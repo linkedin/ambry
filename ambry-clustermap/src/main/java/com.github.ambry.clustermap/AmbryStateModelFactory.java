@@ -25,13 +25,10 @@ import org.apache.helix.participant.statemachine.StateModelFactory;
 class AmbryStateModelFactory extends StateModelFactory<StateModel> {
   private final ClusterMapConfig clustermapConfig;
   private final PartitionStateChangeListener partitionStateChangeListener;
-  private final ReplicaSyncUpManager replicaSyncUpManager;
 
-  AmbryStateModelFactory(ClusterMapConfig clusterMapConfig, PartitionStateChangeListener partitionStateChangeListener,
-      ReplicaSyncUpManager replicaSyncUpManager) {
+  AmbryStateModelFactory(ClusterMapConfig clusterMapConfig, PartitionStateChangeListener partitionStateChangeListener) {
     this.clustermapConfig = clusterMapConfig;
     this.partitionStateChangeListener = partitionStateChangeListener;
-    this.replicaSyncUpManager = replicaSyncUpManager;
   }
 
   /**
@@ -46,8 +43,7 @@ class AmbryStateModelFactory extends StateModelFactory<StateModel> {
     switch (clustermapConfig.clustermapStateModelDefinition) {
       case AmbryStateModelDefinition.AMBRY_LEADER_STANDBY_MODEL:
         stateModelToReturn =
-            new AmbryPartitionStateModel(resourceName, partitionName, partitionStateChangeListener, clustermapConfig,
-                replicaSyncUpManager);
+            new AmbryPartitionStateModel(resourceName, partitionName, partitionStateChangeListener, clustermapConfig);
         break;
       case LeaderStandbySMD.name:
         stateModelToReturn = new DefaultLeaderStandbyStateModel();

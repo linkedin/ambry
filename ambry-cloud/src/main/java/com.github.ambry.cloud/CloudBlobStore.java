@@ -487,6 +487,11 @@ class CloudBlobStore implements Store {
   }
 
   @Override
+  public long getEndPositionOfLastPut() throws StoreException {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public void shutdown() {
     recentBlobCache.clear();
     started = false;

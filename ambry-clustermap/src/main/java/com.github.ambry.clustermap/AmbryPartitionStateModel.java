@@ -32,16 +32,13 @@ public class AmbryPartitionStateModel extends StateModel {
   private final String partitionName;
   private final PartitionStateChangeListener partitionStateChangeListener;
   private final ClusterMapConfig clusterMapConfig;
-  private final ReplicaSyncUpManager replicaSyncUpManager;
 
   AmbryPartitionStateModel(String resourceName, String partitionName,
-      PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig,
-      ReplicaSyncUpManager replicaSyncUpManager) {
+      PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig) {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
     this.partitionStateChangeListener = Objects.requireNonNull(partitionStateChangeListener);
     this.clusterMapConfig = Objects.requireNonNull(clusterMapConfig);
-    this.replicaSyncUpManager = Objects.requireNonNull(replicaSyncUpManager);
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(AmbryPartitionStateModel.class);
   }
@@ -63,16 +60,6 @@ public class AmbryPartitionStateModel extends StateModel {
     if (clusterMapConfig.clustermapEnableStateModelListener) {
       partitionStateChangeListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
     }
-    try {
-      replicaSyncUpManager.waitBootstrapCompleted(partitionName);
-    } catch (InterruptedException e) {
-      logger.error("Bootstrap was interrupted on partition {}", partitionName);
-      throw new StateTransitionException("Bootstrap failed or was interrupted",
-          StateTransitionException.TransitionErrorCode.BootstrapFailure);
-    } catch (StateTransitionException e) {
-      logger.error("Bootstrap didn't complete.", e);
-      throw e;
-    }
   }
 
   @Transition(to = "LEADER", from = "STANDBY")
@@ -91,8 +78,12 @@ public class AmbryPartitionStateModel extends StateModel {
 
   @Transition(to = "INACTIVE", from = "STANDBY")
   public void onBecomeInactiveFromStandby(Message message, NotificationContext context) {
-    logger.info("Partition {} in resource {} is becoming INACTIVE from STANDBY", message.getPartitionName(),
+    String partitionName = message.getPartitionName();
+    logger.info("Partition {} in resource {} is becoming INACTIVE from STANDBY", partitionName,
         message.getResourceName());
+    if (clusterMapConfig.clustermapEnableStateModelListener) {
+      partitionStateChangeListener.onPartitionBecomeInactiveFromStandby(partitionName);
+    }
   }
 
   @Transition(to = "OFFLINE", from = "INACTIVE")

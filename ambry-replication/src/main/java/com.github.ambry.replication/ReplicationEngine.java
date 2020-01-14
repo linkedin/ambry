@@ -20,12 +20,16 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -77,6 +81,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected final Map<PartitionId, PartitionInfo> partitionToPartitionInfo;
   protected final Map<String, Set<PartitionInfo>> mountPathToPartitionInfos;
   protected final ReplicaSyncUpManager replicaSyncUpManager;
+  protected final StoreManager storeManager;
   protected ReplicaTokenPersistor persistor = null;
 
   protected static final short Replication_Delay_Multiplier = 5;
@@ -86,7 +91,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, ScheduledExecutorService scheduler, DataNodeId dataNode,
       List<? extends ReplicaId> replicaIds, ConnectionPool connectionPool, MetricRegistry metricRegistry,
       NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
-      String transformerClassName, ClusterParticipant clusterParticipant) throws ReplicationException {
+      String transformerClassName, ClusterParticipant clusterParticipant, StoreManager storeManager)
+      throws ReplicationException {
     this.replicationConfig = replicationConfig;
     this.storeKeyFactory = storeKeyFactory;
     try {
@@ -111,6 +117,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.storeKeyConverterFactory = storeKeyConverterFactory;
     this.transformerClassName = transformerClassName;
+    this.storeManager = storeManager;
     replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
   }
 
@@ -138,10 +145,35 @@ public abstract class ReplicationEngine implements ReplicationAPI {
 
   @Override
   public void updateTotalBytesReadByRemoteReplica(PartitionId partitionId, String hostName, String replicaPath,
-      long totalBytesRead) {
+      long totalBytesRead) throws StoreException {
     RemoteReplicaInfo remoteReplicaInfo = getRemoteReplicaInfo(partitionId, hostName, replicaPath);
     if (remoteReplicaInfo != null) {
+      ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
       remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesRead);
+      // update replication lag in ReplicaSyncUpManager
+      if (replicaSyncUpManager != null) {
+        Store localStore = storeManager.getStore(partitionId);
+        if (localStore.getCurrentState() == ReplicaState.INACTIVE) {
+          // if local store is in INACTIVE state, that means deactivation process is initiated and in progress on this
+          // replica. We update SyncUpManager by peer's lag from last PUT offset in local store.
+          // it's ok if deactivation has completed and subsequent metadata request attempts to update lag of same replica
+          // again. The reason is, in previous request, onDeactivationComplete method should have removed local replica
+          // from SyncUpManager and it should be no-op and "updated" should be false when calling updateLagBetweenReplicas()
+          // for subsequent request. Hence, it won't call onDeactivationComplete() twice.
+          boolean updated =
+              replicaSyncUpManager.updateLagBetweenReplicas(localReplica, remoteReplicaInfo.getReplicaId(),
+                  localStore.getEndPositionOfLastPut() - totalBytesRead);
+          // if updated = false, it means the replica is not present in SyncUpManager and therefore doesn't need to
+          // complete transition. We don't throw exception here because Standby-To-Inactive transition may already be
+          // complete but local store's state is still INACTIVE since it will be updated at the beginning of
+          // Inactive-To-Offline transition.
+          if (updated && replicaSyncUpManager.isSyncUpComplete(localReplica)) {
+            replicaSyncUpManager.onDeactivationComplete(localReplica);
+          }
+        }
+        // TODO, if local state == OFFLINE, it means replica might be in Inactive-To-Offline transition.
+        //  We need to update lag in replicaSyncUpManager accordingly as well.
+      }
     }
   }
 

@@ -14,6 +14,7 @@
 package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.store.StoreException;
 import java.util.Collection;
 import java.util.List;
 
@@ -41,9 +42,10 @@ public interface ReplicationAPI {
    * @param hostName HostName of the datanode where the replica belongs to
    * @param replicaPath Replica Path of the replica interested in
    * @param totalBytesRead Total bytes read by the replica
+   * @throws StoreException
    */
   void updateTotalBytesReadByRemoteReplica(PartitionId partitionId, String hostName, String replicaPath,
-      long totalBytesRead);
+      long totalBytesRead) throws StoreException;
 
   /**
    * Gets the replica lag of the remote replica with the local store

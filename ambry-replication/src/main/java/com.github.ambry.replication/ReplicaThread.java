@@ -448,12 +448,12 @@ public class ReplicaThread implements Runnable {
                 ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
                 boolean updated = replicaSyncUpManager.updateLagBetweenReplicas(localReplica, remoteReplica,
                     exchangeMetadataResponse.localLagFromRemoteInBytes);
-                // if updated is false, it means local replica is not found in replicaSyncUpManager and is therefore in
-                // bootstrap state
+                // if updated is false, it means local replica is not found in replicaSyncUpManager and is therefore not
+                // in bootstrap state.
                 if (updated && replicaSyncUpManager.isSyncUpComplete(localReplica)) {
                   // complete BOOTSTRAP -> STANDBY transition
                   remoteReplicaInfo.getLocalStore().setCurrentState(ReplicaState.STANDBY);
-                  replicaSyncUpManager.onBootstrapComplete(localReplica.getPartitionId().toPathString());
+                  replicaSyncUpManager.onBootstrapComplete(localReplica);
                   remoteReplicaInfo.getLocalStore().completeBootstrap();
                 }
               }

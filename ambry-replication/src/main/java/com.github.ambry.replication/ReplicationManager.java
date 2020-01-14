@@ -41,12 +41,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
+
 
 /**
  * Set up replicas based on {@link ReplicationEngine} and do replication across all data centers.
  */
 public class ReplicationManager extends ReplicationEngine {
-  private final StoreManager storeManager;
   private final StoreConfig storeConfig;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
@@ -57,8 +58,7 @@ public class ReplicationManager extends ReplicationEngine {
       ClusterParticipant clusterParticipant) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
-        storeKeyConverterFactory, transformerClassName, clusterParticipant);
-    this.storeManager = storeManager;
+        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager);
     this.storeConfig = storeConfig;
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
     // initialize all partitions
@@ -216,7 +216,7 @@ public class ReplicationManager extends ReplicationEngine {
   /**
    * {@link PartitionStateChangeListener} to capture changes in partition state.
    */
-  private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+  class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
@@ -226,7 +226,7 @@ public class ReplicationManager extends ReplicationEngine {
         // no matter this is an existing replica or new added one, it should be present in storage manager because new
         // replica is added into storage manager first.
         throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
-            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+            ReplicaNotFound);
       }
 
       if (!partitionToPartitionInfo.containsKey(replica.getPartitionId())) {
@@ -235,7 +235,7 @@ public class ReplicationManager extends ReplicationEngine {
         logger.info("Didn't find replica {} in replication manager, starting to add it.", partitionName);
         if (!addReplica(replica)) {
           throw new StateTransitionException("Failed to add new replica " + partitionName + " into replication manager",
-              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+              ReplicaOperationFailure);
         }
       }
     }
@@ -248,8 +248,8 @@ public class ReplicationManager extends ReplicationEngine {
       Store store = storeManager.getStore(localReplica.getPartitionId());
       // 1. check if store is started
       if (store == null) {
-        throw new StateTransitionException("Store " + partitionName + " is not started",
-            StateTransitionException.TransitionErrorCode.StoreNotStarted);
+        throw new StateTransitionException(
+            "Store " + partitionName + " is not started during Bootstrap-To-Standby transition", StoreNotStarted);
       }
       // 2. check if store is new added and needs to catch up with peer replicas.
       if (store.isBootstrapInProgress()) {
@@ -272,6 +272,18 @@ public class ReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
+    }
+
+    @Override
+    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+      ReplicaId localReplica = storeManager.getReplica(partitionName);
+      Store store = storeManager.getStore(localReplica.getPartitionId());
+      // 1. check if store is started
+      if (store == null) {
+        throw new StateTransitionException(
+            "Store " + partitionName + " is not started during Standby-To-Inactive transition", StoreNotStarted);
+      }
+      replicaSyncUpManager.initiateDeactivation(localReplica);
     }
   }
 }

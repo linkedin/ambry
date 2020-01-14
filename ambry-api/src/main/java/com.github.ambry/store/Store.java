@@ -101,6 +101,12 @@ public interface Store {
   long getSizeInBytes();
 
   /**
+   * @return absolute end position of last PUT in bytes.
+   * @throws StoreException
+   */
+  long getEndPositionOfLastPut() throws StoreException;
+
+  /**
    * @return true if the store contains no data
    */
   boolean isEmpty();

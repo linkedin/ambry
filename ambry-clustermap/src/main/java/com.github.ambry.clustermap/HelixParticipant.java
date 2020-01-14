@@ -39,6 +39,8 @@ import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
+
 
 /**
  * An implementation of {@link ClusterParticipant} that registers as a participant to a Helix cluster.
@@ -97,7 +99,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig, this, replicaSyncUpManager));
+        new AmbryStateModelFactory(clusterMapConfig, this));
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
       synchronized (helixAdministrationLock) {
@@ -316,6 +318,17 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
     if (replicationManagerListener != null) {
       replicationManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
+      // after bootstrap is initiated in ReplicationManager, transition is blocked here and wait until local replica has
+      // caught up with enough peer replicas.
+      try {
+        replicaSyncUpManager.waitBootstrapCompleted(partitionName);
+      } catch (InterruptedException e) {
+        logger.error("Bootstrap was interrupted on partition {}", partitionName);
+        throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
+      } catch (StateTransitionException e) {
+        logger.error("Bootstrap didn't complete on partition {}", partitionName, e);
+        throw e;
+      }
     }
   }
 
@@ -334,6 +347,33 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         partitionStateChangeListeners.get(StateModelListenerType.CloudToStoreReplicationManagerListener);
     if (cloudToStoreReplicationListener != null) {
       cloudToStoreReplicationListener.onPartitionBecomeStandbyFromLeader(partitionName);
+    }
+  }
+
+  @Override
+  public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+    // 1. storage manager marks store local state as INACTIVE and disables compaction on this partition
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+    }
+    // 2. replication manager initiates deactivation
+    PartitionStateChangeListener replicationManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+    if (replicationManagerListener != null) {
+      replicationManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+      // after deactivation is initiated in ReplicationManager, transition is blocked here and wait until enough peer
+      // replicas have caught up with last PUT in local store.
+      try {
+        replicaSyncUpManager.waitDeactivationCompleted(partitionName);
+      } catch (InterruptedException e) {
+        logger.error("Deactivation was interrupted on partition {}", partitionName);
+        throw new StateTransitionException("Deactivation failed or was interrupted", DeactivationFailure);
+      } catch (StateTransitionException e) {
+        logger.error("Deactivation didn't complete on partition {}", partitionName, e);
+        throw e;
+      }
     }
   }
 }

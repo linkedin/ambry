@@ -274,6 +274,7 @@ project(':ambry-replication') {
         testCompile project(':ambry-commons').sourceSets.test.output
         testCompile project(':ambry-messageformat').sourceSets.test.output
         testCompile project(':ambry-store').sourceSets.main.output
+        testCompile project(':ambry-store').sourceSets.test.output
     }
 }
 

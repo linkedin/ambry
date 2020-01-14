@@ -60,7 +60,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final VirtualReplicatorCluster virtualReplicatorCluster;
   private final CloudStorageCompactor cloudStorageCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
-  private final StoreManager storeManager;
 
   public VcrReplicationManager(VerifiableProperties properties, CloudConfig cloudConfig,
       ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig, StoreConfig storeConfig,
@@ -71,11 +70,11 @@ public class VcrReplicationManager extends ReplicationEngine {
       String transformerClassName) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
         virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool,
-        vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null);
+        vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null,
+        storeManager);
     this.properties = properties;
     this.cloudConfig = cloudConfig;
     this.storeConfig = storeConfig;
-    this.storeManager = storeManager;
     this.virtualReplicatorCluster = virtualReplicatorCluster;
     this.vcrMetrics = vcrMetrics;
     this.cloudDestination = cloudDestination;

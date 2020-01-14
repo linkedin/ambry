@@ -332,6 +332,11 @@ class InMemoryStore implements Store {
   }
 
   @Override
+  public long getEndPositionOfLastPut() throws StoreException {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public void shutdown() throws StoreException {
     started = false;
   }
