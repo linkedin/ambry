@@ -13,23 +13,17 @@
  */
 package com.github.ambry.cloud;
 
-import com.fasterxml.jackson.annotation.JsonFilter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 
 /**
  * Blob metadata document POJO class.
  */
-@JsonInclude(JsonInclude.Include.NON_DEFAULT)
 public class CloudBlobMetadata {
   public static final String FIELD_CREATION_TIME = "creationTime";
   public static final String FIELD_UPLOAD_TIME = "uploadTime";
@@ -42,35 +36,19 @@ public class CloudBlobMetadata {
   public static final String FIELD_CRYPTO_AGENT_FACTORY = "cryptoAgentFactory";
   public static final String FIELD_CLOUD_BLOB_NAME = "cloudBlobName";
 
-  private static final ObjectMapper mapperObj = new ObjectMapper();
-
-  @JsonProperty
   private String id;
-  @JsonProperty
   private String partitionId;
-  @JsonProperty
   private long creationTime;
-  @JsonProperty
   private long uploadTime;
-  @JsonProperty
   private long size;
-  @JsonProperty
   private int accountId;
-  @JsonProperty
   private int containerId;
-  @JsonProperty
-  private Long expirationTime;
-  @JsonProperty
-  private Long deletionTime;
-  // TODO: replace with blobNamingStrategyVersion
+  private long expirationTime;
+  private long deletionTime;
   private String cloudBlobName;
-  @JsonProperty
   private EncryptionOrigin encryptionOrigin;
-  @JsonProperty
   private String vcrKmsContext;
-  @JsonProperty
   private String cryptoAgentFactory;
-  @JsonProperty(defaultValue = "-1")
   private long encryptedSize;
   // this field is derived from the system generated last Update Time in the cloud db
   // and hence shouldn't be serializable.
@@ -88,17 +66,12 @@ public class CloudBlobMetadata {
     /** Encrypted by Router */
     ROUTER,
     /** Encrypted by VCR */
-    VCR
-  }
+    VCR}
 
   /**
    * Default constructor (for JSONSerializer).
    */
   public CloudBlobMetadata() {
-  }
-
-  public static CloudBlobMetadata fromMap(Map<String, String> propertyMap) {
-    return mapperObj.convertValue(propertyMap, CloudBlobMetadata.class);
   }
 
   /**
@@ -134,9 +107,9 @@ public class CloudBlobMetadata {
     this.accountId = blobId.getAccountId();
     this.containerId = blobId.getContainerId();
     this.creationTime = creationTime;
+    this.expirationTime = expirationTime;
     this.uploadTime = System.currentTimeMillis();
-    setExpirationTime(expirationTime);
-    setDeletionTime(Utils.Infinite_Time);
+    this.deletionTime = Utils.Infinite_Time;
     this.size = size;
     this.encryptionOrigin = encryptionOrigin;
     this.vcrKmsContext = vcrKmsContext;
@@ -214,7 +187,7 @@ public class CloudBlobMetadata {
    * @return the blob expiration time.
    */
   public long getExpirationTime() {
-    return expirationTime == null ? -1 : expirationTime;
+    return expirationTime;
   }
 
   /**
@@ -223,7 +196,7 @@ public class CloudBlobMetadata {
    * @return this instance.
    */
   public CloudBlobMetadata setExpirationTime(long expirationTime) {
-    this.expirationTime = expirationTime == -1 ? null : expirationTime;
+    this.expirationTime = expirationTime;
     return this;
   }
 
@@ -231,7 +204,7 @@ public class CloudBlobMetadata {
    * @return the blob deletion time.
    */
   public long getDeletionTime() {
-    return deletionTime == null ? -1 : deletionTime;
+    return deletionTime;
   }
 
   /**
@@ -240,7 +213,7 @@ public class CloudBlobMetadata {
    * @return this instance.
    */
   public CloudBlobMetadata setDeletionTime(long deletionTime) {
-    this.deletionTime = deletionTime == -1 ? null : deletionTime;
+    this.deletionTime = deletionTime;
     return this;
   }
 
