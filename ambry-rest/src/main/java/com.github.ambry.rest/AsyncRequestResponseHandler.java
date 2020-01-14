@@ -61,10 +61,23 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   /**
    * Builds a AsyncRequestResponseHandler.
    * @param metrics the {@link RequestResponseHandlerMetrics} instance to use to track metrics.
+   * @param workerCount the required number of request handling units.
+   * @param restRequestService the {@link RestRequestService} instance to be used to process requests.
+   * @throws IllegalArgumentException if {@code workerCount} < 0 or if {@code workerCount} > 0 but
+   * {@code restRequestService} is null.
    */
-  protected AsyncRequestResponseHandler(RequestResponseHandlerMetrics metrics) {
+  protected AsyncRequestResponseHandler(RequestResponseHandlerMetrics metrics, int workerCount,
+      RestRequestService restRequestService) {
     this.metrics = metrics;
     metrics.trackAsyncRequestResponseHandler(this);
+    if (workerCount < 0) {
+      throw new IllegalArgumentException("Request worker workerCount has to be >= 0");
+    } else if (workerCount > 0 && restRequestService == null) {
+      throw new IllegalArgumentException("RestRequestService cannot be null");
+    }
+    requestWorkersCount = workerCount;
+    this.restRequestService = restRequestService;
+    this.restRequestService.setupResponseHandler(this);
     logger.trace("Instantiated AsyncRequestResponseHandler");
   }
 
@@ -74,21 +87,22 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   @Override
   public void start() {
     long startupBeginTime = System.currentTimeMillis();
+    if (isRunning()) {
+      throw new IllegalStateException("AsyncRequestResponseHandler is running.");
+    }
     try {
-      if (!isRunning()) {
-        logger.info("Starting AsyncRequestResponseHandler with {} request workers", requestWorkersCount);
-        for (int i = 0; i < requestWorkersCount; i++) {
-          long workerStartupBeginTime = System.currentTimeMillis();
-          AsyncRequestWorker asyncRequestWorker = new AsyncRequestWorker(metrics, restRequestService);
-          asyncRequestWorkers.add(asyncRequestWorker);
-          Utils.newThread("RequestWorker-" + i, asyncRequestWorker, false).start();
-          long workerStartupTime = System.currentTimeMillis() - workerStartupBeginTime;
-          metrics.requestWorkerStartTimeInMs.update(workerStartupTime);
-          logger.info("AsyncRequestWorker startup took {} ms", workerStartupTime);
-        }
-        asyncResponseHandler = new AsyncResponseHandler(metrics);
-        isRunning = true;
+      logger.info("Starting AsyncRequestResponseHandler with {} request workers", requestWorkersCount);
+      for (int i = 0; i < requestWorkersCount; i++) {
+        long workerStartupBeginTime = System.currentTimeMillis();
+        AsyncRequestWorker asyncRequestWorker = new AsyncRequestWorker(metrics, restRequestService);
+        asyncRequestWorkers.add(asyncRequestWorker);
+        Utils.newThread("RequestWorker-" + i, asyncRequestWorker, false).start();
+        long workerStartupTime = System.currentTimeMillis() - workerStartupBeginTime;
+        metrics.requestWorkerStartTimeInMs.update(workerStartupTime);
+        logger.info("AsyncRequestWorker startup took {} ms", workerStartupTime);
       }
+      asyncResponseHandler = new AsyncResponseHandler(metrics);
+      isRunning = true;
     } finally {
       long startupTime = System.currentTimeMillis() - startupBeginTime;
       metrics.requestResponseHandlerStartTimeInMs.update(startupTime);
@@ -179,31 +193,9 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
     } else {
       metrics.requestResponseHandlerUnavailableError.inc();
       throw new RestServiceException(
-          "Requests cannot be handled because the AsyncRequestResponseHandler is not available",
+          "Requests cannot be handled because the AsyncRequestResponseHandler is not running",
           RestServiceErrorCode.ServiceUnavailable);
     }
-  }
-
-  /**
-   * Sets the number of request handling units and the {@link RestRequestService} that will be used in
-   * {@link AsyncRequestWorker} instances..
-   * @param workerCount the required number of request handling units.
-   * @param restRequestService the {@link RestRequestService} instance to be used to process requests.
-   * @throws IllegalArgumentException if {@code workerCount} < 0 or if {@code workerCount} > 0 but
-   *                                  {@code restRequestService} is null.
-   * @throws IllegalStateException if {@link #start()} has already been called before a call to this function.
-   */
-  protected void setupRequestHandling(int workerCount, RestRequestService restRequestService) {
-    if (isRunning()) {
-      throw new IllegalStateException("Cannot modify scaling unit count after the service has started");
-    } else if (workerCount < 0) {
-      throw new IllegalArgumentException("Request worker workerCount has to be >= 0");
-    } else if (workerCount > 0 && restRequestService == null) {
-      throw new IllegalArgumentException("RestRequestService cannot be null");
-    }
-    requestWorkersCount = workerCount;
-    this.restRequestService = restRequestService;
-    logger.trace("Request handling units count set to {}", requestWorkersCount);
   }
 
   /**
@@ -273,7 +265,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
  */
 class AsyncRequestWorker implements Runnable {
   private final RequestResponseHandlerMetrics metrics;
-  private final RestRequestService _restRequestService;
+  private final RestRequestService restRequestService;
   private final LinkedBlockingQueue<AsyncRequestInfo> requests = new LinkedBlockingQueue<AsyncRequestInfo>();
   private final AtomicInteger queuedRequestCount = new AtomicInteger(0);
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
@@ -286,7 +278,7 @@ class AsyncRequestWorker implements Runnable {
    */
   protected AsyncRequestWorker(RequestResponseHandlerMetrics metrics, RestRequestService restRequestService) {
     this.metrics = metrics;
-    this._restRequestService = restRequestService;
+    this.restRequestService = restRequestService;
     metrics.registerRequestWorker(this);
     logger.trace("Instantiated AsyncRequestWorker");
   }
@@ -320,7 +312,7 @@ class AsyncRequestWorker implements Runnable {
     } finally {
       running.set(false);
       discardRequests();
-      logger.trace("AsyncRequestWorker stopped");
+      logger.info("AsyncRequestWorker stopped");
       shutdownLatch.countDown();
     }
   }
@@ -423,22 +415,22 @@ class AsyncRequestWorker implements Runnable {
       long restRequestProcessingStartTime = System.currentTimeMillis();
       switch (restMethod) {
         case GET:
-          _restRequestService.handleGet(restRequest, restResponseChannel);
+          restRequestService.handleGet(restRequest, restResponseChannel);
           break;
         case POST:
-          _restRequestService.handlePost(restRequest, restResponseChannel);
+          restRequestService.handlePost(restRequest, restResponseChannel);
           break;
         case PUT:
-          _restRequestService.handlePut(restRequest, restResponseChannel);
+          restRequestService.handlePut(restRequest, restResponseChannel);
           break;
         case DELETE:
-          _restRequestService.handleDelete(restRequest, restResponseChannel);
+          restRequestService.handleDelete(restRequest, restResponseChannel);
           break;
         case HEAD:
-          _restRequestService.handleHead(restRequest, restResponseChannel);
+          restRequestService.handleHead(restRequest, restResponseChannel);
           break;
         case OPTIONS:
-          _restRequestService.handleOptions(restRequest, restResponseChannel);
+          restRequestService.handleOptions(restRequest, restResponseChannel);
           break;
         default:
           metrics.unknownRestMethodError.inc();

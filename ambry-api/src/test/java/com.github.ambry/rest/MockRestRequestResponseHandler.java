@@ -40,7 +40,12 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
   private boolean isRunning = false;
   private VerifiableProperties failureProperties = null;
 
-  private RestRequestService restRequestService = null;
+  private final RestRequestService restRequestService;
+
+  public MockRestRequestResponseHandler(RestRequestService restRequestService) {
+    this.restRequestService = restRequestService;
+    this.restRequestService.setupResponseHandler(this);
+  }
 
   @Override
   public void start() throws InstantiationException {
@@ -140,14 +145,6 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
    */
   public void fix() {
     failureProperties = null;
-  }
-
-  /**
-   * Sets the {@link RestRequestService} that will be used.
-   * @param restRequestService the {@link RestRequestService} instance to be used to process requests.
-   */
-  protected void setRestRequestService(RestRequestService restRequestService) {
-    this.restRequestService = restRequestService;
   }
 
   /**

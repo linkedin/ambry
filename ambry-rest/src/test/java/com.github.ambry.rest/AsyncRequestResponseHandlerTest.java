@@ -69,7 +69,10 @@ public class AsyncRequestResponseHandlerTest {
   public static void startRequestResponseHandler() throws InstantiationException, IOException {
     verifiableProperties = new VerifiableProperties(new Properties());
     router = new InMemoryRouter(verifiableProperties, new MockClusterMap());
-    asyncRequestResponseHandler = getAsyncRequestResponseHandler(5);
+    restRequestService = new MockRestRequestService(verifiableProperties, router);
+    asyncRequestResponseHandler =
+        new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 5, restRequestService);
+    restRequestService.setupResponseHandler(asyncRequestResponseHandler);
     restRequestService.start();
     asyncRequestResponseHandler.start();
   }
@@ -149,27 +152,17 @@ public class AsyncRequestResponseHandlerTest {
   }
 
   /**
-   * Tests the behavior of {@link AsyncRequestResponseHandler} when request worker count is not set or is zero.
+   * Tests the behavior of {@link AsyncRequestResponseHandler} when request worker count or restRequestService is invalid.
    * @throws Exception
    */
   @Test
-  public void edgeCaseWorkerCountsTest() throws Exception {
-    RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
-    AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(metrics);
-    noRequestHandlersTest(requestResponseHandler);
-
-    requestResponseHandler = getAsyncRequestResponseHandler(0);
-    noRequestHandlersTest(requestResponseHandler);
-  }
-
-  @Test
-  public void setFunctionsBadArgumentsTest() {
-    RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
-    AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(metrics);
+  public void edgeCaseTest() throws Exception {
+    AsyncRequestResponseHandler requestResponseHandler;
+    RequestResponseHandlerMetrics metrics;
 
     // set request workers < 0
     try {
-      requestResponseHandler.setupRequestHandling(-1, restRequestService);
+      requestResponseHandler = getAsyncRequestResponseHandler(-1);
       fail("Setting request workers < 0 should have thrown exception");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
@@ -177,24 +170,11 @@ public class AsyncRequestResponseHandlerTest {
 
     // set null RestRequestService
     try {
-      requestResponseHandler.setupRequestHandling(1, null);
+      RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
+      metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
+      new AsyncRequestResponseHandler(metrics, 1, null);
       fail("Setting RestRequestService to null should have thrown exception");
     } catch (IllegalArgumentException e) {
-      // expected. nothing to do.
-    }
-  }
-
-  /**
-   * Tests behavior of {@link AsyncRequestResponseHandler#setupRequestHandling(int, RestRequestService)} after the
-   * {@link AsyncRequestResponseHandler} has been started.
-   */
-  @Test
-  public void setupRequestHandlingStartTest() {
-    // set request workers.
-    try {
-      asyncRequestResponseHandler.setupRequestHandling(5, restRequestService);
-      fail("Setting request workers after start should have thrown exception");
-    } catch (IllegalStateException e) {
       // expected. nothing to do.
     }
   }
@@ -593,15 +573,9 @@ public class AsyncRequestResponseHandlerTest {
    * @throws IOException
    */
   private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(int requestWorkers) throws IOException {
+    RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
     RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
-    AsyncRequestResponseHandler handler = new AsyncRequestResponseHandler(metrics);
-    if (requestWorkers > 0) {
-      if (restRequestService == null) {
-        restRequestService = new MockRestRequestService(verifiableProperties, handler, router);
-      }
-      handler.setupRequestHandling(requestWorkers, restRequestService);
-    }
-    return handler;
+    return new AsyncRequestResponseHandler(metrics, requestWorkers, restRequestService);
   }
 
   // useWithoutSettingWorkerCountTest() and zeroScalingUnitsTest() helpers
@@ -609,11 +583,11 @@ public class AsyncRequestResponseHandlerTest {
   /**
    * Uses the {@code requestResponseHandler} with zero request workers and one response worker and verifies that
    * responses are sent, but requests are not served.
-   * @param requestResponseHandler the {@link AsyncRequestResponseHandler} instance to use. Must have zero request
-   *                               workers and more then zero response workers.
    * @throws Exception
    */
-  private void noRequestHandlersTest(AsyncRequestResponseHandler requestResponseHandler) throws Exception {
+  @Test
+  public void noRequestHandlersTest() throws Exception {
+    AsyncRequestResponseHandler requestResponseHandler = getAsyncRequestResponseHandler(0);
     // ok for start
     requestResponseHandler.start();
     try {

@@ -19,6 +19,7 @@ import com.github.ambry.network.NettyServerRequestResponseChannel;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestResponseHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,6 +34,11 @@ public class StorageRestRequestService implements RestRequestService {
 
   public StorageRestRequestService(NettyServerRequestResponseChannel requestResponseChannel) {
     this.requestResponseChannel = requestResponseChannel;
+  }
+
+  @Override
+  public void setupResponseHandler(RestResponseHandler responseHandler) {
+
   }
 
   @Override

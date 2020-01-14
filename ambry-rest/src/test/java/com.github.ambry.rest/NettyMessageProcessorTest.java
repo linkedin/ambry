@@ -92,9 +92,9 @@ public class NettyMessageProcessorTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(verifiableProperties, notificationSystem, new MockClusterMap());
-    requestHandler = new MockRestRequestResponseHandler();
-    restRequestService = new MockRestRequestService(verifiableProperties, requestHandler, router);
-    requestHandler.setRestRequestService(restRequestService);
+    restRequestService = new MockRestRequestService(verifiableProperties, router);
+    requestHandler = new MockRestRequestResponseHandler(restRequestService);
+    restRequestService.setupResponseHandler(requestHandler);
     restRequestService.start();
     requestHandler.start();
   }

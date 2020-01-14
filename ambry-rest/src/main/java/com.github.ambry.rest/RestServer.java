@@ -181,19 +181,21 @@ public class RestServer {
       ((HelixAccountService) accountService).setupRouter(router);
     }
 
-    RestResponseHandlerFactory restResponseHandlerFactory =
-        Utils.getObj(restServerConfig.restServerResponseHandlerFactory,
-            restServerConfig.restServerResponseHandlerScalingUnitCount, metricRegistry);
-    restResponseHandler = restResponseHandlerFactory.getRestResponseHandler();
-
+    // setup restRequestService
     RestRequestServiceFactory restRequestServiceFactory =
-        Utils.getObj(restServerConfig.restServerRestRequestServiceFactory, verifiableProperties, clusterMap,
-            restResponseHandler, router, accountService);
+        Utils.getObj(restServerConfig.restServerRestRequestServiceFactory, verifiableProperties, clusterMap, router,
+            accountService);
     restRequestService = restRequestServiceFactory.getRestRequestService();
+    if (restRequestService == null) {
+      throw new InstantiationException("RestRequestService is null");
+    }
 
-    RestRequestHandlerFactory restRequestHandlerFactory = Utils.getObj(restServerConfig.restServerRequestHandlerFactory,
-        restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, restRequestService);
-    restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
+    RestRequestResponseHandlerFactory restHandlerFactory =
+        Utils.getObj(restServerConfig.restServerRequestResponseHandlerFactory,
+            restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, restRequestService);
+    restRequestHandler = restHandlerFactory.getRestRequestHandler();
+    restResponseHandler = restHandlerFactory.getRestResponseHandler();
+
     publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
         restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
 
@@ -202,8 +204,8 @@ public class RestServer {
             restRequestHandler, publicAccessLogger, restServerState, sslFactory);
     nioServer = nioServerFactory.getNioServer();
 
-    if (accountService == null || router == null || restResponseHandler == null || restRequestService == null
-        || restRequestHandler == null || nioServer == null) {
+    if (accountService == null || router == null || restResponseHandler == null || restRequestHandler == null
+        || nioServer == null) {
       throw new InstantiationException("Some of the server components were null");
     }
     NetworkConfig networkConfig = new NetworkConfig(verifiableProperties);
@@ -233,7 +235,7 @@ public class RestServer {
       restResponseHandler.start();
       long restResponseHandlerStartTime = System.currentTimeMillis();
       elapsedTime = restResponseHandlerStartTime - reporterStartTime;
-      logger.info("Response handler start took {} ms", elapsedTime);
+      logger.info("Response handler and Request Handler start took {} ms", elapsedTime);
       restServerMetrics.restResponseHandlerStartTimeInMs.update(elapsedTime);
 
       restRequestService.start();
@@ -242,14 +244,8 @@ public class RestServer {
       logger.info("Rest request service start took {} ms", elapsedTime);
       restServerMetrics.restRequestServiceStartTimeInMs.update(elapsedTime);
 
-      restRequestHandler.start();
-      long restRequestHandlerStartTime = System.currentTimeMillis();
-      elapsedTime = restRequestHandlerStartTime - restRequestServiceStartTime;
-      logger.info("Request handler start took {} ms", elapsedTime);
-      restServerMetrics.restRequestHandlerStartTimeInMs.update(elapsedTime);
-
       nioServer.start();
-      elapsedTime = System.currentTimeMillis() - restRequestHandlerStartTime;
+      elapsedTime = System.currentTimeMillis() - restRequestServiceStartTime;
       logger.info("NIO server start took {} ms", elapsedTime);
       restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
 

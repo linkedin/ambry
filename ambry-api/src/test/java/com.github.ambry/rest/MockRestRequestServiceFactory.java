@@ -27,13 +27,11 @@ import com.github.ambry.router.Router;
  */
 public class MockRestRequestServiceFactory implements RestRequestServiceFactory {
   private final VerifiableProperties verifiableProperties;
-  private final RestResponseHandler restResponseHandler;
   private final Router router;
 
-  public MockRestRequestServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      RestResponseHandler restResponseHandler, Router router, AccountService accountService) {
+  public MockRestRequestServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap, Router router,
+      AccountService accountService) {
     this.verifiableProperties = verifiableProperties;
-    this.restResponseHandler = restResponseHandler;
     this.router = router;
   }
 
@@ -44,6 +42,6 @@ public class MockRestRequestServiceFactory implements RestRequestServiceFactory 
    */
   @Override
   public RestRequestService getRestRequestService() {
-    return new MockRestRequestService(verifiableProperties, restResponseHandler, router);
+    return new MockRestRequestService(verifiableProperties, router);
   }
 }
