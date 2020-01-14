@@ -54,7 +54,6 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import org.junit.function.ThrowingRunnable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -186,12 +185,17 @@ class CloudBlobStore implements Store {
       // TODO: if needed, fetch metadata here and check encryption
       if (cloudBlobMetadata.getEncryptionOrigin() == EncryptionOrigin.VCR) {
         ByteBuffer encryptedBlob = ByteBuffer.allocate((int) cloudBlobMetadata.getEncryptedSize());
-        doWithRetries(() -> cloudDestination.downloadBlob(blobId, new ByteBufferOutputStream(encryptedBlob)),
-            "Download");
+        doWithRetries(() -> {
+          cloudDestination.downloadBlob(blobId, new ByteBufferOutputStream(encryptedBlob));
+          return null;
+        }, "Download");
         ByteBuffer decryptedBlob = cryptoAgent.decrypt(encryptedBlob);
         outputStream.write(decryptedBlob.array());
       } else {
-        doWithRetries(() -> cloudDestination.downloadBlob(blobId, outputStream), "Download");
+        doWithRetries(() -> {
+          cloudDestination.downloadBlob(blobId, outputStream);
+          return null;
+        }, "Download");
       }
     } catch (CloudStorageException | GeneralSecurityException | IOException e) {
       throw new StoreException("Error occured in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
@@ -528,33 +532,12 @@ class CloudBlobStore implements Store {
 
   /**
    * Execute an action up to the configured number of attempts.
-   * @param action the {@link ThrowingRunnable} to run.
-   * @param actionName the name of the action.
-   * @throws CloudStorageException
-   */
-  private void doWithRetries(ThrowingRunnable action, String actionName) throws CloudStorageException {
-    int attempts = 0;
-    while (attempts < maxAttempts) {
-      try {
-        action.run();
-        return;
-      } catch (Throwable e) {
-        attempts++;
-        throwOrDelay(e, actionName, attempts);
-      }
-    }
-    throw new CloudStorageException(actionName + " failed " + attempts + " attempts");
-  }
-
-  /**
-   * Execute an action up to the configured number of attempts.
    * @param action the {@link Callable} to call.
    * @param actionName the name of the action.
    * @return the return value of the action.
    * @throws CloudStorageException
    */
-  private Map<String, CloudBlobMetadata> doWithRetries(Callable<Map<String, CloudBlobMetadata>> action,
-      String actionName) throws CloudStorageException {
+  private <T> T doWithRetries(Callable<T> action, String actionName) throws CloudStorageException {
     int attempts = 0;
     while (attempts < maxAttempts) {
       try {
