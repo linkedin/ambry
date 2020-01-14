@@ -47,6 +47,7 @@ import org.slf4j.LoggerFactory;
 public class BlobStore implements Store {
   static final String SEPARATOR = "_";
   static final String BOOTSTRAP_FILE_NAME = "bootstrap_in_progress";
+  static final String DECOMMISSION_FILE_NAME = "decommission_in_progress";
   private final static String LockFile = ".lock";
 
   private final String storeId;
@@ -681,6 +682,13 @@ public class BlobStore implements Store {
   @Override
   public boolean isBootstrapInProgress() {
     return (new File(dataDir, BOOTSTRAP_FILE_NAME)).exists();
+  }
+
+  @Override
+  public boolean isDecommissionInProgress() {
+    // note that, the decommission file will be removed by calling deleteStoreFiles() when replica is being dropped. We
+    // don't need to explicitly delete it. The file is also used for failure recovery to resume decommission process.
+    return (new File(dataDir, DECOMMISSION_FILE_NAME)).exists();
   }
 
   @Override

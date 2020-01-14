@@ -75,6 +75,10 @@ public class AmbryStateModelFactoryTest {
       public void onPartitionBecomeInactiveFromStandby(String partitionName) {
         // no op
       }
+
+      public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+        // no op
+      }
     });
     StateModel stateModel;
     switch (config.clustermapStateModelDefinition) {

@@ -317,6 +317,11 @@ class InMemoryStore implements Store {
   }
 
   @Override
+  public boolean isDecommissionInProgress() {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public void completeBootstrap() {
     // no-op
   }

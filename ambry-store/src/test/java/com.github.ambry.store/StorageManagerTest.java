@@ -52,6 +52,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.junit.After;
@@ -59,6 +61,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -253,8 +256,7 @@ public class StorageManagerTest {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(String.valueOf(partitionIds.size() + 1));
       fail("should fail due to bootstrap replica not found");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
     }
 
     // 3. test regular store didn't start up (which triggers StoreNotStarted exception)
@@ -265,8 +267,7 @@ public class StorageManagerTest {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(replicaId.getPartitionId().toPathString());
       fail("should fail due to store not started");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", StoreNotStarted, e.getErrorCode());
     }
     localStore.start();
 
@@ -283,8 +284,7 @@ public class StorageManagerTest {
     try {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaOperationFailure,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
     // restart disk manager to test case where new replica(store) is successfully added into StorageManager
     storageManager.getDiskManager(replicaOnSameDisk.getPartitionId()).start();
@@ -322,8 +322,7 @@ public class StorageManagerTest {
       mockHelixParticipant.onPartitionBecomeInactiveFromStandby("-1");
       fail("should fail because replica is not found");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
     }
     // 3. store not started exception
     ReplicaId localReplica = localReplicas.get(0);
@@ -332,14 +331,15 @@ public class StorageManagerTest {
       mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
       fail("should fail because store is not started");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", StoreNotStarted, e.getErrorCode());
     }
     storageManager.startBlobStore(localReplica.getPartitionId());
-    // 4. success case
+    // 4. success case (verify both replica's state and decommission file)
     mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
     assertEquals("local store state should be set to INACTIVE", ReplicaState.INACTIVE,
         storageManager.getStore(localReplica.getPartitionId()).getCurrentState());
+    File decommissionFile = new File(localReplica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
+    assertTrue("Decommission file is not found in local replica's dir", decommissionFile.exists());
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
 
     // 5. mock disable compaction failure
@@ -348,11 +348,43 @@ public class StorageManagerTest {
     try {
       mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
     } finally {
       shutdownAndAssertStoresInaccessible(mockStorageManager, localReplicas);
     }
+  }
+
+  /**
+   * Test shutting down blob store failure during Inactive-To-Offline transition.
+   * @throws Exception
+   */
+  @Test
+  public void replicaFromInactiveToOfflineTest() throws Exception {
+    generateConfigs(true);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    ReplicaId testReplica = localReplicas.get(0);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    storageManager.start();
+    // test shutdown store failure (this is induced by shutting down disk manager)
+    storageManager.getDiskManager(testReplica.getPartitionId()).shutdown();
+    mockHelixParticipant.getReplicaSyncUpManager().initiateDisconnection(testReplica);
+    CountDownLatch participantLatch = new CountDownLatch(1);
+    Utils.newThread(() -> {
+      try {
+        mockHelixParticipant.onPartitionBecomeOfflineFromInactive(testReplica.getPartitionId().toPathString());
+        fail("should fail because of shutting down store failure");
+      } catch (StateTransitionException e) {
+        assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
+        participantLatch.countDown();
+      }
+    }, false).start();
+    // make sync-up complete to let code proceed and encounter exception in storage manager.
+    mockHelixParticipant.getReplicaSyncUpManager().onDisconnectionComplete(testReplica);
+    assertTrue("Helix participant transition didn't get invoked within 1 sec",
+        participantLatch.await(1, TimeUnit.SECONDS));
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
   /**

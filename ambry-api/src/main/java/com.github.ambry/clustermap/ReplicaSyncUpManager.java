@@ -41,7 +41,7 @@ public interface ReplicaSyncUpManager {
    * @param localReplica the replica that resides on current node
    * @param peerReplica the peer replica of local one.
    * @param lagInBytes replica lag bytes
-   * @return whether the lag is updated or not. If {@code false}, it means the source replica is not tracked in this service.
+   * @return whether the lag is updated or not. If {@code false}, it means the local replica is not tracked in this service.
    *         Either the replica has caught up and removed from service or it is an existing replica that doesn't need catchup.
    */
   boolean updateLagBetweenReplicas(ReplicaId localReplica, ReplicaId peerReplica, long lagInBytes);
@@ -90,4 +90,29 @@ public interface ReplicaSyncUpManager {
    * @throws InterruptedException
    */
   void waitDeactivationCompleted(String partitionName) throws InterruptedException;
+
+  /**
+   * Initiate disconnection process to stop replica and make it offline. This happens when replica is going to be
+   * removed from current node. For Ambry, it disconnection occurs in Inactive-To-Offline transition.
+   * @param replicaId the {@link ReplicaId} to be disconnected.
+   */
+  void initiateDisconnection(ReplicaId replicaId);
+
+  /**
+   * Wait until disconnection on given partition is complete.
+   * @param partitionName partition name of replica that in disconnection process
+   */
+  void waitDisconnectionCompleted(String partitionName) throws InterruptedException;
+
+  /**
+   * When disconnection completes on given replica and then it becomes offline.
+   * @param replicaId the {@link ReplicaId} on which disconnection completes
+   */
+  void onDisconnectionComplete(ReplicaId replicaId);
+
+  /**
+   * When exception/error occurs during disconnection.
+   * @param replicaId the {@link ReplicaId} which encounters error.
+   */
+  void onDisconnectionError(ReplicaId replicaId);
 }

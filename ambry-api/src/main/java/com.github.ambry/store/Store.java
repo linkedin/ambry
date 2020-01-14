@@ -122,6 +122,12 @@ public interface Store {
   boolean isBootstrapInProgress();
 
   /**
+   * @return {@code true} if store has initiated decommission process (STANDBY -> INACTIVE -> OFFLINE) and decommission
+   * is still in progress.
+   */
+  boolean isDecommissionInProgress();
+
+  /**
    * Take actions (if any) to complete the bootstrap (i.e, delete bootstrap file in store directory)
    */
   void completeBootstrap();

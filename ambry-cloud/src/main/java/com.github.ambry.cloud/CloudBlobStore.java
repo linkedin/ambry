@@ -472,6 +472,11 @@ class CloudBlobStore implements Store {
   }
 
   @Override
+  public boolean isDecommissionInProgress() {
+    return false;
+  }
+
+  @Override
   public void completeBootstrap() {
     // no op
   }

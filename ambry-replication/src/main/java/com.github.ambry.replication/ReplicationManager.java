@@ -285,5 +285,24 @@ public class ReplicationManager extends ReplicationEngine {
       }
       replicaSyncUpManager.initiateDeactivation(localReplica);
     }
+
+    @Override
+    public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+      ReplicaId localReplica = storeManager.getReplica(partitionName);
+      // check if local replica exists
+      if (localReplica == null) {
+        throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
+            ReplicaNotFound);
+      }
+      // check if store is started
+      Store store = storeManager.getStore(localReplica.getPartitionId());
+      if (store == null) {
+        throw new StateTransitionException(
+            "Store " + partitionName + " is not started during Inactive-To-Offline transition", StoreNotStarted);
+      }
+      // set local store state to OFFLINE and initiate disconnection
+      store.setCurrentState(ReplicaState.OFFLINE);
+      replicaSyncUpManager.initiateDisconnection(localReplica);
+    }
   }
 }

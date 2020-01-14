@@ -175,6 +175,11 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
+    public boolean isDecommissionInProgress() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void completeBootstrap() {
       throw new UnsupportedOperationException();
     }
