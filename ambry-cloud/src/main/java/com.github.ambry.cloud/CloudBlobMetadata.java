@@ -14,9 +14,18 @@
 package com.github.ambry.cloud;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 
@@ -24,17 +33,30 @@ import java.util.Objects;
 /**
  * Blob metadata document POJO class.
  */
+@JsonSerialize(using = CloudBlobMetadata.MetadataSerializer.class)
+@JsonInclude(JsonInclude.Include.NON_DEFAULT)
 public class CloudBlobMetadata {
+  public static final String FIELD_ID = "id";
+  public static final String FIELD_PARTITION_ID = "partitionId";
+  public static final String FIELD_ACCOUNT_ID = "accountId";
+  public static final String FIELD_CONTAINER_ID = "containerId";
+  public static final String FIELD_SIZE = "size";
   public static final String FIELD_CREATION_TIME = "creationTime";
   public static final String FIELD_UPLOAD_TIME = "uploadTime";
   public static final String FIELD_DELETION_TIME = "deletionTime";
   public static final String FIELD_EXPIRATION_TIME = "expirationTime";
-  public static final String FIELD_ACCOUNT_ID = "accountId";
-  public static final String FIELD_CONTAINER_ID = "containerId";
   public static final String FIELD_ENCRYPTION_ORIGIN = "encryptionOrigin";
   public static final String FIELD_VCR_KMS_CONTEXT = "vcrKmsContext";
   public static final String FIELD_CRYPTO_AGENT_FACTORY = "cryptoAgentFactory";
-  public static final String FIELD_CLOUD_BLOB_NAME = "cloudBlobName";
+  public static final String FIELD_ENCRYPTED_SIZE = "encryptedSize";
+  public static final String FIELD_NAMING_SCHEME = "namingScheme";
+
+  public static final String[] REQUIRED_FIELDS =
+      new String[]{FIELD_ID, FIELD_ACCOUNT_ID, FIELD_CONTAINER_ID, FIELD_PARTITION_ID, FIELD_SIZE, FIELD_UPLOAD_TIME};
+  public static final String[] OPTIONAL_FIELDS =
+      new String[]{FIELD_CREATION_TIME, FIELD_DELETION_TIME, FIELD_EXPIRATION_TIME, FIELD_NAMING_SCHEME};
+  public static final String[] ENCRYPTION_FIELDS =
+      new String[]{FIELD_ENCRYPTION_ORIGIN, FIELD_VCR_KMS_CONTEXT, FIELD_CRYPTO_AGENT_FACTORY, FIELD_ENCRYPTED_SIZE};
 
   private String id;
   private String partitionId;
@@ -43,12 +65,12 @@ public class CloudBlobMetadata {
   private long size;
   private int accountId;
   private int containerId;
-  private long expirationTime;
-  private long deletionTime;
-  private EncryptionOrigin encryptionOrigin;
+  private long expirationTime = Utils.Infinite_Time;
+  private long deletionTime = Utils.Infinite_Time;
+  private int namingScheme = 0;
+  private EncryptionOrigin encryptionOrigin = EncryptionOrigin.NONE;
   private String vcrKmsContext;
   private String cryptoAgentFactory;
-  private String cloudBlobName;
   private long encryptedSize;
   // this field is derived from the system generated last Update Time in the cloud db
   // and hence shouldn't be serializable.
@@ -76,6 +98,14 @@ public class CloudBlobMetadata {
   }
 
   /**
+   * Constructor from {@link BlobId}.  All other metadata are ignored.
+   * @param blobId The BlobId for metadata record.
+   */
+  public CloudBlobMetadata(BlobId blobId) {
+    this(blobId, 0, Utils.Infinite_Time, 0, EncryptionOrigin.NONE);
+  }
+
+  /**
    * Constructor from {@link BlobId}.
    * @param blobId The BlobId for metadata record.
    * @param creationTime The blob creation time.
@@ -85,7 +115,7 @@ public class CloudBlobMetadata {
    */
   public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
       EncryptionOrigin encryptionOrigin) {
-    this(blobId, creationTime, expirationTime, size, encryptionOrigin, null, null, -1);
+    this(blobId, creationTime, expirationTime, size, encryptionOrigin, null, null, 0);
   }
 
   /**
@@ -115,7 +145,6 @@ public class CloudBlobMetadata {
     this.encryptionOrigin = encryptionOrigin;
     this.vcrKmsContext = vcrKmsContext;
     this.cryptoAgentFactory = cryptoAgentFactory;
-    this.cloudBlobName = blobId.getID();
     this.encryptedSize = encryptedSize;
     this.lastUpdateTime = System.currentTimeMillis();
   }
@@ -303,20 +332,12 @@ public class CloudBlobMetadata {
     return this;
   }
 
-  /**
-   * @return the blob's name in cloud.
-   */
-  public String getCloudBlobName() {
-    return cloudBlobName;
+  public int getNamingScheme() {
+    return namingScheme;
   }
 
-  /**
-   * Sets blob's name in cloud.
-   * @param cloudBlobName the blob's name in cloud.
-   * @return this instance.
-   */
-  public CloudBlobMetadata setCloudBlobName(String cloudBlobName) {
-    this.cloudBlobName = cloudBlobName;
+  public CloudBlobMetadata setNamingScheme(int namingScheme) {
+    this.namingScheme = namingScheme;
     return this;
   }
 
@@ -399,8 +420,72 @@ public class CloudBlobMetadata {
       return false;
     }
     CloudBlobMetadata om = (CloudBlobMetadata) o;
-    return (Objects.equals(id, om.id) && Objects.equals(partitionId, om.partitionId) && creationTime == om.creationTime
+    return (Objects.equals(id, om.id) && Objects.equals(partitionId, om.partitionId) && accountId == om.accountId
+        && containerId == om.containerId && size == om.size && creationTime == om.creationTime
         && uploadTime == om.uploadTime && expirationTime == om.expirationTime && deletionTime == om.deletionTime
-        && size == om.size && accountId == om.accountId && containerId == om.containerId);
+        && namingScheme == om.namingScheme && encryptionOrigin == om.encryptionOrigin && Objects.equals(vcrKmsContext,
+        om.vcrKmsContext) && Objects.equals(cryptoAgentFactory, om.cryptoAgentFactory)
+        && encryptedSize == om.encryptedSize);
+  }
+
+  /**
+   * @return a {@link HashMap} of metadata key-value pairs.
+   */
+  public HashMap<String, String> toMap() {
+    ObjectMapper objectMapper = new ObjectMapper();
+    HashMap<String, String> map = new HashMap<>();
+    ObjectNode node = objectMapper.convertValue(this, ObjectNode.class);
+    node.fieldNames().forEachRemaining(fieldName -> {
+      map.put(fieldName, node.get(fieldName).asText());
+    });
+    return map;
+  }
+
+  /** Custom serializer for CloudBlobMetadata class that omits fields with default values. */
+  static class MetadataSerializer extends StdSerializer<CloudBlobMetadata> {
+
+    public MetadataSerializer() {
+      this(null);
+    }
+
+    public MetadataSerializer(Class<CloudBlobMetadata> t) {
+      super(t);
+    }
+
+    @Override
+    public void serialize(CloudBlobMetadata value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+
+      gen.writeStartObject();
+      // Required fields
+      gen.writeStringField(FIELD_ID, value.id);
+      gen.writeStringField(FIELD_PARTITION_ID, value.partitionId);
+      gen.writeNumberField(FIELD_ACCOUNT_ID, value.accountId);
+      gen.writeNumberField(FIELD_CONTAINER_ID, value.containerId);
+      gen.writeNumberField(FIELD_SIZE, value.size);
+      // Optional fields with default values to exclude
+      if (value.creationTime > 0) {
+        gen.writeNumberField(FIELD_CREATION_TIME, value.creationTime);
+      }
+      if (value.uploadTime > 0) {
+        gen.writeNumberField(FIELD_UPLOAD_TIME, value.uploadTime);
+      }
+      if (value.deletionTime > 0) {
+        gen.writeNumberField(FIELD_DELETION_TIME, value.deletionTime);
+      }
+      if (value.expirationTime > 0) {
+        gen.writeNumberField(FIELD_EXPIRATION_TIME, value.expirationTime);
+      }
+      if (value.namingScheme > 0) {
+        gen.writeNumberField(FIELD_NAMING_SCHEME, value.namingScheme);
+      }
+      // Encryption fields that may or may not apply
+      if (value.encryptionOrigin == EncryptionOrigin.VCR) {
+        gen.writeStringField(FIELD_ENCRYPTION_ORIGIN, value.encryptionOrigin.toString());
+        gen.writeStringField(FIELD_VCR_KMS_CONTEXT, value.vcrKmsContext);
+        gen.writeStringField(FIELD_CRYPTO_AGENT_FACTORY, value.cryptoAgentFactory);
+        gen.writeNumberField(FIELD_ENCRYPTED_SIZE, value.encryptedSize);
+      }
+      gen.writeEndObject();
+    }
   }
 }

@@ -129,8 +129,7 @@ public class AzureBlobDataAccessor {
     Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
     try {
       BlockBlobClient blobClient = getBlockBlobClient(blobId, true);
-      cloudBlobMetadata.setCloudBlobName(getAzureBlobName(blobId));
-      Map<String, String> metadata = getMetadataMap(cloudBlobMetadata);
+      Map<String, String> metadata = cloudBlobMetadata.toMap();
       blobClient.uploadWithResponse(blobInputStream, inputLength, null, metadata, null, null, blobRequestConditions,
           null, Context.NONE);
       logger.debug("Uploaded blob {} to ABS", blobId);
@@ -242,7 +241,7 @@ public class AzureBlobDataAccessor {
     azureMetrics.blobDownloadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
     try {
-      String containerName = getAzureContainerName(blobId.getPartition().toPathString());
+      String containerName = getAzureContainerName(blobId);
       String blobName = getAzureBlobName(blobId);
       downloadFile(containerName, blobName, outputStream, true);
       azureMetrics.blobDownloadSuccessCount.inc();
@@ -319,7 +318,7 @@ public class AzureBlobDataAccessor {
    * @return {@code BlockBlobClient} reference.
    */
   private BlockBlobClient getBlockBlobClient(BlobId blobId, boolean autoCreateContainer) {
-    String containerName = getAzureContainerName(blobId.getPartition().toPathString());
+    String containerName = getAzureContainerName(blobId);
     String blobName = getAzureBlobName(blobId);
     return getBlockBlobClient(containerName, blobName, autoCreateContainer);
   }
@@ -364,14 +363,27 @@ public class AzureBlobDataAccessor {
   }
 
   /**
-   * @return the name of the Azure storage container where blobs in the specified partition are stored.
-   * @param partitionPath the lexical path of the Ambry partition.
+   * @return the name of the Azure storage container to store the specified blob.
+   * @param blobId the id of the blob to store.
    */
-  private String getAzureContainerName(String partitionPath) {
+  String getAzureContainerName(BlobId blobId) {
+    return getAzureContainerName(new CloudBlobMetadata(blobId));
+  }
+
+  /**
+   * @return the name of the Azure storage container to store the specified blob.
+   * @param blobMetadata the blob metadata.
+   */
+  String getAzureContainerName(CloudBlobMetadata blobMetadata) {
     // Include Ambry cluster name in case the same storage account is used to backup multiple clusters.
     // Azure requires container names to be all lower case
-    String rawContainerName = clusterName + SEPARATOR + partitionPath;
-    return rawContainerName.toLowerCase();
+    String partitionPath = blobMetadata.getPartitionId();
+    return getClusterAwareAzureContainerName(partitionPath);
+  }
+
+  String getClusterAwareAzureContainerName(String inputName) {
+    String containerName = clusterName + SEPARATOR + inputName;
+    return containerName.toLowerCase();
   }
 
   /**
@@ -379,9 +391,27 @@ public class AzureBlobDataAccessor {
    * @param blobId The {@link BlobId} to store.
    * @return An Azure-friendly blob name.
    */
-  private String getAzureBlobName(BlobId blobId) {
+  String getAzureBlobName(BlobId blobId) {
+    return getAzureBlobName(blobId.getID());
+  }
+
+  /**
+   * Get the blob name to use in Azure Blob Storage
+   * @param blobMetadata The blob metadata.
+   * @return An Azure-friendly blob name.
+   */
+  String getAzureBlobName(CloudBlobMetadata blobMetadata) {
+    return getAzureBlobName(blobMetadata.getId());
+  }
+
+  // TODO: add AzureBlobNameConverter with versioning, this scheme being version 0
+  /**
+   * Get the blob name to use in Azure Blob Storage
+   * @param blobIdStr The blobId string.
+   * @return An Azure-friendly blob name.
+   */
+  private String getAzureBlobName(String blobIdStr) {
     // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
-    String blobIdStr = blobId.getID();
     return blobIdStr.substring(blobIdStr.length() - 4) + SEPARATOR + blobIdStr;
   }
 
@@ -392,23 +422,5 @@ public class AzureBlobDataAccessor {
    */
   private static boolean isNotFoundError(BlobErrorCode errorCode) {
     return (errorCode == BlobErrorCode.BLOB_NOT_FOUND || errorCode == BlobErrorCode.CONTAINER_NOT_FOUND);
-  }
-
-  /**
-   * @param cloudBlobMetadata the {@link CloudBlobMetadata}.
-   * @return a {@link HashMap} of metadata key-value pairs.
-   */
-  private static HashMap<String, String> getMetadataMap(CloudBlobMetadata cloudBlobMetadata) {
-    HashMap<String, String> map = new HashMap<>();
-    map.put(CloudBlobMetadata.FIELD_CREATION_TIME, String.valueOf(cloudBlobMetadata.getCreationTime()));
-    map.put(CloudBlobMetadata.FIELD_UPLOAD_TIME, String.valueOf(cloudBlobMetadata.getUploadTime()));
-    map.put(CloudBlobMetadata.FIELD_EXPIRATION_TIME, String.valueOf(cloudBlobMetadata.getExpirationTime()));
-    map.put(CloudBlobMetadata.FIELD_ACCOUNT_ID, String.valueOf(cloudBlobMetadata.getAccountId()));
-    map.put(CloudBlobMetadata.FIELD_CONTAINER_ID, String.valueOf(cloudBlobMetadata.getContainerId()));
-    map.put(CloudBlobMetadata.FIELD_ENCRYPTION_ORIGIN, cloudBlobMetadata.getEncryptionOrigin().name());
-    map.put(CloudBlobMetadata.FIELD_VCR_KMS_CONTEXT, String.valueOf(cloudBlobMetadata.getVcrKmsContext()));
-    map.put(CloudBlobMetadata.FIELD_CRYPTO_AGENT_FACTORY, String.valueOf(cloudBlobMetadata.getCryptoAgentFactory()));
-    map.put(CloudBlobMetadata.FIELD_CLOUD_BLOB_NAME, String.valueOf(cloudBlobMetadata.getCloudBlobName()));
-    return map;
   }
 }
