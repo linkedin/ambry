@@ -16,10 +16,10 @@ package com.github.ambry.cloud;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Utils;
@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 
@@ -58,6 +59,8 @@ public class CloudBlobMetadata {
   public static final String[] ENCRYPTION_FIELDS =
       new String[]{FIELD_ENCRYPTION_ORIGIN, FIELD_VCR_KMS_CONTEXT, FIELD_CRYPTO_AGENT_FACTORY, FIELD_ENCRYPTED_SIZE};
 
+  private static final ObjectMapper objectMapper = new ObjectMapper();
+
   private String id;
   private String partitionId;
   private long creationTime;
@@ -88,21 +91,12 @@ public class CloudBlobMetadata {
     /** Encrypted by Router */
     ROUTER,
     /** Encrypted by VCR */
-    VCR
-  }
+    VCR}
 
   /**
    * Default constructor (for JSONSerializer).
    */
   public CloudBlobMetadata() {
-  }
-
-  /**
-   * Constructor from {@link BlobId}.  All other metadata are ignored.
-   * @param blobId The BlobId for metadata record.
-   */
-  public CloudBlobMetadata(BlobId blobId) {
-    this(blobId, 0, Utils.Infinite_Time, 0, EncryptionOrigin.NONE);
   }
 
   /**
@@ -431,21 +425,17 @@ public class CloudBlobMetadata {
   /**
    * @return a {@link HashMap} of metadata key-value pairs.
    */
-  public HashMap<String, String> toMap() {
-    ObjectMapper objectMapper = new ObjectMapper();
-    HashMap<String, String> map = new HashMap<>();
-    ObjectNode node = objectMapper.convertValue(this, ObjectNode.class);
-    node.fieldNames().forEachRemaining(fieldName -> {
-      map.put(fieldName, node.get(fieldName).asText());
+  public Map<String, String> toMap() {
+    return objectMapper.convertValue(this, new TypeReference<Map<String, String>>() {
     });
-    return map;
   }
 
   /** Custom serializer for CloudBlobMetadata class that omits fields with default values. */
   static class MetadataSerializer extends StdSerializer<CloudBlobMetadata> {
 
+    /** Default constructor required for Jackson serialization. */
     public MetadataSerializer() {
-      this(null);
+      this(CloudBlobMetadata.class);
     }
 
     public MetadataSerializer(Class<CloudBlobMetadata> t) {

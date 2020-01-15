@@ -31,13 +31,13 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -367,7 +367,8 @@ public class AzureBlobDataAccessor {
    * @param blobId the id of the blob to store.
    */
   String getAzureContainerName(BlobId blobId) {
-    return getAzureContainerName(new CloudBlobMetadata(blobId));
+    return getAzureContainerName(
+        new CloudBlobMetadata(blobId, 0, Utils.Infinite_Time, 0, CloudBlobMetadata.EncryptionOrigin.NONE));
   }
 
   /**

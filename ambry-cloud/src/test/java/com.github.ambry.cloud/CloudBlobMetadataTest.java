@@ -19,7 +19,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.ArrayUtils;
 import org.junit.Before;
@@ -46,15 +46,6 @@ public class CloudBlobMetadataTest {
     PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
     blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
         BlobDataType.DATACHUNK);
-  }
-
-  /** Barebones constructor */
-  @Test
-  public void testBarebones() throws Exception {
-    // Barebones constructor
-    CloudBlobMetadata blobMetadata = new CloudBlobMetadata(blobId);
-    verifySerde(blobMetadata, CloudBlobMetadata.REQUIRED_FIELDS,
-        ArrayUtils.addAll(CloudBlobMetadata.OPTIONAL_FIELDS, CloudBlobMetadata.ENCRYPTION_FIELDS));
   }
 
   /** Permanent blob */
@@ -111,7 +102,7 @@ public class CloudBlobMetadataTest {
    */
   private void verifySerde(CloudBlobMetadata blobMetadata, String[] expectedFields, String[] unexpectedFields)
       throws JsonProcessingException {
-    HashMap<String, String> propertyMap = blobMetadata.toMap();
+    Map<String, String> propertyMap = blobMetadata.toMap();
     for (String fieldName : expectedFields) {
       assertTrue("Expected field " + fieldName, propertyMap.containsKey(fieldName));
     }
