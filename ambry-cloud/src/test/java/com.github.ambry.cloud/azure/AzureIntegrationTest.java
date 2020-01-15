@@ -56,7 +56,7 @@ import static org.junit.Assert.*;
  * Must supply file azure-test.properties in classpath with valid config property values.
  */
 @RunWith(MockitoJUnitRunner.class)
-//@Ignore
+@Ignore
 public class AzureIntegrationTest {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureIntegrationTest.class);
