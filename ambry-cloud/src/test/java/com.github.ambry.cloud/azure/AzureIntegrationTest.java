@@ -200,13 +200,15 @@ public class AzureIntegrationTest {
     long creationTime = now - TimeUnit.DAYS.toMillis(7);
     int expectedDeadBlobs = 0;
     for (int j = 0; j < bucketCount; j++) {
+      Thread.sleep(20);
+      logger.info("Uploading bucket {}", j);
       // Active blob
       BlobId blobId =
           new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
               BlobDataType.DATACHUNK);
       InputStream inputStream = getBlobInputStream(blobSize);
       CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
+          CloudBlobMetadata.EncryptionOrigin.NONE);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
 
@@ -216,7 +218,7 @@ public class AzureIntegrationTest {
           BlobDataType.DATACHUNK);
       inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
+          CloudBlobMetadata.EncryptionOrigin.NONE);
       cloudBlobMetadata.setDeletionTime(timeOfDeath);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
@@ -227,8 +229,7 @@ public class AzureIntegrationTest {
           BlobDataType.DATACHUNK);
       inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata =
-          new CloudBlobMetadata(blobId, creationTime, timeOfDeath, blobSize, CloudBlobMetadata.EncryptionOrigin.VCR,
-              vcrKmsContext, cryptoAgentFactory, blobSize);
+          new CloudBlobMetadata(blobId, creationTime, timeOfDeath, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
       expectedDeadBlobs++;
@@ -239,7 +240,7 @@ public class AzureIntegrationTest {
           BlobDataType.DATACHUNK);
       inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
+          CloudBlobMetadata.EncryptionOrigin.NONE);
       cloudBlobMetadata.setDeletionTime(timeOfDeath);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
@@ -249,13 +250,13 @@ public class AzureIntegrationTest {
           BlobDataType.DATACHUNK);
       inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata =
-          new CloudBlobMetadata(blobId, creationTime, timeOfDeath, blobSize, CloudBlobMetadata.EncryptionOrigin.VCR,
-              vcrKmsContext, cryptoAgentFactory, blobSize);
+          new CloudBlobMetadata(blobId, creationTime, timeOfDeath, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     }
 
     // run getDeadBlobs query, should return 20
+    logger.info("Query dead blobs");
     String partitionPath = String.valueOf(testPartition);
     List<CloudBlobMetadata> deadBlobs = azureDest.getDeadBlobs(partitionPath);
     assertEquals("Unexpected number of dead blobs", expectedDeadBlobs, deadBlobs.size());
@@ -320,7 +321,8 @@ public class AzureIntegrationTest {
     Timer dummyTimer = new Timer();
     List<CloudBlobMetadata> allBlobsInPartition =
         azureDest.getCosmosDataAccessor().queryMetadata(partitionPath, new SqlQuerySpec("SELECT * FROM c"), dummyTimer);
-    azureDest.purgeBlobs(allBlobsInPartition);
+    int numPurged = azureDest.purgeBlobs(allBlobsInPartition);
+    logger.info("Cleaned up {} blobs", numPurged);
   }
 
   /** Persist tokens to Azure, then read them back and verify they match. */

@@ -32,6 +32,7 @@ import com.microsoft.azure.cosmosdb.RetryOptions;
 import com.microsoft.azure.cosmosdb.SqlParameter;
 import com.microsoft.azure.cosmosdb.SqlParameterCollection;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.internal.HttpConstants;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
 import java.io.InputStream;
@@ -172,7 +173,7 @@ class AzureCloudDestination implements CloudDestination {
     } catch (BlobStorageException | DocumentClientException | IOException e) {
       azureMetrics.backupErrorCount.inc();
       updateErrorMetrics(e);
-      throw new CloudStorageException("Error uploading blob " + blobId, e);
+      throw toCloudStorageException("Error uploading blob " + blobId, e);
     }
   }
 
@@ -182,7 +183,7 @@ class AzureCloudDestination implements CloudDestination {
       azureBlobDataAccessor.downloadBlob(blobId, outputStream);
     } catch (BlobStorageException e) {
       updateErrorMetrics(e);
-      throw new CloudStorageException("Error downloading blob " + blobId, e);
+      throw toCloudStorageException("Error downloading blob " + blobId, e);
     }
   }
 
@@ -235,7 +236,7 @@ class AzureCloudDestination implements CloudDestination {
       return cosmosDataAccessor.queryMetadata(partitionPath, new SqlQuerySpec(query),
           azureMetrics.missingKeysQueryTime);
     } catch (DocumentClientException dex) {
-      throw new CloudStorageException("Failed to query blob metadata for partition " + partitionPath, dex);
+      throw toCloudStorageException("Failed to query blob metadata for partition " + partitionPath, dex);
     }
   }
 
@@ -249,7 +250,7 @@ class AzureCloudDestination implements CloudDestination {
     try {
       return cosmosDataAccessor.queryMetadata(partitionPath, deadBlobsQuery, azureMetrics.deadBlobsQueryTime);
     } catch (DocumentClientException dex) {
-      throw new CloudStorageException("Failed to query dead blobs for partition " + partitionPath, dex);
+      throw toCloudStorageException("Failed to query dead blobs for partition " + partitionPath, dex);
     }
   }
 
@@ -270,7 +271,7 @@ class AzureCloudDestination implements CloudDestination {
       }
       return CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
     } catch (DocumentClientException dex) {
-      throw new CloudStorageException("Failed to query blobs for partition " + partitionPath, dex);
+      throw toCloudStorageException("Failed to query blobs for partition " + partitionPath, dex);
     }
   }
 
@@ -343,7 +344,7 @@ class AzureCloudDestination implements CloudDestination {
     } catch (BlobStorageException | DocumentClientException e) {
       azureMetrics.blobUpdateErrorCount.inc();
       updateErrorMetrics(e);
-      throw new CloudStorageException("Error updating blob metadata: " + blobId, e);
+      throw toCloudStorageException("Error updating blob metadata: " + blobId, e);
     }
   }
 
@@ -377,7 +378,7 @@ class AzureCloudDestination implements CloudDestination {
       azureMetrics.blobDeleteErrorCount.inc();
       String error = (e instanceof DocumentClientException) ? "Failed to delete metadata document for blob " + blobId
           : "Failed to delete blob " + blobId + ", storage path: " + containerName + "/" + blobFileName;
-      throw new CloudStorageException(error, e);
+      throw toCloudStorageException(error, e);
     } finally {
       deleteTimer.stop();
     }
@@ -404,7 +405,7 @@ class AzureCloudDestination implements CloudDestination {
       String containerName = azureBlobDataAccessor.getClusterAwareAzureContainerName(partitionPath);
       azureBlobDataAccessor.uploadFile(containerName, tokenFileName, inputStream);
     } catch (IOException | BlobStorageException e) {
-      throw new CloudStorageException("Could not persist token: " + partitionPath, e);
+      throw toCloudStorageException("Could not persist token: " + partitionPath, e);
     }
   }
 
@@ -415,7 +416,7 @@ class AzureCloudDestination implements CloudDestination {
       String containerName = azureBlobDataAccessor.getClusterAwareAzureContainerName(partitionPath);
       return azureBlobDataAccessor.downloadFile(containerName, tokenFileName, outputStream, false);
     } catch (BlobStorageException e) {
-      throw new CloudStorageException("Could not retrieve token: " + partitionPath, e);
+      throw toCloudStorageException("Could not retrieve token: " + partitionPath, e);
     }
   }
 
@@ -433,6 +434,27 @@ class AzureCloudDestination implements CloudDestination {
    */
   AzureBlobDataAccessor getAzureBlobDataAccessor() {
     return azureBlobDataAccessor;
+  }
+
+  /**
+   * Construct a {@link CloudStorageException} from a root cause exception.
+   * @param message the exception message.
+   * @param e the root cause exception.
+   * @return the {@link CloudStorageException}.
+   */
+  private static final CloudStorageException toCloudStorageException(String message, Exception e) {
+    boolean isRetryable = false;
+    Long retryDelayMs = null;
+    int statusCode = -1;
+    if (e instanceof BlobStorageException) {
+      statusCode = ((BlobStorageException) e).getStatusCode();
+    } else if (e instanceof DocumentClientException) {
+      statusCode = ((DocumentClientException) e).getStatusCode();
+      retryDelayMs = ((DocumentClientException) e).getRetryAfterInMilliseconds();
+    }
+    // Everything is retryable except NOT_FOUND
+    isRetryable = (statusCode != HttpConstants.StatusCodes.NOTFOUND);
+    return new CloudStorageException(message, e, isRetryable, retryDelayMs);
   }
 
   /**
