@@ -510,7 +510,7 @@ public class StorageManager implements StoreManager {
           store.deleteStoreFiles();
         } catch (Exception e) {
           throw new StateTransitionException("Failed to delete directory for store " + partitionName,
-              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+              ReplicaOperationFailure);
         }
         // Remove store from sealed and stopped list (if present)
         logger.info("Removing store from sealed and stopped list(if present)");
@@ -518,7 +518,7 @@ public class StorageManager implements StoreManager {
         replicaStatusDelegate.unmarkStopped(Collections.singletonList(replica));
       } else {
         throw new StateTransitionException("Failed to remove store " + partitionName + " from storage manager",
-            StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+            ReplicaOperationFailure);
       }
       partitionNameToReplicaId.remove(partitionName);
       logger.info("Partition {} is successfully dropped on current node", partitionName);

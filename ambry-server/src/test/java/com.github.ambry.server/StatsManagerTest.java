@@ -71,6 +71,7 @@ import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 
@@ -401,8 +402,7 @@ public class StatsManagerTest {
       clusterParticipant.onPartitionBecomeBootstrapFromOffline("InvalidPartition");
       fail("should fail because partition is not found");
     } catch (StateTransitionException e) {
-      assertEquals("Transition error doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
-          e.getErrorCode());
+      assertEquals("Transition error doesn't match", ReplicaNotFound, e.getErrorCode());
     }
     // 3. create a new partition and test replica addition failure
     PartitionId newPartition = new MockPartitionId(3, MockClusterMap.DEFAULT_PARTITION_CLASS,
@@ -413,8 +413,7 @@ public class StatsManagerTest {
       clusterParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
       fail("should fail because adding replica to stats manager failed");
     } catch (StateTransitionException e) {
-      assertEquals("Transition error code doesn't match",
-          StateTransitionException.TransitionErrorCode.ReplicaOperationFailure, e.getErrorCode());
+      assertEquals("Transition error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
     // 4. test replica addition success during Offline-To-Bootstrap transition
     assertFalse("Before adding new replica, in-mem data structure should not contain new partition",
@@ -563,8 +562,7 @@ public class StatsManagerTest {
       clusterParticipant.onPartitionBecomeDroppedFromOffline("-1");
       fail("should fail because replica is not found");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
     }
     // 2. attempt to remove replica while store is still running (remove store failure case)
     ReplicaId replicaToDrop = localReplicas.get(0);
@@ -572,8 +570,7 @@ public class StatsManagerTest {
       clusterParticipant.onPartitionBecomeDroppedFromOffline(replicaToDrop.getPartitionId().toPathString());
       fail("should fail because store is still running");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaOperationFailure,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
     // 4. shutdown the store but introduce file deletion failure (put a invalid dir in store dir)
     storageManager.shutdownBlobStore(replicaToDrop.getPartitionId());
@@ -585,8 +582,7 @@ public class StatsManagerTest {
       clusterParticipant.onPartitionBecomeDroppedFromOffline(replicaToDrop.getPartitionId().toPathString());
       fail("should fail because store deletion fails");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaOperationFailure,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
     // reset permission to allow deletion to succeed.
     assertTrue("Could not make readable", invalidDir.setReadable(true));

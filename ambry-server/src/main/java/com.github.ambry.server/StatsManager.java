@@ -429,7 +429,7 @@ class StatsManager {
       ReplicaId replica = storageManager.getReplica(partitionName);
       if (replica == null) {
         throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
-            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+            ReplicaNotFound);
       }
       // remove replica from in-mem data structure. If replica doesn't exist, log info but don't fail the transition
       removeReplica(replica);
