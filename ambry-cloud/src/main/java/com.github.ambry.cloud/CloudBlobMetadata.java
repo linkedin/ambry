@@ -436,11 +436,7 @@ public class CloudBlobMetadata {
 
     /** Default constructor required for Jackson serialization. */
     public MetadataSerializer() {
-      this(CloudBlobMetadata.class);
-    }
-
-    public MetadataSerializer(Class<CloudBlobMetadata> t) {
-      super(t);
+      super(CloudBlobMetadata.class);
     }
 
     @Override
