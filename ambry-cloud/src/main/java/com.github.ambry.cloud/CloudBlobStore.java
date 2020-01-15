@@ -37,6 +37,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
@@ -50,6 +51,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -77,6 +79,10 @@ class CloudBlobStore implements Store {
   private final Map<String, BlobState> recentBlobCache;
   private final long minTtlMillis;
   private final boolean requireEncryption;
+  // For live serving mode, implement retries and disable caching
+  private final boolean isVcr;
+  private final long defaultRetryDelay;
+  private final int maxAttempts;
   private boolean started;
 
   /**
@@ -98,7 +104,15 @@ class CloudBlobStore implements Store {
     this.vcrMetrics = Objects.requireNonNull(vcrMetrics, "vcrMetrics is required");
     minTtlMillis = TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays);
     requireEncryption = cloudConfig.vcrRequireEncryption;
-    recentBlobCache = Collections.synchronizedMap(new RecentBlobCache(cloudConfig.recentBlobCacheLimit));
+    isVcr = cloudConfig.cloudIsVcr;
+    if (isVcr) {
+      maxAttempts = 1;
+      recentBlobCache = Collections.synchronizedMap(new RecentBlobCache(cloudConfig.recentBlobCacheLimit));
+    } else {
+      maxAttempts = cloudConfig.cloudMaxAttempts;
+      recentBlobCache = Collections.emptyMap();
+    }
+    defaultRetryDelay = cloudConfig.cloudDefaultRetryDelay;
 
     String cryptoAgentFactoryClass = cloudConfig.cloudBlobCryptoAgentFactoryClass;
     try {
@@ -113,6 +127,7 @@ class CloudBlobStore implements Store {
   @Override
   public void start() {
     started = true;
+    logger.info("Started store: {}", this.toString());
   }
 
   @Override
@@ -123,7 +138,8 @@ class CloudBlobStore implements Store {
     List<MessageInfo> messageInfos = new ArrayList<>(ids.size());
     try {
       List<BlobId> blobIdList = ids.stream().map(key -> (BlobId) key).collect(Collectors.toList());
-      Map<String, CloudBlobMetadata> cloudBlobMetadataListMap = cloudDestination.getBlobMetadata(blobIdList);
+      Map<String, CloudBlobMetadata> cloudBlobMetadataListMap =
+          doWithRetries(() -> cloudDestination.getBlobMetadata(blobIdList), "GetBlobMetadata");
       if (cloudBlobMetadataListMap.size() < blobIdList.size()) {
         Set<BlobId> missingBlobs = blobIdList.stream()
             .filter(blobId -> !cloudBlobMetadataListMap.containsKey(blobId))
@@ -167,13 +183,19 @@ class CloudBlobStore implements Store {
     try {
       // TODO: for GET ops, avoid extra trip to fetch metadata unless config flag is set
       // TODO: if needed, fetch metadata here and check encryption
-      if (cloudBlobMetadata.getEncryptionOrigin().equals(EncryptionOrigin.VCR)) {
+      if (cloudBlobMetadata.getEncryptionOrigin() == EncryptionOrigin.VCR) {
         ByteBuffer encryptedBlob = ByteBuffer.allocate((int) cloudBlobMetadata.getEncryptedSize());
-        cloudDestination.downloadBlob(blobId, new ByteBufferOutputStream(encryptedBlob));
+        doWithRetries(() -> {
+          cloudDestination.downloadBlob(blobId, new ByteBufferOutputStream(encryptedBlob));
+          return null;
+        }, "Download");
         ByteBuffer decryptedBlob = cryptoAgent.decrypt(encryptedBlob);
         outputStream.write(decryptedBlob.array());
       } else {
-        cloudDestination.downloadBlob(blobId, outputStream);
+        doWithRetries(() -> {
+          cloudDestination.downloadBlob(blobId, outputStream);
+          return null;
+        }, "Download");
       }
     } catch (CloudStorageException | GeneralSecurityException | IOException e) {
       throw new StoreException("Error occured in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
@@ -250,47 +272,49 @@ class CloudBlobStore implements Store {
    * @throws CloudStorageException if the upload failed.
    */
   private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size)
-      throws CloudStorageException, IOException, GeneralSecurityException {
+      throws CloudStorageException, IOException {
     if (shouldUpload(messageInfo)) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       boolean isRouterEncrypted = isRouterEncrypted(blobId);
-      String kmsContext = null;
-      String cryptoAgentFactoryClass = null;
       EncryptionOrigin encryptionOrigin = isRouterEncrypted ? EncryptionOrigin.ROUTER : EncryptionOrigin.NONE;
-      long encryptedSize = -1;
-      if (requireEncryption) {
-        if (isRouterEncrypted) {
-          // Nothing further needed
-        } else {
-          // Need to encrypt the buffer before upload
-          Timer.Context encryptionTimer = vcrMetrics.blobEncryptionTime.time();
-          try {
-            messageBuf = cryptoAgent.encrypt(messageBuf);
-            encryptedSize = messageBuf.remaining();
-          } catch (GeneralSecurityException ex) {
-            vcrMetrics.blobEncryptionErrorCount.inc();
-          } finally {
-            encryptionTimer.stop();
-          }
-          vcrMetrics.blobEncryptionCount.inc();
-          encryptionOrigin = EncryptionOrigin.VCR;
-          kmsContext = cryptoAgent.getEncryptionContext();
-          cryptoAgentFactoryClass = this.cryptoAgentFactory.getClass().getName();
+      boolean encryptThisBlob = requireEncryption && !isRouterEncrypted;
+      if (encryptThisBlob) {
+        // Need to encrypt the buffer before upload
+        long encryptedSize = -1;
+        Timer.Context encryptionTimer = vcrMetrics.blobEncryptionTime.time();
+        try {
+          messageBuf = cryptoAgent.encrypt(messageBuf);
+          encryptedSize = messageBuf.remaining();
+        } catch (GeneralSecurityException ex) {
+          vcrMetrics.blobEncryptionErrorCount.inc();
+        } finally {
+          encryptionTimer.stop();
         }
+        vcrMetrics.blobEncryptionCount.inc();
+        CloudBlobMetadata blobMetadata =
+            new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
+                messageInfo.getSize(), EncryptionOrigin.VCR, cryptoAgent.getEncryptionContext(),
+                cryptoAgentFactory.getClass().getName(), encryptedSize);
+        // If buffer was encrypted, we no longer know its size
+        long bufferlen = (encryptedSize == -1) ? size : encryptedSize;
+        uploadBlobInternal(blobId, bufferlen, blobMetadata, new ByteBufferInputStream(messageBuf));
       } else {
-        // encryption not required, upload as is
+        // Upload blob as is
+        CloudBlobMetadata blobMetadata =
+            new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
+                messageInfo.getSize(), encryptionOrigin);
+        uploadBlobInternal(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
       }
-      CloudBlobMetadata blobMetadata =
-          new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
-              messageInfo.getSize(), encryptionOrigin, kmsContext, cryptoAgentFactoryClass, encryptedSize);
-      // If buffer was encrypted, we no longer know its size
-      long bufferlen = (encryptedSize == -1) ? size : encryptedSize;
-      cloudDestination.uploadBlob(blobId, bufferlen, blobMetadata, new ByteBufferInputStream(messageBuf));
       addToCache(blobId.getID(), BlobState.CREATED);
     } else {
       logger.trace("Blob is skipped: {}", messageInfo);
       vcrMetrics.blobUploadSkippedCount.inc();
     }
+  }
+
+  private void uploadBlobInternal(BlobId blobId, long bufferlen, CloudBlobMetadata blobMetadata,
+      InputStream inputStream) throws CloudStorageException {
+    doWithRetries(() -> cloudDestination.uploadBlob(blobId, bufferlen, blobMetadata, inputStream), "Upload");
   }
 
   /**
@@ -331,7 +355,7 @@ class CloudBlobStore implements Store {
         String blobKey = msgInfo.getStoreKey().getID();
         BlobState blobState = recentBlobCache.get(blobKey);
         if (blobState != BlobState.DELETED) {
-          cloudDestination.deleteBlob(blobId, msgInfo.getOperationTimeMs());
+          doWithRetries(() -> cloudDestination.deleteBlob(blobId, msgInfo.getOperationTimeMs()), "Delete");
           addToCache(blobKey, BlobState.DELETED);
         }
       }
@@ -359,7 +383,7 @@ class CloudBlobStore implements Store {
           BlobId blobId = (BlobId) msgInfo.getStoreKey();
           BlobState blobState = recentBlobCache.get(blobId.getID());
           if (blobState == null || blobState == BlobState.CREATED) {
-            cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time);
+            doWithRetries(() -> cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time), "UpdateTtl");
             addToCache(blobId.getID(), BlobState.TTL_UPDATED);
           }
         } else {
@@ -379,7 +403,9 @@ class CloudBlobStore implements Store {
    */
   // Visible for test
   void addToCache(String blobKey, BlobState blobState) {
-    recentBlobCache.put(blobKey, blobState);
+    if (isVcr) {
+      recentBlobCache.put(blobKey, blobState);
+    }
   }
 
   @Override
@@ -500,6 +526,7 @@ class CloudBlobStore implements Store {
   public void shutdown() {
     recentBlobCache.clear();
     started = false;
+    logger.info("Stopped store: {}", this.toString());
   }
 
   @Override
@@ -510,6 +537,56 @@ class CloudBlobStore implements Store {
   private void checkStarted() throws StoreException {
     if (!started) {
       throw new StoreException("Store not started", StoreErrorCodes.Store_Not_Started);
+    }
+  }
+
+  /**
+   * Execute an action up to the configured number of attempts.
+   * @param action the {@link Callable} to call.
+   * @param actionName the name of the action.
+   * @return the return value of the action.
+   * @throws CloudStorageException
+   */
+  private <T> T doWithRetries(Callable<T> action, String actionName) throws CloudStorageException {
+    int attempts = 0;
+    while (attempts < maxAttempts) {
+      try {
+        return action.call();
+      } catch (Exception e) {
+        attempts++;
+        throwOrDelay(e, actionName, attempts);
+      }
+    }
+    // Line should never be reached
+    throw new CloudStorageException(actionName + " failed " + attempts + " attempts");
+  }
+
+  /**
+   * Utility to either throw the input exception or sleep for a specified retry delay.
+   * @param e the input exception to check.
+   * @param actionName the name of the action that threw the exception.
+   * @param attempts the number of attempts made so far.
+   * @throws CloudStorageException
+   */
+  private void throwOrDelay(Throwable e, String actionName, int attempts) throws CloudStorageException {
+    if (e instanceof CloudStorageException) {
+      CloudStorageException cse = (CloudStorageException) e;
+      if (cse.isRetryable() && attempts < maxAttempts) {
+        long delay = (cse.getRetryDelayMs() > 0) ? cse.getRetryDelayMs() : defaultRetryDelay;
+        logger.error("{} failed attempt {}, retrying after {} ms.", actionName, attempts, delay);
+        try {
+          Thread.sleep(delay);
+        } catch (InterruptedException iex) {
+        }
+        vcrMetrics.retryCount.inc();
+        vcrMetrics.retryWaitTimeMsec.inc(delay);
+      } else {
+        // Either not retryable or exhausted attempts.
+        throw cse;
+      }
+    } else {
+      // Unexpected exception
+      throw new CloudStorageException(actionName + " failed", e);
     }
   }
 
@@ -586,7 +663,7 @@ class CloudBlobStore implements Store {
         messageBuf.flip();
         cloudBlobStore.putBlob(messageInfo, messageBuf, size);
         messageIndex++;
-      } catch (IOException | CloudStorageException | GeneralSecurityException e) {
+      } catch (IOException | CloudStorageException e) {
         throw new StoreException(e, StoreErrorCodes.IOError);
       }
     }

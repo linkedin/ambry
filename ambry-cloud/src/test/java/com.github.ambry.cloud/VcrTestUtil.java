@@ -119,6 +119,7 @@ public class VcrTestUtil {
       int clusterMapPort, int vcrSslPort, Properties vcrSSLProps) {
     // Start the VCR and CloudBackupManager
     Properties props = new Properties();
+    props.setProperty(CloudConfig.CLOUD_IS_VCR, Boolean.TRUE.toString());
     props.setProperty("connectionpool.read.timeout.ms", "15000");
     props.setProperty("server.scheduler.num.of.threads", "1");
     props.setProperty("num.io.threads", "1");
