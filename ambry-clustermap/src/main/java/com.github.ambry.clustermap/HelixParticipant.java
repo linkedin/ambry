@@ -221,11 +221,152 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return replicaSyncUpManager;
   }
 
+  @Override
+  public boolean updateDataNodeInfoInCluster(ReplicaId replicaId, boolean shouldExist) {
+    boolean updateResult = true;
+    if (clusterMapConfig.clustermapUpdateDatanodeInfo) {
+      synchronized (helixAdministrationLock) {
+        InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+        if (instanceConfig == null) {
+          throw new IllegalStateException(
+              "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
+        }
+        updateResult = shouldExist ? addNewReplicaInfo(replicaId, instanceConfig)
+            : removeOldReplicaInfo(replicaId, instanceConfig);
+      }
+    }
+    return updateResult;
+  }
+
   /**
    * @return a snapshot of registered state change listeners.
    */
   public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
     return Collections.unmodifiableMap(partitionStateChangeListeners);
+  }
+
+  /**
+   * @return {@link HelixAdmin} that manages current data node.
+   */
+  public HelixAdmin getHelixAdmin() {
+    return helixAdmin;
+  }
+
+  /**
+   * Add new replica info into {@link InstanceConfig} of current data node.
+   * @param replicaId new replica whose info should be added into {@link InstanceConfig}.
+   * @param instanceConfig the {@link InstanceConfig} to update.
+   * @return {@code true} replica info is successfully added. {@code false} otherwise.
+   */
+  private boolean addNewReplicaInfo(ReplicaId replicaId, InstanceConfig instanceConfig) {
+    boolean additionResult = true;
+    String partitionName = replicaId.getPartitionId().toPathString();
+    String newReplicaInfo = partitionName + ClusterMapUtils.REPLICAS_STR_SEPARATOR + replicaId.getCapacityInBytes()
+        + ClusterMapUtils.REPLICAS_STR_SEPARATOR + replicaId.getPartitionId().getPartitionClass()
+        + ClusterMapUtils.REPLICAS_DELIM_STR;
+    Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
+    Map<String, String> diskInfo = mountPathToDiskInfos.get(replicaId.getMountPath());
+    boolean newReplicaInfoAdded = false;
+    boolean duplicateFound = false;
+    if (diskInfo != null) {
+      // add replica to an existing disk (need to sort replicas by partition id)
+      String replicasStr = diskInfo.get(ClusterMapUtils.REPLICAS_STR);
+      String[] replicaInfos = replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR);
+      StringBuilder replicasStrBuilder = new StringBuilder();
+      long idToAdd = Long.valueOf(partitionName);
+      for (String replicaInfo : replicaInfos) {
+        String[] infos = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
+        long currentId = Long.valueOf(infos[0]);
+        if (currentId == idToAdd) {
+          logger.info("Partition {} is already on instance {}, skipping adding it into InstanceConfig in Helix.",
+              partitionName, instanceName);
+          duplicateFound = true;
+          break;
+        } else if (currentId < idToAdd || newReplicaInfoAdded) {
+          replicasStrBuilder.append(replicaInfo).append(ClusterMapUtils.REPLICAS_DELIM_STR);
+        } else {
+          // newReplicaInfo already contains delimiter, no need to append REPLICAS_DELIM_STR
+          replicasStrBuilder.append(newReplicaInfo);
+          replicasStrBuilder.append(replicaInfo).append(ClusterMapUtils.REPLICAS_DELIM_STR);
+          newReplicaInfoAdded = true;
+        }
+      }
+      if (!duplicateFound && !newReplicaInfoAdded) {
+        // this means new replica id is larger than all existing replicas' ids
+        replicasStrBuilder.append(newReplicaInfo);
+        newReplicaInfoAdded = true;
+      }
+      if (newReplicaInfoAdded) {
+        diskInfo.put(ClusterMapUtils.REPLICAS_STR, replicasStrBuilder.toString());
+        mountPathToDiskInfos.put(replicaId.getMountPath(), diskInfo);
+      }
+    } else {
+      // add replica onto a brand new disk
+      Map<String, String> diskInfoToAdd = new HashMap<>();
+      diskInfoToAdd.put(ClusterMapUtils.DISK_CAPACITY_STR,
+          Long.toString(replicaId.getDiskId().getRawCapacityInBytes()));
+      diskInfoToAdd.put(ClusterMapUtils.DISK_STATE, ClusterMapUtils.AVAILABLE_STR);
+      diskInfoToAdd.put(ClusterMapUtils.REPLICAS_STR, newReplicaInfo);
+      mountPathToDiskInfos.put(replicaId.getMountPath(), diskInfoToAdd);
+      newReplicaInfoAdded = true;
+    }
+    if (newReplicaInfoAdded) {
+      // we update InstanceConfig only when new replica info is added (skip updating if replica is already present)
+      instanceConfig.getRecord().setMapFields(mountPathToDiskInfos);
+      logger.info("Updating config: {} in Helix by adding partition {}", instanceConfig, partitionName);
+      additionResult = helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+    }
+    return additionResult;
+  }
+
+  /**
+   * Remove old/existing replica info from {@link InstanceConfig} that associates with current data node.
+   * @param replicaId the {@link ReplicaId} whose info should be removed.
+   * @param instanceConfig {@link InstanceConfig} to update.
+   * @return {@code true} replica info is successfully removed. {@code false} otherwise.
+   */
+  private boolean removeOldReplicaInfo(ReplicaId replicaId, InstanceConfig instanceConfig) {
+    boolean removalResult = true;
+    boolean replicaFound = false;
+    String partitionName = replicaId.getPartitionId().toPathString();
+    Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
+    Map<String, String> diskInfo = mountPathToDiskInfos.get(replicaId.getMountPath());
+    if (diskInfo != null) {
+      String replicasStr = diskInfo.get(ClusterMapUtils.REPLICAS_STR);
+      if (!replicasStr.isEmpty()) {
+        String[] replicaInfos = replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR);
+        for (String replicaInfo : replicaInfos) {
+          String[] infos = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
+          if (infos[0].equals(partitionName)) {
+            replicaFound = true;
+            break;
+          }
+        }
+        // We update InstanceConfig only when replica is found in current instanceConfig. (This is to avoid unnecessary
+        // notification traffic due to InstanceConfig change)
+        if (replicaFound) {
+          StringBuilder newReplicasStrBuilder = new StringBuilder();
+          for (String replicaInfo : replicaInfos) {
+            String[] infos = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
+            if (!infos[0].equals(partitionName)) {
+              newReplicasStrBuilder.append(replicaInfo).append(ClusterMapUtils.REPLICAS_DELIM_STR);
+            }
+          }
+          // update diskInfo and MountPathToDisk map
+          diskInfo.put(ClusterMapUtils.REPLICAS_STR, newReplicasStrBuilder.toString());
+          mountPathToDiskInfos.put(replicaId.getMountPath(), diskInfo);
+          // update InstanceConfig
+          instanceConfig.getRecord().setMapFields(mountPathToDiskInfos);
+          logger.info("Updating config: {} in Helix by removing partition {}", instanceConfig, partitionName);
+          removalResult = helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+        }
+      }
+    }
+    if (!replicaFound) {
+      logger.warn("Partition {} is not found on instance {}, skipping removing it from InstanceConfig in Helix.",
+          partitionName, instanceName);
+    }
+    return removalResult;
   }
 
   /**

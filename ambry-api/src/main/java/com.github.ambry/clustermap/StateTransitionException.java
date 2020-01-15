@@ -58,6 +58,10 @@ public class StateTransitionException extends RuntimeException {
     /**
      * If disconnection process fails on specific replica.
      */
-    DisconnectionFailure
+    DisconnectionFailure,
+    /**
+     * If updating cluster info in Helix fails at some point for specific replica.
+     */
+    HelixUpdateFailure
   }
 }

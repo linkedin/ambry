@@ -400,7 +400,20 @@ public class StorageManager implements StoreManager {
           throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
               ReplicaOperationFailure);
         }
-        // TODO, update InstanceConfig in Helix
+        if (clusterParticipant != null) {
+          // update InstanceConfig in Helix
+          try {
+            if (!clusterParticipant.updateDataNodeInfoInCluster(replicaToAdd, true)) {
+              logger.error("Failed to add partition {} into InstanceConfig for {}", partitionName,
+                  currentNode.getHostname());
+              throw new StateTransitionException("Failed to add partition " + partitionName + " into InstanceConfig",
+                  StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+            }
+          } catch (IllegalStateException e) {
+            throw new StateTransitionException(e.getMessage(),
+                StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+          }
+        }
         // note that partitionNameToReplicaId should be updated if addBlobStore succeeds, so replicationManager should be
         // able to get new replica from storageManager without querying Helix
       } else {

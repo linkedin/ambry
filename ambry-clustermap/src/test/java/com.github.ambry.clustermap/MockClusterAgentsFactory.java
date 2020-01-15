@@ -128,6 +128,11 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         public ReplicaSyncUpManager getReplicaSyncUpManager() {
           return null;
         }
+
+        @Override
+        public boolean updateDataNodeInfoInCluster(ReplicaId replicaId, boolean shouldExist) {
+          return false;
+        }
       };
     }
     return clusterParticipant;

@@ -224,6 +224,13 @@ public class ClusterMapConfig {
   @Config("clustermap.writable.partition.min.replica.count")
   public final int clustermapWritablePartitionMinReplicaCount;
 
+  /**
+   * Whether to allow participant to dynamically update its datanode info in cluster.
+   */
+  @Config("clustermap.update.datanode.info")
+  @Default("false")
+  public final boolean clustermapUpdateDatanodeInfo;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -271,5 +278,6 @@ public class ClusterMapConfig {
         verifiableProperties.getIntInRange("clustermap.replica.catchup.target", 0, 0, Integer.MAX_VALUE);
     clustermapWritablePartitionMinReplicaCount =
         verifiableProperties.getIntInRange("clustermap.writable.partition.min.replica.count", 3, 0, Integer.MAX_VALUE);
+    clustermapUpdateDatanodeInfo = verifiableProperties.getBoolean("clustermap.update.datanode.info", false);
   }
 }
