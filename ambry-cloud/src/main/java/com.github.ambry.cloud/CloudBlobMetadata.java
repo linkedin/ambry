@@ -55,9 +55,10 @@ public class CloudBlobMetadata {
   public static final String[] REQUIRED_FIELDS =
       new String[]{FIELD_ID, FIELD_ACCOUNT_ID, FIELD_CONTAINER_ID, FIELD_PARTITION_ID, FIELD_SIZE, FIELD_UPLOAD_TIME};
   public static final String[] OPTIONAL_FIELDS =
-      new String[]{FIELD_CREATION_TIME, FIELD_DELETION_TIME, FIELD_EXPIRATION_TIME, FIELD_NAMING_SCHEME};
+      new String[]{FIELD_CREATION_TIME, FIELD_DELETION_TIME, FIELD_EXPIRATION_TIME, FIELD_NAMING_SCHEME,
+          FIELD_ENCRYPTION_ORIGIN};
   public static final String[] ENCRYPTION_FIELDS =
-      new String[]{FIELD_ENCRYPTION_ORIGIN, FIELD_VCR_KMS_CONTEXT, FIELD_CRYPTO_AGENT_FACTORY, FIELD_ENCRYPTED_SIZE};
+      new String[]{FIELD_VCR_KMS_CONTEXT, FIELD_CRYPTO_AGENT_FACTORY, FIELD_ENCRYPTED_SIZE};
 
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -469,11 +470,14 @@ public class CloudBlobMetadata {
         gen.writeNumberField(FIELD_NAMING_SCHEME, value.namingScheme);
       }
       // Encryption fields that may or may not apply
-      if (value.encryptionOrigin == EncryptionOrigin.VCR) {
+      if (value.encryptionOrigin != EncryptionOrigin.NONE) {
         gen.writeStringField(FIELD_ENCRYPTION_ORIGIN, value.encryptionOrigin.toString());
-        gen.writeStringField(FIELD_VCR_KMS_CONTEXT, value.vcrKmsContext);
-        gen.writeStringField(FIELD_CRYPTO_AGENT_FACTORY, value.cryptoAgentFactory);
-        gen.writeNumberField(FIELD_ENCRYPTED_SIZE, value.encryptedSize);
+        if (value.encryptionOrigin == EncryptionOrigin.VCR) {
+          gen.writeStringField(FIELD_ENCRYPTION_ORIGIN, value.encryptionOrigin.toString());
+          gen.writeStringField(FIELD_VCR_KMS_CONTEXT, value.vcrKmsContext);
+          gen.writeStringField(FIELD_CRYPTO_AGENT_FACTORY, value.cryptoAgentFactory);
+          gen.writeNumberField(FIELD_ENCRYPTED_SIZE, value.encryptedSize);
+        }
       }
       gen.writeEndObject();
     }

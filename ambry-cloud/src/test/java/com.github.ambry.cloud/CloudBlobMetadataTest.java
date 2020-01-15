@@ -40,6 +40,10 @@ public class CloudBlobMetadataTest {
   private BlobId blobId;
   private final long now = System.currentTimeMillis();
   private final long futureTime = now + TimeUnit.DAYS.toMillis(7);
+  private final String[] FIELDS_ALWAYS_SET =
+      ArrayUtils.addAll(CloudBlobMetadata.REQUIRED_FIELDS, CloudBlobMetadata.FIELD_CREATION_TIME);
+  private final String[] FIELDS_RARELY_SET = ArrayUtils.addAll(CloudBlobMetadata.ENCRYPTION_FIELDS,
+      ArrayUtils.removeElements(CloudBlobMetadata.OPTIONAL_FIELDS, CloudBlobMetadata.FIELD_CREATION_TIME));
 
   @Before
   public void setup() throws Exception {
@@ -53,9 +57,7 @@ public class CloudBlobMetadataTest {
   public void testPermanent() throws Exception {
     CloudBlobMetadata blobMetadata =
         new CloudBlobMetadata(blobId, now, -1, 1024, CloudBlobMetadata.EncryptionOrigin.NONE);
-    verifySerde(blobMetadata, ArrayUtils.add(CloudBlobMetadata.REQUIRED_FIELDS, CloudBlobMetadata.FIELD_CREATION_TIME),
-        ArrayUtils.addAll(CloudBlobMetadata.ENCRYPTION_FIELDS, CloudBlobMetadata.FIELD_EXPIRATION_TIME,
-            CloudBlobMetadata.FIELD_DELETION_TIME));
+    verifySerde(blobMetadata, FIELDS_ALWAYS_SET, FIELDS_RARELY_SET);
   }
 
   /** TTL blob */
@@ -64,10 +66,8 @@ public class CloudBlobMetadataTest {
     CloudBlobMetadata blobMetadata =
         new CloudBlobMetadata(blobId, now, futureTime, 1024, CloudBlobMetadata.EncryptionOrigin.NONE);
     blobMetadata.setExpirationTime(futureTime);
-    verifySerde(blobMetadata,
-        ArrayUtils.addAll(CloudBlobMetadata.REQUIRED_FIELDS, CloudBlobMetadata.FIELD_CREATION_TIME,
-            CloudBlobMetadata.FIELD_EXPIRATION_TIME),
-        ArrayUtils.addAll(CloudBlobMetadata.ENCRYPTION_FIELDS, CloudBlobMetadata.FIELD_DELETION_TIME));
+    verifySerde(blobMetadata, ArrayUtils.addAll(FIELDS_ALWAYS_SET, CloudBlobMetadata.FIELD_EXPIRATION_TIME),
+        ArrayUtils.removeElement(FIELDS_RARELY_SET, CloudBlobMetadata.FIELD_EXPIRATION_TIME));
   }
 
   /** Deleted blob */
@@ -76,20 +76,22 @@ public class CloudBlobMetadataTest {
     CloudBlobMetadata blobMetadata =
         new CloudBlobMetadata(blobId, now, -1, 1024, CloudBlobMetadata.EncryptionOrigin.NONE);
     blobMetadata.setDeletionTime(futureTime);
-    verifySerde(blobMetadata,
-        ArrayUtils.addAll(CloudBlobMetadata.REQUIRED_FIELDS, CloudBlobMetadata.FIELD_CREATION_TIME,
-            CloudBlobMetadata.FIELD_DELETION_TIME),
-        ArrayUtils.addAll(CloudBlobMetadata.ENCRYPTION_FIELDS, CloudBlobMetadata.FIELD_EXPIRATION_TIME));
+    verifySerde(blobMetadata, ArrayUtils.addAll(FIELDS_ALWAYS_SET, CloudBlobMetadata.FIELD_DELETION_TIME),
+        ArrayUtils.removeElement(FIELDS_RARELY_SET, CloudBlobMetadata.FIELD_DELETION_TIME));
   }
 
   /** Encrypted blob */
   @Test
   public void testEncrypted() throws Exception {
+    // Router encrypted
     CloudBlobMetadata blobMetadata =
+        new CloudBlobMetadata(blobId, now, -1, 1024, CloudBlobMetadata.EncryptionOrigin.ROUTER);
+    verifySerde(blobMetadata, ArrayUtils.addAll(FIELDS_ALWAYS_SET, CloudBlobMetadata.FIELD_ENCRYPTION_ORIGIN),
+        ArrayUtils.removeElement(FIELDS_RARELY_SET, CloudBlobMetadata.FIELD_ENCRYPTION_ORIGIN));
+    blobMetadata =
         new CloudBlobMetadata(blobId, now, -1, 1024, CloudBlobMetadata.EncryptionOrigin.VCR, "context", "factory",
             1056);
-    verifySerde(blobMetadata, ArrayUtils.addAll(CloudBlobMetadata.REQUIRED_FIELDS,
-        ArrayUtils.addAll(CloudBlobMetadata.ENCRYPTION_FIELDS, CloudBlobMetadata.FIELD_CREATION_TIME)),
+    verifySerde(blobMetadata, ArrayUtils.addAll(FIELDS_ALWAYS_SET, CloudBlobMetadata.ENCRYPTION_FIELDS),
         new String[]{CloudBlobMetadata.FIELD_DELETION_TIME, CloudBlobMetadata.FIELD_EXPIRATION_TIME});
   }
 
