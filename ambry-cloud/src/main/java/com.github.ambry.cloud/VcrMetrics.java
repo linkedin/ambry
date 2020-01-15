@@ -40,8 +40,8 @@ public class VcrMetrics {
   // Retry metrics
   /** Number of times operation was retried */
   public final Counter retryCount;
-  /** Cumulative time spent waiting before retries */
-  public final Timer retryWaitTime;
+  /** Number of msec spent waiting between retries */
+  public final Counter retryWaitTimeMsec;
 
   public VcrMetrics(MetricRegistry registry) {
     this.registry = registry;
@@ -60,7 +60,7 @@ public class VcrMetrics {
         registry.counter(MetricRegistry.name(VcrReplicationManager.class, "RemovePartitionErrorCount"));
     tokenReloadWarnCount = registry.counter(MetricRegistry.name(VcrReplicationManager.class, "TokenReloadWarnCount"));
     retryCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryCount"));
-    retryWaitTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "RetryWaitTime"));
+    retryWaitTimeMsec = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryWaitTimeMsec"));
   }
 
   /**

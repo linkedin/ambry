@@ -547,6 +547,7 @@ class CloudBlobStore implements Store {
         throwOrDelay(e, actionName, attempts);
       }
     }
+    // Line should never be reached
     throw new CloudStorageException(actionName + " failed " + attempts + " attempts");
   }
 
@@ -562,13 +563,13 @@ class CloudBlobStore implements Store {
       CloudStorageException cse = (CloudStorageException) e;
       if (cse.isRetryable() && attempts < maxAttempts) {
         long delay = (cse.getRetryDelayMs() > 0) ? cse.getRetryDelayMs() : defaultRetryDelay;
-        logger.error(String.format("%s failed attempt %d, retrying after %d ms.", actionName, attempts, delay));
+        logger.error("{} failed attempt {}, retrying after {} ms.", actionName, attempts, delay);
         try {
           Thread.sleep(delay);
         } catch (InterruptedException iex) {
         }
         vcrMetrics.retryCount.inc();
-        vcrMetrics.retryWaitTime.update(delay, TimeUnit.MILLISECONDS);
+        vcrMetrics.retryWaitTimeMsec.inc(delay);
       } else {
         // Either not retryable or exhausted attempts.
         throw cse;

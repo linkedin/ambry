@@ -464,8 +464,8 @@ public class CloudBlobStoreTest {
     exStore.delete(messageWriteSet);
     exStore.get(keys, EnumSet.noneOf(StoreGetOptions.class));
     exStore.downloadBlob(metadata, blobId, new ByteArrayOutputStream());
-    assertEquals("Wrong retry count", 4, vcrMetrics.retryCount.getCount());
-    assertEquals("Wrong wait count", 4, vcrMetrics.retryWaitTime.getCount());
+    assertEquals("Unexpected retry count", 4, vcrMetrics.retryCount.getCount());
+    assertEquals("Unexpected wait time", 4 * retryDelay, vcrMetrics.retryWaitTimeMsec.getCount());
   }
 
   /**

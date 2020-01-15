@@ -470,8 +470,7 @@ class AzureCloudDestination implements CloudDestination {
     int statusCode = -1;
     if (e instanceof BlobStorageException) {
       statusCode = ((BlobStorageException) e).getStatusCode();
-    }
-    else if (e instanceof DocumentClientException) {
+    } else if (e instanceof DocumentClientException) {
       statusCode = ((DocumentClientException) e).getStatusCode();
       retryDelayMs = ((DocumentClientException) e).getRetryAfterInMilliseconds();
     }
