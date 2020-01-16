@@ -24,6 +24,18 @@ import java.io.IOException;
 public interface ConnectedChannel {
 
   /**
+   * Connect remote host.
+   * @throws IOException
+   */
+  void connect() throws IOException;
+
+  /**
+   * Disconnect remote host.
+   * @throws IOException
+   */
+  void disconnect() throws IOException;
+
+  /**
    * Sends the request to a remote host
    * @param request The request that needs to be sent
    * @throws IOException

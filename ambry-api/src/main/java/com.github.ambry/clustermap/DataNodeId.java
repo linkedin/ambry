@@ -50,6 +50,20 @@ public interface DataNodeId extends Resource, Comparable<DataNodeId> {
   boolean hasSSLPort();
 
   /**
+   * Gets the DataNodeId's HTTP2 connection port number.
+   *
+   * @return Port number upon which to establish an HTTP2 SSL connection with the DataNodeId.
+   */
+  int getHttp2Port();
+
+  /**
+   * Returns true if HTTP2 port exists for the DataNodeId.
+   *
+   * @return true if HTTP2 port exists for the datanode, false otherwise.
+   */
+  boolean hasHttp2Port();
+
+  /**
    * Returns the {@link Port} of this node to connect to.
    *
    * @return {@link Port} to which the caller can connect to.

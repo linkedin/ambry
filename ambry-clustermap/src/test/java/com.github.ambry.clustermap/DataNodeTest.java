@@ -89,7 +89,7 @@ public class DataNodeTest {
   public void basics() throws JSONException {
 
     JSONObject jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 8666, HardwareState.AVAILABLE, getDisks());
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     DataNode dataNode = new TestDataNode("datacenter", jsonObject, clusterMapConfig);
@@ -108,8 +108,8 @@ public class DataNodeTest {
     assertEquals(dataNode, new TestDataNode("datacenter", dataNode.toJSONObject(), clusterMapConfig));
 
     // Test with defined rackId
-    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 42, TestUtils.DEFAULT_XID,
-        HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 8666, 42, TestUtils.DEFAULT_XID,
+        getDisks(), HardwareState.AVAILABLE);
     dataNode = new TestDataNode("datacenter", jsonObject, clusterMapConfig);
     assertEquals("42", dataNode.getRackId());
     assertEquals(TestUtils.DEFAULT_XID, dataNode.getXid());
@@ -134,7 +134,8 @@ public class DataNodeTest {
 
     try {
       // Null DataNode
-      jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
+      jsonObject =
+          TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 8666, HardwareState.AVAILABLE, getDisks());
       new DataNode(null, jsonObject, clusterMapConfig);
       fail("Should have failed validation.");
     } catch (IllegalStateException e) {
@@ -142,40 +143,44 @@ public class DataNodeTest {
     }
 
     // Bad hostname
-    jsonObject = TestUtils.getJsonDataNode("", 6666, 7666, HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode("", 6666, 7666, 8666, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
 
     // Bad hostname (http://tools.ietf.org/html/rfc6761 defines 'invalid' top level domain)
-    jsonObject = TestUtils.getJsonDataNode("hostname.invalid", 6666, 7666, HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode("hostname.invalid", 6666, 7666, 8666, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
 
-    // Bad port (too small)
-    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), -1, 7666, HardwareState.AVAILABLE, getDisks());
-    failValidation(jsonObject, clusterMapConfig);
-
-    // Bad ssl port (too small)
-    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, -1, HardwareState.AVAILABLE, getDisks());
-    failValidation(jsonObject, clusterMapConfig);
-
-    // Bad port (too big)
-    jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 100 * 1000, 7666, HardwareState.AVAILABLE, getDisks());
-    failValidation(jsonObject, clusterMapConfig);
-
-    // Bad ssl port (too big)
-    jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 100 * 1000, HardwareState.AVAILABLE, getDisks());
-    failValidation(jsonObject, clusterMapConfig);
+    // Port should between 1025 and 65535
+    int[][] portsToTest =
+        {{-1, 7666, 8666}, {100 * 1000, 7666, 8666}, {6666, -1, 8666}, {6666, 100 * 1000, 8666}, {6666, 7777, -1},
+            {6666, 7777, 100 * 1000}};
+    for (int[] ports : portsToTest) {
+      jsonObject =
+          TestUtils.getJsonDataNode(TestUtils.getLocalHost(), ports[0], ports[1], ports[2], HardwareState.AVAILABLE,
+              getDisks());
+      failValidation(jsonObject, clusterMapConfig);
+    }
 
     // same port number for plain text and ssl port
-    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 6666, HardwareState.AVAILABLE, getDisks());
+    jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 6666, 8666, HardwareState.AVAILABLE, getDisks());
+    failValidation(jsonObject, clusterMapConfig);
+
+    // same port number for plain text and HTTP2 port
+    jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 6666, HardwareState.AVAILABLE, getDisks());
+    failValidation(jsonObject, clusterMapConfig);
+
+    // same port number for http2 port and ssl port
+    jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 8666, 8666, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
   }
 
   @Test
   public void testSoftState() throws JSONException, InterruptedException {
     JSONObject jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 8666, HardwareState.AVAILABLE, getDisks());
     Properties props = new Properties();
     props.setProperty("clustermap.fixedtimeout.datanode.retry.backoff.ms", Integer.toString(2000));
     props.setProperty("clustermap.cluster.name", "test");
@@ -222,7 +227,7 @@ public class DataNodeTest {
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     System.out.println(clusterMapConfig.clusterMapSslEnabledDatacenters);
     JSONObject jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 8666, HardwareState.AVAILABLE, getDisks());
 
     DataNode dataNode = new TestDataNode("datacenter2", jsonObject, clusterMapConfig);
     assertEquals("The datacenter of the data node is in the ssl enabled datacenter list. SSL port should be returned",

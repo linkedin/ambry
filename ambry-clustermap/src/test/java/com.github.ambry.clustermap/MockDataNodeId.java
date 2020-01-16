@@ -20,7 +20,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -106,6 +105,19 @@ public class MockDataNodeId implements DataNodeId {
   @Override
   public boolean hasSSLPort() {
     return ports.containsKey(PortType.SSL);
+  }
+
+  @Override
+  public int getHttp2Port() {
+    if (hasHttp2Port()) {
+      return ports.get(PortType.HTTP2).getPort();
+    }
+    throw new IllegalArgumentException("No HTTP2 port exists for the datanode " + hostname + ":" + portNum);
+  }
+
+  @Override
+  public boolean hasHttp2Port() {
+    return ports.containsKey(PortType.HTTP2);
   }
 
   @Override

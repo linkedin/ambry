@@ -24,6 +24,7 @@ public class CloudConfig {
   public static final String VCR_CLUSTER_ZK_CONNECT_STRING = "vcr.cluster.zk.connect.string";
   public static final String VCR_CLUSTER_NAME = "vcr.cluster.name";
   public static final String VCR_SSL_PORT = "vcr.ssl.port";
+  public static final String VCR_HTTP2_PORT = "vcr.http2.port";
   public static final String VCR_REQUIRE_ENCRYPTION = "vcr.require.encryption";
   public static final String VCR_KMS_FACTORY = "vcr.key.management.service.factory";
   public static final String VCR_CRYPTO_SERVICE_FACTORY = "vcr.crypto.service.factory";
@@ -102,6 +103,13 @@ public class CloudConfig {
   @Config(VCR_SSL_PORT)
   @Default("null")
   public final Integer vcrSslPort;
+
+  /**
+   * The HTTP2 port number associated with this node.
+   */
+  @Config(VCR_HTTP2_PORT)
+  @Default("null")
+  public final Integer vcrHttp2Port;
 
   /**
    * Require blobs to be encrypted prior to cloud upload?
@@ -226,6 +234,7 @@ public class CloudConfig {
         verifiableProperties.getString(VCR_CLUSTER_ZK_CONNECT_STRING, DEFAULT_VCR_CLUSTER_ZK_CONNECT_STRING);
     vcrClusterName = verifiableProperties.getString(VCR_CLUSTER_NAME, DEFAULT_VCR_CLUSTER_NAME);
     vcrSslPort = verifiableProperties.getInteger(VCR_SSL_PORT, null);
+    vcrHttp2Port = verifiableProperties.getInteger(VCR_HTTP2_PORT, null);
     vcrRequireEncryption = verifiableProperties.getBoolean(VCR_REQUIRE_ENCRYPTION, false);
     vcrKeyManagementServiceFactory = verifiableProperties.getString(VCR_KMS_FACTORY, RouterConfig.DEFAULT_KMS_FACTORY);
     vcrCryptoServiceFactory =

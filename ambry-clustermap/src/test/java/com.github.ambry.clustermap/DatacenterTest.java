@@ -75,18 +75,18 @@ public class DatacenterTest {
   }
 
   JSONArray getDataNodes() throws JSONException {
-    return TestUtils.getJsonArrayDataNodes(dataNodeCount, TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE,
+    return TestUtils.getJsonArrayDataNodes(dataNodeCount, TestUtils.getLocalHost(), 6666, 7666, 8666, HardwareState.AVAILABLE,
         getDisks());
   }
 
   JSONArray getDataNodesRackAware() throws JSONException {
-    return TestUtils.getJsonArrayDataNodesRackAware(dataNodeCount, TestUtils.getLocalHost(), 6666, 7666, 3,
+    return TestUtils.getJsonArrayDataNodesRackAware(dataNodeCount, TestUtils.getLocalHost(), 6666, 7666, 8666, 3,
         HardwareState.AVAILABLE, getDisks());
   }
 
   JSONArray getDataNodesPartiallyRackAware() throws JSONException {
     return TestUtils.getJsonArrayDataNodesPartiallyRackAware(dataNodeCount, TestUtils.getLocalHost(), 6666, 7666,
-        HardwareState.AVAILABLE, getDisks());
+        8666, getDisks(), HardwareState.AVAILABLE);
   }
 
   @Test

@@ -21,9 +21,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -254,26 +256,47 @@ public class ClusterMapUtils {
   }
 
   /**
-   * Validate plainTextPort and sslPort.
+   * Validate plainTextPort, sslPort and http2Port.
    * @param plainTextPort PlainText {@link Port}.
    * @param sslPort SSL {@link Port}.
+   * @param http2Port HTTP2 SSL {@link Port}.
+   * @param sslRequired if ssl encrypted port needed.
    * @throws IllegalArgumentException if ports are not valid.
    */
-  public static void validatePorts(Port plainTextPort, Port sslPort, boolean sslPortRequired) {
-    if (sslPort != null) {
-      if (sslPort.getPort() == plainTextPort.getPort()) {
-        throw new IllegalArgumentException("Same port number for both plain and ssl ports");
-      }
-      if (sslPort.getPort() < MIN_PORT || sslPort.getPort() > MAX_PORT) {
-        throw new IllegalArgumentException(
-            "SSL Port " + plainTextPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
-      }
-    } else if (sslPortRequired) {
-      throw new IllegalArgumentException("No SSL port to a datanode to which SSL is enabled.");
+  public static void validatePorts(Port plainTextPort, Port sslPort, Port http2Port, boolean sslRequired) {
+    if (sslRequired && sslPort == null && http2Port == null) {
+      throw new IllegalArgumentException("No SSL port to a data node to which SSL is enabled.");
     }
+
     if (plainTextPort.getPort() < MIN_PORT || plainTextPort.getPort() > MAX_PORT) {
       throw new IllegalArgumentException(
           "PlainText Port " + plainTextPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
+    }
+    if (sslRequired == false) {
+      return;
+    }
+    // check ports duplication
+    Set<Integer> ports = new HashSet<Integer>();
+    ports.add(plainTextPort.getPort());
+
+    if (sslPort != null) {
+      if (sslPort.getPort() < MIN_PORT || sslPort.getPort() > MAX_PORT) {
+        throw new IllegalArgumentException(
+            "SSL Port " + sslPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
+      }
+      if (!ports.add(sslPort.getPort())) {
+        throw new IllegalArgumentException("Port number duplication found. " + ports);
+      }
+    }
+
+    if (http2Port != null) {
+      if (http2Port.getPort() < MIN_PORT || http2Port.getPort() > MAX_PORT) {
+        throw new IllegalArgumentException(
+            "HTTP2 Port " + http2Port.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
+      }
+      if (!ports.add(http2Port.getPort())) {
+        throw new IllegalArgumentException("Port number duplication found. " + ports);
+      }
     }
   }
 

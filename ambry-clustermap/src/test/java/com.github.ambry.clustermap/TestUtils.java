@@ -98,12 +98,13 @@ public class TestUtils {
     return jsonObject;
   }
 
-  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, HardwareState hardwareState,
-      JSONArray disks) throws JSONException {
+  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, int http2Port,
+      HardwareState hardwareState, JSONArray disks) throws JSONException {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
     jsonObject.put("sslport", sslPort);
+    jsonObject.put("http2port", http2Port);
     jsonObject.put("xid", DEFAULT_XID);
     jsonObject.put("hardwareState", hardwareState.name());
     jsonObject.put("disks", disks);
@@ -116,19 +117,21 @@ public class TestUtils {
    * @param hostname the hostname for the node
    * @param port the plaintext port number for the node
    * @param sslPort the ssl port number for the node
+   * @param http2Port the http2 port number for the node
    * @param rackId the rack ID for the node
    * @param xid the xid for the node
-   * @param hardwareState A {@link HardwareState} value for the node
    * @param disks an array of disks belonging to the node
+   * @param hardwareState A {@link HardwareState} value for the node
    * @return a {@link JSONObject) representing the node with the properties passed into the function
    * @throws JSONException
    */
-  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, long rackId, long xid,
-      HardwareState hardwareState, JSONArray disks) throws JSONException {
+  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, int http2Port, long rackId, long xid,
+      JSONArray disks, HardwareState hardwareState) throws JSONException {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
     jsonObject.put("sslport", sslPort);
+    jsonObject.put("http2port", http2Port);
     jsonObject.put("rackId", Long.toString(rackId));
     jsonObject.put("xid", xid);
     jsonObject.put("hardwareState", hardwareState.name());
@@ -144,15 +147,16 @@ public class TestUtils {
    * @param hostname the hostname for each node in the array
    * @param basePort the starting standard port number for nodes generated
    * @param sslPort the starting SSL port number for nodes generated
+   * @param http2Port the starting HTTP2 port number for nodes generated
    * @param hardwareState a {@link HardwareLayout} value for each node
    * @param disks a {@link JSONArray} of disks for each node
    * @return a {@link JSONArray} of nodes
    */
-  static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort, int sslPort,
+  static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort, int sslPort, int http2Port,
       HardwareState hardwareState, JSONArray disks) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks));
+      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, http2Port + i, hardwareState, disks));
     }
     return jsonArray;
   }
@@ -160,19 +164,19 @@ public class TestUtils {
   /**
    * Updates the given array of JSON data node objects by adding new entries to reach the total datanode count.
    * Increments basePort and sslPort for each node to ensure unique DataNode given same hostname.
-   *
-   * @param dataNodeJsonArray the datanode JSONArray to update.
+   *  @param dataNodeJsonArray the datanode JSONArray to update.
    * @param dataNodeCount how many total datanode entries the JSONArray should have.
    * @param hostname the hostname for each node in the array
    * @param basePort the starting standard port number for nodes generated
    * @param sslPort the starting SSL port number for nodes generated
+   * @param http2Port the starting HTTP2 port number for nodes generated
    * @param hardwareState a {@link HardwareLayout} value for each node
    * @param disks a {@link JSONArray} of disks for each node
    */
   private static void updateJsonArrayDataNodes(JSONArray dataNodeJsonArray, int dataNodeCount, String hostname,
-      int basePort, int sslPort, HardwareState hardwareState, JSONArray disks) throws JSONException {
+      int basePort, int sslPort, int http2Port, HardwareState hardwareState, JSONArray disks) throws JSONException {
     for (int i = dataNodeJsonArray.length(); i < dataNodeCount; ++i) {
-      dataNodeJsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks));
+      dataNodeJsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, http2Port + i, hardwareState, disks));
     }
   }
 
@@ -184,17 +188,19 @@ public class TestUtils {
    * @param hostname the hostname for each node in the array
    * @param basePort the starting standard port number for nodes generated
    * @param sslPort the starting SSL port number for nodes generated
+   * @param http2Port the starting HTTP2 port number for nodes generated
    * @param numRacks how many distinct racks the data nodes should use
    * @param hardwareState a {@link HardwareLayout} value for each node
    * @param disks a {@link JSONArray} of disks for each node
    * @return a {@link JSONArray} of nodes
    */
   static JSONArray getJsonArrayDataNodesRackAware(int dataNodeCount, String hostname, int basePort, int sslPort,
-      int numRacks, HardwareState hardwareState, JSONArray disks) throws JSONException {
+      int http2Port, int numRacks, HardwareState hardwareState, JSONArray disks) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
       jsonArray.put(
-          getJsonDataNode(hostname, basePort + i, sslPort + i, i % numRacks, DEFAULT_XID, hardwareState, disks));
+          getJsonDataNode(hostname, basePort + i, sslPort + i, http2Port + i, i % numRacks, DEFAULT_XID, disks,
+              hardwareState));
     }
     return jsonArray;
   }
@@ -202,21 +208,23 @@ public class TestUtils {
   /**
    * Updates the given array of JSON data node objects by adding new entries to reach the total datanode count.
    * Increments basePort and sslPort for each node to ensure unique DataNode given same hostname.
-   *
-   * @param dataNodeJsonArray the datanode JSONArray to update.
+   *  @param dataNodeJsonArray the datanode JSONArray to update.
    * @param dataNodeCount how many total datanode entries the JSONArray should have.
    * @param hostname the hostname for each node in the array
    * @param basePort the starting standard port number for nodes generated
    * @param sslPort the starting SSL port number for nodes generated
+   * @param http2Port the starting HTTP2 port number for nodes generated
    * @param numRacks how many distinct racks the data nodes should use
-   * @param hardwareState a {@link HardwareLayout} value for each node
    * @param disks a {@link JSONArray} of disks for each node
+   * @param hardwareState a {@link HardwareLayout} value for each node
    */
   private static void updateJsonArrayDataNodesRackAware(JSONArray dataNodeJsonArray, int dataNodeCount, String hostname,
-      int basePort, int sslPort, int numRacks, HardwareState hardwareState, JSONArray disks) throws JSONException {
+      int basePort, int sslPort, int http2Port, int numRacks, JSONArray disks, HardwareState hardwareState)
+      throws JSONException {
     for (int i = dataNodeJsonArray.length(); i < dataNodeCount; ++i) {
       dataNodeJsonArray.put(
-          getJsonDataNode(hostname, basePort + i, sslPort + i, i % numRacks, DEFAULT_XID, hardwareState, disks));
+          getJsonDataNode(hostname, basePort + i, sslPort + i, http2Port + i, i % numRacks, DEFAULT_XID, disks,
+              hardwareState));
     }
   }
 
@@ -230,18 +238,20 @@ public class TestUtils {
    * @param hostname the hostname for each node in the array
    * @param basePort the starting standard port number for nodes generated
    * @param sslPort the starting SSL port number for nodes generated
-   * @param hardwareState a {@link HardwareLayout} value for each node
+   * @param http2Port the starting HTTP2 port number for nodes generated
    * @param disks a {@link JSONArray} of disks for each node
+   * @param hardwareState a {@link HardwareLayout} value for each node
    * @return a {@link JSONArray} of nodes
    * @throws JSONException
    */
   public static JSONArray getJsonArrayDataNodesPartiallyRackAware(int dataNodeCount, String hostname, int basePort,
-      int sslPort, HardwareState hardwareState, JSONArray disks) throws JSONException {
+      int sslPort, int http2Port, JSONArray disks, HardwareState hardwareState) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
       JSONObject jsonDataNode =
-          (i % 2 == 0) ? getJsonDataNode(hostname, basePort + i, sslPort + i, i, DEFAULT_XID, hardwareState, disks)
-              : getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks);
+          (i % 2 == 0) ? getJsonDataNode(hostname, basePort + i, sslPort + i, http2Port + i, i, DEFAULT_XID, disks,
+              hardwareState)
+              : getJsonDataNode(hostname, basePort + i, sslPort + i, http2Port + i, hardwareState, disks);
       jsonArray.put(jsonDataNode);
     }
     return jsonArray;
@@ -259,10 +269,10 @@ public class TestUtils {
 
   // Does not increment basePort and sslPort for each data node...
   public static JSONArray getJsonArrayDuplicateDataNodes(int dataNodeCount, String hostname, int basePort, int sslPort,
-      HardwareState hardwareState, JSONArray disks) throws JSONException {
+      int http2Port, HardwareState hardwareState, JSONArray disks) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort, sslPort, hardwareState, disks));
+      jsonArray.put(getJsonDataNode(hostname, basePort, sslPort, http2Port, hardwareState, disks));
     }
     return jsonArray;
   }
@@ -560,21 +570,22 @@ public class TestUtils {
       return getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
     }
 
-    protected JSONArray getDataNodes(int basePort, int sslPort, JSONArray disks) throws JSONException {
+    protected JSONArray getDataNodes(int basePort, int sslPort, int http2Port, JSONArray disks) throws JSONException {
       if (rackAware) {
-        return getJsonArrayDataNodesRackAware(dataNodeCount, getLocalHost(), basePort, sslPort, numRacks,
+        return getJsonArrayDataNodesRackAware(dataNodeCount, getLocalHost(), basePort, sslPort, http2Port, numRacks,
             HardwareState.AVAILABLE, disks);
       }
-      return getJsonArrayDataNodes(dataNodeCount, getLocalHost(), basePort, sslPort, HardwareState.AVAILABLE, disks);
+      return getJsonArrayDataNodes(dataNodeCount, getLocalHost(), basePort, sslPort, http2Port, HardwareState.AVAILABLE,
+          disks);
     }
 
-    protected void updateDataNodeJsonArray(JSONArray dataNodeJsonArray, int basePort, int sslPort, JSONArray disks)
-        throws JSONException {
+    protected void updateDataNodeJsonArray(JSONArray dataNodeJsonArray, int basePort, int sslPort, int http2Port,
+        JSONArray disks) throws JSONException {
       if (rackAware) {
-        updateJsonArrayDataNodesRackAware(dataNodeJsonArray, dataNodeCount, getLocalHost(), basePort, sslPort, numRacks,
-            HardwareState.AVAILABLE, disks);
+        updateJsonArrayDataNodesRackAware(dataNodeJsonArray, dataNodeCount, getLocalHost(), basePort, sslPort,
+            http2Port, numRacks, disks, HardwareState.AVAILABLE);
       } else {
-        updateJsonArrayDataNodes(dataNodeJsonArray, dataNodeCount, getLocalHost(), basePort, sslPort,
+        updateJsonArrayDataNodes(dataNodeJsonArray, dataNodeCount, getLocalHost(), basePort, sslPort, http2Port,
             HardwareState.AVAILABLE, disks);
       }
     }
@@ -587,12 +598,13 @@ public class TestUtils {
 
       int curBasePort = basePort;
       int sslPort = curBasePort + 10000;
+      int http2Port = sslPort + 10000;
       for (int i = 0; i < datacenterCount; i++) {
         names.add(i, "DC" + i);
         if (createNew) {
-          datanodeJSONArrays.add(i, getDataNodes(curBasePort, sslPort, getDisks()));
+          datanodeJSONArrays.add(i, getDataNodes(curBasePort, sslPort, http2Port, getDisks()));
         } else {
-          updateDataNodeJsonArray(datanodeJSONArrays.get(i), curBasePort, sslPort, getDisks());
+          updateDataNodeJsonArray(datanodeJSONArrays.get(i), curBasePort, sslPort, http2Port, getDisks());
         }
         curBasePort += dataNodeCount;
       }

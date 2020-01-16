@@ -165,7 +165,7 @@ final class ServerTestUtil {
       PutRequest putRequest =
           new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
-      BlockingChannel channel =
+      ConnectedChannel channel =
           getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory, clientSSLConfig);
       channel.connect();
       channel.send(putRequest);
@@ -520,15 +520,15 @@ final class ServerTestUtil {
    * @param usermetadata the usermetadata of the blob to be put.
    * @param data the blob data of the blob to be put.
    * @param encryptionKey the encryption key of the blob. Could be null for non-encrypted blobs
-   * @param channelToDatanode1 the {@link BlockingChannel} to the Datanode1.
-   * @param channelToDatanode2 the {@link BlockingChannel} to the Datanode2.
-   * @param channelToDatanode3 the {@link BlockingChannel} to the Datanode3.
+   * @param channelToDatanode1 the {@link ConnectedChannel} to the Datanode1.
+   * @param channelToDatanode2 the {@link ConnectedChannel} to the Datanode2.
+   * @param channelToDatanode3 the {@link ConnectedChannel} to the Datanode3.
    * @param expectedErrorCode the {@link ServerErrorCode} that is expected from every Datanode.
    * @throws IOException
    */
   private static void testLatePutRequest(BlobId blobId, BlobProperties properties, byte[] usermetadata, byte[] data,
-      byte[] encryptionKey, BlockingChannel channelToDatanode1, BlockingChannel channelToDatanode2,
-      BlockingChannel channelToDatanode3, ServerErrorCode expectedErrorCode) throws IOException {
+      byte[] encryptionKey, ConnectedChannel channelToDatanode1, ConnectedChannel channelToDatanode2,
+      ConnectedChannel channelToDatanode3, ServerErrorCode expectedErrorCode) throws IOException {
     // Send put requests for an existing blobId for the exact blob to simulate a request arriving late.
     PutRequest latePutRequest1 =
         new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
@@ -586,7 +586,7 @@ final class ServerTestUtil {
 
     Port port = clientSSLConfig == null ? new Port(dataNode.getPort(), PortType.PLAINTEXT)
         : new Port(dataNode.getSSLPort(), PortType.SSL);
-    BlockingChannel channel =
+    ConnectedChannel channel =
         getBlockingChannelBasedOnPortType(port, "localhost", clientSSLSocketFactory, clientSSLConfig);
     channel.connect();
     CountDownLatch latch = new CountDownLatch(1);
@@ -667,11 +667,11 @@ final class ServerTestUtil {
     }
 
     // connect to all the servers
-    BlockingChannel channel1 =
+    ConnectedChannel channel1 =
         getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
-    BlockingChannel channel2 =
+    ConnectedChannel channel2 =
         getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", clientSSLSocketFactory2, clientSSLConfig2);
-    BlockingChannel channel3 =
+    ConnectedChannel channel3 =
         getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", clientSSLSocketFactory3, clientSSLConfig3);
 
     // put all the blobs to random servers
@@ -682,7 +682,7 @@ final class ServerTestUtil {
     int noOfParallelThreads = 3;
     CountDownLatch latch = new CountDownLatch(noOfParallelThreads);
     List<DirectSender> runnables = new ArrayList<DirectSender>(noOfParallelThreads);
-    BlockingChannel channel = null;
+    ConnectedChannel channel = null;
     for (int i = 0; i < noOfParallelThreads; i++) {
       if (i % noOfParallelThreads == 0) {
         channel = channel1;
@@ -849,7 +849,7 @@ final class ServerTestUtil {
     }
 
     // ttl update all blobs and wait for replication
-    Map<BlockingChannel, List<BlobId>> channelToBlobIds = new HashMap<>();
+    Map<ConnectedChannel, List<BlobId>> channelToBlobIds = new HashMap<>();
     for (int i = 0; i < blobIds.size(); i++) {
       final BlobId blobId = blobIds.get(i);
       if (i % 3 == 0) {
@@ -875,7 +875,7 @@ final class ServerTestUtil {
     // check that the TTL update has propagated
     blobIds.forEach(blobId -> notificationSystem.awaitBlobUpdates(blobId.getID(), UpdateType.TTL_UPDATE));
     // check all servers
-    for (BlockingChannel channelToUse : new BlockingChannel[]{channel1, channel2, channel3}) {
+    for (ConnectedChannel channelToUse : new ConnectedChannel[]{channel1, channel2, channel3}) {
       for (BlobId blobId : blobIds) {
         checkTtlUpdateStatus(channelToUse, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
       }
@@ -1486,11 +1486,11 @@ final class ServerTestUtil {
           encryptionKeyList.get(0) != null ? ByteBuffer.wrap(encryptionKeyList.get(0)) : null,
           ByteBuffer.wrap(usermetadata), dataList.get(0));
 
-      BlockingChannel channel1 =
+      ConnectedChannel channel1 =
           getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
-      BlockingChannel channel2 =
+      ConnectedChannel channel2 =
           getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
-      BlockingChannel channel3 =
+      ConnectedChannel channel3 =
           getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
 
       channel1.connect();
@@ -2073,7 +2073,7 @@ final class ServerTestUtil {
         Utils.readBytesFromStream(channel.getContentAsInputStream(), (int) channel.getBytesWritten()));
   }
 
-  private static void checkBlobContent(MockClusterMap clusterMap, BlobId blobId, BlockingChannel channel,
+  private static void checkBlobContent(MockClusterMap clusterMap, BlobId blobId, ConnectedChannel channel,
       byte[] dataToCheck, byte[] encryptionKey) throws IOException, MessageFormatException {
     ArrayList<BlobId> listIds = new ArrayList<BlobId>();
     listIds.add(blobId);
@@ -2214,20 +2214,22 @@ final class ServerTestUtil {
   }
 
   /**
-   * Returns BlockingChannel or SSLBlockingChannel depending on whether the port type is PlainText or SSL
-   * for the given targetPort
+   * Returns BlockingChannel, SSLBlockingChannel or Http2BlockingChannel depending on whether the port type is PlainText,
+   * SSL or HTTP2 port for the given targetPort
    * @param targetPort upon which connection has to be established
    * @param hostName upon which connection has to be established
-   * @return BlockingChannel
+   * @return ConnectedChannel
    */
-  public static BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
+  public static ConnectedChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
       SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
-    BlockingChannel channel = null;
+    ConnectedChannel channel = null;
     if (targetPort.getPortType() == PortType.PLAINTEXT) {
       channel = new BlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000);
     } else if (targetPort.getPortType() == PortType.SSL) {
       channel = new SSLBlockingChannel(hostName, targetPort.getPort(), new MetricRegistry(), 10000, 10000, 10000, 4000,
           sslSocketFactory, sslConfig);
+    } else if (targetPort.getPortType() == PortType.HTTP2) {
+      channel = new Http2BlockingChannel(hostName, targetPort.getPort());
     }
     return channel;
   }
