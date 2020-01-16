@@ -15,6 +15,7 @@ package com.github.ambry.cloud.azure;
 
 import com.github.ambry.cloud.AzureFindToken;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.microsoft.azure.cosmosdb.DocumentClientException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -24,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Class to handle and cache cosmos change feed.
  */
-public class ChangeFeed {
+public class CosmosChangeFeed {
 
   /**
    * Class representing change feed cache for each partition.
@@ -83,33 +84,19 @@ public class ChangeFeed {
     }
   }
 
-
   private final ConcurrentHashMap<String, ChangeFeedCacheEntry> changeFeedCache;
-  private final ConcurrentHashMap<String, Integer> cacheSizeMap;
   private final int defaultCacheSize;
   private final CosmosDataAccessor cosmosDataAccessor;
 
   /**
-   * Constructor to create a {@link ChangeFeed} object.
+   * Constructor to create a {@link CosmosChangeFeed} object.
    * @param cacheSize default number of cachedEntries for each partition.
    * @param cosmosDataAccessor {@link CosmosDataAccessor} object.
    */
-  public ChangeFeed(int cacheSize, CosmosDataAccessor cosmosDataAccessor) {
+  public CosmosChangeFeed(int cacheSize, CosmosDataAccessor cosmosDataAccessor) {
     this.defaultCacheSize = cacheSize;
     changeFeedCache = new ConcurrentHashMap<>();
-    cacheSizeMap = new ConcurrentHashMap<>();
     this.cosmosDataAccessor = cosmosDataAccessor;
-  }
-
-  /**
-   * Update the number of cached entries for a partition.
-   * Note that by default {@code defaultCacheSize} value is used to determine the number of cached entries for a
-   * partition, unless that value is explicitly changed by calling this method.
-   * @param partitionId PartitionId for which cache size is being updated.
-   * @param cacheSize new number of cached entries for the partition.
-   */
-  public void updateCacheSize(String partitionId, int cacheSize) {
-    cacheSizeMap.put(partitionId, cacheSize);
   }
 
   /**
@@ -123,8 +110,8 @@ public class ChangeFeed {
    * @param partitionId Partition for which change feed entries have to be returned.
    * @return updated {@link AzureFindToken} after processing the next set of entries.
    */
-  public AzureFindToken getNextEntriesAndToken(AzureFindToken azureFindToken,
-      List<CloudBlobMetadata> results, long maxEntriesSize, String partitionId) {
+  public AzureFindToken getNextEntriesAndToken(AzureFindToken azureFindToken, List<CloudBlobMetadata> results,
+      long maxEntriesSize, String partitionId) throws DocumentClientException {
     int index = azureFindToken.getIndex();
     if (!changeFeedCache.containsKey(partitionId) || !isCacheValid(partitionId, azureFindToken)) {
       populateChangeFeedCache(partitionId, azureFindToken.getStartContinuationToken());
@@ -139,6 +126,10 @@ public class ChangeFeed {
         index++;
       } else {
         populateChangeFeedCache(partitionId, azureFindToken.getEndContinuationToken());
+        if (cacheEmpty(partitionId)) {
+          // this means that there are no new changes
+          break;
+        }
         index = 0;
       }
     }
@@ -158,10 +149,13 @@ public class ChangeFeed {
   private boolean isCacheValid(String partitionId, AzureFindToken azureFindToken) {
     ChangeFeedCacheEntry changeFeedCacheEntry = changeFeedCache.get(partitionId);
     return azureFindToken.getAzureTokenRequestId().equals(changeFeedCacheEntry.getAzureRequestId())
-        && azureFindToken.getStartContinuationToken()
-        .equals(changeFeedCacheEntry.getStartContinuationToken())
+        && azureFindToken.getStartContinuationToken().equals(changeFeedCacheEntry.getStartContinuationToken())
         && azureFindToken.getEndContinuationToken().equals(changeFeedCacheEntry.getEndContinuationToken())
         && azureFindToken.getTotalItems() < changeFeedCacheEntry.getFetchedEntries().size();
+  }
+
+  private boolean cacheEmpty(String partitionId) {
+    return changeFeedCache.get(partitionId).getFetchedEntries().size() == 0;
   }
 
   /**
@@ -169,11 +163,11 @@ public class ChangeFeed {
    * @param partitionId Partition for which the change feed cache needs to be populated.
    * @param startRequestContinuationToken request continuation token from which the change feed query needs to be made.
    */
-  private void populateChangeFeedCache(String partitionId, String startRequestContinuationToken) {
-    int changeFeedSize = cacheSizeMap.getOrDefault(partitionId, defaultCacheSize);
-    List<CloudBlobMetadata> changeFeedEntries = new ArrayList<>(changeFeedSize);
+  private void populateChangeFeedCache(String partitionId, String startRequestContinuationToken)
+      throws DocumentClientException {
+    List<CloudBlobMetadata> changeFeedEntries = new ArrayList<>(defaultCacheSize);
     String newRequestContinuationToken =
-        cosmosDataAccessor.queryChangeFeed(startRequestContinuationToken, changeFeedSize, changeFeedEntries,
+        cosmosDataAccessor.queryChangeFeed(startRequestContinuationToken, defaultCacheSize, changeFeedEntries,
             partitionId);
     ChangeFeedCacheEntry changeFeedCacheEntry =
         new ChangeFeedCacheEntry(startRequestContinuationToken, newRequestContinuationToken,

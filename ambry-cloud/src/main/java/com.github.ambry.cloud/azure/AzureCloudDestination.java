@@ -31,7 +31,6 @@ import com.microsoft.azure.cosmosdb.ConnectionPolicy;
 import com.microsoft.azure.cosmosdb.ConsistencyLevel;
 import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
-import com.microsoft.azure.cosmosdb.PartitionKey;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.RetryOptions;
 import com.microsoft.azure.cosmosdb.SqlParameter;
@@ -87,6 +86,7 @@ class AzureCloudDestination implements CloudDestination {
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
   private final AsyncDocumentClient asyncDocumentClient;
   private final CosmosDataAccessor cosmosDataAccessor;
+  private final CosmosChangeFeed cosmosChangeFeed;
   private final AzureMetrics azureMetrics;
   private final String clusterName;
   private final long retentionPeriodMs;
@@ -127,6 +127,7 @@ class AzureCloudDestination implements CloudDestination {
         .withConsistencyLevel(ConsistencyLevel.Session)
         .build();
     cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, azureCloudConfig, azureMetrics);
+    cosmosChangeFeed = new CosmosChangeFeed(findSinceQueryLimit, cosmosDataAccessor);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
     this.deadBlobsQueryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
     logger.info("Created Azure destination");
@@ -151,6 +152,7 @@ class AzureCloudDestination implements CloudDestination {
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
     this.deadBlobsQueryLimit = CloudConfig.DEFAULT_COMPACTION_QUERY_LIMIT;
     cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
+    cosmosChangeFeed = new CosmosChangeFeed(findSinceQueryLimit, cosmosDataAccessor);
   }
 
   /**
@@ -255,32 +257,14 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken,
-      long maxTotalSizeOfEntries) throws CloudStorageException {
-    ChangeFeedOptions changeFeedOptions = new ChangeFeedOptions();
-    changeFeedOptions.setPartitionKey(new PartitionKey(partitionPath));
-    if(findToken.getAzureFindToken() != null) {
-      AzureFindToken azureFindToken = findToken.getAzureFindToken()      changeFeedOptions.setRequestContinuation(
-          azureFindToken.getCosmosRequestContinuationToken());
-    } else {
-      changeFeedOptions.setStartFromBeginning(true);
-    }
-    changeFeedOptions.setMaxItemCount(100);
-
-
-    SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
-        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, findSinceQueryLimit),
-            new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime())));
+  public CloudFindToken findEntriesSince(String partitionPath, CloudFindToken findToken,
+      long maxTotalSizeOfEntries, List<CloudBlobMetadata> nextEntries) throws CloudStorageException {
     try {
-      List<CloudBlobMetadata> queryResults =
-          cosmosDataAccessor.queryMetadata(partitionPath, entriesSinceQuery, azureMetrics.findSinceQueryTime);
-      if (queryResults.isEmpty()) {
-        return queryResults;
-      }
-      if (queryResults.get(0).getLastUpdateTime() == findToken.getLastUpdateTime()) {
-        filterOutLastReadBlobs(queryResults, findToken.getLastUpdateTimeReadBlobIds(), findToken.getLastUpdateTime());
-      }
-      return CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
+      AzureFindToken updatedAzureFindToken =
+          cosmosChangeFeed.getNextEntriesAndToken(findToken.getAzureFindToken(), nextEntries, maxTotalSizeOfEntries,
+              partitionPath);
+      long bytesToBeRead = nextEntries.stream().mapToLong(CloudBlobMetadata::getSize).sum();
+      return CloudFindToken.getUpdatedToken(findToken, updatedAzureFindToken, bytesToBeRead);
     } catch (DocumentClientException dex) {
       throw toCloudStorageException("Failed to query blobs for partition " + partitionPath, dex);
     }

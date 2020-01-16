@@ -157,26 +157,38 @@ public class CosmosDataAccessor {
     }
   }
 
-  String queryChangeFeed(String requestContinationToken, int feedSize, List<CloudBlobMetadata> changeFeed,
-      String partitionPath) {
+  /**
+   * Query cosmos change feed to get the next set of {@code CloudBlobMetadata} objects in specified {@code partitionPath}
+   * after {@code requestContinationToken}, capped by specified {@code maxFeedSize} representing the max number of items to
+   * be queried from the change feed.
+   * @param requestContinationToken Continuation token after which change feed is requested.
+   * @param maxFeedSize max item count to be requested in the feed query.
+   * @param changeFeed {@link CloudBlobMetadata} {@code List} to be populated with the next set of entries returned by change feed query.
+   * @param partitionPath partition for which the change feed is requested.
+   * @return next continuation token.
+   * @throws DocumentClientException
+   */
+  String queryChangeFeed(String requestContinationToken, int maxFeedSize, List<CloudBlobMetadata> changeFeed,
+      String partitionPath) throws DocumentClientException {
     ChangeFeedOptions changeFeedOptions = new ChangeFeedOptions();
     changeFeedOptions.setPartitionKey(new PartitionKey(partitionPath));
-    changeFeedOptions.setMaxItemCount(feedSize);
+    changeFeedOptions.setMaxItemCount(maxFeedSize);
     if (requestContinationToken == null) {
       changeFeedOptions.setStartFromBeginning(true);
     } else {
       changeFeedOptions.setRequestContinuation(requestContinationToken);
     }
-    FeedResponse<Document> feedResponse =
-        asyncDocumentClient.queryDocumentChangeFeed(cosmosCollectionLink, changeFeedOptions)
-            .limit(1)
-            .toBlocking().single();
-    changeFeed.addAll(feedResponse
-        .getResults()
-        .stream()
-        .map(doc -> createMetadataFromDocument(doc))
-        .collect(Collectors.toList()));
-    return feedResponse.getResponseContinuation();
+    try {
+      FeedResponse<Document> feedResponse =
+          asyncDocumentClient.queryDocumentChangeFeed(cosmosCollectionLink, changeFeedOptions).limit(1).toBlocking().single();
+      changeFeed.addAll(feedResponse.getResults().stream().map(doc -> createMetadataFromDocument(doc)).collect(Collectors.toList()));
+      return feedResponse.getResponseContinuation();
+    } catch (RuntimeException rex) {
+      if (rex.getCause() instanceof DocumentClientException) {
+        throw (DocumentClientException) rex.getCause();
+      }
+      throw rex;
+    }
   }
 
   /**
