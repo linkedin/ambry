@@ -88,7 +88,12 @@ class AmbryDataNode implements DataNodeId {
 
   @Override
   public int getSSLPort() {
-    return sslPort.getPort();
+    if (hasSSLPort()) {
+      return sslPort.getPort();
+    } else {
+      throw new IllegalStateException(
+          "No HTTP2 port exists for the Data Node " + hostName + ":" + plainTextPort.getPort());
+    }
   }
 
   @Override
@@ -98,7 +103,12 @@ class AmbryDataNode implements DataNodeId {
 
   @Override
   public int getHttp2Port() {
-    return http2Port.getPort();
+    if (hasHttp2Port()) {
+      return http2Port.getPort();
+    } else {
+      throw new IllegalStateException(
+          "No HTTP2 port exists for the Data Node " + hostName + ":" + plainTextPort.getPort());
+    }
   }
 
   @Override

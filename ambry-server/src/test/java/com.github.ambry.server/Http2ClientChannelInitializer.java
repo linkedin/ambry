@@ -54,18 +54,7 @@ class Http2ClientChannelInitializer extends ChannelInitializer<SocketChannel> {
     SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(host, port, SSLFactory.Mode.CLIENT));
     pipeline.addLast(sslHandler);
     pipeline.addLast(Http2FrameCodecBuilder.forClient().build());
-    pipeline.addLast(new Http2MultiplexHandler(new DummyChildHandler()));
-  }
-
-  private class DummyChildHandler extends ChannelInboundHandlerAdapter {
-
-    public DummyChildHandler() {
-    }
-
-    @Override
-    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-
-    }
+    pipeline.addLast(new Http2MultiplexHandler(new ChannelInboundHandlerAdapter()));
   }
 }
 
