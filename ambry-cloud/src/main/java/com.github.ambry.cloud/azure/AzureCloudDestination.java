@@ -17,6 +17,7 @@ import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.codahale.metrics.Timer;
+import com.github.ambry.cloud.AzureFindToken;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudFindToken;
@@ -258,8 +259,9 @@ class AzureCloudDestination implements CloudDestination {
       long maxTotalSizeOfEntries) throws CloudStorageException {
     ChangeFeedOptions changeFeedOptions = new ChangeFeedOptions();
     changeFeedOptions.setPartitionKey(new PartitionKey(partitionPath));
-    if(findToken.getAzureCloudDestinationToken() != null) {
-      AzureCloudDestinationToken azureCloudDestinationToken = findToken.getAzureCloudDestinationToken()      changeFeedOptions.setRequestContinuation(azureCloudDestinationToken.getCosmosRequestContinuationToken());
+    if(findToken.getAzureFindToken() != null) {
+      AzureFindToken azureFindToken = findToken.getAzureFindToken()      changeFeedOptions.setRequestContinuation(
+          azureFindToken.getCosmosRequestContinuationToken());
     } else {
       changeFeedOptions.setStartFromBeginning(true);
     }

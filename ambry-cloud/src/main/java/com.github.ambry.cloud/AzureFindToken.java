@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud.azure;
+package com.github.ambry.cloud;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -22,7 +22,7 @@ import java.nio.ByteBuffer;
 /**
  * Class representing the replication token to track replication progress in azure.
  */
-public class AzureCloudDestinationToken {
+public class AzureFindToken {
   private final String startContinuationToken;
   private final String endContinuationToken;
   private final int index;
@@ -34,9 +34,9 @@ public class AzureCloudDestinationToken {
   public static short DEFAULT_VERSION = VERSION_0;
 
   /**
-   * Default constructor to create a {@link AzureCloudDestinationToken} with uninitialized continuation token.
+   * Default constructor to create a {@link AzureFindToken} with uninitialized continuation token.
    */
-  public AzureCloudDestinationToken() {
+  public AzureFindToken() {
     startContinuationToken = null;
     index = -1;
     endContinuationToken = null;
@@ -46,14 +46,14 @@ public class AzureCloudDestinationToken {
   }
 
   /**
-   * Create {@link AzureCloudDestinationToken} from provided values.
+   * Create {@link AzureFindToken} from provided values.
    * @param startContinuationToken
    * @param endContinuationToken
    * @param index
    * @param totalItems
    * @param azureTokenRequestId
    */
-  public AzureCloudDestinationToken(String startContinuationToken, String endContinuationToken, int index,
+  public AzureFindToken(String startContinuationToken, String endContinuationToken, int index,
       int totalItems, String azureTokenRequestId) {
     this.startContinuationToken = startContinuationToken;
     this.endContinuationToken = endContinuationToken;
@@ -64,7 +64,7 @@ public class AzureCloudDestinationToken {
   }
 
   /**
-   * Constructor to create a {@link AzureCloudDestinationToken} with specified token values and specified version.
+   * Constructor to create a {@link AzureFindToken} with specified token values and specified version.
    * @param startContinuationToken
    * @param endContinuationToken
    * @param index
@@ -72,7 +72,7 @@ public class AzureCloudDestinationToken {
    * @param azureTokenRequestId
    * @param version
    */
-  public AzureCloudDestinationToken(String startContinuationToken, String endContinuationToken, int index,
+  public AzureFindToken(String startContinuationToken, String endContinuationToken, int index,
       int totalItems, String azureTokenRequestId, short version) {
     this.startContinuationToken = startContinuationToken;
     this.endContinuationToken = endContinuationToken;
@@ -83,19 +83,19 @@ public class AzureCloudDestinationToken {
   }
 
   /**
-   * Deserialize {@link AzureCloudDestinationToken} object from input stream.
+   * Deserialize {@link AzureFindToken} object from input stream.
    * @param inputStream {@link DataOutputStream} to deserialize from.
-   * @return {@link AzureCloudDestinationToken} object.
+   * @return {@link AzureFindToken} object.
    * @throws IOException
    */
-  public static AzureCloudDestinationToken fromBytes(DataInputStream inputStream) throws IOException {
+  public static AzureFindToken fromBytes(DataInputStream inputStream) throws IOException {
     short version = inputStream.readShort();
     String startContinuationToken = extractStringFromStream(inputStream);
     String endContinuationToken = extractStringFromStream(inputStream);
     int index = inputStream.readInt();
     int totalItems = inputStream.readInt();
     String azureTokenRequestId = extractStringFromStream(inputStream);
-    return new AzureCloudDestinationToken(startContinuationToken, endContinuationToken, index, totalItems,
+    return new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems,
         azureTokenRequestId, version);
   }
 
@@ -136,11 +136,11 @@ public class AzureCloudDestinationToken {
         + azureTokenRequestId.length();
   }
 
-  public boolean equals(AzureCloudDestinationToken azureCloudDestinationToken) {
-    return azureCloudDestinationToken.getVersion() == version && azureCloudDestinationToken.getStartContinuationToken()
-        .equals(startContinuationToken) && azureCloudDestinationToken.getEndContinuationToken()
-        .equals(endContinuationToken) && azureCloudDestinationToken.getTotalItems() == totalItems
-        && azureCloudDestinationToken.getIndex() == index && azureCloudDestinationToken.getAzureTokenRequestId()
+  public boolean equals(AzureFindToken azureFindToken) {
+    return azureFindToken.getVersion() == version && azureFindToken.getStartContinuationToken()
+        .equals(startContinuationToken) && azureFindToken.getEndContinuationToken()
+        .equals(endContinuationToken) && azureFindToken.getTotalItems() == totalItems
+        && azureFindToken.getIndex() == index && azureFindToken.getAzureTokenRequestId()
         .equals(azureTokenRequestId);
   }
 

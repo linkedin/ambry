@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.github.ambry.cloud.AzureFindToken;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,7 +42,7 @@ public class ChangeFeed {
      * @param azureRequestId a random UUID which uniquely identifies each cached info.
      * @param fetchedEntries {@link List} of cached {@link CloudBlobMetadata} objects.
      */
-    public ChangeFeedCacheEntry(String startContinuationToken, String endContinuationToken, String azureRequestId,
+    ChangeFeedCacheEntry(String startContinuationToken, String endContinuationToken, String azureRequestId,
         List<CloudBlobMetadata> fetchedEntries) {
       this.startContinuationToken = startContinuationToken;
       this.endContinuationToken = endContinuationToken;
@@ -53,7 +54,7 @@ public class ChangeFeed {
      * Return start continuation token.
      * @return start continuation token.
      */
-    public String getStartContinuationToken() {
+    String getStartContinuationToken() {
       return startContinuationToken;
     }
 
@@ -61,7 +62,7 @@ public class ChangeFeed {
      * Return the end continuation token.
      * @return end continuation token.
      */
-    public String getEndContinuationToken() {
+    String getEndContinuationToken() {
       return endContinuationToken;
     }
 
@@ -69,7 +70,7 @@ public class ChangeFeed {
      * Return the azure request id.
      * @return azure request id.
      */
-    public String getAzureRequestId() {
+    String getAzureRequestId() {
       return azureRequestId;
     }
 
@@ -77,7 +78,7 @@ public class ChangeFeed {
      * Return the fetch entries list.
      * @return {@link List} of {@link CloudBlobMetadata} entries.
      */
-    public List<CloudBlobMetadata> getFetchedEntries() {
+    List<CloudBlobMetadata> getFetchedEntries() {
       return fetchedEntries;
     }
   }
@@ -112,55 +113,55 @@ public class ChangeFeed {
   }
 
   /**
-   * Get next set of change feed entries for the specified partition, after the {@code azureCloudDestinationToken}.
+   * Get next set of change feed entries for the specified partition, after the {@code azureFindToken}.
    * The number of entries is capped by maxEntriesSize.
-   * This method creates a cache for change feed entries. If the {@code azureCloudDestinationToken} is not valid,
+   * This method creates a cache for change feed entries. If the {@code azureFindToken} is not valid,
    * or if all the items in the cache are consumed, then it queries cosmos for new entries.
-   * @param azureCloudDestinationToken {@link AzureCloudDestinationToken} after which the next entries have to be returned.
+   * @param azureFindToken {@link AzureFindToken} after which the next entries have to be returned.
    * @param results {@link List} of {@link CloudBlobMetadata} objects which will be populated by new entries.
    * @param maxEntriesSize maximum size of all the blobs returned in {@code results}
    * @param partitionId Partition for which change feed entries have to be returned.
-   * @return updated {@link AzureCloudDestinationToken} after processing the next set of entries.
+   * @return updated {@link AzureFindToken} after processing the next set of entries.
    */
-  public AzureCloudDestinationToken getNextEntriesAndToken(AzureCloudDestinationToken azureCloudDestinationToken,
+  public AzureFindToken getNextEntriesAndToken(AzureFindToken azureFindToken,
       List<CloudBlobMetadata> results, long maxEntriesSize, String partitionId) {
-    int index = azureCloudDestinationToken.getIndex();
-    if (!changeFeedCache.containsKey(partitionId) || !isCacheValid(partitionId, azureCloudDestinationToken)) {
-      populateChangeFeedCache(partitionId, azureCloudDestinationToken.getStartContinuationToken());
+    int index = azureFindToken.getIndex();
+    if (!changeFeedCache.containsKey(partitionId) || !isCacheValid(partitionId, azureFindToken)) {
+      populateChangeFeedCache(partitionId, azureFindToken.getStartContinuationToken());
       index = 0;
     }
 
     long resultSize = 0;
     while (resultSize < maxEntriesSize) {
-      if (azureCloudDestinationToken.getIndex() < changeFeedCache.get(partitionId).getFetchedEntries().size()) {
+      if (azureFindToken.getIndex() < changeFeedCache.get(partitionId).getFetchedEntries().size()) {
         results.add(changeFeedCache.get(partitionId).getFetchedEntries().get(index));
         resultSize = resultSize + changeFeedCache.get(partitionId).getFetchedEntries().get(index).getSize();
         index++;
       } else {
-        populateChangeFeedCache(partitionId, azureCloudDestinationToken.getEndContinuationToken());
+        populateChangeFeedCache(partitionId, azureFindToken.getEndContinuationToken());
         index = 0;
       }
     }
 
-    return new AzureCloudDestinationToken(changeFeedCache.get(partitionId).getStartContinuationToken(),
+    return new AzureFindToken(changeFeedCache.get(partitionId).getStartContinuationToken(),
         changeFeedCache.get(partitionId).getEndContinuationToken(), index,
         changeFeedCache.get(partitionId).getFetchedEntries().size(),
         changeFeedCache.get(partitionId).getAzureRequestId());
   }
 
   /**
-   * Check is the cache is valid for the {@code azureCloudDestinationToken} provided.
-   * @param partitionId partition of the {@code azureCloudDestinationToken}.
-   * @param azureCloudDestinationToken {@link AzureCloudDestinationToken} object.
+   * Check is the cache is valid for the {@code azureFindToken} provided.
+   * @param partitionId partition of the {@code azureFindToken}.
+   * @param azureFindToken {@link AzureFindToken} object.
    * @return true is cache is valid. false otherwise.
    */
-  private boolean isCacheValid(String partitionId, AzureCloudDestinationToken azureCloudDestinationToken) {
+  private boolean isCacheValid(String partitionId, AzureFindToken azureFindToken) {
     ChangeFeedCacheEntry changeFeedCacheEntry = changeFeedCache.get(partitionId);
-    return azureCloudDestinationToken.getAzureTokenRequestId().equals(changeFeedCacheEntry.getAzureRequestId())
-        && azureCloudDestinationToken.getStartContinuationToken()
+    return azureFindToken.getAzureTokenRequestId().equals(changeFeedCacheEntry.getAzureRequestId())
+        && azureFindToken.getStartContinuationToken()
         .equals(changeFeedCacheEntry.getStartContinuationToken())
-        && azureCloudDestinationToken.getEndContinuationToken().equals(changeFeedCacheEntry.getEndContinuationToken())
-        && azureCloudDestinationToken.getTotalItems() < changeFeedCacheEntry.getFetchedEntries().size();
+        && azureFindToken.getEndContinuationToken().equals(changeFeedCacheEntry.getEndContinuationToken())
+        && azureFindToken.getTotalItems() < changeFeedCacheEntry.getFetchedEntries().size();
   }
 
   /**
