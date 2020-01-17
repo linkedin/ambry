@@ -48,7 +48,7 @@ public class CloudBlobMetadataTest {
   private final String[] ENCRYPTION_FIELDS =
       new String[]{FIELD_VCR_KMS_CONTEXT, FIELD_CRYPTO_AGENT_FACTORY, FIELD_ENCRYPTED_SIZE};
   private final String[] FIELDS_RARELY_SET =
-      ArrayUtils.addAll(ENCRYPTION_FIELDS, FIELD_DELETION_TIME, FIELD_EXPIRATION_TIME, FIELD_NAMING_SCHEME,
+      ArrayUtils.addAll(ENCRYPTION_FIELDS, FIELD_DELETION_TIME, FIELD_EXPIRATION_TIME, FIELD_NAME_SCHEME_VERSION,
           FIELD_ENCRYPTION_ORIGIN);
 
   @Before
@@ -97,7 +97,7 @@ public class CloudBlobMetadataTest {
 
   /** Test deserialization of field that was removed from schema */
   @Test
-  public void testDeserUnknowkField() throws Exception {
+  public void testDeserUnknownField() throws Exception {
     CloudBlobMetadata blobMetadata = new CloudBlobMetadata(blobId, now, -1, 1024, EncryptionOrigin.NONE);
     Map<String, String> propertyMap = blobMetadata.toMap();
     propertyMap.put("cloudBlobName", "1234-" + blobMetadata.getId());

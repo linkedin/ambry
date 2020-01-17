@@ -52,7 +52,7 @@ public class CloudBlobMetadata {
   public static final String FIELD_VCR_KMS_CONTEXT = "vcrKmsContext";
   public static final String FIELD_CRYPTO_AGENT_FACTORY = "cryptoAgentFactory";
   public static final String FIELD_ENCRYPTED_SIZE = "encryptedSize";
-  public static final String FIELD_NAMING_SCHEME = "namingScheme";
+  public static final String FIELD_NAME_SCHEME_VERSION = "nameSchemeVersion";
 
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -65,7 +65,7 @@ public class CloudBlobMetadata {
   private int containerId;
   private long expirationTime = Utils.Infinite_Time;
   private long deletionTime = Utils.Infinite_Time;
-  private int namingScheme = 0;
+  private int nameSchemeVersion = 0;
   private EncryptionOrigin encryptionOrigin = EncryptionOrigin.NONE;
   private String vcrKmsContext;
   private String cryptoAgentFactory;
@@ -321,12 +321,20 @@ public class CloudBlobMetadata {
     return this;
   }
 
-  public int getNamingScheme() {
-    return namingScheme;
+  /**
+   * @return the blob naming scheme version.
+   */
+  public int getNameSchemeVersion() {
+    return nameSchemeVersion;
   }
 
-  public CloudBlobMetadata setNamingScheme(int namingScheme) {
-    this.namingScheme = namingScheme;
+  /**
+   * Sets the blob naming scheme version.
+   * @param nameSchemeVersion the version of blob naming scheme.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setNameSchemeVersion(int nameSchemeVersion) {
+    this.nameSchemeVersion = nameSchemeVersion;
     return this;
   }
 
@@ -412,7 +420,7 @@ public class CloudBlobMetadata {
     return (Objects.equals(id, om.id) && Objects.equals(partitionId, om.partitionId) && accountId == om.accountId
         && containerId == om.containerId && size == om.size && creationTime == om.creationTime
         && uploadTime == om.uploadTime && expirationTime == om.expirationTime && deletionTime == om.deletionTime
-        && namingScheme == om.namingScheme && encryptionOrigin == om.encryptionOrigin && Objects.equals(vcrKmsContext,
+        && nameSchemeVersion == om.nameSchemeVersion && encryptionOrigin == om.encryptionOrigin && Objects.equals(vcrKmsContext,
         om.vcrKmsContext) && Objects.equals(cryptoAgentFactory, om.cryptoAgentFactory)
         && encryptedSize == om.encryptedSize);
   }
@@ -456,8 +464,8 @@ public class CloudBlobMetadata {
       if (value.expirationTime > 0) {
         gen.writeNumberField(FIELD_EXPIRATION_TIME, value.expirationTime);
       }
-      if (value.namingScheme > 0) {
-        gen.writeNumberField(FIELD_NAMING_SCHEME, value.namingScheme);
+      if (value.nameSchemeVersion > 0) {
+        gen.writeNumberField(FIELD_NAME_SCHEME_VERSION, value.nameSchemeVersion);
       }
       // Encryption fields that may or may not apply
       if (value.encryptionOrigin != EncryptionOrigin.NONE) {
