@@ -77,8 +77,10 @@ class CuratedLogIndexState {
   // deliberately do not divide the capacities perfectly.
   static final long PUT_RECORD_SIZE = 53;
   static final long DELETE_RECORD_SIZE = 29;
-  static final long TTL_UPDATE_RECORD_SIZE = 37;
-  static final long UNDELETE_RECORD_SIZE = 41;
+  static final long TTL_UPDATE_RECORD_SIZE = 29;
+  static final long UNDELETE_RECORD_SIZE = 29;
+
+  static final int deleteRetentionDay = 1;
 
   static {
     try {
@@ -101,6 +103,8 @@ class CuratedLogIndexState {
   final Set<MockId> ttlUpdatedKeys = new HashSet<>();
   // Set of all deleted keys
   final Set<MockId> deletedKeys = new HashSet<>();
+  // Set of all deleted and should be compacted keys
+  final Set<MockId> deletedAndShouldBeCompactedKeys = new HashSet<>();
   // Set of all undeleted keys
   final Set<MockId> undeletedKeys = new HashSet<>();
   // Set of all expired keys
@@ -150,11 +154,13 @@ class CuratedLogIndexState {
    * @param isLogSegmented {@code true} if segmented. {@code false} otherwise.
    * @param tempDir the directory where the log and index files should be created.
    * @param addTtlUpdates if {@code true}, adds entries that update TTL.
+   * @param addUndeletes if {@code true}, adds undelete entries.
    * @throws IOException
    * @throws StoreException
    */
-  CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates) throws IOException, StoreException {
-    this(isLogSegmented, tempDir, false, true, addTtlUpdates);
+  CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates, boolean addUndeletes)
+      throws IOException, StoreException {
+    this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes);
   }
 
   /**
@@ -168,11 +174,14 @@ class CuratedLogIndexState {
    * @param hardDeleteEnabled if {@code true}, hard delete is enabled.
    * @param initState sets up a diverse set of entries if {@code true}. Leaves the log and index empty if {@code false}.
    * @param addTtlUpdates if {@code true}, adds entries that update TTL.
+   * @param addUndeletes if {@code true}, adds undelete entries.
    * @throws IOException
    * @throws StoreException
    */
   CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean hardDeleteEnabled, boolean initState,
-      boolean addTtlUpdates) throws IOException, StoreException {
+      boolean addTtlUpdates, boolean addUndeletes) throws IOException, StoreException {
+    // advance time here so when we set delete's operation time to 0, it will fall within retention day.
+    advanceTime(TimeUnit.DAYS.toMillis(CuratedLogIndexState.deleteRetentionDay));
     this.tempDir = tempDir;
     tempDirStr = tempDir.getAbsolutePath();
     long segmentCapacity = isLogSegmented ? CuratedLogIndexState.SEGMENT_CAPACITY : CuratedLogIndexState.LOG_CAPACITY;
@@ -184,12 +193,14 @@ class CuratedLogIndexState {
     properties.put("store.enable.hard.delete", Boolean.toString(hardDeleteEnabled));
     // not used but set anyway since this is a package private variable.
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
+    // set the delete retention day
+    properties.put("store.deleted.message.retention.days", Integer.toString(CuratedLogIndexState.deleteRetentionDay));
     // switch off time movement for the hard delete thread. Otherwise blobs expire too quickly
     time.suspend(Collections.singleton(HardDeleter.getThreadName(tempDirStr)));
     initIndex(null);
     assertTrue("Expected empty index", index.isEmpty());
     if (initState) {
-      setupTestState(isLogSegmented, segmentCapacity, addTtlUpdates);
+      setupTestState(isLogSegmented, segmentCapacity, addTtlUpdates, addUndeletes);
     }
   }
 
@@ -254,7 +265,6 @@ class CuratedLogIndexState {
     return indexEntries;
   }
 
-
   /**
    * Makes the TTL of {@code id} infinite.
    * @param id the {@link MockId} whose TTL needs to be made infinite.
@@ -264,7 +274,7 @@ class CuratedLogIndexState {
    * @throws StoreException
    */
   FileSpan makePermanent(MockId id, boolean forcePut) throws StoreException {
-    return makePermanent(id, forcePut, (short)-1);
+    return makePermanent(id, forcePut, IndexValue.LIFE_VERSION_FROM_FRONTEND);
   }
 
   /**
@@ -278,14 +288,15 @@ class CuratedLogIndexState {
    */
   FileSpan makePermanent(MockId id, boolean forcePut, short lifeVersion) throws StoreException {
     IndexValue value = getExpectedValue(id, false);
-    boolean hasLifeVersion = lifeVersion > (short)-1;
-//    if (!forcePut && value == null) {
-//      throw new IllegalArgumentException(id + " does not exist in the index");
-//    } else if (expiredKeys.contains(id) || (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index))) {
-//      throw new IllegalArgumentException(id + " is deleted or expired");
-//    } else if (value != null && value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
-//      throw new IllegalArgumentException(id + " ttl has already been updated");
-//    }
+    boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
+    if (!forcePut && value == null) {
+      throw new IllegalArgumentException(id + " does not exist in the index");
+    } else if (expiredKeys.contains(id) || (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index))) {
+      throw new IllegalArgumentException(id + " is deleted or expired");
+    } else if (value != null && value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+      throw new IllegalArgumentException(id + " ttl has already been updated");
+    }
+
     byte[] dataWritten = appendToLog(CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE);
     Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
     FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE);
@@ -306,10 +317,12 @@ class CuratedLogIndexState {
       newValue.setNewSize(CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE);
     } else {
       short ttlUpdateLifeVersion = hasLifeVersion ? lifeVersion : 0;
-      newValue = new IndexValue(CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, startOffset, IndexValue.FLAGS_DEFAULT_VALUE, Utils.Infinite_Time,
-          time.milliseconds(), id.getAccountId(), id.getContainerId(), ttlUpdateLifeVersion);
+      newValue =
+          new IndexValue(CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, startOffset, IndexValue.FLAGS_DEFAULT_VALUE,
+              Utils.Infinite_Time, time.milliseconds(), id.getAccountId(), id.getContainerId(), ttlUpdateLifeVersion);
       newValue.clearOriginalMessageOffset();
     }
+    newValue.clearFlag(IndexValue.Flags.Undelete_Index);
     newValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
     if (forcePut) {
       index.addToIndex(new IndexEntry(id, newValue), fileSpan);
@@ -339,7 +352,7 @@ class CuratedLogIndexState {
   }
 
   FileSpan addDeleteEntry(MockId idToDelete, MessageInfo info) throws StoreException {
-    return addDeleteEntry(idToDelete, info, (short)-1);
+    return addDeleteEntry(idToDelete, info, IndexValue.LIFE_VERSION_FROM_FRONTEND);
   }
 
   /**
@@ -351,14 +364,13 @@ class CuratedLogIndexState {
    */
   FileSpan addDeleteEntry(MockId idToDelete, MessageInfo info, short lifeVersion) throws StoreException {
     IndexValue value = getExpectedValue(idToDelete, false);
-    boolean hasLifeVersion = lifeVersion > (short)-1;
+    boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
     //check if we should reject this delete entry
-    //not sure why we have this section... seems like exceptions should ultimately come from the PersistentIndex
-//    if (value == null && !allKeys.containsKey(idToDelete) && info == null) {
-//      throw new IllegalArgumentException(idToDelete + " does not exist in the index");
-//    } else if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-//      throw new IllegalArgumentException(idToDelete + " is already deleted");
-//    }
+    if (value == null && !allKeys.containsKey(idToDelete) && info == null) {
+      throw new IllegalArgumentException(idToDelete + " does not exist in the index");
+    } else if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+      throw new IllegalArgumentException(idToDelete + " is already deleted");
+    }
 
     //add delete to the log
     byte[] dataWritten = appendToLog(CuratedLogIndexState.DELETE_RECORD_SIZE);
@@ -378,9 +390,13 @@ class CuratedLogIndexState {
     if (value != null) {
       short delLifeVersion = hasLifeVersion ? lifeVersion : value.getLifeVersion();
       newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
-          time.milliseconds(), value.getAccountId(), value.getContainerId(), delLifeVersion);
+          info == null ? time.milliseconds() : info.getOperationTimeMs(), value.getAccountId(), value.getContainerId(),
+          delLifeVersion);
       newValue.setNewOffset(startOffset);
       newValue.setNewSize(CuratedLogIndexState.DELETE_RECORD_SIZE);
+      if (!value.isPut()) {
+        newValue.clearOriginalMessageOffset();
+      }
     } else if (allKeys.containsKey(idToDelete)) {
       // this is because a ttl update record was forcibly added
       value = allKeys.get(idToDelete).last();
@@ -391,8 +407,10 @@ class CuratedLogIndexState {
       newValue.clearOriginalMessageOffset();
       forceDeleteEntry = true;
     } else {
-      newValue = new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, startOffset, IndexValue.FLAGS_DEFAULT_VALUE, info.getExpirationTimeInMs(),
-          info.getOperationTimeMs(), info.getAccountId(), info.getContainerId(), info.getLifeVersion());
+      // Force to add the delete entry to the log to mimic the situation when compaction happens to remove the put.
+      newValue = new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, startOffset, IndexValue.FLAGS_DEFAULT_VALUE,
+          info.getExpirationTimeInMs(), info.getOperationTimeMs(), info.getAccountId(), info.getContainerId(),
+          info.getLifeVersion());
       newValue.clearOriginalMessageOffset();
       if (info.isTtlUpdated()) {
         newValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
@@ -400,15 +418,13 @@ class CuratedLogIndexState {
       forceDeleteEntry = true;
     }
     newValue.setFlag(IndexValue.Flags.Delete_Index);
+    newValue.clearFlag(IndexValue.Flags.Undelete_Index);
     if (forceDeleteEntry) {
       index.addToIndex(new IndexEntry(idToDelete, newValue), fileSpan);
-//      index.markAsDeleted(idToDelete, fileSpan, info, info.getOperationTimeMs(), info.getLifeVersion());
     } else {
       index.markAsDeleted(idToDelete, fileSpan, newValue.getOperationTimeInMs());
     }
-    if (!deletedKeys.contains(idToDelete)) {
-      markAsDeleted(idToDelete);
-    }
+    markAsDeleted(idToDelete);
     logOrder.put(startOffset, new Pair<>(idToDelete, new LogEntry(dataWritten, newValue)));
     allKeys.computeIfAbsent(idToDelete, k -> new TreeSet<>()).add(newValue);
     referenceIndex.get(indexSegmentStartOffset).computeIfAbsent(idToDelete, k -> new TreeSet<>()).add(newValue);
@@ -419,8 +435,6 @@ class CuratedLogIndexState {
     return fileSpan;
   }
 
-
-
   /**
    * Adds a delete entry in the index (real and reference) for {@code idToDelete}.
    * @param idToDelete the id to be deleted.
@@ -428,36 +442,30 @@ class CuratedLogIndexState {
    * @throws IOException
    * @throws StoreException
    */
-  FileSpan addUndeleteEntry(MockId idToDelete) throws IOException, StoreException {
-    return addDeleteEntry(idToDelete, null);
-  }
-
-  FileSpan addUndeleteEntry(MockId idToDelete, MessageInfo info) throws StoreException {
-    return addDeleteEntry(idToDelete, info, (short)-1);
+  FileSpan addUndeleteEntry(MockId idToDelete) throws StoreException {
+    return addUndeleteEntry(idToDelete, IndexValue.LIFE_VERSION_FROM_FRONTEND);
   }
 
   /**
    * Adds an undelete entry in the index (real and reference) for {@code idToDelete}.
    * @param idToUndelete the id to be deleted.
-   * @param info the {@link MessageInfo} to use incase of recovery to fetch accountId, containerId and operationTime.
    * @return the {@link FileSpan} of the added entries.
    * @throws StoreException
    */
-  FileSpan addUndeleteEntry(MockId idToUndelete, MessageInfo info, short lifeVersion) throws StoreException {
+  FileSpan addUndeleteEntry(MockId idToUndelete, short lifeVersion) throws StoreException {
     IndexValue value = getExpectedValue(idToUndelete, false);
-    boolean hasLifeVersion = lifeVersion > (short)-1;
-//    if (value == null && !allKeys.containsKey(idToUndelete) && info == null) {
-//      throw new IllegalArgumentException(idToUndelete + " does not exist in the index");
-//    } else if (value != null && !value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-//      throw new IllegalArgumentException(idToUndelete + " is already undeleted");
-//    }
+    boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
+    if (value == null) {
+      throw new IllegalArgumentException(idToUndelete + " does not exist in the index");
+    } else if (value != null && !value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+      throw new IllegalArgumentException(idToUndelete + " is not yet deleted");
+    }
 
-    //add undelete to log
+    // add undelete to log
     byte[] dataWritten = appendToLog(CuratedLogIndexState.UNDELETE_RECORD_SIZE);
     Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
     FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, CuratedLogIndexState.UNDELETE_RECORD_SIZE);
 
-    boolean forcePut = false;
     Offset startOffset = fileSpan.getStartOffset();
     Offset indexSegmentStartOffset = generateReferenceIndexSegmentStartOffset(startOffset);
     if (!referenceIndex.containsKey(indexSegmentStartOffset)) {
@@ -466,42 +474,18 @@ class CuratedLogIndexState {
       referenceIndex.put(indexSegmentStartOffset, new TreeMap<>());
     }
 
-
-
-    IndexValue newValue;
-    if (value != null) {
-      short undelLifeVersion = hasLifeVersion ? lifeVersion : (short) (value.getLifeVersion() + 1);
-      newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
-          time.milliseconds(), value.getAccountId(), value.getContainerId(), undelLifeVersion);
-      newValue.setNewOffset(startOffset);
-      newValue.setNewSize(CuratedLogIndexState.UNDELETE_RECORD_SIZE);
-//    } else if (allKeys.containsKey(idToUndelete)) {
-//      // this is because a ttl update record was forcibly added
-//      value = allKeys.get(idToUndelete).last();
-//      short undelLifeVersion = hasLifeVersion ? lifeVersion : value.getLifeVersion();
-//      newValue =
-//          new IndexValue(CuratedLogIndexState.UNDELETE_RECORD_SIZE, startOffset, value.getFlags(), value.getExpiresAtMs(),
-//              time.milliseconds(), value.getAccountId(), value.getContainerId(), undelLifeVersion);
-//      newValue.clearOriginalMessageOffset();
-//      forcePut = true;
-    } else {
-      newValue = new IndexValue(CuratedLogIndexState.UNDELETE_RECORD_SIZE, startOffset, IndexValue.FLAGS_DEFAULT_VALUE, info.getExpirationTimeInMs(),
-          info.getOperationTimeMs(), info.getAccountId(), info.getContainerId(), info.getLifeVersion());
-      newValue.clearOriginalMessageOffset();
-      if (info.isTtlUpdated()) {
-        newValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
-      }
-      forcePut = true;
-    }
+    // After compaction, undelete record would not be kept without Put and Delete record, so don't bother to forcely
+    // add the undelete record to log.
+    short undelLifeVersion = hasLifeVersion ? lifeVersion : (short) (value.getLifeVersion() + 1);
+    IndexValue newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
+        time.milliseconds(), value.getAccountId(), value.getContainerId(), undelLifeVersion);
+    newValue.setNewOffset(startOffset);
+    newValue.setNewSize(CuratedLogIndexState.UNDELETE_RECORD_SIZE);
+    newValue.clearOriginalMessageOffset();
     newValue.setFlag(IndexValue.Flags.Undelete_Index);
-    if (forcePut) {
-      index.addToIndex(new IndexEntry(idToUndelete, newValue), fileSpan);
-    } else {
-      index.markAsUndeleted(idToUndelete, fileSpan, newValue.getOperationTimeInMs());
-    }
-    if (!undeletedKeys.contains(idToUndelete)) {
-      markAsUndeleted(idToUndelete);
-    }
+    newValue.clearFlag(IndexValue.Flags.Delete_Index);
+    index.markAsUndeleted(idToUndelete, fileSpan, newValue.getOperationTimeInMs());
+    markAsUndeleted(idToUndelete);
     logOrder.put(startOffset, new Pair<>(idToUndelete, new LogEntry(dataWritten, newValue)));
     allKeys.computeIfAbsent(idToUndelete, k -> new TreeSet<>()).add(newValue);
     referenceIndex.get(indexSegmentStartOffset).computeIfAbsent(idToUndelete, k -> new TreeSet<>()).add(newValue);
@@ -577,8 +561,9 @@ class CuratedLogIndexState {
    * @return the value that is expected to obtained from the {@link PersistentIndex}
    */
   IndexValue getExpectedValue(MockId id, boolean wantPut) {
-    return getExpectedValue(id, wantPut ? EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.UNDELETE)
-        : EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE), null);
+    return getExpectedValue(id, wantPut ? EnumSet.of(PersistentIndex.IndexEntryType.PUT)
+        : EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE,
+            PersistentIndex.IndexEntryType.UNDELETE), null);
   }
 
   /**
@@ -613,19 +598,17 @@ class CuratedLogIndexState {
     ListIterator<IndexValue> iterator = toConsider.listIterator(toConsider.size());
     while (iterator.hasPrevious()) {
       IndexValue value = iterator.previous();
-      if (types.contains(PersistentIndex.IndexEntryType.DELETE) && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+      if (types.contains(PersistentIndex.IndexEntryType.DELETE) && value.isDelete()) {
         retCandidate = value;
         break;
-      } else if (types.contains(PersistentIndex.IndexEntryType.TTL_UPDATE) && !value.isFlagSet(
-          IndexValue.Flags.Delete_Index) && value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+      } else if (types.contains(PersistentIndex.IndexEntryType.UNDELETE) && value.isUndelete()) {
         retCandidate = value;
         break;
-      } else if (types.contains(PersistentIndex.IndexEntryType.PUT) && !value.isFlagSet(IndexValue.Flags.Delete_Index)
-          && !value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+      } else if (types.contains(PersistentIndex.IndexEntryType.TTL_UPDATE) && !value.isDelete() && !value.isUndelete()
+          && value.isTTLUpdate()) {
         retCandidate = value;
         break;
-      }
-      else if (types.contains(PersistentIndex.IndexEntryType.UNDELETE) && value.isFlagSet(IndexValue.Flags.Undelete_Index)) {
+      } else if (types.contains(PersistentIndex.IndexEntryType.PUT) && value.isPut()) {
         retCandidate = value;
         break;
       }
@@ -633,9 +616,10 @@ class CuratedLogIndexState {
 
     if (retCandidate != null) {
       IndexValue latest = toConsider.get(toConsider.size() - 1);
-      if (latest.getExpiresAtMs() != retCandidate.getExpiresAtMs()) {
-        retCandidate =
-            new IndexValue(retCandidate.getOffset().getName(), retCandidate.getBytes(), retCandidate.getFormatVersion());
+      if (latest.getExpiresAtMs() != retCandidate.getExpiresAtMs() || (!retCandidate.isTTLUpdate()
+          && latest.isTTLUpdate())) {
+        retCandidate = new IndexValue(retCandidate.getOffset().getName(), retCandidate.getBytes(),
+            retCandidate.getFormatVersion());
         retCandidate.setFlag(IndexValue.Flags.Ttl_Update_Index);
         retCandidate.setExpiresAtMs(latest.getExpiresAtMs());
       }
@@ -835,7 +819,7 @@ class CuratedLogIndexState {
         segment.readInto(readBuf, offset.getOffset() + CuratedLogIndexState.HARD_DELETE_START_OFFSET);
         readBuf.flip();
         while (readBuf.hasRemaining()) {
-          assertEquals("Hard delete has not zeroed out the data", (byte) 0, readBuf.get());
+          assertEquals("Hard delete has not zeroed out the data for id " + id, (byte) 0, readBuf.get());
         }
       }
     }
@@ -875,6 +859,8 @@ class CuratedLogIndexState {
    */
   void verifyRealIndexSanity() throws StoreException {
     IndexSegment prevIndexSegment = null;
+    Map<MockId, Boolean> keyToDeleteSeenMap = new HashMap<>();
+    Map<MockId, Boolean> keyToTtlUpdateSeenMap = new HashMap<>();
     for (IndexSegment indexSegment : index.getIndexSegments().values()) {
       Offset indexSegmentStartOffset = indexSegment.getStartOffset();
       if (prevIndexSegment == null) {
@@ -892,8 +878,6 @@ class CuratedLogIndexState {
             indexSegmentStartOffset.getOffset());
       }
 
-      Map<MockId, Boolean> keyToDeleteSeenMap = new HashMap<>();
-      Map<MockId, Boolean> keyToTtlUpdateSeenMap = new HashMap<>();
       List<IndexEntry> indexEntries = new ArrayList<>();
       indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), indexEntries, new AtomicLong(0),
           false);
@@ -906,6 +890,9 @@ class CuratedLogIndexState {
           // should not be repeated
           assertTrue("Duplicated DELETE record for " + id, deleteSeen == null || !deleteSeen);
           keyToDeleteSeenMap.put(id, true);
+        } else if (value.isFlagSet(IndexValue.Flags.Undelete_Index)) {
+          assertTrue("Undelete record should has a delete prior to it " + id, deleteSeen != null && deleteSeen);
+          keyToDeleteSeenMap.put(id, false);
         } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
           // should not be repeated
           assertTrue("Duplicated TTL update record for " + id, ttlUpdateSeen == null || !ttlUpdateSeen);
@@ -1033,10 +1020,11 @@ class CuratedLogIndexState {
    * @param isLogSegmented {@code true} if segmented. {@code false} otherwise.
    * @param segmentCapacity the intended capacity of each segment
    * @param addTtlUpdates if {@code true}, adds entries that update TTL.
+   * @param addUndeletes if {@code true}, adds undelete entries.
    * @throws IOException
    * @throws StoreException
    */
-  private void setupTestState(boolean isLogSegmented, long segmentCapacity, boolean addTtlUpdates)
+  private void setupTestState(boolean isLogSegmented, long segmentCapacity, boolean addTtlUpdates, boolean addUndeletes)
       throws IOException, StoreException {
     Offset expectedStartOffset = new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getStartOffset());
     assertEquals("Start Offset of index not as expected", expectedStartOffset, index.getStartOffset());
@@ -1107,6 +1095,10 @@ class CuratedLogIndexState {
         idToDelete = getIdToDeleteFromLogSegment(secondSegment, true);
         addDeleteEntry(idToDelete);
       }
+      if (addUndeletes) {
+        addDeleteAndShouldCompactEntry();
+        addCuratedUndeleteToLogSegment();
+      }
       // 1 PUT entry that spans the rest of the data in the segment (upto a third of the segment size)
       long size = segmentCapacity / 3 - index.getCurrentEndOffset().getOffset();
       addPutEntries(1, size, Utils.Infinite_Time);
@@ -1124,6 +1116,65 @@ class CuratedLogIndexState {
     assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
     assertEquals("Used capacity reported not as expected", expectedUsedCapacity, index.getLogUsedCapacity());
     assertFalse("Expected nonempty index", index.isEmpty());
+  }
+
+  /**
+   * Add a blob that will be deleted right away, the the deletes' operation time will be set to 0 so the delete would
+   * be fallen out of retention time.
+   * @throws StoreException
+   */
+  private void addDeleteAndShouldCompactEntry() throws StoreException {
+    // 1 Put entry and 1 delete that should be compacted
+    addPutEntries(1, CuratedLogIndexState.DELETE_RECORD_SIZE, Infinite_Time);
+    MockId idToDelete = getIdToDeleteFromIndexSegment(referenceIndex.lastKey(), false);
+    addDeleteEntry(idToDelete,
+        new MessageInfo(idToDelete, Integer.MAX_VALUE, Utils.Infinite_Time, idToDelete.getAccountId(),
+            idToDelete.getContainerId(), 0));
+    liveKeys.remove(idToDelete);
+    deletedAndShouldBeCompactedKeys.add(idToDelete);
+  }
+
+  /**
+   * Add several undeleted blobs to cover some possible undeleted scenarios.
+   * @throws StoreException
+   */
+  private void addCuratedUndeleteToLogSegment() throws StoreException {
+    // Make sure we have these records
+    // 1. P, D -> U
+    // 2. P, T, D -> U
+    // 3. P, D, U, D -> U
+    // 4. P, D, U, T, D -> U
+
+    List<IndexEntry> entries = addPutEntries(4, CuratedLogIndexState.DELETE_RECORD_SIZE, Infinite_Time);
+    IndexEntry pd = entries.get(0);
+    IndexEntry ptd = entries.get(1);
+    IndexEntry pdud = entries.get(2);
+    IndexEntry pdutd = entries.get(3);
+
+    MockId id = null;
+    // finish P, D
+    id = (MockId) pd.getKey();
+    addDeleteEntry(id);
+    // finish P, T, D
+    id = (MockId) ptd.getKey();
+    makePermanent(id, false);
+    addDeleteEntry(id);
+    // finish P, D, U, D
+    id = (MockId) pdud.getKey();
+    addDeleteEntry(id);
+    addUndeleteEntry(id);
+    addDeleteEntry(id);
+    // finish P, D, U, T, D
+    id = (MockId) pdutd.getKey();
+    addDeleteEntry(id);
+    addUndeleteEntry(id);
+    makePermanent(id, false);
+    addDeleteEntry(id);
+
+    // add undelete to all of them
+    for (IndexEntry ent : entries) {
+      addUndeleteEntry((MockId) ent.getKey());
+    }
   }
 
   /**
@@ -1320,9 +1371,11 @@ class CuratedLogIndexState {
           assertEquals("Size does not match", referenceValue.getSize(), value.getSize());
           assertEquals("Account ID does not match", referenceValue.getAccountId(), value.getAccountId());
           assertEquals("Container ID does not match", referenceValue.getContainerId(), value.getContainerId());
-          assertEquals("Original message offset does not match", referenceValue.getOriginalMessageOffset(),
-              value.getOriginalMessageOffset());
-          assertEquals("Flags do not match", referenceValue.getFlags(), value.getFlags());
+          assertEquals(
+              "Original message offset does not match " + id.toString() + " " + referenceValue + " " + value.toString(),
+              referenceValue.getOriginalMessageOffset(), value.getOriginalMessageOffset());
+          assertEquals("Flags do not match " + id.toString() + " " + referenceValue.toString() + " " + value.toString(),
+              referenceValue.getFlags(), value.getFlags());
           if (index.hardDeleter.enabled.get() && !deletedKeys.contains(referenceIndexSegmentEntry.getKey())) {
             assertEquals("Operation time does not match", referenceValue.getOperationTimeInMs(),
                 value.getOperationTimeInMs());
@@ -1356,6 +1409,7 @@ class CuratedLogIndexState {
    */
   private void markAsDeleted(MockId id) {
     deletedKeys.add(id);
+    undeletedKeys.remove(id);
     liveKeys.remove(id);
   }
 
@@ -1364,8 +1418,9 @@ class CuratedLogIndexState {
    * @param id the {@link MockId} to mark as undeleted.
    */
   private void markAsUndeleted(MockId id) {
-    deletedKeys.remove(id);
+    undeletedKeys.add(id);
     liveKeys.add(id);
+    deletedKeys.remove(id);
   }
 
   /**

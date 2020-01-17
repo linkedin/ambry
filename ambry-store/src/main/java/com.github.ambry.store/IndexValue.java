@@ -55,6 +55,8 @@ class IndexValue implements Comparable<IndexValue> {
 
   final static byte FLAGS_DEFAULT_VALUE = (byte) 0;
   final static long UNKNOWN_ORIGINAL_MESSAGE_OFFSET = -1;
+  // The life version when the operation is trigger by the requests from frontend.
+  final static short LIFE_VERSION_FROM_FRONTEND = -1;
 
   private final static int BLOB_SIZE_IN_BYTES = 8;
   private final static int OFFSET_SIZE_IN_BYTES = 8;
@@ -210,7 +212,7 @@ class IndexValue implements Comparable<IndexValue> {
     this.accountId = accountId;
     this.containerId = containerId;
     this.lifeVersion = lifeVersion;
-    formatVersion = PersistentIndex.CURRENT_VERSION;
+    formatVersion = PersistentIndex.getVersion();
   }
 
   /**
@@ -241,6 +243,38 @@ class IndexValue implements Comparable<IndexValue> {
    */
   boolean isFlagSet(Flags flag) {
     return ((getFlags() & (1 << flag.ordinal())) != 0);
+  }
+
+  /**
+   * Helper function for isFlagSet(Flags.Ttl_Update_Index).
+   * @return true when the Ttl_Update_Index is set.
+   */
+  boolean isTTLUpdate() {
+    return isFlagSet(Flags.Ttl_Update_Index);
+  }
+
+  /**
+   * Helper function for isFlagSet(Flags.Delete_Index).
+   * @return true when the Delete_Index is set.
+   */
+  boolean isDelete() {
+    return isFlagSet(Flags.Delete_Index);
+  }
+
+  /**
+   * Helper function for isFlagSet(Flags.Undelete_Index).
+   * @return true when the Undelete_Index is set.
+   */
+  boolean isUndelete() {
+    return isFlagSet(Flags.Undelete_Index);
+  }
+
+  /**
+   * Helper function to decide if this value is a put value or not.
+   * @return true when it's not a put record.
+   */
+  boolean isPut() {
+    return !(isTTLUpdate() || isDelete() || isUndelete());
   }
 
   /**
@@ -277,6 +311,15 @@ class IndexValue implements Comparable<IndexValue> {
    */
   short getContainerId() {
     return containerId;
+  }
+
+  /**
+   * True when the life version is not from frontend requests.
+   * @param lifeVersion the given life version.
+   * @return true when it's not from frontend requests.
+   */
+  static boolean hasLifeVersion(short lifeVersion) {
+    return lifeVersion > LIFE_VERSION_FROM_FRONTEND;
   }
 
   /**
@@ -386,11 +429,11 @@ class IndexValue implements Comparable<IndexValue> {
   @Override
   public String toString() {
     return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isFlagSet(Flags.Delete_Index)
-        + ", TTL Updated: " + isFlagSet(Flags.Ttl_Update_Index) + ", Undelete: " + isFlagSet(
-        Flags.Undelete_Index) + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: "
-        + getOriginalMessageOffset() + (formatVersion != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs "
-        + getOperationTimeInMs() + ", AccountId " + getAccountId() + ", ContainerId " + getContainerId())
-        : "") + (formatVersion > PersistentIndex.VERSION_2 ? ", Life Version:" + lifeVersion : "");
+        + ", TTL Updated: " + isFlagSet(Flags.Ttl_Update_Index) + ", Undelete: " + isFlagSet(Flags.Undelete_Index)
+        + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset() + (
+        formatVersion != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs " + getOperationTimeInMs() + ", AccountId "
+            + getAccountId() + ", ContainerId " + getContainerId()) : "") + (formatVersion > PersistentIndex.VERSION_2 ?
+        ", Life Version:" + lifeVersion : "");
   }
 
   /**
