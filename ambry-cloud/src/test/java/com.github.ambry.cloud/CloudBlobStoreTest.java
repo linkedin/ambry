@@ -297,7 +297,9 @@ public class CloudBlobStoreTest {
     long blobSize = 200000;
     int numBlobsFound = 5;
     List<CloudBlobMetadata> metadataList = generateMetadataList(startTime, blobSize, numBlobsFound);
-    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong())).thenReturn(metadataList);
+
+    //create a list of 10 blobs with total size less than maxSize, and return it as part of query ChangeFeed
+    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong(), anyList())).thenReturn(metadataList);
     CloudFindToken startToken = new CloudFindToken();
     FindInfo findInfo = store.findEntriesSince(startToken, maxTotalSize);
     assertEquals(numBlobsFound, findInfo.getMessageEntries().size());
@@ -324,6 +326,8 @@ public class CloudBlobStoreTest {
     assertTrue(findInfo.getMessageEntries().isEmpty());
     FindToken finalToken = findInfo.getFindToken();
     assertEquals(outputToken, finalToken);
+
+    // call with new find token, and add total blobs larger than maxSize, and see that all the blobs are exhausted only after 3 tries
   }
 
   /** Test CloudBlobStore cache eviction. */

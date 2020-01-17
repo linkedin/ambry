@@ -42,12 +42,14 @@ import org.slf4j.LoggerFactory;
 public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   private final Map<BlobId, Pair<CloudBlobMetadata, byte[]>> map = new HashMap<>();
+  private final Map<String, BlobId> continuationTokenMap = new HashMap<>();
   private final CountDownLatch uploadLatch;
   private final CountDownLatch downloadLatch;
   private final Set<BlobId> blobIdsToTrack = ConcurrentHashMap.newKeySet();
   private final Map<String, byte[]> tokenMap = new ConcurrentHashMap<>();
   private final AtomicLong bytesUploadedCounter = new AtomicLong(0);
   private final AtomicInteger blobsUploadedCounter = new AtomicInteger(0);
+  private int continuationTokenCounter = -1;
   private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
 
   /**
@@ -83,6 +85,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     }
     cloudBlobMetadata.setLastUpdateTime(System.currentTimeMillis());
     map.put(blobId, new Pair<>(cloudBlobMetadata, outputStream.toByteArray()));
+    continuationTokenMap.put(Integer.toString(continuationTokenCounter++), blobId);
     blobsUploadedCounter.incrementAndGet();
     if (blobIdsToTrack.remove(blobId)) {
       uploadLatch.countDown();
@@ -120,6 +123,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     if (map.containsKey(blobId)) {
       map.get(blobId).getFirst().setExpirationTime(expirationTime);
       map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
+      continuationTokenMap.put(continuationTokenCounter++, blobId);
       return true;
     } else {
       return false;
@@ -143,8 +147,8 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken,
-      long maxTotalSizeOfEntries) {
+  public CloudFindToken findEntriesSince(String partitionPath, CloudFindToken findToken,
+      long maxTotalSizeOfEntries, List<CloudBlobMetadata> nextEntries) {
     List<CloudBlobMetadata> entries = new LinkedList<>();
     for (BlobId blobId : map.keySet()) {
       if (map.get(blobId).getFirst().getLastUpdateTime() >= findToken.getLastUpdateTime()) {

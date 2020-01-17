@@ -120,7 +120,7 @@ public class CosmosChangeFeed {
 
     long resultSize = 0;
     while (resultSize < maxEntriesSize) {
-      if (azureFindToken.getIndex() < changeFeedCache.get(partitionId).getFetchedEntries().size()) {
+      if (index < changeFeedCache.get(partitionId).getFetchedEntries().size()) {
         results.add(changeFeedCache.get(partitionId).getFetchedEntries().get(index));
         resultSize = resultSize + changeFeedCache.get(partitionId).getFetchedEntries().get(index).getSize();
         index++;
