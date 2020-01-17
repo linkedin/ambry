@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -36,6 +37,7 @@ import java.util.Objects;
  */
 @JsonSerialize(using = CloudBlobMetadata.MetadataSerializer.class)
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CloudBlobMetadata {
   public static final String FIELD_ID = "id";
   public static final String FIELD_PARTITION_ID = "partitionId";
@@ -51,14 +53,6 @@ public class CloudBlobMetadata {
   public static final String FIELD_CRYPTO_AGENT_FACTORY = "cryptoAgentFactory";
   public static final String FIELD_ENCRYPTED_SIZE = "encryptedSize";
   public static final String FIELD_NAMING_SCHEME = "namingScheme";
-
-  public static final String[] REQUIRED_FIELDS =
-      new String[]{FIELD_ID, FIELD_ACCOUNT_ID, FIELD_CONTAINER_ID, FIELD_PARTITION_ID, FIELD_SIZE, FIELD_UPLOAD_TIME};
-  public static final String[] OPTIONAL_FIELDS =
-      new String[]{FIELD_CREATION_TIME, FIELD_DELETION_TIME, FIELD_EXPIRATION_TIME, FIELD_NAMING_SCHEME,
-          FIELD_ENCRYPTION_ORIGIN};
-  public static final String[] ENCRYPTION_FIELDS =
-      new String[]{FIELD_VCR_KMS_CONTEXT, FIELD_CRYPTO_AGENT_FACTORY, FIELD_ENCRYPTED_SIZE};
 
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
