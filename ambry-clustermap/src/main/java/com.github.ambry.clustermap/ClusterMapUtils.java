@@ -61,7 +61,8 @@ public class ClusterMapUtils {
   static final String REPLICAS_DELIM_STR = ",";
   static final String REPLICAS_STR_SEPARATOR = ":";
   static final String REPLICAS_CAPACITY_STR = "replicaCapacityInBytes";
-  static final String SSLPORT_STR = "sslPort";
+  static final String SSL_PORT_STR = "sslPort";
+  static final String HTTP2_PORT_STR = "http2Port";
   static final String RACKID_STR = "rackId";
   static final String SEALED_STR = "SEALED";
   static final String STOPPED_REPLICAS_STR = "STOPPED";
@@ -203,9 +204,20 @@ public class ClusterMapUtils {
    * @return the ssl port associated with the given instance.
    */
   public static Integer getSslPortStr(InstanceConfig instanceConfig) {
-    String sslPortStr = instanceConfig.getRecord().getSimpleField(SSLPORT_STR);
+    String sslPortStr = instanceConfig.getRecord().getSimpleField(SSL_PORT_STR);
     return sslPortStr == null ? null : Integer.valueOf(sslPortStr);
   }
+
+  /**
+   * Get the http2 port associated with the given instance (if any).
+   * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
+   * @return the http2 port associated with the given instance.
+   */
+  public static Integer getHttp2PortStr(InstanceConfig instanceConfig) {
+    String http2PortStr = instanceConfig.getRecord().getSimpleField(HTTP2_PORT_STR);
+    return http2PortStr == null ? null : Integer.valueOf(http2PortStr);
+  }
+
 
   /**
    * Get the xid associated with this instance. The xid is like a timestamp or a change number, so if it is absent,

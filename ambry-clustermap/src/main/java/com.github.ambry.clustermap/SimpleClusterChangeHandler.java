@@ -281,7 +281,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
             AmbryDataNode datanode =
                 new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
                     Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig),
-                    null, instanceXid, helixClusterManagerCallback);
+                    getHttp2PortStr(instanceConfig), instanceXid, helixClusterManagerCallback);
             initializeDisksAndReplicasOnNode(datanode, instanceConfig);
             instanceNameToAmbryDataNode.put(instanceName, datanode);
           } else {
