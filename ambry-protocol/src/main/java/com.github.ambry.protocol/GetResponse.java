@@ -14,8 +14,10 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.network.Send;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -107,9 +109,7 @@ public class GetResponse extends Response {
     }
   }
 
-  @Override
-  public long writeTo(WritableByteChannel channel) throws IOException {
-    long written = 0;
+  private void prepareBufferToSend() {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate(
           (int) super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize));
@@ -122,6 +122,12 @@ public class GetResponse extends Response {
       }
       bufferToSend.flip();
     }
+  }
+
+  @Override
+  public long writeTo(WritableByteChannel channel) throws IOException {
+    prepareBufferToSend();
+    long written = 0;
     if (bufferToSend.remaining() > 0) {
       written = channel.write(bufferToSend);
     }
@@ -129,6 +135,15 @@ public class GetResponse extends Response {
       written += toSend.writeTo(channel);
     }
     return written;
+  }
+
+  @Override
+  public void writeTo(AsyncWritableChannel channel, Callback callback) throws IOException {
+    prepareBufferToSend();
+    channel.write(bufferToSend, callback);
+    if (toSend != null) {
+      toSend.writeTo(channel, callback);
+    }
   }
 
   @Override

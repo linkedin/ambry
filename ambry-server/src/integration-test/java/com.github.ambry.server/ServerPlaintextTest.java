@@ -47,7 +47,13 @@ public class ServerPlaintextTest {
     routerProps = new Properties();
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
-    plaintextCluster = new MockCluster(new Properties(), false, SystemTime.getInstance());
+
+    Properties serverProperties = new Properties();
+    serverProperties.setProperty("rest.server.rest.request.service.factory",
+        "com.github.ambry.server.StorageRestRequestService");
+    serverProperties.setProperty("rest.server.nio.server.factory", "com.github.ambry.rest.StorageServerNettyFactory");
+    serverProperties.setProperty("ssl.client.authentication", "none");
+    plaintextCluster = new MockCluster(serverProperties, false, SystemTime.getInstance(),1,1,1);
     notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);
     plaintextCluster.startServers();

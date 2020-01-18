@@ -30,6 +30,8 @@ import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
@@ -45,6 +47,7 @@ import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -89,6 +92,11 @@ class MockStorageManager extends StorageManager {
         @Override
         public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) {
           return 0;
+        }
+
+        @Override
+        public void writeTo(AsyncWritableChannel channel, Callback callback) throws IOException {
+
         }
 
         @Override

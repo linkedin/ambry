@@ -44,6 +44,7 @@ public class MockClusterMap implements ClusterMap {
   public static final String SPECIAL_PARTITION_CLASS = "specialPartitionClass";
   public static final int PLAIN_TEXT_PORT_START_NUMBER = 62000;
   public static final int SSL_PORT_START_NUMBER = 63000;
+  public static final int HTTP2_PORT_START_NUMBER = 64000;
 
   protected final boolean enableSSLPorts;
   protected final Map<Long, PartitionId> partitions;
@@ -117,6 +118,7 @@ public class MockClusterMap implements ClusterMap {
     String dcName = null;
     int currentPlainTextPort = PLAIN_TEXT_PORT_START_NUMBER;
     int currentSSLPort = SSL_PORT_START_NUMBER;
+    int currentHttp2Port = HTTP2_PORT_START_NUMBER;
     for (int i = 0; i < numNodes; i++) {
       if (i % 3 == 0) {
         dcIndex++;
@@ -126,9 +128,11 @@ public class MockClusterMap implements ClusterMap {
       MockDataNodeId dataNodeId;
       if (enableSSLPorts) {
         dataNodeId =
-            createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), dcName, numMountPointsPerNode);
+            createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++, currentHttp2Port++), dcName,
+                numMountPointsPerNode);
       } else {
-        dataNodeId = createDataNode(getListOfPorts(currentPlainTextPort++), dcName, numMountPointsPerNode);
+        dataNodeId = createDataNode(getListOfPorts(currentPlainTextPort++, null, currentHttp2Port++), dcName,
+            numMountPointsPerNode);
       }
       dataNodes.add(dataNodeId);
       dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(dataNodeId);
@@ -244,16 +248,15 @@ public class MockClusterMap implements ClusterMap {
     return new MockClusterMap(recoveryNode, vcrNode, dcName);
   }
 
-  protected ArrayList<Port> getListOfPorts(int port) {
-    ArrayList<Port> ports = new ArrayList<>();
-    ports.add(new Port(port, PortType.PLAINTEXT));
-    return ports;
-  }
-
-  public static ArrayList<Port> getListOfPorts(int port, int sslPort) {
+  protected ArrayList<Port> getListOfPorts(int port, Integer sslPort, Integer http2Port) {
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(port, PortType.PLAINTEXT));
-    ports.add(new Port(sslPort, PortType.SSL));
+    if (sslPort != null) {
+      ports.add(new Port(sslPort, PortType.SSL));
+    }
+    if (http2Port != null) {
+      ports.add(new Port(http2Port, PortType.HTTP2));
+    }
     return ports;
   }
 

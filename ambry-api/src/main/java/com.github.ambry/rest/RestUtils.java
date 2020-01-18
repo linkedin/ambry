@@ -216,6 +216,11 @@ public class RestUtils {
      * Response header indicating the reason a request is non compliant.
      */
     public final static String NON_COMPLIANCE_WARNING = "x-ambry-non-compliance-warning";
+    
+    /**
+     * Request header indicating a HTTP2 request from frontend to server.
+     */
+    public final static String HTTP2_FRONTEND_REQUEST = "x-ambry-http2-frontend-request";
   }
 
   public static final class TrackingHeaders {

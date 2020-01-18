@@ -14,6 +14,8 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
@@ -64,6 +66,11 @@ class CloudMessageReadSet implements MessageReadSet {
     }
     logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written, blobIdStr);
     return written;
+  }
+
+  @Override
+  public void writeTo(AsyncWritableChannel channel, Callback callback) throws IOException {
+
   }
 
   @Override

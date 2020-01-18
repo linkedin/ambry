@@ -20,6 +20,7 @@ import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Send;
 import com.github.ambry.rest.NettySslHttp2Factory;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.bootstrap.Bootstrap;
@@ -107,6 +108,8 @@ public class Http2BlockingChannel implements ConnectedChannel {
     Http2StreamChannel childChannel =
         new Http2StreamChannelBootstrap(channel).handler(initializer).open().syncUninterruptibly().getNow();
     Http2Headers http2Headers = new DefaultHttp2Headers().method(HttpMethod.POST.asciiName()).scheme("https").path("/");
+    http2Headers.set(RestUtils.Headers.HTTP2_FRONTEND_REQUEST, "true");
+
 
     DefaultHttp2HeadersFrame headersFrame = new DefaultHttp2HeadersFrame(http2Headers, false);
     DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(byteBuf, true);

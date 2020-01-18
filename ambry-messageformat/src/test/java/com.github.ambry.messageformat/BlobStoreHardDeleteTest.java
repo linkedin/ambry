@@ -13,6 +13,8 @@
  */
 package com.github.ambry.messageformat;
 
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.store.HardDeleteInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
@@ -284,6 +286,11 @@ public class BlobStoreHardDeleteTest {
         byte[] toReturn = new byte[Math.min(messageList.get(index).size, (int) maxSize)];
         buffer.get(toReturn);
         return channel.write(ByteBuffer.wrap(toReturn));
+      }
+
+      @Override
+      public void writeTo(AsyncWritableChannel channel, Callback callback) throws IOException {
+
       }
 
       @Override

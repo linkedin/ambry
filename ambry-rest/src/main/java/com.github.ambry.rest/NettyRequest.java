@@ -444,6 +444,13 @@ class NettyRequest implements RestRequest {
   protected boolean isMultipart() {
     return HttpPostRequestDecoder.isMultipart(request);
   }
+  /**
+   * Provides info on whether this request is http2 request from frontend or not.
+   * @return {@code true} if http2 request from frontend. {@code false} otherwise.
+   */
+  protected boolean isHttp2RequestFromFrontend() {
+    return request.headers().contains(RestUtils.Headers.HTTP2_FRONTEND_REQUEST);
+  }
 
   /**
    * Writes the data in the provided {@code httpContent} to the given {@code writeChannel}.
