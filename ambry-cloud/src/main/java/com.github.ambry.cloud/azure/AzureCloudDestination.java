@@ -351,9 +351,9 @@ class AzureCloudDestination implements CloudDestination {
   @Override
   public boolean purgeBlob(CloudBlobMetadata blobMetadata) throws CloudStorageException {
     String blobId = blobMetadata.getId();
-    String blobFileName = blobMetadata.getCloudBlobName();
+    String blobFileName = azureBlobDataAccessor.getAzureBlobName(blobMetadata);
+    String containerName = azureBlobDataAccessor.getAzureContainerName(blobMetadata);
     String partitionPath = blobMetadata.getPartitionId();
-    String containerName = getAzureContainerName(partitionPath);
     azureMetrics.blobDeleteRequestCount.inc();
     Timer.Context deleteTimer = azureMetrics.blobDeletionTime.time();
     try {
@@ -402,7 +402,7 @@ class AzureCloudDestination implements CloudDestination {
     // Path is partitionId path string
     // Write to container partitionPath, blob filename "replicaTokens"
     try {
-      String containerName = getAzureContainerName(partitionPath);
+      String containerName = azureBlobDataAccessor.getClusterAwareAzureContainerName(partitionPath);
       azureBlobDataAccessor.uploadFile(containerName, tokenFileName, inputStream);
     } catch (IOException | BlobStorageException e) {
       throw toCloudStorageException("Could not persist token: " + partitionPath, e);
@@ -413,33 +413,11 @@ class AzureCloudDestination implements CloudDestination {
   public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream)
       throws CloudStorageException {
     try {
-      String containerName = getAzureContainerName(partitionPath);
+      String containerName = azureBlobDataAccessor.getClusterAwareAzureContainerName(partitionPath);
       return azureBlobDataAccessor.downloadFile(containerName, tokenFileName, outputStream, false);
     } catch (BlobStorageException e) {
       throw toCloudStorageException("Could not retrieve token: " + partitionPath, e);
     }
-  }
-
-  /**
-   * @return the name of the Azure storage container where blobs in the specified partition are stored.
-   * @param partitionPath the lexical path of the Ambry partition.
-   */
-  private String getAzureContainerName(String partitionPath) {
-    // Include Ambry cluster name in case the same storage account is used to backup multiple clusters.
-    // Azure requires container names to be all lower case
-    String rawContainerName = clusterName + SEPARATOR + partitionPath;
-    return rawContainerName.toLowerCase();
-  }
-
-  /**
-   * Get the blob name to use in Azure Blob Storage
-   * @param blobId The {@link BlobId} to store.
-   * @return An Azure-friendly blob name.
-   */
-  String getAzureBlobName(BlobId blobId) {
-    // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
-    String blobIdStr = blobId.getID();
-    return blobIdStr.substring(blobIdStr.length() - 4) + SEPARATOR + blobIdStr;
   }
 
   /**

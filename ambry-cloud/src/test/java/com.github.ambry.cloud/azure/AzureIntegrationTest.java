@@ -104,8 +104,9 @@ public class AzureIntegrationTest {
         BlobDataType.DATACHUNK);
     byte[] uploadData = TestUtils.getRandomBytes(blobSize);
     InputStream inputStream = new ByteArrayInputStream(uploadData);
+    long now = System.currentTimeMillis();
     CloudBlobMetadata cloudBlobMetadata =
-        new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
+        new CloudBlobMetadata(blobId, now, now + 60000, blobSize,
             CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
     assertTrue("Expected upload to return true",
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
@@ -120,12 +121,10 @@ public class AzureIntegrationTest {
     assertTrue("Expected update to return true", azureDest.updateBlobExpiration(blobId, expirationTime));
     CloudBlobMetadata metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
     assertEquals(expirationTime, metadata.getExpirationTime());
-    assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
-    long deletionTime = System.currentTimeMillis() + 1000;
+    long deletionTime = now + 10000;
     assertTrue("Expected deletion to return true", azureDest.deleteBlob(blobId, deletionTime));
     metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
     assertEquals(deletionTime, metadata.getDeletionTime());
-    assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
 
     azureDest.purgeBlob(metadata);
     assertTrue("Expected empty set after purge",
@@ -160,7 +159,7 @@ public class AzureIntegrationTest {
       byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
       blobIdtoDataMap.put(blobId, randomBytes);
       CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
+          CloudBlobMetadata.EncryptionOrigin.NONE);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, new ByteArrayInputStream(randomBytes)));
     }
@@ -176,11 +175,8 @@ public class AzureIntegrationTest {
       assertEquals("Unexpected metadata containerId", containerId, metadata.getContainerId());
       assertEquals("Unexpected metadata partitionId", partitionId.toPathString(), metadata.getPartitionId());
       assertEquals("Unexpected metadata creationTime", creationTime, metadata.getCreationTime());
-      assertEquals("Unexpected metadata encryption origin", CloudBlobMetadata.EncryptionOrigin.VCR,
+      assertEquals("Unexpected metadata encryption origin", CloudBlobMetadata.EncryptionOrigin.NONE,
           metadata.getEncryptionOrigin());
-      assertEquals("Unexpected metadata vcrKmsContext", vcrKmsContext, metadata.getVcrKmsContext());
-      assertEquals("Unexpected metadata cryptoAgentFactory", cryptoAgentFactory, metadata.getCryptoAgentFactory());
-      assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
 
       verifyDownloadMatches(blobId, blobIdtoDataMap.get(blobId));
     }
