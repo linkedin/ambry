@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -68,6 +69,18 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   private ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
   private static final Logger logger = LoggerFactory.getLogger(DynamicClusterChangeHandler.class);
 
+  /**
+   * Constructor for {@link DynamicClusterChangeHandler}
+   * @param clusterMapConfig the {@link ClusterMapConfig} used to define some behavior of cluster change handler.
+   * @param dcName the name of data center this handler is associated with.
+   * @param selfInstanceName instance name of current node.
+   * @param partitionOverrideInfoMap a map that records partitions and states they should be overridden to.
+   * @param helixClusterManagerCallback a call back used to query cluster-wide info.
+   * @param clusterChangeHandlerCallback a call back that allows current handler to update cluster-wide info.
+   * @param helixClusterManagerMetrics metrics to keep track of changes and status of {@link HelixClusterManager}.
+   * @param initializationFailureMap a map recording failure associate with each dc during initialization.
+   * @param sealedStateChangeCounter a counter indicating if sealed state of any partition has changed.
+   */
   DynamicClusterChangeHandler(ClusterMapConfig clusterMapConfig, String dcName, String selfInstanceName,
       Map<String, Map<String, String>> partitionOverrideInfoMap,
       HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback,
@@ -90,6 +103,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
    * change: (1) replica's seal or stop state has changed; (2) new node or new partition is added; (3) new replica is
    * added to existing node; (4) old replica is removed from existing node; (5) data node is deleted from cluster.
    * For now, {@link DynamicClusterChangeHandler} supports (1)~(4). We may consider supporting (5) in the future.
+   * (The ZNode path of instance config in Helix is [AmbryClusterName]/CONFIGS/PARTICIPANT/[hostname_port])
    * @param configs all the {@link InstanceConfig}(s) in current data center. (Note that PreFetch is enabled by default
    *                in Helix, which means all instance configs under "participants" ZNode will be sent to this method)
    * @param changeContext the {@link NotificationContext} associated.
@@ -106,7 +120,6 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
         logger.debug("Detailed instance configs in {} are: {}", dcName, configs);
         try {
           addOrUpdateInstanceInfos(configs);
-          instanceConfigInitialized.set(true);
         } catch (Exception e) {
           if (!instanceConfigInitialized.get()) {
             logger.error("Exception occurred when initializing instances in {}: ", dcName, e);
@@ -115,6 +128,8 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
           } else {
             logger.error("Exception occurred at runtime when handling instance config changes in {}: ", dcName, e);
           }
+        } finally {
+          instanceConfigInitialized.set(true);
         }
         sealedStateChangeCounter.incrementAndGet();
         helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
@@ -283,13 +298,21 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
     logger.info("Updating replicas info for existing node {}", instanceName);
     List<String> sealedReplicas = getSealedReplicas(instanceConfig);
     List<String> stoppedReplicas = getStoppedReplicas(instanceConfig);
-    ConcurrentHashMap<String, AmbryReplica> currentReplicasOnNode =
-        ambryDataNodeToAmbryReplicas.get(instanceNameToAmbryDataNode.get(instanceName));
+    AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
+    ConcurrentHashMap<String, AmbryReplica> currentReplicasOnNode = ambryDataNodeToAmbryReplicas.get(dataNode);
     ConcurrentHashMap<String, AmbryReplica> replicasFromConfig = new ConcurrentHashMap<>();
     Map<String, Map<String, String>> diskInfos = instanceConfig.getRecord().getMapFields();
     for (Map.Entry<String, Map<String, String>> entry : diskInfos.entrySet()) {
       String mountPath = entry.getKey();
       Map<String, String> diskInfo = entry.getValue();
+      Optional<AmbryDisk> potentialDisk =
+          ambryDataNodeToAmbryDisks.get(dataNode).stream().filter(d -> d.getMountPath().equals(mountPath)).findFirst();
+      AmbryDisk disk = potentialDisk.orElse(null);
+      if (disk == null) {
+        logger.info("Temporarily don't support adding new disk to existing node.");
+        // TODO support dynamically adding disk in the future
+        continue;
+      }
       String replicasStr = diskInfo.get(ClusterMapUtils.REPLICAS_STR);
       if (!replicasStr.isEmpty()) {
         for (String replicaInfo : replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR)) {
@@ -308,12 +331,6 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
             logger.info("Adding new replica {} to existing node {}", partitionName, instanceName);
             long replicaCapacity = Long.valueOf(info[1]);
             String partitionClass = info.length > 2 ? info[2] : clusterMapConfig.clusterMapDefaultPartitionClass;
-            AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
-            AmbryDisk disk = ambryDataNodeToAmbryDisks.get(dataNode)
-                .stream()
-                .filter(d -> d.getMountPath().equals(mountPath))
-                .findFirst()
-                .get();
             // this can be a brand new partition that is added to an existing node
             AmbryPartition mappedPartition =
                 new AmbryPartition(Long.valueOf(partitionName), partitionClass, helixClusterManagerCallback);
