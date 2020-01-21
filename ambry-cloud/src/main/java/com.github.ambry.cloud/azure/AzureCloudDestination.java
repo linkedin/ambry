@@ -21,6 +21,7 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.utils.Utils;
@@ -81,6 +82,7 @@ class AzureCloudDestination implements CloudDestination {
   private static final String SEPARATOR = "-";
   private static final int findSinceQueryLimit = 1000;
   private final AzureBlobDataAccessor azureBlobDataAccessor;
+  private final AzureBlobLayoutStrategy blobLayoutStrategy;
   private final AsyncDocumentClient asyncDocumentClient;
   private final CosmosDataAccessor cosmosDataAccessor;
   private final AzureMetrics azureMetrics;
@@ -100,7 +102,9 @@ class AzureCloudDestination implements CloudDestination {
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
       AzureMetrics azureMetrics) throws URISyntaxException, InvalidKeyException {
     this.azureMetrics = azureMetrics;
-    this.azureBlobDataAccessor = new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, clusterName, azureMetrics);
+    this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
+    this.azureBlobDataAccessor =
+        new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
     this.clusterName = clusterName;
     // Set up CosmosDB connection, including retry options and any proxy setting
     ConnectionPolicy connectionPolicy = new ConnectionPolicy();
@@ -141,6 +145,7 @@ class AzureCloudDestination implements CloudDestination {
     this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
+    this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, null);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
     this.deadBlobsQueryLimit = CloudConfig.DEFAULT_COMPACTION_QUERY_LIMIT;
     cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
@@ -392,8 +397,8 @@ class AzureCloudDestination implements CloudDestination {
     // Path is partitionId path string
     // Write to container partitionPath, blob filename "replicaTokens"
     try {
-      String containerName = azureBlobDataAccessor.getClusterAwareAzureContainerName(partitionPath);
-      azureBlobDataAccessor.uploadFile(containerName, tokenFileName, inputStream);
+      BlobLayout tokenLayout = blobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
+      azureBlobDataAccessor.uploadFile(tokenLayout.containerName, tokenLayout.blobFilePath, inputStream);
     } catch (IOException | BlobStorageException e) {
       throw toCloudStorageException("Could not persist token: " + partitionPath, e);
     }
@@ -403,8 +408,9 @@ class AzureCloudDestination implements CloudDestination {
   public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream)
       throws CloudStorageException {
     try {
-      String containerName = azureBlobDataAccessor.getClusterAwareAzureContainerName(partitionPath);
-      return azureBlobDataAccessor.downloadFile(containerName, tokenFileName, outputStream, false);
+      BlobLayout tokenLayout = blobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
+      return azureBlobDataAccessor.downloadFile(tokenLayout.containerName, tokenLayout.blobFilePath, outputStream,
+          false);
     } catch (BlobStorageException e) {
       throw toCloudStorageException("Could not retrieve token: " + partitionPath, e);
     }

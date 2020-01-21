@@ -199,7 +199,8 @@ public class AzureBlobDataAccessorTest {
     // Test without proxy
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureBlobDataAccessor dataAccessor = new AzureBlobDataAccessor(cloudConfig, azureConfig, clusterName, azureMetrics);
+    AzureBlobLayoutStrategy blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureConfig);
+    AzureBlobDataAccessor dataAccessor = new AzureBlobDataAccessor(cloudConfig, azureConfig, blobLayoutStrategy, azureMetrics);
 
     // Test with proxy
     String proxyHost = "azure-proxy.randomcompany.com";
@@ -207,7 +208,7 @@ public class AzureBlobDataAccessorTest {
     configProps.setProperty(CloudConfig.VCR_PROXY_HOST, proxyHost);
     configProps.setProperty(CloudConfig.VCR_PROXY_PORT, String.valueOf(proxyPort));
     cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
-    dataAccessor = new AzureBlobDataAccessor(cloudConfig, azureConfig, clusterName, azureMetrics);
+    dataAccessor = new AzureBlobDataAccessor(cloudConfig, azureConfig, blobLayoutStrategy, azureMetrics);
   }
 
   /** Test upload of existing blob. */

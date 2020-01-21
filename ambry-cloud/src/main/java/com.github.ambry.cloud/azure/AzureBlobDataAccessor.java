@@ -33,6 +33,7 @@ import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.azure.storage.common.policy.RequestRetryOptions;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.utils.Utils;
@@ -65,7 +66,7 @@ public class AzureBlobDataAccessor {
   private final BlobBatchClient blobBatchClient;
   private final Configuration storageConfiguration;
   private final AzureMetrics azureMetrics;
-  private final String clusterName;
+  private final AzureBlobLayoutStrategy blobLayoutStrategy;
   // Containers known to exist in the storage account
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
   private ProxyOptions proxyOptions;
@@ -75,12 +76,12 @@ public class AzureBlobDataAccessor {
    * Production constructor
    * @param cloudConfig the {@link CloudConfig} to use.
    * @param azureCloudConfig the {@link AzureCloudConfig} to use.
-   * @param clusterName the cluster name to use for blob naming.
+   * @param blobLayoutStrategy the {@link AzureBlobLayoutStrategy} to use.
    * @param azureMetrics the {@link AzureMetrics} to use.
    */
-  AzureBlobDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
-      AzureMetrics azureMetrics) {
-    this.clusterName = clusterName;
+  AzureBlobDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
+      AzureBlobLayoutStrategy blobLayoutStrategy, AzureMetrics azureMetrics) {
+    this.blobLayoutStrategy = blobLayoutStrategy;
     this.azureMetrics = azureMetrics;
     this.purgeBatchSize = azureCloudConfig.azurePurgeBatchSize;
     this.storageConfiguration = new Configuration();
@@ -113,7 +114,7 @@ public class AzureBlobDataAccessor {
       AzureMetrics azureMetrics) {
     this.storageClient = storageClient;
     this.storageConfiguration = new Configuration();
-    this.clusterName = clusterName;
+    this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, null);
     this.azureMetrics = azureMetrics;
     this.blobBatchClient = blobBatchClient;
     this.purgeBatchSize = AzureCloudConfig.DEFAULT_PURGE_BATCH_SIZE;
@@ -256,9 +257,8 @@ public class AzureBlobDataAccessor {
     azureMetrics.blobDownloadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
     try {
-      String containerName = getAzureContainerName(blobId);
-      String blobName = getAzureBlobName(blobId);
-      downloadFile(containerName, blobName, outputStream, true);
+      BlobLayout blobLayout = blobLayoutStrategy.getDataBlobLayout(blobId);
+      downloadFile(blobLayout.containerName, blobLayout.blobFilePath, outputStream, true);
       azureMetrics.blobDownloadSuccessCount.inc();
     } catch (Exception e) {
       azureMetrics.blobDownloadErrorCount.inc();
@@ -329,9 +329,11 @@ public class AzureBlobDataAccessor {
       BlobBatch blobBatch = blobBatchClient.getBlobBatch();
       List<Response<Void>> responseList = new ArrayList<>();
       for (CloudBlobMetadata blobMetadata : batchOfBlobs) {
-        String containerName = getAzureContainerName(blobMetadata);
-        String blobName = getAzureBlobName(blobMetadata);
-        responseList.add(blobBatch.deleteBlob(containerName, blobName));
+        BlobLayout blobLayout = blobLayoutStrategy.getDataBlobLayout(blobMetadata);
+        String containerName = blobLayout.containerName;
+        String blobFileName = blobLayout.blobFilePath;
+        String partitionPath = blobMetadata.getPartitionId();
+        responseList.add(blobBatch.deleteBlob(containerName, blobFileName));
       }
       blobBatchClient.submitBatchWithResponse(blobBatch, false, Duration.ofSeconds(batchPurgeTimeoutSec), Context.NONE);
       for (int j = 0; j < responseList.size(); j++) {
@@ -367,9 +369,8 @@ public class AzureBlobDataAccessor {
    * @return {@code BlockBlobClient} reference.
    */
   private BlockBlobClient getBlockBlobClient(BlobId blobId, boolean autoCreateContainer) {
-    String containerName = getAzureContainerName(blobId);
-    String blobName = getAzureBlobName(blobId);
-    return getBlockBlobClient(containerName, blobName, autoCreateContainer);
+    BlobLayout blobLayout = blobLayoutStrategy.getDataBlobLayout(blobId);
+    return getBlockBlobClient(blobLayout.containerName, blobLayout.blobFilePath, autoCreateContainer);
   }
 
   /**
@@ -409,61 +410,6 @@ public class AzureBlobDataAccessor {
       }
     }
     return containerClient;
-  }
-
-  /**
-   * @return the name of the Azure storage container to store the specified blob.
-   * @param blobId the id of the blob to store.
-   */
-  String getAzureContainerName(BlobId blobId) {
-    return getAzureContainerName(
-        new CloudBlobMetadata(blobId, 0, Utils.Infinite_Time, 0, CloudBlobMetadata.EncryptionOrigin.NONE));
-  }
-
-  /**
-   * @return the name of the Azure storage container to store the specified blob.
-   * @param blobMetadata the blob metadata.
-   */
-  String getAzureContainerName(CloudBlobMetadata blobMetadata) {
-    // Include Ambry cluster name in case the same storage account is used to backup multiple clusters.
-    // Azure requires container names to be all lower case
-    String partitionPath = blobMetadata.getPartitionId();
-    return getClusterAwareAzureContainerName(partitionPath);
-  }
-
-  String getClusterAwareAzureContainerName(String inputName) {
-    String containerName = clusterName + SEPARATOR + inputName;
-    return containerName.toLowerCase();
-  }
-
-  /**
-   * Get the blob name to use in Azure Blob Storage
-   * @param blobId The {@link BlobId} to store.
-   * @return An Azure-friendly blob name.
-   */
-  String getAzureBlobName(BlobId blobId) {
-    return getAzureBlobName(blobId.getID());
-  }
-
-  /**
-   * Get the blob name to use in Azure Blob Storage
-   * @param blobMetadata The blob metadata.
-   * @return An Azure-friendly blob name.
-   */
-  String getAzureBlobName(CloudBlobMetadata blobMetadata) {
-    return getAzureBlobName(blobMetadata.getId());
-  }
-
-  // TODO: add AzureBlobNameConverter with versioning, this scheme being version 0
-
-  /**
-   * Get the blob name to use in Azure Blob Storage
-   * @param blobIdStr The blobId string.
-   * @return An Azure-friendly blob name.
-   */
-  String getAzureBlobName(String blobIdStr) {
-    // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
-    return blobIdStr.substring(blobIdStr.length() - 4) + SEPARATOR + blobIdStr;
   }
 
   /**
