@@ -433,8 +433,6 @@ class GetBlobOperation extends GetOperation {
      */
     void completeRead() {
       if (readIntoCallbackCalled.compareAndSet(false, true)) {
-        chunkIndexToResponseInfo.values().forEach(ResponseInfo::release);
-        chunkIndexToResponseInfo.clear();
         Exception e = operationException.get();
         readIntoFuture.done(bytesWritten.get(), e);
         if (readIntoCallback != null) {
@@ -450,6 +448,12 @@ class GetBlobOperation extends GetOperation {
           routerMetrics.getEncryptedBlobOperationTotalTimeMs.update(totalTime);
         } else {
           routerMetrics.getBlobOperationTotalTimeMs.update(totalTime);
+        }
+        for (Integer key : chunkIndexToResponseInfo.keySet()) {
+          ResponseInfo response = chunkIndexToResponseInfo.remove(key);
+          if (response != null) {
+            response.release();
+          }
         }
       }
       operationCompleted = true;
