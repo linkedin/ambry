@@ -54,9 +54,8 @@ import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.rest.NettySslHttp2Factory;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
-import com.github.ambry.rest.PublicAccessLogger;
 import com.github.ambry.rest.RestRequestHandler;
-import com.github.ambry.rest.RestRequestHandlerFactory;
+import com.github.ambry.rest.RestRequestResponseHandlerFactory;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestServerState;
 import com.github.ambry.rest.StorageServerNettyFactory;
@@ -231,7 +230,7 @@ public class AmbryServer {
             new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, requestResponseChannel,
                 ambryServerRequestsForHttp2);
 
-        RestRequestHandlerFactory restRequestHandlerFactory =
+        RestRequestResponseHandlerFactory restRequestHandlerFactory =
             Utils.getObj(restServerConfig.restServerRequestResponseHandlerFactory,
                 restServerConfig.restServerRequestHandlerScalingUnitCount, registry, restRequestService);
         restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();

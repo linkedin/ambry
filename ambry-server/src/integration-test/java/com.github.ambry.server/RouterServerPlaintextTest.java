@@ -74,7 +74,13 @@ public class RouterServerPlaintextTest {
   @BeforeClass
   public static void initializeTests() throws Exception {
     Properties properties = getRouterProperties("DC1");
-    plaintextCluster = new MockCluster(new Properties(), false, SystemTime.getInstance());
+
+    Properties serverProperties = new Properties();
+    serverProperties.setProperty("rest.server.rest.request.service.factory",
+        "com.github.ambry.server.StorageRestRequestService");
+    serverProperties.setProperty("rest.server.nio.server.factory", "com.github.ambry.rest.StorageServerNettyFactory");
+    serverProperties.setProperty("ssl.client.authentication", "none");
+    plaintextCluster = new MockCluster(serverProperties, false, SystemTime.getInstance());
     MockNotificationSystem notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);
     plaintextCluster.startServers();
