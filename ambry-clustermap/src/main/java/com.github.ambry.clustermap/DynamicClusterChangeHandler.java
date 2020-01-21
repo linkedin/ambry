@@ -395,7 +395,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
     logger.info("Adding node {} and its disks and replicas", instanceName);
     AmbryDataNode datanode =
         new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
-            Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig),
+            Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig), null,
             getXid(instanceConfig), helixClusterManagerCallback);
     // for new instance, we first set it to unavailable and rely on its participation to update its liveness
     if (!instanceName.equals(selfInstanceName)) {
