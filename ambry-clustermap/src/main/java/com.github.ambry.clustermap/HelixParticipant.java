@@ -18,6 +18,7 @@ import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -334,23 +335,19 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     if (diskInfo != null) {
       String replicasStr = diskInfo.get(ClusterMapUtils.REPLICAS_STR);
       if (!replicasStr.isEmpty()) {
-        String[] replicaInfos = replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR);
-        for (String replicaInfo : replicaInfos) {
-          String[] infos = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
-          if (infos[0].equals(partitionName)) {
-            replicaFound = true;
-            break;
-          }
-        }
+        List<String> replicaInfos =
+            new ArrayList<>(Arrays.asList(replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR)));
+        // if any element is removed, that means old replica is found in replicasStr.
+        replicaFound = replicaInfos.removeIf(
+            info -> (info.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR)[0]).equals(partitionName));
+
         // We update InstanceConfig only when replica is found in current instanceConfig. (This is to avoid unnecessary
         // notification traffic due to InstanceConfig change)
         if (replicaFound) {
           StringBuilder newReplicasStrBuilder = new StringBuilder();
+          // note that old replica info has been removed from "replicaInfos"
           for (String replicaInfo : replicaInfos) {
-            String[] infos = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
-            if (!infos[0].equals(partitionName)) {
-              newReplicasStrBuilder.append(replicaInfo).append(ClusterMapUtils.REPLICAS_DELIM_STR);
-            }
+            newReplicasStrBuilder.append(replicaInfo).append(ClusterMapUtils.REPLICAS_DELIM_STR);
           }
           // update diskInfo and MountPathToDisk map
           diskInfo.put(ClusterMapUtils.REPLICAS_STR, newReplicasStrBuilder.toString());
