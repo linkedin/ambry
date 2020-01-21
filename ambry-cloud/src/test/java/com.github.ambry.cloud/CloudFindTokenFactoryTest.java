@@ -16,9 +16,8 @@ package com.github.ambry.cloud;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.Random;
-import java.util.Set;
+import java.util.UUID;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -37,13 +36,15 @@ public class CloudFindTokenFactoryTest {
   public void getFindTokenTest() throws IOException {
     short version = 0;
     Random random = new Random();
-    long latestBlobUpdateTime = random.nextLong();
     long bytesRead = random.nextLong();
-    Set<String> lastReadBlobIds = new HashSet<>();
-    lastReadBlobIds.add("blobid1");
-    lastReadBlobIds.add("blobid2");
+    String startContinuationToken = "start";
+    String endContinuationToken = "end";
+    int totalItems = random.nextInt();
+    int index = random.nextInt() % totalItems;
+    String azureRequestId = UUID.randomUUID().toString();
 
-    CloudFindToken cloudFindToken1 = new CloudFindToken(version, latestBlobUpdateTime, bytesRead, lastReadBlobIds);
+    CloudFindToken cloudFindToken1 = new CloudFindToken(bytesRead,
+        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
     DataInputStream stream = new DataInputStream(new ByteArrayInputStream(cloudFindToken1.toBytes()));
     CloudFindToken cloudFindToken2 = (CloudFindToken) new CloudFindTokenFactory().getFindToken(stream);
     assertEquals("incorrect token returned from factory", cloudFindToken1, cloudFindToken2);

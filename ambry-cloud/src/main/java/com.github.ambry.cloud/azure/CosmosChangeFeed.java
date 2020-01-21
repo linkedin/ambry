@@ -15,6 +15,7 @@ package com.github.ambry.cloud.azure;
 
 import com.github.ambry.cloud.AzureFindToken;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
 import java.util.ArrayList;
 import java.util.List;
@@ -119,11 +120,19 @@ public class CosmosChangeFeed {
     }
 
     long resultSize = 0;
-    while (resultSize < maxEntriesSize) {
+    while (true) {
       if (index < changeFeedCache.get(partitionId).getFetchedEntries().size()) {
-        results.add(changeFeedCache.get(partitionId).getFetchedEntries().get(index));
-        resultSize = resultSize + changeFeedCache.get(partitionId).getFetchedEntries().get(index).getSize();
-        index++;
+        if (resultSize + changeFeedCache.get(partitionId).getFetchedEntries().get(index).getSize() < maxEntriesSize) {
+          results.add(changeFeedCache.get(partitionId).getFetchedEntries().get(index));
+          resultSize = resultSize + changeFeedCache.get(partitionId).getFetchedEntries().get(index).getSize();
+          index++;
+        } else {
+          if (resultSize == 0) {
+            results.add(changeFeedCache.get(partitionId).getFetchedEntries().get(index));
+            index++;
+          }
+          break;
+        }
       } else {
         populateChangeFeedCache(partitionId, azureFindToken.getEndContinuationToken());
         if (cacheEmpty(partitionId)) {
@@ -148,10 +157,12 @@ public class CosmosChangeFeed {
    */
   private boolean isCacheValid(String partitionId, AzureFindToken azureFindToken) {
     ChangeFeedCacheEntry changeFeedCacheEntry = changeFeedCache.get(partitionId);
-    return azureFindToken.getAzureTokenRequestId().equals(changeFeedCacheEntry.getAzureRequestId())
-        && azureFindToken.getStartContinuationToken().equals(changeFeedCacheEntry.getStartContinuationToken())
-        && azureFindToken.getEndContinuationToken().equals(changeFeedCacheEntry.getEndContinuationToken())
-        && azureFindToken.getTotalItems() < changeFeedCacheEntry.getFetchedEntries().size();
+    return Utils.checkNullableStringEquals(azureFindToken.getAzureTokenRequestId(),
+        changeFeedCacheEntry.getAzureRequestId()) && Utils.checkNullableStringEquals(
+        azureFindToken.getStartContinuationToken(), changeFeedCacheEntry.getStartContinuationToken())
+        && Utils.checkNullableStringEquals(azureFindToken.getEndContinuationToken(),
+        changeFeedCacheEntry.getEndContinuationToken())
+        && azureFindToken.getTotalItems() == changeFeedCacheEntry.getFetchedEntries().size();
   }
 
   private boolean cacheEmpty(String partitionId) {

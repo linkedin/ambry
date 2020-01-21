@@ -23,6 +23,7 @@ import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -46,20 +47,19 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import org.apache.commons.codec.binary.Base64;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
+import org.mockito.internal.util.reflection.FieldSetter;
 import org.mockito.junit.MockitoJUnitRunner;
 import rx.Observable;
 
@@ -392,136 +392,52 @@ public class AzureCloudDestinationTest {
   /** Test findEntriesSince. */
   @Test
   public void testFindEntriesSince() throws Exception {
-    testFindEntriesSinceWithUniqueUpdateTimes();
-    testFindEntriesSinceWithNonUniqueUpdateTimes();
-  }
-
-  /**
-   * Test findEntriesSince with all entries having unique updateTimes.
-   * @throws Exception
-   */
-  private void testFindEntriesSinceWithUniqueUpdateTimes() throws Exception {
     long chunkSize = 110000;
     long maxTotalSize = 1000000; // between 9 and 10 chunks
     long startTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
     int totalBlobs = 20;
 
     // create metadata list where total size > maxTotalSize
-    List<Document> docList = new ArrayList<>();
     List<String> blobIdList = new ArrayList<>();
+    List<CloudBlobMetadata> cloudBlobMetadataList = new ArrayList<>();
     for (int j = 0; j < totalBlobs; j++) {
       BlobId blobId = generateBlobId();
       blobIdList.add(blobId.getID());
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       inputMetadata.setUploadTime(startTime + j);
-      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + j, objectMapper));
+      cloudBlobMetadataList.add(inputMetadata);
     }
 
-    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
-    mockObservableForQuery(docList, mockResponse);
-
-    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        mockResponse);
+    MockChangeFeedQuery mockChangeFeedQuery = new MockChangeFeedQuery();
+    CosmosChangeFeed cosmosChangeFeed =
+        new CosmosChangeFeed(AzureCloudDestination.getFindSinceQueryLimit(), mockChangeFeedQuery);
+    FieldSetter.setField(azureDest, azureDest.getClass().getDeclaredField("cosmosChangeFeed"), cosmosChangeFeed);
+    cloudBlobMetadataList.stream().forEach(doc -> mockChangeFeedQuery.add(doc));
     CloudFindToken findToken = new CloudFindToken();
     // Run the query
-    List<CloudBlobMetadata> firstResult =
-        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    List<CloudBlobMetadata> firstResult = new ArrayList<>();
+    findToken = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize, firstResult);
     assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
 
-    docList = docList.subList(firstResult.size(), docList.size());
-    findToken = CloudFindToken.getUpdatedToken(findToken, firstResult);
-    assertEquals("Find token has wrong last update time", findToken.getLastUpdateTime(),
-        firstResult.get(firstResult.size() - 1).getLastUpdateTime());
-    assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", findToken.getLastUpdateTimeReadBlobIds(),
-        new HashSet<>(Collections.singletonList(firstResult.get(firstResult.size() - 1).getId())));
+    assertEquals("Find token has wrong end continuation token", findToken.getAzureFindToken().getIndex(),
+        firstResult.size());
+    assertEquals("Find token has wrong totalItems count", findToken.getAzureFindToken().getTotalItems(),
+        Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
+    cloudBlobMetadataList = cloudBlobMetadataList.subList(firstResult.size(), cloudBlobMetadataList.size());
 
-    mockObservableForQuery(docList, mockResponse);
-    List<CloudBlobMetadata> secondResult =
-        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    List<CloudBlobMetadata> secondResult = new ArrayList<>();
+    findToken = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize, secondResult);
     assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
     assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
 
-    mockObservableForQuery(docList, mockResponse);
+    assertEquals("Find token has wrong totalItems count", findToken.getAzureFindToken().getTotalItems(),
+        Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
+
     // Rerun with max size below blob size, and make sure it returns one result
-    assertEquals("Expected one result", 1,
-        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2).size());
-  }
-
-  /**
-   * Test findEntriesSince with entries having non unique updateTimes.
-   * @throws Exception
-   */
-  private void testFindEntriesSinceWithNonUniqueUpdateTimes() throws Exception {
-    long chunkSize = 110000;
-    long maxTotalSize = 1000000; // between 9 and 10 chunks
-    long startTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
-    int totalBlobs = 20;
-
-    // create metadata list where total size > maxTotalSize
-    List<Document> docList = new ArrayList<>();
-    List<String> blobIdList = new ArrayList<>();
-    for (int j = 0; j < totalBlobs - 1; j++) {
-      BlobId blobId = generateBlobId();
-      blobIdList.add(blobId.getID());
-      CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
-          CloudBlobMetadata.EncryptionOrigin.NONE);
-      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime, objectMapper));
-    }
-    BlobId blobId = generateBlobId();
-    blobIdList.add(blobId.getID());
-    CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
-        CloudBlobMetadata.EncryptionOrigin.NONE);
-    docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + 1, objectMapper));
-
-    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
-    mockObservableForQuery(docList, mockResponse);
-
-    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        mockResponse);
-    CloudFindToken findToken = new CloudFindToken();
-    // Run the query
-    List<CloudBlobMetadata> firstResult =
-        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
-    assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
-
-    findToken = CloudFindToken.getUpdatedToken(findToken, firstResult);
-    assertEquals("Find token has wrong last update time", findToken.getLastUpdateTime(),
-        firstResult.get(firstResult.size() - 1).getLastUpdateTime());
-    Set<String> resultBlobIdSet = firstResult.stream().map(CloudBlobMetadata::getId).collect(Collectors.toSet());
-    assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", findToken.getLastUpdateTimeReadBlobIds(),
-        resultBlobIdSet);
-
-    mockObservableForQuery(docList, mockResponse);
-    List<CloudBlobMetadata> secondResult =
-        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
-    assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
-    assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
-
-    CloudFindToken secondFindToken = CloudFindToken.getUpdatedToken(findToken, secondResult);
-    assertEquals("Find token has wrong last update time", secondFindToken.getLastUpdateTime(),
-        firstResult.get(firstResult.size() - 1).getLastUpdateTime());
-    resultBlobIdSet.addAll(secondResult.stream().map(CloudBlobMetadata::getId).collect(Collectors.toSet()));
-    assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", secondFindToken.getLastUpdateTimeReadBlobIds(),
-        resultBlobIdSet);
-
-    mockObservableForQuery(docList, mockResponse);
-    // Rerun with max size below blob size, and make sure it returns one result
-    assertEquals("Expected one result", 1,
-        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2).size());
-
-    mockObservableForQuery(docList, mockResponse);
-    // Rerun final time, and make sure that it returns all the remaining blobs
-    List<CloudBlobMetadata> thirdResult =
-        azureDest.findEntriesSince(blobId.getPartition().toPathString(), secondFindToken, maxTotalSize);
-    assertEquals("Unexpected doc count", totalBlobs - (firstResult.size() + secondResult.size()), thirdResult.size());
-    assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size() + secondResult.size()),
-        thirdResult.get(0).getId());
-
-    CloudFindToken thirdFindToken = CloudFindToken.getUpdatedToken(secondFindToken, thirdResult);
-    assertEquals("Find token has wrong last update time", thirdFindToken.getLastUpdateTime(), startTime + 1);
-    assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", thirdFindToken.getLastUpdateTimeReadBlobIds(),
-        new HashSet<>(Collections.singletonList(thirdResult.get(thirdResult.size() - 1).getId())));
+    List<CloudBlobMetadata> thirdResult = new ArrayList<>();
+    azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize - 1, thirdResult);
+    assertEquals("Expected one result", 1, thirdResult.size());
   }
 
   private void mockBlobExistence(boolean exists) {

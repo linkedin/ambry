@@ -1096,6 +1096,19 @@ public class Utils {
   }
 
   /**
+   * Compare two strings which can be null.
+   * @param str1 {@link String} to compare.
+   * @param str2 {@link String} to compare.
+   * @return true if strings are equal. False otherwise.
+   */
+  public static boolean checkNullableStringEquals(String str1, String str2) {
+    if(str1 == null || str2 == null) {
+      return str1 == str2;
+    }
+    return str1.equals(str2);
+  }
+
+  /**
    * A thread factory to use for {@link ScheduledExecutorService}s instantiated using
    * {@link #newScheduler(int, String, boolean)}.
    */

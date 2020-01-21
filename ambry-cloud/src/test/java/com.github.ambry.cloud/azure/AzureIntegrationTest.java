@@ -299,14 +299,13 @@ public class AzureIntegrationTest {
 
     CloudFindToken findToken = new CloudFindToken();
     // Call findEntriesSince in a loop until no new entries are returned
-    List<CloudBlobMetadata> results;
+    List<CloudBlobMetadata> results = new ArrayList<>();
     int numQueries = 0;
     int totalBlobsReturned = 0;
     do {
-      results = azureDest.findEntriesSince(partitionPath, findToken, maxTotalSize);
+      findToken = azureDest.findEntriesSince(partitionPath, findToken, maxTotalSize, results);
       numQueries++;
       totalBlobsReturned += results.size();
-      findToken = CloudFindToken.getUpdatedToken(findToken, results);
     } while (!results.isEmpty());
 
     assertEquals("Wrong number of queries", expectedNumQueries, numQueries);

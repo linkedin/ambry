@@ -19,18 +19,19 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,15 +42,52 @@ import org.slf4j.LoggerFactory;
  */
 public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
+  /**
+   * Class representing change feed for {@link LatchBasedInMemoryCloudDestination}
+   */
+  class ChangeFeed {
+    private final Map<String, BlobId> continuationTokenToBlobIdMap = new HashMap<>();
+    private final Map<BlobId, String> blobIdToContinuationTokenMap = new HashMap<>();
+    private int continuationTokenCounter = -1;
+    private final String reqUuid = UUID.randomUUID().toString();
+
+    /**
+     * Add a blobid to the change feed.
+     * @param blobId {@link BlobId} to add.
+     */
+    void add(BlobId blobId) {
+      if (blobIdToContinuationTokenMap.containsKey(blobId)) {
+        continuationTokenToBlobIdMap.put(blobIdToContinuationTokenMap.get(blobId), null);
+      }
+      continuationTokenToBlobIdMap.put(Integer.toString(++continuationTokenCounter), blobId);
+      blobIdToContinuationTokenMap.put(blobId, Integer.toString(continuationTokenCounter));
+    }
+
+    String getContinuationTokenForBlob(BlobId blobId) {
+      return blobIdToContinuationTokenMap.get(blobId);
+    }
+
+    Map<String, BlobId> getContinuationTokenToBlobIdMap() {
+      return continuationTokenToBlobIdMap;
+    }
+
+    int getContinuationTokenCounter() {
+      return continuationTokenCounter;
+    }
+
+    String getReqUuid() {
+      return reqUuid;
+    }
+  }
+
   private final Map<BlobId, Pair<CloudBlobMetadata, byte[]>> map = new HashMap<>();
-  private final Map<String, BlobId> continuationTokenMap = new HashMap<>();
   private final CountDownLatch uploadLatch;
   private final CountDownLatch downloadLatch;
   private final Set<BlobId> blobIdsToTrack = ConcurrentHashMap.newKeySet();
   private final Map<String, byte[]> tokenMap = new ConcurrentHashMap<>();
   private final AtomicLong bytesUploadedCounter = new AtomicLong(0);
   private final AtomicInteger blobsUploadedCounter = new AtomicInteger(0);
-  private int continuationTokenCounter = -1;
+  private final ChangeFeed changeFeed = new ChangeFeed();
   private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
 
   /**
@@ -85,7 +123,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     }
     cloudBlobMetadata.setLastUpdateTime(System.currentTimeMillis());
     map.put(blobId, new Pair<>(cloudBlobMetadata, outputStream.toByteArray()));
-    continuationTokenMap.put(Integer.toString(continuationTokenCounter++), blobId);
+    changeFeed.add(blobId);
     blobsUploadedCounter.incrementAndGet();
     if (blobIdsToTrack.remove(blobId)) {
       uploadLatch.countDown();
@@ -115,6 +153,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     }
     map.get(blobId).getFirst().setDeletionTime(deletionTime);
     map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
+    changeFeed.add(blobId);
     return true;
   }
 
@@ -123,7 +162,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     if (map.containsKey(blobId)) {
       map.get(blobId).getFirst().setExpirationTime(expirationTime);
       map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
-      continuationTokenMap.put(continuationTokenCounter++, blobId);
+      changeFeed.add(blobId);
       return true;
     } else {
       return false;
@@ -147,20 +186,50 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public CloudFindToken findEntriesSince(String partitionPath, CloudFindToken findToken,
-      long maxTotalSizeOfEntries, List<CloudBlobMetadata> nextEntries) {
-    List<CloudBlobMetadata> entries = new LinkedList<>();
-    for (BlobId blobId : map.keySet()) {
-      if (map.get(blobId).getFirst().getLastUpdateTime() >= findToken.getLastUpdateTime()) {
-        if (findToken.getLastUpdateTimeReadBlobIds().contains(map.get(blobId).getFirst().getId())) {
-          continue;
-        }
-        entries.add(map.get(blobId).getFirst());
-      }
+  public CloudFindToken findEntriesSince(String partitionPath, CloudFindToken findToken, long maxTotalSizeOfEntries,
+      List<CloudBlobMetadata> nextEntries) {
+    String continuationToken = findToken.getAzureFindToken().getEndContinuationToken();
+    List<BlobId> blobIds = new ArrayList<>();
+    getFeed(continuationToken, maxTotalSizeOfEntries, blobIds);
+    nextEntries.addAll(blobIds.stream().map(blobId -> map.get(blobId).getFirst()).collect(Collectors.toList()));
+    AzureFindToken azureFindToken = findToken.getAzureFindToken();
+    if (blobIds.size() != 0) {
+      azureFindToken = new AzureFindToken(changeFeed.getContinuationTokenForBlob(blobIds.get(0)),
+          changeFeed.getContinuationTokenForBlob(blobIds.get(blobIds.size() - 1)), 0, blobIds.size(),
+          changeFeed.getReqUuid());
     }
-    Collections.sort(entries, Comparator.comparingLong(CloudBlobMetadata::getLastUpdateTime));
+    long bytesToBeRead = nextEntries.stream().mapToLong(CloudBlobMetadata::getSize).sum();
+    return CloudFindToken.getUpdatedToken(findToken, azureFindToken, bytesToBeRead);
+  }
 
-    return CloudBlobMetadata.capMetadataListBySize(entries, maxTotalSizeOfEntries);
+  /**
+   * Get the change feed starting from given continuation token upto {@code maxLimit} number of items.
+   * @param continuationToken starting token for the change feed.
+   * @param maxTotalSizeOfEntries max size of all the blobs returned in changefeed.
+   * @param feed {@link List} of {@link BlobId}s to be populated with the change feed.
+   */
+  private void getFeed(String continuationToken, long maxTotalSizeOfEntries, List<BlobId> feed) {
+    int continuationTokenCounter = changeFeed.getContinuationTokenCounter();
+    // there are no changes since last continuation token or there is no change feed at all, then return
+    if (Integer.parseInt(continuationToken) == continuationTokenCounter + 1 || continuationTokenCounter == -1) {
+      return;
+    }
+    // check if its an invalid continuation token
+    if (!changeFeed.getContinuationTokenToBlobIdMap().containsKey(continuationToken)) {
+      throw new IllegalArgumentException("Invalid continuation token");
+    }
+    // iterate through change feed till it ends or maxLimit or maxTotalSizeofEntries is reached
+    String continuationTokenCtr = continuationToken;
+    long totalFeedSize = 0;
+    while (changeFeed.getContinuationTokenToBlobIdMap().containsKey(continuationTokenCtr)
+        && totalFeedSize < maxTotalSizeOfEntries) {
+      if (changeFeed.getContinuationTokenToBlobIdMap().get(continuationTokenCtr) != null) {
+        feed.add(changeFeed.getContinuationTokenToBlobIdMap().get(continuationTokenCtr));
+        totalFeedSize +=
+            map.get(changeFeed.getContinuationTokenToBlobIdMap().get(continuationTokenCtr)).getFirst().getSize();
+      }
+      continuationTokenCtr = Integer.toString(Integer.parseInt(continuationTokenCtr) + 1);
+    }
   }
 
   @Override
@@ -168,7 +237,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     return 0;
   }
 
-  public boolean doesBlobExist(BlobId blobId) {
+  boolean doesBlobExist(BlobId blobId) {
     return map.containsKey(blobId);
   }
 
@@ -200,11 +269,11 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     return tokenMap;
   }
 
-  public int getBlobsUploaded() {
+  int getBlobsUploaded() {
     return blobsUploadedCounter.get();
   }
 
-  public long getBytesUploaded() {
+  long getBytesUploaded() {
     return bytesUploadedCounter.get();
   }
 

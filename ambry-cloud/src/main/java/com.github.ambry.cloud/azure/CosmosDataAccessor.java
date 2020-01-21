@@ -168,7 +168,7 @@ public class CosmosDataAccessor {
    * @return next continuation token.
    * @throws DocumentClientException
    */
-  String queryChangeFeed(String requestContinationToken, int maxFeedSize, List<CloudBlobMetadata> changeFeed,
+  public String queryChangeFeed(String requestContinationToken, int maxFeedSize, List<CloudBlobMetadata> changeFeed,
       String partitionPath) throws DocumentClientException {
     ChangeFeedOptions changeFeedOptions = new ChangeFeedOptions();
     changeFeedOptions.setPartitionKey(new PartitionKey(partitionPath));

@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.CloudStorageManager;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.CloudDataNode;

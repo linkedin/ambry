@@ -74,12 +74,12 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.Mockito;
 
 import static com.github.ambry.commons.BlobId.*;
 import static com.github.ambry.replication.ReplicationTest.*;
@@ -297,31 +297,34 @@ public class CloudBlobStoreTest {
     long blobSize = 200000;
     int numBlobsFound = 5;
     List<CloudBlobMetadata> metadataList = generateMetadataList(startTime, blobSize, numBlobsFound);
-
+    CloudFindToken cloudFindToken = new CloudFindToken(blobSize * numBlobsFound,
+        new AzureFindToken("start", "end", 0, numBlobsFound, UUID.randomUUID().toString()));
     //create a list of 10 blobs with total size less than maxSize, and return it as part of query ChangeFeed
-    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong(), anyList())).thenReturn(metadataList);
+    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong(), anyList())).thenReturn(
+        cloudFindToken);
     CloudFindToken startToken = new CloudFindToken();
     FindInfo findInfo = store.findEntriesSince(startToken, maxTotalSize);
-    assertEquals(numBlobsFound, findInfo.getMessageEntries().size());
     CloudFindToken outputToken = (CloudFindToken) findInfo.getFindToken();
-    assertEquals(startTime + numBlobsFound - 1, outputToken.getLastUpdateTime());
     assertEquals(blobSize * numBlobsFound, outputToken.getBytesRead());
-    assertEquals(Collections.singletonList(metadataList.get(numBlobsFound - 1).getId()),
-        new ArrayList<String>(outputToken.getLastUpdateTimeReadBlobIds()));
+    assertEquals(numBlobsFound, outputToken.getAzureFindToken().getTotalItems());
+    assertEquals(0, outputToken.getAzureFindToken().getIndex());
 
     // 2) call find with new token, return more data including lastBlob, verify token updated
     startTime += 1000;
     metadataList = generateMetadataList(startTime, blobSize, numBlobsFound);
-    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong())).thenReturn(metadataList);
+    cloudFindToken = new CloudFindToken(blobSize * 2 * numBlobsFound,
+        new AzureFindToken("start2", "end2", 0, numBlobsFound, UUID.randomUUID().toString()));
+    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong(), anyList())).thenReturn(
+        cloudFindToken);
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
     outputToken = (CloudFindToken) findInfo.getFindToken();
-    assertEquals(startTime + numBlobsFound - 1, outputToken.getLastUpdateTime());
     assertEquals(blobSize * 2 * numBlobsFound, outputToken.getBytesRead());
-    assertEquals(Collections.singletonList(metadataList.get(numBlobsFound - 1).getId()),
-        new ArrayList<String>(outputToken.getLastUpdateTimeReadBlobIds()));
+    assertEquals(numBlobsFound, outputToken.getAzureFindToken().getTotalItems());
+    assertEquals(0, outputToken.getAzureFindToken().getIndex());
 
     // 3) call find with new token, no more data, verify token unchanged
-    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong())).thenReturn(Collections.emptyList());
+    metadataList = Collections.emptyList();
+    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong(), anyList())).thenReturn(outputToken);
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
     assertTrue(findInfo.getMessageEntries().isEmpty());
     FindToken finalToken = findInfo.getFindToken();
@@ -451,7 +454,8 @@ public class CloudBlobStoreTest {
     when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(retryableException)
         .thenReturn(true);
     when(exDest.deleteBlob(any(BlobId.class), anyLong())).thenThrow(retryableException).thenReturn(true);
-    when(exDest.getBlobMetadata(anyList())).thenThrow(retryableException).thenReturn(Collections.singletonMap(metadata.getId(), metadata));
+    when(exDest.getBlobMetadata(anyList())).thenThrow(retryableException)
+        .thenReturn(Collections.singletonMap(metadata.getId(), metadata));
     doThrow(retryableException).doNothing().when(exDest).downloadBlob(any(BlobId.class), any());
     Properties props = new Properties();
     setBasicProperties(props);

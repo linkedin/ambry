@@ -42,15 +42,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URISyntaxException;
-import java.security.InvalidKeyException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -66,20 +62,12 @@ class AzureCloudDestination implements CloudDestination {
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestination.class);
   private static final String THRESHOLD_PARAM = "@threshold";
   private static final String LIMIT_PARAM = "@limit";
-  private static final String TIME_SINCE_PARAM = "@timesince";
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
   static final int ID_QUERY_BATCH_SIZE = 1000;
   private static final String DEAD_BLOBS_QUERY_TEMPLATE =
       "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND "
           + THRESHOLD_PARAM + ")" + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND "
           + THRESHOLD_PARAM + ")" + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
-  // Note: ideally would like to order by uploadTime and id, but Cosmos doesn't allow without composite index.
-  // It is unlikely (but not impossible) for two blobs in same partition to have the same uploadTime (would have to
-  // be multiple VCR's uploading same partition).  We track the lastBlobId in the CloudFindToken and skip it if
-  // is returned in successive queries.
-  private static final String ENTRIES_SINCE_QUERY_TEMPLATE =
-      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN + " >= "
-          + TIME_SINCE_PARAM + " ORDER BY c." + CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN + " ASC";
   private static final String SEPARATOR = "-";
   private static final int findSinceQueryLimit = 1000;
   private final AzureBlobDataAccessor azureBlobDataAccessor;
@@ -98,11 +86,9 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureCloudConfig the {@link AzureCloudConfig} to use.
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
-   * @throws InvalidKeyException if credentials in the connection string contain an invalid key.
-   * @throws URISyntaxException if the connection string specifies an invalid URI.
    */
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
-      AzureMetrics azureMetrics) throws URISyntaxException, InvalidKeyException {
+      AzureMetrics azureMetrics) {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =
@@ -257,8 +243,8 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public CloudFindToken findEntriesSince(String partitionPath, CloudFindToken findToken,
-      long maxTotalSizeOfEntries, List<CloudBlobMetadata> nextEntries) throws CloudStorageException {
+  public CloudFindToken findEntriesSince(String partitionPath, CloudFindToken findToken, long maxTotalSizeOfEntries,
+      List<CloudBlobMetadata> nextEntries) throws CloudStorageException {
     try {
       AzureFindToken updatedAzureFindToken =
           cosmosChangeFeed.getNextEntriesAndToken(findToken.getAzureFindToken(), nextEntries, maxTotalSizeOfEntries,
@@ -276,29 +262,6 @@ class AzureCloudDestination implements CloudDestination {
    */
   AsyncDocumentClient getAsyncDocumentClient() {
     return asyncDocumentClient;
-  }
-
-  /**
-   * Filter out {@link CloudBlobMetadata} objects from lastUpdateTime ordered {@code cloudBlobMetadataList} whose
-   * lastUpdateTime is {@code lastUpdateTime} and id is in {@code lastReadBlobIds}.
-   * @param cloudBlobMetadataList list of {@link CloudBlobMetadata} objects to filter out from.
-   * @param lastReadBlobIds set if blobIds which need to be filtered out.
-   * @param lastUpdateTime lastUpdateTime of the blobIds to filter out.
-   */
-  private void filterOutLastReadBlobs(List<CloudBlobMetadata> cloudBlobMetadataList, Set<String> lastReadBlobIds,
-      long lastUpdateTime) {
-    ListIterator<CloudBlobMetadata> iterator = cloudBlobMetadataList.listIterator();
-    int numRemovedBlobs = 0;
-    while (iterator.hasNext()) {
-      CloudBlobMetadata cloudBlobMetadata = iterator.next();
-      if (numRemovedBlobs == lastReadBlobIds.size() || cloudBlobMetadata.getLastUpdateTime() > lastUpdateTime) {
-        break;
-      }
-      if (lastReadBlobIds.contains(cloudBlobMetadata.getId())) {
-        iterator.remove();
-        numRemovedBlobs++;
-      }
-    }
   }
 
   /**
@@ -413,6 +376,10 @@ class AzureCloudDestination implements CloudDestination {
     }
   }
 
+  public static int getFindSinceQueryLimit() {
+    return findSinceQueryLimit;
+  }
+
   /**
    * Visible for test.
    * @return the {@link CosmosDataAccessor}
@@ -435,8 +402,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param e the root cause exception.
    * @return the {@link CloudStorageException}.
    */
-  private static final CloudStorageException toCloudStorageException(String message, Exception e) {
-    boolean isRetryable = false;
+  private static CloudStorageException toCloudStorageException(String message, Exception e) {
     Long retryDelayMs = null;
     int statusCode = -1;
     if (e instanceof BlobStorageException) {
@@ -446,7 +412,7 @@ class AzureCloudDestination implements CloudDestination {
       retryDelayMs = ((DocumentClientException) e).getRetryAfterInMilliseconds();
     }
     // Everything is retryable except NOT_FOUND
-    isRetryable = (statusCode != HttpConstants.StatusCodes.NOTFOUND);
+    boolean isRetryable = (statusCode != HttpConstants.StatusCodes.NOTFOUND);
     return new CloudStorageException(message, e, isRetryable, retryDelayMs);
   }
 

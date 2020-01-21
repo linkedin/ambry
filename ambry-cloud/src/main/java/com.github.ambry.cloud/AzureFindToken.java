@@ -13,10 +13,12 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Objects;
 
 
 /**
@@ -53,8 +55,8 @@ public class AzureFindToken {
    * @param totalItems
    * @param azureTokenRequestId
    */
-  public AzureFindToken(String startContinuationToken, String endContinuationToken, int index,
-      int totalItems, String azureTokenRequestId) {
+  public AzureFindToken(String startContinuationToken, String endContinuationToken, int index, int totalItems,
+      String azureTokenRequestId) {
     this.startContinuationToken = startContinuationToken;
     this.endContinuationToken = endContinuationToken;
     this.index = index;
@@ -72,8 +74,8 @@ public class AzureFindToken {
    * @param azureTokenRequestId
    * @param version
    */
-  public AzureFindToken(String startContinuationToken, String endContinuationToken, int index,
-      int totalItems, String azureTokenRequestId, short version) {
+  public AzureFindToken(String startContinuationToken, String endContinuationToken, int index, int totalItems,
+      String azureTokenRequestId, short version) {
     this.startContinuationToken = startContinuationToken;
     this.endContinuationToken = endContinuationToken;
     this.index = index;
@@ -95,8 +97,8 @@ public class AzureFindToken {
     int index = inputStream.readInt();
     int totalItems = inputStream.readInt();
     String azureTokenRequestId = extractStringFromStream(inputStream);
-    return new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems,
-        azureTokenRequestId, version);
+    return new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureTokenRequestId,
+        version);
   }
 
   /**
@@ -137,11 +139,11 @@ public class AzureFindToken {
   }
 
   public boolean equals(AzureFindToken azureFindToken) {
-    return azureFindToken.getVersion() == version && azureFindToken.getStartContinuationToken()
-        .equals(startContinuationToken) && azureFindToken.getEndContinuationToken()
-        .equals(endContinuationToken) && azureFindToken.getTotalItems() == totalItems
-        && azureFindToken.getIndex() == index && azureFindToken.getAzureTokenRequestId()
-        .equals(azureTokenRequestId);
+    return azureFindToken.getVersion() == version && Utils.checkNullableStringEquals(
+        azureFindToken.getStartContinuationToken(), startContinuationToken) && Utils.checkNullableStringEquals(
+        azureFindToken.getEndContinuationToken(), endContinuationToken) && azureFindToken.getTotalItems() == totalItems
+        && azureFindToken.getIndex() == index && Utils.checkNullableStringEquals(
+        azureFindToken.getAzureTokenRequestId(), azureTokenRequestId);
   }
 
   /**
@@ -182,5 +184,10 @@ public class AzureFindToken {
    */
   public String getAzureTokenRequestId() {
     return azureTokenRequestId;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(startContinuationToken, endContinuationToken, index, totalItems, azureTokenRequestId, version);
   }
 }

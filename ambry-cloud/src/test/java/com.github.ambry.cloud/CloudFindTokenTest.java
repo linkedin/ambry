@@ -17,9 +17,8 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.HashSet;
 import java.util.Random;
-import java.util.Set;
+import java.util.UUID;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -37,44 +36,53 @@ public class CloudFindTokenTest {
   public void equalityTest() {
     short version = 0;
     Random random = new Random();
-    long lastBlobUpdateTime = random.nextLong();
     long bytesRead = random.nextLong();
-    Set<String> lastReadBlobIds = new HashSet<>();
-    lastReadBlobIds.add("blobid1");
-    lastReadBlobIds.add("blobid2");
+    String startContinuationToken = "start";
+    String endContinuationToken = "end";
+    int totalItems = random.nextInt();
+    int index = random.nextInt() % totalItems;
+    String azureRequestId = UUID.randomUUID().toString();
 
     //compare empty tokens
     ensureEqual(new CloudFindToken(), new CloudFindToken());
 
     //compare token constructed from all constructors
-    CloudFindToken token1 = new CloudFindToken(lastBlobUpdateTime, bytesRead, lastReadBlobIds);
-    CloudFindToken token2 = new CloudFindToken(lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    CloudFindToken token1 = new CloudFindToken(bytesRead,
+        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
+    CloudFindToken token2 = new CloudFindToken(bytesRead,
+        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
     ensureEqual(token1, token2);
 
-    token1 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
-    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    token1 = new CloudFindToken(bytesRead,
+        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId, version));
+    token2 = new CloudFindToken(bytesRead,
+        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId, version));
     ensureEqual(token1, token2);
 
     //ensure inequality for any unequal field
-    token2 = new CloudFindToken((short) 1, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    token2 = new CloudFindToken(bytesRead + 1,
+        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(version, lastBlobUpdateTime + 100, bytesRead, lastReadBlobIds);
+    token2 = new CloudFindToken(bytesRead,
+        new AzureFindToken(startContinuationToken + "1", endContinuationToken, index, totalItems, azureRequestId));
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, new HashSet<>());
+    token2 = new CloudFindToken(bytesRead,
+        new AzureFindToken(startContinuationToken, endContinuationToken + "1", index, totalItems, azureRequestId));
     ensureUnequal(token1, token2);
 
-    Set<String> unEqualBlobidSet = new HashSet<>();
-    unEqualBlobidSet.add("blobid1");
-    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, unEqualBlobidSet);
+    token2 = new CloudFindToken(bytesRead,
+        new AzureFindToken(startContinuationToken, endContinuationToken, index + 1, totalItems, azureRequestId));
     ensureUnequal(token1, token2);
 
-    unEqualBlobidSet.add("blobid3");
-    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, unEqualBlobidSet);
+    token2 = new CloudFindToken(bytesRead,
+        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems + 1, azureRequestId));
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead + 10, lastReadBlobIds);
+    token2 = new CloudFindToken(bytesRead,
+        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems,
+            UUID.randomUUID().toString()));
     ensureUnequal(token1, token2);
 
     token2 = new CloudFindToken();
@@ -89,16 +97,18 @@ public class CloudFindTokenTest {
   public void serdeTest() throws IOException {
     short version = 0;
     Random random = new Random();
-    long lastBlobUpdateTime = random.nextLong();
     long bytesRead = random.nextLong();
-    Set<String> lastReadBlobIds = new HashSet<>();
-    lastReadBlobIds.add("blobid1");
-    lastReadBlobIds.add("blobid2");
+    String startContinuationToken = "start";
+    String endContinuationToken = "end";
+    int totalItems = random.nextInt();
+    int index = random.nextInt() % totalItems;
+    String azureRequestId = UUID.randomUUID().toString();
 
     //Deserialization test
 
     //token with invalid version
-    CloudFindToken invalidToken = new CloudFindToken((short) 1, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    CloudFindToken invalidToken = new CloudFindToken((short) 1, bytesRead,
+        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
     DataInputStream tokenStream = getSerializedStream(invalidToken);
     try {
       CloudFindToken.fromBytes(tokenStream);
@@ -107,8 +117,9 @@ public class CloudFindTokenTest {
     }
 
     //valid token
-    CloudFindToken token = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
-    tokenStream = getSerializedStream(token);
+    CloudFindToken token = new CloudFindToken(bytesRead,
+        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
+    tokenStream = new DataInputStream(new ByteArrayInputStream(token.toBytes()));
     CloudFindToken deSerToken = CloudFindToken.fromBytes(tokenStream);
     assertEquals("Stream should have ended ", 0, tokenStream.available());
     assertEquals(token, deSerToken);
@@ -155,27 +166,18 @@ public class CloudFindTokenTest {
    * @return DataInputStream serialized stream
    */
   private DataInputStream getSerializedStream(CloudFindToken token) {
-    int size = 2 * Short.BYTES + 2 * Long.BYTES + Short.BYTES;
-    for (String blobId : token.getLastUpdateTimeReadBlobIds()) {
-      size += Short.BYTES; //for size of string
-      size += blobId.length(); //for the string itself
-    }
-    byte[] buf = new byte[size];
+    byte[] buf = null;
+    int size = 2 * Short.BYTES + Long.BYTES + token.getAzureFindToken().size();
+    buf = new byte[size];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     // add version
     bufWrap.putShort(token.getVersion());
     // add type
     bufWrap.putShort((short) token.getType().ordinal());
-    // add latestUploadTime
-    bufWrap.putLong(token.getLastUpdateTime());
     // add bytesRead
     bufWrap.putLong(token.getBytesRead());
     // add lastUpdateTimeReadBlobIds
-    bufWrap.putShort((short) token.getLastUpdateTimeReadBlobIds().size());
-    for (String blobId : token.getLastUpdateTimeReadBlobIds()) {
-      bufWrap.putShort((short) blobId.length());
-      bufWrap.put(blobId.getBytes());
-    }
+    bufWrap.put(token.getAzureFindToken().toBytes());
     return new DataInputStream(new ByteArrayInputStream(buf));
   }
 }
