@@ -80,12 +80,17 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
       if (headerFormat.hasEncryptionKeyRecord()) {
         deserializeBlobEncryptionKey(stream);
       }
+      short lifeVersion = 0;
+      if (headerFormat.hasLifeVersion()) {
+        lifeVersion = headerFormat.getLifeVersion();
+      }
       // read the appropriate type of message based on the relative offset that is set
       if (headerFormat.isPutRecord()) {
         BlobProperties properties = deserializeBlobProperties(stream);
-        return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
-            Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()),
-            properties.getAccountId(), properties.getContainerId(), properties.getCreationTimeInMs());
+        return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), false, false,
+            false, Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()),
+            null, properties.getAccountId(), properties.getContainerId(), properties.getCreationTimeInMs(),
+            lifeVersion);
       } else {
         UpdateRecord updateRecord = deserializeUpdateRecord(stream);
         boolean deleted = false, ttlUpdated = false, undeleted = false;
@@ -104,7 +109,7 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
         }
         return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), deleted,
             ttlUpdated, undeleted, updateRecord.getAccountId(), updateRecord.getContainerId(),
-            updateRecord.getUpdateTimeInMs());
+            updateRecord.getUpdateTimeInMs(), lifeVersion);
       }
     } catch (MessageFormatException e) {
       // log in case where we were not able to parse a message.

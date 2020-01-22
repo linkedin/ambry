@@ -74,11 +74,12 @@ public class MessageInfo {
    * @param accountId accountId of the blob
    * @param containerId containerId of the blob
    * @param operationTimeMs operation time in ms
+   * @param lifeVersion update version of update
    */
   public MessageInfo(StoreKey key, long size, boolean deleted, boolean ttlUpdated, boolean undeleted, short accountId,
-      short containerId, long operationTimeMs) {
+      short containerId, long operationTimeMs, short lifeVersion) {
     this(key, size, deleted, ttlUpdated, undeleted, Utils.Infinite_Time, null, accountId, containerId, operationTimeMs,
-        (short) 0);
+        lifeVersion);
   }
 
   /**
