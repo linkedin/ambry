@@ -423,7 +423,7 @@ public class MessageFormatInputStreamTest {
   }
 
   /**
-   * Verifies the values in the {@link UpdateRecord} obtained from {@code stream}
+   * Verifies the values in the {@link UpdateRecord} obtained from {@code stream} for ttl update.
    * @param stream the {@link InputStream} to obtain the records from
    * @param accountId the account id expected
    * @param containerId the container id expected
@@ -462,12 +462,31 @@ public class MessageFormatInputStreamTest {
     checkUndeleteMessage(messageFormatInputStream, undeleteRecordSize, key, accountId, containerId, updateTimeMs);
   }
 
+  /**
+   * Checks a undelete message including headers and the {@link UpdateRecord}.
+   * @param stream the {@link InputStream} to read data from
+   * @param expectedRecordSize the expected size of the record in the message. Can be {@code null} if unknown (won't be
+   *                            checked)
+   * @param key the expected {@link StoreKey}
+   * @param accountId the account id expected
+   * @param containerId the container id expected
+   * @param updateTimeMs the expected time of update
+   * @throws Exception any error.
+   */
   private static void checkUndeleteMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
       short containerId, long updateTimeMs) throws Exception {
     checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key);
     checkUndeleteSubRecord(stream, accountId, containerId, updateTimeMs);
   }
 
+  /**
+   * Verifies the values in the {@link UpdateRecord} obtained from {@code stream} for undelete.
+   * @param stream the {@link InputStream} to obtain the records from
+   * @param accountId the account id expected
+   * @param containerId the container id expected
+   * @param updateTimeMs the expected time of update
+   * @throws Exception any error.
+   */
   private static void checkUndeleteSubRecord(InputStream stream, short accountId, short containerId, long updateTimeMs)
       throws Exception {
     UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(stream);
