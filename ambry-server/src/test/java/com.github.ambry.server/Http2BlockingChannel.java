@@ -21,13 +21,13 @@ import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Send;
 import com.github.ambry.rest.NettySslHttp2Factory;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.router.Callback;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
@@ -56,14 +56,14 @@ import org.slf4j.LoggerFactory;
  */
 public class Http2BlockingChannel implements ConnectedChannel {
   private static final Logger logger = LoggerFactory.getLogger(Http2BlockingChannel.class);
-  private final Http2ResponseHandler http2ResponseHandler;
   private final String hostName;
   private final int port;
   private EventLoopGroup workerGroup;
   private Channel channel;
+  private ChannelPromise channelPromise;
+  private ByteBuf responseByteBuf;
 
   public Http2BlockingChannel(String hostName, int port) {
-    http2ResponseHandler = new Http2ResponseHandler();
     this.hostName = hostName;
     this.port = port;
   }
@@ -104,26 +104,31 @@ public class Http2BlockingChannel implements ConnectedChannel {
     byteBufferChannel.getBuffer().position(0);
     ByteBuf byteBuf = Unpooled.wrappedBuffer(byteBufferChannel.getBuffer());
 
-    Http2ClientStreamInitializer initializer = new Http2ClientStreamInitializer(http2ResponseHandler);
+    Http2ClientStreamInitializer initializer = new Http2ClientStreamInitializer(new Http2ResponseHandler());
     Http2StreamChannel childChannel =
         new Http2StreamChannelBootstrap(channel).handler(initializer).open().syncUninterruptibly().getNow();
     Http2Headers http2Headers = new DefaultHttp2Headers().method(HttpMethod.POST.asciiName()).scheme("https").path("/");
     http2Headers.set(RestUtils.Headers.HTTP2_FRONTEND_REQUEST, "true");
-
+    channelPromise = childChannel.newPromise();
+    childChannel.attr(Http2ResponseHandler.RESPONSE_CALLBACK).set(new Callback<ByteBuf>() {
+      @Override
+      public void onCompletion(ByteBuf result, Exception exception) {
+        responseByteBuf = result;
+        channelPromise.setSuccess();
+      }
+    });
 
     DefaultHttp2HeadersFrame headersFrame = new DefaultHttp2HeadersFrame(http2Headers, false);
     DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(byteBuf, true);
-    ChannelPromise childChannelPromise = childChannel.newPromise();
     childChannel.write(headersFrame);
-    ChannelFuture channelFuture = childChannel.write(dataFrame);
+    childChannel.write(dataFrame);
     childChannel.flush();
-    http2ResponseHandler.put(channelFuture, childChannelPromise);
   }
 
   @Override
   public ChannelOutput receive() throws IOException {
-    Http2ResponseHandler.StreamResult streamResult = http2ResponseHandler.awaitResponses(5, TimeUnit.SECONDS);
-    DataInputStream dataInputStream = new NettyByteBufDataInputStream(streamResult.getByteBuf());
+    channelPromise.awaitUninterruptibly(3, TimeUnit.SECONDS);
+    DataInputStream dataInputStream = new NettyByteBufDataInputStream(responseByteBuf);
     return new ChannelOutput(dataInputStream, dataInputStream.readLong());
   }
 
