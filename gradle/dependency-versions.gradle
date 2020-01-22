@@ -25,4 +25,5 @@ ext {
     azureStorageVersion = "12.0.0"
     azureCosmosDbVersion = "2.6.3"
     conscryptVersion = "2.2.1"
+    jimFsVersion = "1.1"
 }
