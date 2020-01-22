@@ -74,6 +74,7 @@ public class RouterServerSSLTest {
     Properties serverSSLProps = new Properties();
     TestSSLUtils.addSSLProperties(serverSSLProps, sslEnabledDataCentersStr, SSLFactory.Mode.SERVER, trustStoreFile,
         "server");
+    TestSSLUtils.addHttp2Properties(serverSSLProps);
     Properties routerProps = getRouterProperties("DC1");
     TestSSLUtils.addSSLProperties(routerProps, sslEnabledDataCentersStr, SSLFactory.Mode.CLIENT, trustStoreFile,
         "router-client");

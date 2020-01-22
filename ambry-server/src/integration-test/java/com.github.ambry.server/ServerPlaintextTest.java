@@ -15,6 +15,7 @@ package com.github.ambry.server;
 
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.SystemTime;
@@ -49,11 +50,8 @@ public class ServerPlaintextTest {
     routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
 
     Properties serverProperties = new Properties();
-    serverProperties.setProperty("rest.server.rest.request.service.factory",
-        "com.github.ambry.server.StorageRestRequestService");
-    serverProperties.setProperty("rest.server.nio.server.factory", "com.github.ambry.rest.StorageServerNettyFactory");
-    serverProperties.setProperty("ssl.client.authentication", "none");
-    plaintextCluster = new MockCluster(serverProperties, false, SystemTime.getInstance(),1,1,1);
+    TestSSLUtils.addHttp2Properties(serverProperties);
+    plaintextCluster = new MockCluster(serverProperties, false, SystemTime.getInstance());
     notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);
     plaintextCluster.startServers();
