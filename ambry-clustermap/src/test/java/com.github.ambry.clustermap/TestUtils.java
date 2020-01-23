@@ -15,9 +15,9 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.ServerErrorCode;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -804,6 +804,7 @@ public class TestUtils {
     protected PartitionLayout partitionLayout;
     private JSONArray jsonPartitions;
     private long version;
+    private ClusterMapConfig clusterMapConfig;
 
     protected JSONObject makeJsonPartitionLayout() throws JSONException {
       return makeJsonPartitionLayout(DEFAULT_PARTITION_CLASS);
@@ -842,9 +843,14 @@ public class TestUtils {
       this.replicaCountPerDc = replicaCountPerDc;
 
       this.testHardwareLayout = testHardwareLayout;
-      this.partitionLayout =
-          new PartitionLayout(testHardwareLayout.getHardwareLayout(), makeJsonPartitionLayout(), localDc);
       this.dcCount = testHardwareLayout.getHardwareLayout().getDatacenterCount();
+      Properties props = new Properties();
+      props.setProperty("clustermap.host.name", "localhost");
+      props.setProperty("clustermap.cluster.name", "cluster");
+      props.setProperty("clustermap.datacenter.name", localDc == null ? "" : localDc);
+      clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+      this.partitionLayout =
+          new PartitionLayout(testHardwareLayout.getHardwareLayout(), makeJsonPartitionLayout(), clusterMapConfig);
     }
 
     public TestPartitionLayout(TestHardwareLayout testHardwareLayout, String localDc) throws JSONException {
@@ -856,7 +862,7 @@ public class TestUtils {
         throws JSONException {
       this.partitionCount += i;
       this.partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(),
-          updateJsonPartitionLayout(partitionClass, partitionState), localDc);
+          updateJsonPartitionLayout(partitionClass, partitionState), clusterMapConfig);
     }
 
     public PartitionLayout getPartitionLayout() {
@@ -922,10 +928,10 @@ public class TestUtils {
   }
 
   public static StaticClusterManager getTestClusterMap(int partitionCount, int replicaCountPerDatacenter,
-      long replicaCapacityInBytes) throws JSONException {
+      long replicaCapacityInBytes, ClusterMapConfig clusterMapConfig) throws JSONException {
 
     TestUtils.TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha");
-    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), null);
+    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), clusterMapConfig);
 
     StaticClusterManager clusterMapManager = new StaticClusterManager(partitionLayout, null, new MetricRegistry());
     List<PartitionId> allocatedPartitions;
@@ -937,12 +943,12 @@ public class TestUtils {
     return clusterMapManager;
   }
 
-  public static StaticClusterManager getTestClusterMap() throws JSONException {
+  public static StaticClusterManager getTestClusterMap(ClusterMapConfig clusterMapConfig) throws JSONException {
     int numPartitions = 5;
     int replicaCountPerDatacenter = 2;
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
-    return getTestClusterMap(numPartitions, replicaCountPerDatacenter, replicaCapacityInBytes);
+    return getTestClusterMap(numPartitions, replicaCountPerDatacenter, replicaCapacityInBytes, clusterMapConfig);
   }
 
   /**

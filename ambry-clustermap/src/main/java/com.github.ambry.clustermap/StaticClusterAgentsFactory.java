@@ -52,7 +52,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
       String partitionLayoutFilePath) throws JSONException, IOException {
     this(clusterMapConfig, new PartitionLayout(
         new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutFilePath)), clusterMapConfig),
-        new JSONObject(readStringFromFile(partitionLayoutFilePath)), clusterMapConfig.clusterMapDatacenterName));
+        new JSONObject(readStringFromFile(partitionLayoutFilePath)), clusterMapConfig));
   }
 
   /**

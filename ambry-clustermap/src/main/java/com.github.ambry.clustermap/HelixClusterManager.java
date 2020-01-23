@@ -218,7 +218,8 @@ public class HelixClusterManager implements ClusterMap {
     }
     localDatacenterId = dcToDcZkInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
     partitionSelectionHelper =
-        new PartitionSelectionHelper(partitionMap.values(), clusterMapConfig.clusterMapDatacenterName);
+        new PartitionSelectionHelper(partitionMap.values(), clusterMapConfig.clusterMapDatacenterName,
+            clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
   }
 
   /**

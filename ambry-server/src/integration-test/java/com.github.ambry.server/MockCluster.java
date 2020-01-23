@@ -144,7 +144,6 @@ public class MockCluster {
    * @param recoveryNode The data node.
    * @param dcName Name of the datacenter.
    * @return {@link MockCluster} object.
-   * @throws IOException if an exception happens during cluster creation.
    */
   public static MockCluster createOneNodeRecoveryCluster(MockDataNodeId vcrNode, MockDataNodeId recoveryNode,
       String dcName) {
