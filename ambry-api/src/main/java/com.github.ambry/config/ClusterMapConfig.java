@@ -269,6 +269,7 @@ public class ClusterMapConfig {
         verifiableProperties.getLongInRange("clustermap.replica.catchup.acceptable.lag.bytes", 0L, 0L, Long.MAX_VALUE);
     clustermapReplicaCatchupTarget =
         verifiableProperties.getIntInRange("clustermap.replica.catchup.target", 0, 0, Integer.MAX_VALUE);
-    clustermapWritablePartitionMinReplicaCount = verifiableProperties.getIntInRange("clustermap.writable.partition.min.replica.count", 3, 0, Integer.MAX_VALUE);
+    clustermapWritablePartitionMinReplicaCount =
+        verifiableProperties.getIntInRange("clustermap.writable.partition.min.replica.count", 3, 0, Integer.MAX_VALUE);
   }
 }
