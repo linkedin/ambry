@@ -268,12 +268,6 @@ public class AzureBlobDataAccessor {
     }
   }
 
-  public CloudBlobMetadata getBlobMetadata(BlobId blobId) throws BlobStorageException {
-    BlockBlobClient blobClient = getBlockBlobClient(blobId, false);
-    BlobProperties blobProperties = blobClient.getProperties();
-    return (blobProperties == null) ? null : new CloudBlobMetadata(blobProperties.getMetadata());
-  }
-
   /**
    * Update the metadata for the specified blob.
    * @param blobId The {@link BlobId} to update.
