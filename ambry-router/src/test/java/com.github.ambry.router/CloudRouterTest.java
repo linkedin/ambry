@@ -99,6 +99,7 @@ public class CloudRouterTest extends NonBlockingRouterTest {
     properties.setProperty("router.ttl.update.success.target", Integer.toString(SUCCESS_TARGET));
     properties.setProperty("clustermap.port", "1666");
     properties.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
+    properties.setProperty("clustermap.resolve.hostnames", "false");
     properties.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS,
         LatchBasedInMemoryCloudDestinationFactory.class.getName());
     properties.setProperty(CloudConfig.VCR_MIN_TTL_DAYS, "0");
