@@ -901,8 +901,7 @@ public class AmbrySecurityServiceTest {
     }
 
     @Override
-    public void setHeader(String headerName, Object headerValue) throws RestServiceException {
-      throw new RestServiceException("Not Implemented", RestServiceErrorCode.InternalServerError);
+    public void setHeader(String headerName, Object headerValue) {
     }
 
     @Override

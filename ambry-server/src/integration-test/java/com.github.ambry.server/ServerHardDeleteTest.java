@@ -26,6 +26,7 @@ import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.DeleteRequest;
@@ -273,7 +274,7 @@ public class ServerHardDeleteTest {
           chosenPartition, false, BlobId.BlobDataType.DATACHUNK));
     }
 
-    BlockingChannel channel =
+    ConnectedChannel channel =
         ServerTestUtil.getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT),
             "localhost", null, null);
     channel.connect();
@@ -352,11 +353,11 @@ public class ServerHardDeleteTest {
    * @param properties the {@link BlobProperties} of the blob being uploaded
    * @param usermetadata the user metadata of the blob being uploaded
    * @param data the blob content of the blob being uploaded
-   * @param channel the {@link BlockingChannel} to use to send and receive data
+   * @param channel the {@link ConnectedChannel} to use to send and receive data
    * @throws IOException
    */
   void putBlob(BlobId blobId, BlobProperties properties, byte[] encryptionKey, byte[] usermetadata, byte[] data,
-      BlockingChannel channel) throws IOException {
+      ConnectedChannel channel) throws IOException {
     PutRequest putRequest0 =
         new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
             properties.getBlobSize(), BlobType.DataBlob, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey));
@@ -369,10 +370,10 @@ public class ServerHardDeleteTest {
   /**
    * Deletes a single blob from ambry server node
    * @param blobId the {@link BlobId} that needs to be deleted
-   * @param channel the {@link BlockingChannel} to use to send and receive data
+   * @param channel the {@link ConnectedChannel} to use to send and receive data
    * @throws IOException
    */
-  void deleteBlob(BlobId blobId, BlockingChannel channel) throws IOException {
+  void deleteBlob(BlobId blobId, ConnectedChannel channel) throws IOException {
     DeleteRequest deleteRequest = new DeleteRequest(1, "client1", blobId, time.milliseconds());
     channel.send(deleteRequest);
     InputStream deleteResponseStream = channel.receive().getInputStream();
@@ -397,7 +398,7 @@ public class ServerHardDeleteTest {
    * @param blobsCount the total number of blobs that needs to be verified against
    * @throws Exception
    */
-  void getAndVerify(BlockingChannel channel, int blobsCount) throws Exception {
+  void getAndVerify(ConnectedChannel channel, int blobsCount) throws Exception {
     ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
     ArrayList<BlobId> ids = new ArrayList<>();
     for (int i = 0; i < blobsCount; i++) {

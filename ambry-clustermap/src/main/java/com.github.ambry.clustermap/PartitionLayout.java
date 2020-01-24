@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -52,16 +53,16 @@ class PartitionLayout {
    * Create a PartitionLayout
    * @param hardwareLayout the {@link HardwareLayout} to use.
    * @param jsonObject the {@link JSONObject} that represents the partition layout
-   * @param localDatacenterName the name of the local datacenter. Can be {@code null}.
+   * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    * @throws JSONException
    */
-  public PartitionLayout(HardwareLayout hardwareLayout, JSONObject jsonObject, String localDatacenterName)
+  public PartitionLayout(HardwareLayout hardwareLayout, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("PartitionLayout " + hardwareLayout + ", " + jsonObject.toString());
     }
     this.hardwareLayout = hardwareLayout;
-    this.localDatacenterName = localDatacenterName;
+    this.localDatacenterName = clusterMapConfig.clusterMapDatacenterName;
     this.clusterName = jsonObject.getString("clusterName");
     this.version = jsonObject.getLong("version");
     this.partitionMap = new HashMap<>();
@@ -70,26 +71,28 @@ class PartitionLayout {
     }
 
     validate();
-    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitionMap.values(), localDatacenterName);
+    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitionMap.values(), localDatacenterName,
+        clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
   }
 
   /**
    * Constructor for initial PartitionLayout
    * @param hardwareLayout the {@link JSONObject} that represents the partition layout
-   * @param localDatacenterName the name of the local datacenter. Can be {@code null}.
+   * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    */
-  public PartitionLayout(HardwareLayout hardwareLayout, String localDatacenterName) {
+  public PartitionLayout(HardwareLayout hardwareLayout, ClusterMapConfig clusterMapConfig) {
     if (logger.isTraceEnabled()) {
       logger.trace("PartitionLayout " + hardwareLayout);
     }
     this.hardwareLayout = hardwareLayout;
-    this.localDatacenterName = localDatacenterName;
+    this.localDatacenterName = clusterMapConfig.clusterMapDatacenterName;
     this.clusterName = hardwareLayout.getClusterName();
     this.version = 1;
     this.maxPartitionId = MinPartitionId;
     this.partitionMap = new HashMap<>();
     validate();
-    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitionMap.values(), localDatacenterName);
+    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitionMap.values(), localDatacenterName,
+        clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
   }
 
   public HardwareLayout getHardwareLayout() {

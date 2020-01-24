@@ -13,6 +13,8 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 
@@ -29,6 +31,13 @@ public interface Send {
    * @throws IOException
    */
   long writeTo(WritableByteChannel channel) throws IOException;
+
+  /**
+   * Placeholder to support {@link AsyncWritableChannel}
+   */
+  default void writeTo(AsyncWritableChannel channel, Callback<Long> callback) throws IOException {
+    return;
+  }
 
   /**
    * Returns true if the all data has been written

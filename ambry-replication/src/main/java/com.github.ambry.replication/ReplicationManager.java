@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
@@ -40,12 +41,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
+
 
 /**
  * Set up replicas based on {@link ReplicationEngine} and do replication across all data centers.
  */
 public class ReplicationManager extends ReplicationEngine {
-  private final StoreManager storeManager;
   private final StoreConfig storeConfig;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
@@ -56,8 +58,7 @@ public class ReplicationManager extends ReplicationEngine {
       ClusterParticipant clusterParticipant) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
-        storeKeyConverterFactory, transformerClassName);
-    this.storeManager = storeManager;
+        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager);
     this.storeConfig = storeConfig;
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
     // initialize all partitions
@@ -215,7 +216,7 @@ public class ReplicationManager extends ReplicationEngine {
   /**
    * {@link PartitionStateChangeListener} to capture changes in partition state.
    */
-  private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+  class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
@@ -225,7 +226,7 @@ public class ReplicationManager extends ReplicationEngine {
         // no matter this is an existing replica or new added one, it should be present in storage manager because new
         // replica is added into storage manager first.
         throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
-            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+            ReplicaNotFound);
       }
 
       if (!partitionToPartitionInfo.containsKey(replica.getPartitionId())) {
@@ -234,16 +235,31 @@ public class ReplicationManager extends ReplicationEngine {
         logger.info("Didn't find replica {} in replication manager, starting to add it.", partitionName);
         if (!addReplica(replica)) {
           throw new StateTransitionException("Failed to add new replica " + partitionName + " into replication manager",
-              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+              ReplicaOperationFailure);
         }
       }
     }
 
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
-      logger.info("Partition state change notification from Bootstrap to Standby received for partition {}",
-          partitionName);
-      // TODO implement replication catchup logic if this is a new replica
+      // if code arrives here, it means local replica has completed OFFLINE -> BOOTSTRAP transition. We don't have to
+      // check if local replica exists or not.
+      ReplicaId localReplica = storeManager.getReplica(partitionName);
+      Store store = storeManager.getStore(localReplica.getPartitionId());
+      // 1. check if store is started
+      if (store == null) {
+        throw new StateTransitionException(
+            "Store " + partitionName + " is not started during Bootstrap-To-Standby transition", StoreNotStarted);
+      }
+      // 2. check if store is new added and needs to catch up with peer replicas.
+      if (store.isBootstrapInProgress()) {
+        store.setCurrentState(ReplicaState.BOOTSTRAP);
+        // store state will updated to STANDBY in ReplicaThread when bootstrap is complete
+        replicaSyncUpManager.initiateBootstrap(localReplica);
+      } else {
+        // if this is existing replica, then directly set state to STANDBY
+        store.setCurrentState(ReplicaState.STANDBY);
+      }
     }
 
     @Override
@@ -256,6 +272,37 @@ public class ReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
+    }
+
+    @Override
+    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+      ReplicaId localReplica = storeManager.getReplica(partitionName);
+      Store store = storeManager.getStore(localReplica.getPartitionId());
+      // 1. check if store is started
+      if (store == null) {
+        throw new StateTransitionException(
+            "Store " + partitionName + " is not started during Standby-To-Inactive transition", StoreNotStarted);
+      }
+      replicaSyncUpManager.initiateDeactivation(localReplica);
+    }
+
+    @Override
+    public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+      ReplicaId localReplica = storeManager.getReplica(partitionName);
+      // check if local replica exists
+      if (localReplica == null) {
+        throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
+            ReplicaNotFound);
+      }
+      // check if store is started
+      Store store = storeManager.getStore(localReplica.getPartitionId());
+      if (store == null) {
+        throw new StateTransitionException(
+            "Store " + partitionName + " is not started during Inactive-To-Offline transition", StoreNotStarted);
+      }
+      // set local store state to OFFLINE and initiate disconnection
+      store.setCurrentState(ReplicaState.OFFLINE);
+      replicaSyncUpManager.initiateDisconnection(localReplica);
     }
   }
 }

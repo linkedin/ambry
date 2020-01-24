@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.MockRouter;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
@@ -34,7 +35,9 @@ import static org.junit.Assert.*;
  */
 public class NettyServerTest {
   private static final NettyMetrics NETTY_METRICS = new NettyMetrics(new MetricRegistry());
-  private static final RestRequestHandler REQUEST_HANDLER = new MockRestRequestResponseHandler();
+  private static final RestRequestService REST_REQUEST_SERVICE =
+      new MockRestRequestService(new VerifiableProperties(new Properties()), new MockRouter());
+  private static final RestRequestHandler REQUEST_HANDLER = new MockRestRequestResponseHandler(REST_REQUEST_SERVICE);
   private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
   private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
   private static final ConnectionStatsHandler CONNECTION_STATS_HANDLER = new ConnectionStatsHandler(NETTY_METRICS);
@@ -105,10 +108,10 @@ public class NettyServerTest {
 
     Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = new HashMap<>();
     channelInitializers.put(nettyConfig.nettyServerPort,
-        new NettyServerChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
+        new FrontendNettyChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
             REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, null));
     channelInitializers.put(nettyConfig.nettyServerSSLPort,
-        new NettyServerChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
+        new FrontendNettyChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
             REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, SSL_FACTORY));
     return new NettyServer(nettyConfig, NETTY_METRICS, channelInitializers);
   }

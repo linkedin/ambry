@@ -27,7 +27,7 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
-import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
@@ -157,7 +157,7 @@ public class VcrRecoveryTest {
    * @throws IOException on {@link IOException}
    */
   private void testGetOnRecoveryNode(Map<BlobId, Integer> blobIdToSizeMap) throws IOException {
-    BlockingChannel channel =
+    ConnectedChannel channel =
         ServerTestUtil.getBlockingChannelBasedOnPortType(recoveryNodePort, "localhost", null, null);
     channel.connect();
 

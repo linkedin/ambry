@@ -375,9 +375,8 @@ class AzureCloudDestination implements CloudDestination {
       }
       return deletedBlobs.size();
     } catch (Exception ex) {
-      logger.error("Failed to purge all blobs", ex);
       azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size());
-      throw new CloudStorageException(ex);
+      throw new CloudStorageException("Failed to purge all blobs", ex);
     } finally {
       deleteTimer.stop();
     }

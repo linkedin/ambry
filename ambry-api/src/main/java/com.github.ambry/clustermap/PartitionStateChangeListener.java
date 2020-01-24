@@ -41,4 +41,16 @@ public interface PartitionStateChangeListener {
    * @param partitionName of the partition.
    */
   void onPartitionBecomeStandbyFromLeader(String partitionName);
+
+  /**
+   * Action to take when partition becomes inactive from standby.
+   * @param partitionName of the partition
+   */
+  void onPartitionBecomeInactiveFromStandby(String partitionName);
+
+  /**
+   * Action to take when partition becomes offline from inactive.
+   * @param partitionName of the partition
+   */
+  void onPartitionBecomeOfflineFromInactive(String partitionName);
 }

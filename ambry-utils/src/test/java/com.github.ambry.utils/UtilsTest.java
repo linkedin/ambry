@@ -25,12 +25,14 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.commons.io.FileUtils;
@@ -54,7 +56,7 @@ public class UtilsTest {
   public void whpGetRandomLongRangeTest(int range, int draws) {
     // This test is probabilistic in nature if range is greater than one.
     // Make sure draws >> range for test to pass with high probability.
-    int count[] = new int[range];
+    int[] count = new int[range];
     Random random = new Random();
     for (int i = 0; i < draws; i++) {
       long r = Utils.getRandomLong(random, range);
@@ -227,7 +229,7 @@ public class UtilsTest {
       CrcInputStream cis = new CrcInputStream(new ByteBufferDataInputStream(buffer));
       DataInputStream dis = new DataInputStream(cis);
       long dataSize = dis.readLong();
-      assertEquals((long) dataSize, blobSize);
+      assertEquals(dataSize, blobSize);
       ByteBufferInputStream obtained = Utils.getByteBufferInputStreamFromCrcInputStream(cis, (int) dataSize);
       // Make sure these two ByteBuffers actually share the underlying memory.
       assertEquals(getByteArrayFromByteBuffer(buffer), getByteArrayFromByteBuffer(obtained.getByteBuffer()));
@@ -274,7 +276,7 @@ public class UtilsTest {
         CrcInputStream cis = new CrcInputStream(new NettyByteBufDataInputStream(byteBuf));
         DataInputStream dis = new DataInputStream(cis);
         long dataSize = dis.readLong();
-        assertEquals((long) dataSize, blobSize);
+        assertEquals(dataSize, blobSize);
         ByteBufferInputStream obtained = Utils.getByteBufferInputStreamFromCrcInputStream(cis, (int) dataSize);
         assertEquals(byteBuf.array(), getByteArrayFromByteBuffer(obtained.getByteBuffer()));
         byte[] obtainedArray = new byte[blobSize];
@@ -678,6 +680,21 @@ public class UtilsTest {
     assertEquals("Empty string should return empty list", new ArrayList<>(), Utils.splitString("", ","));
     assertEquals("Empty segments should be ignored", new ArrayList<>(Arrays.asList("a", "b-extra", "c")),
         Utils.splitString(",a,,b-extra,c,,", ","));
+  }
+
+  /**
+   * Tests for {@link Utils#splitString(String, String, Supplier)}.
+   */
+  @Test
+  public void splitStringForCollectionTest() {
+    assertEquals("Unexpected result", new ArrayList<>(Arrays.asList("a", "b", "c")),
+        Utils.splitString("a,b,c", ",", ArrayList::new));
+    assertEquals("Unexpected result", new HashSet<>(Arrays.asList("a", "b", "c")),
+        Utils.splitString("a,b,c", ",", HashSet::new));
+    assertEquals("Empty string should return empty list", new ArrayList<>(),
+        Utils.splitString("", ",", ArrayList::new));
+    assertEquals("Empty segments should be ignored", new ArrayList<>(Arrays.asList("a", "b-extra", "c")),
+        Utils.splitString(",a,,b-extra,c,,", ",", ArrayList::new));
   }
 
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";

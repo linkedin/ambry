@@ -74,6 +74,7 @@ class SimpleOperationTracker implements OperationTracker {
   protected int inflightCount = 0;
   protected int succeededCount = 0;
   protected int failedCount = 0;
+  protected int disabledCount = 0;
 
   // How many NotFound responses from originating dc will terminate the operation.
   // It's decided by the success target of each mutation operations, including put, delete, update ttl etc.
@@ -81,6 +82,8 @@ class SimpleOperationTracker implements OperationTracker {
   protected int originatingDcNotFoundCount = 0;
 
   private final OpTrackerIterator otIterator;
+  private final RouterOperation routerOperation;
+  private final RouterConfig routerConfig;
   private Iterator<ReplicaId> replicaIterator;
   private static final Logger logger = LoggerFactory.getLogger(SimpleOperationTracker.class);
 
@@ -120,6 +123,8 @@ class SimpleOperationTracker implements OperationTracker {
     boolean crossColoEnabled = false;
     boolean includeNonOriginatingDcReplicas = true;
     int numOfReplicasRequired = Integer.MAX_VALUE;
+    this.routerConfig = routerConfig;
+    this.routerOperation = routerOperation;
     datacenterName = routerConfig.routerDatacenterName;
     List<ReplicaId> eligibleReplicas;
     switch (routerOperation) {
@@ -238,9 +243,29 @@ class SimpleOperationTracker implements OperationTracker {
         routerOperation, successTarget, parallelism, originatingDcNotFoundFailureThreshold);
   }
 
+  /**
+   * The dynamic success target is introduced mainly for following use case:
+   * In the intermediate state of "move replica", when decommission of old replicas is initiated(but hasn't transited to
+   * INACTIVE yet), the PUT requests should be rejected on old replicas. For frontends, they are seeing both old and new
+   * replicas(lets say 3 old and 3 new) and the success target should be 6 - 1 = 5. In the aforementioned scenario, PUT
+   * request failed on 3 old replicas. It seems we should fail whole PUT operation because number of remaining requests
+   * is already less than success target.
+   * From another point of view, however, PUT request is highly likely to succeed on 3 new replicas and we actually
+   * could consider it success without generating "slip put" (which makes PUT latency worse). The reason is, if new PUTs
+   * already succeeded on at least 2 new replicas,  read-after-write should always succeed because frontends are always
+   * able to see new replicas and subsequent READ/DELETE/TtlUpdate request should succeed on at least 2 aforementioned
+   * new replicas.
+   */
   @Override
   public boolean hasSucceeded() {
-    return succeededCount >= successTarget;
+    boolean hasSucceeded;
+    if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget) {
+      hasSucceeded =
+          succeededCount >= Math.max(totalReplicaCount - disabledCount - 1, routerConfig.routerPutSuccessTarget);
+    } else {
+      hasSucceeded = succeededCount >= successTarget;
+    }
+    return hasSucceeded;
   }
 
   @Override
@@ -257,17 +282,28 @@ class SimpleOperationTracker implements OperationTracker {
   @Override
   public void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState) {
     inflightCount--;
-    if (trackedRequestFinalState == TrackedRequestFinalState.SUCCESS) {
-      succeededCount++;
-    } else {
-      failedCount++;
-      // NOT_FOUND is a special error. When tracker sees >= numReplicasInOriginatingDc - 1 "NOT_FOUND" from the
-      // originating DC, we can be sure the operation will end up with a NOT_FOUND error.
-      if (trackedRequestFinalState == TrackedRequestFinalState.NOT_FOUND && replicaId.getDataNodeId()
-          .getDatacenterName()
-          .equals(originatingDcName)) {
-        originatingDcNotFoundCount++;
-      }
+    switch (trackedRequestFinalState) {
+      case SUCCESS:
+        succeededCount++;
+        break;
+      // Request disabled may happen when PUT/DELETE/TTLUpdate requests attempt to perform on replicas that are being
+      // decommissioned (i.e STANDBY -> INACTIVE). This is because decommission may take some time and frontends still
+      // hold old view. Aforementioned requests are rejected by server with Temporarily_Disabled error. For DELETE/TTLUpdate,
+      // even though we may receive such errors, the success target is still same(=2). For PUT, we have to adjust the
+      // success target (quorum) to let some PUT operations (with at least 2 requests succeeded on new replicas) succeed.
+      // Currently, disabledCount only applies to PUT operation.
+      case REQUEST_DISABLED:
+        disabledCount++;
+        break;
+      default:
+        failedCount++;
+        // NOT_FOUND is a special error. When tracker sees >= numReplicasInOriginatingDc - 1 "NOT_FOUND" from the
+        // originating DC, we can be sure the operation will end up with a NOT_FOUND error.
+        if (trackedRequestFinalState == TrackedRequestFinalState.NOT_FOUND && replicaId.getDataNodeId()
+            .getDatacenterName()
+            .equals(originatingDcName)) {
+          originatingDcNotFoundCount++;
+        }
     }
   }
 
@@ -313,7 +349,14 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   private boolean hasFailed() {
-    return (totalReplicaCount - failedCount) < successTarget || hasFailedOnNotFound();
+    boolean hasFailed;
+    if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget) {
+      hasFailed = totalReplicaCount - failedCount < Math.max(totalReplicaCount - 1,
+          routerConfig.routerPutSuccessTarget + disabledCount);
+    } else {
+      hasFailed = (totalReplicaCount - failedCount) < successTarget || hasFailedOnNotFound();
+    }
+    return hasFailed;
   }
 
   /**
@@ -321,6 +364,20 @@ class SimpleOperationTracker implements OperationTracker {
    */
   public int getSuccessTarget() {
     return successTarget;
+  }
+
+  /**
+   * @return the number of requests that are temporarily disabled on certain replicas.
+   */
+  int getDisabledCount() {
+    return disabledCount;
+  }
+
+  /**
+   * @return current failed count in this tracker
+   */
+  int getFailedCount() {
+    return failedCount;
   }
 
   /**

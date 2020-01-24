@@ -16,6 +16,8 @@ package com.github.ambry.commons;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Queue;
@@ -31,6 +33,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * retrieved and resolved by an external thread.
  */
 public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
+  private static final ByteBuffer EMPTY_BYTE_BUFFER = ByteBuffer.allocate(0);
 
   /**
    * List of events of interest to the consumer of the content in this channel.
@@ -47,7 +50,7 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
      * Called when an event of the given type completes within this channel.
      * @param e the {@link EventType} of the event that completed.
      */
-    public void onEvent(EventType e);
+    void onEvent(EventType e);
   }
 
   private final LinkedBlockingQueue<ChunkData> chunks = new LinkedBlockingQueue<ChunkData>();
@@ -80,6 +83,21 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    */
   @Override
   public Future<Long> write(ByteBuffer src, Callback<Long> callback) {
+    if (src == null) {
+      throw new IllegalArgumentException("Source buffer cannot be null");
+    }
+    return write(Unpooled.wrappedBuffer(src), callback);
+  }
+
+  /**
+   * If the channel is open, simply queues the buffer to be handled later.
+   * @param src the data that needs to be written to the channel.
+   * @param callback the {@link Callback} that will be invoked once the write succeeds/fails. This can be null.
+   * @return a {@link Future} that will eventually contain the result of the write operation.
+   * @throws IllegalArgumentException if {@code src} is null.
+   */
+  @Override
+  public Future<Long> write(ByteBuf src, Callback<Long> callback) {
     if (src == null) {
       throw new IllegalArgumentException("Source buffer cannot be null");
     }
@@ -123,11 +141,11 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    * @throws InterruptedException if the wait for a chunk is interrupted.
    */
   public ByteBuffer getNextChunk() throws InterruptedException {
-    ByteBuffer chunkBuf = null;
-    if (isOpen()) {
-      chunkBuf = getChunkBuffer(chunks.take());
+    ByteBuf chunkBuf = getNextByteBuf();
+    if (chunkBuf == null) {
+      return null;
     }
-    return chunkBuf;
+    return convertToByteBuffer(chunkBuf);
   }
 
   /**
@@ -142,9 +160,71 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    * @throws InterruptedException if the wait for a chunk is interrupted.
    */
   public ByteBuffer getNextChunk(long timeoutInMs) throws InterruptedException {
-    ByteBuffer chunkBuf = null;
+    ByteBuf chunkBuf = getNextByteBuf(timeoutInMs);
+    if (chunkBuf == null) {
+      return null;
+    }
+    return convertToByteBuffer(chunkBuf);
+  }
+
+  /**
+   * Convert the {@link ByteBuf} to a {@link ByteBuffer}. It will change the {@link ByteBuf#readerIndex()} for the given
+   * {@code buf}.
+   * @param buf The {@link ByteBuf}'s data that would be converted to a {@link ByteBuffer}.
+   * @return A {@link ByteBuffer} that contains the same data as the given {@code buf}.
+   */
+  private ByteBuffer convertToByteBuffer(ByteBuf buf) {
+    if (buf == null) {
+      return null;
+    }
+    int bufferCount = buf.nioBufferCount();
+    switch (bufferCount) {
+      case 0:
+        return EMPTY_BYTE_BUFFER;
+      case 1:
+        ByteBuffer buffer = buf.nioBuffer();
+        buf.readerIndex(buf.readerIndex() + buf.readableBytes());
+        return buffer;
+      default:
+        ByteBuffer byteBuffer = ByteBuffer.allocate(buf.readableBytes());
+        buf.readBytes(byteBuffer);
+        byteBuffer.rewind();
+        return byteBuffer;
+    }
+  }
+
+  /**
+   * Gets the next chunk of data as a {@link ByteBuf} when it is available.
+   * <p/>
+   * If the channel is not closed, this function blocks until the next chunk is available. Once the channel is closed,
+   * this function starts returning {@code null}.
+   * @return a {@link ByteBuf} representing the next chunk of data if the channel is not closed. {@code null} if the
+   *         channel is closed.
+   * @throws InterruptedException if the wait for a chunk is interrupted.
+   */
+  public ByteBuf getNextByteBuf() throws InterruptedException {
+    ByteBuf chunkBuf = null;
     if (isOpen()) {
-      chunkBuf = getChunkBuffer(chunks.poll(timeoutInMs, TimeUnit.MILLISECONDS));
+      chunkBuf = getChunkBuf(chunks.take());
+    }
+    return chunkBuf;
+  }
+
+  /**
+   * Gets the next chunk of data as a {@link ByteBuf}.
+   * <p/>
+   * If the channel is not closed, this function waits for {@code timeoutInMs} ms for a chunk. If the channel is closed
+   * or if {@code timeoutInMs} expires, this function returns {@code null}.
+   * @param timeoutInMs the time in ms to wait for a chunk.
+   * @return a {@link ByteBuf} representing the next chunk of data if the channel is not closed and a chunk becomes
+   *          available within {@code timeoutInMs}. {@code null} if the channel is closed or if {@code timeoutInMs}
+   *          expires.
+   * @throws InterruptedException if the wait for a chunk is interrupted.
+   */
+  public ByteBuf getNextByteBuf(long timeoutInMs) throws InterruptedException {
+    ByteBuf chunkBuf = null;
+    if (isOpen()) {
+      chunkBuf = getChunkBuf(chunks.poll(timeoutInMs, TimeUnit.MILLISECONDS));
     }
     return chunkBuf;
   }
@@ -162,14 +242,14 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
   }
 
   /**
-   * Gets the buffer associated with the chunk if there is one. Also updates internal state.
+   * Gets the {@link ByteBuf} associated with the chunk if there is one. Also updates internal state.
    * @param chunkData the data associated with the chunk whose buffer needs to be returned.
    * @return the buffer inside {@code chunkData} if there is one.
    */
-  private ByteBuffer getChunkBuffer(ChunkData chunkData) {
-    ByteBuffer chunkBuf = null;
-    if (chunkData != null && chunkData.buffer != null) {
-      chunkBuf = chunkData.buffer;
+  private ByteBuf getChunkBuf(ChunkData chunkData) {
+    ByteBuf chunkBuf = null;
+    if (chunkData != null && chunkData.buf != null) {
+      chunkBuf = chunkData.buf;
       chunksAwaitingResolution.add(chunkData);
       if (!isOpen()) {
         chunkBuf = null;
@@ -214,20 +294,20 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
     /**
      * The bytes associated with this chunk.
      */
-    public final ByteBuffer buffer;
+    public ByteBuf buf;
 
     private final int startPos;
     private final Callback<Long> callback;
 
     /**
      * Create a new instance of ChunkData with the given parameters.
-     * @param buffer the bytes of data associated with the chunk.
+     * @param buf the bytes of data associated with the chunk.
      * @param callback the {@link Callback} that will be invoked on chunk resolution.
      */
-    private ChunkData(ByteBuffer buffer, Callback<Long> callback) {
-      this.buffer = buffer;
-      if (buffer != null) {
-        startPos = buffer.position();
+    private ChunkData(ByteBuf buf, Callback<Long> callback) {
+      this.buf = buf;
+      if (buf != null) {
+        startPos = buf.readerIndex();
       } else {
         startPos = 0;
       }
@@ -240,8 +320,8 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
      * @param exception the reason for chunk handling failure.
      */
     private void resolveChunk(Exception exception) {
-      if (buffer != null) {
-        long bytesWritten = buffer.position() - startPos;
+      if (buf != null) {
+        long bytesWritten = buf.readerIndex() - startPos;
         future.done(bytesWritten, exception);
         if (callback != null) {
           callback.onCompletion(bytesWritten, exception);

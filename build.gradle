@@ -110,13 +110,18 @@ subprojects {
     allTest.dependsOn test
     allTest.dependsOn intTest
 
-    task testJar(type: Jar) {
+    task testJar(type: Jar, dependsOn: testClasses) {
         from sourceSets.test.output
         classifier = 'test'
     }
 
     artifacts {
         archives testJar
+    }
+
+    if (!project.hasProperty('disableShipkit')) {
+        // add test jars to maven publication if using shipkit
+        publishing.publications.javaLibrary.artifact testJar
     }
 
     javadoc {
@@ -163,6 +168,7 @@ project(':ambry-account') {
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
+        testCompile "com.google.jimfs:jimfs:$jimFsVersion"
     }
 }
 
@@ -215,6 +221,7 @@ project(':ambry-server') {
                 project(':ambry-commons'),
                 project(':ambry-store'),
                 project(':ambry-utils'),
+                project(':ambry-rest'),
                 project(':ambry-replication')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
@@ -269,6 +276,7 @@ project(':ambry-replication') {
         testCompile project(':ambry-commons').sourceSets.test.output
         testCompile project(':ambry-messageformat').sourceSets.test.output
         testCompile project(':ambry-store').sourceSets.main.output
+        testCompile project(':ambry-store').sourceSets.test.output
     }
 }
 

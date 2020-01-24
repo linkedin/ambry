@@ -47,6 +47,7 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -380,15 +381,14 @@ class StatsManager {
         // no matter this is an existing replica or new added one, it should be present in storage manager because new
         // replica is added into storage manager first.
         throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
-            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+            ReplicaNotFound);
       }
       if (!partitionToReplicaMap.containsKey(replica.getPartitionId())) {
         // if replica is not present in partitionToReplicaMap, it means this new replica was just added into storage
         // manager. Here we add it into stats manager accordingly.
         logger.info("Didn't find replica {} in stats manager, starting to add it.", partitionName);
         if (!addReplica(replica)) {
-          throw new StateTransitionException("Failed to add new replica into stats manager",
-              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+          throw new StateTransitionException("Failed to add new replica into stats manager", ReplicaOperationFailure);
         }
       }
     }
@@ -408,6 +408,18 @@ class StatsManager {
     @Override
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
+          partitionName);
+    }
+
+    @Override
+    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+      logger.info("Partition state change notification from Standby to Inactive received for partition {}",
+          partitionName);
+    }
+
+    @Override
+    public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+      logger.info("Partition state change notification from Inactive to Offline received for partition {}",
           partitionName);
     }
   }

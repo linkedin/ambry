@@ -32,7 +32,7 @@ import org.json.JSONException;
  * A tool to generate accounts for existing service IDs. Each account will share its name with the provided service ID
  * and contain two containers, a default public and a default private container. These containers are meant to mirror
  * the existing concept of private and public blobs and will be assigned accordingly by
- * {@link com.github.ambry.frontend.AmbryBlobStorageService} when making POST requests with the service ID based API.
+ * {@link com.github.ambry.frontend.FrontendRestRequestService} when making POST requests with the service ID based API.
  */
 public class ServiceIdAccountGenTool {
 

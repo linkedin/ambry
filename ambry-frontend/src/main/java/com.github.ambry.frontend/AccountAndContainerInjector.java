@@ -138,7 +138,7 @@ public class AccountAndContainerInjector {
     Account targetAccount = (Account) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
     Container targetContainer = (Container) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
     if (targetAccount == null || targetContainer == null) {
-      throw new RestServiceException("Account and container were not injected by BlobStorageService",
+      throw new RestServiceException("Account and container were not injected by RestRequestService",
           RestServiceErrorCode.InternalServerError);
     } else if (targetAccount.getId() == Account.UNKNOWN_ACCOUNT_ID) {
       // This should only occur for V1 blobs, where the blob ID does not contain the actual account and container IDs.

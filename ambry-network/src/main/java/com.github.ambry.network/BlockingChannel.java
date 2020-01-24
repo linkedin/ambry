@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.config.ConnectionPoolConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -39,16 +40,29 @@ public class BlockingChannel implements ConnectedChannel {
   protected boolean connected = false;
   protected InputStream readChannel = null;
   protected WritableByteChannel writeChannel = null;
+  protected boolean enableTcpNoDelay;
   private Socket socket = null;
 
   public BlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs,
-      int connectTimeoutMs) {
+      int connectTimeoutMs, boolean enableTcpNoDelay) {
     this.host = host;
     this.port = port;
     this.readBufferSize = readBufferSize;
     this.writeBufferSize = writeBufferSize;
     this.readTimeoutMs = readTimeoutMs;
     this.connectTimeoutMs = connectTimeoutMs;
+    this.enableTcpNoDelay = enableTcpNoDelay;
+  }
+
+  public BlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs,
+      int connectTimeoutMs) {
+    this(host, port, readBufferSize, writeBufferSize, readTimeoutMs, connectTimeoutMs, true);
+  }
+
+  public BlockingChannel(String host, int port, ConnectionPoolConfig config) {
+    this(host, port, config.connectionPoolReadBufferSizeBytes, config.connectionPoolWriteBufferSizeBytes,
+        config.connectionPoolReadTimeoutMs, config.connectionPoolConnectTimeoutMs,
+        config.connectionPoolSocketEnableTcpNoDelay);
   }
 
   /**
@@ -56,6 +70,7 @@ public class BlockingChannel implements ConnectedChannel {
    *
    * @throws IOException
    */
+  @Override
   public void connect() throws IOException {
     synchronized (this) {
       if (!connected) {
@@ -89,7 +104,7 @@ public class BlockingChannel implements ConnectedChannel {
     }
     tcpSocket.setSoTimeout(readTimeoutMs);
     tcpSocket.setKeepAlive(true);
-    tcpSocket.setTcpNoDelay(true);
+    tcpSocket.setTcpNoDelay(enableTcpNoDelay);
     tcpSocket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
 
     logger.debug("Created socket with SO_TIMEOUT = {} (requested {}), "
@@ -102,6 +117,7 @@ public class BlockingChannel implements ConnectedChannel {
     /**
      * Disconnect readChannel, writeChannel and close underlying Socket
      */
+    @Override
     public void disconnect() {
     synchronized (this) {
       try {

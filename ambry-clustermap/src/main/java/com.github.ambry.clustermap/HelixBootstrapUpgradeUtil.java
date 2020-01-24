@@ -329,7 +329,7 @@ class HelixBootstrapUpgradeUtil {
     } else {
       staticClusterMap = (new StaticClusterAgentsFactory(clusterMapConfig, new PartitionLayout(
           new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)), clusterMapConfig),
-          null))).getClusterMap();
+          clusterMapConfig))).getClusterMap();
     }
     String clusterNameInStaticClusterMap = staticClusterMap.partitionLayout.getClusterName();
     clusterName = clusterNamePrefix + clusterNameInStaticClusterMap;

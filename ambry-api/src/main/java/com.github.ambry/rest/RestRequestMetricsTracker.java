@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *    {@link RestRequestMetrics} (metrics) object associated with the tracker tracks "unknown" requests.
  * 3. As the request passes through the NIO framework and the scaling framework, metrics associated with these layers
  *    are tracked and stored but not updated in the metrics object.
- * 4. When the request reaches the {@link BlobStorageService}, it is usually identified as a specific type and a custom
+ * 4. When the request reaches the {@link RestRequestService}, it is usually identified as a specific type and a custom
  *    metrics object that tracks that specific type of request is "injected" into the tracker associated with the
  *    request.
  * 5. When the response for the request is complete and the request is "closed", the metrics that are stored are
@@ -124,7 +124,7 @@ public class RestRequestMetricsTracker {
 
   /**
    * Helper for updating scaling related metrics. These metrics are updated in the classes that provide scaling
-   * capabilities when transferring control from {@link NioServer} to {@link BlobStorageService}.
+   * capabilities when transferring control from {@link NioServer} to {@link RestRequestService}.
    */
   public static class ScalingMetricsTracker {
     private final AtomicLong requestProcessingTimeInMs = new AtomicLong(0);
@@ -248,6 +248,7 @@ public class RestRequestMetricsTracker {
     if (metrics != null) {
       if (metricsRecorded.compareAndSet(false, true)) {
         metrics.operationRate.mark();
+        metrics.operationCount.inc();
         metrics.nioRequestProcessingTimeInMs.update(nioMetricsTracker.requestProcessingTimeInMs.get());
         metrics.nioResponseProcessingTimeInMs.update(nioMetricsTracker.responseProcessingTimeInMs.get());
         metrics.nioRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);

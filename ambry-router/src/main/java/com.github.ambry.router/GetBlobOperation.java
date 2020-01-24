@@ -241,6 +241,7 @@ class GetBlobOperation extends GetOperation {
    */
   @Override
   void handleResponse(ResponseInfo responseInfo, GetResponse getResponse) {
+    responseInfo.touch(blobId);
     GetChunk getChunk = correlationIdToGetChunk.remove(
         ((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
     getChunk.handleResponse(responseInfo, getResponse);
@@ -432,8 +433,6 @@ class GetBlobOperation extends GetOperation {
      */
     void completeRead() {
       if (readIntoCallbackCalled.compareAndSet(false, true)) {
-        chunkIndexToResponseInfo.values().forEach(ResponseInfo::release);
-        chunkIndexToResponseInfo.clear();
         Exception e = operationException.get();
         readIntoFuture.done(bytesWritten.get(), e);
         if (readIntoCallback != null) {
@@ -449,6 +448,12 @@ class GetBlobOperation extends GetOperation {
           routerMetrics.getEncryptedBlobOperationTotalTimeMs.update(totalTime);
         } else {
           routerMetrics.getBlobOperationTotalTimeMs.update(totalTime);
+        }
+        for (Integer key : chunkIndexToResponseInfo.keySet()) {
+          ResponseInfo response = chunkIndexToResponseInfo.remove(key);
+          if (response != null) {
+            response.release();
+          }
         }
       }
       operationCompleted = true;
@@ -1364,16 +1369,19 @@ class GetBlobOperation extends GetOperation {
       }
       if (!rangeResolutionFailure) {
         chunkIdIterator = null;
+        numChunksTotal = 0;
         dataChunks = null;
-        chunkIndex = 0;
-        numChunksTotal = 1;
-        ByteBuffer dataBuffer = blobData.getStream().getByteBuffer();
-        responseInfo.retain();
-        chunkIndexToResponseInfo.put(0, responseInfo);
-        boolean launchedJob = maybeLaunchCryptoJob(dataBuffer, userMetadata, encryptionKey, blobId);
-        if (!launchedJob) {
-          chunkIndexToBuffer.put(0, filterChunkToRange(dataBuffer));
-          numChunksRetrieved = 1;
+        if (!options.getChunkIdsOnly) {
+          chunkIndex = 0;
+          numChunksTotal = 1;
+          ByteBuffer dataBuffer = blobData.getStream().getByteBuffer();
+          responseInfo.retain();
+          chunkIndexToResponseInfo.put(0, responseInfo);
+          boolean launchedJob = maybeLaunchCryptoJob(dataBuffer, userMetadata, encryptionKey, blobId);
+          if (!launchedJob) {
+            chunkIndexToBuffer.put(0, filterChunkToRange(dataBuffer));
+            numChunksRetrieved = 1;
+          }
         }
       }
     }

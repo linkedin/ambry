@@ -18,18 +18,18 @@ package com.github.ambry.config;
  */
 public class RestServerConfig {
   /**
-   * The BlobStorageServiceFactory that needs to be used by the RestServer
-   * for bootstrapping the BlobStorageService.
+   * The RestRequestServiceFactory that needs to be used by the RestServer
+   * for bootstrapping the RestRequestService.
    */
-  @Config("rest.server.blob.storage.service.factory")
-  public final String restServerBlobStorageServiceFactory;
+  @Config("rest.server.rest.request.service.factory")
+  public final String restServerRestRequestServiceFactory;
 
   /**
-   * The NioServerFactory that needs to be used by the RestServer for
-   * bootstrapping the NioServer
+   * The NioServerFactory that needs to be used by the RestServer or AmbryServer for
+   * bootstrapping the Frontend NioServer or Storage Node HTTP2 Server.
    */
   @Config("rest.server.nio.server.factory")
-  @Default("com.github.ambry.rest.NettyServerFactory")
+  @Default("com.github.ambry.rest.FrontendNettyFactory")
   public final String restServerNioServerFactory;
 
   /**
@@ -40,12 +40,12 @@ public class RestServerConfig {
   public final int restServerRequestHandlerScalingUnitCount;
 
   /**
-   * The RestRequestHandlerFactory that needs to be used by the RestServer
-   * for bootstrapping the RestRequestHandler
+   * The RequestResponseHandlerFactory that needs to be used by the RestServer or AmbryServer HTTP2
+   * for bootstrapping the RestRequestHandler and RestResponseHandler
    */
-  @Config("rest.server.request.handler.factory")
+  @Config("rest.server.request.response.handler.factory")
   @Default("com.github.ambry.rest.AsyncRequestResponseHandlerFactory")
-  public final String restServerRequestHandlerFactory;
+  public final String restServerRequestResponseHandlerFactory;
 
   /**
    * The number of scaling units in RestResponseHandler handle responses.
@@ -55,15 +55,7 @@ public class RestServerConfig {
   public final int restServerResponseHandlerScalingUnitCount;
 
   /**
-   * The RestResponseHandlerFactory that needs to be used by the RestServer
-   * for bootstrapping the RestResponseHandler.
-   */
-  @Config("rest.server.response.handler.factory")
-  @Default("com.github.ambry.rest.AsyncRequestResponseHandlerFactory")
-  public final String restServerResponseHandlerFactory;
-
-  /**
-   * The AccountServiceFactory that needs to be used by AmbryBlobStorageService to get account-related information.
+   * The AccountServiceFactory that needs to be used by FrontendRestRequestService to get account-related information.
    */
   @Config("rest.server.account.service.factory")
   @Default("com.github.ambry.account.InMemoryUnknownAccountServiceFactory")
@@ -99,17 +91,15 @@ public class RestServerConfig {
   public final String restServerHealthCheckUri;
 
   public RestServerConfig(VerifiableProperties verifiableProperties) {
-    restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory");
+    restServerRestRequestServiceFactory = verifiableProperties.getString("rest.server.rest.request.service.factory");
     restServerNioServerFactory =
-        verifiableProperties.getString("rest.server.nio.server.factory", "com.github.ambry.rest.NettyServerFactory");
+        verifiableProperties.getString("rest.server.nio.server.factory", "com.github.ambry.rest.FrontendNettyFactory");
     restServerRequestHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.request.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
-    restServerRequestHandlerFactory = verifiableProperties.getString("rest.server.request.handler.factory",
+    restServerRequestResponseHandlerFactory = verifiableProperties.getString("rest.server.request.response.handler.factory",
         "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerResponseHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.response.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
-    restServerResponseHandlerFactory = verifiableProperties.getString("rest.server.response.handler.factory",
-        "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerAccountServiceFactory = verifiableProperties.getString("rest.server.account.service.factory",
         "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
     restServerRouterFactory = verifiableProperties.getString("rest.server.router.factory",

@@ -25,7 +25,7 @@ import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ServerConfig;
-import com.github.ambry.network.Request;
+import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
 import com.github.ambry.notification.NotificationSystem;
@@ -101,7 +101,7 @@ public class AmbryServerRequests extends AmbryRequests {
   }
 
   @Override
-  public void handleRequests(Request request) throws InterruptedException {
+  public void handleRequests(NetworkRequest request) throws InterruptedException {
     try {
       DataInputStream stream = new DataInputStream(request.getInputStream());
       RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
@@ -202,7 +202,7 @@ public class AmbryServerRequests extends AmbryRequests {
    * @throws IOException if there are I/O errors carrying our the required operation.
    */
   @Override
-  public void handleAdminRequest(Request request) throws InterruptedException, IOException {
+  public void handleAdminRequest(NetworkRequest request) throws InterruptedException, IOException {
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();
@@ -436,7 +436,7 @@ public class AmbryServerRequests extends AmbryRequests {
           break;
         default:
           throw new IllegalArgumentException(
-              "Request type not supported: " + blobStoreControlAdminRequest.getStoreControlAction());
+              "NetworkRequest type not supported: " + blobStoreControlAdminRequest.getStoreControlAction());
       }
     } else {
       error = ServerErrorCode.Bad_Request;

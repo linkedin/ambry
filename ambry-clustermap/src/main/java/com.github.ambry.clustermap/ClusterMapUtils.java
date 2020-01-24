@@ -21,9 +21,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -254,26 +256,47 @@ public class ClusterMapUtils {
   }
 
   /**
-   * Validate plainTextPort and sslPort.
+   * Validate plainTextPort, sslPort and http2Port.
    * @param plainTextPort PlainText {@link Port}.
    * @param sslPort SSL {@link Port}.
+   * @param http2Port HTTP2 SSL {@link Port}.
+   * @param sslRequired if ssl encrypted port needed.
    * @throws IllegalArgumentException if ports are not valid.
    */
-  public static void validatePorts(Port plainTextPort, Port sslPort, boolean sslPortRequired) {
-    if (sslPort != null) {
-      if (sslPort.getPort() == plainTextPort.getPort()) {
-        throw new IllegalArgumentException("Same port number for both plain and ssl ports");
-      }
-      if (sslPort.getPort() < MIN_PORT || sslPort.getPort() > MAX_PORT) {
-        throw new IllegalArgumentException(
-            "SSL Port " + plainTextPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
-      }
-    } else if (sslPortRequired) {
-      throw new IllegalArgumentException("No SSL port to a datanode to which SSL is enabled.");
+  public static void validatePorts(Port plainTextPort, Port sslPort, Port http2Port, boolean sslRequired) {
+    if (sslRequired && sslPort == null && http2Port == null) {
+      throw new IllegalArgumentException("No SSL port to a data node to which SSL is enabled.");
     }
+
     if (plainTextPort.getPort() < MIN_PORT || plainTextPort.getPort() > MAX_PORT) {
       throw new IllegalArgumentException(
           "PlainText Port " + plainTextPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
+    }
+    if (sslRequired == false) {
+      return;
+    }
+    // check ports duplication
+    Set<Integer> ports = new HashSet<Integer>();
+    ports.add(plainTextPort.getPort());
+
+    if (sslPort != null) {
+      if (sslPort.getPort() < MIN_PORT || sslPort.getPort() > MAX_PORT) {
+        throw new IllegalArgumentException(
+            "SSL Port " + sslPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
+      }
+      if (!ports.add(sslPort.getPort())) {
+        throw new IllegalArgumentException("Port number duplication found. " + ports);
+      }
+    }
+
+    if (http2Port != null) {
+      if (http2Port.getPort() < MIN_PORT || http2Port.getPort() > MAX_PORT) {
+        throw new IllegalArgumentException(
+            "HTTP2 Port " + http2Port.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
+      }
+      if (!ports.add(http2Port.getPort())) {
+        throw new IllegalArgumentException("Port number duplication found. " + ports);
+      }
     }
   }
 
@@ -341,6 +364,7 @@ public class ClusterMapUtils {
    * Not thread safe.
    */
   static class PartitionSelectionHelper {
+    private final int minimumLocalReplicaCount;
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
     private Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas;
@@ -349,10 +373,13 @@ public class ClusterMapUtils {
     /**
      * @param allPartitions the list of all {@link PartitionId}s
      * @param localDatacenterName the name of the local datacenter. Can be null if datacenter specific replica counts
-     *                            are not required.
+     * @param minimumLocalReplicaCount the minimum number of replicas in local datacenter. This is used when selecting
+     *                                 writable partitions.
      */
-    PartitionSelectionHelper(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
+    PartitionSelectionHelper(Collection<? extends PartitionId> allPartitions, String localDatacenterName,
+        int minimumLocalReplicaCount) {
       this.localDatacenterName = localDatacenterName;
+      this.minimumLocalReplicaCount = minimumLocalReplicaCount;
       updatePartitions(allPartitions, localDatacenterName);
     }
 
@@ -364,6 +391,7 @@ public class ClusterMapUtils {
      */
     void updatePartitions(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
       this.allPartitions = allPartitions;
+      // todo when new partitions added into clustermap, dynamically update these two maps.
       partitionIdsByClassAndLocalReplicaCount = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
       partitionIdToLocalReplicas = new HashMap<>();
       for (PartitionId partition : allPartitions) {
@@ -432,7 +460,6 @@ public class ClusterMapUtils {
     PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
       PartitionId anyWritablePartition = null;
       List<PartitionId> partitionsInClass = getPartitionsInClass(partitionClass, true);
-
       int workingSize = partitionsInClass.size();
       while (workingSize > 0) {
         int randomIndex = ThreadLocalRandom.current().nextInt(workingSize);
@@ -487,20 +514,23 @@ public class ClusterMapUtils {
      * Returns the partitions belonging to the {@code partitionClass}. Returns all partitions if {@code partitionClass}
      * is {@code null}.
      * @param partitionClass the class of the partitions desired.
-     * @param highestReplicaCountOnly if {@code true}, returns only the partitions with the highest number of replicas
-     *                                in the local datacenter.
+     * @param minimumReplicaCountRequired if {@code true}, returns only the partitions with the number of replicas in
+     *                                    local datacenter that is larger than or equal to minimum required count.
      * @return the partitions belonging to the {@code partitionClass}. Returns all partitions if {@code partitionClass}
      * is {@code null}.
      */
-    private List<PartitionId> getPartitionsInClass(String partitionClass, boolean highestReplicaCountOnly) {
+    private List<PartitionId> getPartitionsInClass(String partitionClass, boolean minimumReplicaCountRequired) {
       List<PartitionId> toReturn = new ArrayList<>();
       if (partitionClass == null) {
         toReturn.addAll(allPartitions);
       } else if (partitionIdsByClassAndLocalReplicaCount.containsKey(partitionClass)) {
         SortedMap<Integer, List<PartitionId>> partitionsByReplicaCount =
             partitionIdsByClassAndLocalReplicaCount.get(partitionClass);
-        if (highestReplicaCountOnly) {
-          toReturn.addAll(partitionsByReplicaCount.get(partitionsByReplicaCount.lastKey()));
+        if (minimumReplicaCountRequired) {
+          // get partitions with replica count >= min replica count specified in ClusterMapConfig
+          for (List<PartitionId> partitionIds : partitionsByReplicaCount.tailMap(minimumLocalReplicaCount).values()) {
+            toReturn.addAll(partitionIds);
+          }
         } else {
           for (List<PartitionId> partitionIds : partitionIdsByClassAndLocalReplicaCount.get(partitionClass).values()) {
             toReturn.addAll(partitionIds);

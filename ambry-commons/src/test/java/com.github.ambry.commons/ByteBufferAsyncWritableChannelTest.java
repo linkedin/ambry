@@ -15,14 +15,20 @@ package com.github.ambry.commons;
 
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.CompositeByteBuf;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -32,6 +38,18 @@ import static org.junit.Assert.*;
  * Unit tests for {@link ByteBufferAsyncWritableChannel}.
  */
 public class ByteBufferAsyncWritableChannelTest {
+
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
 
   @Test
   public void commonCaseTest() throws Exception {
@@ -61,6 +79,38 @@ public class ByteBufferAsyncWritableChannelTest {
     assertFalse("Channel is still open", channel.isOpen());
     assertNull("There should have been no chunk returned", channel.getNextChunk());
     assertNull("There should have been no chunk returned", channel.getNextChunk(0));
+  }
+
+  @Test
+  public void commonCaseTestForNettyByteBuf() throws Exception {
+    for (boolean useCompositeByteBuf : Arrays.asList(false, true)) {
+      ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
+      assertTrue("Channel is not open", channel.isOpen());
+      assertNull("There should have been no chunk returned", channel.getNextChunk(0));
+      ChannelWriter channelWriter = new ChannelWriter(channel, true, useCompositeByteBuf);
+      channelWriter.writeToChannel(10);
+
+      int chunkCount = 0;
+      ByteBuf chunk = channel.getNextByteBuf();
+      while (chunk != null) {
+        WriteData writeData = channelWriter.writes.get(chunkCount);
+        int chunkSize = chunk.readableBytes();
+        byte[] writtenChunk = writeData.writtenChunk;
+        byte[] readChunk = new byte[writtenChunk.length];
+        chunk.readBytes(readChunk);
+        assertArrayEquals("Data unequal", writtenChunk, readChunk);
+        channel.resolveOldestChunk(null);
+        assertEquals("Unexpected write size (future)", chunkSize, writeData.future.get().longValue());
+        assertEquals("Unexpected write size (callback)", chunkSize, writeData.writeCallback.bytesWritten);
+        chunkCount++;
+        chunk = channel.getNextByteBuf(0);
+      }
+      assertEquals("Mismatch in number of ByteBufs", channelWriter.writes.size(), chunkCount);
+      channel.close();
+      assertFalse("Channel is still open", channel.isOpen());
+      assertNull("There should have been no ByteBuf returned", channel.getNextByteBuf());
+      assertNull("There should have been no ByteBuf returned", channel.getNextByteBuf(0));
+    }
   }
 
   @Test
@@ -116,7 +166,7 @@ public class ByteBufferAsyncWritableChannelTest {
     // null input.
     ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     try {
-      channel.write(null, null);
+      channel.write((ByteBuffer) null, null);
       fail("Write should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -225,9 +275,21 @@ class ChannelWriter {
   public final List<WriteData> writes = new ArrayList<WriteData>();
   private final ByteBufferAsyncWritableChannel channel;
   private final Random random = new Random();
+  private final boolean useNettyByteBuf;
+  private final boolean useCompositeByteBuf;
 
   public ChannelWriter(ByteBufferAsyncWritableChannel channel) {
+    this(channel, false, false);
+  }
+
+  public ChannelWriter(ByteBufferAsyncWritableChannel channel, boolean useNettyByteBuf) {
+    this(channel, useNettyByteBuf, false);
+  }
+
+  public ChannelWriter(ByteBufferAsyncWritableChannel channel, boolean useNettyByteBuf, boolean useCompositeByteBuf) {
     this.channel = channel;
+    this.useNettyByteBuf = useNettyByteBuf;
+    this.useCompositeByteBuf = useCompositeByteBuf;
   }
 
   /**
@@ -239,8 +301,31 @@ class ChannelWriter {
       WriteCallback writeCallback = new WriteCallback(i);
       byte[] data = new byte[100];
       random.nextBytes(data);
-      ByteBuffer chunk = ByteBuffer.wrap(data);
-      Future<Long> future = channel.write(chunk, writeCallback);
+      Future<Long> future = null;
+      if (useNettyByteBuf) {
+        ByteBuf chunk = null;
+        if (!useCompositeByteBuf) {
+          chunk = ByteBufAllocator.DEFAULT.heapBuffer(data.length);
+          chunk.writeBytes(data);
+        } else {
+          CompositeByteBuf composite = new CompositeByteBuf(ByteBufAllocator.DEFAULT, false, 100);
+          ByteBuf c = ByteBufAllocator.DEFAULT.heapBuffer(50);
+          c.writeBytes(data, 0, 50);
+          composite.addComponent(true, c);
+          c = ByteBufAllocator.DEFAULT.heapBuffer(50);
+          c.writeBytes(data, 50, 50);
+          composite.addComponent(true, c);
+          chunk = composite;
+        }
+        final ByteBuf finalByteBuf = chunk;
+        future = channel.write(finalByteBuf, (result, exception) -> {
+          finalByteBuf.release();
+          writeCallback.onCompletion(result, exception);
+        });
+      } else {
+        ByteBuffer chunk = ByteBuffer.wrap(data);
+        future = channel.write(chunk, writeCallback);
+      }
       writes.add(new WriteData(data, future, writeCallback));
     }
   }

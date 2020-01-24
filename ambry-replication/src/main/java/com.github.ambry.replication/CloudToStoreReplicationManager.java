@@ -65,7 +65,6 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 public class CloudToStoreReplicationManager extends ReplicationEngine {
   private final ClusterMapConfig clusterMapConfig;
   private final StoreConfig storeConfig;
-  private final StoreManager storeManager;
   private final ClusterSpectator vcrClusterSpectator;
   private final ClusterParticipant clusterParticipant;
   private static final String cloudReplicaTokenFileName = "cloudReplicaTokens";
@@ -101,10 +100,9 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
       ClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
         Collections.emptyList(), connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory,
-        transformerClassName);
+        transformerClassName, clusterParticipant, storeManager);
     this.clusterMapConfig = clusterMapConfig;
     this.storeConfig = storeConfig;
-    this.storeManager = storeManager;
     this.vcrClusterSpectator = vcrClusterSpectator;
     this.clusterParticipant = clusterParticipant;
     this.instanceNameToCloudDataNode = new AtomicReference<>(new ConcurrentHashMap<>());
@@ -216,6 +214,24 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   }
 
   /**
+   * Check if a token is for the given {@link RemoteReplicaInfo} based on partition id.
+   * @param remoteReplicaInfo The remoteReplicaInfo to check.
+   * @param tokenInfo The tokenInfo to check.
+   * @return true if partition id matches. false otherwise.
+   */
+  @Override
+  protected boolean isTokenForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo,
+      RemoteReplicaInfo.ReplicaTokenInfo tokenInfo) {
+    // Note that in case of cloudReplicaTokens, the actual remote vcr node might not match as the vcr node is chosen at
+    // random during initialization. So it's enough to just match the partitionId in the token so that replication
+    // can start from cloud from where it left off.
+    return tokenInfo.getReplicaInfo()
+        .getReplicaId()
+        .getPartitionId()
+        .equals(remoteReplicaInfo.getReplicaId().getPartitionId());
+  }
+
+  /**
    * Remove a replica of given partition and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionName the partition of the replica to removed.
    */
@@ -279,8 +295,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         Port sslPort =
             getSslPortStr(instanceConfig) == null ? null : new Port(getSslPortStr(instanceConfig), PortType.SSL);
         CloudDataNode cloudDataNode = new CloudDataNode(instanceConfig.getHostName(),
-            new Port(Integer.valueOf(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort,
-            clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
+            new Port(Integer.valueOf(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort, null, clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
         newInstanceNameToCloudDataNode.put(instanceName, cloudDataNode);
         newVcrNodes.add(cloudDataNode);
       }
@@ -334,12 +349,14 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeLeaderFromStandby(String partitionName) {
       logger.info("Partition state change notification from Standby to Leader received for partition {}",
           partitionName);
-      synchronized (notificationLock) {
-        try {
-          addCloudReplica(partitionName);
-        } catch (ReplicationException rex) {
-          logger.error("Exception {} while adding replication for partition {}", rex, partitionName);
-          replicationMetrics.addCloudPartitionErrorCount.inc();
+      if (shouldReplicatePartition(partitionName)) {
+        synchronized (notificationLock) {
+          try {
+            addCloudReplica(partitionName);
+          } catch (ReplicationException rex) {
+            logger.error("Exception {} while adding replication for partition {}", rex, partitionName);
+            replicationMetrics.addCloudPartitionErrorCount.inc();
+          }
         }
       }
     }
@@ -348,9 +365,39 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
-      synchronized (notificationLock) {
-        removeCloudReplica(partitionName);
+      if (shouldReplicatePartition(partitionName)) {
+        synchronized (notificationLock) {
+          removeCloudReplica(partitionName);
+        }
       }
+    }
+
+    @Override
+    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+      logger.info("Partition state change notification from Standby to Inactive received for partition {}",
+          partitionName);
+    }
+
+    @Override
+    public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+      logger.info("Partition state change notification from Inactive to Offline received for partition {}",
+          partitionName);
+    }
+
+    /**
+     * If only config specified list of partitions are being replicated from cloud, then check that the partition
+     * belongs to the specified list.
+     * @param partitionName Name of the partition to be checked.
+     * @return true if all the partitions are being replicated or if the partition in the list of partitions to be
+     *         replicated. false otherwise.
+     */
+    private boolean shouldReplicatePartition(String partitionName) {
+      if (!replicationConfig.replicationVcrRecoveryPartitions.isEmpty()
+          && !replicationConfig.replicationVcrRecoveryPartitions.contains(partitionName)) {
+        logger.info("Ignoring state change of partition {} as it is not in recovery partition config", partitionName);
+        return false;
+      }
+      return true;
     }
   }
 }

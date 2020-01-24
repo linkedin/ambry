@@ -13,6 +13,9 @@
  */
 package com.github.ambry.clustermap;
 
+/**
+ * An extension of {@link RuntimeException} used to record exceptions occurred during state transition.
+ */
 public class StateTransitionException extends RuntimeException {
   private static final long serialVersionUID = 1L;
   private final TransitionErrorCode error;
@@ -26,6 +29,11 @@ public class StateTransitionException extends RuntimeException {
     return error;
   }
 
+  /**
+   * All types of error code that associate with {@link StateTransitionException}. The error code is currently used by
+   * tests to determine location of exception. In production environment, if transition exception occurs, the message
+   * together with error code should be recorded in Helix log which helps us investigate failure cause.
+   */
   public enum TransitionErrorCode {
     /**
      * If replica is not present in Helix and not found on current node.
@@ -38,6 +46,18 @@ public class StateTransitionException extends RuntimeException {
     /**
      * If store is not started and unavailable for specific operations.
      */
-    StoreNotStarted
+    StoreNotStarted,
+    /**
+     * If bootstrap process fails at some point for specific replica.
+     */
+    BootstrapFailure,
+    /**
+     * If failure occurs during Standby-To-Inactive transition.
+     */
+    DeactivationFailure,
+    /**
+     * If disconnection process fails on specific replica.
+     */
+    DisconnectionFailure
   }
 }

@@ -13,13 +13,7 @@
 * third party wishes to use custom repositories, or inject certain
 * functionality into the default Gradle build lifecycle.
 */
-if (!project.hasProperty('overrideBuildEnvironment'))
-{
-    // If overrideBuildEnvironment is not set, then just use the default environment.
-    apply from: file('gradle/maven.gradle')
-}
-else
-{
+if (project.hasProperty('overrideBuildEnvironment')) {
     // Otherwise, assume overrideBuildEnvironment defines a path to a file, and apply it.
     apply from: project.overrideBuildEnvironment
 }

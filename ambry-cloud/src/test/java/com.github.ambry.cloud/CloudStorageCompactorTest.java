@@ -100,7 +100,7 @@ public class CloudStorageCompactorTest {
   private List<CloudBlobMetadata> getMetadataList(String partitionId, int numBlobs) {
     List<CloudBlobMetadata> metadataList = new ArrayList<>();
     for (int j = 0; j < numBlobs; j++) {
-      metadataList.add(new CloudBlobMetadata().setPartitionId(partitionId).setCloudBlobName("blob_" + j));
+      metadataList.add(new CloudBlobMetadata().setPartitionId(partitionId).setId("blob_" + j));
     }
     return metadataList;
   }

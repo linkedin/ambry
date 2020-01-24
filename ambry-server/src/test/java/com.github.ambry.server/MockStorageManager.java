@@ -170,6 +170,21 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
+    public boolean isBootstrapInProgress() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isDecommissionInProgress() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void completeBootstrap() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void setCurrentState(ReplicaState state) {
       currentState = state;
     }
@@ -182,6 +197,11 @@ class MockStorageManager extends StorageManager {
     @Override
     public boolean isStarted() {
       return started;
+    }
+
+    @Override
+    public long getEndPositionOfLastPut() throws StoreException {
+      throw new UnsupportedOperationException("Method not supported");
     }
 
     public void shutdown() throws StoreException {

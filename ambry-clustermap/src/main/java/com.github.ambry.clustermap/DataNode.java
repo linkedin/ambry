@@ -94,6 +94,10 @@ class DataNode implements DataNodeId {
       int sslPortNum = jsonObject.getInt("sslport");
       this.ports.put(PortType.SSL, new Port(sslPortNum, PortType.SSL));
     }
+    if (jsonObject.has("http2port")) {
+      int http2PortNum = jsonObject.getInt("http2port");
+      this.ports.put(PortType.HTTP2, new Port(http2PortNum, PortType.HTTP2));
+    }
   }
 
   @Override
@@ -123,6 +127,26 @@ class DataNode implements DataNodeId {
       return ports.get(PortType.SSL).getPort();
     } else {
       throw new IllegalStateException("No SSL port exists for the Data Node " + hostname + ":" + portNum);
+    }
+  }
+
+  @Override
+  public boolean hasHttp2Port() {
+    return ports.containsKey(PortType.HTTP2);
+  }
+
+  /**
+   * Gets the DataNode's HTTP2 port number.
+   *
+   * @return Port number upon which to establish an HTTP2 connection with the DataNodeId.
+   * @throws IllegalStateException Thrown if no HTTP2 port exists.
+   */
+  @Override
+  public int getHttp2Port() {
+    if (hasHttp2Port()) {
+      return ports.get(PortType.HTTP2).getPort();
+    } else {
+      throw new IllegalStateException("No HTTP2 port exists for the Data Node " + hostname + ":" + portNum);
     }
   }
 
@@ -232,7 +256,8 @@ class DataNode implements DataNodeId {
     logger.trace("begin validate.");
     validateDatacenter();
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostname);
-    validatePorts(ports.get(PortType.PLAINTEXT), ports.get(PortType.SSL), ports.containsKey(PortType.SSL));
+    validatePorts(ports.get(PortType.PLAINTEXT), ports.get(PortType.SSL), ports.get(PortType.HTTP2),
+        ports.containsKey(PortType.SSL) || ports.containsKey(PortType.HTTP2));
     for (Disk disk : disks) {
       disk.validate();
     }
@@ -257,6 +282,9 @@ class DataNode implements DataNodeId {
     for (PortType portType : ports.keySet()) {
       if (portType == PortType.SSL) {
         jsonObject.put("sslport", ports.get(portType).getPort());
+      }
+      if (portType == PortType.HTTP2) {
+        jsonObject.put("http2port", ports.get(portType).getPort());
       }
     }
   }

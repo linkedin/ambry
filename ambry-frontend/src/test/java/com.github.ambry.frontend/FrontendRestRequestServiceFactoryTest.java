@@ -20,9 +20,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.BlobStorageService;
-import com.github.ambry.rest.MockRestRequestResponseHandler;
-import com.github.ambry.rest.RestResponseHandler;
+import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.Router;
 import java.util.Properties;
@@ -33,17 +31,17 @@ import static org.junit.Assert.*;
 
 
 /**
- * Unit tests for {@link AmbryBlobStorageServiceFactory}.
+ * Unit tests for {@link FrontendRestRequestServiceFactory}.
  */
-public class AmbryBlobStorageServiceFactoryTest {
+public class FrontendRestRequestServiceFactoryTest {
 
   /**
-   * Tests the instantiation of an {@link AmbryBlobStorageService} instance through the
-   * {@link AmbryBlobStorageServiceFactory}.
+   * Tests the instantiation of an {@link FrontendRestRequestService} instance through the
+   * {@link FrontendRestRequestServiceFactory}.
    * @throws Exception
    */
   @Test
-  public void getAmbryBlobStorageServiceTest() throws Exception {
+  public void getFrontendRestRequestServiceTest() throws Exception {
     // dud properties. server should pick up defaults
     JSONObject jsonObject =
         new JSONObject().put("POST", "http://uploadUrl:15158").put("GET", "http://downloadUrl:15158");
@@ -55,33 +53,31 @@ public class AmbryBlobStorageServiceFactoryTest {
     properties.setProperty("clustermap.host.name", "localhost");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 
-    AmbryBlobStorageServiceFactory ambryBlobStorageServiceFactory =
-        new AmbryBlobStorageServiceFactory(verifiableProperties, new MockClusterMap(),
-            new MockRestRequestResponseHandler(), new InMemoryRouter(verifiableProperties, new MockClusterMap()),
-            new InMemAccountService(false, true));
-    BlobStorageService ambryBlobStorageService = ambryBlobStorageServiceFactory.getBlobStorageService();
-    assertNotNull("No BlobStorageService returned", ambryBlobStorageService);
-    assertEquals("Did not receive an AmbryBlobStorageService instance",
-        AmbryBlobStorageService.class.getCanonicalName(), ambryBlobStorageService.getClass().getCanonicalName());
+    FrontendRestRequestServiceFactory frontendRestRequestServiceFactory =
+        new FrontendRestRequestServiceFactory(verifiableProperties, new MockClusterMap(),
+            new InMemoryRouter(verifiableProperties, new MockClusterMap()), new InMemAccountService(false, true));
+    RestRequestService ambryRestRequestService = frontendRestRequestServiceFactory.getRestRequestService();
+    assertNotNull("No RestRequestService returned", ambryRestRequestService);
+    assertEquals("Did not receive an FrontendRestRequestService instance",
+        FrontendRestRequestService.class.getCanonicalName(), ambryRestRequestService.getClass().getCanonicalName());
   }
 
   /**
-   * Tests instantiation of {@link AmbryBlobStorageServiceFactory} with bad input.
+   * Tests instantiation of {@link FrontendRestRequestServiceFactory} with bad input.
    * @throws Exception
    */
   @Test
-  public void getAmbryBlobStorageServiceFactoryWithBadInputTest() throws Exception {
+  public void getFrontendRestRequestServiceFactoryWithBadInputTest() throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     ClusterMap clusterMap = new MockClusterMap();
-    RestResponseHandler restResponseHandler = new MockRestRequestResponseHandler();
     Router router = new InMemoryRouter(verifiableProperties, clusterMap);
     AccountService accountService = new InMemAccountService(false, true);
 
     // VerifiableProperties null.
     try {
-      new AmbryBlobStorageServiceFactory(null, clusterMap, restResponseHandler, router, accountService);
+      new FrontendRestRequestServiceFactory(null, clusterMap, router, accountService);
       fail("Instantiation should have failed because VerifiableProperties was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
@@ -89,23 +85,15 @@ public class AmbryBlobStorageServiceFactoryTest {
 
     // ClusterMap null.
     try {
-      new AmbryBlobStorageServiceFactory(verifiableProperties, null, restResponseHandler, router, accountService);
+      new FrontendRestRequestServiceFactory(verifiableProperties, null, router, accountService);
       fail("Instantiation should have failed because ClusterMap was null");
-    } catch (NullPointerException e) {
-      // expected. Nothing to do.
-    }
-
-    // RestResponseHandler null.
-    try {
-      new AmbryBlobStorageServiceFactory(verifiableProperties, clusterMap, null, router, accountService);
-      fail("Instantiation should have failed because RestResponseHandler was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
     }
 
     // Router null.
     try {
-      new AmbryBlobStorageServiceFactory(verifiableProperties, clusterMap, restResponseHandler, null, accountService);
+      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, null, accountService);
       fail("Instantiation should have failed because Router was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
@@ -113,7 +101,7 @@ public class AmbryBlobStorageServiceFactoryTest {
 
     // AccountService null.
     try {
-      new AmbryBlobStorageServiceFactory(verifiableProperties, clusterMap, restResponseHandler, router, null);
+      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, router, null);
       fail("Instantiation should have failed because AccountService was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.

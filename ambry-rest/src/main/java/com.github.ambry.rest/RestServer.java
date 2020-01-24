@@ -46,19 +46,19 @@ import org.slf4j.LoggerFactory;
  * The RestServer is responsible for starting up (and shutting down) multiple services required to handle requests from
  * clients. Currently it starts/shuts down the following: -
  * 1. A {@link Router} - A service that is used to contact the backend service.
- * 2. A {@link BlobStorageService} - A service that understands the operations supported by the backend service and can
+ * 2. A {@link RestRequestService} - A service that understands the operations supported by the backend service and can
  * handle requests from clients for such operations.
  * 3. A {@link NioServer} - To receive requests and return responses via a REST protocol (HTTP).
  * 4. A {@link RestRequestHandler} and a {@link RestResponseHandler} - Scaling units that are responsible for
- * interfacing between the {@link NioServer} and the {@link BlobStorageService}.
+ * interfacing between the {@link NioServer} and the {@link RestRequestService}.
  * 5. A {@link PublicAccessLogger} - To assist in public access logging
  * 6. A {@link RestServerState} - To maintain the health of the server
  * <p/>
  * Depending upon what is specified in the configuration file, the RestServer can start different implementations of
- * {@link NioServer} and {@link BlobStorageService} and behave accordingly.
+ * {@link NioServer} and {@link RestRequestService} and behave accordingly.
  * <p/>
  * With RestServer, the goals are threefold:-
- * 1. To support ANY RESTful frontend service as long as it can provide an implementation of {@link BlobStorageService}.
+ * 1. To support ANY RESTful frontend service as long as it can provide an implementation of {@link RestRequestService}.
  * 2. Make it easy to plug in any implementation of {@link NioServer} as long as it can provide implementations that
  * abstract framework specific objects and actions (like write/read from channel) into generic APIs through
  * {@link RestRequest}, {@link RestResponseChannel} etc.
@@ -72,7 +72,7 @@ public class RestServer {
   private final JmxReporter reporter;
   private final AccountService accountService;
   private final Router router;
-  private final BlobStorageService blobStorageService;
+  private final RestRequestService restRequestService;
   private final RestRequestHandler restRequestHandler;
   private final RestResponseHandler restResponseHandler;
   private final NioServer nioServer;
@@ -88,8 +88,8 @@ public class RestServer {
     public final Counter restServerInstantiationError;
 
     // Others
-    public final Histogram blobStorageServiceShutdownTimeInMs;
-    public final Histogram blobStorageServiceStartTimeInMs;
+    public final Histogram restRequestServiceShutdownTimeInMs;
+    public final Histogram restRequestServiceStartTimeInMs;
     public final Histogram nioServerShutdownTimeInMs;
     public final Histogram nioServerStartTimeInMs;
     public final Histogram jmxReporterShutdownTimeInMs;
@@ -114,10 +114,10 @@ public class RestServer {
           metricRegistry.counter(MetricRegistry.name(RestServer.class, "InstantiationError"));
 
       // Others
-      blobStorageServiceShutdownTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "BlobStorageServiceShutdownTimeInMs"));
-      blobStorageServiceStartTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "BlobStorageServiceStartTimeInMs"));
+      restRequestServiceShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestServiceShutdownTimeInMs"));
+      restRequestServiceStartTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestServiceStartTimeInMs"));
       jmxReporterShutdownTimeInMs =
           metricRegistry.histogram(MetricRegistry.name(RestServer.class, "JmxShutdownTimeInMs"));
       jmxReporterStartTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "JmxStartTimeInMs"));
@@ -181,19 +181,21 @@ public class RestServer {
       ((HelixAccountService) accountService).setupRouter(router);
     }
 
-    RestResponseHandlerFactory restResponseHandlerFactory =
-        Utils.getObj(restServerConfig.restServerResponseHandlerFactory,
-            restServerConfig.restServerResponseHandlerScalingUnitCount, metricRegistry);
-    restResponseHandler = restResponseHandlerFactory.getRestResponseHandler();
+    // setup restRequestService
+    RestRequestServiceFactory restRequestServiceFactory =
+        Utils.getObj(restServerConfig.restServerRestRequestServiceFactory, verifiableProperties, clusterMap, router,
+            accountService);
+    restRequestService = restRequestServiceFactory.getRestRequestService();
+    if (restRequestService == null) {
+      throw new InstantiationException("RestRequestService is null");
+    }
 
-    BlobStorageServiceFactory blobStorageServiceFactory =
-        Utils.getObj(restServerConfig.restServerBlobStorageServiceFactory, verifiableProperties, clusterMap,
-            restResponseHandler, router, accountService);
-    blobStorageService = blobStorageServiceFactory.getBlobStorageService();
+    RestRequestResponseHandlerFactory restHandlerFactory =
+        Utils.getObj(restServerConfig.restServerRequestResponseHandlerFactory,
+            restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, restRequestService);
+    restRequestHandler = restHandlerFactory.getRestRequestHandler();
+    restResponseHandler = restHandlerFactory.getRestResponseHandler();
 
-    RestRequestHandlerFactory restRequestHandlerFactory = Utils.getObj(restServerConfig.restServerRequestHandlerFactory,
-        restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, blobStorageService);
-    restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
     publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
         restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
 
@@ -202,8 +204,8 @@ public class RestServer {
             restRequestHandler, publicAccessLogger, restServerState, sslFactory);
     nioServer = nioServerFactory.getNioServer();
 
-    if (accountService == null || router == null || restResponseHandler == null || blobStorageService == null
-        || restRequestHandler == null || nioServer == null) {
+    if (accountService == null || router == null || restResponseHandler == null || restRequestHandler == null
+        || nioServer == null) {
       throw new InstantiationException("Some of the server components were null");
     }
     NetworkConfig networkConfig = new NetworkConfig(verifiableProperties);
@@ -233,23 +235,17 @@ public class RestServer {
       restResponseHandler.start();
       long restResponseHandlerStartTime = System.currentTimeMillis();
       elapsedTime = restResponseHandlerStartTime - reporterStartTime;
-      logger.info("Response handler start took {} ms", elapsedTime);
+      logger.info("Response handler and Request Handler start took {} ms", elapsedTime);
       restServerMetrics.restResponseHandlerStartTimeInMs.update(elapsedTime);
 
-      blobStorageService.start();
-      long blobStorageServiceStartTime = System.currentTimeMillis();
-      elapsedTime = blobStorageServiceStartTime - restResponseHandlerStartTime;
-      logger.info("Blob storage service start took {} ms", elapsedTime);
-      restServerMetrics.blobStorageServiceStartTimeInMs.update(elapsedTime);
-
-      restRequestHandler.start();
-      long restRequestHandlerStartTime = System.currentTimeMillis();
-      elapsedTime = restRequestHandlerStartTime - blobStorageServiceStartTime;
-      logger.info("Request handler start took {} ms", elapsedTime);
-      restServerMetrics.restRequestHandlerStartTimeInMs.update(elapsedTime);
+      restRequestService.start();
+      long restRequestServiceStartTime = System.currentTimeMillis();
+      elapsedTime = restRequestServiceStartTime - restResponseHandlerStartTime;
+      logger.info("Rest request service start took {} ms", elapsedTime);
+      restServerMetrics.restRequestServiceStartTimeInMs.update(elapsedTime);
 
       nioServer.start();
-      elapsedTime = System.currentTimeMillis() - restRequestHandlerStartTime;
+      elapsedTime = System.currentTimeMillis() - restRequestServiceStartTime;
       logger.info("NIO server start took {} ms", elapsedTime);
       restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
 
@@ -297,15 +293,15 @@ public class RestServer {
       logger.info("Request handler shutdown took {} ms", elapsedTime);
       restServerMetrics.restRequestHandlerShutdownTimeInMs.update(elapsedTime);
 
-      blobStorageService.shutdown();
-      long blobStorageServiceShutdownTime = System.currentTimeMillis();
-      elapsedTime = blobStorageServiceShutdownTime - requestHandlerShutdownTime;
-      logger.info("Blob storage service shutdown took {} ms", elapsedTime);
-      restServerMetrics.blobStorageServiceShutdownTimeInMs.update(elapsedTime);
+      restRequestService.shutdown();
+      long restRequestServiceShutdownTime = System.currentTimeMillis();
+      elapsedTime = restRequestServiceShutdownTime - requestHandlerShutdownTime;
+      logger.info("Rest request service shutdown took {} ms", elapsedTime);
+      restServerMetrics.restRequestServiceShutdownTimeInMs.update(elapsedTime);
 
       restResponseHandler.shutdown();
       long responseHandlerShutdownTime = System.currentTimeMillis();
-      elapsedTime = responseHandlerShutdownTime - blobStorageServiceShutdownTime;
+      elapsedTime = responseHandlerShutdownTime - restRequestServiceShutdownTime;
       logger.info("Response handler shutdown took {} ms", elapsedTime);
       restServerMetrics.restResponseHandlerShutdownTimeInMs.update(elapsedTime);
 

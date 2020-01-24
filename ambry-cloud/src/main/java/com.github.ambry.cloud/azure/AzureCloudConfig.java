@@ -62,6 +62,8 @@ public class AzureCloudConfig {
   @Default("5")
   public final int cosmosMaxRetries;
 
+  // TODO: Add blobNamingSchemeVersion, containerNamingScheme
+
   /**
    * Flag indicating whether to use DirectHttps CosmosDB connection mode.
    * Provides better performance but may not work with all firewall settings.

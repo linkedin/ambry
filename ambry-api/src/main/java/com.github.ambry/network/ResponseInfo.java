@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.clustermap.DataNodeId;
+import io.netty.buffer.ByteBuf;
 import io.netty.util.ReferenceCountUtil;
 
 
@@ -82,6 +83,18 @@ public class ResponseInfo {
   public void release() {
     if (response != null) {
       ReferenceCountUtil.release(response);
+    }
+  }
+
+  /**
+   * Tries to call {@link ByteBuf#touch(Object)} if the specified message implements
+   * {@link ByteBuf}.  If the specified message doesn't implement {@link ByteBuf},
+   * this method does nothing.
+   * @param hint hint object.
+   */
+  public void touch(Object hint) {
+    if (response != null) {
+      ReferenceCountUtil.touch(response, hint);
     }
   }
 

@@ -54,10 +54,11 @@ public class AmbryPartitionStateModel extends StateModel {
 
   @Transition(to = "STANDBY", from = "BOOTSTRAP")
   public void onBecomeStandbyFromBootstrap(Message message, NotificationContext context) {
-    logger.info("Partition {} in resource {} is becoming STANDBY from BOOTSTRAP", message.getPartitionName(),
+    String partitionName = message.getPartitionName();
+    logger.info("Partition {} in resource {} is becoming STANDBY from BOOTSTRAP", partitionName,
         message.getResourceName());
     if (clusterMapConfig.clustermapEnableStateModelListener) {
-      partitionStateChangeListener.onPartitionBecomeStandbyFromBootstrap(message.getPartitionName());
+      partitionStateChangeListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
     }
   }
 
@@ -77,14 +78,22 @@ public class AmbryPartitionStateModel extends StateModel {
 
   @Transition(to = "INACTIVE", from = "STANDBY")
   public void onBecomeInactiveFromStandby(Message message, NotificationContext context) {
-    logger.info("Partition {} in resource {} is becoming INACTIVE from STANDBY", message.getPartitionName(),
+    String partitionName = message.getPartitionName();
+    logger.info("Partition {} in resource {} is becoming INACTIVE from STANDBY", partitionName,
         message.getResourceName());
+    if (clusterMapConfig.clustermapEnableStateModelListener) {
+      partitionStateChangeListener.onPartitionBecomeInactiveFromStandby(partitionName);
+    }
   }
 
   @Transition(to = "OFFLINE", from = "INACTIVE")
   public void onBecomeOfflineFromInactive(Message message, NotificationContext context) {
-    logger.info("Partition {} in resource {} is becoming OFFLINE from INACTIVE", message.getPartitionName(),
+    String partitionName = message.getPartitionName();
+    logger.info("Partition {} in resource {} is becoming OFFLINE from INACTIVE", partitionName,
         message.getResourceName());
+    if (clusterMapConfig.clustermapEnableStateModelListener) {
+      partitionStateChangeListener.onPartitionBecomeOfflineFromInactive(partitionName);
+    }
   }
 
   @Transition(to = "DROPPED", from = "OFFLINE")

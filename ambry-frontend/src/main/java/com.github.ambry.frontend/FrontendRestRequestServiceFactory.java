@@ -18,9 +18,8 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.BlobStorageService;
-import com.github.ambry.rest.BlobStorageServiceFactory;
-import com.github.ambry.rest.RestResponseHandler;
+import com.github.ambry.rest.RestRequestService;
+import com.github.ambry.rest.RestRequestServiceFactory;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
 import java.util.Objects;
@@ -29,51 +28,47 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Ambry frontend specific implementation of {@link BlobStorageServiceFactory}.
+ * Ambry frontend specific implementation of {@link RestRequestServiceFactory}.
  * <p/>
- * Sets up all the supporting cast required for the operation of {@link AmbryBlobStorageService} and returns a new
- * instance on {@link #getBlobStorageService()}.
+ * Sets up all the supporting cast required for the operation of {@link FrontendRestRequestService} and returns a new
+ * instance on {@link #getRestRequestService()}.
  */
-public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory {
+public class FrontendRestRequestServiceFactory implements RestRequestServiceFactory {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final VerifiableProperties verifiableProperties;
   private final ClusterMap clusterMap;
   private final ClusterMapConfig clusterMapConfig;
-  private final RestResponseHandler responseHandler;
   private final Router router;
   private final AccountService accountService;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
-   * Creates a new instance of AmbryBlobStorageServiceFactory.
+   * Creates a new instance of FrontendRestRequestServiceFactory.
    * @param verifiableProperties the properties to use to create configs.
    * @param clusterMap the {@link ClusterMap} to use.
-   * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent
-   *                        out.
    * @param router the {@link Router} to use.
    * @param accountService the {@link AccountService} to use.
    * @throws IllegalArgumentException if any of the arguments are null.
    */
-  public AmbryBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      RestResponseHandler responseHandler, Router router, AccountService accountService) {
+  public FrontendRestRequestServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      Router router, AccountService accountService) {
     this.verifiableProperties = Objects.requireNonNull(verifiableProperties, "Provided VerifiableProperties is null");
     this.clusterMap = Objects.requireNonNull(clusterMap, "Provided ClusterMap is null");
-    this.responseHandler = Objects.requireNonNull(responseHandler, "Provided RestResponseHandler is null");
     this.router = Objects.requireNonNull(router, "Provided Router is null");
     this.accountService = Objects.requireNonNull(accountService, "Provided AccountService is null");
     clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     frontendConfig = new FrontendConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
-    logger.trace("Instantiated AmbryBlobStorageServiceFactory");
+    logger.trace("Instantiated FrontendRestRequestServiceFactory");
   }
 
   /**
-   * Returns a new instance of {@link AmbryBlobStorageService}.
-   * @return a new instance of {@link AmbryBlobStorageService}.
+   * Returns a new instance of {@link FrontendRestRequestService}.
+   * @return a new instance of {@link FrontendRestRequestService}.
    */
   @Override
-  public BlobStorageService getBlobStorageService() {
+  public RestRequestService getRestRequestService() {
     try {
       IdSigningService idSigningService =
           Utils.<IdSigningServiceFactory>getObj(frontendConfig.idSigningServiceFactory, verifiableProperties,
@@ -89,12 +84,12 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
               urlSigningService, idSigningService, accountAndContainerInjector);
-      return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-          idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-          accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
+      return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
+          securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
+          clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
           clusterMapConfig.clusterMapClusterName);
     } catch (Exception e) {
-      throw new IllegalStateException("Could not instantiate AmbryBlobStorageService", e);
+      throw new IllegalStateException("Could not instantiate FrontendRestRequestService", e);
     }
   }
 }

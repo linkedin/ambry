@@ -24,8 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Implementation of {@link RestRequestHandler} and {@link RestResponseHandler} that can be used in tests.
  * <p/>
  * This implementation simply calls the appropriate method (based on the {@link RestMethod} in the request) in the
- * underlying {@link BlobStorageService} on being asked to handle a request. If the implementation of
- * {@link BlobStorageService} is blocking, then this will be blocking too.
+ * underlying {@link RestRequestService} on being asked to handle a request. If the implementation of
+ * {@link RestRequestService} is blocking, then this will be blocking too.
  * <p/>
  * Submitted responses also will be sent out immediately so response handling will block until the response has been
  * sent out completely.
@@ -40,12 +40,17 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
   private boolean isRunning = false;
   private VerifiableProperties failureProperties = null;
 
-  private BlobStorageService blobStorageService = null;
+  private final RestRequestService restRequestService;
+
+  public MockRestRequestResponseHandler(RestRequestService restRequestService) {
+    this.restRequestService = restRequestService;
+    this.restRequestService.setupResponseHandler(this);
+  }
 
   @Override
   public void start() throws InstantiationException {
-    if (blobStorageService == null) {
-      throw new InstantiationException("BlobStorageService not set");
+    if (restRequestService == null) {
+      throw new InstantiationException("RestRequestService not set");
     }
     isRunning = true;
   }
@@ -56,8 +61,8 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
   }
 
   /**
-   * Calls the appropriate method in the {@link BlobStorageService}. Non-blocking nature depends on the implementation
-   * of the underlying {@link BlobStorageService}.
+   * Calls the appropriate method in the {@link RestRequestService}. Non-blocking nature depends on the implementation
+   * of the underlying {@link RestRequestService}.
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} on which a response to the request may be sent.
    * @throws IllegalArgumentException if either of {@code restRequest} or {@code restResponseChannel} is null.
@@ -71,19 +76,19 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
       restRequest.prepare();
       switch (restMethod) {
         case GET:
-          blobStorageService.handleGet(restRequest, restResponseChannel);
+          restRequestService.handleGet(restRequest, restResponseChannel);
           break;
         case POST:
-          blobStorageService.handlePost(restRequest, restResponseChannel);
+          restRequestService.handlePost(restRequest, restResponseChannel);
           break;
         case PUT:
-          blobStorageService.handlePut(restRequest, restResponseChannel);
+          restRequestService.handlePut(restRequest, restResponseChannel);
           break;
         case DELETE:
-          blobStorageService.handleDelete(restRequest, restResponseChannel);
+          restRequestService.handleDelete(restRequest, restResponseChannel);
           break;
         case HEAD:
-          blobStorageService.handleHead(restRequest, restResponseChannel);
+          restRequestService.handleHead(restRequest, restResponseChannel);
           break;
         default:
           throw new RestServiceException("Unknown rest method - " + restMethod,
@@ -140,14 +145,6 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
    */
   public void fix() {
     failureProperties = null;
-  }
-
-  /**
-   * Sets the {@link BlobStorageService} that will be used.
-   * @param blobStorageService the {@link BlobStorageService} instance to be used to process requests.
-   */
-  protected void setBlobStorageService(BlobStorageService blobStorageService) {
-    this.blobStorageService = blobStorageService;
   }
 
   /**

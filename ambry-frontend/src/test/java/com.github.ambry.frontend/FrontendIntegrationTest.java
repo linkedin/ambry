@@ -549,8 +549,8 @@ public class FrontendIntegrationTest {
   private static VerifiableProperties buildFrontendVProps(File trustStoreFile)
       throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
-    properties.put("rest.server.blob.storage.service.factory",
-        "com.github.ambry.frontend.AmbryBlobStorageServiceFactory");
+    properties.put("rest.server.rest.request.service.factory",
+        "com.github.ambry.frontend.FrontendRestRequestServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
     properties.put("rest.server.account.service.factory", "com.github.ambry.account.InMemAccountServiceFactory");
     properties.put("netty.server.port", Integer.toString(PLAINTEXT_SERVER_PORT));

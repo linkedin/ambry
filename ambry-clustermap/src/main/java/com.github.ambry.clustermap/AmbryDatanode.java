@@ -34,6 +34,7 @@ class AmbryDataNode implements DataNodeId {
   private final String hostName;
   private final Port plainTextPort;
   private final Port sslPort;
+  private final Port http2Port;
   private final String dataCenterName;
   private final String rackId;
   private final long xid;
@@ -50,15 +51,18 @@ class AmbryDataNode implements DataNodeId {
    * @param portNum the port identifying this data node.
    * @param rackId the rack Id associated with this data node (may be null).
    * @param sslPortNum the ssl port associated with this data node (may be null).
+   * @param http2PortNumber the http2 ssl port associated with this data node (may be null).
    * @param xid the xid associated with this data node.
    * @param clusterManagerCallback the {@link ClusterManagerCallback} to use
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
   AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, int portNum, String rackId,
-      Integer sslPortNum, long xid, ClusterManagerCallback clusterManagerCallback) throws Exception {
+      Integer sslPortNum, Integer http2PortNumber, long xid, ClusterManagerCallback clusterManagerCallback)
+      throws Exception {
     this.hostName = hostName;
     this.plainTextPort = new Port(portNum, PortType.PLAINTEXT);
     this.sslPort = sslPortNum != null ? new Port(sslPortNum, PortType.SSL) : null;
+    this.http2Port = http2PortNumber != null ? new Port(http2PortNumber, PortType.HTTP2) : null;
     this.dataCenterName = dataCenterName;
     this.rackId = rackId;
     this.xid = xid;
@@ -69,7 +73,7 @@ class AmbryDataNode implements DataNodeId {
     this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     this.clusterManagerCallback = clusterManagerCallback;
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
-    validatePorts(plainTextPort, sslPort, sslEnabledDataCenters.contains(dataCenterName));
+    validatePorts(plainTextPort, sslPort, http2Port, sslEnabledDataCenters.contains(dataCenterName));
   }
 
   @Override
@@ -84,12 +88,32 @@ class AmbryDataNode implements DataNodeId {
 
   @Override
   public int getSSLPort() {
-    return sslPort.getPort();
+    if (hasSSLPort()) {
+      return sslPort.getPort();
+    } else {
+      throw new IllegalStateException(
+          "No HTTP2 port exists for the Data Node " + hostName + ":" + plainTextPort.getPort());
+    }
   }
 
   @Override
   public boolean hasSSLPort() {
     return sslPort != null;
+  }
+
+  @Override
+  public int getHttp2Port() {
+    if (hasHttp2Port()) {
+      return http2Port.getPort();
+    } else {
+      throw new IllegalStateException(
+          "No HTTP2 port exists for the Data Node " + hostName + ":" + plainTextPort.getPort());
+    }
+  }
+
+  @Override
+  public boolean hasHttp2Port() {
+    return http2Port != null;
   }
 
   @Override

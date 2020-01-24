@@ -139,7 +139,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  private static KeyManagerFactory getKeyManagerFactory(SSLConfig config) throws GeneralSecurityException, IOException {
+  static KeyManagerFactory getKeyManagerFactory(SSLConfig config) throws GeneralSecurityException, IOException {
     KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
     KeyStore ks = loadKeyStore(config.sslKeystorePath, config.sslKeystoreType, config.sslKeystorePassword);
     String keyPassword = config.sslKeyPassword.isEmpty() ? config.sslKeystorePassword : config.sslKeyPassword;
@@ -153,7 +153,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  private static TrustManagerFactory getTrustManagerFactory(SSLConfig config)
+  static TrustManagerFactory getTrustManagerFactory(SSLConfig config)
       throws GeneralSecurityException, IOException {
     TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
     KeyStore ks = loadKeyStore(config.sslTruststorePath, config.sslTruststoreType, config.sslTruststorePassword);
@@ -174,7 +174,7 @@ public class NettySslFactory implements SSLFactory {
    * @param config the {@link SSLConfig}.
    * @return the list of supported cipher suites, or {@code null} if the configs did not specify any
    */
-  private static String[] getEnabledProtocols(SSLConfig config) {
+  static String[] getEnabledProtocols(SSLConfig config) {
     List<String> enabledProtocols = Utils.splitString(config.sslEnabledProtocols, ",");
     return !enabledProtocols.isEmpty() ? enabledProtocols.toArray(new String[0]) : null;
   }
@@ -183,7 +183,7 @@ public class NettySslFactory implements SSLFactory {
    * @param config the {@link SSLConfig}.
    * @return the {@link ClientAuth} setting.
    */
-  private static ClientAuth getClientAuth(SSLConfig config) {
+  static ClientAuth getClientAuth(SSLConfig config) {
     switch (config.sslClientAuthentication) {
       case "required":
         return ClientAuth.REQUIRE;

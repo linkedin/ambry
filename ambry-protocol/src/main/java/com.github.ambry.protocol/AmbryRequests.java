@@ -33,7 +33,7 @@ import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
-import com.github.ambry.network.Request;
+import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
@@ -112,7 +112,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleRequests(Request request) throws InterruptedException {
+  public void handleRequests(NetworkRequest request) throws InterruptedException {
     try {
       DataInputStream stream = new DataInputStream(request.getInputStream());
       RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
@@ -145,7 +145,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handlePutRequest(Request request) throws IOException, InterruptedException {
+  public void handlePutRequest(NetworkRequest request) throws IOException, InterruptedException {
     InputStream is = request.getInputStream();
     DataInputStream dis = is instanceof DataInputStream ? (DataInputStream) is : new DataInputStream(is);
     PutRequest receivedRequest = PutRequest.readFrom(dis, clusterMap);
@@ -214,7 +214,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleGetRequest(Request request) throws IOException, InterruptedException {
+  public void handleGetRequest(NetworkRequest request) throws IOException, InterruptedException {
     GetRequest getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     Histogram responseQueueTime = null;
     Histogram responseSendTime = null;
@@ -378,7 +378,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleDeleteRequest(Request request) throws IOException, InterruptedException {
+  public void handleDeleteRequest(NetworkRequest request) throws IOException, InterruptedException {
     DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
@@ -452,7 +452,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleTtlUpdateRequest(Request request) throws IOException, InterruptedException {
+  public void handleTtlUpdateRequest(NetworkRequest request) throws IOException, InterruptedException {
     TtlUpdateRequest updateRequest =
         TtlUpdateRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
@@ -532,7 +532,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
+  public void handleReplicaMetadataRequest(NetworkRequest request) throws IOException, InterruptedException {
     if (replicationEngine == null) {
       throw new UnsupportedOperationException("Replication not supported on this node.");
     }
@@ -641,7 +641,7 @@ public class AmbryRequests implements RequestAPI {
             metrics.replicaMetadataSendTimeInMs, metrics.replicaMetadataTotalTimeInMs, null, null, totalTimeSpent));
   }
 
-  private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,
+  private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, NetworkRequest request,
       Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
       long blobSize, ServerMetrics metrics) throws InterruptedException {
     if (response.getError() == ServerErrorCode.No_Error) {
@@ -666,7 +666,7 @@ public class AmbryRequests implements RequestAPI {
     }
   }
 
-  private void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, Request request,
+  private void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, NetworkRequest request,
       Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
       long blobSize, MessageFormatFlags flags, ServerMetrics metrics) throws InterruptedException {
 
@@ -674,6 +674,7 @@ public class AmbryRequests implements RequestAPI {
       if (flags == MessageFormatFlags.Blob || flags == MessageFormatFlags.All) {
         if (response.getError() == ServerErrorCode.No_Error) {
           metrics.markGetBlobRequestRateBySize(blobSize);
+
           requestResponseChannel.sendResponse(response, request,
               new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime,
                   metrics.getSmallBlobSendTimeInMs, metrics.getSmallBlobTotalTimeInMs, totalTimeSpent));

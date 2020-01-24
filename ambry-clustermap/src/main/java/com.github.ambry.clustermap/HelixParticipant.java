@@ -39,6 +39,8 @@ import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
+
 
 /**
  * An implementation of {@link ClusterParticipant} that registers as a participant to a Helix cluster.
@@ -51,6 +53,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private HelixManager manager;
   private String instanceName;
   private HelixAdmin helixAdmin;
+  private ReplicaSyncUpManager replicaSyncUpManager;
   final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
 
   private static final Logger logger = LoggerFactory.getLogger(HelixParticipant.class);
@@ -80,6 +83,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
     }
     manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
+    replicaSyncUpManager = new AmbryReplicaSyncUpManager(clusterMapConfig);
     partitionStateChangeListeners = new HashMap<>();
   }
 
@@ -212,6 +216,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return ClusterMapUtils.getStoppedReplicas(instanceConfig);
   }
 
+  @Override
+  public ReplicaSyncUpManager getReplicaSyncUpManager() {
+    return replicaSyncUpManager;
+  }
+
   /**
    * @return a snapshot of registered state change listeners.
    */
@@ -305,10 +314,21 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
-    PartitionStateChangeListener storageManagerListener =
-        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
-    if (storageManagerListener != null) {
-      storageManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
+    PartitionStateChangeListener replicationManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+    if (replicationManagerListener != null) {
+      replicationManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
+      // after bootstrap is initiated in ReplicationManager, transition is blocked here and wait until local replica has
+      // caught up with enough peer replicas.
+      try {
+        replicaSyncUpManager.waitBootstrapCompleted(partitionName);
+      } catch (InterruptedException e) {
+        logger.error("Bootstrap was interrupted on partition {}", partitionName);
+        throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
+      } catch (StateTransitionException e) {
+        logger.error("Bootstrap didn't complete on partition {}", partitionName, e);
+        throw e;
+      }
     }
   }
 
@@ -328,5 +348,61 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     if (cloudToStoreReplicationListener != null) {
       cloudToStoreReplicationListener.onPartitionBecomeStandbyFromLeader(partitionName);
     }
+  }
+
+  @Override
+  public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+    // 1. storage manager marks store local state as INACTIVE and disables compaction on this partition
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+    }
+    // 2. replication manager initiates deactivation
+    PartitionStateChangeListener replicationManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+    if (replicationManagerListener != null) {
+      replicationManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+      // after deactivation is initiated in ReplicationManager, transition is blocked here and wait until enough peer
+      // replicas have caught up with last PUT in local store.
+      try {
+        replicaSyncUpManager.waitDeactivationCompleted(partitionName);
+      } catch (InterruptedException e) {
+        logger.error("Deactivation was interrupted on partition {}", partitionName);
+        throw new StateTransitionException("Deactivation failed or was interrupted", DeactivationFailure);
+      } catch (StateTransitionException e) {
+        logger.error("Deactivation didn't complete on partition {}", partitionName, e);
+        throw e;
+      }
+    }
+  }
+
+  @Override
+  public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+    PartitionStateChangeListener replicationManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+    if (replicationManagerListener != null) {
+      // 1. take actions in replication manager
+      //    (1) set local store state to OFFLINE
+      //    (2) initiate disconnection in ReplicaSyncUpManager
+      replicationManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
+      // 2. wait until peer replicas have caught up with local replica
+      try {
+        replicaSyncUpManager.waitDisconnectionCompleted(partitionName);
+      } catch (InterruptedException e) {
+        logger.error("Disconnection was interrupted on partition {}", partitionName);
+        throw new StateTransitionException("Disconnection failed or was interrupted", DisconnectionFailure);
+      } catch (StateTransitionException e) {
+        logger.error("Disconnection didn't complete ", e);
+        throw e;
+      }
+    }
+    // 3. take actions in storage manager (stop the store)
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
+    }
+    // 4. todo update instanceConfig in helix
   }
 }

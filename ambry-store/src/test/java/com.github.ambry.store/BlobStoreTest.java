@@ -1192,6 +1192,7 @@ public class BlobStoreTest {
     // create test store directory
     File storeDir = StoreTestUtils.createTempDirectory("store-" + storeId);
     File reserveDir = StoreTestUtils.createTempDirectory("reserve-pool");
+    reserveDir.deleteOnExit();
     DiskSpaceAllocator diskAllocator =
         new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
@@ -1248,6 +1249,49 @@ public class BlobStoreTest {
     assertFalse("test store entry should have been removed from in-mem store file map ",
         diskAllocator.getStoreReserveFileMap().containsKey(storeId));
     reloadStore();
+  }
+
+  /**
+   * test store in bootstrap and store completes bootstrap behaviors.
+   * @throws Exception
+   */
+  @Test
+  public void inBootstrapAndCompleteBootstrapTest() throws Exception {
+    store.shutdown();
+    File testDir = StoreTestUtils.createTempDirectory("testStoreDir-" + storeId);
+    testDir.deleteOnExit();
+    StoreTestUtils.MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
+    BlobStore blobStore = createBlobStore(testReplica);
+    blobStore.start();
+    // create a bootstrap file
+    File bootstrapFile = new File(testReplica.getReplicaPath(), BlobStore.BOOTSTRAP_FILE_NAME);
+    assertTrue("Couldn't create a bootstrap file", bootstrapFile.createNewFile());
+    assertTrue("Store should be in bootstrap state", blobStore.isBootstrapInProgress());
+    blobStore.completeBootstrap();
+    assertFalse("Bootstrap file should be deleted", bootstrapFile.exists());
+  }
+
+  /**
+   * Test store in decommission process.
+   */
+  @Test
+  public void inDecommissionTest() throws Exception {
+    store.shutdown();
+    File testDir = StoreTestUtils.createTempDirectory("testStoreDir-" + storeId);
+    testDir.deleteOnExit();
+    StoreTestUtils.MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
+    BlobStore blobStore = createBlobStore(testReplica);
+    blobStore.start();
+    assertFalse("Store should not be in decommission state because there is no decommission file",
+        blobStore.isDecommissionInProgress());
+    // create a decommission file
+    File decommissionFile = new File(testReplica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
+    assertTrue("Couldn't create a decommission file", decommissionFile.createNewFile());
+    assertTrue("Store should be in decommission state", blobStore.isDecommissionInProgress());
+    // delete store files
+    blobStore.shutdown();
+    blobStore.deleteStoreFiles();
+    assertFalse("Decommission file should be deleted", decommissionFile.exists());
   }
 
   // helpers

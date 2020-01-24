@@ -39,10 +39,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
@@ -63,7 +59,6 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
-import static org.mockito.Mockito.*;
 
 
 /**
@@ -234,6 +229,81 @@ public class HelixClusterManagerTest {
     }
     for (com.github.ambry.utils.TestUtils.ZkInfo zkInfo : dcsToZkInfo.values()) {
       zkInfo.shutdown();
+    }
+  }
+
+  /**
+   * Test the case where replicas from same partition have different capacities (which should block the startup)
+   * @throws Exception
+   */
+  @Test
+  public void inconsistentReplicaCapacityTest() throws Exception {
+    assumeTrue(listenCrossColo);
+    clusterManager.close();
+    metricRegistry = new MetricRegistry();
+    String staticClusterName = "TestOnly";
+    File tempDir = Files.createTempDirectory("helixClusterManagerTest").toFile();
+    tempDir.deleteOnExit();
+    String tempDirPath = tempDir.getAbsolutePath();
+    String testHardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
+    String testPartitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
+    String testZkLayoutPath = tempDirPath + File.separator + "zkLayoutPath.json";
+
+    // initialize test hardware layout and partition layout, create mock helix cluster for testing.
+    TestHardwareLayout testHardwareLayout1 = constructInitialHardwareLayoutJSON(staticClusterName);
+    TestPartitionLayout testPartitionLayout1 = constructInitialPartitionLayoutJSON(testHardwareLayout1, 3, localDc);
+    JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
+    Utils.writeJsonObjectToFile(zkJson, testZkLayoutPath);
+    Utils.writeJsonObjectToFile(testHardwareLayout1.getHardwareLayout().toJSONObject(), testHardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
+    MockHelixCluster testCluster =
+        new MockHelixCluster("AmbryTest-", testHardwareLayoutPath, testPartitionLayoutPath, testZkLayoutPath);
+
+    List<DataNode> initialNodes = testHardwareLayout1.getAllExistingDataNodes();
+    Partition partitionToTest = (Partition) testPartitionLayout1.getPartitionLayout().getPartitions(null).get(0);
+
+    // add a new node into cluster
+    testHardwareLayout1.addNewDataNodes(1);
+    Utils.writeJsonObjectToFile(testHardwareLayout1.getHardwareLayout().toJSONObject(), testHardwareLayoutPath);
+    DataNode newAddedNode =
+        testHardwareLayout1.getAllExistingDataNodes().stream().filter(n -> !initialNodes.contains(n)).findAny().get();
+    // add a new replica on new node for partitionToTest
+    Disk diskOnNewNode = newAddedNode.getDisks().get(0);
+    // deliberately change capacity of partition to ensure new replica picks new capacity
+    partitionToTest.replicaCapacityInBytes += 1;
+    partitionToTest.addReplica(new Replica(partitionToTest, diskOnNewNode, testHardwareLayout1.clusterMapConfig));
+    Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
+    testCluster.upgradeWithNewHardwareLayout(testHardwareLayoutPath);
+    testCluster.upgradeWithNewPartitionLayout(testPartitionLayoutPath);
+
+    // reset hardware/partition layout, this also resets replica capacity of partitionToTest. However, it won't touch
+    // instanceConfig of new added node because it is not in hardware layout. So, replica on new added node still has
+    // larger capacity. We use this particular replica to mock inconsistent replica capacity case.
+    // Note that instanceConfig of new node is still kept in cluster because upgrading cluster didn't force remove
+    // instanceConfig that not present in static clustermap.
+    testHardwareLayout1 = constructInitialHardwareLayoutJSON(staticClusterName);
+    testPartitionLayout1 = constructInitialPartitionLayoutJSON(testHardwareLayout1, 3, localDc);
+    Utils.writeJsonObjectToFile(testHardwareLayout1.getHardwareLayout().toJSONObject(), testHardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
+    testCluster.upgradeWithNewHardwareLayout(testHardwareLayoutPath);
+    testCluster.upgradeWithNewPartitionLayout(testPartitionLayoutPath);
+
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", hostname);
+    props.setProperty("clustermap.cluster.name", "AmbryTest-" + staticClusterName);
+    props.setProperty("clustermap.datacenter.name", localDc);
+    props.setProperty("clustermap.port", Integer.toString(portNum));
+    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    // instantiate HelixClusterManager and its initialization should fail because validation on replica capacity cannot
+    // succeed (The aforementioned replica has larger capacity than its peers)
+    try {
+      new HelixClusterManager(clusterMapConfig, selfInstanceName, new MockHelixManagerFactory(testCluster, null, null),
+          metricRegistry);
+      fail("Initialization should fail due to inconsistent replica capacity");
+    } catch (IOException e) {
+      // expected
     }
   }
 
@@ -518,8 +588,7 @@ public class HelixClusterManagerTest {
     helixCluster.addNewResource(resourceName, idealState, localDc);
     verifyInitialClusterChanges(helixClusterManager, helixCluster, new String[]{localDc});
     // localDc should have one more partition compared with remoteDc
-    Map<String, ConcurrentHashMap<String, String>> partitionToResource =
-        (helixClusterManager).getPartitionToResourceMap();
+    Map<String, Map<String, String>> partitionToResource = (helixClusterManager).getPartitionToResourceMap();
     assertEquals("localDc should have one more partition", partitionToResource.get(localDc).size(),
         partitionToResource.get(remoteDc).size() + 1);
     assertTrue(partitionToResource.get(localDc).containsKey(partitionName) && !partitionToResource.get(remoteDc)
@@ -532,23 +601,23 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void routingTableProviderChangeTest() throws Exception {
-    assumeTrue(!useComposite && !overrideEnabled);
-    metricRegistry = new MetricRegistry();
+    assumeTrue(!useComposite && !overrideEnabled && !listenCrossColo);
+    // Change zk connect strings to ensure HelixClusterManager sees local DC only
+    JSONObject zkJson = constructZkLayoutJSON(Collections.singletonList(dcsToZkInfo.get(localDc)));
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", hostname);
+    props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
+    props.setProperty("clustermap.datacenter.name", localDc);
+    props.setProperty("clustermap.port", Integer.toString(portNum));
+    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     // Mock metricRegistry here to introduce a latch based counter for testing purpose
-    MetricRegistry mockMetricRegistry = Mockito.spy(metricRegistry);
-    Counter mockCounter = Mockito.mock(Counter.class);
-    AtomicReference<CountDownLatch> routingTableChangeLatch = new AtomicReference<>();
-    routingTableChangeLatch.set(new CountDownLatch(4));
-    doAnswer(invocation -> {
-      routingTableChangeLatch.get().countDown();
-      return null;
-    }).when(mockCounter).inc();
-    doReturn(mockCounter).when(mockMetricRegistry)
-        .counter(MetricRegistry.name(HelixClusterManager.class, "routingTableChangeTriggerCount"));
+    metricRegistry = new MetricRegistry();
     HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
-        new MockHelixManagerFactory(helixCluster, null, null), mockMetricRegistry);
-    Map<String, AtomicReference<RoutingTableSnapshot>> snapshotsByDc = helixClusterManager.getRoutingTableSnapshots();
-    RoutingTableSnapshot localDcSnapshot = snapshotsByDc.get(localDc).get();
+        new MockHelixManagerFactory(helixCluster, null, null), metricRegistry);
+    Map<String, RoutingTableSnapshot> snapshotsByDc = helixClusterManager.getRoutingTableSnapshots();
+    RoutingTableSnapshot localDcSnapshot = snapshotsByDc.get(localDc);
 
     Set<InstanceConfig> instanceConfigsInSnapshot = new HashSet<>(localDcSnapshot.getInstanceConfigs());
     Set<InstanceConfig> instanceConfigsInCluster =
@@ -557,21 +626,53 @@ public class HelixClusterManagerTest {
     // verify leader replica of each partition is correct
     verifyLeaderReplicasInDc(helixClusterManager, localDc);
 
+    // test live instance triggered routing table change
+    // we purposely bring down one instance and wait for expected number of live instance unless times out.
+    int initialLiveCnt = localDcSnapshot.getLiveInstances().size();
+    MockHelixAdmin mockHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
+    String instance = instanceConfigsInCluster.stream()
+        .filter(insConfig -> !insConfig.getInstanceName().equals(selfInstanceName))
+        .findFirst()
+        .get()
+        .getInstanceName();
+    mockHelixAdmin.bringInstanceDown(instance);
+    mockHelixAdmin.triggerRoutingTableNotification();
+    int sleepCnt = 0;
+    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).getLiveInstances().size()
+        != initialLiveCnt - 1) {
+      assertTrue("Routing table change (triggered by bringing down node) didn't come within 1 sec", sleepCnt < 5);
+      Thread.sleep(200);
+      sleepCnt++;
+    }
+    // then bring up the same instance, the number of live instances should equal to initial count
+    mockHelixAdmin.bringInstanceUp(instance);
+    mockHelixAdmin.triggerRoutingTableNotification();
+    sleepCnt = 0;
+    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).getLiveInstances().size() != initialLiveCnt) {
+      assertTrue("Routing table change (triggered by bringing up node) didn't come within 1 sec", sleepCnt < 5);
+      Thread.sleep(200);
+      sleepCnt++;
+    }
+
     // randomly choose a partition and change the leader replica of it in cluster
     List<? extends PartitionId> defaultPartitionIds = helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS);
     PartitionId partitionToChange = defaultPartitionIds.get((new Random()).nextInt(defaultPartitionIds.size()));
-    MockHelixAdmin mockHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
     String currentLeaderInstance = mockHelixAdmin.getPartitionToLeaderReplica().get(partitionToChange.toPathString());
+    int currentLeaderPort = Integer.valueOf(currentLeaderInstance.split("_")[1]);
     String newLeaderInstance = mockHelixAdmin.getInstancesForPartition(partitionToChange.toPathString())
         .stream()
         .filter(k -> !k.equals(currentLeaderInstance))
         .findFirst()
         .get();
-    routingTableChangeLatch.set(new CountDownLatch(1));
     mockHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
     mockHelixAdmin.triggerRoutingTableNotification();
-    assertTrue("Routing table change didn't come within 1 second",
-        routingTableChangeLatch.get().await(1, TimeUnit.SECONDS));
+    sleepCnt = 0;
+    while (partitionToChange.getReplicaIdsByState(ReplicaState.LEADER, localDc).get(0).getDataNodeId().getPort()
+        == currentLeaderPort) {
+      assertTrue("Routing table change (triggered by leadership change) didn't come within 1 sec", sleepCnt < 5);
+      Thread.sleep(200);
+      sleepCnt++;
+    }
     verifyLeaderReplicasInDc(helixClusterManager, localDc);
 
     helixClusterManager.close();
@@ -1116,7 +1217,7 @@ public class HelixClusterManagerTest {
   private void verifyInitialClusterChanges(HelixClusterManager clusterManager, MockHelixCluster helixCluster,
       String[] dcs) {
     // get in-mem data structures populated based on initial notification
-    Map<String, ConcurrentHashMap<String, String>> partitionToResouceByDc = clusterManager.getPartitionToResourceMap();
+    Map<String, Map<String, String>> partitionToResouceByDc = clusterManager.getPartitionToResourceMap();
     Map<String, Set<AmbryDataNode>> dataNodesByDc = clusterManager.getDcToDataNodesMap();
 
     for (String dc : dcs) {
@@ -1154,13 +1255,11 @@ public class HelixClusterManagerTest {
     Map<String, String> leaderReplicasInCluster = helixCluster.getPartitionToLeaderReplica(dcName);
     for (PartitionId partitionId : helixClusterManager.getAllPartitionIds(null)) {
       List<? extends ReplicaId> leadReplicas = partitionId.getReplicaIdsByState(ReplicaState.LEADER, dcName);
-      assertTrue("There should not be more than one lead replica", leadReplicas.size() <= 1);
-      // some special partition class has replicas in one dc only
-      if (leadReplicas.size() == 1) {
-        DataNodeId dataNodeId = leadReplicas.get(0).getDataNodeId();
-        leaderReplicasInSnapshot.put(partitionId.toPathString(),
-            getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort()));
-      }
+      assertEquals("There should be exactly one lead replica for partition: " + partitionId.toPathString(), 1,
+          leadReplicas.size());
+      DataNodeId dataNodeId = leadReplicas.get(0).getDataNodeId();
+      leaderReplicasInSnapshot.put(partitionId.toPathString(),
+          getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort()));
     }
     assertEquals("Mismatch in leader replicas", leaderReplicasInCluster, leaderReplicasInSnapshot);
   }

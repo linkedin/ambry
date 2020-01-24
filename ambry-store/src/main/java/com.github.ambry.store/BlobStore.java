@@ -47,6 +47,7 @@ import org.slf4j.LoggerFactory;
 public class BlobStore implements Store {
   static final String SEPARATOR = "_";
   static final String BOOTSTRAP_FILE_NAME = "bootstrap_in_progress";
+  static final String DECOMMISSION_FILE_NAME = "decommission_in_progress";
   private final static String LockFile = ".lock";
 
   private final String storeId;
@@ -679,6 +680,31 @@ public class BlobStore implements Store {
   }
 
   @Override
+  public boolean isBootstrapInProgress() {
+    return (new File(dataDir, BOOTSTRAP_FILE_NAME)).exists();
+  }
+
+  @Override
+  public boolean isDecommissionInProgress() {
+    // note that, the decommission file will be removed by calling deleteStoreFiles() when replica is being dropped. We
+    // don't need to explicitly delete it. The file is also used for failure recovery to resume decommission process.
+    return (new File(dataDir, DECOMMISSION_FILE_NAME)).exists();
+  }
+
+  @Override
+  public void completeBootstrap() {
+    File bootstrapFile = new File(dataDir, BOOTSTRAP_FILE_NAME);
+    try {
+      // the method will check if file exists or not
+      Utils.deleteFileOrDirectory(bootstrapFile);
+    } catch (IOException e) {
+      // if deletion fails, we log here without throwing exception. Next time when server restarts, the store should
+      // complete BOOTSTRAP -> STANDBY quickly and attempt to delete this again.
+      logger.error("Failed to delete " + bootstrapFile.getName(), e);
+    }
+  }
+
+  @Override
   public void setCurrentState(ReplicaState state) {
     currentState = state;
   }
@@ -739,15 +765,9 @@ public class BlobStore implements Store {
    * @return return absolute end position of last PUT in current store when this method is invoked.
    * @throws StoreException
    */
+  @Override
   public long getEndPositionOfLastPut() throws StoreException {
     return index.getAbsoluteEndPositionOfLastPut();
-  }
-
-  /**
-   * @return {@code true} if new added store has initiated bootstrap process and bootstrap is still in progress.
-   */
-  boolean isBootstrapInProgress() {
-    return (new File(dataDir, BOOTSTRAP_FILE_NAME)).exists();
   }
 
   /**

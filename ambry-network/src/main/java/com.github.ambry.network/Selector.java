@@ -141,7 +141,7 @@ public class Selector implements Selectable {
    * @param address The address to connect to
    * @param sendBufferSize The networkSend buffer size for the new connection
    * @param receiveBufferSize The receive buffer size for the new connection
-   * @param portType {@PortType} which represents the type of connection to establish
+   * @param portType {@link PortType} which represents the type of connection to establish
    * @return The id for the connection that was created
    * @throws IllegalStateException if there is already a connection for that id
    * @throws IOException if DNS resolution fails on the hostname or if the server is down
@@ -246,7 +246,7 @@ public class Selector implements Selectable {
   }
 
   /**
-   * Tells whether or not this selector is open.  </p>
+   * Tells whether or not this selector is open.
    *
    * @return <tt>true</tt> if, and only if, this selector is open
    */
@@ -256,7 +256,7 @@ public class Selector implements Selectable {
   }
 
   /**
-   * Queue the given request for sending in the subsequent {@poll(long)} calls
+   * Queue the given request for sending in the subsequent {@link #poll(long)} calls
    * @param networkSend The NetworkSend that is ready to be sent
    */
   public void send(NetworkSend networkSend) {

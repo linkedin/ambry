@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
@@ -31,6 +32,8 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -41,6 +44,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 
 
 /**
@@ -387,14 +392,13 @@ public class StorageManager implements StoreManager {
         if (replicaToAdd == null) {
           logger.error("No new replica found for partition {} in cluster map", partitionName);
           throw new StateTransitionException(
-              "New replica " + partitionName + " is not found in clustermap for " + currentNode,
-              StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+              "New replica " + partitionName + " is not found in clustermap for " + currentNode, ReplicaNotFound);
         }
         // Attempt to add store into storage manager. If store already exists, fail adding store request.
         if (!addBlobStore(replicaToAdd)) {
           logger.error("Failed to add store {} into storage manager", partitionName);
           throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
-              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+              ReplicaOperationFailure);
         }
         // TODO, update InstanceConfig in Helix
         // note that partitionNameToReplicaId should be updated if addBlobStore succeeds, so replicationManager should be
@@ -409,23 +413,14 @@ public class StorageManager implements StoreManager {
         if (getStore(replica.getPartitionId(), false) == null) {
           throw new StateTransitionException(
               "Store " + partitionName + " didn't start correctly, replica should be set to ERROR state",
-              StateTransitionException.TransitionErrorCode.StoreNotStarted);
+              StoreNotStarted);
         }
       }
     }
 
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
-      // BOOTSTRAP -> STANDBY primarily happens in ReplicationManager listener (if there is bootstrap file in store dir)
-      /* an exmaple:
-         // check if store is started
-         store.setCurrentState(ReplicaState.BOOTSTRAP);
-         if (store.isBootstrapInProgress()) {
-          // wait for replication to complete
-         }
-         // remove bootstrap file once new replica has caught up peer nodes.
-         store.setCurrentState(ReplicaState.STANDBY);
-      */
+      // no op
     }
 
     @Override
@@ -436,6 +431,60 @@ public class StorageManager implements StoreManager {
     @Override
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       // no op
+    }
+
+    @Override
+    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+      // check if partition exists on current node
+      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+      // if replica is null that means partition is not on current node (this shouldn't happen unless we use server admin
+      // tool to remove the store before initiating decommission on this partition). We throw exception in this case.
+      if (replica != null) {
+        // 0. as long as local replica exists, we create a decommission file in its dir
+        File decommissionFile = new File(replica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
+        try {
+          if (!decommissionFile.exists()) {
+            // if not present, create one.
+            decommissionFile.createNewFile();
+            logger.info("Decommission file is created for replica {}", replica.getReplicaPath());
+          }
+        } catch (IOException e) {
+          logger.error("IOException occurs when creating decommission file for replica " + partitionName, e);
+          throw new StateTransitionException(
+              "Couldn't create decommission file for replica " + replica.getReplicaPath(), ReplicaOperationFailure);
+        }
+        Store localStore = getStore(replica.getPartitionId());
+        if (localStore != null) {
+          // 1. set state to INACTIVE
+          localStore.setCurrentState(ReplicaState.INACTIVE);
+          logger.info("Store {} is set to INACTIVE", partitionName);
+          // 2. disable compaction on this store
+          if (!controlCompactionForBlobStore(replica.getPartitionId(), false)) {
+            logger.error("Failed to disable compaction on store {}", partitionName);
+            // we set error code to ReplicaNotFound because that is the only reason why compaction may fail.
+            throw new StateTransitionException("Couldn't disable compaction on replica " + replica.getReplicaPath(),
+                ReplicaNotFound);
+          }
+          logger.info("Compaction is successfully disabled on store {}", partitionName);
+        } else {
+          // this may happen when the disk holding this store crashes (or store is stopped by server admin tool)
+          throw new StateTransitionException("Store " + partitionName + " is not started", StoreNotStarted);
+        }
+      } else {
+        throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
+            ReplicaNotFound);
+      }
+    }
+
+    @Override
+    public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+      // if code arrives here, which means replica exists on current node. This is guaranteed by replication manager,
+      // which checks existence of local replica (see onPartitionBecomeOfflineFromInactive method in ReplicationManager)
+      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+      if (!shutdownBlobStore(replica.getPartitionId())) {
+        throw new StateTransitionException("Failed to shutdown store " + partitionName, ReplicaOperationFailure);
+      }
+      logger.info("Store {} is successfully shut down during Inactive-To-Offline transition", partitionName);
     }
   }
 }

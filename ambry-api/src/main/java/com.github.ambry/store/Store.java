@@ -101,6 +101,12 @@ public interface Store {
   long getSizeInBytes();
 
   /**
+   * @return absolute end position of last PUT in bytes.
+   * @throws StoreException
+   */
+  long getEndPositionOfLastPut() throws StoreException;
+
+  /**
    * @return true if the store contains no data
    */
   boolean isEmpty();
@@ -109,6 +115,22 @@ public interface Store {
    * @return true if the store is started
    */
   boolean isStarted();
+
+  /**
+   * @return {@code true} if store has initiated bootstrap process and bootstrap is still in progress.
+   */
+  boolean isBootstrapInProgress();
+
+  /**
+   * @return {@code true} if store has initiated decommission process (STANDBY -> INACTIVE -> OFFLINE) and decommission
+   * is still in progress.
+   */
+  boolean isDecommissionInProgress();
+
+  /**
+   * Take actions (if any) to complete the bootstrap (i.e, delete bootstrap file in store directory)
+   */
+  void completeBootstrap();
 
   /**
    * Set current state of the store.

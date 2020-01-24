@@ -35,6 +35,7 @@ public class CloudDataNode implements DataNodeId {
   private final String hostName;
   private final Port plainTextPort;
   private final Port sslPort;
+  private final Port http2Port;
   private final String dataCenterName;
   private final boolean isSslEnabled;
   private final List<String> sslEnabledDataCenters;
@@ -52,26 +53,28 @@ public class CloudDataNode implements DataNodeId {
     this.hostName = clusterMapConfig.clusterMapHostName;
     this.plainTextPort = new Port(clusterMapConfig.clusterMapPort, PortType.PLAINTEXT);
     this.sslPort = (cloudConfig.vcrSslPort != null) ? new Port(cloudConfig.vcrSslPort, PortType.SSL) : null;
+    this.http2Port = (cloudConfig.vcrHttp2Port != null) ? new Port(cloudConfig.vcrHttp2Port, PortType.HTTP2) : null;
     this.dataCenterName = clusterMapConfig.clusterMapDatacenterName;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.isSslEnabled = sslEnabledDataCenters.contains(dataCenterName);
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
-    validatePorts(plainTextPort, sslPort, isSslEnabled);
+    validatePorts(plainTextPort, sslPort, http2Port, isSslEnabled);
   }
 
   /**
    * Instantiate a CloudDataNode object from hostname, port and datacentername.
    */
-  public CloudDataNode(String hostName, Port plainTextPort, Port sslPort, String dataCenterName,
+  public CloudDataNode(String hostName, Port plainTextPort, Port sslPort, Port http2Port, String dataCenterName,
       ClusterMapConfig clusterMapConfig) {
     this.hostName = hostName;
     this.plainTextPort = plainTextPort;
     this.sslPort = sslPort;
+    this.http2Port = http2Port;
     this.dataCenterName = dataCenterName;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.isSslEnabled = sslEnabledDataCenters.contains(dataCenterName);
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
-    validatePorts(plainTextPort, sslPort, isSslEnabled);
+    validatePorts(plainTextPort, sslPort, http2Port, isSslEnabled);
   }
 
   @Override
@@ -85,13 +88,31 @@ public class CloudDataNode implements DataNodeId {
   }
 
   @Override
-  public int getSSLPort() {
-    return sslPort.getPort();
+  public boolean hasSSLPort() {
+    return sslPort != null;
   }
 
   @Override
-  public boolean hasSSLPort() {
-    return sslPort != null;
+  public int getSSLPort() {
+    if (hasSSLPort()) {
+      return sslPort.getPort();
+    } else {
+      throw new IllegalStateException("No SSL port exists for the Data Node " + hostName + ":" + plainTextPort);
+    }
+  }
+
+  @Override
+  public boolean hasHttp2Port() {
+    return http2Port != null;
+  }
+
+  @Override
+  public int getHttp2Port() {
+    if (hasHttp2Port()) {
+      return http2Port.getPort();
+    } else {
+      throw new IllegalStateException("No HTTP2 port exists for the Data Node " + hostName + ":" + plainTextPort);
+    }
   }
 
   @Override

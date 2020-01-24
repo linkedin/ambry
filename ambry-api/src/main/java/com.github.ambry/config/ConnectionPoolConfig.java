@@ -67,6 +67,13 @@ public class ConnectionPoolConfig {
   @Default("true")
   public final boolean connectionPoolSocketResetOnError;
 
+  /**
+   * Enable TCP_NODELAY socket option
+   */
+  @Config("connectionpool.socket.enable.tcp.no.delay")
+  @Default("true")
+  public final boolean connectionPoolSocketEnableTcpNoDelay;
+
   public ConnectionPoolConfig(VerifiableProperties verifiableProperties) {
     connectionPoolReadBufferSizeBytes =
         verifiableProperties.getIntInRange("connectionpool.read.buffer.size.bytes", 1048576, 1, 1024 * 1024 * 1024);
@@ -80,5 +87,6 @@ public class ConnectionPoolConfig {
     connectionPoolMaxConnectionsPerPortSSL =
         verifiableProperties.getIntInRange("connectionpool.max.connections.per.port.ssl", 2, 1, 20);
     connectionPoolSocketResetOnError = verifiableProperties.getBoolean("connectionpool.socket.reset.on.error", true);
+    connectionPoolSocketEnableTcpNoDelay = verifiableProperties.getBoolean("connectionpool.socket.enable.tcp.no.delay", true);
   }
 }

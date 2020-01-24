@@ -671,12 +671,32 @@ public class StatsManagerTest {
     }
 
     @Override
+    public boolean isBootstrapInProgress() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public boolean isDecommissionInProgress() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void completeBootstrap() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void setCurrentState(ReplicaState state) {
       throw new IllegalStateException("Not implemented");
     }
 
     @Override
     public ReplicaState getCurrentState() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public long getEndPositionOfLastPut() throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
 

@@ -69,23 +69,23 @@ public class DynamicClusterManagerComponentsTest {
     MockClusterManagerCallback mockClusterManagerCallback = new MockClusterManagerCallback();
     // AmbryDataNode test
     try {
-      new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM1, RACK_ID, null, XID, mockClusterManagerCallback);
+      new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM1, RACK_ID, null, null, XID, mockClusterManagerCallback);
       fail("Datanode construction should have failed when SSL is enabled and SSL port is null");
     } catch (IllegalArgumentException e) {
       // OK
     }
     try {
-      new AmbryDataNode("DC1", clusterMapConfig1, HOST_NAME, MAX_PORT + 1, RACK_ID, null, XID,
+      new AmbryDataNode("DC1", clusterMapConfig1, HOST_NAME, MAX_PORT + 1, RACK_ID, null, null, XID,
           mockClusterManagerCallback);
       fail("Datanode construction should have failed when port num is outside the valid range");
     } catch (IllegalArgumentException e) {
       // OK
     }
     AmbryDataNode datanode1 =
-        new AmbryDataNode("DC0", clusterMapConfig1, HOST_NAME, PORT_NUM1, RACK_ID, SSL_PORT_NUM, XID,
+        new AmbryDataNode("DC0", clusterMapConfig1, HOST_NAME, PORT_NUM1, RACK_ID, SSL_PORT_NUM, null, XID,
             mockClusterManagerCallback);
     AmbryDataNode datanode2 =
-        new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM2, RACK_ID, SSL_PORT_NUM, XID,
+        new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM2, RACK_ID, SSL_PORT_NUM, null, XID,
             mockClusterManagerCallback);
     assertEquals(datanode1.getDatacenterName(), "DC0");
     assertEquals(datanode1.getHostname(), HOST_NAME);

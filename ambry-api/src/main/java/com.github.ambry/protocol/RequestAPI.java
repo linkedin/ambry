@@ -13,7 +13,7 @@
  */
 package com.github.ambry.protocol;
 
-import com.github.ambry.network.Request;
+import com.github.ambry.network.NetworkRequest;
 import java.io.IOException;
 
 
@@ -27,7 +27,7 @@ public interface RequestAPI {
    * @param request The request to handle.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handleRequests(Request request) throws InterruptedException;
+  void handleRequests(NetworkRequest request) throws InterruptedException;
 
   /**
    * Puts a blob into the store. It accepts a blob property, user metadata and the blob
@@ -36,7 +36,7 @@ public interface RequestAPI {
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handlePutRequest(Request request) throws IOException, InterruptedException;
+  void handlePutRequest(NetworkRequest request) throws IOException, InterruptedException;
 
   /**
    * Gets blob property, user metadata or the blob from the specified partition.
@@ -45,7 +45,7 @@ public interface RequestAPI {
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handleGetRequest(Request request) throws IOException, InterruptedException;
+  void handleGetRequest(NetworkRequest request) throws IOException, InterruptedException;
 
   /**
    * Deletes the blob from the store.
@@ -53,7 +53,7 @@ public interface RequestAPI {
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handleDeleteRequest(Request request) throws IOException, InterruptedException;
+  void handleDeleteRequest(NetworkRequest request) throws IOException, InterruptedException;
 
   /**
    * Updates the TTL of a blob as required in {@code request}.
@@ -61,7 +61,7 @@ public interface RequestAPI {
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handleTtlUpdateRequest(Request request) throws IOException, InterruptedException;
+  void handleTtlUpdateRequest(NetworkRequest request) throws IOException, InterruptedException;
 
   /**
    * Gets the metadata required for replication.
@@ -69,7 +69,7 @@ public interface RequestAPI {
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException;
+  void handleReplicaMetadataRequest(NetworkRequest request) throws IOException, InterruptedException;
 
   /**
    * Handles an administration request. These requests can query for or change the internal state of the server.
@@ -77,7 +77,7 @@ public interface RequestAPI {
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  default void handleAdminRequest(Request request) throws InterruptedException, IOException {
+  default void handleAdminRequest(NetworkRequest request) throws InterruptedException, IOException {
     throw new UnsupportedOperationException("Admin request not supported on this node");
   }
 }

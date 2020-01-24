@@ -14,29 +14,31 @@
 package com.github.ambry.rest;
 
 /**
- * BlobStorageService defines a service that forms the bridge b/w a RESTful frontend and a storage backend (or something
- * that communicates with a storage backend).
- * <p/>
- * Typically, a BlobStorageService is expected to receive requests from the RESTful frontend, handle them as required
- * and either send a response (if immediately available) or pass control to another component that does further handling
- * and generates a response. The information received from the scaling layer should be enough to perform these
- * functions.
- * <p/>
+ * RestRequestService defines a service that handles {@link RestRequest}.
+ * Typically, a RestRequestService is expected to receive requests and handle them as required and either send a
+ * response (if immediately available) or pass control to another component that does further handling and generates a
+ * response.
  * Most operations are performed async and responses are therefore queued asynchronously instead of being available at
  * the end of the function call.
- * <p/>
  * Implementations are expected to be thread-safe.
  */
-public interface BlobStorageService {
+public interface RestRequestService {
 
   /**
-   * Does startup tasks for the BlobStorageService. When the function returns, startup is FULLY complete.
-   * @throws InstantiationException if BlobStorageService is unable to start.
+   * Setup {@link RestResponseHandler} for this {@link RestRequestService}.
+   * This method should be called before {@link RestRequestService#start()}
+   * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses.
+   */
+  public void setupResponseHandler(RestResponseHandler responseHandler);
+
+  /**
+   * Does startup tasks for the RestRequestService. When the function returns, startup is FULLY complete.
+   * @throws InstantiationException if RestRequestService is unable to start.
    */
   public void start() throws InstantiationException;
 
   /**
-   * Does shutdown tasks for the BlobStorageService. When the function returns, shutdown is FULLY complete.
+   * Does shutdown tasks for the RestRequestService. When the function returns, shutdown is FULLY complete.
    */
   public void shutdown();
 

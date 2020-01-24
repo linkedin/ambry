@@ -73,7 +73,7 @@ import static org.junit.Assert.*;
  */
 public class NettyMessageProcessorTest {
   private final InMemoryRouter router;
-  private final BlobStorageService blobStorageService;
+  private final RestRequestService restRequestService;
   private final MockRestRequestResponseHandler requestHandler;
   private final HelperNotificationSystem notificationSystem = new HelperNotificationSystem();
 
@@ -92,10 +92,10 @@ public class NettyMessageProcessorTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(verifiableProperties, notificationSystem, new MockClusterMap());
-    requestHandler = new MockRestRequestResponseHandler();
-    blobStorageService = new MockBlobStorageService(verifiableProperties, requestHandler, router);
-    requestHandler.setBlobStorageService(blobStorageService);
-    blobStorageService.start();
+    restRequestService = new MockRestRequestService(verifiableProperties, router);
+    requestHandler = new MockRestRequestResponseHandler(restRequestService);
+    restRequestService.setupResponseHandler(requestHandler);
+    restRequestService.start();
     requestHandler.start();
   }
 
@@ -104,7 +104,7 @@ public class NettyMessageProcessorTest {
    */
   @After
   public void cleanUp() throws IOException {
-    blobStorageService.shutdown();
+    restRequestService.shutdown();
     router.close();
     notificationSystem.close();
   }
@@ -193,7 +193,7 @@ public class NettyMessageProcessorTest {
     // content without request on a channel that was kept alive
     channel = createChannel();
     // send and receive response for a good request and keep the channel alive
-    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, MockBlobStorageService.ECHO_REST_METHOD, null));
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, MockRestRequestService.ECHO_REST_METHOD, null));
     channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
     response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
@@ -299,14 +299,14 @@ public class NettyMessageProcessorTest {
   private void sendRequestCheckResponse(EmbeddedChannel channel, HttpMethod httpMethod, RestMethod restMethod,
       boolean isKeepAlive) throws IOException {
     long requestId = REQUEST_ID_GENERATOR.getAndIncrement();
-    String uri = MockBlobStorageService.ECHO_REST_METHOD + requestId;
+    String uri = MockRestRequestService.ECHO_REST_METHOD + requestId;
     HttpRequest httpRequest = RestTestUtils.createRequest(httpMethod, uri, null);
     HttpUtil.setKeepAlive(httpRequest, isKeepAlive);
     channel.writeInbound(httpRequest);
     channel.writeInbound(new DefaultLastHttpContent());
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
-    // MockBlobStorageService echoes the RestMethod + request id.
+    // MockRestRequestService echoes the RestMethod + request id.
     String expectedResponse = restMethod.toString() + requestId;
     assertEquals("Unexpected content", expectedResponse,
         RestTestUtils.getContentString((HttpContent) channel.readOutbound()));

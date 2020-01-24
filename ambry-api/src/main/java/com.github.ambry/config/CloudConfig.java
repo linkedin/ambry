@@ -18,11 +18,13 @@ package com.github.ambry.config;
  */
 public class CloudConfig {
 
+  public static final String CLOUD_IS_VCR = "cloud.is.vcr";
   public static final String VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS = "virtual.replicator.cluster.factory.class";
   public static final String CLOUD_DESTINATION_FACTORY_CLASS = "cloud.destination.factory.class";
   public static final String VCR_CLUSTER_ZK_CONNECT_STRING = "vcr.cluster.zk.connect.string";
   public static final String VCR_CLUSTER_NAME = "vcr.cluster.name";
   public static final String VCR_SSL_PORT = "vcr.ssl.port";
+  public static final String VCR_HTTP2_PORT = "vcr.http2.port";
   public static final String VCR_REQUIRE_ENCRYPTION = "vcr.require.encryption";
   public static final String VCR_KMS_FACTORY = "vcr.key.management.service.factory";
   public static final String VCR_CRYPTO_SERVICE_FACTORY = "vcr.crypto.service.factory";
@@ -32,6 +34,8 @@ public class CloudConfig {
   public static final String CLOUD_BLOB_COMPACTION_INTERVAL_HOURS = "cloud.blob.compaction.interval.hours";
   public static final String CLOUD_BLOB_COMPACTION_QUERY_LIMIT = "cloud.blob.compaction.query.limit";
   public static final String CLOUD_RECENT_BLOB_CACHE_LIMIT = "cloud.recent.blob.cache.limit";
+  public static final String CLOUD_MAX_ATTEMPTS = "cloud.max.attempts";
+  public static final String CLOUD_DEFAULT_RETRY_DELAY = "cloud.default.retry.delay";
   public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
   public static final String VCR_PROXY_HOST = "vcr.proxy.host";
   public static final String VCR_PROXY_PORT = "vcr.proxy.port";
@@ -52,9 +56,18 @@ public class CloudConfig {
   public static final int DEFAULT_RETENTION_DAYS = 7;
   public static final int DEFAULT_COMPACTION_QUERY_LIMIT = 100000;
   public static final int DEFAULT_RECENT_BLOB_CACHE_LIMIT = 10000;
+  public static final int DEFAULT_MAX_ATTEMPTS = 3;
+  public static final long DEFAULT_RETRY_DELAY_VALUE = 50;
   public static final int DEFAULT_VCR_PROXY_PORT = 3128;
   public static final String DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS =
       "com.github.ambry.clustermap.HelixClusterSpectatorFactory";
+
+  /**
+   * True for VCR node, false for live serving node.
+   */
+  @Config(CLOUD_IS_VCR)
+  @Default("false")
+  public final boolean cloudIsVcr;
 
   /**
    * The virtual replicator cluster factory class name.
@@ -90,6 +103,13 @@ public class CloudConfig {
   @Config(VCR_SSL_PORT)
   @Default("null")
   public final Integer vcrSslPort;
+
+  /**
+   * The HTTP2 port number associated with this node.
+   */
+  @Config(VCR_HTTP2_PORT)
+  @Default("null")
+  public final Integer vcrHttp2Port;
 
   /**
    * Require blobs to be encrypted prior to cloud upload?
@@ -184,8 +204,19 @@ public class CloudConfig {
   public final int vcrProxyPort;
 
   /**
-   *
-   * @param verifiableProperties
+   * The maximum number of attempts for each cloud operation in live serving mode;
+   */
+  @Config(CLOUD_MAX_ATTEMPTS)
+  public final int cloudMaxAttempts;
+
+  /**
+   * The default delay in ms between retries of cloud operations.
+   */
+  @Config(CLOUD_DEFAULT_RETRY_DELAY)
+  public final long cloudDefaultRetryDelay;
+
+  /**
+   * The class used to instantiate {@link com.github.ambry.clustermap.ClusterSpectatorFactory}
    */
   @Config(VCR_CLUSTER_SPECTATOR_FACTORY_CLASS)
   @Default(DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS)
@@ -193,6 +224,7 @@ public class CloudConfig {
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
+    cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
     virtualReplicatorClusterFactoryClass = verifiableProperties.getString(VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS,
         DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS);
     cloudDestinationFactoryClass =
@@ -202,6 +234,7 @@ public class CloudConfig {
         verifiableProperties.getString(VCR_CLUSTER_ZK_CONNECT_STRING, DEFAULT_VCR_CLUSTER_ZK_CONNECT_STRING);
     vcrClusterName = verifiableProperties.getString(VCR_CLUSTER_NAME, DEFAULT_VCR_CLUSTER_NAME);
     vcrSslPort = verifiableProperties.getInteger(VCR_SSL_PORT, null);
+    vcrHttp2Port = verifiableProperties.getInteger(VCR_HTTP2_PORT, null);
     vcrRequireEncryption = verifiableProperties.getBoolean(VCR_REQUIRE_ENCRYPTION, false);
     vcrKeyManagementServiceFactory = verifiableProperties.getString(VCR_KMS_FACTORY, RouterConfig.DEFAULT_KMS_FACTORY);
     vcrCryptoServiceFactory =
@@ -216,7 +249,8 @@ public class CloudConfig {
     cloudBlobCompactionQueryLimit =
         verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_QUERY_LIMIT, DEFAULT_COMPACTION_QUERY_LIMIT);
     recentBlobCacheLimit = verifiableProperties.getInt(CLOUD_RECENT_BLOB_CACHE_LIMIT, DEFAULT_RECENT_BLOB_CACHE_LIMIT);
-
+    cloudMaxAttempts = verifiableProperties.getInt(CLOUD_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS);
+    cloudDefaultRetryDelay = verifiableProperties.getLong(CLOUD_DEFAULT_RETRY_DELAY, DEFAULT_RETRY_DELAY_VALUE);
     // Proxy settings
     vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);
     vcrProxyPort = verifiableProperties.getInt(VCR_PROXY_PORT, DEFAULT_VCR_PROXY_PORT);

@@ -19,7 +19,7 @@ package com.github.ambry.router;
  * consumed by operation tracker to change success/failure counter and determine whether to update Histograms.
  */
 public enum TrackedRequestFinalState {
-  SUCCESS, FAILURE, TIMED_OUT, NOT_FOUND;
+  SUCCESS, FAILURE, TIMED_OUT, NOT_FOUND, REQUEST_DISABLED;
 
   /**
    *  Return the corresponding {@link TrackedRequestFinalState}  for the given {@link RouterErrorCode}.

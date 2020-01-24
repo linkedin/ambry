@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
  * <p/>
  * It processes a request (in parts) by converting it from Netty specific objects ({@link HttpObject},
  * {@link HttpRequest}, {@link HttpContent}) into {@link RestRequest}, a generic request object that all the RESTful
- * layers can understand and passes it down the pipeline to a {@link BlobStorageService} through a
+ * layers can understand and passes it down the pipeline to a {@link RestRequestService} through a
  * {@link RestRequestHandler}.
  * <p/>
  * It also maintains three pieces of state: -
