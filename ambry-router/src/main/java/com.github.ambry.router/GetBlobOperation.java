@@ -386,7 +386,7 @@ class GetBlobOperation extends GetOperation {
     @Override
     public void close() throws IOException {
       if (isOpen.compareAndSet(true, false)) {
-        releaseResourse();
+        releaseResource();
         if (numChunksWrittenOut.get() != numChunksTotal) {
           setOperationException(new RouterException(
               "The ReadableStreamChannel for blob data has been closed by the user before all chunks were written out.",
@@ -448,7 +448,7 @@ class GetBlobOperation extends GetOperation {
         } else {
           routerMetrics.getBlobOperationTotalTimeMs.update(totalTime);
         }
-        releaseResourse();
+        releaseResource();
       }
       operationCompleted = true;
     }
@@ -457,7 +457,7 @@ class GetBlobOperation extends GetOperation {
      * Release all the {@link ResponseInfo} in the map. Use {@link ConcurrentHashMap#remove(Object)} method to avoid
      * conflict with the release call in the chunk async callback.
      */
-    private void releaseResourse() {
+    private void releaseResource() {
       for (Integer key : chunkIndexToResponseInfo.keySet()) {
         ResponseInfo response = chunkIndexToResponseInfo.remove(key);
         if (response != null) {
