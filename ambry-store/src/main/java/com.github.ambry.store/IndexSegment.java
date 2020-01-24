@@ -1099,10 +1099,10 @@ class IndexSegment {
    */
   private void eliminateDuplicates(List<IndexEntry> entries) {
     Set<StoreKey> setToFindDuplicate = new HashSet<>();
-    // first choose PUTs over update entries (omitting DELETEs)
+    // first choose PUTs over update entries (omitting DELETEs and UNDELETEs)
     entries.removeIf(entry -> !entry.getValue().isDelete() && !entry.getValue().isUndelete() && !setToFindDuplicate.add(
         entry.getKey()));
-    // then choose DELETEs over all other entries
+    // then choose DELETEs/UNDELETEs over all other entries
     setToFindDuplicate.clear();
     ListIterator<IndexEntry> iterator = entries.listIterator(entries.size());
     while (iterator.hasPrevious()) {

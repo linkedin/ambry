@@ -1117,9 +1117,8 @@ class PersistentIndex {
               putValue.getOperationTimeInMs(), value.getLifeVersion()));
     } else {
       // PUT record no longer available.
-      throw new StoreException("Did not find PUT index entry for key [" + key
-          + "] and the the original offset in value of the DELETE entry was [" + value.getOriginalMessageOffset() + "]",
-          StoreErrorCodes.ID_Deleted);
+      throw new StoreException("Did not find PUT index entry for key [" + key + "] when there is an undelete entry",
+          StoreErrorCodes.ID_Not_Found);
     }
   }
 
