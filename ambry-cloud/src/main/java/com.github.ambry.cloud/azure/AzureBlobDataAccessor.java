@@ -460,7 +460,7 @@ public class AzureBlobDataAccessor {
    * @param blobIdStr The blobId string.
    * @return An Azure-friendly blob name.
    */
-  private String getAzureBlobName(String blobIdStr) {
+  String getAzureBlobName(String blobIdStr) {
     // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
     return blobIdStr.substring(blobIdStr.length() - 4) + SEPARATOR + blobIdStr;
   }

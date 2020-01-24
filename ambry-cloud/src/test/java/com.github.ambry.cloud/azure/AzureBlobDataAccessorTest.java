@@ -13,8 +13,6 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.azure.core.http.HttpHeaders;
-import com.azure.core.http.HttpRequest;
 import com.azure.core.http.rest.Response;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
@@ -168,28 +166,30 @@ public class AzureBlobDataAccessorTest {
     String blobNameNotFoundStatus = "sirius";
     String blobNameErrorStatus = "mutant";
     BlobBatch mockBatch = mock(BlobBatch.class);
-    when (mockBatchClient.getBlobBatch()).thenReturn(mockBatch);
+    when(mockBatchClient.getBlobBatch()).thenReturn(mockBatch);
     Response<Void> okResponse = mock(Response.class);
-    when (okResponse.getStatusCode()).thenReturn(202);
-    when (mockBatch.deleteBlob(anyString(), eq(blobNameOkStatus))).thenReturn(okResponse);
+    when(okResponse.getStatusCode()).thenReturn(202);
+    when(mockBatch.deleteBlob(anyString(), eq(dataAccessor.getAzureBlobName(blobNameOkStatus)))).thenReturn(okResponse);
     BlobStorageException notFoundException = mock(BlobStorageException.class);
-    when (notFoundException.getStatusCode()).thenReturn(404);
+    when(notFoundException.getStatusCode()).thenReturn(404);
     Response<Void> notFoundResponse = mock(Response.class);
-    when (notFoundResponse.getStatusCode()).thenThrow(notFoundException);
-    when (mockBatch.deleteBlob(anyString(), eq(blobNameNotFoundStatus))).thenReturn(notFoundResponse);
+    when(notFoundResponse.getStatusCode()).thenThrow(notFoundException);
+    when(mockBatch.deleteBlob(anyString(), eq(dataAccessor.getAzureBlobName(blobNameNotFoundStatus)))).thenReturn(
+        notFoundResponse);
     BlobStorageException badException = mock(BlobStorageException.class);
-    when (badException.getStatusCode()).thenReturn(503);
+    when(badException.getStatusCode()).thenReturn(503);
     Response<Void> badResponse = mock(Response.class);
-    when (badResponse.getStatusCode()).thenThrow(badException);
-    when (mockBatch.deleteBlob(anyString(), eq(blobNameErrorStatus))).thenReturn(badResponse);
+    when(badResponse.getStatusCode()).thenThrow(badException);
+    when(mockBatch.deleteBlob(anyString(), eq(dataAccessor.getAzureBlobName(blobNameErrorStatus)))).thenReturn(
+        badResponse);
     List<CloudBlobMetadata> purgeList = new ArrayList<>();
-    purgeList.add(new CloudBlobMetadata().setCloudBlobName(blobNameOkStatus));
-    purgeList.add(new CloudBlobMetadata().setCloudBlobName(blobNameNotFoundStatus));
-    purgeList.add(new CloudBlobMetadata().setCloudBlobName(blobNameErrorStatus));
+    purgeList.add(new CloudBlobMetadata().setId(blobNameOkStatus));
+    purgeList.add(new CloudBlobMetadata().setId(blobNameNotFoundStatus));
+    purgeList.add(new CloudBlobMetadata().setId(blobNameErrorStatus));
     List<CloudBlobMetadata> purgeResponseList = dataAccessor.purgeBlobs(purgeList);
     assertEquals("Wrong response size", 2, purgeResponseList.size());
-    assertEquals("Wrong blob name", blobNameOkStatus, purgeResponseList.get(0).getCloudBlobName());
-    assertEquals("Wrong blob name", blobNameNotFoundStatus, purgeResponseList.get(1).getCloudBlobName());
+    assertEquals("Wrong blob name", blobNameOkStatus, purgeResponseList.get(0).getId());
+    assertEquals("Wrong blob name", blobNameNotFoundStatus, purgeResponseList.get(1).getId());
   }
 
   /** Test initializing with a proxy */
