@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import java.nio.ByteBuffer;
 
 /**
  * Represents a message that consists of the undelete record.
- * This format is used to delete a blob
+ * This format is used to undelete a blob
  *
  *  - - - - - - - - - - - - -
  * |     Message Header      |
