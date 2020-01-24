@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.server;
+package com.github.ambry.rest;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;

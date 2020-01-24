@@ -19,6 +19,9 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Send;
+import com.github.ambry.rest.Http2ClientChannelInitializer;
+import com.github.ambry.rest.Http2ClientStreamInitializer;
+import com.github.ambry.rest.Http2ResponseHandler;
 import com.github.ambry.rest.NettySslHttp2Factory;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
@@ -62,6 +65,7 @@ public class Http2BlockingChannel implements ConnectedChannel {
   private Channel channel;
   private ChannelPromise channelPromise;
   private ByteBuf responseByteBuf;
+  private Http2StreamChannelBootstrap http2StreamChannelBootstrap;
 
   public Http2BlockingChannel(String hostName, int port) {
     this.hostName = hostName;
@@ -87,6 +91,8 @@ public class Http2BlockingChannel implements ConnectedChannel {
     // Start the client.
     channel = b.connect().syncUninterruptibly().channel();
     logger.info("Connected to remote host");
+    Http2ClientStreamInitializer initializer = new Http2ClientStreamInitializer(new Http2ResponseHandler());
+    http2StreamChannelBootstrap = new Http2StreamChannelBootstrap(channel).handler(initializer);
   }
 
   @Override
@@ -97,6 +103,7 @@ public class Http2BlockingChannel implements ConnectedChannel {
 
   @Override
   public void send(Send request) throws IOException {
+    System.out.println("send");
     ByteBufferChannel byteBufferChannel = new ByteBufferChannel(ByteBuffer.allocate((int) request.sizeInBytes()));
     while (!request.isSendComplete()) {
       request.writeTo(byteBufferChannel);
@@ -104,9 +111,7 @@ public class Http2BlockingChannel implements ConnectedChannel {
     byteBufferChannel.getBuffer().position(0);
     ByteBuf byteBuf = Unpooled.wrappedBuffer(byteBufferChannel.getBuffer());
 
-    Http2ClientStreamInitializer initializer = new Http2ClientStreamInitializer(new Http2ResponseHandler());
-    Http2StreamChannel childChannel =
-        new Http2StreamChannelBootstrap(channel).handler(initializer).open().syncUninterruptibly().getNow();
+    Http2StreamChannel childChannel = http2StreamChannelBootstrap.open().syncUninterruptibly().getNow();
     Http2Headers http2Headers = new DefaultHttp2Headers().method(HttpMethod.POST.asciiName()).scheme("https").path("/");
     http2Headers.set(RestUtils.Headers.HTTP2_FRONTEND_REQUEST, "true");
     channelPromise = childChannel.newPromise();

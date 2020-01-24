@@ -143,6 +143,7 @@ class PutManager {
         PutOperation.forUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
             userMetaData, channel, options, futureResult, callback, routerCallback, chunkArrivalListener, kms,
             cryptoService, cryptoJobHandler, time, blobProperties, partitionClass);
+    // TODO: netty send this request
     putOperations.add(putOperation);
     putOperation.startOperation();
   }

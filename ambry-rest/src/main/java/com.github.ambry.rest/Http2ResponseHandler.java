@@ -12,7 +12,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.github.ambry.server;
+package com.github.ambry.rest;
 
 import com.github.ambry.router.Callback;
 import io.netty.buffer.ByteBuf;

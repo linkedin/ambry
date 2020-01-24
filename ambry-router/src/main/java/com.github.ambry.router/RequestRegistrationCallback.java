@@ -72,6 +72,7 @@ class RequestRegistrationCallback<T> {
    * @param requestInfo the request to send out.
    */
   void registerRequestToSend(T routerOperation, RequestInfo requestInfo) {
+    // TODO: netty send here>?
     if (requestsToSend != null) {
       requestsToSend.add(requestInfo);
     }

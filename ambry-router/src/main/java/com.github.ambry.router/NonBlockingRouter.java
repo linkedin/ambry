@@ -888,6 +888,9 @@ class NonBlockingRouter implements Router {
           List<RequestInfo> requestsToSend = new ArrayList<>();
           Set<Integer> requestsToDrop = new HashSet<>();
           pollForRequests(requestsToSend, requestsToDrop);
+
+
+
           List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestsToSend,
               routerConfig.routerDropRequestOnTimeout ? requestsToDrop : Collections.emptySet(),
               NETWORK_CLIENT_POLL_TIMEOUT);

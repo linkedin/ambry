@@ -23,6 +23,7 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
 import io.netty.handler.codec.http2.Http2MultiplexHandler;
+import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import java.net.InetSocketAddress;
@@ -80,7 +81,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
       SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(peerHost, peerPort, SSLFactory.Mode.SERVER));
       pipeline.addLast("SslHandler", sslHandler);
     }
-    pipeline.addLast(Http2FrameCodecBuilder.forServer().build())
+    pipeline.addLast(Http2FrameCodecBuilder.forServer().initialSettings(Http2Settings.defaultSettings()).build())
         .addLast("IdleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
         .addLast("Http2MultiplexHandler", new Http2MultiplexHandler(
             new Http2StreamHandler(nettyMetrics, nettyConfig, performanceConfig, requestHandler)));
