@@ -292,6 +292,14 @@ class CompositeClusterManager implements ClusterMap {
   }
 
   @Override
+  public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
+    staticClusterManager.registerClusterMapListener(clusterMapChangeListener);
+    if (helixClusterManager != null) {
+      helixClusterManager.registerClusterMapListener(clusterMapChangeListener);
+    }
+  }
+
+  @Override
   public void close() {
     staticClusterManager.close();
     if (helixClusterManager != null) {

@@ -538,6 +538,11 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
+  public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
+    // No-op.
+  }
+
+  @Override
   public void close() {
     // No-op.
   }

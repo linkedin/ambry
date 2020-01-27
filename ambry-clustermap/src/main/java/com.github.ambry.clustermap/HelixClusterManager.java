@@ -83,6 +83,7 @@ public class HelixClusterManager implements ClusterMap {
   // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
   // reflects the current value.
   private final AtomicLong currentXid;
+  private final List<ClusterMapChangeListener> clusterMapChangeListeners = new ArrayList<>();
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
 
   /**
@@ -487,6 +488,11 @@ public class HelixClusterManager implements ClusterMap {
           "Either datanode or disk that associated with bootstrap replica is not found in cluster map. Cannot create the replica.");
     }
     return bootstrapReplica;
+  }
+
+  @Override
+  public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
+    clusterMapChangeListeners.add(clusterMapChangeListener);
   }
 
   /**

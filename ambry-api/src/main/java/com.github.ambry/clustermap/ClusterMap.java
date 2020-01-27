@@ -133,6 +133,12 @@ public interface ClusterMap extends AutoCloseable {
   ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId);
 
   /**
+   * Register a listener of cluster map for any changes.
+   * @param clusterMapChangeListener the {@link ClusterMapChangeListener} to add.
+   */
+  void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener);
+
+  /**
    * Close the cluster map. Any cleanups should be done in this call.
    */
   @Override
