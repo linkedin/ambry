@@ -788,7 +788,10 @@ class HelixBootstrapUpgradeUtil {
     instanceConfig.setHostName(node.getHostname());
     instanceConfig.setPort(Integer.toString(node.getPort()));
     if (node.hasSSLPort()) {
-      instanceConfig.getRecord().setSimpleField(ClusterMapUtils.SSLPORT_STR, Integer.toString(node.getSSLPort()));
+      instanceConfig.getRecord().setSimpleField(ClusterMapUtils.SSL_PORT_STR, Integer.toString(node.getSSLPort()));
+    }
+    if (node.hasHttp2Port()) {
+      instanceConfig.getRecord().setSimpleField(ClusterMapUtils.HTTP2_PORT_STR, Integer.toString(node.getHttp2Port()));
     }
     instanceConfig.getRecord().setSimpleField(ClusterMapUtils.DATACENTER_STR, node.getDatacenterName());
     instanceConfig.getRecord().setSimpleField(ClusterMapUtils.RACKID_STR, node.getRackId());
@@ -1024,8 +1027,11 @@ class HelixBootstrapUpgradeUtil {
       ensureOrThrow(diskInfos.isEmpty(), "Instance " + instanceName + " has extra disks in Helix: " + diskInfos);
 
       ensureOrThrow(!dataNode.hasSSLPort() || (dataNode.getSSLPort() == Integer.valueOf(
-          instanceConfig.getRecord().getSimpleField(ClusterMapUtils.SSLPORT_STR))),
+          instanceConfig.getRecord().getSimpleField(ClusterMapUtils.SSL_PORT_STR))),
           "SSL Port mismatch for instance " + instanceName);
+      ensureOrThrow(!dataNode.hasHttp2Port() || (dataNode.getHttp2Port() == Integer.valueOf(
+          instanceConfig.getRecord().getSimpleField(ClusterMapUtils.HTTP2_PORT_STR))),
+          "HTTP2 Port mismatch for instance " + instanceName);
       ensureOrThrow(dataNode.getDatacenterName()
               .equals(instanceConfig.getRecord().getSimpleField(ClusterMapUtils.DATACENTER_STR)),
           "Datacenter mismatch for instance " + instanceName);

@@ -294,8 +294,11 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         String instanceName = instanceConfig.getInstanceName();
         Port sslPort =
             getSslPortStr(instanceConfig) == null ? null : new Port(getSslPortStr(instanceConfig), PortType.SSL);
+        Port http2Port =
+            getHttp2PortStr(instanceConfig) == null ? null : new Port(getHttp2PortStr(instanceConfig), PortType.HTTP2);
         CloudDataNode cloudDataNode = new CloudDataNode(instanceConfig.getHostName(),
-            new Port(Integer.valueOf(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort, null, clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
+            new Port(Integer.valueOf(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort, http2Port,
+            clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
         newInstanceNameToCloudDataNode.put(instanceName, cloudDataNode);
         newVcrNodes.add(cloudDataNode);
       }
