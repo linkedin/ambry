@@ -70,6 +70,24 @@ public class MessageInfo {
    * @param size the size of this message in bytes.
    * @param deleted {@code true} if the message is deleted, {@code false} otherwise
    * @param ttlUpdated {@code true} if the message's ttl has been updated, {@code false} otherwise
+   * @param undeleted {@code true} if the message is undeleted, {@code false} otherwise
+   * @param accountId accountId of the blob
+   * @param containerId containerId of the blob
+   * @param operationTimeMs operation time in ms
+   * @param lifeVersion update version of update
+   */
+  public MessageInfo(StoreKey key, long size, boolean deleted, boolean ttlUpdated, boolean undeleted, short accountId,
+      short containerId, long operationTimeMs, short lifeVersion) {
+    this(key, size, deleted, ttlUpdated, undeleted, Utils.Infinite_Time, null, accountId, containerId, operationTimeMs,
+        lifeVersion);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message in bytes.
+   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
+   * @param ttlUpdated {@code true} if the message's ttl has been updated, {@code false} otherwise
    * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
    * @param accountId accountId of the blob
    * @param containerId containerId of the blob

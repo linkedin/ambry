@@ -53,20 +53,20 @@ public class MessageFormatInputStreamTest {
    * Tests for {@link PutMessageFormatInputStream} in different versions.
    */
   @Test
-  public void messageFormatRecordsTest() throws IOException, MessageFormatException {
-    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob,
+  public void messageFormatPutRecordsTest() throws IOException, MessageFormatException {
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob,
         MessageFormatRecord.Message_Header_Version_V1);
-    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob,
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob,
         MessageFormatRecord.Message_Header_Version_V1);
-    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
         MessageFormatRecord.Message_Header_Version_V1);
-    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob,
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob,
         MessageFormatRecord.Message_Header_Version_V2);
-    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
         MessageFormatRecord.Message_Header_Version_V2);
   }
 
-  private void messageFormatRecordsTest(short blobVersion, BlobType blobType, short headerVersion)
+  private void messageFormatPutRecordsTest(short blobVersion, BlobType blobType, short headerVersion)
       throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
     StoreKeyFactory keyFactory = new MockIdFactory();
@@ -225,7 +225,7 @@ public class MessageFormatInputStreamTest {
       default: //case MessageFormatRecord.Message_Header_Version_V2:
         totalSize = headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize
             + (int) blobSize;
-      //TODO Add MessageFormatRecord.Message_Header_Version_V3 test code
+        //TODO Add MessageFormatRecord.Message_Header_Version_V3 test code
     }
     ByteBuffer allBuf = ByteBuffer.allocate(totalSize);
     messageFormatStream.read(allBuf.array());
@@ -325,7 +325,7 @@ public class MessageFormatInputStreamTest {
    * @throws MessageFormatException
    */
   @Test
-  public void messageFormatNoArgReadTest() throws Exception, MessageFormatException {
+  public void messageFormatPutNoArgReadTest() throws Exception, MessageFormatException {
     StoreKey key = new MockId("id1");
     StoreKeyFactory keyFactory = new MockIdFactory();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -382,7 +382,7 @@ public class MessageFormatInputStreamTest {
    */
   public static void checkTtlUpdateMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
       short containerId, long updatedExpiresAtMs, long updateTimeMs) throws IOException, MessageFormatException {
-    checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key);
+    checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key, (short) -1);
     checkTtlUpdateSubRecord(stream, accountId, containerId, updatedExpiresAtMs, updateTimeMs);
   }
 
@@ -395,15 +395,19 @@ public class MessageFormatInputStreamTest {
    * @throws IOException
    * @throws MessageFormatException
    */
-  private static void checkHeaderAndStoreKeyForUpdate(InputStream stream, Long expectedRecordSize, StoreKey key)
-      throws IOException, MessageFormatException {
+  private static void checkHeaderAndStoreKeyForUpdate(InputStream stream, Long expectedRecordSize, StoreKey key,
+      short lifeVersion) throws IOException, MessageFormatException {
     MessageFormatRecord.MessageHeader_Format header = MessageFormatRecordTest.getHeader(new DataInputStream(stream));
     header.verifyHeader();
 
-    Assert.assertEquals("Version not as expected", MessageFormatRecord.headerVersionToUse, header.getVersion());
+    short messageHeaderVersion = MessageFormatRecord.headerVersionToUse;
+    if (lifeVersion != -1) {
+      messageHeaderVersion = UndeleteMessageFormatInputStream.UNDELETE_MESSAGE_HEADER_VERSION;
+    }
+    Assert.assertEquals("Version not as expected", messageHeaderVersion, header.getVersion());
     // update record relative offset. This is the only relative offset with a valid value.
     Assert.assertEquals("Update record relative offset not as expected",
-        MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse) + key.sizeInBytes(),
+        MessageFormatRecord.getHeaderSizeForVersion(messageHeaderVersion) + key.sizeInBytes(),
         header.getUpdateRecordRelativeOffset());
     if (expectedRecordSize != null) {
       Assert.assertEquals("Size of record not as expected", expectedRecordSize.longValue(), header.getMessageSize());
@@ -417,13 +421,18 @@ public class MessageFormatInputStreamTest {
     Assert.assertEquals("Blob relative offset should be invalid",
         MessageFormatRecord.Message_Header_Invalid_Relative_Offset, header.getBlobRecordRelativeOffset());
 
+    if (header.getVersion() == MessageFormatRecord.Message_Header_Version_V3) {
+      Assert.assertTrue("Header should have lifeVersion", header.hasLifeVersion());
+      Assert.assertEquals("LifeVersion mismatch", lifeVersion, header.getLifeVersion());
+    }
+
     // verify StoreKey
     byte[] keyBytes = Utils.readBytesFromStream(stream, key.sizeInBytes());
     Assert.assertArrayEquals("StoreKey not as expected", key.toBytes(), keyBytes);
   }
 
   /**
-   * Verifies the values in the {@link UpdateRecord} obtained from {@code stream}
+   * Verifies the values in the {@link UpdateRecord} obtained from {@code stream} for ttl update.
    * @param stream the {@link InputStream} to obtain the records from
    * @param accountId the account id expected
    * @param containerId the container id expected
@@ -441,6 +450,62 @@ public class MessageFormatInputStreamTest {
     Assert.assertEquals("ContainerId mismatch", containerId, updateRecord.getContainerId());
     Assert.assertEquals("Updated expiry time mismatch", updatedExpiresAtMs,
         updateRecord.getTtlUpdateSubRecord().getUpdatedExpiryTimeMs());
+    Assert.assertEquals("UpdateTime mismatch", updateTimeMs, updateRecord.getUpdateTimeInMs());
+  }
+
+  /**
+   * Test for {@link UndeleteMessageFormatInputStream}.
+   * @throws Exception
+   */
+  @Test
+  public void messageFormatUndeleteUpdateRecordTest() throws Exception {
+    StoreKey key = new MockId("id1");
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long updateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    short lifeVersion = Utils.getRandomShort(TestUtils.RANDOM);
+    MessageFormatInputStream messageFormatInputStream =
+        new UndeleteMessageFormatInputStream(key, accountId, containerId, updateTimeMs, lifeVersion);
+    long undeleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.UNDELETE);
+    // Undelete record's version will start at least from V3.
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.Message_Header_Version_V3);
+    Assert.assertEquals(headerSize + undeleteRecordSize + key.sizeInBytes(), messageFormatInputStream.getSize());
+    checkUndeleteMessage(messageFormatInputStream, undeleteRecordSize, key, accountId, containerId, updateTimeMs,
+        lifeVersion);
+  }
+
+  /**
+   * Checks a undelete message including headers and the {@link UpdateRecord}.
+   * @param stream the {@link InputStream} to read data from
+   * @param expectedRecordSize the expected size of the record in the message. Can be {@code null} if unknown (won't be
+   *                            checked)
+   * @param key the expected {@link StoreKey}
+   * @param accountId the account id expected
+   * @param containerId the container id expected
+   * @param updateTimeMs the expected time of update
+   * @throws Exception any error.
+   */
+  private static void checkUndeleteMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
+      short containerId, long updateTimeMs, short lifeVersion) throws Exception {
+    checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key, lifeVersion);
+    checkUndeleteSubRecord(stream, accountId, containerId, updateTimeMs);
+  }
+
+  /**
+   * Verifies the values in the {@link UpdateRecord} obtained from {@code stream} for undelete.
+   * @param stream the {@link InputStream} to obtain the records from
+   * @param accountId the account id expected
+   * @param containerId the container id expected
+   * @param updateTimeMs the expected time of update
+   * @throws Exception any error.
+   */
+  private static void checkUndeleteSubRecord(InputStream stream, short accountId, short containerId, long updateTimeMs)
+      throws Exception {
+    UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(stream);
+    Assert.assertEquals("Type of update record not UNDELETE", SubRecord.Type.UNDELETE, updateRecord.getType());
+    Assert.assertNotNull("UndeleteSubRecord should not be null", updateRecord.getUndeleteSubRecord());
+    Assert.assertEquals("AccountId mismatch", accountId, updateRecord.getAccountId());
+    Assert.assertEquals("ContainerId mismatch", containerId, updateRecord.getContainerId());
     Assert.assertEquals("UpdateTime mismatch", updateTimeMs, updateRecord.getUpdateTimeInMs());
   }
 }
