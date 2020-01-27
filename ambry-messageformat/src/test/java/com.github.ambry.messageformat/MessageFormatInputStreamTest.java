@@ -382,7 +382,7 @@ public class MessageFormatInputStreamTest {
    */
   public static void checkTtlUpdateMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
       short containerId, long updatedExpiresAtMs, long updateTimeMs) throws IOException, MessageFormatException {
-    checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key);
+    checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key, (short) -1);
     checkTtlUpdateSubRecord(stream, accountId, containerId, updatedExpiresAtMs, updateTimeMs);
   }
 
@@ -395,15 +395,19 @@ public class MessageFormatInputStreamTest {
    * @throws IOException
    * @throws MessageFormatException
    */
-  private static void checkHeaderAndStoreKeyForUpdate(InputStream stream, Long expectedRecordSize, StoreKey key)
-      throws IOException, MessageFormatException {
+  private static void checkHeaderAndStoreKeyForUpdate(InputStream stream, Long expectedRecordSize, StoreKey key,
+      short lifeVersion) throws IOException, MessageFormatException {
     MessageFormatRecord.MessageHeader_Format header = MessageFormatRecordTest.getHeader(new DataInputStream(stream));
     header.verifyHeader();
 
-    Assert.assertEquals("Version not as expected", MessageFormatRecord.headerVersionToUse, header.getVersion());
+    short messageHeaderVersion = MessageFormatRecord.headerVersionToUse;
+    if (lifeVersion != -1) {
+      messageHeaderVersion = UndeleteMessageFormatInputStream.UNDELETE_MESSAGE_HEADER_VERSION;
+    }
+    Assert.assertEquals("Version not as expected", messageHeaderVersion, header.getVersion());
     // update record relative offset. This is the only relative offset with a valid value.
     Assert.assertEquals("Update record relative offset not as expected",
-        MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse) + key.sizeInBytes(),
+        MessageFormatRecord.getHeaderSizeForVersion(messageHeaderVersion) + key.sizeInBytes(),
         header.getUpdateRecordRelativeOffset());
     if (expectedRecordSize != null) {
       Assert.assertEquals("Size of record not as expected", expectedRecordSize.longValue(), header.getMessageSize());
@@ -416,6 +420,11 @@ public class MessageFormatInputStreamTest {
         MessageFormatRecord.Message_Header_Invalid_Relative_Offset, header.getUserMetadataRecordRelativeOffset());
     Assert.assertEquals("Blob relative offset should be invalid",
         MessageFormatRecord.Message_Header_Invalid_Relative_Offset, header.getBlobRecordRelativeOffset());
+
+    if (header.getVersion() == MessageFormatRecord.Message_Header_Version_V3) {
+      Assert.assertTrue("Header should have lifeVersion", header.hasLifeVersion());
+      Assert.assertEquals("LifeVersion mismatch", lifeVersion, header.getLifeVersion());
+    }
 
     // verify StoreKey
     byte[] keyBytes = Utils.readBytesFromStream(stream, key.sizeInBytes());
@@ -454,12 +463,15 @@ public class MessageFormatInputStreamTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     long updateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    short lifeVersion = Utils.getRandomShort(TestUtils.RANDOM);
     MessageFormatInputStream messageFormatInputStream =
-        new UndeleteMessageFormatInputStream(key, accountId, containerId, updateTimeMs);
+        new UndeleteMessageFormatInputStream(key, accountId, containerId, updateTimeMs, lifeVersion);
     long undeleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.UNDELETE);
-    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
+    // Undelete record's version will start at least from V3.
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.Message_Header_Version_V3);
     Assert.assertEquals(headerSize + undeleteRecordSize + key.sizeInBytes(), messageFormatInputStream.getSize());
-    checkUndeleteMessage(messageFormatInputStream, undeleteRecordSize, key, accountId, containerId, updateTimeMs);
+    checkUndeleteMessage(messageFormatInputStream, undeleteRecordSize, key, accountId, containerId, updateTimeMs,
+        lifeVersion);
   }
 
   /**
@@ -474,8 +486,8 @@ public class MessageFormatInputStreamTest {
    * @throws Exception any error.
    */
   private static void checkUndeleteMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
-      short containerId, long updateTimeMs) throws Exception {
-    checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key);
+      short containerId, long updateTimeMs, short lifeVersion) throws Exception {
+    checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key, lifeVersion);
     checkUndeleteSubRecord(stream, accountId, containerId, updateTimeMs);
   }
 
