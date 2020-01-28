@@ -145,7 +145,7 @@ class AzureCloudDestination implements CloudDestination {
     this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
-    this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, null);
+    this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
     this.deadBlobsQueryLimit = CloudConfig.DEFAULT_COMPACTION_QUERY_LIMIT;
     cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
