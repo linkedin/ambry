@@ -100,39 +100,6 @@ public class AmbryServerRequests extends AmbryRequests {
     localPartitionToReplicaMap = createLocalPartitionToReplicaMap();
   }
 
-  @Override
-  public void handleRequests(NetworkRequest request) throws InterruptedException {
-    try {
-      DataInputStream stream = new DataInputStream(request.getInputStream());
-      RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
-      switch (type) {
-        case PutRequest:
-          handlePutRequest(request);
-          break;
-        case GetRequest:
-          handleGetRequest(request);
-          break;
-        case DeleteRequest:
-          handleDeleteRequest(request);
-          break;
-        case ReplicaMetadataRequest:
-          handleReplicaMetadataRequest(request);
-          break;
-        case AdminRequest:
-          handleAdminRequest(request);
-          break;
-        case TtlUpdateRequest:
-          handleTtlUpdateRequest(request);
-          break;
-        default:
-          throw new UnsupportedOperationException("Request type not supported");
-      }
-    } catch (Exception e) {
-      logger.error("Error while handling request " + request + " closing connection", e);
-      requestResponseChannel.closeConnection(request);
-    }
-  }
-
   /**
    * Get the list of replicas on current node.
    * @return a map of {@link PartitionId} to {@link ReplicaId} on current node.
