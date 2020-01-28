@@ -53,6 +53,11 @@ public class PartitionInfo {
     return this.localReplicaId;
   }
 
+  /**
+   * Add {@link RemoteReplicaInfo} to this {@link PartitionInfo} if it is previously absent.
+   * @param remoteReplicaInfo the {@link RemoteReplicaInfo} to add.
+   * @return {@code true} if remote replica info is added. {@code false} if it is already present
+   */
   boolean addReplicaInfoIfAbsent(RemoteReplicaInfo remoteReplicaInfo) {
     lock.lock();
     boolean isAdded = false;
@@ -70,6 +75,11 @@ public class PartitionInfo {
     return isAdded;
   }
 
+  /**
+   * Remove {@link RemoteReplicaInfo} from this {@link PartitionInfo} if it is present.
+   * @param remoteReplicaInfo the {@link RemoteReplicaInfo} to remove.
+   * @return {@code true} if given remote replica info previously existed and is successfully removed. {@code false}, otherwise.
+   */
   boolean removeRelicaInfoIfPresent(RemoteReplicaInfo remoteReplicaInfo) {
     lock.lock();
     boolean isRemoved;

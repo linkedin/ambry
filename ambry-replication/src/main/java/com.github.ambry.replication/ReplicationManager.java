@@ -54,11 +54,11 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
  * Set up replicas based on {@link ReplicationEngine} and do replication across all data centers.
  */
 public class ReplicationManager extends ReplicationEngine implements ClusterMapChangeListener {
+  protected final CountDownLatch startupLatch = new CountDownLatch(1);
+  protected boolean started = false;
   private final StoreConfig storeConfig;
-  private final CountDownLatch startupLatch = new CountDownLatch(1);
   private final DataNodeId currentNode;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-  private boolean started = false;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
@@ -180,7 +180,7 @@ public class ReplicationManager extends ReplicationEngine implements ClusterMapC
                   findToken,
                   TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
                   SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
-          logger.info("Adding info of remote replica {} on {} to partition info.", remoteReplica.getReplicaPath(),
+          logger.info("Adding remote replica {} on {} to partition info.", remoteReplica.getReplicaPath(),
               remoteReplica.getDataNodeId());
           if (partitionInfo.addReplicaInfoIfAbsent(remoteReplicaInfo)) {
             replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
@@ -195,10 +195,12 @@ public class ReplicationManager extends ReplicationEngine implements ClusterMapC
           PartitionInfo partitionInfo = partitionToPartitionInfo.get(remoteReplica.getPartitionId());
           for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
             if (remoteReplicaInfo.getReplicaId() == remoteReplica) {
-              logger.info("Removing info of remote replica {} on {} from replica threads.",
-                  remoteReplica.getReplicaPath(), remoteReplica.getDataNodeId());
+              logger.info("Removing remote replica {} on {} from replica threads.", remoteReplica.getReplicaPath(),
+                  remoteReplica.getDataNodeId());
               replicaInfosToRemove.add(remoteReplicaInfo);
-              partitionInfo.removeRelicaInfoIfPresent(remoteReplicaInfo);
+              if (partitionInfo.removeRelicaInfoIfPresent(remoteReplicaInfo)) {
+                replicationMetrics.removeMetricsForRemoteReplicaInfo(remoteReplicaInfo);
+              }
               break;
             }
           }
@@ -262,6 +264,9 @@ public class ReplicationManager extends ReplicationEngine implements ClusterMapC
         return v;
       });
       partitionToPartitionInfo.remove(replicaId.getPartitionId());
+      if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
+        replicationMetrics.removeLagMetricForPartition(replicaId.getPartitionId());
+      }
       logger.info("{} is successfully removed from replication manager", replicaId.getPartitionId());
     } finally {
       rwLock.writeLock().unlock();

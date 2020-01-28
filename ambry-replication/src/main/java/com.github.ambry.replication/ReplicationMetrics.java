@@ -434,11 +434,19 @@ public class ReplicationMetrics {
     }
   }
 
+  /**
+   * Remove replication lag metric of given partition if it's present.
+   * @param partitionId the given partition whose lag metric should be removed.
+   */
+  public void removeLagMetricForPartition(PartitionId partitionId) {
+    if (partitionLags.containsKey(partitionId)) {
+      registry.remove(MetricRegistry.name(ReplicaThread.class,
+          "Partition-" + partitionId.toPathString() + "-maxLagFromPeersInBytes"));
+    }
+  }
+
   public void addMetricsForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
-    ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-    DataNodeId dataNodeId = replicaId.getDataNodeId();
-    final String metricNamePrefix =
-        dataNodeId.getHostname() + "-" + dataNodeId.getPort() + "-" + replicaId.getPartitionId().toString();
+    String metricNamePrefix = generateRemoteReplicaMetricPrefix(remoteReplicaInfo);
 
     String metadataRequestErrorMetricName = metricNamePrefix + "-metadataRequestError";
     if (metadataRequestErrorMap.containsKey(metadataRequestErrorMetricName)) {
@@ -460,6 +468,23 @@ public class ReplicationMetrics {
     Gauge<Long> replicaLag = remoteReplicaInfo::getRemoteLagFromLocalInBytes;
     registry.register(MetricRegistry.name(ReplicationMetrics.class, metricNamePrefix + "-remoteLagInBytes"),
         replicaLag);
+  }
+
+  public void removeMetricsForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
+    String metricNamePrefix = generateRemoteReplicaMetricPrefix(remoteReplicaInfo);
+    String metadataRequestErrorMetricName = metricNamePrefix + "-metadataRequestError";
+    if (metadataRequestErrorMap.remove(metadataRequestErrorMetricName) == null) {
+      // if there is no metric associated with given remote replica info, this means it has already been removed
+      return;
+    }
+    registry.remove(MetricRegistry.name(ReplicaThread.class, metadataRequestErrorMetricName));
+    String getRequestErrorMetricName = metricNamePrefix + "-getRequestError";
+    getRequestErrorMap.remove(getRequestErrorMetricName);
+    registry.remove(MetricRegistry.name(ReplicaThread.class, getRequestErrorMetricName));
+    String localStoreErrorMetricName = metricNamePrefix + "-localStoreError";
+    localStoreErrorMap.remove(localStoreErrorMetricName);
+    registry.remove(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
+    registry.remove(MetricRegistry.name(ReplicationMetrics.class, metricNamePrefix + "-remoteLagInBytes"));
   }
 
   public void updateMetadataRequestError(ReplicaId remoteReplica) {
@@ -658,5 +683,11 @@ public class ReplicationMetrics {
     Optional<Map.Entry<DataNodeId, Long>> maxEntry =
         perDataNodeLag.entrySet().stream().max(Comparator.comparing(Map.Entry::getValue));
     return maxEntry.get().getValue();
+  }
+
+  private String generateRemoteReplicaMetricPrefix(RemoteReplicaInfo remoteReplicaInfo) {
+    ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+    DataNodeId dataNodeId = replicaId.getDataNodeId();
+    return dataNodeId.getHostname() + "-" + dataNodeId.getPort() + "-" + replicaId.getPartitionId().toString();
   }
 }

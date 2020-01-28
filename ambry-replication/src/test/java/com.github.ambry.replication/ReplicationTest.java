@@ -19,7 +19,9 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockHelixParticipant;
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -97,6 +99,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.MockClusterMap.*;
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
@@ -282,6 +285,73 @@ public class ReplicationTest {
     ReplicationManager mockManager = Mockito.spy(replicationManager);
     assertFalse("Remove non-existent replica should return false", replicationManager.removeReplica(replicaToTest));
     verify(mockManager, never()).removeRemoteReplicaInfoFromReplicaThread(anyList());
+    storageManager.shutdown();
+  }
+
+  /**
+   * Test cluster map change callback in {@link ReplicationManager} when any remote replicas are added or removed.
+   * Test setup: attempt to add 3 replicas and remove 3 replicas respectively. The three replicas are picked as follows:
+   *   (1) 1st replica on current node (should skip)
+   *   (2) 2nd replica on remote node sharing partition with current one (should be added or removed)
+   *   (3) 3rd replica on remote node but doesn't share partition with current one (should skip)
+   * @throws Exception
+   */
+  @Test
+  public void onRemoteReplicaAddedOrRemovedTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
+    // pick a node with no special partition as current node
+    Set<DataNodeId> specialPartitionNodes = clusterMap.getSpecialPartition()
+        .getReplicaIds()
+        .stream()
+        .map(ReplicaId::getDataNodeId)
+        .collect(Collectors.toSet());
+    DataNodeId currentNode =
+        clusterMap.getDataNodes().stream().filter(d -> !specialPartitionNodes.contains(d)).findFirst().get();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    StorageManager storageManager =
+        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
+            new MetricRegistry(), null, clusterMap, currentNode, null, null, new MockTime(), null);
+    storageManager.start();
+    MockReplicationManager replicationManager =
+        new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
+            currentNode, storeKeyConverterFactory, null);
+    // find the special partition (not on current node) and get an irrelevant replica from it
+    PartitionId absentPartition = clusterMap.getSpecialPartition();
+    ReplicaId irrelevantReplica = absentPartition.getReplicaIds().get(0);
+    // find an existing replica on current node and one of its peer replicas on remote node
+    ReplicaId existingReplica = clusterMap.getReplicaIds(currentNode).get(0);
+    ReplicaId peerReplicaToRemove =
+        existingReplica.getPartitionId().getReplicaIds().stream().filter(r -> r != existingReplica).findFirst().get();
+    // create a new node and place a peer of existing replica on it.
+    MockDataNodeId remoteNode =
+        createDataNode(getListOfPorts(PLAIN_TEXT_PORT_START_NUMBER + 10, SSL_PORT_START_NUMBER + 10),
+            clusterMap.getDatacenterName((byte) 0), 3);
+    ReplicaId addedReplica =
+        new MockReplicaId(remoteNode.getPort(), (MockPartitionId) existingReplica.getPartitionId(), remoteNode, 0);
+    // populate added replica and removed replica lists
+    List<ReplicaId> replicasToAdd = new ArrayList<>(Arrays.asList(existingReplica, addedReplica, irrelevantReplica));
+    List<ReplicaId> replicasToRemove =
+        new ArrayList<>(Arrays.asList(existingReplica, peerReplicaToRemove, irrelevantReplica));
+    PartitionInfo partitionInfo =
+        replicationManager.getPartitionToPartitionInfoMap().get(existingReplica.getPartitionId());
+    assertNotNull("PartitionInfo is not found", partitionInfo);
+    // Test Case 1: replication manager encountered exception during startup (remote replica addition/removal will be skipped)
+    replicationManager.startWithException();
+    replicationManager.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
+    // verify that PartitionInfo stays unchanged
+    verifyRemoteReplicaInfo(partitionInfo, addedReplica, false);
+    verifyRemoteReplicaInfo(partitionInfo, peerReplicaToRemove, true);
+
+    // Test Case 2: replication manager is successfully started
+    replicationManager.start();
+    replicationManager.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
+    // verify that PartitionInfo has latest remote replica infos
+    verifyRemoteReplicaInfo(partitionInfo, addedReplica, true);
+    verifyRemoteReplicaInfo(partitionInfo, peerReplicaToRemove, false);
+    verifyRemoteReplicaInfo(partitionInfo, irrelevantReplica, false);
     storageManager.shutdown();
   }
 
@@ -1797,6 +1867,24 @@ public class ReplicationTest {
   }
 
   // helpers
+
+  /**
+   * Verify remote replica info is/isn't present in given {@link PartitionInfo}.
+   * @param partitionInfo the {@link PartitionInfo} to check if it contains remote replica info
+   * @param remoteReplica remote replica to check
+   * @param shouldExist if {@code true}, remote replica info should exist. {@code false} otherwise
+   */
+  private void verifyRemoteReplicaInfo(PartitionInfo partitionInfo, ReplicaId remoteReplica, boolean shouldExist) {
+    Optional<RemoteReplicaInfo> findResult =
+        partitionInfo.getRemoteReplicaInfos().stream().filter(info -> info.getReplicaId() == remoteReplica).findAny();
+    if (shouldExist) {
+      assertTrue("Expected remote replica info is not found in partition info", findResult.isPresent());
+      assertEquals("Node of remote replica is not expected", remoteReplica.getDataNodeId(),
+          findResult.get().getReplicaId().getDataNodeId());
+    } else {
+      assertFalse("Remote replica info should no long exist in partition info", findResult.isPresent());
+    }
+  }
 
   private ReplicaId getNewReplicaToAdd(MockClusterMap clusterMap) {
     DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);

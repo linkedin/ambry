@@ -249,7 +249,7 @@ public class MockClusterMap implements ClusterMap {
     return ports;
   }
 
-  protected ArrayList<Port> getListOfPorts(int port, int sslPort) {
+  public static ArrayList<Port> getListOfPorts(int port, int sslPort) {
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(port, PortType.PLAINTEXT));
     ports.add(new Port(sslPort, PortType.SSL));

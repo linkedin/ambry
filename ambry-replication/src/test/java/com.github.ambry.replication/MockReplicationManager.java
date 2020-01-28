@@ -92,6 +92,12 @@ public class MockReplicationManager extends ReplicationManager {
   }
 
   @Override
+  public void start() {
+    startupLatch.countDown();
+    started = true;
+  }
+
+  @Override
   public boolean controlReplicationForPartitions(Collection<PartitionId> ids, List<String> origins, boolean enable) {
     failIfRequired();
     if (controlReplicationReturnVal == null) {
@@ -156,6 +162,13 @@ public class MockReplicationManager extends ReplicationManager {
    */
   Map<String, Set<PartitionInfo>> getMountPathToPartitionInfosMap() {
     return mountPathToPartitionInfos;
+  }
+
+  /**
+   * Mock that replication manager starts with an exception and boolean variable started is not updated to true.
+   */
+  void startWithException() {
+    startupLatch.countDown();
   }
 
   /**
