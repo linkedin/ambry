@@ -106,8 +106,9 @@ public class AmbryServer {
   private final NotificationSystem notificationSystem;
   private ServerMetrics metrics = null;
   private Time time;
-  private RestRequestHandler restRequestHandler;
-  private NioServer nioServer;
+  private RequestHandlerPool requestHandlerPoolForHttp2;
+  private RestRequestHandler restRequestHandlerForHttp2;
+  private NioServer nettyHttp2Server;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       ClusterSpectatorFactory clusterSpectatorFactory, Time time) {
@@ -226,21 +227,21 @@ public class AmbryServer {
             new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics,
                 findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
                 storeKeyConverterFactory, statsManager);
-        RequestHandlerPool requestHandlerPoolForHttp2 =
+        requestHandlerPoolForHttp2 =
             new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, requestResponseChannel,
                 ambryServerRequestsForHttp2);
 
         RestRequestResponseHandlerFactory restRequestHandlerFactory =
             Utils.getObj(restServerConfig.restServerRequestResponseHandlerFactory,
                 restServerConfig.restServerRequestHandlerScalingUnitCount, registry, restRequestService);
-        restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
-        restRequestHandler.start();
+        restRequestHandlerForHttp2 = restRequestHandlerFactory.getRestRequestHandler();
+        restRequestHandlerForHttp2.start();
 
         NioServerFactory nioServerFactory =
-            new StorageServerNettyFactory(nodeId.getHttp2Port(), properties, registry, restRequestHandler,
+            new StorageServerNettyFactory(nodeId.getHttp2Port(), properties, registry, restRequestHandlerForHttp2,
                 restServerState, sslFactory);
-        nioServer = nioServerFactory.getNioServer();
-        nioServer.start();
+        nettyHttp2Server = nioServerFactory.getNioServer();
+        nettyHttp2Server.start();
       }
 
       // Other code
@@ -294,11 +295,14 @@ public class AmbryServer {
       if (networkServer != null) {
         networkServer.shutdown();
       }
-      if (restRequestHandler != null) {
-        restRequestHandler.shutdown();
+      if (nettyHttp2Server != null) {
+        nettyHttp2Server.shutdown();
       }
-      if (nioServer != null) {
-        nioServer.shutdown();
+      if (restRequestHandlerForHttp2 != null) {
+        restRequestHandlerForHttp2.shutdown();
+      }
+      if (requestHandlerPoolForHttp2 != null) {
+        requestHandlerPoolForHttp2.shutdown();
       }
       if (requestHandlerPool != null) {
         requestHandlerPool.shutdown();

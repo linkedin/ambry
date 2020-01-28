@@ -64,7 +64,7 @@ public class Http2BlockingChannel implements ConnectedChannel {
   private EventLoopGroup workerGroup;
   private Channel channel;
   private ChannelPromise channelPromise;
-  private ByteBuf responseByteBuf;
+  private volatile ByteBuf responseByteBuf;
   private Http2StreamChannelBootstrap http2StreamChannelBootstrap;
 
   public Http2BlockingChannel(String hostName, int port) {
@@ -132,7 +132,9 @@ public class Http2BlockingChannel implements ConnectedChannel {
 
   @Override
   public ChannelOutput receive() throws IOException {
-    channelPromise.awaitUninterruptibly(3, TimeUnit.SECONDS);
+    if (channelPromise.awaitUninterruptibly(3, TimeUnit.SECONDS) == false) {
+      throw new IOException("No response received in 3 seconds.");
+    }
     DataInputStream dataInputStream = new NettyByteBufDataInputStream(responseByteBuf);
     return new ChannelOutput(dataInputStream, dataInputStream.readLong());
   }

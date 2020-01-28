@@ -59,6 +59,7 @@ public class CompositeSend implements Send {
         // only the last one pass in callback
         send.writeTo(channel, callback);
       } else {
+        //TODO: stop writing to the channel whenever there is an exception here and stop the for loop.
         send.writeTo(channel, null);
       }
       i++;

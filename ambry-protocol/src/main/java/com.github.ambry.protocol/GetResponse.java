@@ -109,6 +109,11 @@ public class GetResponse extends Response {
     }
   }
 
+  /**
+   * A private method shared by {@link GetResponse#writeTo(WritableByteChannel)} and
+   * {@link GetResponse#writeTo(AsyncWritableChannel, Callback)}.
+   * This method allocate bufferToSend and write metadata to it if bufferToSend is null.
+   */
   private void prepareBufferToSend() {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate(

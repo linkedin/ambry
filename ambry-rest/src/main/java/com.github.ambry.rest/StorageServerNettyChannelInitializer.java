@@ -82,7 +82,6 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
       pipeline.addLast("SslHandler", sslHandler);
     }
     pipeline.addLast(Http2FrameCodecBuilder.forServer().initialSettings(Http2Settings.defaultSettings()).build())
-        .addLast("IdleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
         .addLast("Http2MultiplexHandler", new Http2MultiplexHandler(
             new Http2StreamHandler(nettyMetrics, nettyConfig, performanceConfig, requestHandler)));
   }

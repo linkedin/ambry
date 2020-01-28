@@ -61,6 +61,11 @@ public class AdminResponse extends Response {
     return new AdminResponse(correlationId, clientId, error);
   }
 
+  /**
+   * A private method shared by {@link AdminResponse#writeTo(WritableByteChannel)} and
+   * {@link AdminResponse#writeTo(AsyncWritableChannel, Callback)}.
+   * This method allocate bufferToSend and write headers to it if bufferToSend is null.
+   */
   private void prepareBufferToSend() {
     if (bufferToSend == null) {
       serializeIntoBuffer();

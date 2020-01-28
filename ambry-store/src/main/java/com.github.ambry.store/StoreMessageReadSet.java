@@ -224,8 +224,10 @@ class StoreMessageReadSet implements MessageReadSet {
         // only the last one needs callback.
         channel.write(buf, callback);
       } else {
+        // TODO: Stop writing to the channel whenever there is an exception and stop the for loop.
         channel.write(buf, null);
       }
+      i++;
     }
   }
 
