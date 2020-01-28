@@ -448,13 +448,15 @@ public class RequestResponseTest {
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
     int correlationId = TestUtils.RANDOM.nextInt();
-    UndeleteRequest undeleteRequest = new UndeleteRequest(correlationId, "client", id1);
+    long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    UndeleteRequest undeleteRequest = new UndeleteRequest(correlationId, "client", id1, operationTimeMs);
     DataInputStream requestStream = serAndPrepForRead(undeleteRequest, -1, true);
     UndeleteRequest deserializedUndeleteRequest = UndeleteRequest.readFrom(requestStream, clusterMap);
     Assert.assertEquals(deserializedUndeleteRequest.getClientId(), "client");
     Assert.assertEquals(deserializedUndeleteRequest.getBlobId(), id1);
     Assert.assertEquals("AccountId mismatch ", id1.getAccountId(), deserializedUndeleteRequest.getAccountId());
     Assert.assertEquals("ContainerId mismatch ", id1.getContainerId(), deserializedUndeleteRequest.getContainerId());
+    Assert.assertEquals("OperationTimeMs mismatch ", operationTimeMs, deserializedUndeleteRequest.getOperationTimeMs());
     UndeleteResponse response = null;
     try {
       response = new UndeleteResponse(correlationId, "client", ServerErrorCode.No_Error);

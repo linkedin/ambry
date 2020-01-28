@@ -26,20 +26,22 @@ import java.nio.channels.WritableByteChannel;
  * Undelete request to undelete a deleted blob.
  */
 public class UndeleteRequest extends RequestOrResponse {
-  private final BlobId blobId;
   static final short UNDELETE_REQUEST_VERSION_1 = 1;
   private final static short CURRENT_VERSION = UNDELETE_REQUEST_VERSION_1;
 
   private int sizeSent = 0;
+  private final BlobId blobId;
+  private final long operationTimeMs;
 
   /**
    * Constructs {@link UndeleteRequest} in {@link #UNDELETE_REQUEST_VERSION_1}.
    * @param correlationId correlationId of the undelete request
    * @param clientId clientId of the undelete request
    * @param blobId blobId of the undelete request
+   * @param operationTimeMs the time when this operation is created (in ms).
    */
-  public UndeleteRequest(int correlationId, String clientId, BlobId blobId) {
-    this(correlationId, clientId, blobId, CURRENT_VERSION);
+  public UndeleteRequest(int correlationId, String clientId, BlobId blobId, long operationTimeMs) {
+    this(correlationId, clientId, blobId, operationTimeMs, CURRENT_VERSION);
   }
 
   /**
@@ -47,11 +49,13 @@ public class UndeleteRequest extends RequestOrResponse {
    * @param correlationId correlationId of the undelete request
    * @param clientId clientId of the undelete request
    * @param blobId blobId of the undelete request
+   * @param operationTimeMs the time when this operation is created (in ms).
    * @param version version of the {@link UndeleteRequest}.
    */
-  public UndeleteRequest(int correlationId, String clientId, BlobId blobId, short version) {
+  public UndeleteRequest(int correlationId, String clientId, BlobId blobId, long operationTimeMs, short version) {
     super(RequestOrResponseType.UndeleteRequest, version, correlationId, clientId);
     this.blobId = blobId;
+    this.operationTimeMs = operationTimeMs;
     sizeSent = 0;
   }
 
@@ -63,7 +67,8 @@ public class UndeleteRequest extends RequestOrResponse {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     BlobId id = new BlobId(stream, map);
-    return new UndeleteRequest(correlationId, clientId, id);
+    long operationTimeMs = stream.readLong();
+    return new UndeleteRequest(correlationId, clientId, id, operationTimeMs);
   }
 
   @Override
@@ -73,6 +78,7 @@ public class UndeleteRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.put(blobId.toBytes());
+      bufferToSend.putLong(operationTimeMs);
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
@@ -90,7 +96,7 @@ public class UndeleteRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + blobId
-    return super.sizeInBytes() + blobId.sizeInBytes();
+    return super.sizeInBytes() + blobId.sizeInBytes() + Long.BYTES;
   }
 
   /**
@@ -115,6 +121,14 @@ public class UndeleteRequest extends RequestOrResponse {
    */
   public short getContainerId() {
     return blobId.getContainerId();
+  }
+
+  /**
+   * Return the operationTimeMs.
+   * @return the operationTimeMs.
+   */
+  public long getOperationTimeMs() {
+    return operationTimeMs;
   }
 
   @Override
