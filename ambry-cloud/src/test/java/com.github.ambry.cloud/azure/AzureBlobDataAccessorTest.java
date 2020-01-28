@@ -42,7 +42,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import org.apache.commons.codec.binary.Base64;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -58,9 +57,6 @@ import static org.mockito.Mockito.*;
 @RunWith(MockitoJUnitRunner.class)
 public class AzureBlobDataAccessorTest {
 
-  private final String base64key = Base64.encodeBase64String("ambrykey".getBytes());
-  private final String storageConnection =
-      "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
   private final String clusterName = "main";
   private Properties configProps = new Properties();
   private AzureBlobDataAccessor dataAccessor;
@@ -68,10 +64,6 @@ public class AzureBlobDataAccessorTest {
   private BlobBatchClient mockBatchClient;
   private AzureMetrics azureMetrics;
   private int blobSize = 1024;
-  byte dataCenterId = 66;
-  short accountId = 101;
-  short containerId = 5;
-  long partition = 666;
   private BlobId blobId;
   private long creationTime = System.currentTimeMillis();
   private long deletionTime = creationTime + 10000;
@@ -86,18 +78,8 @@ public class AzureBlobDataAccessorTest {
 
     mockBlobExistence(false);
 
-    PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
-        BlobDataType.DATACHUNK);
-
-    // TODO: move common properties to util class
-    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
-    configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com");
-    configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
-    configProps.setProperty(AzureCloudConfig.COSMOS_KEY, "cosmos-key");
-    configProps.setProperty("clustermap.cluster.name", "main");
-    configProps.setProperty("clustermap.datacenter.name", "uswest");
-    configProps.setProperty("clustermap.host.name", "localhost");
+    blobId = AzureTestUtils.generateBlobId();
+    AzureTestUtils.setConfigProperties(configProps);
     azureMetrics = new AzureMetrics(new MetricRegistry());
     dataAccessor = new AzureBlobDataAccessor(mockServiceClient, mockBatchClient, clusterName, azureMetrics);
   }
@@ -200,7 +182,8 @@ public class AzureBlobDataAccessorTest {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     AzureBlobLayoutStrategy blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureConfig);
-    AzureBlobDataAccessor dataAccessor = new AzureBlobDataAccessor(cloudConfig, azureConfig, blobLayoutStrategy, azureMetrics);
+    AzureBlobDataAccessor dataAccessor =
+        new AzureBlobDataAccessor(cloudConfig, azureConfig, blobLayoutStrategy, azureMetrics);
 
     // Test with proxy
     String proxyHost = "azure-proxy.randomcompany.com";
@@ -257,7 +240,7 @@ public class AzureBlobDataAccessorTest {
    * @throws IOException on error.
    */
   private boolean uploadDefaultBlob() throws IOException {
-    InputStream inputStream = getBlobInputStream(blobSize);
+    InputStream inputStream = AzureTestUtils.getBlobInputStream(blobSize);
     CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
         CloudBlobMetadata.EncryptionOrigin.NONE);
     return dataAccessor.uploadIfNotExists(blobId, blobSize, metadata, inputStream);
@@ -283,22 +266,5 @@ public class AzureBlobDataAccessorTest {
     }
   }
 
-  /**
-   * Utility method to generate a BlobId.
-   * @return a BlobId for the default attributes.
-   */
-  private BlobId generateBlobId() {
-    return new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, blobId.getPartition(), false,
-        BlobDataType.DATACHUNK);
-  }
 
-  /**
-   * Utility method to get blob input stream.
-   * @param blobSize size of blob to consider.
-   * @return the blob input stream.
-   */
-  private static InputStream getBlobInputStream(int blobSize) {
-    byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
-    return new ByteArrayInputStream(randomBytes);
-  }
 }

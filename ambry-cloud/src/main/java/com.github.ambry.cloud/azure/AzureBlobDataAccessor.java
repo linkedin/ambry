@@ -114,7 +114,7 @@ public class AzureBlobDataAccessor {
       AzureMetrics azureMetrics) {
     this.storageClient = storageClient;
     this.storageConfiguration = new Configuration();
-    this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, null);
+    this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.azureMetrics = azureMetrics;
     this.blobBatchClient = blobBatchClient;
     this.purgeBatchSize = AzureCloudConfig.DEFAULT_PURGE_BATCH_SIZE;
