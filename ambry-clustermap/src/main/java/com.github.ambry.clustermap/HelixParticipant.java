@@ -190,7 +190,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
-   * Get the list of sealed replicas from the HelixAdmin.
    * @return list of sealed replicas from HelixAdmin.
    */
   @Override
@@ -204,7 +203,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
-   * Get the list of stopped replicas from the HelixAdmin.
    * @return list of stopped replicas from HelixAdmin
    */
   @Override
@@ -262,8 +260,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private boolean addNewReplicaInfo(ReplicaId replicaId, InstanceConfig instanceConfig) {
     boolean additionResult = true;
     String partitionName = replicaId.getPartitionId().toPathString();
-    String newReplicaInfo = partitionName + ClusterMapUtils.REPLICAS_STR_SEPARATOR + replicaId.getCapacityInBytes()
-        + ClusterMapUtils.REPLICAS_STR_SEPARATOR + replicaId.getPartitionId().getPartitionClass()
+    String newReplicaInfo = String.join(ClusterMapUtils.REPLICAS_STR_SEPARATOR, partitionName,
+        String.valueOf(replicaId.getCapacityInBytes()), replicaId.getPartitionId().getPartitionClass())
         + ClusterMapUtils.REPLICAS_DELIM_STR;
     Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
     Map<String, String> diskInfo = mountPathToDiskInfos.get(replicaId.getMountPath());
@@ -303,6 +301,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       }
     } else {
       // add replica onto a brand new disk
+      logger.info("Adding info of new replica {} to the new disk {}", replicaId.getPartitionId().toPathString(),
+          replicaId.getDiskId());
       Map<String, String> diskInfoToAdd = new HashMap<>();
       diskInfoToAdd.put(ClusterMapUtils.DISK_CAPACITY_STR,
           Long.toString(replicaId.getDiskId().getRawCapacityInBytes()));
