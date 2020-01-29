@@ -157,6 +157,7 @@ public class ReplicationTest {
     properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "200");
     properties.setProperty("replication.replica.thread.idle.sleep.duration.ms", "1000");
+    properties.setProperty("replication.track.per.partition.lag.from.remote", "true");
     properties.put("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 2L));
     verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
@@ -297,7 +298,7 @@ public class ReplicationTest {
    * @throws Exception
    */
   @Test
-  public void onRemoteReplicaAddedOrRemovedTest() throws Exception {
+  public void onReplicaAddedOrRemovedCallbackTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     StoreConfig storeConfig = new StoreConfig(verifiableProperties);
