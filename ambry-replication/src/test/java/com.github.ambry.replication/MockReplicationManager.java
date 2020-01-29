@@ -151,6 +151,13 @@ public class MockReplicationManager extends ReplicationManager {
   }
 
   /**
+   * @return dataNodeIdToReplicaThread map
+   */
+  Map<DataNodeId, ReplicaThread> getDataNodeIdToReplicaThreadMap() {
+    return dataNodeIdToReplicaThread;
+  }
+
+  /**
    * @return partitionToPartitionInfo map
    */
   Map<PartitionId, PartitionInfo> getPartitionToPartitionInfoMap() {

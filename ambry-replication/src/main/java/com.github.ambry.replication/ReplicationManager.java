@@ -193,8 +193,9 @@ public class ReplicationManager extends ReplicationEngine implements ClusterMapC
         List<RemoteReplicaInfo> replicaInfosToRemove = new ArrayList<>();
         for (ReplicaId remoteReplica : removedPeerReplicas) {
           PartitionInfo partitionInfo = partitionToPartitionInfo.get(remoteReplica.getPartitionId());
-          for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
-            if (remoteReplicaInfo.getReplicaId() == remoteReplica) {
+          List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>(partitionInfo.getRemoteReplicaInfos());
+          for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
+            if (remoteReplicaInfo.getReplicaId().getDataNodeId() == remoteReplica.getDataNodeId()) {
               logger.info("Removing remote replica {} on {} from replica threads.", remoteReplica.getReplicaPath(),
                   remoteReplica.getDataNodeId());
               replicaInfosToRemove.add(remoteReplicaInfo);

@@ -338,6 +338,14 @@ public class ReplicationTest {
     PartitionInfo partitionInfo =
         replicationManager.getPartitionToPartitionInfoMap().get(existingReplica.getPartitionId());
     assertNotNull("PartitionInfo is not found", partitionInfo);
+    RemoteReplicaInfo peerReplicaInfo = partitionInfo.getRemoteReplicaInfos()
+        .stream()
+        .filter(info -> info.getReplicaId() == peerReplicaToRemove)
+        .findFirst()
+        .get();
+    // get the replica-thread for this peer replica
+    ReplicaThread peerReplicaThread = peerReplicaInfo.getReplicaThread();
+
     // Test Case 1: replication manager encountered exception during startup (remote replica addition/removal will be skipped)
     replicationManager.startWithException();
     replicationManager.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
@@ -352,6 +360,26 @@ public class ReplicationTest {
     verifyRemoteReplicaInfo(partitionInfo, addedReplica, true);
     verifyRemoteReplicaInfo(partitionInfo, peerReplicaToRemove, false);
     verifyRemoteReplicaInfo(partitionInfo, irrelevantReplica, false);
+    // verify new added replica is assigned to a certain thread
+    ReplicaThread replicaThread =
+        replicationManager.getDataNodeIdToReplicaThreadMap().get(addedReplica.getDataNodeId());
+    assertNotNull("There is no ReplicaThread assocated with new replica", replicaThread);
+    Optional<RemoteReplicaInfo> findResult = replicaThread.getRemoteReplicaInfos()
+        .get(remoteNode)
+        .stream()
+        .filter(info -> info.getReplicaId() == addedReplica)
+        .findAny();
+    assertTrue("New added remote replica info should exist in corresponding thread", findResult.isPresent());
+
+    // verify the removed replica info's thread is null
+    assertNull("Thread in removed replica info should be null", peerReplicaInfo.getReplicaThread());
+    findResult = peerReplicaThread.getRemoteReplicaInfos()
+        .get(peerReplicaToRemove.getDataNodeId())
+        .stream()
+        .filter(info -> info.getReplicaId() == peerReplicaToRemove)
+        .findAny();
+    assertFalse("Previous replica thread should not contain RemoteReplicaInfo that is already removed",
+        findResult.isPresent());
     storageManager.shutdown();
   }
 
