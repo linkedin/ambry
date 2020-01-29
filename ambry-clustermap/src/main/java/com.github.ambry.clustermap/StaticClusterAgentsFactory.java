@@ -130,6 +130,12 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         public ReplicaSyncUpManager getReplicaSyncUpManager() {
           return null;
         }
+
+        @Override
+        public boolean updateDataNodeInfoInCluster(ReplicaId replicaId, boolean shouldExist) {
+          // static clustermap doesn't support updating node info dynamically.
+          return false;
+        }
       };
     }
     return clusterParticipant;

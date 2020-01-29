@@ -16,6 +16,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
@@ -55,6 +56,8 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import org.apache.helix.HelixAdmin;
+import org.apache.helix.model.InstanceConfig;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
@@ -72,6 +75,7 @@ import static org.mockito.Mockito.*;
  */
 public class StorageManagerTest {
   private static final Random RANDOM = new Random();
+  private static final String CLUSTER_NAME = "AmbryTestCluster";
 
   private DiskManagerConfig diskManagerConfig;
   private ClusterMapConfig clusterMapConfig;
@@ -87,7 +91,7 @@ public class StorageManagerTest {
   public void initializeCluster() throws IOException {
     clusterMap = new MockClusterMap(false, 1, 3, 3, false);
     metricRegistry = clusterMap.getMetricRegistry();
-    generateConfigs(false);
+    generateConfigs(false, false);
   }
 
   /**
@@ -187,7 +191,7 @@ public class StorageManagerTest {
    */
   @Test
   public void addBlobStoreTest() throws Exception {
-    generateConfigs(true);
+    generateConfigs(true, false);
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     int newMountPathIndex = 3;
@@ -234,12 +238,13 @@ public class StorageManagerTest {
   }
 
   /**
-   * test that both success and failure in storage manager when replica becomes BOOTSTRAP from OFFLINE.
+   * test that both success and failure in storage manager when replica becomes BOOTSTRAP from OFFLINE (update
+   * InstanceConfig in Helix is turned off in this test)
    * @throws Exception
    */
   @Test
   public void replicaFromOfflineToBootstrapTest() throws Exception {
-    generateConfigs(true);
+    generateConfigs(true, false);
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
@@ -289,14 +294,14 @@ public class StorageManagerTest {
     // restart disk manager to test case where new replica(store) is successfully added into StorageManager
     storageManager.getDiskManager(replicaOnSameDisk.getPartitionId()).start();
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
-    BlobStore newAddedStore = (BlobStore) storageManager.getStore(newPartition, false);
+    BlobStore newAddedStore = (BlobStore) storageManager.getStore(newPartition);
     assertNotNull("There should be a started store associated with new partition", newAddedStore);
 
     // 5. verify that new added store has bootstrap file
     assertTrue("There should be a bootstrap file indicating store is in BOOTSTRAP state",
         newAddedStore.isBootstrapInProgress());
 
-    // 6. test that existing replica state transition should succeed
+    // 6. test that state transition should succeed for existing replicas
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(localReplicas.get(0).getPartitionId().toPathString());
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
@@ -306,7 +311,7 @@ public class StorageManagerTest {
    */
   @Test
   public void replicaFromStandbyToInactiveTest() throws Exception {
-    generateConfigs(true);
+    generateConfigs(true, false);
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
@@ -360,7 +365,7 @@ public class StorageManagerTest {
    */
   @Test
   public void replicaFromInactiveToOfflineTest() throws Exception {
-    generateConfigs(true);
+    generateConfigs(true, false);
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     ReplicaId testReplica = localReplicas.get(0);
@@ -384,6 +389,83 @@ public class StorageManagerTest {
     mockHelixParticipant.getReplicaSyncUpManager().onDisconnectionComplete(testReplica);
     assertTrue("Helix participant transition didn't get invoked within 1 sec",
         participantLatch.await(1, TimeUnit.SECONDS));
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
+   * Test failure case when updating InstanceConfig in Helix after new replica is added in storage manager.
+   */
+  @Test
+  public void updateInstanceConfigFailureTest() throws Exception {
+    generateConfigs(true, true);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    storageManager.start();
+    // create a new partition and get its replica on local node
+    PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
+    // override return value of updateDataNodeInfoInCluster() to mock update InstanceConfig failure
+    mockHelixParticipant.updateNodeInfoReturnVal = false;
+    try {
+      mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+      fail("should fail because updating InstanceConfig didn't succeed");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.HelixUpdateFailure,
+          e.getErrorCode());
+    }
+    mockHelixParticipant.updateNodeInfoReturnVal = null;
+    // mock InstanceConfig not found error (note that MockHelixAdmin is empty by default, so no InstanceConfig is present)
+    newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
+    try {
+      mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+      fail("should fail because InstanceConfig is not found");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.HelixUpdateFailure,
+          e.getErrorCode());
+    }
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
+   * Test success case when updating InstanceConfig in Helix after new replica is added in storage manager.
+   */
+  @Test
+  public void updateInstanceConfigSuccessTest() throws Exception {
+    generateConfigs(true, true);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    storageManager.start();
+    // create a new partition and get its replica on local node
+    PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
+    ReplicaId newReplica = newPartition.getReplicaIds().get(0);
+    // for updating instanceConfig test, we first add an empty InstanceConfig of current node
+    String instanceName =
+        ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
+    InstanceConfig instanceConfig = new InstanceConfig(instanceName);
+    instanceConfig.setHostName(localNode.getHostname());
+    instanceConfig.setPort(Integer.toString(localNode.getPort()));
+    // for current test, we initial InstanceConfig empty, non-empty case will be tested in HelixParticipantTest
+    Map<String, Map<String, String>> diskInfos = new HashMap<>();
+    instanceConfig.getRecord().setMapFields(diskInfos);
+    HelixAdmin helixAdmin = mockHelixParticipant.getHelixAdmin();
+    helixAdmin.addCluster(CLUSTER_NAME);
+    helixAdmin.addInstance(CLUSTER_NAME, instanceConfig);
+    // test success case
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+    instanceConfig = helixAdmin.getInstanceConfig(CLUSTER_NAME, instanceName);
+    // verify that new replica info is present in InstanceConfig
+    Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
+    Map<String, String> diskInfo = mountPathToDiskInfos.get(newReplica.getMountPath());
+    String replicasStr = diskInfo.get("Replicas");
+    Set<String> partitionStrs = new HashSet<>();
+    for (String replicaInfo : replicasStr.split(",")) {
+      String[] infos = replicaInfo.split(":");
+      partitionStrs.add(infos[0]);
+    }
+    assertTrue("New replica info is not found in InstanceConfig", partitionStrs.contains(newPartition.toPathString()));
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
@@ -761,7 +843,7 @@ public class StorageManagerTest {
    */
   @Test
   public void diskSpaceAllocatorTest() throws Exception {
-    generateConfigs(true);
+    generateConfigs(true, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<String> mountPaths = dataNode.getMountPaths();
@@ -1004,8 +1086,9 @@ public class StorageManagerTest {
   /**
    * Generates {@link StoreConfig} and {@link DiskManagerConfig} for use in tests.
    * @param segmentedLog {@code true} to set a segment capacity lower than total store capacity
+   * @param updateInstanceConfig whether to update InstanceConfig in Helix
    */
-  private void generateConfigs(boolean segmentedLog) throws IOException {
+  private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig) throws IOException {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -1015,9 +1098,10 @@ public class StorageManagerTest {
     properties.put("store.replica.status.delegate.enable", "true");
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("clustermap.port", "2200");
-    properties.setProperty("clustermap.cluster.name", "AmbryTestCluster");
+    properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
     properties.setProperty("clustermap.datacenter.name", "DC0");
     properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    properties.setProperty("clustermap.update.datanode.info", Boolean.toString(updateInstanceConfig));
     if (segmentedLog) {
       long replicaCapacity = clusterMap.getAllPartitionIds(null).get(0).getReplicaIds().get(0).getCapacityInBytes();
       properties.put("store.segment.size.in.bytes", Long.toString(replicaCapacity / 2L));
@@ -1063,6 +1147,7 @@ public class StorageManagerTest {
    * An extension of {@link HelixParticipant} to help with tests.
    */
   private class MockClusterParticipant extends HelixParticipant {
+    Boolean updateNodeInfoReturnVal = null;
     Set<ReplicaId> sealedReplicas = new HashSet<>();
     Set<ReplicaId> stoppedReplicas = new HashSet<>();
 
@@ -1103,6 +1188,12 @@ public class StorageManagerTest {
     @Override
     public List<String> getStoppedReplicas() {
       return stoppedReplicas.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList());
+    }
+
+    @Override
+    public boolean updateDataNodeInfoInCluster(ReplicaId replicaId, boolean shouldExist) {
+      return updateNodeInfoReturnVal == null ? super.updateDataNodeInfoInCluster(replicaId, shouldExist)
+          : updateNodeInfoReturnVal;
     }
 
     @Override

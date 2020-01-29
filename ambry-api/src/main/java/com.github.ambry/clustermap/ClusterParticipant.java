@@ -75,6 +75,16 @@ public interface ClusterParticipant extends AutoCloseable {
   ReplicaSyncUpManager getReplicaSyncUpManager();
 
   /**
+   * Update disk/replica infos associated with current data node in cluster (this occurs when replica addition/removal
+   * on current node is complete and local changes will be broadcast to all listeners in this cluster)
+   * @param replicaId the {@link ReplicaId} whose info should be updated on current node
+   * @param shouldExist Whether the replica info should exist or not. When {@code true}, replica info will be added if
+   *                      it is missing in current node info. When {@code false}, replica info will be removed if present.
+   * @return if {@code true}, node info is successfully updated. {@code false} otherwise.
+   */
+  boolean updateDataNodeInfoInCluster(ReplicaId replicaId, boolean shouldExist);
+
+  /**
    * Terminate the participant.
    */
   @Override
