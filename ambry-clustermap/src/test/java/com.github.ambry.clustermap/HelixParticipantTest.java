@@ -330,22 +330,25 @@ public class HelixParticipantTest {
     MockClusterMap clusterMap = new MockClusterMap(false, 1, 3, 3, false);
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    ReplicaId existingReplica = localReplicas.get(0);
     // override some props for current test
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(true));
     props.setProperty("clustermap.port", String.valueOf(localNode.getPort()));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
-    // create InstanceConfig for local node
-    InstanceConfig instanceConfig = generateInstanceConfig(clusterMap, localNode);
+    // create InstanceConfig for local node. Also, put existing replica into sealed list
+    List<String> sealedList = new ArrayList<>();
+    sealedList.add(existingReplica.getPartitionId().toPathString());
+    InstanceConfig instanceConfig = generateInstanceConfig(clusterMap, localNode, sealedList);
     HelixAdmin helixAdmin = participant.getHelixAdmin();
     helixAdmin.addCluster(clusterMapConfig.clusterMapClusterName);
     helixAdmin.addInstance(clusterMapConfig.clusterMapClusterName, instanceConfig);
     String instanceName = ClusterMapUtils.getInstanceName(localNode.getHostname(), localNode.getPort());
     // generate exactly same config for comparison
-    InstanceConfig initialInstanceConfig = generateInstanceConfig(clusterMap, localNode);
+    InstanceConfig initialInstanceConfig = generateInstanceConfig(clusterMap, localNode, sealedList);
     // 1. add existing replica's info to Helix should be no-op
     assertTrue("Adding existing replica's info should succeed",
-        participant.updateDataNodeInfoInCluster(localReplicas.get(0), true));
+        participant.updateDataNodeInfoInCluster(existingReplica, true));
     assertEquals("InstanceConfig should stay unchanged", initialInstanceConfig,
         helixAdmin.getInstanceConfig(clusterMapConfig.clusterMapClusterName, instanceName));
     // create two new partitions on the same disk of local node
@@ -376,11 +379,11 @@ public class HelixParticipantTest {
     // 5. remove same replica again (id = 9, replicaFromPartition1) should be no-op
     assertTrue("Removing non-found replica info from InstanceConfig should succeed.",
         participant.updateDataNodeInfoInCluster(replicaFromPartition1, false));
-    // 6. remove another existing replica should succeed
+    // 6. remove an existing replica should succeed
     assertTrue("Removing replica info from InstanceConfig should succeed.",
-        participant.updateDataNodeInfoInCluster(localReplicas.get(0), false));
+        participant.updateDataNodeInfoInCluster(existingReplica, false));
     instanceConfig = helixAdmin.getInstanceConfig(clusterMapConfig.clusterMapClusterName, instanceName);
-    verifyReplicaInfoInInstanceConfig(instanceConfig, localReplicas.get(0), false);
+    verifyReplicaInfoInInstanceConfig(instanceConfig, existingReplica, false);
     verifyReplicaInfoInInstanceConfig(instanceConfig, replicaFromPartition2, true);
     // reset props
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(false));
@@ -391,9 +394,11 @@ public class HelixParticipantTest {
    * Generate {@link InstanceConfig} for given data node.
    * @param clusterMap {@link MockClusterMap} to use
    * @param dataNode the data node associated with InstanceConfig.
+   * @param sealedReplicas the sealed replicas that should be placed into sealed list. This can be null.
    * @return {@link InstanceConfig} of given data node.
    */
-  private InstanceConfig generateInstanceConfig(MockClusterMap clusterMap, MockDataNodeId dataNode) {
+  private InstanceConfig generateInstanceConfig(MockClusterMap clusterMap, MockDataNodeId dataNode,
+      List<String> sealedReplicas) {
     String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
     InstanceConfig instanceConfig = new InstanceConfig(instanceName);
     instanceConfig.setHostName(dataNode.getHostname());
@@ -427,6 +432,8 @@ public class HelixParticipantTest {
       mountPathToDiskInfos.put(mountPath, diskInfo);
     }
     instanceConfig.getRecord().setMapFields(mountPathToDiskInfos);
+    instanceConfig.getRecord()
+        .setListField(ClusterMapUtils.SEALED_STR, sealedReplicas == null ? new ArrayList<>() : sealedReplicas);
     return instanceConfig;
   }
 
@@ -445,12 +452,16 @@ public class HelixParticipantTest {
     for (String replicaInfo : diskInfo.get(REPLICAS_STR).split(REPLICAS_DELIM_STR)) {
       replicasOnDisk.add(replicaInfo.split(REPLICAS_STR_SEPARATOR)[0]);
     }
+    List<String> sealedList = getSealedReplicas(instanceConfig);
+    List<String> stoppedList = getStoppedReplicas(instanceConfig);
+    String partitionName = replicaId.getPartitionId().toPathString();
     if (shouldExist) {
-      assertTrue("New replica is not found in InstanceConfig",
-          replicasOnDisk.contains(replicaId.getPartitionId().toPathString()));
+      assertTrue("New replica is not found in InstanceConfig", replicasOnDisk.contains(partitionName));
     } else {
-      assertFalse("Old replica should not exist in InstanceConfig",
-          replicasOnDisk.contains(replicaId.getPartitionId().toPathString()));
+      assertFalse("Old replica should not exist in InstanceConfig", replicasOnDisk.contains(partitionName));
+      // make sure the replica is not present in sealed/stopped list
+      assertFalse("Old replica should not exist in sealed/stopped list",
+          sealedList.contains(partitionName) || stoppedList.contains(partitionName));
     }
   }
 

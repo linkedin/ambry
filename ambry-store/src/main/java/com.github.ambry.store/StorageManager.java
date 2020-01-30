@@ -404,11 +404,11 @@ public class StorageManager implements StoreManager {
           // update InstanceConfig in Helix
           try {
             if (!clusterParticipant.updateDataNodeInfoInCluster(replicaToAdd, true)) {
-              logger.error("Failed to add partition {} into InstanceConfig for {}", partitionName,
-                  currentNode.getHostname());
+              logger.error("Failed to add partition {} into InstanceConfig of current node", partitionName);
               throw new StateTransitionException("Failed to add partition " + partitionName + " into InstanceConfig",
                   StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
             }
+            logger.info("Partition {} is successfully added into InstanceConfig of current node", partitionName);
           } catch (IllegalStateException e) {
             throw new StateTransitionException(e.getMessage(),
                 StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
@@ -498,6 +498,20 @@ public class StorageManager implements StoreManager {
         throw new StateTransitionException("Failed to shutdown store " + partitionName, ReplicaOperationFailure);
       }
       logger.info("Store {} is successfully shut down during Inactive-To-Offline transition", partitionName);
+      if (clusterParticipant != null) {
+        // update InstanceConfig in Helix
+        try {
+          if (!clusterParticipant.updateDataNodeInfoInCluster(replica, false)) {
+            logger.error("Failed to remove partition {} from InstanceConfig of current node", partitionName);
+            throw new StateTransitionException("Failed to remove partition " + partitionName + " from InstanceConfig",
+                StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+          }
+          logger.info("Partition {} is successfully removed from InstanceConfig of current node", partitionName);
+        } catch (IllegalStateException e) {
+          throw new StateTransitionException(e.getMessage(),
+              StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+        }
+      }
     }
 
     @Override
@@ -512,10 +526,6 @@ public class StorageManager implements StoreManager {
           throw new StateTransitionException("Failed to delete directory for store " + partitionName,
               ReplicaOperationFailure);
         }
-        // Remove store from sealed and stopped list (if present)
-        logger.info("Removing store from sealed and stopped list(if present)");
-        replicaStatusDelegate.unseal(replica);
-        replicaStatusDelegate.unmarkStopped(Collections.singletonList(replica));
       } else {
         throw new StateTransitionException("Failed to remove store " + partitionName + " from storage manager",
             ReplicaOperationFailure);
