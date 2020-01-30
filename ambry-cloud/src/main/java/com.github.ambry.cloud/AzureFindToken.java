@@ -13,12 +13,13 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Objects;
+
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -39,11 +40,11 @@ public class AzureFindToken {
    * Default constructor to create a {@link AzureFindToken} with uninitialized continuation token.
    */
   public AzureFindToken() {
-    startContinuationToken = null;
+    startContinuationToken = "";
     index = -1;
-    endContinuationToken = null;
+    endContinuationToken = "";
     totalItems = -1;
-    azureTokenRequestId = null;
+    azureTokenRequestId = "";
     version = DEFAULT_VERSION;
   }
 
@@ -118,14 +119,14 @@ public class AzureFindToken {
     byte[] buf = new byte[size()];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     bufWrap.putShort(version);
-    bufWrap.putInt(startContinuationToken.length());
-    bufWrap.put(startContinuationToken.getBytes());
-    bufWrap.putInt(endContinuationToken.length());
-    bufWrap.put(endContinuationToken.getBytes());
+    bufWrap.putInt(getNullableStringLength(startContinuationToken));
+    bufWrap.put(nullableStringToBytes(startContinuationToken));
+    bufWrap.putInt(getNullableStringLength(endContinuationToken));
+    bufWrap.put(nullableStringToBytes(endContinuationToken));
     bufWrap.putInt(index);
     bufWrap.putInt(totalItems);
-    bufWrap.putInt(azureTokenRequestId.length());
-    bufWrap.put(azureTokenRequestId.getBytes());
+    bufWrap.putInt(getNullableStringLength(azureTokenRequestId));
+    bufWrap.put(nullableStringToBytes(azureTokenRequestId));
     return buf;
   }
 
@@ -134,16 +135,16 @@ public class AzureFindToken {
   }
 
   public int size() {
-    return Short.BYTES + 5 * Integer.BYTES + startContinuationToken.length() + endContinuationToken.length()
-        + azureTokenRequestId.length();
+    return Short.BYTES + 5 * Integer.BYTES + getNullableStringLength(startContinuationToken) + getNullableStringLength(
+        endContinuationToken) + getNullableStringLength(azureTokenRequestId);
   }
 
   public boolean equals(AzureFindToken azureFindToken) {
-    return azureFindToken.getVersion() == version && Utils.checkNullableStringEquals(
-        azureFindToken.getStartContinuationToken(), startContinuationToken) && Utils.checkNullableStringEquals(
+    return azureFindToken.getVersion() == version && checkNullableStringEquals(
+        azureFindToken.getStartContinuationToken(), startContinuationToken) && checkNullableStringEquals(
         azureFindToken.getEndContinuationToken(), endContinuationToken) && azureFindToken.getTotalItems() == totalItems
-        && azureFindToken.getIndex() == index && Utils.checkNullableStringEquals(
-        azureFindToken.getAzureTokenRequestId(), azureTokenRequestId);
+        && azureFindToken.getIndex() == index && checkNullableStringEquals(azureFindToken.getAzureTokenRequestId(),
+        azureTokenRequestId);
   }
 
   /**

@@ -48,12 +48,11 @@ public class MockChangeFeedQuery extends CosmosDataAccessor {
     blobIdToContinuationTokenMap.put(blobId, Integer.toString(continuationTokenCounter));
   }
 
-  String getContinuationTokenForBlob(String blobId) {
-    return blobIdToContinuationTokenMap.get(blobId);
-  }
-
   public String queryChangeFeed(String requestContinuationToken, int maxFeedSize, List<CloudBlobMetadata> changeFeed,
       String partitionId) {
+    if (requestContinuationToken.equals("")) {
+      requestContinuationToken = "0";
+    }
     // there are no changes since last continuation token or there is no change feed at all, then return
     if ((requestContinuationToken != null && Integer.parseInt(requestContinuationToken) == continuationTokenCounter + 1)
         || continuationTokenCounter == -1) {

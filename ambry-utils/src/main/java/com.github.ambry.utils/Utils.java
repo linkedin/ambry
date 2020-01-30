@@ -310,7 +310,7 @@ public class Utils {
    * @param <T> The exception to throw in this operation.
    */
   @FunctionalInterface
-  public static interface ByteBufferFunction<T extends Throwable> {
+  public interface ByteBufferFunction<T extends Throwable> {
     ByteBuffer apply(ByteBuffer buffer) throws T;
   }
 
@@ -701,6 +701,15 @@ public class Utils {
    */
   public static int getNullableStringLength(String value) {
     return value == null ? 0 : value.length();
+  }
+
+  /**
+   * Converts {@link String} to bytes for a nullable string.
+   * @param str Input string to convert to byte[]
+   * @return byte[] representing the bytes in the string.
+   */
+  public static byte[] nullableStringToBytes(String str) {
+    return str == null ? new byte[0] : str.getBytes();
   }
 
   /**
@@ -1102,7 +1111,7 @@ public class Utils {
    * @return true if strings are equal. False otherwise.
    */
   public static boolean checkNullableStringEquals(String str1, String str2) {
-    if(str1 == null || str2 == null) {
+    if (str1 == null || str2 == null) {
       return str1 == str2;
     }
     return str1.equals(str2);

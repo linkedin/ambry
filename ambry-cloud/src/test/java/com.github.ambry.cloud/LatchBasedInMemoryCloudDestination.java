@@ -195,11 +195,15 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     AzureFindToken azureFindToken = findToken.getAzureFindToken();
     if (blobIds.size() != 0) {
       azureFindToken = new AzureFindToken(changeFeed.getContinuationTokenForBlob(blobIds.get(0)),
-          changeFeed.getContinuationTokenForBlob(blobIds.get(blobIds.size() - 1)), 0, blobIds.size(),
-          changeFeed.getReqUuid());
+          createEndContinuationToken(blobIds), 0, blobIds.size(), changeFeed.getReqUuid());
     }
     long bytesToBeRead = nextEntries.stream().mapToLong(CloudBlobMetadata::getSize).sum();
     return CloudFindToken.getUpdatedToken(findToken, azureFindToken, bytesToBeRead);
+  }
+
+  private String createEndContinuationToken(List<BlobId> blobIds) {
+    return Integer.toString(
+        Integer.parseInt(changeFeed.getContinuationTokenForBlob(blobIds.get(blobIds.size() - 1))) + 1);
   }
 
   /**
@@ -210,6 +214,9 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
    */
   private void getFeed(String continuationToken, long maxTotalSizeOfEntries, List<BlobId> feed) {
     int continuationTokenCounter = changeFeed.getContinuationTokenCounter();
+    if (continuationToken.equals("")) {
+      continuationToken = "0";
+    }
     // there are no changes since last continuation token or there is no change feed at all, then return
     if (Integer.parseInt(continuationToken) == continuationTokenCounter + 1 || continuationTokenCounter == -1) {
       return;
