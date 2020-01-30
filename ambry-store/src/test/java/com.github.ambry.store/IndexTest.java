@@ -107,7 +107,7 @@ public class IndexTest {
       state.destroy();
     }
     assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, true));
-    PersistentIndex.setVersion(PersistentIndex.CURRENT_VERSION);
+    PersistentIndex.CURRENT_VERSION = PersistentIndex.VERSION_2;
   }
 
   /**
@@ -402,7 +402,7 @@ public class IndexTest {
   public void undeleteBasicTest() throws StoreException {
     assumeTrue(isLogSegmented);
     //Get deleted key that hasn't been TTLUpdated
-    PersistentIndex.setVersion(PersistentIndex.VERSION_3);
+    PersistentIndex.CURRENT_VERSION = PersistentIndex.VERSION_3;
     StoreKey targetKey = null;
     for (StoreKey key : state.deletedKeys) {
       if (state.deletedAndShouldBeCompactedKeys.contains(key)) {
@@ -449,7 +449,7 @@ public class IndexTest {
   @Test
   public void markAsUndeletedBadInputTest() throws StoreException {
     assumeTrue(isLogSegmented);
-    PersistentIndex.setVersion(PersistentIndex.VERSION_3);
+    PersistentIndex.CURRENT_VERSION = PersistentIndex.VERSION_3;
     // FileSpan end offset < currentIndexEndOffset
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
     try {

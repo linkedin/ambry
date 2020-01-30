@@ -67,32 +67,8 @@ class PersistentIndex {
   static final short VERSION_1 = 1;
   static final short VERSION_2 = 2;
   static final short VERSION_3 = 3;
-  static final short CURRENT_VERSION = VERSION_2;
+  static short CURRENT_VERSION = VERSION_2;
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
-
-  // set by the setVersion method from test cases to test IndexValue at next version.
-  private static Short externalSetVersion = null;
-
-  /**
-   * Return the version. If {@link #setVersion(Short)} was invoked before, the version provided in the {@link #setVersion(Short)}
-   * would be returned here.
-   * @return The version of {@link PersistentIndex}.
-   */
-  static short getVersion() {
-    if (externalSetVersion != null) {
-      return externalSetVersion;
-    }
-    return CURRENT_VERSION;
-  }
-
-  /**
-   * Set the version for {@link PersistentIndex}. To resume the version to default one, pass a null to this method.
-   * This method should only be used in the test cases.
-   * @param external the version to set for {@link PersistentIndex}.
-   */
-  static void setVersion(Short external) {
-    externalSetVersion = external;
-  }
 
   static final FilenameFilter INDEX_SEGMENT_FILE_FILTER = new FilenameFilter() {
     @Override
@@ -676,7 +652,7 @@ class PersistentIndex {
    * @return The list of the {@link IndexValue}s for {@code key} conforming to one of the types {@code types}.
    * @throws StoreException any error.
    */
-  List<IndexValue> findAllIndexValuesForKeyinReverseOrder(StoreKey key, FileSpan fileSpan,
+  List<IndexValue> findAllIndexValuesForKeyInReverseOrder(StoreKey key, FileSpan fileSpan,
       EnumSet<IndexEntryType> types, ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
     List<IndexValue> result = null;
     final Timer.Context context = metrics.findTime.time();
@@ -827,6 +803,7 @@ class PersistentIndex {
    * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise. Used if the PUT
    *             record could not be found
    * @param deletionTimeMs deletion time of the blob. In-case of recovery, deletion time is obtained from {@code info}.
+   * @param lifeVersion lifeVersion of this undelete record.
    * @return the {@link IndexValue} of the delete record
    * @throws StoreException
    */
@@ -894,6 +871,7 @@ class PersistentIndex {
    * @param operationTimeMs the time of the update operation
    * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise. Used if the PUT
    *             record could not be found
+   * @param lifeVersion lifeVersion of this ttlUpdate record.
    * @return the {@link IndexValue} of the ttl update record
    * @throws StoreException if there is any problem writing the index record
    */
@@ -961,6 +939,7 @@ class PersistentIndex {
    * @param operationTimeMs the time of the update operation
    * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise. Used if the PUT
    *             record could not be found
+   * @param lifeVersion lifeVersion of this undelete record.
    * @return the {@link IndexValue} of the undelete record
    * @throws StoreException if there is any problem writing the index record
    */
@@ -969,7 +948,7 @@ class PersistentIndex {
     boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
     validateFileSpan(fileSpan, true);
     List<IndexValue> values =
-        findAllIndexValuesForKeyinReverseOrder(id, null, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
+        findAllIndexValuesForKeyInReverseOrder(id, null, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
     validateSanityForUndelete(id, values);
     // This value is the delete IndexValue
     IndexValue value = values.get(0);

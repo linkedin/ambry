@@ -212,7 +212,7 @@ class IndexValue implements Comparable<IndexValue> {
     this.accountId = accountId;
     this.containerId = containerId;
     this.lifeVersion = lifeVersion;
-    formatVersion = PersistentIndex.getVersion();
+    formatVersion = PersistentIndex.CURRENT_VERSION;
   }
 
   /**
@@ -274,7 +274,7 @@ class IndexValue implements Comparable<IndexValue> {
    * @return true when it's not a put record.
    */
   boolean isPut() {
-    return !(isTTLUpdate() || isDelete() || isUndelete());
+    return flags == FLAGS_DEFAULT_VALUE;
   }
 
   /**
@@ -428,12 +428,11 @@ class IndexValue implements Comparable<IndexValue> {
 
   @Override
   public String toString() {
-    return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isFlagSet(Flags.Delete_Index)
-        + ", TTL Updated: " + isFlagSet(Flags.Ttl_Update_Index) + ", Undelete: " + isFlagSet(Flags.Undelete_Index)
-        + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset() + (
-        formatVersion != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs " + getOperationTimeInMs() + ", AccountId "
-            + getAccountId() + ", ContainerId " + getContainerId()) : "") + (formatVersion > PersistentIndex.VERSION_2 ?
-        ", Life Version:" + lifeVersion : "");
+    return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isDelete() + ", TTL Updated: " + isTTLUpdate()
+        + ", Undelete: " + isUndelete() + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: "
+        + getOriginalMessageOffset() + (formatVersion != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs "
+        + getOperationTimeInMs() + ", AccountId " + getAccountId() + ", ContainerId " + getContainerId()) : "") + (
+        formatVersion > PersistentIndex.VERSION_2 ? ", Life Version:" + lifeVersion : "");
   }
 
   /**
