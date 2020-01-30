@@ -318,15 +318,17 @@ class PersistentIndex {
         if (info.isDeleted()) {
           markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info, info.getOperationTimeMs(),
               info.getLifeVersion());
-          logger.info("Index : {} updated message with key {} by inserting delete entry of size {} ttl {}", dataDir,
-              info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
+          logger.info(
+              "Index : {} updated message with key {} by inserting delete entry of size {} ttl {} lifeVersion{}",
+              dataDir, info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.getLifeVersion());
           // removes from the tracking structure if a delete was being expected for the key
           deleteExpectedKeys.remove(info.getStoreKey());
         } else if (info.isTtlUpdated()) {
           markAsPermanent(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info,
               info.getOperationTimeMs(), info.getLifeVersion());
-          logger.info("Index : {} updated message with key {} by inserting TTL update entry of size {} ttl {}", dataDir,
-              info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
+          logger.info(
+              "Index : {} updated message with key {} by inserting TTL update entry of size {} ttl {} lifeVersion {}",
+              dataDir, info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.getLifeVersion());
           if (value == null) {
             // this TTL update was forced even though there was no equivalent PUT record - this means that we MUST see
             // a DELETE for this key (because the PUT record is gone, compaction must have cleaned it up because a
@@ -336,8 +338,9 @@ class PersistentIndex {
         } else if (info.isUndeleted()) {
           markAsUndeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info.getOperationTimeMs(),
               info.getLifeVersion());
-          logger.info("Index : {} updated message with key {} by inserting undelete update entry of size {} ttl {}",
-              dataDir, info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
+          logger.info(
+              "Index : {} updated message with key {} by inserting undelete update entry of size {} ttl {} lifeVersion {}",
+              dataDir, info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.getLifeVersion());
           if (value == null) {
             // Undelete record indicates that there might be a put and delete record before it.
             throw new StoreException("Put record were expected but were not encountered for key: " + info.getStoreKey(),
