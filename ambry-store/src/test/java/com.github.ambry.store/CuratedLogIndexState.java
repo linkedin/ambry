@@ -65,8 +65,8 @@ import static org.junit.Assert.*;
 class CuratedLogIndexState {
   private static final byte[] RECOVERY_INFO = new byte[100];
   // setupTestState() is coupled to these numbers. Changing them *will* cause setting test state or tests to fail.
-  private static final long LOG_CAPACITY = 30000;
-  private static final long SEGMENT_CAPACITY = 3000;
+  private static final long LOG_CAPACITY = 40000;
+  private static final long SEGMENT_CAPACITY = 4000;
   private static final long HARD_DELETE_START_OFFSET = 11;
   private static final long HARD_DELETE_LAST_PART_SIZE = 13;
 
@@ -457,8 +457,6 @@ class CuratedLogIndexState {
     boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
     if (value == null) {
       throw new IllegalArgumentException(idToUndelete + " does not exist in the index");
-    } else if (value != null && !value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-      throw new IllegalArgumentException(idToUndelete + " is not yet deleted");
     }
 
     // add undelete to log
@@ -484,7 +482,11 @@ class CuratedLogIndexState {
     newValue.clearOriginalMessageOffset();
     newValue.setFlag(IndexValue.Flags.Undelete_Index);
     newValue.clearFlag(IndexValue.Flags.Delete_Index);
-    index.markAsUndeleted(idToUndelete, fileSpan, newValue.getOperationTimeInMs());
+    if (hasLifeVersion) {
+      index.markAsUndeleted(idToUndelete, fileSpan, newValue.getOperationTimeInMs(), lifeVersion);
+    } else {
+      index.markAsUndeleted(idToUndelete, fileSpan, newValue.getOperationTimeInMs());
+    }
     markAsUndeleted(idToUndelete);
     logOrder.put(startOffset, new Pair<>(idToUndelete, new LogEntry(dataWritten, newValue)));
     allKeys.computeIfAbsent(idToUndelete, k -> new TreeSet<>()).add(newValue);
@@ -861,6 +863,7 @@ class CuratedLogIndexState {
     IndexSegment prevIndexSegment = null;
     Map<MockId, Boolean> keyToDeleteSeenMap = new HashMap<>();
     Map<MockId, Boolean> keyToTtlUpdateSeenMap = new HashMap<>();
+    Map<MockId, Short> keyToLifeVersionMap = new HashMap<>();
     for (IndexSegment indexSegment : index.getIndexSegments().values()) {
       Offset indexSegmentStartOffset = indexSegment.getStartOffset();
       if (prevIndexSegment == null) {
@@ -891,7 +894,12 @@ class CuratedLogIndexState {
           assertTrue("Duplicated DELETE record for " + id, deleteSeen == null || !deleteSeen);
           keyToDeleteSeenMap.put(id, true);
         } else if (value.isFlagSet(IndexValue.Flags.Undelete_Index)) {
-          assertTrue("Undelete record should has a delete prior to it " + id, deleteSeen != null && deleteSeen);
+          short prevLifeVersion = keyToLifeVersionMap.put(id, value.getLifeVersion());
+          short currentLifeVersion = value.getLifeVersion();
+          if (PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3) {
+            assertTrue("Undelete's lifeVersion should be greater than previous one, Undelete: " + currentLifeVersion
+                + " Previous: " + prevLifeVersion, prevLifeVersion < currentLifeVersion);
+          }
           keyToDeleteSeenMap.put(id, false);
         } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
           // should not be repeated
@@ -912,6 +920,7 @@ class CuratedLogIndexState {
           keyToTtlUpdateSeenMap.put(id, false);
           keyToDeleteSeenMap.put(id, false);
         }
+        keyToLifeVersionMap.put(id, value.getLifeVersion());
       }
       long expectedOffset = indexSegmentStartOffset.getOffset();
       NavigableSet<IndexEntry> indexEntriesByOffset = new TreeSet<>(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
@@ -1174,6 +1183,27 @@ class CuratedLogIndexState {
     // add undelete to all of them
     for (IndexEntry ent : entries) {
       addUndeleteEntry((MockId) ent.getKey());
+    }
+
+    // Add records from replication, make sure we have these records
+    // 1. P0 -> U3
+    // 2. P0, T0 -> U3
+    // 3. P0, U1 -> U3
+    entries = addPutEntries(3, CuratedLogIndexState.DELETE_RECORD_SIZE, Infinite_Time);
+    IndexEntry ptu = entries.get(1);
+    IndexEntry puu = entries.get(2);
+
+    // finish P, T
+    id = (MockId) ptu.getKey();
+    makePermanent(id, false);
+
+    // finish P, U
+    id = (MockId) puu.getKey();
+    addUndeleteEntry(id, (short) 1);
+
+    // add undelete to all of them
+    for (IndexEntry ent : entries) {
+      addUndeleteEntry((MockId) ent.getKey(), (short) 3);
     }
   }
 

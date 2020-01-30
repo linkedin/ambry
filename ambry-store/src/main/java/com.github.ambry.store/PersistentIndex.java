@@ -334,8 +334,8 @@ class PersistentIndex {
             deleteExpectedKeys.add(info.getStoreKey());
           }
         } else if (info.isUndeleted()) {
-          markAsUndeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info,
-              info.getOperationTimeMs(), info.getLifeVersion());
+          markAsUndeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info.getOperationTimeMs(),
+              info.getLifeVersion());
           logger.info("Index : {} updated message with key {} by inserting undelete update entry of size {} ttl {}",
               dataDir, info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
           if (value == null) {
@@ -529,11 +529,12 @@ class PersistentIndex {
   }
 
   /**
-   * Finds a key in the index and returns the blob index value associated with it. If not found,
-   * returns null
+   * Finds {@link IndexValue} that represents the latest state of the given {@code key} in the index and return it. If
+   * not found, returns null.
    * <br>
-   * This method only returns PUT or DELETE index entries. It does not return TTL_UPDATE entries but accounts for
-   * TTL updates by updating the flag and expiry time (if applicable).
+   * This method returns the final state of the given {@code key}. The final state of a key can be a Put value, a Delete
+   * value and a Undelete value. Ttl_update isn't considered as final state as it just update the expiration date.
+   * {@link IndexValue} returned by this method would carry expiration date from Ttl_update if there is one.
    * @param key  The key to find in the index
    * @return The blob index value associated with the key. Null if the key is not found.
    * @throws StoreException
@@ -711,15 +712,42 @@ class PersistentIndex {
    * hasn't expired yet.
    * @param key the key to be undeleted.
    * @param values the previous {@link IndexValue}s in reversed order.
-   * @throws StoreException
+   * @param lifeVersion lifeVersion for the undelete record, it's only valid when in recovery or replication.
    */
-  void validateSanityForUndelete(StoreKey key, List<IndexValue> values) throws StoreException {
-    // When it's valid to undelete this key
-    // P/T + D
-    // P/T + D + U + D
+  void validateSanityForUndelete(StoreKey key, List<IndexValue> values, short lifeVersion) throws StoreException {
     if (values == null || values.isEmpty()) {
       throw new StoreException("Id " + key + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
     }
+    if (!IndexValue.hasLifeVersion(lifeVersion)) {
+      validateSanityForUndeleteWithoutLifeVersion(key, values);
+      return;
+    }
+    IndexValue firstValue = values.get(values.size() - 1);
+    IndexValue lastValue = values.get(0);
+    if (!firstValue.isPut()) {
+      throw new StoreException("Id " + key + " requires first value to be a put in index " + dataDir,
+          StoreErrorCodes.ID_Deleted_Permanently);
+    }
+    if (lastValue.getLifeVersion() >= lifeVersion) {
+      throw new StoreException(
+          "LifeVersion conflict in index. Id " + key + " LifeVersion: " + lastValue.getLifeVersion()
+              + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
+    }
+  }
+
+  /**
+   * Ensure that the previous {@link IndexValue}s is structured correctly for undeleting the {@code key} when there is
+   * no lifeVersion provided.
+   * <p/>
+   * Undelete should be permitted only when the first record is a Put and last record is a Delete, and the Put record
+   * hasn't expired yet.
+   * @param key the key to be undeleted.
+   * @param values the previous {@link IndexValue}s in reversed order.
+   */
+  void validateSanityForUndeleteWithoutLifeVersion(StoreKey key, List<IndexValue> values) throws StoreException {
+    // When it's valid to undelete this key
+    // P/T + D
+    // P/T + D + U + D
     if (values.size() == 1) {
       IndexValue value = values.get(0);
       if (value.isDelete() || value.isTTLUpdate()) {
@@ -815,11 +843,16 @@ class PersistentIndex {
     if (value == null && info == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
     } else if (value != null) {
-      if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-        throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
-      } else if (hasLifeVersion && value.getLifeVersion() > lifeVersion) {
-        throw new StoreException("LifeVersion conflict in index. Id " + id + " LifeVersion: " + value.getLifeVersion()
-            + " Delete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
+      if (hasLifeVersion) {
+        // When this method is invoked in either recovery or replication, delete can follow any index value.
+        if ((value.isDelete() && value.getLifeVersion() >= lifeVersion) || (value.getLifeVersion() > lifeVersion)) {
+          throw new StoreException("LifeVersion conflict in index. Id " + id + " LifeVersion: " + value.getLifeVersion()
+              + " Delete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
+        }
+      } else {
+        if (value.isDelete()) {
+          throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
+        }
       }
     }
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
@@ -929,7 +962,7 @@ class PersistentIndex {
    * @throws StoreException if there is any problem writing the index record
    */
   IndexValue markAsUndeleted(StoreKey id, FileSpan fileSpan, long operationTimeMs) throws StoreException {
-    return markAsUndeleted(id, fileSpan, null, operationTimeMs, IndexValue.LIFE_VERSION_FROM_FRONTEND);
+    return markAsUndeleted(id, fileSpan, operationTimeMs, IndexValue.LIFE_VERSION_FROM_FRONTEND);
   }
 
   /**
@@ -937,32 +970,21 @@ class PersistentIndex {
    * @param id the {@link StoreKey} of the blob
    * @param fileSpan the file span represented by this entry in the log
    * @param operationTimeMs the time of the update operation
-   * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise. Used if the PUT
-   *             record could not be found
    * @param lifeVersion lifeVersion of this undelete record.
    * @return the {@link IndexValue} of the undelete record
    * @throws StoreException if there is any problem writing the index record
    */
-  private IndexValue markAsUndeleted(StoreKey id, FileSpan fileSpan, MessageInfo info, long operationTimeMs,
-      short lifeVersion) throws StoreException {
+  IndexValue markAsUndeleted(StoreKey id, FileSpan fileSpan, long operationTimeMs, short lifeVersion)
+      throws StoreException {
     boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
     validateFileSpan(fileSpan, true);
     List<IndexValue> values =
         findAllIndexValuesForKeyInReverseOrder(id, null, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
-    validateSanityForUndelete(id, values);
+    validateSanityForUndelete(id, values, lifeVersion);
     // This value is the delete IndexValue
     IndexValue value = values.get(0);
     maybeChangeExpirationDate(value, values);
-    if (hasLifeVersion) {
-      // last delete's life version might not equal to the current undelete's life version minus 1, because of compaction
-      // and replication, but it's always less than undelete's lift version.
-      if (value.getLifeVersion() >= lifeVersion) {
-        throw new StoreException("LifeVersion conflict in index. Id " + id + " LifeVersion: " + value.getLifeVersion()
-            + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
-      }
-    } else {
-      lifeVersion = (short) (value.getLifeVersion() + 1);
-    }
+    lifeVersion = hasLifeVersion ? lifeVersion : (short) (value.getLifeVersion() + 1);
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
     IndexValue newValue =
         new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(), operationTimeMs,

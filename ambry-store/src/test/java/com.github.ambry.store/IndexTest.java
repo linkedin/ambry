@@ -923,10 +923,10 @@ public class IndexTest {
         new MessageInfo(deletedId, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, deletedId.getAccountId(),
             deletedId.getContainerId(), state.time.milliseconds());
     doRecoveryFailureTest(info, StoreErrorCodes.ID_Deleted);
-    // recovery info contains a DELETE for a key that has been deleted
+    // recovery info contains a DELETE for a key that has been deleted, with the same lifeVersion
     info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds());
-    doRecoveryFailureTest(info, StoreErrorCodes.ID_Deleted);
+    doRecoveryFailureTest(info, StoreErrorCodes.Life_Version_Conflict);
     // recovery info that contains a PUT beyond the end offset of the log segment
     info = new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
