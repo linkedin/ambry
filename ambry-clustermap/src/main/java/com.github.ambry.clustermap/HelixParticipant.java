@@ -333,8 +333,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     String partitionName = replicaId.getPartitionId().toPathString();
     List<String> stoppedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.STOPPED_REPLICAS_STR);
     List<String> sealedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
-    stoppedReplicas = stoppedReplicas == null ? Collections.emptyList() : stoppedReplicas;
-    sealedReplicas = sealedReplicas == null ? Collections.emptyList() : sealedReplicas;
+    stoppedReplicas = stoppedReplicas == null ? new ArrayList<>() : stoppedReplicas;
+    sealedReplicas = sealedReplicas == null ? new ArrayList<>() : sealedReplicas;
     if (stoppedReplicas.remove(partitionName) || sealedReplicas.remove(partitionName)) {
       logger.info("Removing partition {} from stopped and sealed list", partitionName);
       instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicas);

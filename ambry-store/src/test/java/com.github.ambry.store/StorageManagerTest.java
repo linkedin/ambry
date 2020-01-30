@@ -393,7 +393,7 @@ public class StorageManagerTest {
   }
 
   /**
-   * Test failure case when updating InstanceConfig in Helix after new replica is added in storage manager.
+   * Test failure cases when updating InstanceConfig in Helix for both Offline-To-Bootstrap and Inactive-To-Offline.
    */
   @Test
   public void updateInstanceConfigFailureTest() throws Exception {
@@ -409,7 +409,14 @@ public class StorageManagerTest {
     mockHelixParticipant.updateNodeInfoReturnVal = false;
     try {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
-      fail("should fail because updating InstanceConfig didn't succeed");
+      fail("should fail because updating InstanceConfig didn't succeed during Offline-To-Bootstrap");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.HelixUpdateFailure,
+          e.getErrorCode());
+    }
+    try {
+      mockHelixParticipant.onPartitionBecomeOfflineFromInactive(localReplicas.get(0).getPartitionId().toPathString());
+      fail("should fail because updating InstanceConfig didn't succeed during Inactive-To-Offline");
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.HelixUpdateFailure,
           e.getErrorCode());
@@ -419,7 +426,14 @@ public class StorageManagerTest {
     newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
     try {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
-      fail("should fail because InstanceConfig is not found");
+      fail("should fail because InstanceConfig is not found during Offline-To-Bootstrap");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.HelixUpdateFailure,
+          e.getErrorCode());
+    }
+    try {
+      mockHelixParticipant.onPartitionBecomeOfflineFromInactive(localReplicas.get(1).getPartitionId().toPathString());
+      fail("should fail because InstanceConfig is not found during Inactive-To-Offline");
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.HelixUpdateFailure,
           e.getErrorCode());
