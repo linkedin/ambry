@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.commons.BlobId;
+import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 
@@ -23,7 +24,7 @@ import java.security.GeneralSecurityException;
  */
 class DecryptJob implements CryptoJob {
   private final BlobId blobId;
-  private final ByteBuffer encryptedBlobContent;
+  private final ByteBuf encryptedBlobContent;
   private final ByteBuffer encryptedUserMetadata;
   private final ByteBuffer encryptedPerBlobKey;
   private final Callback<DecryptJobResult> callback;
@@ -36,14 +37,14 @@ class DecryptJob implements CryptoJob {
    * {@link Callback}
    * @param blobId the {@link BlobId} for which decryption is requested
    * @param encryptedPerBlobKey encrypted per blob key
-   * @param encryptedBlobContent encrypted blob content. Could be {@null}
+   * @param encryptedBlobContent encrypted blob content. Could be {@null}. Currently the BlobContent is in a {@link ByteBuf}.
    * @param encryptedUserMetadata encrypted user metadata. Could be {@null}
    * @param cryptoService the {@link CryptoService} instance to use
    * @param kms the {@link KeyManagementService} instance to use
    * @param decryptJobMetricsTracker metrics tracker to track the decryption job
    * @param callback {@link Callback} to be invoked on completion
    */
-  DecryptJob(BlobId blobId, ByteBuffer encryptedPerBlobKey, ByteBuffer encryptedBlobContent,
+  DecryptJob(BlobId blobId, ByteBuffer encryptedPerBlobKey, ByteBuf encryptedBlobContent,
       ByteBuffer encryptedUserMetadata, CryptoService cryptoService, KeyManagementService kms,
       CryptoJobMetricsTracker decryptJobMetricsTracker, Callback<DecryptJobResult> callback) {
     this.blobId = blobId;
@@ -73,7 +74,7 @@ class DecryptJob implements CryptoJob {
       Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
       Object perBlobKey = cryptoService.decryptKey(encryptedPerBlobKey, containerKey);
       if (encryptedBlobContent != null) {
-        decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent, perBlobKey);
+        decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent.nioBuffer(), perBlobKey);
       }
       if (encryptedUserMetadata != null) {
         decryptedUserMetadata = cryptoService.decrypt(encryptedUserMetadata, perBlobKey);
@@ -81,6 +82,10 @@ class DecryptJob implements CryptoJob {
     } catch (Exception e) {
       exception = e;
     } finally {
+      // After decryption, we release the ByteBuf;
+      if (encryptedBlobContent != null) {
+        encryptedBlobContent.release();
+      }
       decryptJobMetricsTracker.onJobProcessingComplete();
       callback.onCompletion(
           exception == null ? new DecryptJobResult(blobId, decryptedBlobContent, decryptedUserMetadata) : null,

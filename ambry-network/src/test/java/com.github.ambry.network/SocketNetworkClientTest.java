@@ -18,7 +18,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.commons.NettyByteBufLeakHelper;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;

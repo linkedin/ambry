@@ -42,6 +42,7 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
@@ -260,9 +261,12 @@ public class ServerReadPerformance {
             long sizeRead = 0;
             byte[] outputBuffer = new byte[(int) blobData.getSize()];
             ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
-            while (sizeRead < blobData.getSize()) {
-              streamOut.write(blobData.getStream().read());
-              sizeRead++;
+            ByteBuf buffer = blobData.getAndRelease();
+            try {
+              buffer.readBytes(streamOut, (int) blobData.getSize());
+            } finally {
+              buffer.release();
+              buffer = null;
             }
             long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
             totalTimeTaken.addAndGet(latencyPerBlob);

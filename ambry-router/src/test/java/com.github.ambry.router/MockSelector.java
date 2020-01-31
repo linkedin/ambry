@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.BoundedByteBufferReceive;
@@ -23,9 +24,15 @@ import com.github.ambry.network.NetworkReceive;
 import com.github.ambry.network.NetworkSend;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.Selector;
+import com.github.ambry.utils.ByteBufferChannel;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
+import java.io.SequenceInputStream;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -48,6 +55,7 @@ class MockSelector extends Selector {
   private final AtomicReference<MockSelectorState> state;
   private final MockServerLayout serverLayout;
   private boolean isOpen = true;
+  private final NetworkConfig config;
 
   /**
    *
@@ -58,14 +66,15 @@ class MockSelector extends Selector {
    * @param time the Time instance to use.
    * @throws IOException if {@link Selector} throws.
    */
-  MockSelector(MockServerLayout serverLayout, AtomicReference<MockSelectorState> state, Time time) throws IOException {
-    super(new NetworkMetrics(new MetricRegistry()), time, null,
-        new NetworkConfig(new VerifiableProperties(new Properties())));
+  MockSelector(MockServerLayout serverLayout, AtomicReference<MockSelectorState> state, Time time, NetworkConfig config)
+      throws IOException {
+    super(new NetworkMetrics(new MetricRegistry()), time, null, config);
     // we don't need the actual selector, close it.
     super.close();
     this.serverLayout = serverLayout;
     this.state = state == null ? new AtomicReference<MockSelectorState>(MockSelectorState.Good) : state;
     this.time = time;
+    this.config = config;
   }
 
   /**
@@ -122,7 +131,22 @@ class MockSelector extends Selector {
           MockServer server = connIdToServer.get(send.getConnectionId());
           BoundedByteBufferReceive receive = server.send(send.getPayload());
           if (receive != null) {
-            receives.add(new NetworkReceive(send.getConnectionId(), receive, time));
+            if (!config.networkUseNettyByteBuf) {
+              receives.add(new NetworkReceive(send.getConnectionId(), receive, time));
+            } else {
+              // Convert a BoundedByteBufferReceive to BoundedNettyByteBufReceive
+              BoundedNettyByteBufReceive boundedNettyByteBufReceive = new BoundedNettyByteBufReceive();
+              ByteBuffer buffer = (ByteBuffer) receive.getAndRelease();
+              ByteBuffer sizeBuffer = ByteBuffer.allocate(Long.BYTES);
+              sizeBuffer.putLong(buffer.remaining() + Long.BYTES);
+              sizeBuffer.flip();
+              ReadableByteChannel channel = Channels.newChannel(
+                  new SequenceInputStream(new ByteBufferInputStream(sizeBuffer), new ByteBufferInputStream(buffer)));
+              while (!boundedNettyByteBufReceive.isReadComplete()) {
+                boundedNettyByteBufReceive.readFrom(channel);
+              }
+              receives.add(new NetworkReceive(send.getConnectionId(), boundedNettyByteBufReceive, time));
+            }
           }
         }
       }

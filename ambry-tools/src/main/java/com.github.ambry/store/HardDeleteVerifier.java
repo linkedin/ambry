@@ -28,6 +28,8 @@ import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -456,28 +458,32 @@ public class HardDeleteVerifier {
               }
 
               if (isDeleted) {
-                if (!verifyZeroed(metadata.array()) || !verifyZeroed(
-                    Utils.readBytesFromStream(output.getStream(), new byte[(int) output.getSize()], 0,
-                        (int) output.getSize()))) {
+                ByteBuf byteBuf = output.getAndRelease();
+                try {
+                  if (!verifyZeroed(metadata.array()) || !verifyZeroed(
+                      Utils.readBytesFromByteBuf(byteBuf, new byte[(int) output.getSize()], 0,
+                          (int) output.getSize()))) {
                     /* If the offset in the index is different from that in the log, hard delete wouldn't have been
                        possible and we just saw a duplicate put for the same key, otherwise we missed a hard delete. */
-                  if (currentOffset == indexValue.getOriginalMessageOffset()) {
-                    notHardDeletedErrorCount++;
+                    if (currentOffset == indexValue.getOriginalMessageOffset()) {
+                      notHardDeletedErrorCount++;
+                    } else {
+                      // the assumption here is that this put has been lost as far as the index is concerned due to
+                      // a duplicate put. Of course, these shouldn't happen anymore, we are accounting for past
+                      // bugs.
+                      duplicatePuts++;
+                    }
                   } else {
-                    // the assumption here is that this put has been lost as far as the index is concerned due to
-                    // a duplicate put. Of course, these shouldn't happen anymore, we are accounting for past
-                    // bugs.
-                    duplicatePuts++;
+                    hardDeletedPuts++;
                   }
-                } else {
-                  hardDeletedPuts++;
+                } finally {
+                  byteBuf.release();
+                  byteBuf = null;
                 }
               } else {
                 unDeletedPuts++;
               }
-            } else if (MessageFormatRecord.deserializeUpdateRecord(streamlog)
-                .getType()
-                .equals(SubRecord.Type.DELETE)) {
+            } else if (MessageFormatRecord.deserializeUpdateRecord(streamlog).getType().equals(SubRecord.Type.DELETE)) {
               deletes++;
             }
             currentOffset += (header.getMessageSize() + buffer.capacity() + id.sizeInBytes());
@@ -681,8 +687,7 @@ public class HardDeleteVerifier {
     boolean caughtException = false;
     boolean caughtExceptionInOld = false;
     try {
-      isDeleteRecord =
-          MessageFormatRecord.deserializeUpdateRecord(streamlog).getType().equals(SubRecord.Type.DELETE);
+      isDeleteRecord = MessageFormatRecord.deserializeUpdateRecord(streamlog).getType().equals(SubRecord.Type.DELETE);
     } catch (Exception e) {
       caughtException = true;
     }
@@ -730,22 +735,31 @@ public class HardDeleteVerifier {
 
     if (!caughtException) {
       if (isDeleted) {
+        ByteBuf byteBuf = blobData.getAndRelease();
         try {
           asExpected = verifyZeroed(usermetadata.array()) && verifyZeroed(
-              Utils.readBytesFromStream(blobData.getStream(), new byte[(int) blobData.getSize()], 0,
-                  (int) blobData.getSize()));
+              Utils.readBytesFromByteBuf(byteBuf, new byte[(int) blobData.getSize()], 0, (int) blobData.getSize()));
         } catch (IOException e) {
           asExpected = false;
+        } finally {
+          byteBuf.release();
+          byteBuf = null;
         }
       } else {
+        ByteBuf byteBuf = blobData.getAndRelease();
+        ByteBuf oldByteBuf = oldBlobData.getAndRelease();
         try {
           asExpected = Arrays.equals(usermetadata.array(), oldUsermetadata.array()) && Arrays.equals(
-              Utils.readBytesFromStream(blobData.getStream(), new byte[(int) blobData.getSize()], 0,
-                  (int) blobData.getSize()),
-              Utils.readBytesFromStream(oldBlobData.getStream(), new byte[(int) oldBlobData.getSize()], 0,
+              Utils.readBytesFromByteBuf(byteBuf, new byte[(int) blobData.getSize()], 0, (int) blobData.getSize()),
+              Utils.readBytesFromByteBuf(oldByteBuf, new byte[(int) oldBlobData.getSize()], 0,
                   (int) oldBlobData.getSize()));
         } catch (IOException e) {
           asExpected = false;
+        } finally {
+          byteBuf.release();
+          oldByteBuf.release();
+          byteBuf = null;
+          oldByteBuf = null;
         }
       }
       return asExpected;

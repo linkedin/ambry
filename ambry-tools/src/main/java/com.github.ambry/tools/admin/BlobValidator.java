@@ -37,6 +37,7 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -415,9 +416,10 @@ public class BlobValidator implements Closeable {
       ServerErrorCode errorCode = response.getFirst();
       if (errorCode == ServerErrorCode.No_Error) {
         BlobAll blobAll = response.getSecond();
-        ByteBuffer buffer = blobAll.getBlobData().getStream().getByteBuffer();
-        byte[] blobBytes = new byte[buffer.remaining()];
-        buffer.get(blobBytes);
+        ByteBuf buffer = blobAll.getBlobData().getAndRelease();
+        byte[] blobBytes = new byte[buffer.readableBytes()];
+        buffer.readBytes(blobBytes);
+        buffer.release();
         serverResponse = new ServerResponse(errorCode, blobAll.getStoreKey(), blobAll.getBlobInfo().getBlobProperties(),
             blobAll.getBlobInfo().getUserMetadata(), blobBytes, blobAll.getBlobEncryptionKey());
       } else {

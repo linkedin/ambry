@@ -15,11 +15,13 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -243,7 +245,8 @@ public class MessageFormatRecord {
    */
   public static BlobAll deserializeBlobAll(InputStream stream, StoreKeyFactory storeKeyFactory)
       throws IOException, MessageFormatException {
-    DataInputStream inputStream = new DataInputStream(stream);
+    DataInputStream inputStream =
+        stream instanceof DataInputStream ? (DataInputStream) stream : new DataInputStream(stream);
     short headerVersion = inputStream.readShort();
     ByteBuffer headerBuf;
     MessageHeader_Format header;
@@ -277,7 +280,7 @@ public class MessageFormatRecord {
             MessageFormatErrorCodes.Unknown_Format_Version);
     }
     header.verifyHeader();
-    StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(stream));
+    StoreKey storeKey = storeKeyFactory.getStoreKey(inputStream);
     ByteBuffer blobEncryptionKey = null;
     if (header.hasEncryptionKeyRecord()) {
       blobEncryptionKey = deserializeBlobEncryptionKey(stream);
@@ -1671,7 +1674,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = Utils.getByteBufferInputStreamFromCrcInputStream(crcStream, (int) dataSize);
+      ByteBuf byteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, (int) dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
@@ -1679,7 +1682,7 @@ public class MessageFormatRecord {
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new BlobData(BlobType.DataBlob, dataSize, output);
+      return new BlobData(BlobType.DataBlob, dataSize, byteBuf);
     }
   }
 
@@ -1729,7 +1732,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = Utils.getByteBufferInputStreamFromCrcInputStream(crcStream, (int) dataSize);
+      ByteBuf byteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, (int) dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
@@ -1737,7 +1740,7 @@ public class MessageFormatRecord {
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new BlobData(blobContentType, dataSize, output);
+      return new BlobData(blobContentType, dataSize, byteBuf);
     }
   }
 

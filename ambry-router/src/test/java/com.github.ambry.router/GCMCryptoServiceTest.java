@@ -14,8 +14,8 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.NettyByteBufLeakHelper;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;

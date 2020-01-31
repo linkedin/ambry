@@ -55,12 +55,11 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.tools.util.ToolUtils;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.ByteBuf;
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.File;
@@ -317,7 +316,12 @@ public class ServerAdminTool implements Closeable {
             serverAdminTool.getBlob(dataNodeId, blobId, config.getOption, clusterMap);
         if (bResponse.getFirst() == ServerErrorCode.No_Error) {
           LOGGER.info("Blob type of {} from {} is {}", blobId, dataNodeId, bResponse.getSecond().getBlobType());
-          writeBufferToFile(bResponse.getSecond().getStream().getByteBuffer(), outputFileStream);
+          ByteBuf buffer = bResponse.getSecond().getAndRelease();
+          try {
+            writeByteBufToFile(buffer, outputFileStream);
+          } finally {
+            buffer.release();
+          }
           LOGGER.info("Blob data for {} from {} written to {}", blobId, dataNodeId, config.dataOutputFilePath);
         } else {
           LOGGER.error("Failed to get blob data for {} from {} with option {}. Error code is {}", blobId, dataNodeId,
@@ -455,6 +459,16 @@ public class ServerAdminTool implements Closeable {
     byte[] bytes = new byte[buffer.remaining()];
     buffer.get(bytes);
     outputFileStream.write(bytes);
+  }
+
+  /**
+   * Writes the content of {@code buffer} into {@link ServerAdminToolConfig#dataOutputFilePath}.
+   * @param buffer the {@link ByteBuf} whose content needs to be written.
+   * @param outputFileStream the {@link FileOutputStream} to write to.
+   * @throws IOException
+   */
+  private static void writeByteBufToFile(ByteBuf buffer, FileOutputStream outputFileStream) throws IOException {
+    buffer.readBytes(outputFileStream, buffer.readableBytes());
   }
 
   /**

@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.RequestInfo;
@@ -25,6 +26,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 
 
@@ -41,8 +43,9 @@ class MockNetworkClient extends SocketNetworkClient {
    * Construct a MockNetworkClient with mock components.
    */
   MockNetworkClient() throws IOException {
-    super(new MockSelector(new MockServerLayout(new MockClusterMap()), null, new MockTime()), null,
-        new NetworkMetrics(new MetricRegistry()), 0, 0, 0, new MockTime());
+    super(new MockSelector(new MockServerLayout(new MockClusterMap()), null, new MockTime(),
+            new NetworkConfig(new VerifiableProperties(new Properties()))), null, new NetworkMetrics(new MetricRegistry()),
+        0, 0, 0, new MockTime());
   }
 
   /**

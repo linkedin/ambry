@@ -27,8 +27,8 @@ import io.netty.util.ReferenceCountUtil;
 public class ResponseInfo {
   private final RequestInfo requestInfo;
   private final NetworkClientErrorCode error;
-  private final Object response;
   private final DataNodeId dataNode;
+  private Object response;
 
   /**
    * Constructs a ResponseInfo with the given parameters.
@@ -69,20 +69,12 @@ public class ResponseInfo {
   }
 
   /**
-   * Increase the reference count of underlying response.
-   */
-  public void retain() {
-    if (response != null) {
-      ReferenceCountUtil.retain(response);
-    }
-  }
-
-  /**
    * Decrease the reference count of underlying response.
    */
   public void release() {
     if (response != null) {
       ReferenceCountUtil.release(response);
+      response = null;
     }
   }
 

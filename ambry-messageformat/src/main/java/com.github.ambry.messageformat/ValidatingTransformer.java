@@ -20,6 +20,7 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
+import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -72,9 +73,12 @@ public class ValidatingTransformer implements Transformer {
         throw new IllegalStateException("Message cannot be a deleted record ");
       }
       if (msgInfo.getStoreKey().equals(keyInStream)) {
+        // ValidatingTransformer only exists on ambry-server and we don't enable netty on ambry server yet. So And blobData.getAndRelease
+        // will return an Unpooled ByteBuf, it's not not to release it.
+        // @todo, when enabling netty in ambry-server, release this ByteBuf.
         PutMessageFormatInputStream transformedStream =
-            new PutMessageFormatInputStream(keyInStream, encryptionKey, props, metadata, blobData.getStream(),
-                blobData.getSize(), blobData.getBlobType());
+            new PutMessageFormatInputStream(keyInStream, encryptionKey, props, metadata,
+                new ByteBufInputStream(blobData.getAndRelease(), true), blobData.getSize(), blobData.getBlobType());
         MessageInfo transformedMsgInfo =
             new MessageInfo(keyInStream, transformedStream.getSize(), msgInfo.isDeleted(), msgInfo.isTtlUpdated(),
                 msgInfo.getExpirationTimeInMs(), msgInfo.getCrc(), msgInfo.getAccountId(), msgInfo.getContainerId(),

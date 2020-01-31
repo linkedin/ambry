@@ -33,6 +33,7 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -198,9 +199,11 @@ class Verifier implements Runnable {
                 try {
                   BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
                   byte[] blobout = new byte[(int) blobData.getSize()];
-                  int readsize = 0;
-                  while (readsize < blobData.getSize()) {
-                    readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
+                  ByteBuf buffer = blobData.getAndRelease();
+                  try {
+                    buffer.readBytes(blobout);
+                  } finally {
+                    buffer.release();
                   }
                   if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
                     throw new IllegalStateException();
@@ -228,11 +231,11 @@ class Verifier implements Runnable {
                   BlobAll blobAll =
                       MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), new BlobIdFactory(clusterMap));
                   byte[] blobout = new byte[(int) blobAll.getBlobData().getSize()];
-                  int readsize = 0;
-                  while (readsize < blobAll.getBlobData().getSize()) {
-                    readsize += blobAll.getBlobData()
-                        .getStream()
-                        .read(blobout, readsize, (int) blobAll.getBlobData().getSize() - readsize);
+                  ByteBuf buffer = blobAll.getBlobData().getAndRelease();
+                  try {
+                    buffer.readBytes(blobout);
+                  } finally {
+                    buffer.release();
                   }
                   if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
                     throw new IllegalStateException();
