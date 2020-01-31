@@ -19,8 +19,15 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.model.InstanceConfig;
@@ -31,6 +38,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -310,6 +318,140 @@ public class HelixParticipantTest {
     assertEquals(AmbryStateModelFactory.class, helixManager.getStateModelFactory().getClass());
     participant.close();
     assertFalse(helixManager.isConnected());
+  }
+
+  /**
+   * Test both replica info addition and removal cases when updating node info in Helix cluster.
+   * @throws Exception
+   */
+  @Test
+  public void testUpdateNodeInfoInCluster() throws Exception {
+    // test setup: 3 disks on local node, each disk has 3 replicas
+    MockClusterMap clusterMap = new MockClusterMap(false, 1, 3, 3, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    // override some props for current test
+    props.setProperty("clustermap.update.datanode.info", Boolean.toString(true));
+    props.setProperty("clustermap.port", String.valueOf(localNode.getPort()));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
+    // create InstanceConfig for local node
+    InstanceConfig instanceConfig = generateInstanceConfig(clusterMap, localNode);
+    HelixAdmin helixAdmin = participant.getHelixAdmin();
+    helixAdmin.addCluster(clusterMapConfig.clusterMapClusterName);
+    helixAdmin.addInstance(clusterMapConfig.clusterMapClusterName, instanceConfig);
+    String instanceName = ClusterMapUtils.getInstanceName(localNode.getHostname(), localNode.getPort());
+    // generate exactly same config for comparison
+    InstanceConfig initialInstanceConfig = generateInstanceConfig(clusterMap, localNode);
+    // 1. add existing replica's info to Helix should be no-op
+    assertTrue("Adding existing replica's info should succeed",
+        participant.updateDataNodeInfoInCluster(localReplicas.get(0), true));
+    assertEquals("InstanceConfig should stay unchanged", initialInstanceConfig,
+        helixAdmin.getInstanceConfig(clusterMapConfig.clusterMapClusterName, instanceName));
+    // create two new partitions on the same disk of local node
+    PartitionId newPartition1 = clusterMap.createNewPartition(Collections.singletonList(localNode), 0);
+    PartitionId newPartition2 = clusterMap.createNewPartition(Collections.singletonList(localNode), 0);
+    // 2. add new partition2 (id = 10, replicaFromPartition2) into InstanceConfig
+    ReplicaId replicaFromPartition2 = newPartition2.getReplicaIds().get(0);
+    assertTrue("Adding new replica info into InstanceConfig should succeed.",
+        participant.updateDataNodeInfoInCluster(replicaFromPartition2, true));
+    // verify new added replica (id = 10, replicaFromPartition2) info is present in InstanceConfig
+    instanceConfig = helixAdmin.getInstanceConfig(clusterMapConfig.clusterMapClusterName, instanceName);
+    verifyReplicaInfoInInstanceConfig(instanceConfig, replicaFromPartition2, true);
+    // 3. add new partition1 (id = 9, replicaFromPartition1) into InstanceConfig
+    ReplicaId replicaFromPartition1 = newPartition1.getReplicaIds().get(0);
+    assertTrue("Adding new replica info into InstanceConfig should succeed.",
+        participant.updateDataNodeInfoInCluster(replicaFromPartition1, true));
+    // verify new added replica (id = 9, replicaFromPartition1) info is present in InstanceConfig
+    instanceConfig = helixAdmin.getInstanceConfig(clusterMapConfig.clusterMapClusterName, instanceName);
+    verifyReplicaInfoInInstanceConfig(instanceConfig, replicaFromPartition1, true);
+    // ensure previous added replica (id = 10, replicaFromPartition2) still exists
+    verifyReplicaInfoInInstanceConfig(instanceConfig, replicaFromPartition2, true);
+    // 4. remove recently added new replica (id = 9, replicaFromPartition1)
+    assertTrue("Removing replica info from InstanceConfig should succeed.",
+        participant.updateDataNodeInfoInCluster(replicaFromPartition1, false));
+    instanceConfig = helixAdmin.getInstanceConfig(clusterMapConfig.clusterMapClusterName, instanceName);
+    verifyReplicaInfoInInstanceConfig(instanceConfig, replicaFromPartition1, false);
+    verifyReplicaInfoInInstanceConfig(instanceConfig, replicaFromPartition2, true);
+    // 5. remove same replica again (id = 9, replicaFromPartition1) should be no-op
+    assertTrue("Removing non-found replica info from InstanceConfig should succeed.",
+        participant.updateDataNodeInfoInCluster(replicaFromPartition1, false));
+    // 6. remove another existing replica should succeed
+    assertTrue("Removing replica info from InstanceConfig should succeed.",
+        participant.updateDataNodeInfoInCluster(localReplicas.get(0), false));
+    instanceConfig = helixAdmin.getInstanceConfig(clusterMapConfig.clusterMapClusterName, instanceName);
+    verifyReplicaInfoInInstanceConfig(instanceConfig, localReplicas.get(0), false);
+    verifyReplicaInfoInInstanceConfig(instanceConfig, replicaFromPartition2, true);
+    // reset props
+    props.setProperty("clustermap.update.datanode.info", Boolean.toString(false));
+    props.setProperty("clustermap.port", "2200");
+  }
+
+  /**
+   * Generate {@link InstanceConfig} for given data node.
+   * @param clusterMap {@link MockClusterMap} to use
+   * @param dataNode the data node associated with InstanceConfig.
+   * @return {@link InstanceConfig} of given data node.
+   */
+  private InstanceConfig generateInstanceConfig(MockClusterMap clusterMap, MockDataNodeId dataNode) {
+    String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+    InstanceConfig instanceConfig = new InstanceConfig(instanceName);
+    instanceConfig.setHostName(dataNode.getHostname());
+    instanceConfig.setPort(Integer.toString(dataNode.getPort()));
+    instanceConfig.getRecord().setSimpleField(DATACENTER_STR, dataNode.getDatacenterName());
+    instanceConfig.getRecord().setSimpleField(RACKID_STR, dataNode.getRackId());
+    instanceConfig.getRecord().setSimpleField(SCHEMA_VERSION_STR, Integer.toString(CURRENT_SCHEMA_VERSION));
+    Map<String, SortedSet<ReplicaId>> mountPathToReplicas = new HashMap<>();
+    for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
+      mountPathToReplicas.computeIfAbsent(replicaId.getMountPath(),
+          k -> new TreeSet<>(Comparator.comparing(ReplicaId::getPartitionId))).add(replicaId);
+    }
+    Map<String, Map<String, String>> mountPathToDiskInfos = new HashMap<>();
+    for (Map.Entry<String, SortedSet<ReplicaId>> entry : mountPathToReplicas.entrySet()) {
+      String mountPath = entry.getKey();
+      StringBuilder replicaStrBuilder = new StringBuilder();
+      DiskId diskId = null;
+      for (ReplicaId replica : entry.getValue()) {
+        replicaStrBuilder.append(replica.getPartitionId().toPathString())
+            .append(REPLICAS_STR_SEPARATOR)
+            .append(replica.getCapacityInBytes())
+            .append(REPLICAS_STR_SEPARATOR)
+            .append(replica.getPartitionId().getPartitionClass())
+            .append(REPLICAS_DELIM_STR);
+        diskId = replica.getDiskId();
+      }
+      Map<String, String> diskInfo = new HashMap<>();
+      diskInfo.put(REPLICAS_STR, replicaStrBuilder.toString());
+      diskInfo.put(DISK_CAPACITY_STR, String.valueOf(diskId.getRawCapacityInBytes()));
+      diskInfo.put(DISK_STATE, AVAILABLE_STR);
+      mountPathToDiskInfos.put(mountPath, diskInfo);
+    }
+    instanceConfig.getRecord().setMapFields(mountPathToDiskInfos);
+    return instanceConfig;
+  }
+
+  /**
+   * Verify updated {@link InstanceConfig}. If {@param shouldExist} is true, verify that replica is present in InstanceConfig.
+   * If false, InstanceConfig should not contain given replica info.
+   * @param instanceConfig the updated {@link InstanceConfig} to verify.
+   * @param replicaId the replica whose info should/shouldn't exist in InstanceConfig
+   * @param shouldExist whether given replica should exist in InstanceConfig.
+   */
+  private void verifyReplicaInfoInInstanceConfig(InstanceConfig instanceConfig, ReplicaId replicaId,
+      boolean shouldExist) {
+    Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
+    Map<String, String> diskInfo = mountPathToDiskInfos.get(replicaId.getMountPath());
+    Set<String> replicasOnDisk = new HashSet<>();
+    for (String replicaInfo : diskInfo.get(REPLICAS_STR).split(REPLICAS_DELIM_STR)) {
+      replicasOnDisk.add(replicaInfo.split(REPLICAS_STR_SEPARATOR)[0]);
+    }
+    if (shouldExist) {
+      assertTrue("New replica is not found in InstanceConfig",
+          replicasOnDisk.contains(replicaId.getPartitionId().toPathString()));
+    } else {
+      assertFalse("Old replica should not exist in InstanceConfig",
+          replicasOnDisk.contains(replicaId.getPartitionId().toPathString()));
+    }
   }
 
   private ReplicaId createMockAmbryReplica(String partitionIdString) {

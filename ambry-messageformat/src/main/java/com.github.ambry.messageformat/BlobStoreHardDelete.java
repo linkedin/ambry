@@ -80,24 +80,36 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
       if (headerFormat.hasEncryptionKeyRecord()) {
         deserializeBlobEncryptionKey(stream);
       }
+      short lifeVersion = 0;
+      if (headerFormat.hasLifeVersion()) {
+        lifeVersion = headerFormat.getLifeVersion();
+      }
       // read the appropriate type of message based on the relative offset that is set
       if (headerFormat.isPutRecord()) {
         BlobProperties properties = deserializeBlobProperties(stream);
-        return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
-            Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()),
-            properties.getAccountId(), properties.getContainerId(), properties.getCreationTimeInMs());
+        return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), false, false,
+            false, Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()),
+            null, properties.getAccountId(), properties.getContainerId(), properties.getCreationTimeInMs(),
+            lifeVersion);
       } else {
         UpdateRecord updateRecord = deserializeUpdateRecord(stream);
+        boolean deleted = false, ttlUpdated = false, undeleted = false;
         switch (updateRecord.getType()) {
           case DELETE:
-            return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
-                false, updateRecord.getAccountId(), updateRecord.getContainerId(), updateRecord.getUpdateTimeInMs());
+            deleted = true;
+            break;
           case TTL_UPDATE:
-            return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), false,
-                true, updateRecord.getAccountId(), updateRecord.getContainerId(), updateRecord.getUpdateTimeInMs());
+            ttlUpdated = true;
+            break;
+          case UNDELETE:
+            undeleted = true;
+            break;
           default:
             throw new IllegalStateException("Unknown update record type: " + updateRecord.getType());
         }
+        return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), deleted,
+            ttlUpdated, undeleted, updateRecord.getAccountId(), updateRecord.getContainerId(),
+            updateRecord.getUpdateTimeInMs(), lifeVersion);
       }
     } catch (MessageFormatException e) {
       // log in case where we were not able to parse a message.

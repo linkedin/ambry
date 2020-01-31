@@ -293,6 +293,16 @@ public class MockClusterMap implements ClusterMap {
    */
   public PartitionId createNewPartition(List<MockDataNodeId> dataNodes) {
     int mountPathIndexToUse = (new Random()).nextInt(this.dataNodes.get(0).getMountPaths().size());
+    return createNewPartition(dataNodes, mountPathIndexToUse);
+  }
+
+  /**
+   * Create a new partition at given mount path on given nodes.
+   * @param dataNodes the nodes on which replicas of new partition should reside.
+   * @param mountPathIndexToUse the mount path index to use when creating new partition
+   * @return new {@link PartitionId}
+   */
+  PartitionId createNewPartition(List<MockDataNodeId> dataNodes, int mountPathIndexToUse) {
     PartitionId partitionId =
         new MockPartitionId(partitions.size(), DEFAULT_PARTITION_CLASS, dataNodes, mountPathIndexToUse);
     partitions.put((long) partitions.size(), partitionId);
