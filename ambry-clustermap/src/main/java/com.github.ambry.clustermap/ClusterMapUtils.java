@@ -62,6 +62,7 @@ public class ClusterMapUtils {
   static final String REPLICAS_DELIM_STR = ",";
   static final String REPLICAS_STR_SEPARATOR = ":";
   static final String REPLICAS_CAPACITY_STR = "replicaCapacityInBytes";
+  static final String REPLICA_TYPE_STR = "replicaType";
   static final String SSL_PORT_STR = "sslPort";
   static final String HTTP2_PORT_STR = "http2Port";
   static final String RACKID_STR = "rackId";
@@ -93,17 +94,20 @@ public class ClusterMapUtils {
     private final String dcName;
     private final byte dcId;
     private final String zkConnectStr;
+    private final ReplicaType replicaType;
 
     /**
      * Construct a DcInfo object with the given parameters.
      * @param dcName the associated datacenter name.
      * @param dcId the associated datacenter ID.
      * @param zkConnectStr the associated ZK connect string for this datacenter.
+     * @param replicaType the type of replicas (cloud or disk backed) present in this datacenter.
      */
-    DcZkInfo(String dcName, byte dcId, String zkConnectStr) {
+    DcZkInfo(String dcName, byte dcId, String zkConnectStr, ReplicaType replicaType) {
       this.dcName = dcName;
       this.dcId = dcId;
       this.zkConnectStr = zkConnectStr;
+      this.replicaType = replicaType;
     }
 
     public String getDcName() {
@@ -116,6 +120,10 @@ public class ClusterMapUtils {
 
     public String getZkConnectStr() {
       return zkConnectStr;
+    }
+
+    public ReplicaType getReplicaType() {
+      return replicaType;
     }
   }
 
@@ -141,8 +149,12 @@ public class ClusterMapUtils {
     JSONArray all = root.getJSONArray(ZKINFO_STR);
     for (int i = 0; i < all.length(); i++) {
       JSONObject entry = all.getJSONObject(i);
+      String name = entry.getString(DATACENTER_STR);
       byte id = (byte) entry.getInt(DATACENTER_ID_STR);
-      DcZkInfo dcZkInfo = new DcZkInfo(entry.getString(DATACENTER_STR), id, entry.getString(ZKCONNECTSTR_STR));
+      ReplicaType replicaType = entry.optEnum(ReplicaType.class, REPLICA_TYPE_STR, ReplicaType.DISK_BACKED);
+      String zkConnectStr = (replicaType == ReplicaType.DISK_BACKED) ? entry.getString(ZKCONNECTSTR_STR)
+          : entry.optString(ZKCONNECTSTR_STR);
+      DcZkInfo dcZkInfo = new DcZkInfo(name, id, zkConnectStr, replicaType);
       dataCenterToZkAddress.put(dcZkInfo.dcName, dcZkInfo);
     }
     return dataCenterToZkAddress;

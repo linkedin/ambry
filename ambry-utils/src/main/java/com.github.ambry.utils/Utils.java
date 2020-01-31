@@ -310,7 +310,7 @@ public class Utils {
    * @param <T> The exception to throw in this operation.
    */
   @FunctionalInterface
-  public static interface ByteBufferFunction<T extends Throwable> {
+  public interface ByteBufferFunction<T extends Throwable> {
     ByteBuffer apply(ByteBuffer buffer) throws T;
   }
 

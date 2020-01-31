@@ -88,7 +88,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * </pre>
  *
  * <br>
- * Version 4, which is the same as Version 3 now.
+ * Version 4, which is the same as Version 3 now but indicates that .
  * <br>
  * <pre>
  * +---------+-------+--------------+-----------+-------------+-------------+----------+----------+
@@ -120,6 +120,23 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * |  un-assigned | BlobDataType  | IsEncrypted |  BlobIdType   |
  * +--------------+---------------+-------------+---------------|
  * </pre>
+ *
+ * <br>
+ * Version 6, which has a more compact encoding for the UUID where it is encoded as a 16 byte value instead of a
+ * size-prefixed hexadecimal string.
+ * <br>
+ * <pre>
+ * +---------+--------+--------------+-----------+-------------+-------------+------------+
+ * | version | flag   | datacenterId | accountId | containerId | partitionId | uuid       |
+ * | (short) | (byte) | (byte)       | (short)   | (short)     | (n bytes)   | (16 bytes) |
+ * +---------+--------+--------------+-----------+-------------+-------------+------------+
+ *
+ * Flag format: 1 Byte
+ * +--------------+---------------+-------------+---------------+
+ * |  1 to 3 bits | 4 and 5th bit |    6th bit  | 7 and 8th bit |
+ * |  un-assigned | BlobDataType  | IsEncrypted |  BlobIdType   |
+ * +--------------+---------------+-------------+---------------|
+ * </pre>
  */
 
 public class BlobId extends StoreKey {
@@ -139,7 +156,6 @@ public class BlobId extends StoreKey {
   private static final int IS_ENCRYPTED_MASK = 0x4;
   private static final int BLOB_DATA_TYPE_MASK = 0x18;
   private static final int BLOB_DATA_TYPE_SHIFT = 3;
-  private static final Logger LOGGER = LoggerFactory.getLogger(BlobId.class);
 
   private final short version;
   private final BlobIdType type;

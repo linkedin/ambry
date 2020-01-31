@@ -361,7 +361,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, dataNode, replicaCapacity);
             // create new replica belonging to this partition
             AmbryReplica replica =
-                new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
+                new DiskAmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
                     replicaCapacity, sealedReplicas.contains(partitionName));
             updateReplicaStateAndOverrideIfNeeded(replica, sealedReplicas, stoppedReplicas);
             // add new created replica to "replicasFromInstanceConfig" map
@@ -493,7 +493,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
                 .equals(ClusterMapUtils.READ_ONLY_STR);
           }
           AmbryReplica replica =
-              new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
+              new DiskAmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
                   replicaCapacity, isSealed);
           ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);
           clusterChangeHandlerCallback.addReplicasToPartition(mappedPartition, Collections.singletonList(replica));
