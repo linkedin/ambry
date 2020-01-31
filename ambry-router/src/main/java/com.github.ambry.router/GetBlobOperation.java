@@ -144,12 +144,26 @@ class GetBlobOperation extends GetOperation {
     firstChunk = new FirstGetChunk();
   }
 
+
+  /**
+   * Release all the {@link ByteBuf} in the map. Use {@link ConcurrentHashMap#remove(Object)} method to avoid
+   * conflict with the release call in the chunk async callback.
+   */
+  private void releaseResource() {
+    for (Integer key : chunkIndexToBuf.keySet()) {
+      ByteBuf byteBuf = chunkIndexToBuf.remove(key);
+      if (byteBuf != null) {
+        byteBuf.release();
+      }
+    }
+  }
+
+  /**
+   * Set the operation to be completed and release all the resources
+   */
   private void setOperationCompleted() {
     operationCompleted = true;
-    if (chunkIndexToBuf != null) {
-      chunkIndexToBuf.values().forEach(ReferenceCountUtil::release);
-      chunkIndexToBuf.clear();
-    }
+    releaseResource();
   }
 
   /**
@@ -461,19 +475,6 @@ class GetBlobOperation extends GetOperation {
         releaseResource();
       }
       setOperationCompleted();
-    }
-
-    /**
-     * Release all the {@link ByteBuf} in the map. Use {@link ConcurrentHashMap#remove(Object)} method to avoid
-     * conflict with the release call in the chunk async callback.
-     */
-    private void releaseResource() {
-      for (Integer key : chunkIndexToBuf.keySet()) {
-        ByteBuf byteBuf = chunkIndexToBuf.remove(key);
-        if (byteBuf != null) {
-          byteBuf.release();
-        }
-      }
     }
 
     /**

@@ -76,14 +76,15 @@ public class BlobData {
     if (stream != null) {
       return stream;
     }
-    // The blob content is passed as a ByteBuf
+    // The blob content is passed as a ByteBuf since the stream is nulle
     if (byteBuf == null) {
       return null;
     }
     ByteBuffer temp = ByteBuffer.allocate(byteBuf.readableBytes());
-    byteBuf.writeBytes(temp);
+    byteBuf.readBytes(temp);
     byteBuf.release();
     byteBuf = null;
+    temp.flip();
     stream = new ByteBufferInputStream(temp);
     return stream;
   }
