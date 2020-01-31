@@ -417,7 +417,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
           // mappedPartition is now the final mapped AmbryPartition object for this partition.
           synchronized (mappedPartition) {
             if (!ambryPartitionToAmbryReplicas.containsKey(mappedPartition)) {
-              ambryPartitionToAmbryReplicas.put(mappedPartition, Collections.newSetFromMap(new ConcurrentHashMap<>()));
+              ambryPartitionToAmbryReplicas.put(mappedPartition, ConcurrentHashMap.newKeySet());
               partitionMap.put(ByteBuffer.wrap(mappedPartition.getBytes()), mappedPartition);
             }
           }
@@ -433,7 +433,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
             isSealed = sealedReplicas.contains(partitionName);
           }
           AmbryReplica replica =
-              new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
+              new DiskAmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
                   replicaCapacity, isSealed);
           ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
           ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);

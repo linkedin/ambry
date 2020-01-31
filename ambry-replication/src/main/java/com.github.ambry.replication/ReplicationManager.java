@@ -37,6 +37,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -251,7 +252,8 @@ public class ReplicationManager extends ReplicationEngine {
      * concurrently update remote replica infos.
      */
     @Override
-    public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
+    public void onReplicaAddedOrRemoved(Collection<? extends ReplicaId> addedReplicas,
+        Collection<? extends ReplicaId> removedReplicas) {
       // 1. wait for start() to complete
       try {
         startupLatch.await();

@@ -66,6 +66,7 @@ public class ClusterMapSnapshotConstants {
   public static final String REPLICA_NODE = "node";
   public static final String REPLICA_PARTITION = "partition";
   public static final String REPLICA_DISK = "disk";
+  public static final String REPLICA_TYPE = "type";
   // values
   public static final String REPLICA_STOPPED = "stopped";
 
