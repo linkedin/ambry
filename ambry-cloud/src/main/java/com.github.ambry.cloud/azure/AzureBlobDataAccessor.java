@@ -35,8 +35,8 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
-import com.google.common.collect.Lists;
 import com.github.ambry.utils.Utils;
+import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -45,7 +45,6 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -70,8 +69,8 @@ public class AzureBlobDataAccessor {
   // Containers known to exist in the storage account
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
   private ProxyOptions proxyOptions;
-  // TODO: add to AzureCloudConfig
-  private int purgeBatchSize = 100;
+  private final int purgeBatchSize;
+  private final int batchPurgeTimeoutSec = 60;
 
   /**
    * Production constructor
@@ -84,6 +83,7 @@ public class AzureBlobDataAccessor {
       AzureMetrics azureMetrics) {
     this.clusterName = clusterName;
     this.azureMetrics = azureMetrics;
+    this.purgeBatchSize = azureCloudConfig.azurePurgeBatchSize;
     this.storageConfiguration = new Configuration();
     // Check for network proxy
     proxyOptions = (cloudConfig.vcrProxyHost == null) ? null : new ProxyOptions(ProxyOptions.Type.HTTP,
@@ -117,6 +117,7 @@ public class AzureBlobDataAccessor {
     this.clusterName = clusterName;
     this.azureMetrics = azureMetrics;
     this.blobBatchClient = blobBatchClient;
+    this.purgeBatchSize = AzureCloudConfig.DEFAULT_PURGE_BATCH_SIZE;
   }
 
   /**
@@ -322,21 +323,20 @@ public class AzureBlobDataAccessor {
    */
   public List<CloudBlobMetadata> purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws BlobStorageException {
 
-    // Per docs.microsoft.com/en-us/rest/api/storageservices/blob-batch, must use batch size <= 256
     List<CloudBlobMetadata> deletedBlobs = new ArrayList<>();
     List<List<CloudBlobMetadata>> partitionedLists = Lists.partition(blobMetadataList, purgeBatchSize);
-    for (List<CloudBlobMetadata> someBlobs : partitionedLists) {
+    for (List<CloudBlobMetadata> batchOfBlobs : partitionedLists) {
       BlobBatch blobBatch = blobBatchClient.getBlobBatch();
       List<Response<Void>> responseList = new ArrayList<>();
-      for (CloudBlobMetadata blobMetadata : someBlobs) {
+      for (CloudBlobMetadata blobMetadata : batchOfBlobs) {
         String containerName = getAzureContainerName(blobMetadata);
         String blobName = getAzureBlobName(blobMetadata);
         responseList.add(blobBatch.deleteBlob(containerName, blobName));
       }
-      blobBatchClient.submitBatchWithResponse(blobBatch, false, Duration.ofHours(1), Context.NONE);
+      blobBatchClient.submitBatchWithResponse(blobBatch, false, Duration.ofSeconds(batchPurgeTimeoutSec), Context.NONE);
       for (int j = 0; j < responseList.size(); j++) {
         Response<Void> response = responseList.get(j);
-        CloudBlobMetadata blobMetadata = someBlobs.get(j);
+        CloudBlobMetadata blobMetadata = batchOfBlobs.get(j);
         // Note: Response.getStatusCode() throws exception on any error.
         int statusCode;
         try {
@@ -455,6 +455,7 @@ public class AzureBlobDataAccessor {
   }
 
   // TODO: add AzureBlobNameConverter with versioning, this scheme being version 0
+
   /**
    * Get the blob name to use in Azure Blob Storage
    * @param blobIdStr The blobId string.
