@@ -648,7 +648,7 @@ class PersistentIndex {
 
   /**
    * Finds all the {@link IndexValue}s associated with the given {@code key} that matches any of the provided {@code types}
-   * if present in the index with the given {@code fileSpan} and return them in reversed order.
+   * if present in the index with the given {@code fileSpan} and return them in reversed chronological order.
    * @param key the {@link StoreKey} whose {@link IndexValue} is required.
    * @param fileSpan {@link FileSpan} which specifies the range within which search should be made.
    * @param types the types of {@link IndexEntryType} to look for.
@@ -656,8 +656,8 @@ class PersistentIndex {
    * @return The list of the {@link IndexValue}s for {@code key} conforming to one of the types {@code types}.
    * @throws StoreException any error.
    */
-  List<IndexValue> findAllIndexValuesForKeyInReverseOrder(StoreKey key, FileSpan fileSpan,
-      EnumSet<IndexEntryType> types, ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
+  List<IndexValue> findAllIndexValuesForKey(StoreKey key, FileSpan fileSpan, EnumSet<IndexEntryType> types,
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
     List<IndexValue> result = null;
     final Timer.Context context = metrics.findTime.time();
     try {
@@ -982,7 +982,7 @@ class PersistentIndex {
     boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
     validateFileSpan(fileSpan, true);
     List<IndexValue> values =
-        findAllIndexValuesForKeyInReverseOrder(id, null, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
+        findAllIndexValuesForKey(id, null, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
     validateSanityForUndelete(id, values, lifeVersion);
     // This value is the delete IndexValue
     IndexValue value = values.get(0);

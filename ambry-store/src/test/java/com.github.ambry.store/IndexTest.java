@@ -331,11 +331,13 @@ public class IndexTest {
 
   /**
    * Tests and verifies an undelete with an expected life version
-   * @param targetKey
-   * @param expectedLifeVersion
+   * @param targetKey the {@link StoreKey} to look up
+   * @param expectedLifeVersion the expected lifeVersion
+   * @param expectTtlUpdateSet true when expecting ttl update flag is set from returned {@link IndexValue}
    * @throws StoreException
    */
-  private void undeleteKeyAndVerify(StoreKey targetKey, short expectedLifeVersion) throws StoreException {
+  private void undeleteKeyAndVerify(StoreKey targetKey, short expectedLifeVersion, boolean expectTtlUpdateSet)
+      throws StoreException {
     assertTrue("targetKey is not deleted", state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Delete_Index));
     assertTrue("targetKey is undeleted early",
         !state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Undelete_Index));
@@ -345,17 +347,20 @@ public class IndexTest {
     state.appendToLog(UNDELETE_RECORD_SIZE);
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), UNDELETE_RECORD_SIZE);
     state.index.markAsUndeleted(targetKey, fileSpan, System.currentTimeMillis());
-    assertTrue("targetKey is not undeleted", state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Undelete_Index));
-    assertTrue("targetKey has delete flag", !state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Delete_Index));
-    actualLifeVersion = state.index.findKey(targetKey).getLifeVersion();
+    IndexValue value = state.index.findKey(targetKey);
+    assertNotNull(value);
+    assertTrue("targetKey is not undeleted", value.isUndelete());
+    assertTrue("targetKey has delete flag", !value.isDelete());
+    assertEquals("Ttl update flag mismatch", expectTtlUpdateSet, value.isTTLUpdate());
+    actualLifeVersion = value.getLifeVersion();
     assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
         actualLifeVersion);
   }
 
   /**
    * Tests and verifies a delete with an expected life version
-   * @param key
-   * @param expectedLifeVersion
+   * @param key the {@link StoreKey} to look up
+   * @param expectedLifeVersion the expected lifeVersion
    * @throws StoreException
    */
   private void deleteKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
@@ -375,8 +380,8 @@ public class IndexTest {
 
   /**
    * Tests and verifies a ttlUpdate with an expected life version
-   * @param key
-   * @param expectedLifeVersion
+   * @param key the {@link StoreKey} to look up
+   * @param expectedLifeVersion the expected lifeVersion
    * @throws StoreException
    */
   private void ttlUpdateKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
@@ -420,19 +425,19 @@ public class IndexTest {
     }
     //Undelete deleted key
     short expectedLifeVersion = 1;
-    undeleteKeyAndVerify(targetKey, expectedLifeVersion);
+    undeleteKeyAndVerify(targetKey, expectedLifeVersion, false);
     //Delete Key
     deleteKeyAndVerify(targetKey, expectedLifeVersion);
     //Undelete key again
     expectedLifeVersion++;
-    undeleteKeyAndVerify(targetKey, expectedLifeVersion);
+    undeleteKeyAndVerify(targetKey, expectedLifeVersion, false);
     //TTL Update Key
     ttlUpdateKeyAndVerify(targetKey, expectedLifeVersion);
     //Delete Key again
     deleteKeyAndVerify(targetKey, expectedLifeVersion);
     //Undelete Key again
     expectedLifeVersion++;
-    undeleteKeyAndVerify(targetKey, expectedLifeVersion);
+    undeleteKeyAndVerify(targetKey, expectedLifeVersion, true);
   }
 
   /**

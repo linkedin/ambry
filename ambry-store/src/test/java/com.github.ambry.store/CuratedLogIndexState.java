@@ -77,7 +77,7 @@ class CuratedLogIndexState {
   // deliberately do not divide the capacities perfectly.
   static final long PUT_RECORD_SIZE = 53;
   static final long DELETE_RECORD_SIZE = 29;
-  static final long TTL_UPDATE_RECORD_SIZE = 29;
+  static final long TTL_UPDATE_RECORD_SIZE = 37;
   static final long UNDELETE_RECORD_SIZE = 29;
 
   static final int deleteRetentionDay = 1;
