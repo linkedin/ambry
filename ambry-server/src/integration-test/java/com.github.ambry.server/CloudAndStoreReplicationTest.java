@@ -101,8 +101,8 @@ public class CloudAndStoreReplicationTest {
    * @return {@link Collection} of parameters.
    */
   @Parameterized.Parameters
-  public static Collection input() {
-    return Arrays.asList("0", "");
+  public static List<Object[]> input() {
+    return Arrays.asList(new Object[][]{{"0"}, {""}});
   }
 
   /**
