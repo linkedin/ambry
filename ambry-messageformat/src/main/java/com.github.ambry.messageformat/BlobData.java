@@ -90,7 +90,7 @@ public class BlobData {
   }
 
   /**
-   * Return the netty {@link ByteBuf} and then transfer the ownship to the caller. It's not safe
+   * Return the netty {@link ByteBuf} and then transfer the ownership to the caller. It's not safe
    * to call this method more than once.
    */
   public ByteBuf getAndRelease() {

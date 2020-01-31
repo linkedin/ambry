@@ -1064,7 +1064,6 @@ public class GetBlobOperationTest {
   public void testEarlyReadableStreamChannelClose() throws Exception {
     for (int numChunksInBlob = 0; numChunksInBlob <= 4; numChunksInBlob++) {
       for (int numChunksToRead = 0; numChunksToRead < numChunksInBlob; numChunksToRead++) {
-        System.out.println("" + numChunksInBlob + " chunks but only read " + numChunksToRead);
         testEarlyReadableStreamChannelClose(numChunksInBlob, numChunksToRead);
       }
     }

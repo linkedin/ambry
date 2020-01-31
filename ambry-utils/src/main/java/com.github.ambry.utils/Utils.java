@@ -261,7 +261,7 @@ public class Utils {
    * @return The {@link ByteBuffer}
    * @throws IOException Unexpected IO errors.
    */
-   public static ByteBuffer getByteBufferFromInputStream(InputStream stream, int dataSize) throws IOException {
+  public static ByteBuffer getByteBufferFromInputStream(InputStream stream, int dataSize) throws IOException {
     ByteBuffer output = ByteBuffer.allocate(dataSize);
     int read = 0;
     ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
@@ -907,7 +907,8 @@ public class Utils {
    * @throws IOException
    */
   public static byte[] readBytesFromByteBuf(ByteBuf buffer, byte[] data, int offset, int size) throws IOException {
-    return readBytesFromStream(new ByteBufInputStream(buffer), data, offset, size);
+    buffer.readBytes(data, offset, size);
+    return data;
   }
 
   /**
