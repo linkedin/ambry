@@ -150,6 +150,9 @@ class GetBlobOperation extends GetOperation {
    * conflict with the release call in the chunk async callback.
    */
   private void releaseResource() {
+    if (chunkIndexToBuf == null) {
+      return;
+    }
     for (Integer key : chunkIndexToBuf.keySet()) {
       ByteBuf byteBuf = chunkIndexToBuf.remove(key);
       if (byteBuf != null) {
