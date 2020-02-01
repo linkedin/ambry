@@ -189,6 +189,15 @@ class IndexValue implements Comparable<IndexValue> {
   }
 
   /**
+   * Constructor to copy all data from a given {@link IndexValue}.
+   * @param other the given {@link IndexValue}.
+   */
+  IndexValue(IndexValue other) {
+    this(other.getSize(), other.getOffset(), other.getFlags(), other.getExpiresAtMs(), other.getOriginalMessageOffset(),
+        other.getOperationTimeInMs(), other.getAccountId(), other.getContainerId(), other.getLifeVersion());
+  }
+
+  /**
    * Constructs IndexValue based on the args passed
    * @param size the size of the blob that this index value refers to
    * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
