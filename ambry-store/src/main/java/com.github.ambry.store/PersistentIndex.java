@@ -1100,8 +1100,8 @@ class PersistentIndex {
 
   /**
    * Gets {@link BlobReadOptions} for a undeleted blob.
-   * @param value the {@link IndexValue} of the delete index entry for the blob.
-   * @param key the {@link StoreKey} for which {@code value} is the delete {@link IndexValue}
+   * @param value the {@link IndexValue} of the undelete index entry for the blob.
+   * @param key the {@link StoreKey} for which {@code value} is the undelete {@link IndexValue}
    * @param indexSegments the map of index segment start {@link Offset} to {@link IndexSegment} instances
    * @return the {@link BlobReadOptions} that contains the information for the given {@code id}
    * @throws StoreException
@@ -1115,9 +1115,9 @@ class PersistentIndex {
       // use the expiration time from the original value because it may have been updated
       // since we are here dealing with undelete blob, we have to return the right life version
       return new BlobReadOptions(log, putValue.getOffset(),
-          new MessageInfo(key, putValue.getSize(), false, value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), true,
-              value.getExpiresAtMs(), null, putValue.getAccountId(), putValue.getContainerId(),
-              putValue.getOperationTimeInMs(), value.getLifeVersion()));
+          new MessageInfo(key, putValue.getSize(), false, value.isTTLUpdate(), true, value.getExpiresAtMs(), null,
+              putValue.getAccountId(), putValue.getContainerId(), putValue.getOperationTimeInMs(),
+              value.getLifeVersion()));
     } else {
       // PUT record no longer available.
       throw new StoreException("Did not find PUT index entry for key [" + key + "] when there is an undelete entry",
@@ -1618,7 +1618,7 @@ class PersistentIndex {
   }
 
   /**
-   * Updates the messages with their updated state (ttl update/delete). This method can be used when
+   * Updates the messages with their updated state (ttl update/delete/undelete). This method can be used when
    * the messages have been retrieved from an old index segment and needs to be updated with the state from the new
    * index segment
    * @param messageEntries The message entries that may need to be updated.
@@ -1760,7 +1760,8 @@ class PersistentIndex {
 
   /**
    * Finds all the deleted entries from the given start token. The token defines the start position in the index from
-   * where entries needs to be fetched
+   * where entries needs to be fetched. All the entries returned from this method have delete as it's final state, which
+   * means if we see a Delete entry but this key is undelete later, it will not be returned.
    * @param token The token that signifies the start position in the index from where deleted entries need to be
    *              retrieved
    * @param maxTotalSizeOfEntries The maximum total size of entries that need to be returned. The api will try to
@@ -1840,9 +1841,12 @@ class PersistentIndex {
       }
     }
     // Filter out all the messages that are not "deleted", then update state for remaining deleted message.
+    // First, filter out all the entries that are not delete
+    // second, update all the remaining delete entries' state since delete might not be the final state of those entries, they can be undeleted.
+    // third, filter out undelete entries after
+    // fourth, eliminate duplicate deleted entries. We might have more than one versions of delete entries here.
     filterDeleteEntries(messageEntries);
     updateStateForMessages(messageEntries);
-
     filterDeleteEntries(messageEntries);
     eliminateDuplicates(messageEntries);
     return new FindInfo(messageEntries, newToken);
