@@ -345,17 +345,6 @@ class PersistentIndex {
             // DELETE must have been present)
             deleteExpectedKeys.add(info.getStoreKey());
           }
-        } else if (info.isUndeleted()) {
-          markAsUndeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info.getOperationTimeMs(),
-              info.getLifeVersion());
-          logger.info(
-              "Index : {} updated message with key {} by inserting undelete update entry of size {} ttl {} lifeVersion {}",
-              dataDir, info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.getLifeVersion());
-          if (value == null) {
-            // Undelete record indicates that there might be a put and delete record before it.
-            throw new StoreException("Put record were expected but were not encountered for key: " + info.getStoreKey(),
-                StoreErrorCodes.Initialization_Error);
-          }
         } else if (value != null) {
           throw new StoreException("Illegal message state during recovery. Duplicate PUT record",
               StoreErrorCodes.Initialization_Error);

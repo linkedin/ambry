@@ -65,21 +65,35 @@ public class LoggingNotificationSystem implements NotificationSystem {
   }
 
   @Override
+  public void onBlobUndeleted(String blobId, String serviceId, Account account, Container container) {
+    logger.debug("onBlobUndeleted " + blobId,
+        ", " + serviceId + ", accountName " + (account == null ? null : account.getName()) + ", accountId" + (
+            account == null ? null : account.getId()) + ", containerName " + (container == null ? null
+            : container.getName()) + ", containerId " + (container == null ? null : container.getId()));
+
+  }
+
+  @Override
   public void onBlobReplicaCreated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
     logger.debug("onBlobReplicaCreated " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType);
   }
 
   @Override
   public void onBlobReplicaDeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
-    logger.debug("onBlobReplicaCreated " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType);
+    logger.debug("onBlobReplicaDeleted " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType);
   }
 
   @Override
   public void onBlobReplicaUpdated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType,
       UpdateType updateType, MessageInfo info) {
     logger.debug(
-        "onBlobReplicaCreated " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType + ", " + updateType
+        "onBlobReplicaUpdated " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType + ", " + updateType
             + ", " + info);
+  }
+
+  @Override
+  public void onBlobReplicaUndeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+    logger.debug("onBlobReplicaUndeleted " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType);
   }
 }
 

@@ -24,6 +24,9 @@ import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.MessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
@@ -132,6 +135,31 @@ class MockStorageManager extends StorageManager {
       throwExceptionIfRequired();
       checkValidityOfIds(
           messageSetToUpdate.getMessageSetInfo().stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()));
+    }
+
+    @Override
+    public short undelete(MessageInfo info) throws StoreException {
+      operationReceived = RequestOrResponseType.UndeleteRequest;
+      try {
+        MessageFormatInputStream stream =
+            new UndeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                info.getOperationTimeMs(), (short) returnValueOfUndelete);
+        // Update info to add stream size;
+        info = new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
+            info.getOperationTimeMs());
+        ArrayList<MessageInfo> infoList = new ArrayList<>();
+        infoList.add(info);
+        messageWriteSetReceived = new MessageFormatWriteSet(stream, infoList, false);
+      } catch (Exception e) {
+        throw new StoreException("Unknown error while trying to undelete blobs from store", e,
+            StoreErrorCodes.Unknown_Error);
+      }
+      throwExceptionIfRequired();
+      checkValidityOfIds(messageWriteSetReceived.getMessageSetInfo()
+          .stream()
+          .map(MessageInfo::getStoreKey)
+          .collect(Collectors.toList()));
+      return returnValueOfUndelete;
     }
 
     @Override
@@ -324,6 +352,11 @@ class MockStorageManager extends StorageManager {
    * The return value for a call to {@link #removeBlobStore(PartitionId)}.
    */
   boolean returnValueOfRemoveBlobStore = true;
+
+  /**
+   * The return value for a call to {@link TestStore#undelete(MessageInfo)}.
+   */
+  short returnValueOfUndelete = 1;
   /**
    * The {@link PartitionId} that was provided in the call to {@link #scheduleNextForCompaction(PartitionId)}
    */

@@ -635,10 +635,11 @@ public class BlobStore implements Store {
       ArrayList<MessageInfo> infoList = new ArrayList<>();
       infoList.add(info);
       MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
-      if (info.getStoreKey().isAccountContainerMatch(lastValue.getAccountId(), lastValue.getContainerId())) {
+      if (!info.getStoreKey().isAccountContainerMatch(lastValue.getAccountId(), lastValue.getContainerId())) {
         if (config.storeValidateAuthorization) {
-          throw new StoreException("UNDELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: "
-              + lastValue.getAccountId() + "Actually containerId: " + lastValue.getContainerId(),
+          throw new StoreException(
+              "UNDELETE authorization failure. Key: " + info.getStoreKey() + " Actually accountId: "
+                  + lastValue.getAccountId() + "Actually containerId: " + lastValue.getContainerId(),
               StoreErrorCodes.Authorization_Failure);
         } else {
           logger.warn("UNDELETE authorization failure. Key: {} Actually accountId: {} Actually containerId: {}",

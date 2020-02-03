@@ -461,6 +461,11 @@ public class NettyMessageProcessorTest {
     }
 
     @Override
+    public void onBlobUndeleted(String blobId, String serviceId, Account account, Container container) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void onBlobReplicaCreated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
       throw new IllegalStateException("Not implemented");
     }
@@ -473,6 +478,11 @@ public class NettyMessageProcessorTest {
     @Override
     public void onBlobReplicaUpdated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType,
         UpdateType updateType, MessageInfo info) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void onBlobReplicaUndeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
       throw new IllegalStateException("Not implemented");
     }
 

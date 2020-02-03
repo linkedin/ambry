@@ -15,9 +15,6 @@ package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
-import com.github.ambry.messageformat.MessageFormatInputStream;
-import com.github.ambry.messageformat.MessageFormatWriteSet;
-import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
@@ -216,20 +213,15 @@ class InMemoryStore implements Store {
   @Override
   public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
     for (MessageInfo info : messageSetToDelete.getMessageSetInfo()) {
-      MessageInfo prev = getMessageInfo(info.getStoreKey(), messageInfos, true, true, true);
-      if (prev == null) {
-        throw new StoreException("Not Found", StoreErrorCodes.ID_Not_Found);
-      } else if (prev.isDeleted()) {
-        throw new StoreException("Deleted", StoreErrorCodes.ID_Deleted);
-      }
       try {
         messageSetToDelete.writeTo(log);
       } catch (StoreException e) {
         throw new IllegalStateException(e);
       }
-      messageInfos.add(new MessageInfo(info.getStoreKey(), info.getSize(), true, prev.isTtlUpdated(), false,
-          prev.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
-          prev.getLifeVersion()));
+      MessageInfo ttlUpdateInfo = getMessageInfo(info.getStoreKey(), messageInfos, false, true);
+      messageInfos.add(
+          new MessageInfo(info.getStoreKey(), info.getSize(), true, ttlUpdateInfo != null, info.getExpirationTimeInMs(),
+              info.getAccountId(), info.getContainerId(), info.getOperationTimeMs()));
     }
   }
 
@@ -248,37 +240,14 @@ class InMemoryStore implements Store {
       } catch (StoreException e) {
         throw new IllegalStateException(e);
       }
-      messageInfos.add(
-          new MessageInfo(info.getStoreKey(), info.getSize(), false, true, false, info.getExpirationTimeInMs(), null,
-              info.getAccountId(), info.getContainerId(), info.getOperationTimeMs()));
+      messageInfos.add(new MessageInfo(info.getStoreKey(), info.getSize(), false, true, info.getExpirationTimeInMs(),
+          info.getAccountId(), info.getContainerId(), info.getOperationTimeMs()));
     }
   }
 
   @Override
   public short undelete(MessageInfo info) throws StoreException {
-    StoreKey key = info.getStoreKey();
-    MessageInfo deleteInfo = getMessageInfo(key, messageInfos, true, false);
-    if (deleteInfo == null) {
-      throw new StoreException("Key " + key + " not delete yet", StoreErrorCodes.ID_Not_Deleted);
-    }
-    short lifeVersion = (short) (deleteInfo.getLifeVersion() + 1);
-    try {
-      MessageFormatInputStream stream =
-          new UndeleteMessageFormatInputStream(key, info.getAccountId(), info.getContainerId(),
-              info.getOperationTimeMs(), lifeVersion);
-      // Update info to add stream size;
-      info = new MessageInfo(key, stream.getSize(), false, deleteInfo.isTtlUpdated(), true,
-          deleteInfo.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(),
-          info.getOperationTimeMs(), lifeVersion);
-      ArrayList<MessageInfo> infoList = new ArrayList<>();
-      infoList.add(info);
-      MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
-      writeSet.writeTo(log);
-      return lifeVersion;
-    } catch (Exception e) {
-      throw new StoreException("Unknown error while trying to undelete blobs from store", e,
-          StoreErrorCodes.Unknown_Error);
-    }
+    throw new UnsupportedOperationException("Undelete unsupported for now");
   }
 
   @Override

@@ -2251,25 +2251,20 @@ public class ReplicationTest {
    * @param messageInfos the {@link MessageInfo} list.
    * @param deleteMsg {@code true} if delete msg is requested. {@code false} otherwise
    * @param ttlUpdateMsg {@code true} if ttl update msg is requested. {@code false} otherwise
-   * @param ttlUpdateMsg {@code true} if undelete msg is requested. {@code false} otherwise
    * @return the delete {@link MessageInfo} if it exists in {@code messageInfos}. {@code null otherwise.}
    */
   static MessageInfo getMessageInfo(StoreKey id, List<MessageInfo> messageInfos, boolean deleteMsg,
-      boolean ttlUpdateMsg, boolean undeleteMsg) {
+      boolean ttlUpdateMsg) {
     MessageInfo toRet = null;
     for (MessageInfo messageInfo : messageInfos) {
       if (messageInfo.getStoreKey().equals(id)) {
         if (deleteMsg && messageInfo.isDeleted()) {
           toRet = messageInfo;
           break;
-        } else if (undeleteMsg && messageInfo.isUndeleted()) {
+        } else if (ttlUpdateMsg && messageInfo.isTtlUpdated()) {
           toRet = messageInfo;
           break;
-        } else if (ttlUpdateMsg && !messageInfo.isUndeleted() && !messageInfo.isDeleted()
-            && messageInfo.isTtlUpdated()) {
-          toRet = messageInfo;
-          break;
-        } else if (!deleteMsg && !ttlUpdateMsg && !undeleteMsg) {
+        } else if (!deleteMsg && !ttlUpdateMsg) {
           toRet = messageInfo;
           break;
         }

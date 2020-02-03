@@ -104,5 +104,4 @@ public interface NotificationSystem extends Closeable {
    * @param sourceType The source that undeleted the blob replica
    */
   void onBlobReplicaUndeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType);
-
 }
