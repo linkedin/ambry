@@ -1010,10 +1010,9 @@ class IndexSegment {
         getIndexEntriesSince(key, findEntriesCondition, indexEntries, currentTotalSizeOfEntriesInBytes, true);
     for (IndexEntry indexEntry : indexEntries) {
       IndexValue value = indexEntry.getValue();
-      MessageInfo info =
-          new MessageInfo(indexEntry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-              value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
-              value.getContainerId(), value.getOperationTimeInMs());
+      MessageInfo info = new MessageInfo(indexEntry.getKey(), value.getSize(), value.isDelete(), value.isTTLUpdate(),
+          value.isUndelete(), value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(),
+          value.getOperationTimeInMs(), value.getLifeVersion());
       entries.add(info);
     }
     return areNewEntriesAdded;
@@ -1100,10 +1099,10 @@ class IndexSegment {
    */
   private void eliminateDuplicates(List<IndexEntry> entries) {
     Set<StoreKey> setToFindDuplicate = new HashSet<>();
-    // first choose PUTs over update entries (omitting DELETEs)
-    entries.removeIf(
-        entry -> !entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index) && !setToFindDuplicate.add(entry.getKey()));
-    // then choose DELETEs over all other entries
+    // first choose PUTs over update entries (omitting DELETEs and UNDELETEs)
+    entries.removeIf(entry -> !entry.getValue().isDelete() && !entry.getValue().isUndelete() && !setToFindDuplicate.add(
+        entry.getKey()));
+    // then choose DELETEs/UNDELETEs over all other entries
     setToFindDuplicate.clear();
     ListIterator<IndexEntry> iterator = entries.listIterator(entries.size());
     while (iterator.hasPrevious()) {

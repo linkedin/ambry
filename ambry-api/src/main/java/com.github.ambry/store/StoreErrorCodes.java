@@ -35,5 +35,9 @@ public enum StoreErrorCodes {
   Already_Updated,
   Update_Not_Allowed,
   File_Not_Found,
-  Channel_Closed
+  Channel_Closed,
+  Life_Version_Conflict,
+  ID_Not_Deleted,
+  ID_Undeleted,
+  ID_Deleted_Permanently
 }
