@@ -36,7 +36,6 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.utils.Utils;
-import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -61,6 +60,7 @@ public class AzureBlobDataAccessor {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureBlobDataAccessor.class);
   private static final String SEPARATOR = "-";
+  private static final int batchPurgeTimeoutSec = 60;
   private final BlobServiceClient storageClient;
   private final BlobBatchClient blobBatchClient;
   private final Configuration storageConfiguration;
@@ -70,7 +70,6 @@ public class AzureBlobDataAccessor {
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
   private ProxyOptions proxyOptions;
   private final int purgeBatchSize;
-  private final int batchPurgeTimeoutSec = 60;
 
   /**
    * Production constructor
@@ -320,11 +319,12 @@ public class AzureBlobDataAccessor {
    * @param blobMetadataList the list of {@link CloudBlobMetadata} referencing the blobs to purge.
    * @return list of {@link CloudBlobMetadata} referencing the blobs successfully purged.
    * @throws BlobStorageException if the purge operation fails.
+   * @throws RuntimeException if the request times out before a response is received.
    */
   public List<CloudBlobMetadata> purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws BlobStorageException {
 
     List<CloudBlobMetadata> deletedBlobs = new ArrayList<>();
-    List<List<CloudBlobMetadata>> partitionedLists = Lists.partition(blobMetadataList, purgeBatchSize);
+    List<List<CloudBlobMetadata>> partitionedLists = Utils.partitionList(blobMetadataList, purgeBatchSize);
     for (List<CloudBlobMetadata> batchOfBlobs : partitionedLists) {
       BlobBatch blobBatch = blobBatchClient.getBlobBatch();
       List<Response<Void>> responseList = new ArrayList<>();

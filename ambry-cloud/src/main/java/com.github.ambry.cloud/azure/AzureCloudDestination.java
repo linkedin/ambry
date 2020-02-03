@@ -23,6 +23,7 @@ import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.ConnectionMode;
 import com.microsoft.azure.cosmosdb.ConnectionPolicy;
 import com.microsoft.azure.cosmosdb.ConsistencyLevel;
@@ -209,22 +210,11 @@ class AzureCloudDestination implements CloudDestination {
     // TODO: For single blob GET request, get metadata from ABS
     // CosmosDB has query size limit of 256k chars.
     // Break list into chunks if necessary to avoid overflow.
-    List<CloudBlobMetadata> metadataList;
-    if (blobIds.size() > ID_QUERY_BATCH_SIZE) {
-      metadataList = new ArrayList<>();
-      for (int j = 0; j < blobIds.size() / ID_QUERY_BATCH_SIZE + 1; j++) {
-        int start = j * ID_QUERY_BATCH_SIZE;
-        if (start >= blobIds.size()) {
-          break;
-        }
-        int end = Math.min((j + 1) * ID_QUERY_BATCH_SIZE, blobIds.size());
-        List<BlobId> someBlobIds = blobIds.subList(start, end);
-        metadataList.addAll(getBlobMetadataChunked(someBlobIds));
-      }
-    } else {
-      metadataList = getBlobMetadataChunked(blobIds);
+    List<CloudBlobMetadata> metadataList = new ArrayList<>();
+    List<List<BlobId>> chunkedBlobIdList = Utils.partitionList(blobIds, ID_QUERY_BATCH_SIZE);
+    for (List<BlobId> batchOfBlobs : chunkedBlobIdList) {
+      metadataList.addAll(getBlobMetadataChunked(batchOfBlobs));
     }
-
     return metadataList.stream().collect(Collectors.toMap(CloudBlobMetadata::getId, Function.identity()));
   }
 

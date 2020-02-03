@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
@@ -910,6 +911,30 @@ public class Utils {
     return Arrays.stream(data.split(delimiter))
         .filter(s -> !s.isEmpty())
         .collect(Collectors.toCollection(collectionFactory));
+  }
+
+  /**
+   * Partition the input list into a List of smaller sublists, each one limited to the specified batch size.
+   * Method inspired by the Guava utility Lists.partition(List<T> list, int size).
+   * @param inputList the input list to partition.
+   * @param batchSize the maximum size of the returned sublists.
+   * @return the partitioned list of sublists.
+   */
+  public static <T> List<List<T>> partitionList(List<T> inputList, int batchSize) {
+    Objects.requireNonNull(inputList, "Input list cannot be null");
+    if (batchSize < 1) {
+      throw new IllegalArgumentException("Invalid batchSize: " + batchSize);
+    }
+    List<List<T>> partitionedLists = new ArrayList<>();
+    for (int j = 0; j < inputList.size() / batchSize + 1; j++) {
+      int start = j * batchSize;
+      if (start >= inputList.size()) {
+        break;
+      }
+      int end = Math.min((j + 1) * batchSize, inputList.size());
+      partitionedLists.add(inputList.subList(start, end));
+    }
+    return partitionedLists;
   }
 
   /**
