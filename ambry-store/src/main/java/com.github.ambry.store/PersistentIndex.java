@@ -659,7 +659,7 @@ class PersistentIndex {
    */
   List<IndexValue> findAllIndexValuesForKey(StoreKey key, FileSpan fileSpan, EnumSet<IndexEntryType> types,
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
-    List<IndexValue> result = null;
+    List<IndexValue> result = new ArrayList<>();
     final Timer.Context context = metrics.findTime.time();
     try {
       ConcurrentNavigableMap<Offset, IndexSegment> segmentsMapToSearch;
@@ -680,9 +680,6 @@ class PersistentIndex {
         logger.trace("Index : {} searching all indexes with start offset {}", dataDir, entry.getKey());
         NavigableSet<IndexValue> values = entry.getValue().find(key);
         if (values != null) {
-          if (result == null) {
-            result = new LinkedList<>();
-          }
           Iterator<IndexValue> it = values.descendingIterator();
           while (it.hasNext()) {
             IndexValue value = it.next();
@@ -700,10 +697,10 @@ class PersistentIndex {
     } finally {
       context.stop();
     }
-    if (result != null) {
+    if (!result.isEmpty()) {
       logger.trace("Index: {} Returning values {}", dataDir, result);
     }
-    return result;
+    return result.isEmpty() ? null : result;
   }
 
   /**
@@ -723,8 +720,8 @@ class PersistentIndex {
     // This is from recovery or replication, make sure the last value is a put and the first value's lifeVersion is strictly
     // less than the given lifeVersion. We don't care about the first value's type, it can be a put, ttl_update or delete, it
     // can even be an undelete.
-    IndexValue lastValue = values.get(values.size() - 1);
     IndexValue firstValue = values.get(0);
+    IndexValue lastValue = values.get(values.size() - 1);
     if (!lastValue.isPut()) {
       throw new StoreException("Id " + key + " requires first value to be a put in index " + dataDir,
           StoreErrorCodes.ID_Deleted_Permanently);
@@ -959,7 +956,7 @@ class PersistentIndex {
   }
 
   /**
-   * Marks a blob as permanent
+   * Marks a blob as undeleted
    * @param id the {@link StoreKey} of the blob
    * @param fileSpan the file span represented by this entry in the log
    * @param operationTimeMs the time of the update operation
