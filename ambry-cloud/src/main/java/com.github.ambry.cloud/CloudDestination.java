@@ -93,14 +93,6 @@ public interface CloudDestination {
       throws CloudStorageException;
 
   /**
-   * Permanently delete the specified blob in the cloud destination.
-   * @param blobMetadata the {@link CloudBlobMetadata} referencing the blob to purge.
-   * @return flag indicating whether the blob was successfully purged.
-   * @throws CloudStorageException if the purge operation fails.
-   */
-  boolean purgeBlob(CloudBlobMetadata blobMetadata) throws CloudStorageException;
-
-  /**
    * Permanently delete the specified blobs in the cloud destination.
    * @param blobMetadataList the list of {@link CloudBlobMetadata} referencing the blobs to purge.
    * @return the number of blobs successfully purged.

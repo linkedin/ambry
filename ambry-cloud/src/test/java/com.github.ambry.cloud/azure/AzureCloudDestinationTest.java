@@ -13,7 +13,10 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.core.http.rest.Response;
 import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.batch.BlobBatch;
+import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.specialized.BlockBlobClient;
@@ -81,6 +84,7 @@ public class AzureCloudDestinationTest {
   private AzureCloudDestination azureDest;
   private BlobServiceClient mockServiceClient;
   private BlockBlobClient mockBlockBlobClient;
+  private BlobBatchClient mockBlobBatchClient;
   private AsyncDocumentClient mockumentClient;
   private AzureMetrics azureMetrics;
   private int blobSize = 1024;
@@ -95,6 +99,7 @@ public class AzureCloudDestinationTest {
   @Before
   public void setup() throws Exception {
     mockServiceClient = mock(BlobServiceClient.class);
+    mockBlobBatchClient = mock(BlobBatchClient.class);
     mockBlockBlobClient = AzureBlobDataAccessorTest.setupMockBlobClient(mockServiceClient);
     mockBlobExistence(false);
 
@@ -119,7 +124,8 @@ public class AzureCloudDestinationTest {
     configProps.setProperty("clustermap.datacenter.name", "uswest");
     configProps.setProperty("clustermap.host.name", "localhost");
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    azureDest = new AzureCloudDestination(mockServiceClient, mockumentClient, "foo", clusterName, azureMetrics);
+    azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
+        azureMetrics);
   }
 
   /**
@@ -178,11 +184,15 @@ public class AzureCloudDestinationTest {
   /** Test purge success. */
   @Test
   public void testPurge() throws Exception {
-    Mockito.doNothing().when(mockBlockBlobClient).delete();
+    BlobBatch mockBatch = mock(BlobBatch.class);
+    when (mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
+    Response<Void> okResponse = mock(Response.class);
+    when (okResponse.getStatusCode()).thenReturn(202);
+    when (mockBatch.deleteBlob(anyString(), anyString())).thenReturn(okResponse);
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
             CloudBlobMetadata.EncryptionOrigin.NONE);
-    assertTrue("Expected success", azureDest.purgeBlob(cloudBlobMetadata));
+    assertEquals("Expected success", 1, azureDest.purgeBlobs(Collections.singletonList(cloudBlobMetadata)));
     assertEquals(1, azureMetrics.blobDeletedCount.getCount());
     assertEquals(0, azureMetrics.blobDeleteErrorCount.getCount());
     assertEquals(1, azureMetrics.documentDeleteTime.getCount());
@@ -190,18 +200,24 @@ public class AzureCloudDestinationTest {
 
   /** Test purge not found. */
   @Test
-  public void testPurgeNotFound() throws Exception {
+  public void testPurgeError() throws Exception {
     // Unsuccessful case
-    BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
-    doThrow(ex).when(mockBlockBlobClient).delete();
-    when(mockumentClient.deleteDocument(anyString(), any(RequestOptions.class))).thenThrow(
-        new RuntimeException("Dcoument not Found", new DocumentClientException(404)));
+    BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_ARCHIVED);
+    BlobBatch mockBatch = mock(BlobBatch.class);
+    Response<Void> mockResponse = mock(Response.class);
+    when (mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
+    when (mockBatch.deleteBlob(anyString(), anyString())).thenReturn(mockResponse);
+    when(mockBlobBatchClient.submitBatchWithResponse(any(), anyBoolean(), any(), any())).thenThrow(ex);
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
             CloudBlobMetadata.EncryptionOrigin.NONE);
-    assertFalse("Expected false", azureDest.purgeBlob(cloudBlobMetadata));
+    try {
+      azureDest.purgeBlobs(Collections.singletonList(cloudBlobMetadata));
+      fail("Expected CloudStorageException");
+    } catch (CloudStorageException bex) {
+    }
     assertEquals(0, azureMetrics.blobDeletedCount.getCount());
-    assertEquals(0, azureMetrics.blobDeleteErrorCount.getCount());
+    assertEquals(1, azureMetrics.blobDeleteErrorCount.getCount());
   }
 
   /** Test upload of existing blob. */
@@ -334,7 +350,8 @@ public class AzureCloudDestinationTest {
   private void testQueryMetadata(int numBlobs, int expectedQueries) throws Exception {
     // Reset metrics
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    azureDest = new AzureCloudDestination(mockServiceClient, mockumentClient, "foo", clusterName, azureMetrics);
+    azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
+        azureMetrics);
     List<BlobId> blobIdList = new ArrayList<>();
     List<Document> docList = new ArrayList<>();
     for (int j = 0; j < numBlobs; j++) {

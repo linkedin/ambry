@@ -126,7 +126,7 @@ public class AzureIntegrationTest {
     metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
     assertEquals(deletionTime, metadata.getDeletionTime());
 
-    azureDest.purgeBlob(metadata);
+    azureDest.purgeBlobs(Collections.singletonList(metadata));
     assertTrue("Expected empty set after purge",
         azureDest.getBlobMetadata(Collections.singletonList(blobId)).isEmpty());
 
@@ -256,11 +256,11 @@ public class AzureIntegrationTest {
     }
 
     // run getDeadBlobs query, should return 20
-    logger.info("Query dead blobs");
     String partitionPath = String.valueOf(testPartition);
     List<CloudBlobMetadata> deadBlobs = azureDest.getDeadBlobs(partitionPath);
     assertEquals("Unexpected number of dead blobs", expectedDeadBlobs, deadBlobs.size());
 
+    logger.info("Running purge");
     int numPurged = azureDest.purgeBlobs(deadBlobs);
     assertEquals("Not all blobs were purged", expectedDeadBlobs, numPurged);
     cleanup();
