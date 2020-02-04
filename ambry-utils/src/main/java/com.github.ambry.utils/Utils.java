@@ -926,12 +926,8 @@ public class Utils {
       throw new IllegalArgumentException("Invalid batchSize: " + batchSize);
     }
     List<List<T>> partitionedLists = new ArrayList<>();
-    for (int j = 0; j < inputList.size() / batchSize + 1; j++) {
-      int start = j * batchSize;
-      if (start >= inputList.size()) {
-        break;
-      }
-      int end = Math.min((j + 1) * batchSize, inputList.size());
+    for (int start = 0; start < inputList.size(); start += batchSize) {
+      int end = Math.min(start + batchSize, inputList.size());
       partitionedLists.add(inputList.subList(start, end));
     }
     return partitionedLists;
