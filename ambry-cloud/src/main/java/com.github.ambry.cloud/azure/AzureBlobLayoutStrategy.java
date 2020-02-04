@@ -28,12 +28,15 @@ import com.github.ambry.utils.Utils;
  */
 public class AzureBlobLayoutStrategy {
 
-  private static final String SEPARATOR = "-";
+  private static final String DASH = "-";
+  private static final String UNDERSCORE = "_";
+  private static final String BLOB_NAME_SEPARATOR = DASH;
   // Note: Azure container name needs to be lower case
   private static final String TOKEN_CONTAINER_NAME = "replicatokens";
   private final String clusterName;
   private int currentVersion;
   private BlobContainerStrategy blobContainerStrategy;
+  private final String containerNameSeparator;
 
   /**
    * Enum for deciding how Azure storage containers are organized.
@@ -81,6 +84,9 @@ public class AzureBlobLayoutStrategy {
     this.clusterName = clusterName;
     currentVersion = azureCloudConfig.azureNameSchemeVersion;
     blobContainerStrategy = BlobContainerStrategy.get(azureCloudConfig.azureBlobContainerStrategy);
+    // Since account and container Ids can technically be negative numbers, use underscore instead of dash
+    // to avoid confusion.
+    containerNameSeparator = (blobContainerStrategy == BlobContainerStrategy.CONTAINER) ? UNDERSCORE : DASH;
   }
 
   /** Test constructor */
@@ -88,7 +94,9 @@ public class AzureBlobLayoutStrategy {
     this.clusterName = clusterName;
     currentVersion = 0;
     blobContainerStrategy = BlobContainerStrategy.PARTITION;
+    containerNameSeparator = DASH;
   }
+
   /**
    * @return the {@link BlobLayout} for the specified blob.
    * @param blobMetadata the {@link CloudBlobMetadata for the data blob.
@@ -128,7 +136,7 @@ public class AzureBlobLayoutStrategy {
   private String getAzureContainerName(CloudBlobMetadata blobMetadata) {
     String baseContainerName =
         (blobContainerStrategy == BlobContainerStrategy.PARTITION) ? blobMetadata.getPartitionId()
-            : blobMetadata.getAccountId() + SEPARATOR + blobMetadata.getContainerId();
+            : blobMetadata.getAccountId() + containerNameSeparator + blobMetadata.getContainerId();
     return getClusterAwareAzureContainerName(baseContainerName);
   }
 
@@ -142,7 +150,7 @@ public class AzureBlobLayoutStrategy {
     switch (nameVersion) {
       default:
         // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
-        return blobIdStr.substring(blobIdStr.length() - 4) + SEPARATOR + blobIdStr;
+        return blobIdStr.substring(blobIdStr.length() - 4) + BLOB_NAME_SEPARATOR + blobIdStr;
     }
   }
 
@@ -152,7 +160,7 @@ public class AzureBlobLayoutStrategy {
    * @return a container name scoped to the cluster.
    */
   private String getClusterAwareAzureContainerName(String inputName) {
-    String containerName = clusterName + SEPARATOR + inputName;
+    String containerName = clusterName + containerNameSeparator + inputName;
     return containerName.toLowerCase();
   }
 

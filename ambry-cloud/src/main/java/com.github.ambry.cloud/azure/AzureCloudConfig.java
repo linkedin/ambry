@@ -80,7 +80,7 @@ public class AzureCloudConfig {
   public final int azureNameSchemeVersion;
 
   @Config(AZURE_BLOB_CONTAINER_STRATEGY)
-  @Default("partition")
+  @Default("Partition")
   public final String azureBlobContainerStrategy;
 
   /**
