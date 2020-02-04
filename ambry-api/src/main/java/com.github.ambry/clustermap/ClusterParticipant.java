@@ -85,6 +85,12 @@ public interface ClusterParticipant extends AutoCloseable {
   boolean updateDataNodeInfoInCluster(ReplicaId replicaId, boolean shouldExist);
 
   /**
+   * Initialize participant related metrics if needed.
+   * @param localPartitionCount total number of partitions on local node.
+   */
+  void initializeParticipantMetrics(int localPartitionCount);
+
+  /**
    * Terminate the participant.
    */
   @Override

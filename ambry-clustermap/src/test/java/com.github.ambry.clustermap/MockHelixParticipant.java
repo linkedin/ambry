@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
@@ -39,7 +40,7 @@ public class MockHelixParticipant extends HelixParticipant {
   private PartitionStateChangeListener mockReplicationManagerListener;
 
   public MockHelixParticipant(ClusterMapConfig clusterMapConfig) throws IOException {
-    super(clusterMapConfig, new MockHelixManagerFactory());
+    super(clusterMapConfig, new MockHelixManagerFactory(), new MetricRegistry());
     // create mock state change listener for ReplicationManager
     mockReplicationManagerListener = Mockito.mock(PartitionStateChangeListener.class);
     // mock Bootstrap-To-Standby change

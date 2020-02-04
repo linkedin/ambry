@@ -1166,7 +1166,7 @@ public class StorageManagerTest {
     Set<ReplicaId> stoppedReplicas = new HashSet<>();
 
     MockClusterParticipant() throws IOException {
-      super(clusterMapConfig, new MockHelixManagerFactory());
+      super(clusterMapConfig, new MockHelixManagerFactory(), metricRegistry);
     }
 
     @Override

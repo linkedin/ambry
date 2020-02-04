@@ -136,6 +136,10 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
           // static clustermap doesn't support updating node info dynamically.
           return false;
         }
+
+        @Override
+        public void initializeParticipantMetrics(int localPartitionCount) {
+        }
       };
     }
     return clusterParticipant;
