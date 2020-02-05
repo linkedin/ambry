@@ -68,14 +68,12 @@ class AzureCloudDestination implements CloudDestination {
       "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND "
           + THRESHOLD_PARAM + ")" + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND "
           + THRESHOLD_PARAM + ")" + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
-  private static final String SEPARATOR = "-";
   private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
   private final AsyncDocumentClient asyncDocumentClient;
   private final CosmosDataAccessor cosmosDataAccessor;
   private final AzureReplicationFeed azureReplicationFeed;
   private final AzureMetrics azureMetrics;
-  private final String clusterName;
   private final long retentionPeriodMs;
   private final int deadBlobsQueryLimit;
 
@@ -85,6 +83,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureCloudConfig the {@link AzureCloudConfig} to use.
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
+   * @param azureReplicationFeedType {@link AzureReplicationFeedType} to use for replication from azure.
    */
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
       AzureMetrics azureMetrics, AzureReplicationFeedType azureReplicationFeedType) {
@@ -92,7 +91,6 @@ class AzureCloudDestination implements CloudDestination {
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =
         new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
-    this.clusterName = clusterName;
     // Set up CosmosDB connection, including retry options and any proxy setting
     ConnectionPolicy connectionPolicy = new ConnectionPolicy();
     RetryOptions retryOptions = new RetryOptions();
@@ -125,6 +123,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param cosmosCollectionLink the CosmosDB collection link to use.
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
+   * @param azureReplicationFeedType the {@link AzureReplicationFeedType} to use for replication from azure.
    */
   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
       AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String clusterName,
@@ -132,7 +131,6 @@ class AzureCloudDestination implements CloudDestination {
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
-    this.clusterName = clusterName;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
     this.deadBlobsQueryLimit = CloudConfig.DEFAULT_COMPACTION_QUERY_LIMIT;
@@ -372,6 +370,10 @@ class AzureCloudDestination implements CloudDestination {
     }
   }
 
+  /**
+   * Return {@code findSinceQueryLimit}
+   * @return value of {@code findSinceQueryLimit}
+   */
   public static int getFindSinceQueryLimit() {
     return findSinceQueryLimit;
   }
@@ -398,7 +400,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param e the root cause exception.
    * @return the {@link CloudStorageException}.
    */
-  static CloudStorageException toCloudStorageException(String message, Exception e) {
+  private static final CloudStorageException toCloudStorageException(String message, Exception e) {
     Long retryDelayMs = null;
     int statusCode = -1;
     if (e instanceof BlobStorageException) {
@@ -412,6 +414,11 @@ class AzureCloudDestination implements CloudDestination {
     return new CloudStorageException(message, e, isRetryable, retryDelayMs);
   }
 
+  /**
+   * Return corres{@link AzureReplicationFeed} object for co
+   * @param azureReplicationFeedType
+   * @return
+   */
   private AzureReplicationFeed getReplicationFeedObj(AzureReplicationFeedType azureReplicationFeedType) {
     switch (azureReplicationFeedType) {
       case COSMOS_CHANGE_FEED:

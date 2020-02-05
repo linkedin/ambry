@@ -14,7 +14,6 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.Timer;
-import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
