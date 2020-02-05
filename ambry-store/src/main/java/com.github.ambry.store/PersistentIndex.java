@@ -645,6 +645,15 @@ class PersistentIndex {
     return retCandidate;
   }
 
+  /**
+   * Finds all the {@link IndexValue}s associated with the given {@code key} that matches any of the provided {@code types}
+   * if present in the index with the given {@code fileSpan} and return them in reversed chronological order. If there is
+   * no matched {@link IndexValue}, this method would return null;
+   * @param key the {@link StoreKey} whose {@link IndexValue} is required.
+   * @param fileSpan {@link FileSpan} which specifies the range within which search should be made.
+   * @return The list of the {@link IndexValue}s for {@code key} conforming to one of the types {@code types}.
+   * @throws StoreException any error.
+   */
   List<IndexValue> findAllIndexValuesForKey(StoreKey key, FileSpan fileSpan) throws StoreException {
     return findAllIndexValuesForKey(key, fileSpan, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
   }
