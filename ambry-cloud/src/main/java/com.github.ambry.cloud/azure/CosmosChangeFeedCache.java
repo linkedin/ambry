@@ -87,16 +87,18 @@ public class CosmosChangeFeedCache {
   private final ConcurrentHashMap<String, ChangeFeedCacheEntry> changeFeedCache;
   private final int defaultCacheSize;
   private final CosmosDataAccessor cosmosDataAccessor;
+  private final AzureMetrics azureMetrics;
 
   /**
    * Constructor to create a {@link CosmosChangeFeedCache} object.
    * @param cacheSize default number of cachedEntries for each partition.
    * @param cosmosDataAccessor {@link CosmosDataAccessor} object.
    */
-  public CosmosChangeFeedCache(int cacheSize, CosmosDataAccessor cosmosDataAccessor) {
+  public CosmosChangeFeedCache(int cacheSize, CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics) {
     this.defaultCacheSize = cacheSize;
     changeFeedCache = new ConcurrentHashMap<>();
     this.cosmosDataAccessor = cosmosDataAccessor;
+    this.azureMetrics = azureMetrics;
   }
 
   /**

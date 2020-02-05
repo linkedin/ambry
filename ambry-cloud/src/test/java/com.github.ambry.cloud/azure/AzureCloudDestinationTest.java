@@ -71,7 +71,7 @@ import static org.mockito.BDDMockito.*;
 
 
 /** Test cases for {@link AzureCloudDestination} */
-@RunWith(MockitoJUnitRunner.class)
+//@RunWith(MockitoJUnitRunner.class)
 public class AzureCloudDestinationTest {
 
   private final String base64key = Base64.encodeBase64String("ambrykey".getBytes());
@@ -413,7 +413,7 @@ public class AzureCloudDestinationTest {
 
     MockChangeFeedQuery mockChangeFeedQuery = new MockChangeFeedQuery();
     AzureReplicationFeed azureReplicationFeed =
-        new CosmosChangeFeedBasedReplicationFeed(mockChangeFeedQuery, AzureCloudDestination.getFindSinceQueryLimit());
+        new CosmosChangeFeedBasedReplicationFeed(mockChangeFeedQuery, azureMetrics);
     FieldSetter.setField(azureDest, azureDest.getClass().getDeclaredField("azureReplicationFeed"),
         azureReplicationFeed);
     cloudBlobMetadataList.stream().forEach(doc -> mockChangeFeedQuery.add(doc));

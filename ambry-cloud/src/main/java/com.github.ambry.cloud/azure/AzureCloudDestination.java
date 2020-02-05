@@ -126,10 +126,10 @@ class AzureCloudDestination implements CloudDestination {
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    */
-   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
-       AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String clusterName,
-       AzureMetrics azureMetrics, AzureReplicationFeedType azureReplicationFeedType) {
-     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
+  AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
+      AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String clusterName,
+      AzureMetrics azureMetrics, AzureReplicationFeedType azureReplicationFeedType) {
+    this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
@@ -398,7 +398,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param e the root cause exception.
    * @return the {@link CloudStorageException}.
    */
-  private static CloudStorageException toCloudStorageException(String message, Exception e) {
+  static CloudStorageException toCloudStorageException(String message, Exception e) {
     Long retryDelayMs = null;
     int statusCode = -1;
     if (e instanceof BlobStorageException) {
@@ -415,8 +415,9 @@ class AzureCloudDestination implements CloudDestination {
   private AzureReplicationFeed getReplicationFeedObj(AzureReplicationFeedType azureReplicationFeedType) {
     switch (azureReplicationFeedType) {
       case COSMOS_CHANGE_FEED:
+        return new CosmosChangeFeedBasedReplicationFeed(cosmosDataAccessor, azureMetrics);
       case COSMOS_UPDATE_TIME:
-        return new CosmosChangeFeedBasedReplicationFeed(cosmosDataAccessor, findSinceQueryLimit);
+        return new CosmosUpdateTimeBasedReplicationFeed(cosmosDataAccessor, azureMetrics);
       default:
         throw new IllegalArgumentException(
             String.format("Unknown cloud replication feed type: %s", azureReplicationFeedType));

@@ -26,13 +26,15 @@ public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFee
    * Constructor for {@link CosmosChangeFeedBasedReplicationFeed} object.
    * @param cosmosDataAccessor
    */
-  public CosmosChangeFeedBasedReplicationFeed(CosmosDataAccessor cosmosDataAccessor, int findSinceQueryLimit) {
-    cosmosChangeFeedCache = new CosmosChangeFeedCache(findSinceQueryLimit, cosmosDataAccessor);
+  public CosmosChangeFeedBasedReplicationFeed(CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics) {
+    cosmosChangeFeedCache =
+        new CosmosChangeFeedCache(AzureCloudDestination.getFindSinceQueryLimit(), cosmosDataAccessor, azureMetrics);
   }
 
   @Override
-  public FindToken getNextEntriesAndUpdatedToken(FindToken curfindToken, List<CloudBlobMetadata> nextEntries,
-      long maxTotalSizeOfEntries, String partitionPath) throws DocumentClientException {
+  public CosmosChangeFeedFindToken getNextEntriesAndUpdatedToken(FindToken curfindToken,
+      List<CloudBlobMetadata> nextEntries, long maxTotalSizeOfEntries, String partitionPath)
+      throws DocumentClientException {
     return cosmosChangeFeedCache.getNextEntriesAndToken((CosmosChangeFeedFindToken) curfindToken, nextEntries,
         maxTotalSizeOfEntries, partitionPath);
   }

@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.cloud.azure;
 
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory;
