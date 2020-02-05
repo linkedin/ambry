@@ -30,7 +30,6 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.TestUtils;
@@ -48,6 +47,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -59,7 +59,6 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mockito;
 import org.mockito.internal.util.reflection.FieldSetter;
 import org.mockito.junit.MockitoJUnitRunner;
 import rx.Observable;
@@ -124,8 +123,8 @@ public class AzureCloudDestinationTest {
     configProps.setProperty("clustermap.datacenter.name", "uswest");
     configProps.setProperty("clustermap.host.name", "localhost");
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    azureDest = new AzureCloudDestination(mockServiceClient, mockumentClient, "foo", clusterName, azureMetrics,
-        AzureReplicationFeedType.COSMOS_CHANGE_FEED);
+    azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
+        azureMetrics, AzureReplicationFeedType.COSMOS_CHANGE_FEED);
     //todo token test with cosmos updatetime replication feed type
   }
 
@@ -186,10 +185,10 @@ public class AzureCloudDestinationTest {
   @Test
   public void testPurge() throws Exception {
     BlobBatch mockBatch = mock(BlobBatch.class);
-    when (mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
+    when(mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
     Response<Void> okResponse = mock(Response.class);
-    when (okResponse.getStatusCode()).thenReturn(202);
-    when (mockBatch.deleteBlob(anyString(), anyString())).thenReturn(okResponse);
+    when(okResponse.getStatusCode()).thenReturn(202);
+    when(mockBatch.deleteBlob(anyString(), anyString())).thenReturn(okResponse);
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
             CloudBlobMetadata.EncryptionOrigin.NONE);
@@ -206,8 +205,8 @@ public class AzureCloudDestinationTest {
     BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_ARCHIVED);
     BlobBatch mockBatch = mock(BlobBatch.class);
     Response<Void> mockResponse = mock(Response.class);
-    when (mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
-    when (mockBatch.deleteBlob(anyString(), anyString())).thenReturn(mockResponse);
+    when(mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
+    when(mockBatch.deleteBlob(anyString(), anyString())).thenReturn(mockResponse);
     when(mockBlobBatchClient.submitBatchWithResponse(any(), anyBoolean(), any(), any())).thenThrow(ex);
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
@@ -351,8 +350,8 @@ public class AzureCloudDestinationTest {
   private void testQueryMetadata(int numBlobs, int expectedQueries) throws Exception {
     // Reset metrics
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    azureDest = new AzureCloudDestination(mockServiceClient, mockumentClient, "foo", clusterName, azureMetrics,
-        AzureReplicationFeedType.COSMOS_CHANGE_FEED);
+    azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
+        azureMetrics, AzureReplicationFeedType.COSMOS_CHANGE_FEED);
     // todo token test for all replication feed types
     List<BlobId> blobIdList = new ArrayList<>();
     List<Document> docList = new ArrayList<>();
@@ -413,8 +412,10 @@ public class AzureCloudDestinationTest {
     }
 
     MockChangeFeedQuery mockChangeFeedQuery = new MockChangeFeedQuery();
-    AzureReplicationFeed azureReplicationFeed = new CosmosChangeFeedBasedReplicationFeed(mockChangeFeedQuery, AzureCloudDestination.getFindSinceQueryLimit());
-    FieldSetter.setField(azureDest, azureDest.getClass().getDeclaredField("azureReplicationFeed"), azureReplicationFeed);
+    AzureReplicationFeed azureReplicationFeed =
+        new CosmosChangeFeedBasedReplicationFeed(mockChangeFeedQuery, AzureCloudDestination.getFindSinceQueryLimit());
+    FieldSetter.setField(azureDest, azureDest.getClass().getDeclaredField("azureReplicationFeed"),
+        azureReplicationFeed);
     cloudBlobMetadataList.stream().forEach(doc -> mockChangeFeedQuery.add(doc));
     FindToken findToken = new CosmosChangeFeedFindToken();
     // Run the query

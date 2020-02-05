@@ -24,6 +24,7 @@ import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.ConnectionMode;
 import com.microsoft.azure.cosmosdb.ConnectionPolicy;
 import com.microsoft.azure.cosmosdb.ConsistencyLevel;
@@ -125,10 +126,10 @@ class AzureCloudDestination implements CloudDestination {
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    */
-  AzureCloudDestination(BlobServiceClient storageClient, AsyncDocumentClient asyncDocumentClient,
-      String cosmosCollectionLink, String clusterName, AzureMetrics azureMetrics,
-      AzureReplicationFeedType azureReplicationFeedType) {
-    this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, clusterName, azureMetrics);
+   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
+       AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String clusterName,
+       AzureMetrics azureMetrics, AzureReplicationFeedType azureReplicationFeedType) {
+     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
