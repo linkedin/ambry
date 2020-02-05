@@ -47,6 +47,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -59,8 +61,8 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.mockito.internal.util.reflection.FieldSetter;
-import org.mockito.junit.MockitoJUnitRunner;
 import rx.Observable;
 
 import static com.github.ambry.cloud.azure.AzureTestUtils.*;
@@ -71,7 +73,7 @@ import static org.mockito.BDDMockito.*;
 
 
 /** Test cases for {@link AzureCloudDestination} */
-//@RunWith(MockitoJUnitRunner.class)
+@RunWith(Parameterized.class)
 public class AzureCloudDestinationTest {
 
   private final String base64key = Base64.encodeBase64String("ambrykey".getBytes());
@@ -94,6 +96,26 @@ public class AzureCloudDestinationTest {
   private long creationTime = System.currentTimeMillis();
   private long deletionTime = creationTime + 10000;
   private long expirationTime = Utils.Infinite_Time;
+  private AzureReplicationFeedType azureReplicationFeedType;
+
+  /**
+   * Parameterized constructor.
+   * @param azureReplicationFeedType type of replication feed used by {@link AzureCloudDestination}
+   */
+  public AzureCloudDestinationTest(AzureReplicationFeedType azureReplicationFeedType) {
+    super();
+    this.azureReplicationFeedType = azureReplicationFeedType;
+  }
+
+  /**
+   * static method to generate parameters.
+   * @return {@link Collection} of parameters.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> input() {
+    return Arrays.asList(
+        new Object[][]{{AzureReplicationFeedType.COSMOS_UPDATE_TIME}, {AzureReplicationFeedType.COSMOS_CHANGE_FEED}});
+  }
 
   @Before
   public void setup() throws Exception {
@@ -124,8 +146,7 @@ public class AzureCloudDestinationTest {
     configProps.setProperty("clustermap.host.name", "localhost");
     azureMetrics = new AzureMetrics(new MetricRegistry());
     azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-        azureMetrics, AzureReplicationFeedType.COSMOS_CHANGE_FEED);
-    //todo token test with cosmos updatetime replication feed type
+        azureMetrics, azureReplicationFeedType);
   }
 
   /**
@@ -351,7 +372,7 @@ public class AzureCloudDestinationTest {
     // Reset metrics
     azureMetrics = new AzureMetrics(new MetricRegistry());
     azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-        azureMetrics, AzureReplicationFeedType.COSMOS_CHANGE_FEED);
+        azureMetrics, azureReplicationFeedType);
     // todo token test for all replication feed types
     List<BlobId> blobIdList = new ArrayList<>();
     List<Document> docList = new ArrayList<>();
@@ -394,6 +415,9 @@ public class AzureCloudDestinationTest {
   /** Test findEntriesSince. */
   @Test
   public void testFindEntriesSince() throws Exception {
+    if (azureReplicationFeedType != AzureReplicationFeedType.COSMOS_CHANGE_FEED) {
+      return;
+    }
     long chunkSize = 110000;
     long maxTotalSize = 1000000; // between 9 and 10 chunks
     long startTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
@@ -412,8 +436,7 @@ public class AzureCloudDestinationTest {
     }
 
     MockChangeFeedQuery mockChangeFeedQuery = new MockChangeFeedQuery();
-    AzureReplicationFeed azureReplicationFeed =
-        new CosmosChangeFeedBasedReplicationFeed(mockChangeFeedQuery, azureMetrics);
+    AzureReplicationFeed azureReplicationFeed = getReplicationFeedObj(mockChangeFeedQuery);
     FieldSetter.setField(azureDest, azureDest.getClass().getDeclaredField("azureReplicationFeed"),
         azureReplicationFeed);
     cloudBlobMetadataList.stream().forEach(doc -> mockChangeFeedQuery.add(doc));
@@ -471,8 +494,8 @@ public class AzureCloudDestinationTest {
   public void testAzureConnection() throws Exception {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics,
-        AzureReplicationFeedType.COSMOS_CHANGE_FEED);
+    AzureCloudDestination dest =
+        new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, azureReplicationFeedType);
     try {
       dest.getAzureBlobDataAccessor().testConnectivity();
       fail("Expected exception");
@@ -495,8 +518,8 @@ public class AzureCloudDestinationTest {
     // Test without proxy
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics,
-        AzureReplicationFeedType.COSMOS_CHANGE_FEED);
+    AzureCloudDestination dest =
+        new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, azureReplicationFeedType);
     assertNull("Expected null proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
     assertNull("Expected null proxy for Cosmos", dest.getAsyncDocumentClient().getConnectionPolicy().getProxy());
 
@@ -506,13 +529,24 @@ public class AzureCloudDestinationTest {
     configProps.setProperty(CloudConfig.VCR_PROXY_HOST, proxyHost);
     configProps.setProperty(CloudConfig.VCR_PROXY_PORT, String.valueOf(proxyPort));
     cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
-    dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics,
-        AzureReplicationFeedType.COSMOS_CHANGE_FEED);
+    dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, azureReplicationFeedType);
     assertNotNull("Expected proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
     InetSocketAddress proxy = dest.getAsyncDocumentClient().getConnectionPolicy().getProxy();
     assertNotNull("Expected proxy for Cosmos", proxy);
     assertEquals("Wrong host", proxyHost, proxy.getHostName());
     assertEquals("Wrong port", proxyPort, proxy.getPort());
+  }
+
+  private AzureReplicationFeed getReplicationFeedObj(CosmosDataAccessor cosmosDataAccessor) {
+    switch (azureReplicationFeedType) {
+      case COSMOS_CHANGE_FEED:
+        return new CosmosChangeFeedBasedReplicationFeed(cosmosDataAccessor, azureMetrics);
+      case COSMOS_UPDATE_TIME:
+        return new CosmosUpdateTimeBasedReplicationFeed(cosmosDataAccessor, azureMetrics);
+      default:
+        throw new IllegalArgumentException(
+            String.format("Unknown cloud replication feed type: %s", azureReplicationFeedType));
+    }
   }
 
   /**
