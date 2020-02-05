@@ -66,8 +66,9 @@ public class AzurePerformanceTest {
       CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
       AzureCloudConfig azureCloudConfig = new AzureCloudConfig(verifiableProperties);
       String clusterName = "perftest";
-      blobDataAccessor =
-          new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, clusterName, new AzureMetrics(new MetricRegistry()));
+      AzureBlobLayoutStrategy blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
+      blobDataAccessor = new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy,
+          new AzureMetrics(new MetricRegistry()));
 
       testPerformance();
     } catch (Exception ex) {

@@ -16,17 +16,27 @@ package com.github.ambry.cloud.azure;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.utils.TestUtils;
 import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.FeedResponse;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Properties;
+import org.apache.commons.codec.binary.Base64;
 import rx.Observable;
 import rx.observables.BlockingObservable;
 
+import static com.github.ambry.commons.BlobId.*;
 import static org.mockito.Mockito.*;
 
 
@@ -34,6 +44,14 @@ import static org.mockito.Mockito.*;
  * Class to define utilities for azure tests.
  */
 class AzureTestUtils {
+
+  static final String base64key = Base64.encodeBase64String("ambrykey".getBytes());
+  static final String storageConnection =
+      "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
+  static final byte dataCenterId = 66;
+  static final short accountId = 101;
+  static final short containerId = 5;
+  static final long partition = 666;
 
   /**
    * Create {@link Document} object from {@link CloudBlobMetadata} object.
@@ -58,6 +76,36 @@ class AzureTestUtils {
     Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
     document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, uploadTime);
     return document;
+  }
+
+  static void setConfigProperties(Properties configProps) {
+    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
+    configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com");
+    configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
+    configProps.setProperty(AzureCloudConfig.COSMOS_KEY, "cosmos-key");
+    configProps.setProperty("clustermap.cluster.name", "main");
+    configProps.setProperty("clustermap.datacenter.name", "uswest");
+    configProps.setProperty("clustermap.host.name", "localhost");
+  }
+
+  /**
+   * Utility method to generate a BlobId.
+   * @return a BlobId for the default attributes.
+   */
+  static BlobId generateBlobId() {
+    PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    return new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+        BlobDataType.DATACHUNK);
+  }
+
+  /**
+   * Utility method to get blob input stream.
+   * @param blobSize size of blob to consider.
+   * @return the blob input stream.
+   */
+  static InputStream getBlobInputStream(int blobSize) {
+    byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
+    return new ByteArrayInputStream(randomBytes);
   }
 
   /**
