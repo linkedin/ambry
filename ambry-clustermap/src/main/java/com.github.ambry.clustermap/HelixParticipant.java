@@ -65,7 +65,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * Instantiate a HelixParticipant.
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this participant.
    * @param helixFactory the {@link HelixFactory} to use to get the {@link HelixManager}.
-   * @param metricRegistry
+   * @param metricRegistry the {@link MetricRegistry} to instantiate {@link HelixParticipantMetrics}.
    * @throws IOException if there is an error in parsing the JSON serialized ZK connect string config.
    */
   public HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory, MetricRegistry metricRegistry)
@@ -110,7 +110,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig, this, null));
+        new AmbryStateModelFactory(clusterMapConfig, this, participantMetrics));
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
       synchronized (helixAdministrationLock) {
