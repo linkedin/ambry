@@ -25,15 +25,11 @@ import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.MockPartitionId;
-import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -47,7 +43,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 
-import static com.github.ambry.commons.BlobId.*;
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -151,19 +146,17 @@ public class AzureBlobDataAccessorTest {
     when(mockBatchClient.getBlobBatch()).thenReturn(mockBatch);
     Response<Void> okResponse = mock(Response.class);
     when(okResponse.getStatusCode()).thenReturn(202);
-    when(mockBatch.deleteBlob(anyString(), eq(dataAccessor.getAzureBlobName(blobNameOkStatus)))).thenReturn(okResponse);
+    when(mockBatch.deleteBlob(anyString(), endsWith(blobNameOkStatus))).thenReturn(okResponse);
     BlobStorageException notFoundException = mock(BlobStorageException.class);
     when(notFoundException.getStatusCode()).thenReturn(404);
     Response<Void> notFoundResponse = mock(Response.class);
     when(notFoundResponse.getStatusCode()).thenThrow(notFoundException);
-    when(mockBatch.deleteBlob(anyString(), eq(dataAccessor.getAzureBlobName(blobNameNotFoundStatus)))).thenReturn(
-        notFoundResponse);
+    when(mockBatch.deleteBlob(anyString(), endsWith(blobNameNotFoundStatus))).thenReturn(notFoundResponse);
     BlobStorageException badException = mock(BlobStorageException.class);
     when(badException.getStatusCode()).thenReturn(503);
     Response<Void> badResponse = mock(Response.class);
     when(badResponse.getStatusCode()).thenThrow(badException);
-    when(mockBatch.deleteBlob(anyString(), eq(dataAccessor.getAzureBlobName(blobNameErrorStatus)))).thenReturn(
-        badResponse);
+    when(mockBatch.deleteBlob(anyString(), endsWith(blobNameErrorStatus))).thenReturn(badResponse);
     List<CloudBlobMetadata> purgeList = new ArrayList<>();
     purgeList.add(new CloudBlobMetadata().setId(blobNameOkStatus));
     purgeList.add(new CloudBlobMetadata().setId(blobNameNotFoundStatus));
@@ -265,6 +258,4 @@ public class AzureBlobDataAccessorTest {
     } catch (BlobStorageException csex) {
     }
   }
-
-
 }

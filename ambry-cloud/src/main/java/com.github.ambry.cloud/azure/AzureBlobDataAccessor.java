@@ -330,10 +330,7 @@ public class AzureBlobDataAccessor {
       List<Response<Void>> responseList = new ArrayList<>();
       for (CloudBlobMetadata blobMetadata : batchOfBlobs) {
         BlobLayout blobLayout = blobLayoutStrategy.getDataBlobLayout(blobMetadata);
-        String containerName = blobLayout.containerName;
-        String blobFileName = blobLayout.blobFilePath;
-        String partitionPath = blobMetadata.getPartitionId();
-        responseList.add(blobBatch.deleteBlob(containerName, blobFileName));
+        responseList.add(blobBatch.deleteBlob(blobLayout.containerName, blobLayout.blobFilePath));
       }
       blobBatchClient.submitBatchWithResponse(blobBatch, false, Duration.ofSeconds(batchPurgeTimeoutSec), Context.NONE);
       for (int j = 0; j < responseList.size(); j++) {
