@@ -624,8 +624,8 @@ public class BlobStore implements Store {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       List<IndexValue> values = index.findAllIndexValuesForKey(id, null);
       index.validateSanityForUndelete(id, values, IndexValue.LIFE_VERSION_FROM_FRONTEND);
-      IndexValue lastValue = values.get(0);
-      short lifeVersion = (short) (lastValue.getLifeVersion() + 1);
+      IndexValue latestValue = values.get(0);
+      short lifeVersion = (short) (latestValue.getLifeVersion() + 1);
       MessageFormatInputStream stream =
           new UndeleteMessageFormatInputStream(id, info.getAccountId(), info.getContainerId(),
               info.getOperationTimeMs(), lifeVersion);
@@ -635,15 +635,15 @@ public class BlobStore implements Store {
       ArrayList<MessageInfo> infoList = new ArrayList<>();
       infoList.add(info);
       MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
-      if (!info.getStoreKey().isAccountContainerMatch(lastValue.getAccountId(), lastValue.getContainerId())) {
+      if (!info.getStoreKey().isAccountContainerMatch(latestValue.getAccountId(), latestValue.getContainerId())) {
         if (config.storeValidateAuthorization) {
           throw new StoreException(
               "UNDELETE authorization failure. Key: " + info.getStoreKey() + " Actually accountId: "
-                  + lastValue.getAccountId() + "Actually containerId: " + lastValue.getContainerId(),
+                  + latestValue.getAccountId() + "Actually containerId: " + latestValue.getContainerId(),
               StoreErrorCodes.Authorization_Failure);
         } else {
           logger.warn("UNDELETE authorization failure. Key: {} Actually accountId: {} Actually containerId: {}",
-              info.getStoreKey(), lastValue.getAccountId(), lastValue.getContainerId());
+              info.getStoreKey(), latestValue.getAccountId(), latestValue.getContainerId());
           metrics.undeleteAuthorizationFailureCount.inc();
         }
       }
