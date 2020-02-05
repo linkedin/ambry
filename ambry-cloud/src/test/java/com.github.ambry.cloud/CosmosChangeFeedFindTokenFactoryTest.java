@@ -13,6 +13,8 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
+import com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -24,9 +26,9 @@ import static org.junit.Assert.*;
 
 
 /**
- * Test for {@link CloudFindTokenFactory}
+ * Test for {@link com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory}
  */
-public class CloudFindTokenFactoryTest {
+public class CosmosChangeFeedFindTokenFactoryTest {
 
   /**
    * test get find token from stream
@@ -43,11 +45,11 @@ public class CloudFindTokenFactoryTest {
     int index = random.nextInt() % totalItems;
     String azureRequestId = UUID.randomUUID().toString();
 
-    CloudFindToken cloudFindToken1 = new CloudFindToken(bytesRead,
-        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
-    DataInputStream stream = new DataInputStream(new ByteArrayInputStream(cloudFindToken1.toBytes()));
-    CloudFindToken cloudFindToken2 = (CloudFindToken) new CloudFindTokenFactory().getFindToken(stream);
-    assertEquals("incorrect token returned from factory", cloudFindToken1, cloudFindToken2);
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken1 =
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems, azureRequestId, version);
+    DataInputStream stream = new DataInputStream(new ByteArrayInputStream(cosmosChangeFeedFindToken1.toBytes()));
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken2 = (CosmosChangeFeedFindToken) new CosmosChangeFeedFindTokenFactory().getFindToken(stream);
+    assertEquals("incorrect token returned from factory", cosmosChangeFeedFindToken1, cosmosChangeFeedFindToken2);
   }
 
   /**
@@ -55,8 +57,8 @@ public class CloudFindTokenFactoryTest {
    */
   @Test
   public void getNewFindTokenTest() {
-    CloudFindToken cloudFindToken1 = (CloudFindToken) new CloudFindTokenFactory().getNewFindToken();
-    CloudFindToken cloudFindToken2 = new CloudFindToken();
-    assertEquals("tokens should be equal", cloudFindToken1, cloudFindToken2);
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken1 = (CosmosChangeFeedFindToken) new CosmosChangeFeedFindTokenFactory().getNewFindToken();
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken2 = new CosmosChangeFeedFindToken();
+    assertEquals("tokens should be equal", cosmosChangeFeedFindToken1, cosmosChangeFeedFindToken2);
   }
 }

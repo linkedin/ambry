@@ -16,7 +16,6 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -24,6 +23,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
@@ -297,7 +297,8 @@ public class AzureIntegrationTest {
           azureDest.uploadBlob(blobId, chunkSize, cloudBlobMetadata, inputStream));
     }
 
-    CloudFindToken findToken = new CloudFindToken();
+    //token todo test for update time token too
+    FindToken findToken = new CosmosChangeFeedFindToken();
     // Call findEntriesSince in a loop until no new entries are returned
     List<CloudBlobMetadata> results = new ArrayList<>();
     int numQueries = 0;

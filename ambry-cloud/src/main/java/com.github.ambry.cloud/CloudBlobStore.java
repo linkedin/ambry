@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.Timer;
+import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
@@ -415,11 +416,10 @@ class CloudBlobStore implements Store {
 
   @Override
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
-    CloudFindToken inputToken = (CloudFindToken) token;
     try {
       List<CloudBlobMetadata> results = new ArrayList<>();
-      CloudFindToken outputToken =
-          cloudDestination.findEntriesSince(partitionId.toPathString(), inputToken, maxTotalSizeOfEntries, results);
+      FindToken outputToken =
+          cloudDestination.findEntriesSince(partitionId.toPathString(), token, maxTotalSizeOfEntries, results);
       if (results.isEmpty()) {
         return new FindInfo(Collections.emptyList(), outputToken);
       }

@@ -17,15 +17,13 @@ import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.codahale.metrics.Timer;
-import com.github.ambry.cloud.AzureFindToken;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
-import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.utils.Utils;
+import com.github.ambry.replication.FindToken;
 import com.microsoft.azure.cosmosdb.ConnectionMode;
 import com.microsoft.azure.cosmosdb.ConnectionPolicy;
 import com.microsoft.azure.cosmosdb.ConsistencyLevel;
@@ -64,17 +62,17 @@ class AzureCloudDestination implements CloudDestination {
   private static final String LIMIT_PARAM = "@limit";
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
   static final int ID_QUERY_BATCH_SIZE = 1000;
+  private static final int findSinceQueryLimit = 1000;
   private static final String DEAD_BLOBS_QUERY_TEMPLATE =
       "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND "
           + THRESHOLD_PARAM + ")" + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND "
           + THRESHOLD_PARAM + ")" + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
   private static final String SEPARATOR = "-";
-  private static final int findSinceQueryLimit = 1000;
   private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
   private final AsyncDocumentClient asyncDocumentClient;
   private final CosmosDataAccessor cosmosDataAccessor;
-  private final CosmosChangeFeed cosmosChangeFeed;
+  private final AzureReplicationFeed azureReplicationFeed;
   private final AzureMetrics azureMetrics;
   private final String clusterName;
   private final long retentionPeriodMs;
@@ -88,7 +86,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureMetrics the {@link AzureMetrics} to use.
    */
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
-      AzureMetrics azureMetrics) {
+      AzureMetrics azureMetrics, AzureReplicationFeedType azureReplicationFeedType) {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =
@@ -113,7 +111,7 @@ class AzureCloudDestination implements CloudDestination {
         .withConsistencyLevel(ConsistencyLevel.Session)
         .build();
     cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, azureCloudConfig, azureMetrics);
-    cosmosChangeFeed = new CosmosChangeFeed(findSinceQueryLimit, cosmosDataAccessor);
+    azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
     this.deadBlobsQueryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
     logger.info("Created Azure destination");
@@ -127,10 +125,10 @@ class AzureCloudDestination implements CloudDestination {
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    */
-  AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
-      AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String clusterName,
-      AzureMetrics azureMetrics) {
-    this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
+  AzureCloudDestination(BlobServiceClient storageClient, AsyncDocumentClient asyncDocumentClient,
+      String cosmosCollectionLink, String clusterName, AzureMetrics azureMetrics,
+      AzureReplicationFeedType azureReplicationFeedType) {
+    this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, clusterName, azureMetrics);
     this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
@@ -138,7 +136,7 @@ class AzureCloudDestination implements CloudDestination {
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
     this.deadBlobsQueryLimit = CloudConfig.DEFAULT_COMPACTION_QUERY_LIMIT;
     cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
-    cosmosChangeFeed = new CosmosChangeFeed(findSinceQueryLimit, cosmosDataAccessor);
+    azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType);
   }
 
   /**
@@ -243,14 +241,11 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public CloudFindToken findEntriesSince(String partitionPath, CloudFindToken findToken, long maxTotalSizeOfEntries,
+  public FindToken findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
       List<CloudBlobMetadata> nextEntries) throws CloudStorageException {
     try {
-      AzureFindToken updatedAzureFindToken =
-          cosmosChangeFeed.getNextEntriesAndToken(findToken.getAzureFindToken(), nextEntries, maxTotalSizeOfEntries,
-              partitionPath);
-      long bytesToBeRead = nextEntries.stream().mapToLong(CloudBlobMetadata::getSize).sum();
-      return CloudFindToken.getUpdatedToken(findToken, updatedAzureFindToken, bytesToBeRead);
+      return azureReplicationFeed.getNextEntriesAndUpdatedToken(findToken, nextEntries, maxTotalSizeOfEntries,
+          partitionPath);
     } catch (DocumentClientException dex) {
       throw toCloudStorageException("Failed to query blobs for partition " + partitionPath, dex);
     }
@@ -414,6 +409,17 @@ class AzureCloudDestination implements CloudDestination {
     // Everything is retryable except NOT_FOUND
     boolean isRetryable = (statusCode != HttpConstants.StatusCodes.NOTFOUND);
     return new CloudStorageException(message, e, isRetryable, retryDelayMs);
+  }
+
+  private AzureReplicationFeed getReplicationFeedObj(AzureReplicationFeedType azureReplicationFeedType) {
+    switch (azureReplicationFeedType) {
+      case COSMOS_CHANGE_FEED:
+      case COSMOS_UPDATE_TIME:
+        return new CosmosChangeFeedBasedReplicationFeed(cosmosDataAccessor, findSinceQueryLimit);
+      default:
+        throw new IllegalArgumentException(
+            String.format("Unknown cloud replication feed type: %s", azureReplicationFeedType));
+    }
   }
 
   /**

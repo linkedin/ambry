@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -21,16 +22,17 @@ import java.util.Random;
 import java.util.UUID;
 import org.junit.Test;
 
+import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 
 
 /**
- * Test for {@link CloudFindToken}
+ * Test for {@link CosmosChangeFeedFindToken}
  */
-public class CloudFindTokenTest {
+public class CosmosChangeFeedFindTokenTest {
 
   /**
-   * Test for correctness of {@code CloudFindToken#equals(Object)}
+   * Test for correctness of {@code CosmosChangeFeedFindToken#equals(Object)}
    */
   @Test
   public void equalityTest() {
@@ -44,48 +46,54 @@ public class CloudFindTokenTest {
     String azureRequestId = UUID.randomUUID().toString();
 
     //compare empty tokens
-    ensureEqual(new CloudFindToken(), new CloudFindToken());
+    ensureEqual(new CosmosChangeFeedFindToken(), new CosmosChangeFeedFindToken());
 
     //compare token constructed from all constructors
-    CloudFindToken token1 = new CloudFindToken(bytesRead,
-        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
-    CloudFindToken token2 = new CloudFindToken(bytesRead,
-        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
+    CosmosChangeFeedFindToken token1 =
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
+            azureRequestId);
+    CosmosChangeFeedFindToken token2 =
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
+            azureRequestId);
     ensureEqual(token1, token2);
 
-    token1 = new CloudFindToken(bytesRead,
-        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId, version));
-    token2 = new CloudFindToken(bytesRead,
-        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId, version));
+    token1 = new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
+        azureRequestId, version);
+    token2 = new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
+        azureRequestId, version);
     ensureEqual(token1, token2);
 
     //ensure inequality for any unequal field
-    token2 = new CloudFindToken(bytesRead + 1,
-        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
+    token2 =
+        new CosmosChangeFeedFindToken(bytesRead + 1, startContinuationToken, endContinuationToken, index, totalItems,
+            azureRequestId, version);
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(bytesRead,
-        new AzureFindToken(startContinuationToken + "1", endContinuationToken, index, totalItems, azureRequestId));
+    token2 =
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken + "1", endContinuationToken, index, totalItems,
+            azureRequestId);
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(bytesRead,
-        new AzureFindToken(startContinuationToken, endContinuationToken + "1", index, totalItems, azureRequestId));
+    token2 =
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken + "1", index, totalItems,
+            azureRequestId);
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(bytesRead,
-        new AzureFindToken(startContinuationToken, endContinuationToken, index + 1, totalItems, azureRequestId));
+    token2 =
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index + 1, totalItems,
+            azureRequestId);
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(bytesRead,
-        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems + 1, azureRequestId));
+    token2 =
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems + 1,
+            azureRequestId);
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(bytesRead,
-        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems,
-            UUID.randomUUID().toString()));
+    token2 = new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
+        UUID.randomUUID().toString());
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken();
+    token2 = new CosmosChangeFeedFindToken();
     ensureUnequal(token1, token2);
   }
 
@@ -107,20 +115,20 @@ public class CloudFindTokenTest {
     //Deserialization test
 
     //token with invalid version
-    CloudFindToken invalidToken = new CloudFindToken((short) 1, bytesRead,
-        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
+    CosmosChangeFeedFindToken invalidToken =
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems, azureRequestId, (short) 1);
     DataInputStream tokenStream = getSerializedStream(invalidToken);
     try {
-      CloudFindToken.fromBytes(tokenStream);
+      CosmosChangeFeedFindToken.fromBytes(tokenStream);
       fail("deserialization of token with invalid version should have failed");
     } catch (IllegalStateException ise) {
     }
 
     //valid token
-    CloudFindToken token = new CloudFindToken(bytesRead,
-        new AzureFindToken(startContinuationToken, endContinuationToken, index, totalItems, azureRequestId));
+    CosmosChangeFeedFindToken token =
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems, azureRequestId);
     tokenStream = new DataInputStream(new ByteArrayInputStream(token.toBytes()));
-    CloudFindToken deSerToken = CloudFindToken.fromBytes(tokenStream);
+    CosmosChangeFeedFindToken deSerToken = CosmosChangeFeedFindToken.fromBytes(tokenStream);
     assertEquals("Stream should have ended ", 0, tokenStream.available());
     assertEquals(token, deSerToken);
 
@@ -129,14 +137,14 @@ public class CloudFindTokenTest {
     //token with invalid version
     DataInputStream serializedStream = getSerializedStream(invalidToken);
     try {
-      CloudFindToken.fromBytes(serializedStream);
+      CosmosChangeFeedFindToken.fromBytes(serializedStream);
       fail("serialization of token with invalid version should have failed");
     } catch (IllegalStateException ise) {
     }
 
     //valid token
     serializedStream = new DataInputStream(new ByteArrayInputStream(token.toBytes()));
-    deSerToken = CloudFindToken.fromBytes(serializedStream);
+    deSerToken = CosmosChangeFeedFindToken.fromBytes(serializedStream);
     assertEquals("Stream should have ended ", 0, serializedStream.available());
     assertEquals(token, deSerToken);
   }
@@ -146,7 +154,7 @@ public class CloudFindTokenTest {
    * @param token1
    * @param token2
    */
-  private void ensureEqual(CloudFindToken token1, CloudFindToken token2) {
+  private void ensureEqual(CosmosChangeFeedFindToken token1, CosmosChangeFeedFindToken token2) {
     assertEquals("Tokens should match", token1, token2);
     assertEquals("Hashcode of tokens should match", token1.hashCode(), token2.hashCode());
   }
@@ -156,28 +164,29 @@ public class CloudFindTokenTest {
    * @param token1
    * @param token2
    */
-  private void ensureUnequal(CloudFindToken token1, CloudFindToken token2) {
+  private void ensureUnequal(CosmosChangeFeedFindToken token1, CosmosChangeFeedFindToken token2) {
     assertFalse("Tokens shouldn't match", token1.equals(token2));
   }
 
   /**
    * helper to seriliaze token.
-   * @param token {@code CloudFindToken} object to serialize
+   * @param token {@code AzureFindToken} object to serialize
    * @return DataInputStream serialized stream
    */
-  private DataInputStream getSerializedStream(CloudFindToken token) {
-    byte[] buf = null;
-    int size = 2 * Short.BYTES + Long.BYTES + token.getAzureFindToken().size();
-    buf = new byte[size];
+  private DataInputStream getSerializedStream(CosmosChangeFeedFindToken token) {
+    byte[] buf = new byte[token.size()];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
-    // add version
     bufWrap.putShort(token.getVersion());
-    // add type
     bufWrap.putShort((short) token.getType().ordinal());
-    // add bytesRead
     bufWrap.putLong(token.getBytesRead());
-    // add lastUpdateTimeReadBlobIds
-    bufWrap.put(token.getAzureFindToken().toBytes());
+    bufWrap.putInt(getNullableStringLength(token.getStartContinuationToken()));
+    bufWrap.put(nullableStringToBytes(token.getEndContinuationToken()));
+    bufWrap.putInt(getNullableStringLength(token.getEndContinuationToken()));
+    bufWrap.put(nullableStringToBytes(token.getEndContinuationToken()));
+    bufWrap.putInt(token.getIndex());
+    bufWrap.putInt(token.getTotalItems());
+    bufWrap.putInt(getNullableStringLength(token.getAzureTokenRequestId()));
+    bufWrap.put(nullableStringToBytes(token.getAzureTokenRequestId()));
     return new DataInputStream(new ByteArrayInputStream(buf));
   }
 }

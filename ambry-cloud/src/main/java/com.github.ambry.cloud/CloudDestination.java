@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.replication.FindToken;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
@@ -82,15 +83,15 @@ public interface CloudDestination {
 
   /**
    * Populates a sequenced list of blobs in the specified partition in {@code nextEntries} {@link List}, ordered by update
-   * time starting from the specified time. Returns the updated {@link CloudFindToken}.
+   * time starting from the specified time. Returns the updated {@link com.github.ambry.replication.FindToken}.
    * @param partitionPath the partition to query.
-   * @param findToken the {@link CloudFindToken} specifying the boundary for the query.
+   * @param findToken the {@link com.github.ambry.replication.FindToken} specifying the boundary for the query.
    * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
    * @param nextEntries a List of {@link CloudBlobMetadata} referencing the blobs returned by the query.
-   * @return updated {@link CloudFindToken} object.
+   * @return updated {@link com.github.ambry.replication.FindToken} object.
    * @throws CloudStorageException
    */
-  CloudFindToken findEntriesSince(String partitionPath, CloudFindToken findToken, long maxTotalSizeOfEntries,
+  FindToken findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
       List<CloudBlobMetadata> nextEntries) throws CloudStorageException;
 
   /**

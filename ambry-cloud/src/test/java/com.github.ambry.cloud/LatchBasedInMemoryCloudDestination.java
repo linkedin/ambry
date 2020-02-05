@@ -13,7 +13,9 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Pair;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -186,19 +188,19 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public CloudFindToken findEntriesSince(String partitionPath, CloudFindToken findToken, long maxTotalSizeOfEntries,
+  public FindToken findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
       List<CloudBlobMetadata> nextEntries) {
-    String continuationToken = findToken.getAzureFindToken().getEndContinuationToken();
+    String continuationToken = ((CosmosChangeFeedFindToken)findToken).getEndContinuationToken();
     List<BlobId> blobIds = new ArrayList<>();
     getFeed(continuationToken, maxTotalSizeOfEntries, blobIds);
     nextEntries.addAll(blobIds.stream().map(blobId -> map.get(blobId).getFirst()).collect(Collectors.toList()));
-    AzureFindToken azureFindToken = findToken.getAzureFindToken();
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken)findToken;
     if (blobIds.size() != 0) {
-      azureFindToken = new AzureFindToken(changeFeed.getContinuationTokenForBlob(blobIds.get(0)),
-          createEndContinuationToken(blobIds), 0, blobIds.size(), changeFeed.getReqUuid());
+      long bytesToBeRead = nextEntries.stream().mapToLong(CloudBlobMetadata::getSize).sum();
+      cosmosChangeFeedFindToken = new CosmosChangeFeedFindToken(bytesToBeRead, changeFeed.getContinuationTokenForBlob(blobIds.get(0)),
+          createEndContinuationToken(blobIds), 0, blobIds.size(), changeFeed.getReqUuid(), cosmosChangeFeedFindToken.getVersion());
     }
-    long bytesToBeRead = nextEntries.stream().mapToLong(CloudBlobMetadata::getSize).sum();
-    return CloudFindToken.getUpdatedToken(findToken, azureFindToken, bytesToBeRead);
+    return cosmosChangeFeedFindToken;
   }
 
   private String createEndContinuationToken(List<BlobId> blobIds) {

@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
@@ -287,9 +288,15 @@ public class CloudBlobStoreTest {
     }
   }
 
-  /** Test the CloudBlobStore findEntriesSince method. */
   @Test
   public void testFindEntriesSince() throws Exception {
+    testFindEntriesSinceWithCosmosChangeFeed();
+    testFindEntriesSinceWithCosmosUpdateTime();
+  }
+
+  /** Test the CloudBlobStore findEntriesSince method. */
+  @Test
+  public void testFindEntriesSinceWithCosmosChangeFeed() throws Exception {
     setupCloudStore(false, true, defaultCacheLimit, true);
     long maxTotalSize = 1000000;
     // 1) start with empty token, call find, return some data
@@ -297,40 +304,45 @@ public class CloudBlobStoreTest {
     long blobSize = 200000;
     int numBlobsFound = 5;
     List<CloudBlobMetadata> metadataList = generateMetadataList(startTime, blobSize, numBlobsFound);
-    CloudFindToken cloudFindToken = new CloudFindToken(blobSize * numBlobsFound,
-        new AzureFindToken("start", "end", 0, numBlobsFound, UUID.randomUUID().toString()));
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken = new CosmosChangeFeedFindToken(blobSize * numBlobsFound,
+       "start", "end", 0, numBlobsFound, UUID.randomUUID().toString());
     //create a list of 10 blobs with total size less than maxSize, and return it as part of query ChangeFeed
-    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong(), anyList())).thenReturn(
-        cloudFindToken);
-    CloudFindToken startToken = new CloudFindToken();
+    when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong(), anyList())).thenReturn(
+        cosmosChangeFeedFindToken);
+    CosmosChangeFeedFindToken startToken = new CosmosChangeFeedFindToken();
     FindInfo findInfo = store.findEntriesSince(startToken, maxTotalSize);
-    CloudFindToken outputToken = (CloudFindToken) findInfo.getFindToken();
+    CosmosChangeFeedFindToken outputToken = (CosmosChangeFeedFindToken) findInfo.getFindToken();
     assertEquals(blobSize * numBlobsFound, outputToken.getBytesRead());
-    assertEquals(numBlobsFound, outputToken.getAzureFindToken().getTotalItems());
-    assertEquals(0, outputToken.getAzureFindToken().getIndex());
+    assertEquals(numBlobsFound, outputToken.getTotalItems());
+    assertEquals(0, outputToken.getIndex());
 
     // 2) call find with new token, return more data including lastBlob, verify token updated
     startTime += 1000;
     metadataList = generateMetadataList(startTime, blobSize, numBlobsFound);
-    cloudFindToken = new CloudFindToken(blobSize * 2 * numBlobsFound,
-        new AzureFindToken("start2", "end2", 0, numBlobsFound, UUID.randomUUID().toString()));
-    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong(), anyList())).thenReturn(
-        cloudFindToken);
+    cosmosChangeFeedFindToken = new CosmosChangeFeedFindToken(blobSize * 2 * numBlobsFound,
+        "start2", "end2", 0, numBlobsFound, UUID.randomUUID().toString());
+    when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong(), anyList())).thenReturn(
+        cosmosChangeFeedFindToken);
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
-    outputToken = (CloudFindToken) findInfo.getFindToken();
+    outputToken = (CosmosChangeFeedFindToken) findInfo.getFindToken();
     assertEquals(blobSize * 2 * numBlobsFound, outputToken.getBytesRead());
-    assertEquals(numBlobsFound, outputToken.getAzureFindToken().getTotalItems());
-    assertEquals(0, outputToken.getAzureFindToken().getIndex());
+    assertEquals(numBlobsFound, outputToken.getTotalItems());
+    assertEquals(0, outputToken.getIndex());
 
     // 3) call find with new token, no more data, verify token unchanged
     metadataList = Collections.emptyList();
-    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong(), anyList())).thenReturn(outputToken);
+    when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong(), anyList())).thenReturn(outputToken);
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
     assertTrue(findInfo.getMessageEntries().isEmpty());
     FindToken finalToken = findInfo.getFindToken();
     assertEquals(outputToken, finalToken);
 
     // call with new find token, and add total blobs larger than maxSize, and see that all the blobs are exhausted only after 3 tries
+  }
+
+  @Test
+  public void testFindEntriesSinceWithCosmosUpdateTime() throws Exception {
+
   }
 
   /** Test CloudBlobStore cache eviction. */
