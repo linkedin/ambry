@@ -141,6 +141,7 @@ public class UndeleteRequest extends RequestOrResponse {
     sb.append(", ").append("CorrelationId=").append(correlationId);
     sb.append(", ").append("AccountId=").append(blobId.getAccountId());
     sb.append(", ").append("ContainerId=").append(blobId.getContainerId());
+    sb.append(", ").append("OperationTimeMs=").append(operationTimeMs);
     sb.append("]");
     return sb.toString();
   }

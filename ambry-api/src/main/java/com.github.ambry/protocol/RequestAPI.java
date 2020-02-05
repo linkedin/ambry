@@ -83,7 +83,7 @@ public interface RequestAPI {
 
   /**
    * Undelete the blob from the store.
-   * @param request the request that contains the partitioni and the id of the blob that needs to be undeleted.
+   * @param request the request that contains the partition and the id of the blob that needs to be undeleted.
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
