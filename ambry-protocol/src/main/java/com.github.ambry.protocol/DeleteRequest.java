@@ -47,7 +47,7 @@ public class DeleteRequest extends RequestOrResponse {
   }
 
   /**
-   * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_2}
+   * Constructs {@link DeleteRequest} in given version.
    * @param correlationId correlationId of the delete request
    * @param clientId clientId of the delete request
    * @param blobId blobId of the delete request

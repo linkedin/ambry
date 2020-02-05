@@ -29,5 +29,7 @@ public enum RequestOrResponseType {
   ReplicaMetadataRequest,
   ReplicaMetadataResponse,
   AdminRequest,
-  AdminResponse
+  AdminResponse,
+  UndeleteRequest,
+  UndeleteResponse
 }

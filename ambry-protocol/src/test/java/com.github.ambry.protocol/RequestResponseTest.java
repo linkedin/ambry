@@ -434,6 +434,58 @@ public class RequestResponseTest {
     }
   }
 
+  /**
+   * Test for undelete request and response.
+   * @throws IOException
+   */
+  @Test
+  public void undeleteRequestResponseTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    UndeleteRequest undeleteRequest = new UndeleteRequest(correlationId, "client", id1, operationTimeMs);
+    DataInputStream requestStream = serAndPrepForRead(undeleteRequest, -1, true);
+    UndeleteRequest deserializedUndeleteRequest = UndeleteRequest.readFrom(requestStream, clusterMap);
+    Assert.assertEquals(deserializedUndeleteRequest.getClientId(), "client");
+    Assert.assertEquals(deserializedUndeleteRequest.getBlobId(), id1);
+    Assert.assertEquals("AccountId mismatch ", id1.getAccountId(), deserializedUndeleteRequest.getAccountId());
+    Assert.assertEquals("ContainerId mismatch ", id1.getContainerId(), deserializedUndeleteRequest.getContainerId());
+    Assert.assertEquals("OperationTimeMs mismatch ", operationTimeMs, deserializedUndeleteRequest.getOperationTimeMs());
+    UndeleteResponse response = null;
+    try {
+      response = new UndeleteResponse(correlationId, "client", ServerErrorCode.No_Error);
+      Assert.fail("No Error is not a valid error node for this response");
+    } catch (IllegalArgumentException e) {
+      // do nothing
+    }
+    response = new UndeleteResponse(correlationId, "client", ServerErrorCode.Blob_Deleted);
+    requestStream = serAndPrepForRead(response, -1, false);
+    UndeleteResponse deserializedUndeleteResponse = UndeleteResponse.readFrom(requestStream);
+    Assert.assertEquals(deserializedUndeleteResponse.getCorrelationId(), correlationId);
+    Assert.assertEquals(deserializedUndeleteResponse.getError(), ServerErrorCode.Blob_Deleted);
+    Assert.assertEquals(deserializedUndeleteResponse.getLifeVersion(), UndeleteResponse.INVALID_LIFE_VERSION);
+
+    try {
+      response = new UndeleteResponse(correlationId, "client", UndeleteResponse.INVALID_LIFE_VERSION);
+      Assert.fail("Not an valid life version");
+    } catch (IllegalArgumentException e) {
+      // do nothing
+    }
+    short lifeVersion = 1;
+    response = new UndeleteResponse(correlationId, "client", lifeVersion);
+    requestStream = serAndPrepForRead(response, -1, false);
+    deserializedUndeleteResponse = UndeleteResponse.readFrom(requestStream);
+    Assert.assertEquals(deserializedUndeleteResponse.getCorrelationId(), correlationId);
+    Assert.assertEquals(deserializedUndeleteResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(deserializedUndeleteResponse.getLifeVersion(), lifeVersion);
+  }
+
   @Test
   public void replicaMetadataRequestTest() throws IOException {
     for (ReplicaType replicaType : ReplicaType.values()) {
