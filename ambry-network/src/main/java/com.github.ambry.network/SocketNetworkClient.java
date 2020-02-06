@@ -355,7 +355,9 @@ public class SocketNetworkClient implements NetworkClient {
       connectionTracker.checkInConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
       correlationIdInFlightToConnectionId.remove(requestMetadata.requestInfo.getRequest().getCorrelationId());
-      responseInfoList.add(new ResponseInfo(requestMetadata.requestInfo, null, recv.getReceivedBytes().getAndRelease()));
+      // This would transfer the ownership of the content from BoundedNettyByteBufReceive to ResponseInfo.
+      // Don't use this BoundedNettyByteBufReceive anymore.
+      responseInfoList.add(new ResponseInfo(requestMetadata.requestInfo, null, recv.getReceivedBytes().content()));
       requestMetadata.onResponseReceive();
     }
   }

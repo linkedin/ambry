@@ -155,7 +155,7 @@ class TtlUpdateManager {
     long startTime = time.milliseconds();
     TtlUpdateResponse ttlUpdateResponse =
         RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
-            TtlUpdateResponse::readFrom, TtlUpdateResponse::getError, false);
+            TtlUpdateResponse::readFrom, TtlUpdateResponse::getError);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     int correlationId = ((TtlUpdateRequest) routerRequestInfo.getRequest()).getCorrelationId();
     TtlUpdateOperation ttlUpdateOperation = correlationIdToTtlUpdateOperation.remove(correlationId);

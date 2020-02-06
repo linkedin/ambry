@@ -30,7 +30,6 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -157,7 +156,7 @@ public class BlobIdTransformer implements Transformer {
       BlobProperties oldProperties = deserializeBlobProperties(inputStream);
       ByteBuffer userMetaData = deserializeUserMetadata(inputStream);
       BlobData blobData = deserializeBlob(inputStream);
-      ByteBuf blobDataBytes = blobData.getAndRelease();
+      ByteBuf blobDataBytes = blobData.content();
 
       long blobPropertiesSize = oldProperties.getBlobSize();
 
@@ -224,6 +223,7 @@ public class BlobIdTransformer implements Transformer {
         }
         blobPropertiesSize = compositeBlobInfo.getTotalSize();
         metadataContent.flip();
+        blobDataBytes.release();
         blobDataBytes = Unpooled.wrappedBuffer(metadataContent);
         blobData = new BlobData(blobData.getBlobType(), metadataContent.remaining(), blobDataBytes);
       }
@@ -235,7 +235,7 @@ public class BlobIdTransformer implements Transformer {
               oldProperties.isEncrypted(), null);
 
       // BlobIDTransformer only exists on ambry-server and we don't enable netty on ambry server yet. So And blobData.getAndRelease
-      // will return an Unpooled ByteBuf, it's not not to release it.
+      // will return an Unpooled ByteBuf, it's not required to release it.
       // @todo, when enabling netty in ambry-server, release this ByteBuf.
       PutMessageFormatInputStream putMessageFormatInputStream =
           new PutMessageFormatInputStream(newKey, blobEncryptionKey, newProperties, userMetaData,

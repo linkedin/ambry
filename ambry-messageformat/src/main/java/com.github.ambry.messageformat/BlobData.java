@@ -13,45 +13,28 @@
  */
 package com.github.ambry.messageformat;
 
-import com.github.ambry.utils.ByteBufferInputStream;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import java.nio.ByteBuffer;
+import io.netty.buffer.ByteBufHolder;
 
 
 /**
  * Contains the blob stream along with some required info
  */
-public class BlobData {
+public class BlobData implements ByteBufHolder {
   private final BlobType blobType;
   private final long size;
-  private ByteBuf byteBuf;
-  private ByteBufferInputStream stream = null;
+  private ByteBuf content;
 
   /**
    * The blob data contains the stream and other required info
    * @param blobType {@link BlobType} of the blob
    * @param size The size of the blob content.
-   * @param byteBuf The content of this blob in a {@link ByteBuf}.
+   * @param content The content of this blob in a {@link ByteBuf}.
    */
-  public BlobData(BlobType blobType, long size, ByteBuf byteBuf) {
+  public BlobData(BlobType blobType, long size, ByteBuf content) {
     this.blobType = blobType;
     this.size = size;
-    this.byteBuf = byteBuf;
-  }
-
-  /**
-   * The blob data contains the stream and other required info
-   * @param blobType {@link BlobType} of the blob
-   * @param size The size of the blob content.
-   * @param stream The {@link ByteBufferInputStream} containing the blob content.
-   */
-  @Deprecated
-  public BlobData(BlobType blobType, long size, ByteBufferInputStream stream) {
-    this.blobType = blobType;
-    this.size = size;
-    this.byteBuf = Unpooled.wrappedBuffer(stream.getByteBuffer());
-    this.stream = stream;
+    this.content = content;
   }
 
   /**
@@ -68,40 +51,68 @@ public class BlobData {
     return size;
   }
 
-  /**
-   * @return the {@link ByteBufferInputStream} containing the blob content.
-   */
-  @Deprecated
-  public ByteBufferInputStream getStream() {
-    if (stream != null) {
-      return stream;
-    }
-    // The blob content is passed as a ByteBuf since the stream is nulle
-    if (byteBuf == null) {
-      return null;
-    }
-    ByteBuffer temp = ByteBuffer.allocate(byteBuf.readableBytes());
-    byteBuf.readBytes(temp);
-    byteBuf.release();
-    byteBuf = null;
-    temp.flip();
-    stream = new ByteBufferInputStream(temp);
-    return stream;
+  @Override
+  public ByteBuf content() {
+    return content;
   }
 
-  /**
-   * Return the netty {@link ByteBuf} and then transfer the ownership to the caller. It's not safe
-   * to call this method more than once.
-   */
-  public ByteBuf getAndRelease() {
-    if (byteBuf == null) {
-      return null;
-    }
-    try {
-      return byteBuf.retainedDuplicate();
-    } finally {
-      byteBuf.release();
-      byteBuf = null;
-    }
+  @Override
+  public BlobData copy() {
+    return replace(content().copy());
+  }
+
+  @Override
+  public BlobData duplicate() {
+    return replace(content().duplicate());
+  }
+
+  @Override
+  public BlobData retainedDuplicate() {
+    return replace(content().retainedDuplicate());
+  }
+
+  @Override
+  public BlobData replace(ByteBuf content) {
+    BlobData data = new BlobData(blobType, size, content);
+    return data;
+  }
+
+  @Override
+  public int refCnt() {
+    return content.refCnt();
+  }
+
+  @Override
+  public BlobData retain() {
+    content.retain();
+    return this;
+  }
+
+  @Override
+  public BlobData retain(int increment) {
+    content.retain(increment);
+    return this;
+  }
+
+  @Override
+  public BlobData touch() {
+    content.touch();
+    return this;
+  }
+
+  @Override
+  public BlobData touch(Object hint) {
+    content.touch(hint);
+    return this;
+  }
+
+  @Override
+  public boolean release() {
+    return content.release();
+  }
+
+  @Override
+  public boolean release(int decrement) {
+    return content.release(decrement);
   }
 }

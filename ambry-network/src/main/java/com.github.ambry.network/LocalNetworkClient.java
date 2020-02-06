@@ -17,6 +17,8 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.network.LocalRequestResponseChannel.LocalChannelRequest;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Set;
@@ -80,8 +82,8 @@ public class LocalNetworkClient implements NetworkClient {
       for (RequestInfo requestInfo : requestInfos) {
         // TODO: inefficient to serialize request before sending, better to convert Send to an InputStream
         // that handles the header skipping.
-        ByteBuffer buffer = LocalRequestResponseChannel.byteBufferFromPayload(requestInfo.getRequest());
-        channel.sendRequest(new LocalChannelRequest(requestInfo, processorId, new ByteBufferInputStream(buffer)));
+        ByteBuf buffer = LocalRequestResponseChannel.byteBufFromPayload(requestInfo.getRequest());
+        channel.sendRequest(new LocalChannelRequest(requestInfo, processorId, new ByteBufInputStream(buffer)));
       }
     } catch (Exception e) {
       logger.error("Received an unexpected error during sendAndPoll(): ", e);

@@ -439,7 +439,7 @@ public class ServerHardDeleteTest {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
           Assert.assertEquals(properties.get(i).getBlobSize(), blobData.getSize());
           byte[] dataOutput = new byte[(int) blobData.getSize()];
-          ByteBuf buffer = blobData.getAndRelease();
+          ByteBuf buffer = blobData.content();
           try {
             buffer.readBytes(dataOutput);
           } finally {

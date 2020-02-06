@@ -78,7 +78,7 @@ public class ValidatingTransformer implements Transformer {
         // @todo, when enabling netty in ambry-server, release this ByteBuf.
         PutMessageFormatInputStream transformedStream =
             new PutMessageFormatInputStream(keyInStream, encryptionKey, props, metadata,
-                new ByteBufInputStream(blobData.getAndRelease(), true), blobData.getSize(), blobData.getBlobType());
+                new ByteBufInputStream(blobData.content(), true), blobData.getSize(), blobData.getBlobType());
         MessageInfo transformedMsgInfo =
             new MessageInfo(keyInStream, transformedStream.getSize(), msgInfo.isDeleted(), msgInfo.isTtlUpdated(),
                 msgInfo.getExpirationTimeInMs(), msgInfo.getCrc(), msgInfo.getAccountId(), msgInfo.getContainerId(),

@@ -15,11 +15,11 @@ package com.github.ambry.network;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.ByteBufHolder;
 import java.io.EOFException;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
 /**
  * A netty {@link ByteBuf} version of Receive to buffer the incoming request or response.
  */
-public class BoundedNettyByteBufReceive implements BoundedReceive<ByteBuf> {
+public class BoundedNettyByteBufReceive implements ByteBufHolder {
 
   private ByteBuf buffer = null;
   private ByteBuf sizeBuffer = null;
@@ -35,9 +35,16 @@ public class BoundedNettyByteBufReceive implements BoundedReceive<ByteBuf> {
   private long sizeRead = 0;
   private final static Logger logger = LoggerFactory.getLogger(BoundedNettyByteBufReceive.class);
 
-  @Override
+  public BoundedNettyByteBufReceive() {
+  }
+
+  BoundedNettyByteBufReceive(ByteBuf buffer, long sizeToRead) {
+    this.buffer = Objects.requireNonNull(buffer);
+    this.sizeToRead = sizeToRead;
+  }
+
   public boolean isReadComplete() {
-    return buffer != null &&  sizeRead >= sizeToRead;
+    return buffer != null && sizeRead >= sizeToRead;
   }
 
   /**
@@ -56,7 +63,6 @@ public class BoundedNettyByteBufReceive implements BoundedReceive<ByteBuf> {
     return n;
   }
 
-  @Override
   public long readFrom(ReadableByteChannel channel) throws IOException {
     long bytesRead = 0;
     if (buffer == null) {
@@ -100,31 +106,87 @@ public class BoundedNettyByteBufReceive implements BoundedReceive<ByteBuf> {
   }
 
   /**
-   * Returns the payload as {@link ByteBuf}, at the same time release the current reference to this payload.
-   * It's not safe to call this function multiple times.
-   * @return
-   */
-  @Override
-  public ByteBuf getAndRelease() {
-    if (buffer == null) {
-      return null;
-    } else {
-      try {
-        return buffer.retainedDuplicate();
-      } finally {
-        buffer.release();
-        buffer = null;
-      }
-    }
-  }
-
-  /**
    * The total size in bytes that needs to receive from the channel
    * It will be initialized only after header is read.
    * @return the size of the data in bytes to receive after reading header, otherwise return 0
    */
-  @Override
   public long sizeRead() {
     return sizeRead;
+  }
+
+  /**
+   * Returns the byte buffer received.
+   * @return
+   */
+  public ByteBuf content() {
+    return buffer;
+  }
+
+  @Override
+  public BoundedNettyByteBufReceive copy() {
+    return replace(content().copy());
+  }
+
+  @Override
+  public BoundedNettyByteBufReceive duplicate() {
+    return replace(content().duplicate());
+  }
+
+  @Override
+  public BoundedNettyByteBufReceive retainedDuplicate() {
+    return replace(content().retainedDuplicate());
+  }
+
+  @Override
+  public BoundedNettyByteBufReceive replace(ByteBuf content) {
+    BoundedNettyByteBufReceive receive = new BoundedNettyByteBufReceive(content, sizeToRead);
+    return receive;
+  }
+
+  @Override
+  public int refCnt() {
+    return buffer.refCnt();
+  }
+
+  @Override
+  public BoundedNettyByteBufReceive retain() {
+    buffer.retain();
+    return this;
+  }
+
+  @Override
+  public BoundedNettyByteBufReceive retain(int increment) {
+    buffer.retain(increment);
+    return this;
+  }
+
+  @Override
+  public BoundedNettyByteBufReceive touch() {
+    buffer.touch();
+    return this;
+  }
+
+  @Override
+  public BoundedNettyByteBufReceive touch(Object hint) {
+    buffer.touch(hint);
+    return this;
+  }
+
+  @Override
+  public boolean release() {
+    if (buffer != null) {
+      return buffer.release();
+    } else {
+      return false;
+    }
+  }
+
+  @Override
+  public boolean release(int decrement) {
+    if (buffer != null) {
+      return buffer.release(decrement);
+    } else {
+      return false;
+    }
   }
 }

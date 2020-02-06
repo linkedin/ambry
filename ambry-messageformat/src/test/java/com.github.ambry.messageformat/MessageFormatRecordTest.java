@@ -21,6 +21,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -33,7 +34,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.account.Account.*;
@@ -45,6 +48,18 @@ import static org.junit.Assert.*;
 
 
 public class MessageFormatRecordTest {
+
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
 
   //TODO Separate this mega test into smaller tests
   @Test
@@ -173,8 +188,9 @@ public class MessageFormatRecordTest {
     BlobData blobData = MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(sData));
     Assert.assertEquals(blobData.getSize(), 2000);
     byte[] verify = new byte[2000];
-    blobData.getAndRelease().readBytes(verify);
+    blobData.content().readBytes(verify);
     Assert.assertArrayEquals(verify, data.array());
+    blobData.release();
 
     // corrupt blob record V1
     sData.flip();
@@ -640,8 +656,9 @@ public class MessageFormatRecordTest {
     BlobData blobData = getBlobRecordV2(blobSize, blobType, blobContent, entireBlob);
     Assert.assertEquals("Blob size mismatch", blobSize, blobData.getSize());
     byte[] verify = new byte[blobSize];
-    blobData.getAndRelease().readBytes(verify);
+    blobData.content().readBytes(verify);
     Assert.assertArrayEquals("BlobContent mismatch", blobContent.array(), verify);
+    blobData.release();
 
     // corrupt blob record V2
     entireBlob.flip();
@@ -694,8 +711,9 @@ public class MessageFormatRecordTest {
 
       Assert.assertEquals(metadataContentSize, blobData.getSize());
       byte[] verify = new byte[metadataContentSize];
-      blobData.getAndRelease().readBytes(verify);
+      blobData.content().readBytes(verify);
       Assert.assertArrayEquals("Metadata content mismatch", metadataContent.array(), verify);
+      blobData.release();
 
       // deserialize and check for metadata contents
       metadataContent.rewind();
@@ -728,8 +746,9 @@ public class MessageFormatRecordTest {
     BlobData blobData = getBlobRecordV2(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
     Assert.assertEquals(metadataContentSize, blobData.getSize());
     byte[] verify = new byte[metadataContentSize];
-    blobData.getAndRelease().readBytes(verify);
+    blobData.content().readBytes(verify);
     Assert.assertArrayEquals("Metadata content mismatch", metadataContent.array(), verify);
+    blobData.release();
 
     metadataContent.rewind();
     CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV3(metadataContent, new MockIdFactory());

@@ -130,7 +130,7 @@ final class ServerTestUtil {
 
   static byte[] getBlobDataAndRelease(BlobData blobData) {
     byte[] actualBlobData = new byte[(int) blobData.getSize()];
-    ByteBuf buffer = blobData.getAndRelease();
+    ByteBuf buffer = blobData.content();
     try {
       buffer.readBytes(actualBlobData);
     } finally {

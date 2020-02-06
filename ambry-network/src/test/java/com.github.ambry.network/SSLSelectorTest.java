@@ -22,10 +22,10 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
+import io.netty.buffer.ByteBuf;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
@@ -212,11 +212,10 @@ public class SSLSelectorTest {
 
       // handle any responses we may have gotten
       for (NetworkReceive receive : selector.completedReceives()) {
-        ByteBuffer payload = (ByteBuffer) (receive.getReceivedBytes().getAndRelease());
+        ByteBuf payload = receive.getReceivedBytes().content();
         String[] pieces = SelectorTest.asString(payload).split("&");
         assertEquals("Should be in the form 'conn-counter'", 2, pieces.length);
         assertEquals("Check the source", receive.getConnectionId(), pieces[0]);
-        assertEquals("Check that the receive has kindly been rewound", 0, payload.position());
         assertTrue("Received connectionId is as expected ", connectionIds.contains(receive.getConnectionId()));
         assertEquals("Check the request counter", 0, Integer.parseInt(pieces[1]));
         responseCount++;
@@ -335,8 +334,12 @@ public class SSLSelectorTest {
       selector.poll(1000L);
       for (NetworkReceive receive : selector.completedReceives()) {
         if (receive.getConnectionId().equals(connectionId)) {
-          ByteBuffer payload = (ByteBuffer) (receive.getReceivedBytes().getAndRelease());
-          return SelectorTest.asString(payload);
+          ByteBuf payload = receive.getReceivedBytes().content();
+          try {
+            return SelectorTest.asString(payload);
+          } finally {
+            payload.release();
+          }
         }
       }
     }

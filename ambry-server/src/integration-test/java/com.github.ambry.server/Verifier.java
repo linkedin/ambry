@@ -199,7 +199,7 @@ class Verifier implements Runnable {
                 try {
                   BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
                   byte[] blobout = new byte[(int) blobData.getSize()];
-                  ByteBuf buffer = blobData.getAndRelease();
+                  ByteBuf buffer = blobData.content();
                   try {
                     buffer.readBytes(blobout);
                   } finally {
@@ -231,7 +231,7 @@ class Verifier implements Runnable {
                   BlobAll blobAll =
                       MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), new BlobIdFactory(clusterMap));
                   byte[] blobout = new byte[(int) blobAll.getBlobData().getSize()];
-                  ByteBuf buffer = blobAll.getBlobData().getAndRelease();
+                  ByteBuf buffer = blobAll.getBlobData().content();
                   try {
                     buffer.readBytes(blobout);
                   } finally {

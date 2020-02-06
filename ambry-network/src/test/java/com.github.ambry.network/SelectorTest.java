@@ -16,7 +16,9 @@ package com.github.ambry.network;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -44,6 +46,17 @@ public class SelectorTest {
   private EchoServer server;
   private Selector selector;
   private int selectorExecutorPoolSize;
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -197,15 +210,15 @@ public class SelectorTest {
 
       // handle any responses we may have gotten
       for (NetworkReceive receive : selector.completedReceives()) {
-        ByteBuffer payload = (ByteBuffer) (receive.getReceivedBytes().getAndRelease());
+        ByteBuf payload = receive.getReceivedBytes().content();
         String[] pieces = asString(payload).split("&");
         assertEquals("Should be in the form 'conn-counter'", 2, pieces.length);
         assertEquals("Check the source", receive.getConnectionId(), pieces[0]);
-        assertEquals("Check that the receive has kindly been rewound", 0, payload.position());
         int index = Integer.parseInt(receive.getConnectionId().split("_")[1]);
         assertEquals("Check the request counter", responses[index], Integer.parseInt(pieces[1]));
         responses[index]++; // increment the expected counter
         responseCount++;
+        receive.getReceivedBytes().release();
       }
 
       // prepare new sends for the next round
@@ -247,8 +260,12 @@ public class SelectorTest {
       selector.poll(1000L);
       for (NetworkReceive receive : selector.completedReceives()) {
         if (receive.getConnectionId() == connectionId) {
-          ByteBuffer payload = (ByteBuffer) (receive.getReceivedBytes().getAndRelease());
-          return asString(payload);
+          ByteBuf payload = receive.getReceivedBytes().content();
+          try {
+            return asString(payload);
+          } finally {
+            receive.getReceivedBytes().release();
+          }
         }
       }
     }
@@ -272,8 +289,11 @@ public class SelectorTest {
     return new NetworkSend(connectionId, new BoundedByteBufferSend(buf), null, SystemTime.getInstance());
   }
 
-  static String asString(ByteBuffer payload) {
-    return new String(payload.array(), payload.arrayOffset());
+  static String asString(ByteBuf payload) {
+    ByteBuffer buffer = ByteBuffer.allocate(payload.readableBytes());
+    payload.readBytes(buffer);
+    buffer.flip();
+    return new String(buffer.array(), buffer.arrayOffset());
   }
 
   /**

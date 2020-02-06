@@ -416,7 +416,7 @@ public class BlobValidator implements Closeable {
       ServerErrorCode errorCode = response.getFirst();
       if (errorCode == ServerErrorCode.No_Error) {
         BlobAll blobAll = response.getSecond();
-        ByteBuf buffer = blobAll.getBlobData().getAndRelease();
+        ByteBuf buffer = blobAll.getBlobData().content();
         byte[] blobBytes = new byte[buffer.readableBytes()];
         buffer.readBytes(blobBytes);
         buffer.release();

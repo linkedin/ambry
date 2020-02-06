@@ -20,6 +20,7 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
@@ -419,9 +420,8 @@ class Processor extends AbstractServerThread {
         List<NetworkReceive> completedReceives = selector.completedReceives();
         for (NetworkReceive networkReceive : completedReceives) {
           String connectionId = networkReceive.getConnectionId();
-          Object buffer = networkReceive.getReceivedBytes().getAndRelease();
-          SocketServerRequest req = new SocketServerRequest(id, connectionId, buffer,
-              Utils.createDataInputStreamFromBuffer(buffer, networkConfig.networkPutRequestShareMemory));
+          ByteBuf buffer = networkReceive.getReceivedBytes().content();
+          SocketServerRequest req = new SocketServerRequest(id, connectionId, buffer);
           channel.sendRequest(req);
         }
       }
