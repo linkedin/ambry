@@ -18,6 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.server.RouterServerTestFramework.*;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
@@ -76,10 +77,7 @@ public class RouterServerPlaintextTest {
     Properties properties = getRouterProperties("DC1");
 
     Properties serverProperties = new Properties();
-    serverProperties.setProperty("rest.server.rest.request.service.factory",
-        "com.github.ambry.server.StorageRestRequestService");
-    serverProperties.setProperty("rest.server.nio.server.factory", "com.github.ambry.rest.StorageServerNettyFactory");
-    serverProperties.setProperty("ssl.client.authentication", "none");
+    TestSSLUtils.addHttp2Properties(serverProperties);
     plaintextCluster = new MockCluster(serverProperties, false, SystemTime.getInstance());
     MockNotificationSystem notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);

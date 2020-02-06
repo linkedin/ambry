@@ -14,7 +14,6 @@
  */
 package com.github.ambry.rest;
 
-import com.github.ambry.router.Callback;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -22,6 +21,7 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http2.HttpConversionUtil;
 import io.netty.util.AttributeKey;
+import io.netty.util.concurrent.Promise;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,8 +31,8 @@ import org.slf4j.LoggerFactory;
  */
 @ChannelHandler.Sharable
 public class Http2ResponseHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
-  public static AttributeKey<Callback<ByteBuf>> RESPONSE_CALLBACK = AttributeKey.newInstance("responseCallback");
-  protected final Logger logger = LoggerFactory.getLogger(getClass());
+  public final static AttributeKey<Promise<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
+  private final static Logger logger = LoggerFactory.getLogger(Http2ResponseHandler.class);
 
   @Override
   protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
@@ -42,7 +42,6 @@ public class Http2ResponseHandler extends SimpleChannelInboundHandler<FullHttpRe
       return;
     }
     logger.trace("Stream response received.");
-    Callback<ByteBuf> callback = ctx.channel().attr(RESPONSE_CALLBACK).getAndSet(null);
-    callback.onCompletion(msg.content().retainedDuplicate(), null);
+    ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null).setSuccess(msg.content().retainedDuplicate());
   }
 }

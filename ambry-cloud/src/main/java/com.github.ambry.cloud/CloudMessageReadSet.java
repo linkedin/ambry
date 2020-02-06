@@ -27,6 +27,7 @@ import java.nio.channels.WritableByteChannel;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 
 /**
@@ -69,8 +70,9 @@ class CloudMessageReadSet implements MessageReadSet {
   }
 
   @Override
-  public void writeTo(AsyncWritableChannel channel, Callback callback) throws IOException {
-
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
+    // TODO: read from cloud based store and write to AsyncWritableChannel is needed in the future.
+    throw new NotImplementedException();
   }
 
   @Override

@@ -289,7 +289,7 @@ public class BlobStoreHardDeleteTest {
       }
 
       @Override
-      public void writeTo(AsyncWritableChannel channel, Callback callback) throws IOException {
+      public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
 
       }
 

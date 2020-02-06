@@ -51,9 +51,11 @@ public class CompositeSend implements Send {
   }
 
   @Override
-  public void writeTo(AsyncWritableChannel channel, Callback callback) throws IOException {
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
     int lastIndex = compositeSendList.size() - 1;
     int i = 0;
+    // This callback technically won't be set to the correct value since it will only reflect the size of the last send,
+    // not all sends in the batch. This may not currently be a problem but is something to look out for.
     for (Send send : compositeSendList) {
       if (i == lastIndex) {
         // only the last one pass in callback

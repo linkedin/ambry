@@ -25,8 +25,8 @@ import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
 import io.netty.handler.codec.http2.Http2MultiplexHandler;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.ssl.SslHandler;
-import io.netty.handler.timeout.IdleStateHandler;
 import java.net.InetSocketAddress;
+import java.util.Objects;
 
 
 /**
@@ -39,7 +39,6 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
   private final NettyMetrics nettyMetrics;
   private final ConnectionStatsHandler connectionStatsHandler;
   private final RestRequestHandler requestHandler;
-  private final RestServerState restServerState;
   private final SSLFactory sslFactory;
 
   /**
@@ -49,19 +48,19 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
    * @param nettyMetrics the {@link NettyMetrics} object to use.
    * @param connectionStatsHandler the {@link ConnectionStatsHandler} to use.
    * @param requestHandler the {@link RestRequestHandler} to handle requests on this pipeline.
-   * @param restServerState the {@link RestServerState} object to use.
    * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
    *                   or {@code null} if SSL is not enabled in this pipeline.
    */
   public StorageServerNettyChannelInitializer(NettyConfig nettyConfig, PerformanceConfig performanceConfig,
       NettyMetrics nettyMetrics, ConnectionStatsHandler connectionStatsHandler, RestRequestHandler requestHandler,
-      RestServerState restServerState, SSLFactory sslFactory, MetricRegistry metricRegistry) {
+      SSLFactory sslFactory, MetricRegistry metricRegistry) {
     this.nettyConfig = nettyConfig;
     this.performanceConfig = performanceConfig;
     this.nettyMetrics = nettyMetrics;
-    this.connectionStatsHandler = connectionStatsHandler;
-    this.restServerState = restServerState;
+    // For http2, SSL encrypted is required. sslFactory should not be null.
+    Objects.requireNonNull(sslFactory);
     this.sslFactory = sslFactory;
+    this.connectionStatsHandler = connectionStatsHandler;
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     this.requestHandler = requestHandler;
   }
@@ -73,14 +72,12 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
     ChannelPipeline pipeline = ch.pipeline();
     // connection stats handler to track connection related metrics
-    // if SSL is enabled, add an SslHandler before the HTTP codec
-    if (sslFactory != null) {
-      InetSocketAddress peerAddress = ch.remoteAddress();
-      String peerHost = peerAddress.getHostName();
-      int peerPort = peerAddress.getPort();
-      SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(peerHost, peerPort, SSLFactory.Mode.SERVER));
-      pipeline.addLast("SslHandler", sslHandler);
-    }
+    pipeline.addLast("connectionStatsHandler", connectionStatsHandler);
+    InetSocketAddress peerAddress = ch.remoteAddress();
+    String peerHost = peerAddress.getHostName();
+    int peerPort = peerAddress.getPort();
+    SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(peerHost, peerPort, SSLFactory.Mode.SERVER));
+    pipeline.addLast("SslHandler", sslHandler);
     pipeline.addLast(Http2FrameCodecBuilder.forServer().initialSettings(Http2Settings.defaultSettings()).build())
         .addLast("Http2MultiplexHandler", new Http2MultiplexHandler(
             new Http2StreamHandler(nettyMetrics, nettyConfig, performanceConfig, requestHandler)));

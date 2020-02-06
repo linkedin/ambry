@@ -59,7 +59,7 @@ public abstract class Response extends RequestOrResponse {
   }
 
   @Override
-  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) throws IOException {
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
     prepareBuffer();
     channel.write(bufferToSend, callback);
   }

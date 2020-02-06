@@ -308,16 +308,14 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           }
           responseChannel.setRequest(request);
           logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
-          // We send POST that is not multipart or not http2 for handling immediately since we expect valid content with it that will
-          // be streamed in.
-          // In the case of POST that is multipart, all the content has to be received for Netty's
+          // We send POST that is not multipart for handling immediately since we expect valid content with it that will
+          // be streamed in. In the case of POST that is multipart, all the content has to be received for Netty's
           // decoder and NettyMultipartRequest to work. So it is scheduled for handling when LastHttpContent is received.
           // With any other method that we support, we do not expect any valid content. LastHttpContent is a Netty thing.
           // So we wait for LastHttpContent (throw an error if we don't receive it or receive something else) and then
           // schedule the other methods for handling in handleContent().
-          // For HTTP2 from frontend, waif for all contents to be received.
           if ((request.getRestMethod().equals(RestMethod.POST) || request.getRestMethod().equals(RestMethod.PUT))
-              && !HttpPostRequestDecoder.isMultipart(httpRequest) && !request.isHttp2RequestFromFrontend()) {
+              && !HttpPostRequestDecoder.isMultipart(httpRequest)) {
             requestHandler.handleRequest(request, responseChannel);
           }
         } catch (RestServiceException e) {
@@ -374,8 +372,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       }
       if (success && (
           (!request.getRestMethod().equals(RestMethod.POST) && !request.getRestMethod().equals(RestMethod.PUT)) || (
-              request.isMultipart() && requestContentFullyReceived) || (request.isHttp2RequestFromFrontend()
-              && requestContentFullyReceived))) {
+              request.isMultipart() && requestContentFullyReceived))) {
         requestHandler.handleRequest(request, responseChannel);
       }
     } else {

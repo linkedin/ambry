@@ -39,6 +39,7 @@ import static com.github.ambry.rest.NettySslFactory.*;
 
 /**
  * An HTTP/2 specific implementation of {@link SSLFactory} that uses Netty's SSL libraries for HTTP2.
+ * The main differences between this factory and {@link NettySslFactory} are getServerSslContext and getServerClientContext.
  * This factory provides HTTP2 specific sslContext: HTTP2 Ciphers and ALPN.
  *
  */

@@ -211,13 +211,13 @@ class StoreMessageReadSet implements MessageReadSet {
   }
 
   @Override
-  public void writeTo(AsyncWritableChannel channel, Callback callback) throws IOException {
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
     int lastIndex = readOptions.size() - 1;
     int i = 0;
     for (BlobReadOptions options : readOptions) {
       ByteBuffer buf = options.getPrefetchedData();
       if (buf == null) {
-        throw new IOException("Data should be prefetched.");
+        callback.onCompletion(null, new IllegalStateException("Data should be prefetched."));
       }
       buf.position(0);
       if (i == lastIndex) {

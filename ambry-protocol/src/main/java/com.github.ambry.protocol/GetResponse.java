@@ -143,7 +143,7 @@ public class GetResponse extends Response {
   }
 
   @Override
-  public void writeTo(AsyncWritableChannel channel, Callback callback) throws IOException {
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
     prepareBufferToSend();
     channel.write(bufferToSend, callback);
     if (toSend != null) {

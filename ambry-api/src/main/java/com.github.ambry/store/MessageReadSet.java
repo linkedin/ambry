@@ -43,9 +43,8 @@ public interface MessageReadSet {
    * called when the entire batch of writes succeeds or fails.
    * @param channel the channel into which the data needs to be written to
    * @param callback The callback when data is fully wrote to the channel.
-   * @throws IOException If prefetch is not used.
    */
-  void writeTo(AsyncWritableChannel channel, Callback<Void> callback) throws IOException;
+  void writeTo(AsyncWritableChannel channel, Callback<Long> callback);
 
   /**
    * @return The total number of messages in this set

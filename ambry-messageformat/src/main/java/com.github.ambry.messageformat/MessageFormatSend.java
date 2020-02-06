@@ -269,7 +269,7 @@ public class MessageFormatSend implements Send {
   }
 
   @Override
-  public void writeTo(AsyncWritableChannel channel, Callback callback) throws IOException {
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
       readSet.writeTo(channel, callback);
   }
 

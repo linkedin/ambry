@@ -47,7 +47,6 @@ import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -95,7 +94,7 @@ class MockStorageManager extends StorageManager {
         }
 
         @Override
-        public void writeTo(AsyncWritableChannel channel, Callback callback) throws IOException {
+        public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
 
         }
 
