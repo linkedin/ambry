@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -33,6 +34,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -43,7 +45,7 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,7 +57,7 @@ import static org.junit.Assert.*;
  * Integration Test cases for {@link AzureCloudDestination}
  * Must supply file azure-test.properties in classpath with valid config property values.
  */
-@RunWith(MockitoJUnitRunner.class)
+@RunWith(Parameterized.class)
 @Ignore
 public class AzureIntegrationTest {
 
@@ -63,6 +65,7 @@ public class AzureIntegrationTest {
   private final String vcrKmsContext = "backup-default";
   private final String cryptoAgentFactory = CloudConfig.DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS;
   private AzureCloudDestination azureDest;
+  private final String replicationCloudTokenFactory;
   private int blobSize = 1024;
   private byte dataCenterId = 66;
   private short accountId = 101;
@@ -72,6 +75,25 @@ public class AzureIntegrationTest {
   private int retentionPeriodDays = 1;
   private String propFileName = "azure-test.properties";
   private String tokenFileName = "replicaTokens";
+
+  /**
+   * Parameterized constructor.
+   * @param replicationCloudTokenFactory type of token factory used by {@link CloudDestination}
+   */
+  public AzureIntegrationTest(String replicationCloudTokenFactory) {
+    super();
+    this.replicationCloudTokenFactory = replicationCloudTokenFactory;
+  }
+
+  /**
+   * static method to generate parameters.
+   * @return {@link Collection} of parameters.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> input() {
+    return Arrays.asList(new Object[][]{{"com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory"},
+        {"com.github.ambry.cloud.azure.CosmosUpdateTimeFindTokenFactory"}});
+  }
 
   @Before
   public void setup() {
@@ -87,6 +109,7 @@ public class AzureIntegrationTest {
     props.setProperty("clustermap.cluster.name", "Integration-Test");
     props.setProperty("clustermap.datacenter.name", "uswest");
     props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("replication.cloud.token.factory", replicationCloudTokenFactory);
     props.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
     VerifiableProperties verProps = new VerifiableProperties(props);
     azureDest =

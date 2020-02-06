@@ -59,7 +59,7 @@ public class CloudTokenPersistorTest {
 
   /**
    * Parameterized constructor.
-   * @param replicationCloudTokenFactory type of replication feed used by {@link CloudDestination}
+   * @param replicationCloudTokenFactory type of token factory used by {@link CloudDestination}
    */
   public CloudTokenPersistorTest(String replicationCloudTokenFactory) {
     super();
@@ -79,7 +79,7 @@ public class CloudTokenPersistorTest {
   @Test
   public void basicTest() throws Exception {
     Properties props = VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "zkConnectString", 12310, 12410, null);
-    setTokenFactoryProperty(props);
+    props.setProperty("replication.cloud.token.factory", replicationCloudTokenFactory);
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(props));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     ClusterMap clusterMap = new MockClusterMap();
@@ -121,9 +121,5 @@ public class CloudTokenPersistorTest {
       Assert.assertArrayEquals("Token is not correct.", replicaTokenInfos.get(i).getReplicaToken().toBytes(),
           retrievedReplicaTokenInfos.get(i).getReplicaToken().toBytes());
     }
-  }
-
-  private void setTokenFactoryProperty(Properties properties) {
-    properties.setProperty("replication.cloud.token.factory", replicationCloudTokenFactory);
   }
 }
