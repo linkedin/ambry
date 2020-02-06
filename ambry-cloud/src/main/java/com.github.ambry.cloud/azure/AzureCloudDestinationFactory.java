@@ -67,7 +67,7 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
    * @param verifiableProperties properties containing configs.
    * @return {@link AzureReplicationFeedType} object.
    */
-  private AzureReplicationFeedType getReplicationFeedType(VerifiableProperties verifiableProperties) {
+  public static AzureReplicationFeedType getReplicationFeedType(VerifiableProperties verifiableProperties) {
     ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
     if (replicationConfig.replicationCloudTokenFactory.equals(
         CosmosChangeFeedFindTokenFactory.class.getCanonicalName())) {

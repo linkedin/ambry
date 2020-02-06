@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
@@ -33,6 +34,8 @@ import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.StoreFindTokenFactory;
 import com.github.ambry.utils.SystemTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -42,16 +45,41 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 
 /**
  * Test of the CloudTokenPersistor.
  */
+@RunWith(Parameterized.class)
 public class CloudTokenPersistorTest {
+
+  private final String replicationCloudTokenFactory;
+
+  /**
+   * Parameterized constructor.
+   * @param replicationCloudTokenFactory type of replication feed used by {@link CloudDestination}
+   */
+  public CloudTokenPersistorTest(String replicationCloudTokenFactory) {
+    super();
+    this.replicationCloudTokenFactory = replicationCloudTokenFactory;
+  }
+
+  /**
+   * static method to generate parameters.
+   * @return {@link Collection} of parameters.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> input() {
+    return Arrays.asList(new Object[][]{{"com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory"},
+        {"com.github.ambry.cloud.azure.CosmosUpdateTimeFindTokenFactory"}});
+  }
 
   @Test
   public void basicTest() throws Exception {
     Properties props = VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "zkConnectString", 12310, 12410, null);
+    setTokenFactoryProperty(props);
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(props));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     ClusterMap clusterMap = new MockClusterMap();
@@ -78,7 +106,8 @@ public class CloudTokenPersistorTest {
         .add(partitionInfo);
 
     LatchBasedInMemoryCloudDestination cloudDestination =
-        new LatchBasedInMemoryCloudDestination(Collections.emptyList());
+        new LatchBasedInMemoryCloudDestination(Collections.emptyList(),
+            AzureCloudDestinationFactory.getReplicationFeedType(new VerifiableProperties(props)));
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(props));
     CloudTokenPersistor cloudTokenPersistor = new CloudTokenPersistor("replicaTokens", mountPathToPartitionInfoList,
         new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap,
@@ -92,5 +121,9 @@ public class CloudTokenPersistorTest {
       Assert.assertArrayEquals("Token is not correct.", replicaTokenInfos.get(i).getReplicaToken().toBytes(),
           retrievedReplicaTokenInfos.get(i).getReplicaToken().toBytes());
     }
+  }
+
+  private void setTokenFactoryProperty(Properties properties) {
+    properties.setProperty("replication.cloud.token.factory", replicationCloudTokenFactory);
   }
 }

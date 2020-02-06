@@ -82,8 +82,8 @@ public interface CloudDestination {
   List<CloudBlobMetadata> getDeadBlobs(String partitionPath) throws CloudStorageException;
 
   /**
-   * Populates a sequenced list of blobs in the specified partition in {@code nextEntries} {@link List}, ordered by update
-   * time starting from the specified time. Returns the updated {@link com.github.ambry.replication.FindToken}.
+   * Populates an ordered sequenced list of blobs in the specified partition in {@code nextEntries} {@link List}.
+   * Returns the updated {@link com.github.ambry.replication.FindToken}.
    * @param partitionPath the partition to query.
    * @param findToken the {@link com.github.ambry.replication.FindToken} specifying the boundary for the query.
    * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.

@@ -13,7 +13,9 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.cloud.azure.AzureReplicationFeedType;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
+import com.github.ambry.cloud.azure.CosmosUpdateTimeFindToken;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Pair;
@@ -23,7 +25,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -108,9 +112,14 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final AtomicInteger blobsUploadedCounter = new AtomicInteger(0);
   private final ChangeFeed changeFeed = new ChangeFeed();
   private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
+  private final AzureReplicationFeedType azureReplicationFeedType;
+
+  private final static AzureReplicationFeedType DEFAULT_AZURE_REPLICATION_FEED_TYPE =
+      AzureReplicationFeedType.COSMOS_CHANGE_FEED;
 
   /**
    * Instantiate {@link LatchBasedInMemoryCloudDestination}.
+   * Use this constructor for tests where type of azure replication feed doesn't matter.
    * @param blobIdsToTrack a list of blobs that {@link LatchBasedInMemoryCloudDestination} tracks.
    */
   public LatchBasedInMemoryCloudDestination(List<BlobId> blobIdsToTrack) {
@@ -118,6 +127,21 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     this.blobIdsToTrack.addAll(blobIdsToTrack);
     uploadLatch = new CountDownLatch(blobIdsToTrack.size());
     downloadLatch = new CountDownLatch(blobIdsToTrack.size());
+    this.azureReplicationFeedType = DEFAULT_AZURE_REPLICATION_FEED_TYPE;
+  }
+
+  /**
+   * Instantiate {@link LatchBasedInMemoryCloudDestination}.
+   * @param blobIdsToTrack a list of blobs that {@link LatchBasedInMemoryCloudDestination} tracks.
+   * @param azureReplicationFeedType {@link AzureReplicationFeedType} object.
+   */
+  public LatchBasedInMemoryCloudDestination(List<BlobId> blobIdsToTrack,
+      AzureReplicationFeedType azureReplicationFeedType) {
+    logger.debug("Constructing LatchBasedInMemoryCloudDestination with {} tracked blobs", blobIdsToTrack.size());
+    this.blobIdsToTrack.addAll(blobIdsToTrack);
+    uploadLatch = new CountDownLatch(blobIdsToTrack.size());
+    downloadLatch = new CountDownLatch(blobIdsToTrack.size());
+    this.azureReplicationFeedType = azureReplicationFeedType;
   }
 
   @Override
@@ -207,6 +231,29 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   public FindToken findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
       List<CloudBlobMetadata> nextEntries) {
+    switch (azureReplicationFeedType) {
+      case COSMOS_CHANGE_FEED:
+        return findChangeFeedBasedEntries(partitionPath, findToken, maxTotalSizeOfEntries, nextEntries);
+      case COSMOS_UPDATE_TIME:
+        return findUpdateTimeBasedEntries(partitionPath, findToken, maxTotalSizeOfEntries, nextEntries);
+      default:
+        throw new IllegalArgumentException(
+            String.format("Unknown azure replication feed type: %s", azureReplicationFeedType));
+    }
+  }
+
+  /**
+   * Populates an ordered sequenced list of blobs in the specified partition in {@code nextEntries} {@link List},
+   * ordered by change feed. Returns the updated {@link com.github.ambry.replication.FindToken}.
+   * @param partitionPath the partition to query.
+   * @param findToken the {@link com.github.ambry.replication.FindToken} specifying the boundary for the query.
+   * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
+   * @param nextEntries a List of {@link CloudBlobMetadata} referencing the blobs returned by the query.
+   * @return updated {@link com.github.ambry.replication.FindToken} object.
+   * @throws CloudStorageException
+   */
+  private FindToken findChangeFeedBasedEntries(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
+      List<CloudBlobMetadata> nextEntries) {
     String continuationToken = ((CosmosChangeFeedFindToken) findToken).getEndContinuationToken();
     List<BlobId> blobIds = new ArrayList<>();
     getFeed(continuationToken, maxTotalSizeOfEntries, blobIds);
@@ -220,6 +267,35 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
               cosmosChangeFeedFindToken.getVersion());
     }
     return cosmosChangeFeedFindToken;
+  }
+
+  /**
+   * Populates an ordered sequenced list of blobs in the specified partition in {@code nextEntries} {@link List},
+   * ordered by update time of blobs. Returns the updated {@link com.github.ambry.replication.FindToken}.
+   * @param partitionPath the partition to query.
+   * @param findToken the {@link com.github.ambry.replication.FindToken} specifying the boundary for the query.
+   * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
+   * @param nextEntries a List of {@link CloudBlobMetadata} referencing the blobs returned by the query.
+   * @return updated {@link com.github.ambry.replication.FindToken} object.
+   * @throws CloudStorageException
+   */
+  private FindToken findUpdateTimeBasedEntries(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
+      List<CloudBlobMetadata> nextEntries) {
+    CosmosUpdateTimeFindToken cosmosUpdateTimeFindToken = (CosmosUpdateTimeFindToken) findToken;
+    List<CloudBlobMetadata> entries = new LinkedList<>();
+    for (BlobId blobId : map.keySet()) {
+      if (map.get(blobId).getFirst().getLastUpdateTime() >= cosmosUpdateTimeFindToken.getLastUpdateTime()) {
+        if (cosmosUpdateTimeFindToken.getLastUpdateTimeReadBlobIds().contains(map.get(blobId).getFirst().getId())) {
+          continue;
+        }
+        entries.add(map.get(blobId).getFirst());
+      }
+    }
+    Collections.sort(entries, Comparator.comparingLong(CloudBlobMetadata::getLastUpdateTime));
+
+    List<CloudBlobMetadata> cappedRsults = CloudBlobMetadata.capMetadataListBySize(entries, maxTotalSizeOfEntries);
+    nextEntries.addAll(cappedRsults);
+    return CosmosUpdateTimeFindToken.getUpdatedToken(cosmosUpdateTimeFindToken, cappedRsults);
   }
 
   private String createEndContinuationToken(List<BlobId> blobIds) {

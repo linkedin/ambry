@@ -68,8 +68,9 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
     if (queryResults.get(0).getLastUpdateTime() == findToken.getLastUpdateTime()) {
       filterOutLastReadBlobs(queryResults, findToken.getLastUpdateTimeReadBlobIds(), findToken.getLastUpdateTime());
     }
-    nextEntries.addAll(CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries));
-    return CosmosUpdateTimeFindToken.getUpdatedToken(findToken, queryResults);
+    List<CloudBlobMetadata> cappedRsults = CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
+    nextEntries.addAll(cappedRsults);
+    return CosmosUpdateTimeFindToken.getUpdatedToken(findToken, cappedRsults);
   }
 
   /**
