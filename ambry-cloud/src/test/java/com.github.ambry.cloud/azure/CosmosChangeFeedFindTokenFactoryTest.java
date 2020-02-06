@@ -13,8 +13,6 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
-import com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -46,9 +44,11 @@ public class CosmosChangeFeedFindTokenFactoryTest {
     String azureRequestId = UUID.randomUUID().toString();
 
     CosmosChangeFeedFindToken cosmosChangeFeedFindToken1 =
-        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems, azureRequestId, version);
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
+            azureRequestId, version);
     DataInputStream stream = new DataInputStream(new ByteArrayInputStream(cosmosChangeFeedFindToken1.toBytes()));
-    CosmosChangeFeedFindToken cosmosChangeFeedFindToken2 = (CosmosChangeFeedFindToken) new CosmosChangeFeedFindTokenFactory().getFindToken(stream);
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken2 =
+        (CosmosChangeFeedFindToken) new CosmosChangeFeedFindTokenFactory().getFindToken(stream);
     assertEquals("incorrect token returned from factory", cosmosChangeFeedFindToken1, cosmosChangeFeedFindToken2);
   }
 
@@ -57,7 +57,8 @@ public class CosmosChangeFeedFindTokenFactoryTest {
    */
   @Test
   public void getNewFindTokenTest() {
-    CosmosChangeFeedFindToken cosmosChangeFeedFindToken1 = (CosmosChangeFeedFindToken) new CosmosChangeFeedFindTokenFactory().getNewFindToken();
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken1 =
+        (CosmosChangeFeedFindToken) new CosmosChangeFeedFindTokenFactory().getNewFindToken();
     CosmosChangeFeedFindToken cosmosChangeFeedFindToken2 = new CosmosChangeFeedFindToken();
     assertEquals("tokens should be equal", cosmosChangeFeedFindToken1, cosmosChangeFeedFindToken2);
   }

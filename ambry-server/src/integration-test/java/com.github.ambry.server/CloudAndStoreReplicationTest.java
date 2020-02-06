@@ -108,7 +108,7 @@ public class CloudAndStoreReplicationTest {
 
   /**
    * Create a cluster with one vcr node and two ambry server data nodes.
-   * @throws Exception z````````zon {@link Exception}
+   * @throws Exception on {@link Exception}
    */
   @Before
   public void setup() throws Exception {

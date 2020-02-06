@@ -25,6 +25,9 @@ import java.util.Objects;
 import java.util.Set;
 
 
+/**
+ * {@link FindToken} object to act as bookmark for replication based on cosmos update time field.
+ */
 public class CosmosUpdateTimeFindToken implements FindToken {
 
   static final short VERSION_0 = 0;
@@ -49,7 +52,7 @@ public class CosmosUpdateTimeFindToken implements FindToken {
     this.lastUpdateTimeReadBlobIds = new HashSet<>(lastUpdateTimeReadBlobIds);
   }
 
-  /** Constructor for reading token that can have older version*/
+  /** Constructor for reading token that can have older version */
   public CosmosUpdateTimeFindToken(short version, long lastUpdateTime, long bytesRead,
       Set<String> lastUpdateTimeReadBlobIds) {
     this.version = version;
@@ -96,7 +99,7 @@ public class CosmosUpdateTimeFindToken implements FindToken {
 
   @Override
   public byte[] toBytes() {
-    byte[] buf = null;
+    byte[] buf;
     switch (version) {
       case VERSION_0:
         int size = 2 * Short.BYTES + 2 * Long.BYTES + Short.BYTES;
@@ -134,7 +137,7 @@ public class CosmosUpdateTimeFindToken implements FindToken {
    * @throws IOException
    */
   static CosmosUpdateTimeFindToken fromBytes(DataInputStream inputStream) throws IOException {
-    CosmosUpdateTimeFindToken cloudFindToken = null;
+    CosmosUpdateTimeFindToken cloudFindToken;
     DataInputStream stream = new DataInputStream(inputStream);
     short version = stream.readShort();
     switch (version) {
@@ -164,10 +167,18 @@ public class CosmosUpdateTimeFindToken implements FindToken {
     return bytesRead;
   }
 
+  /**
+   * Return {@code lastUpdateTime}.
+   * @return {@code lastUpdateTime}
+   */
   public long getLastUpdateTime() {
     return lastUpdateTime;
   }
 
+  /**
+   * Return {@code lastUpdateTimeReadBlobIds}
+   * @return {@code lastUpdateTimeReadBlobIds}
+   */
   public Set<String> getLastUpdateTimeReadBlobIds() {
     return lastUpdateTimeReadBlobIds;
   }

@@ -21,5 +21,5 @@ public enum AzureReplicationFeedType {
   COSMOS_CHANGE_FEED,
 
   /** Replication feed is obtained from cosmos queries ordered by update time */
-  COSMOS_UPDATE_TIME;
+  COSMOS_UPDATE_TIME
 }

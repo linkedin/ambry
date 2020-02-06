@@ -106,8 +106,8 @@ public class AzureIntegrationTest {
     InputStream inputStream = new ByteArrayInputStream(uploadData);
     long now = System.currentTimeMillis();
     CloudBlobMetadata cloudBlobMetadata =
-        new CloudBlobMetadata(blobId, now, now + 60000, blobSize,
-            CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
+        new CloudBlobMetadata(blobId, now, now + 60000, blobSize, CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext,
+            cryptoAgentFactory, blobSize);
     assertTrue("Expected upload to return true",
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
 
@@ -297,7 +297,6 @@ public class AzureIntegrationTest {
           azureDest.uploadBlob(blobId, chunkSize, cloudBlobMetadata, inputStream));
     }
 
-    //token todo test for update time token too
     FindToken findToken = new CosmosChangeFeedFindToken();
     // Call findEntriesSince in a loop until no new entries are returned
     List<CloudBlobMetadata> results = new ArrayList<>();

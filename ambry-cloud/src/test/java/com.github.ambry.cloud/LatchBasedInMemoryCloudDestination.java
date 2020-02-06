@@ -65,18 +65,35 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       blobIdToContinuationTokenMap.put(blobId, Integer.toString(continuationTokenCounter));
     }
 
+    /**
+     * Return continuation token for specified {@link BlobId}
+     * @param blobId {@link BlobId} object.
+     * @return continuation token.
+     */
     String getContinuationTokenForBlob(BlobId blobId) {
       return blobIdToContinuationTokenMap.get(blobId);
     }
 
+    /**
+     * Return continuation token to blob id map.
+     * @return {@code continuationTokenToBlobIdMap}.
+     */
     Map<String, BlobId> getContinuationTokenToBlobIdMap() {
       return continuationTokenToBlobIdMap;
     }
 
+    /**
+     * Return continuation token counter.
+     * @return {@code continuationTokenCounter}.
+     */
     int getContinuationTokenCounter() {
       return continuationTokenCounter;
     }
 
+    /**
+     * Return request uuid.
+     * @return {@code reqUuid}
+     */
     String getReqUuid() {
       return reqUuid;
     }
@@ -190,15 +207,17 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   public FindToken findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
       List<CloudBlobMetadata> nextEntries) {
-    String continuationToken = ((CosmosChangeFeedFindToken)findToken).getEndContinuationToken();
+    String continuationToken = ((CosmosChangeFeedFindToken) findToken).getEndContinuationToken();
     List<BlobId> blobIds = new ArrayList<>();
     getFeed(continuationToken, maxTotalSizeOfEntries, blobIds);
     nextEntries.addAll(blobIds.stream().map(blobId -> map.get(blobId).getFirst()).collect(Collectors.toList()));
-    CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken)findToken;
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) findToken;
     if (blobIds.size() != 0) {
       long bytesToBeRead = nextEntries.stream().mapToLong(CloudBlobMetadata::getSize).sum();
-      cosmosChangeFeedFindToken = new CosmosChangeFeedFindToken(bytesToBeRead, changeFeed.getContinuationTokenForBlob(blobIds.get(0)),
-          createEndContinuationToken(blobIds), 0, blobIds.size(), changeFeed.getReqUuid(), cosmosChangeFeedFindToken.getVersion());
+      cosmosChangeFeedFindToken =
+          new CosmosChangeFeedFindToken(bytesToBeRead, changeFeed.getContinuationTokenForBlob(blobIds.get(0)),
+              createEndContinuationToken(blobIds), 0, blobIds.size(), changeFeed.getReqUuid(),
+              cosmosChangeFeedFindToken.getVersion());
     }
     return cosmosChangeFeedFindToken;
   }

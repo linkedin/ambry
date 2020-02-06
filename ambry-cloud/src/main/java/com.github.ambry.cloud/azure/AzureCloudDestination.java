@@ -210,6 +210,12 @@ class AzureCloudDestination implements CloudDestination {
     return metadataList.stream().collect(Collectors.toMap(CloudBlobMetadata::getId, Function.identity()));
   }
 
+  /**
+   * Get metadata for specified list of blobs.
+   * @param blobIds {@link List} of {@link BlobId}s to get metadata of.
+   * @return {@link List} of {@link CloudBlobMetadata} for the blobs list.
+   * @throws CloudStorageException
+   */
   private List<CloudBlobMetadata> getBlobMetadataChunked(List<BlobId> blobIds) throws CloudStorageException {
     if (blobIds.isEmpty() || blobIds.size() > ID_QUERY_BATCH_SIZE) {
       throw new IllegalArgumentException("Invalid input list size: " + blobIds.size());
@@ -400,7 +406,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param e the root cause exception.
    * @return the {@link CloudStorageException}.
    */
-  private static final CloudStorageException toCloudStorageException(String message, Exception e) {
+  private static CloudStorageException toCloudStorageException(String message, Exception e) {
     Long retryDelayMs = null;
     int statusCode = -1;
     if (e instanceof BlobStorageException) {
@@ -415,9 +421,9 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   /**
-   * Return corres{@link AzureReplicationFeed} object for co
-   * @param azureReplicationFeedType
-   * @return
+   * Return corresponding {@link AzureReplicationFeed} object for specified {@link AzureReplicationFeedType}.
+   * @param azureReplicationFeedType replication feed type.
+   * @return {@link AzureReplicationFeed} object.
    */
   private AzureReplicationFeed getReplicationFeedObj(AzureReplicationFeedType azureReplicationFeedType) {
     switch (azureReplicationFeedType) {

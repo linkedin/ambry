@@ -172,6 +172,10 @@ public class CloudBlobStoreTest {
     testStorePuts(true);
   }
 
+  /**
+   * Test the CloudBlobStore put method with specified encryption.
+   * @param requireEncryption true for encrypted puts. false otherwise.
+   */
   private void testStorePuts(boolean requireEncryption) throws Exception {
     setupCloudStore(true, requireEncryption, defaultCacheLimit, true);
     // Put blobs with and without expiration and encryption
@@ -288,15 +292,9 @@ public class CloudBlobStoreTest {
     }
   }
 
-  @Test
-  public void testFindEntriesSince() throws Exception {
-    testFindEntriesSinceWithCosmosChangeFeed();
-    testFindEntriesSinceWithCosmosUpdateTime();
-  }
-
   /** Test the CloudBlobStore findEntriesSince method. */
   @Test
-  public void testFindEntriesSinceWithCosmosChangeFeed() throws Exception {
+  public void testFindEntriesSince() throws Exception {
     setupCloudStore(false, true, defaultCacheLimit, true);
     long maxTotalSize = 1000000;
     // 1) start with empty token, call find, return some data
@@ -304,8 +302,9 @@ public class CloudBlobStoreTest {
     long blobSize = 200000;
     int numBlobsFound = 5;
     List<CloudBlobMetadata> metadataList = generateMetadataList(startTime, blobSize, numBlobsFound);
-    CosmosChangeFeedFindToken cosmosChangeFeedFindToken = new CosmosChangeFeedFindToken(blobSize * numBlobsFound,
-       "start", "end", 0, numBlobsFound, UUID.randomUUID().toString());
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken =
+        new CosmosChangeFeedFindToken(blobSize * numBlobsFound, "start", "end", 0, numBlobsFound,
+            UUID.randomUUID().toString());
     //create a list of 10 blobs with total size less than maxSize, and return it as part of query ChangeFeed
     when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong(), anyList())).thenReturn(
         cosmosChangeFeedFindToken);
@@ -319,8 +318,9 @@ public class CloudBlobStoreTest {
     // 2) call find with new token, return more data including lastBlob, verify token updated
     startTime += 1000;
     metadataList = generateMetadataList(startTime, blobSize, numBlobsFound);
-    cosmosChangeFeedFindToken = new CosmosChangeFeedFindToken(blobSize * 2 * numBlobsFound,
-        "start2", "end2", 0, numBlobsFound, UUID.randomUUID().toString());
+    cosmosChangeFeedFindToken =
+        new CosmosChangeFeedFindToken(blobSize * 2 * numBlobsFound, "start2", "end2", 0, numBlobsFound,
+            UUID.randomUUID().toString());
     when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong(), anyList())).thenReturn(
         cosmosChangeFeedFindToken);
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
@@ -331,18 +331,12 @@ public class CloudBlobStoreTest {
 
     // 3) call find with new token, no more data, verify token unchanged
     metadataList = Collections.emptyList();
-    when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong(), anyList())).thenReturn(outputToken);
+    when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong(), anyList())).thenReturn(
+        outputToken);
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
     assertTrue(findInfo.getMessageEntries().isEmpty());
     FindToken finalToken = findInfo.getFindToken();
     assertEquals(outputToken, finalToken);
-
-    // call with new find token, and add total blobs larger than maxSize, and see that all the blobs are exhausted only after 3 tries
-  }
-
-  @Test
-  public void testFindEntriesSinceWithCosmosUpdateTime() throws Exception {
-
   }
 
   /** Test CloudBlobStore cache eviction. */

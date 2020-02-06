@@ -17,12 +17,12 @@ import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
 import java.io.DataInputStream;
 import java.io.IOException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
+/**
+ * Factory that creates {@link CosmosUpdateTimeFindTokenFactory} objects.
+ */
 public class CosmosUpdateTimeFindTokenFactory implements FindTokenFactory {
-  private static final Logger logger = LoggerFactory.getLogger(CosmosUpdateTimeFindToken.class);
 
   @Override
   public FindToken getFindToken(DataInputStream stream) throws IOException {

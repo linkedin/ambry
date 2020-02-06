@@ -18,7 +18,6 @@ import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import static org.mockito.Mockito.*;
 
@@ -28,7 +27,6 @@ public class MockChangeFeedQuery extends CosmosDataAccessor {
   private final Map<String, String> blobIdToContinuationTokenMap = new HashMap<>();
   private final Map<String, CloudBlobMetadata> blobIdToMetadataMap = new HashMap<>();
   private int continuationTokenCounter = -1;
-  private final String reqUuid = UUID.randomUUID().toString();
 
   MockChangeFeedQuery() {
     super(mock(AsyncDocumentClient.class), "", mock(AzureMetrics.class));

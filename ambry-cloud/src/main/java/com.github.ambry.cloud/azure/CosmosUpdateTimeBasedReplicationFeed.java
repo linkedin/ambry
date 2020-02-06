@@ -24,6 +24,10 @@ import java.util.ListIterator;
 import java.util.Set;
 
 
+/**
+ * The replication feed that provides next list of blobs to replicate from azure and corresponding {@link FindToken}
+ * using cosmos update time field.
+ */
 public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFeed {
 
   private static final String LIMIT_PARAM = "@limit";
@@ -39,7 +43,9 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
   private final AzureMetrics azureMetrics;
 
   /**
-   * Default constructor.
+   * Constructor for {@link CosmosUpdateTimeBasedReplicationFeed} object.
+   * @param cosmosDataAccessor {@link CosmosDataAccessor} object to run cosmos change feed queries.
+   * @param azureMetrics {@link AzureMetrics} object.
    */
   public CosmosUpdateTimeBasedReplicationFeed(CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics) {
     this.cosmosDataAccessor = cosmosDataAccessor;
@@ -47,8 +53,9 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
   }
 
   @Override
-  public CosmosUpdateTimeFindToken getNextEntriesAndUpdatedToken(FindToken curfindToken, List<CloudBlobMetadata> nextEntries,
-      long maxTotalSizeOfEntries, String partitionPath) throws DocumentClientException {
+  public CosmosUpdateTimeFindToken getNextEntriesAndUpdatedToken(FindToken curfindToken,
+      List<CloudBlobMetadata> nextEntries, long maxTotalSizeOfEntries, String partitionPath)
+      throws DocumentClientException {
     CosmosUpdateTimeFindToken findToken = (CosmosUpdateTimeFindToken) curfindToken;
     SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
         new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, AzureCloudDestination.getFindSinceQueryLimit()),
@@ -88,4 +95,3 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
     }
   }
 }
-

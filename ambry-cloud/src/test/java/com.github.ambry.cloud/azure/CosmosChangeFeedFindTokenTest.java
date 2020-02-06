@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -103,7 +102,6 @@ public class CosmosChangeFeedFindTokenTest {
    */
   @Test
   public void serdeTest() throws IOException {
-    short version = 0;
     Random random = new Random();
     long bytesRead = random.nextLong();
     String startContinuationToken = "start";
@@ -116,7 +114,8 @@ public class CosmosChangeFeedFindTokenTest {
 
     //token with invalid version
     CosmosChangeFeedFindToken invalidToken =
-        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems, azureRequestId, (short) 1);
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
+            azureRequestId, (short) 1);
     DataInputStream tokenStream = getSerializedStream(invalidToken);
     try {
       CosmosChangeFeedFindToken.fromBytes(tokenStream);
@@ -126,7 +125,8 @@ public class CosmosChangeFeedFindTokenTest {
 
     //valid token
     CosmosChangeFeedFindToken token =
-        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems, azureRequestId);
+        new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
+            azureRequestId);
     tokenStream = new DataInputStream(new ByteArrayInputStream(token.toBytes()));
     CosmosChangeFeedFindToken deSerToken = CosmosChangeFeedFindToken.fromBytes(tokenStream);
     assertEquals("Stream should have ended ", 0, tokenStream.available());
@@ -151,8 +151,8 @@ public class CosmosChangeFeedFindTokenTest {
 
   /**
    * helper to ensure that token passed are equal
-   * @param token1
-   * @param token2
+   * @param token1 token to be checked.
+   * @param token2 token to be checked.
    */
   private void ensureEqual(CosmosChangeFeedFindToken token1, CosmosChangeFeedFindToken token2) {
     assertEquals("Tokens should match", token1, token2);
@@ -161,8 +161,8 @@ public class CosmosChangeFeedFindTokenTest {
 
   /**
    * helper to ensure that token passed are not equal
-   * @param token1
-   * @param token2
+   * @param token1 token to be checked.
+   * @param token2 token to be checked.
    */
   private void ensureUnequal(CosmosChangeFeedFindToken token1, CosmosChangeFeedFindToken token2) {
     assertFalse("Tokens shouldn't match", token1.equals(token2));

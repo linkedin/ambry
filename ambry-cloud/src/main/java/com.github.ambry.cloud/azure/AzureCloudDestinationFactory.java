@@ -36,6 +36,11 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
   private final AzureMetrics azureMetrics;
   private final AzureReplicationFeedType azureReplicationFeedType;
 
+  /**
+   * Constructor for {@link AzureCloudDestinationFactory}
+   * @param verifiableProperties properties containing configs.
+   * @param metricRegistry metric registry.
+   */
   public AzureCloudDestinationFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this.cloudConfig = new CloudConfig(verifiableProperties);
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
@@ -58,9 +63,9 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
   }
 
   /**
-   *
-   * @param verifiableProperties
-   * @return
+   * Derive the replication feed type to use from the type of token factory passed in the config.
+   * @param verifiableProperties properties containing configs.
+   * @return {@link AzureReplicationFeedType} object.
    */
   private AzureReplicationFeedType getReplicationFeedType(VerifiableProperties verifiableProperties) {
     ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);

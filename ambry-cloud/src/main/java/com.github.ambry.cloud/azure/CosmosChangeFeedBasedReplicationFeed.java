@@ -19,12 +19,17 @@ import com.microsoft.azure.cosmosdb.DocumentClientException;
 import java.util.List;
 
 
+/**
+ * The replication feed that provides next list of blobs to replicate from azure and corresponding {@link FindToken}
+ * using cosmos change feed apis.
+ */
 public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFeed {
   private final CosmosChangeFeedCache cosmosChangeFeedCache;
 
   /**
    * Constructor for {@link CosmosChangeFeedBasedReplicationFeed} object.
-   * @param cosmosDataAccessor
+   * @param cosmosDataAccessor {@link CosmosDataAccessor} object to run cosmos change feed queries.
+   * @param azureMetrics {@link AzureMetrics} object.
    */
   public CosmosChangeFeedBasedReplicationFeed(CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics) {
     cosmosChangeFeedCache =

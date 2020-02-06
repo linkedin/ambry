@@ -19,6 +19,9 @@ import java.io.DataInputStream;
 import java.io.IOException;
 
 
+/**
+ * Factory that creates {@link CosmosChangeFeedFindToken} objects.
+ */
 public class CosmosChangeFeedFindTokenFactory implements FindTokenFactory {
   @Override
   public FindToken getFindToken(DataInputStream stream) throws IOException {

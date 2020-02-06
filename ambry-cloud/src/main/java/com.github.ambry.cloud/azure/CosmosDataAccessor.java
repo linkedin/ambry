@@ -180,8 +180,12 @@ public class CosmosDataAccessor {
     }
     try {
       FeedResponse<Document> feedResponse =
-          asyncDocumentClient.queryDocumentChangeFeed(cosmosCollectionLink, changeFeedOptions).limit(1).toBlocking().single();
-      changeFeed.addAll(feedResponse.getResults().stream().map(doc -> createMetadataFromDocument(doc)).collect(Collectors.toList()));
+          asyncDocumentClient.queryDocumentChangeFeed(cosmosCollectionLink, changeFeedOptions)
+              .limit(1)
+              .toBlocking()
+              .single();
+      changeFeed.addAll(
+          feedResponse.getResults().stream().map(doc -> createMetadataFromDocument(doc)).collect(Collectors.toList()));
       return feedResponse.getResponseContinuation();
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {

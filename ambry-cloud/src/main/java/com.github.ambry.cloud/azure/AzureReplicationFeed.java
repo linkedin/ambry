@@ -20,17 +20,19 @@ import java.util.List;
 
 
 /**
- *
+ * The replication feed that provides next list of blobs to replicate from azure, and a bookmark in form of {@link FindToken}.
  */
 public interface AzureReplicationFeed {
 
   /**
-   *
-   * @param curfindToken
-   * @param nextEntries
-   * @param maxTotalSizeOfEntries
-   * @param partitionPath
-   * @return
+   * Populate the next set of {@link CloudBlobMetadata} objects in {@code nextEntries} of specified partition {@code partitionPath}
+   * from the specified {@link FindToken} such that total size of all blobs in the entries are less or equal to {@code maxTotalSizeOfEntries}.
+   * This method should return at least one blob, if exists, after {@code curfindToken}, irrespective of {@code maxTotalSizeOfEntries} requirement.
+   * @param curfindToken current {@link FindToken} object that acts as a bookmark to return blobs after.
+   * @param nextEntries {@link List} to populate next {@link CloudBlobMetadata} objects in.
+   * @param maxTotalSizeOfEntries max total size of all the {@link CloudBlobMetadata} objects returned.
+   * @param partitionPath partition of the blobs.
+   * @return Updated {@link FindToken} object which can act as a bookmark for subsequent requests.
    */
   FindToken getNextEntriesAndUpdatedToken(FindToken curfindToken, List<CloudBlobMetadata> nextEntries,
       long maxTotalSizeOfEntries, String partitionPath) throws DocumentClientException;
