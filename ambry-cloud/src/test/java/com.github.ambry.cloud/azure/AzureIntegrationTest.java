@@ -21,10 +21,14 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenFactory;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
@@ -65,6 +69,7 @@ public class AzureIntegrationTest {
   private final String vcrKmsContext = "backup-default";
   private final String cryptoAgentFactory = CloudConfig.DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS;
   private AzureCloudDestination azureDest;
+  private FindTokenFactory findTokenFactory;
   private final String replicationCloudTokenFactory;
   private int blobSize = 1024;
   private byte dataCenterId = 66;
@@ -80,9 +85,15 @@ public class AzureIntegrationTest {
    * Parameterized constructor.
    * @param replicationCloudTokenFactory type of token factory used by {@link CloudDestination}
    */
-  public AzureIntegrationTest(String replicationCloudTokenFactory) {
+  public AzureIntegrationTest(String replicationCloudTokenFactory) throws ReflectiveOperationException {
     super();
     this.replicationCloudTokenFactory = replicationCloudTokenFactory;
+    Properties properties = new Properties();
+    properties.setProperty("replication.cloud.token.factory", replicationCloudTokenFactory);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
+    findTokenFactory =
+        new FindTokenHelper(null, replicationConfig).getFindTokenFactoryFromReplicaType(ReplicaType.CLOUD_BACKED);
   }
 
   /**
@@ -91,8 +102,8 @@ public class AzureIntegrationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> input() {
-    return Arrays.asList(new Object[][]{{"com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory"},
-        {"com.github.ambry.cloud.azure.CosmosUpdateTimeFindTokenFactory"}});
+    return Arrays.asList(new Object[][]{{"com.github.ambry.cloud.azure.CosmosUpdateTimeFindTokenFactory"},
+        {"com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory"}});
   }
 
   @Before
@@ -320,12 +331,13 @@ public class AzureIntegrationTest {
           azureDest.uploadBlob(blobId, chunkSize, cloudBlobMetadata, inputStream));
     }
 
-    FindToken findToken = new CosmosChangeFeedFindToken();
+    FindToken findToken = findTokenFactory.getNewFindToken();
     // Call findEntriesSince in a loop until no new entries are returned
-    List<CloudBlobMetadata> results = new ArrayList<>();
+    List<CloudBlobMetadata> results;
     int numQueries = 0;
     int totalBlobsReturned = 0;
     do {
+      results = new ArrayList<>();
       findToken = azureDest.findEntriesSince(partitionPath, findToken, maxTotalSize, results);
       numQueries++;
       totalBlobsReturned += results.size();

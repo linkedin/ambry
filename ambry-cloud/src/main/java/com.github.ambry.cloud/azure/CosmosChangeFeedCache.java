@@ -145,7 +145,8 @@ public class CosmosChangeFeedCache {
       }
     }
 
-    return new CosmosChangeFeedFindToken(resultSize, changeFeedCache.get(partitionId).getStartContinuationToken(),
+    return new CosmosChangeFeedFindToken(cosmosChangeFeedFindToken.getBytesRead() + resultSize,
+        changeFeedCache.get(partitionId).getStartContinuationToken(),
         changeFeedCache.get(partitionId).getEndContinuationToken(), index,
         changeFeedCache.get(partitionId).getFetchedEntries().size(),
         changeFeedCache.get(partitionId).getAzureRequestId(), cosmosChangeFeedFindToken.getVersion());

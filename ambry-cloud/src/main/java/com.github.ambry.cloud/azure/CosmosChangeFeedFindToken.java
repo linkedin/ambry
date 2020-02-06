@@ -171,18 +171,6 @@ public class CosmosChangeFeedFindToken implements FindToken {
         + getNullableStringLength(endContinuationToken) + getNullableStringLength(azureTokenRequestId);
   }
 
-  /**
-   * Utility to construct a new AzureFindToken from a previous instance and new token returned from findEntriesSince query.
-   * @param newBytesRead bytes read in the findEntriesSince query.
-   * @return the updated token.
-   */
-  public CosmosChangeFeedFindToken getUpdatedToken(long newBytesRead) {
-    if (newBytesRead == 0) {
-      return this;
-    }
-    return new CosmosChangeFeedFindToken();
-  }
-
   @Override
   public boolean equals(Object o) {
     if (this == o) {
