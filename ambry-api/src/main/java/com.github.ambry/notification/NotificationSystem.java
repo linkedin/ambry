@@ -58,13 +58,14 @@ public interface NotificationSystem extends Closeable {
   void onBlobDeleted(String blobId, String serviceId, Account account, Container container);
 
   /**
-   * Notifies the underlying system when a deleted blob is undeleted.
-   * @param blobId The id of the blob whose deleted state has been replicated
-   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
+   * Notifies the underlying system when the blob is undeleted.
+   * @param blobId The id of the blob whose undeleted state has been replicated
+   * @param serviceId The service ID of the service undeleting the blob. This can be null if unknown.
    * @param account The {@link Account} for the blob
    * @param container The {@link Container} for the blob
    */
-  void onBlobUndeleted(String blobId, String serviceId, Account account, Container container);
+  default void onBlobUndeleted(String blobId, String serviceId, Account account, Container container) {
+  }
 
   /**
    * Notifies the underlying system when a blob is replicated to a node
@@ -97,11 +98,12 @@ public interface NotificationSystem extends Closeable {
       UpdateType updateType, MessageInfo info);
 
   /**
-   * Notifies the underlying system when a undeleted state of a blob is replicated to a node
+   * Notifies the underlying system when a undeleted state of a blob is replicated to a node.
    * @param sourceHost The source host from where the notification is being invoked
    * @param port The port of the source host from where the notification is being invoked.
-   * @param blobId The id of the blob whose deleted state has been replicated
+   * @param blobId The id of the blob whose undeleted state has been replicated
    * @param sourceType The source that undeleted the blob replica
    */
-  void onBlobReplicaUndeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType);
+  default void onBlobReplicaUndeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+  }
 }
