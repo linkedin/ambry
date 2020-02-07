@@ -356,7 +356,20 @@ public class ReplicationTest {
     verifyRemoteReplicaInfo(partitionInfo, addedReplica, false);
     verifyRemoteReplicaInfo(partitionInfo, peerReplicaToRemove, true);
 
-    // Test Case 2: replication manager is successfully started
+    // Test Case 2: startup latch is interrupted
+    CountDownLatch initialLatch = replicationManager.startupLatch;
+    CountDownLatch mockLatch = Mockito.mock(CountDownLatch.class);
+    doThrow(new InterruptedException()).when(mockLatch).await();
+    replicationManager.startupLatch = mockLatch;
+    try {
+      clusterMapChangeListener.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
+      fail("should fail because startup latch is interrupted");
+    } catch (IllegalStateException e) {
+      // expected
+    }
+    replicationManager.startupLatch = initialLatch;
+
+    // Test Case 3: replication manager is successfully started
     replicationManager.start();
     clusterMapChangeListener.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
     // verify that PartitionInfo has latest remote replica infos
