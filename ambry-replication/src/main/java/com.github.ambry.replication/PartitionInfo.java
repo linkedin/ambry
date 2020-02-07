@@ -82,9 +82,9 @@ public class PartitionInfo {
   }
 
   /**
-   * Remove {@link RemoteReplicaInfo} from this {@link PartitionInfo} if it is present.
-   * @param remoteReplica the {@link RemoteReplicaInfo} to remove.
-   * @return {@code true} if given remote replica info previously existed and is successfully removed. {@code false}, otherwise.
+   * Remove {@link RemoteReplicaInfo} of given replica from this {@link PartitionInfo} if it is present.
+   * @param remoteReplica the {@link ReplicaId} whose info should be removed.
+   * @return {@link RemoteReplicaInfo} that is removed, can be null if it is not present.
    */
   RemoteReplicaInfo removeReplicaInfoIfPresent(ReplicaId remoteReplica) {
     rwLock.writeLock().lock();

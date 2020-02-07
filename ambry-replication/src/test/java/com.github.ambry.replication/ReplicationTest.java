@@ -16,6 +16,7 @@ package com.github.ambry.replication;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.AmbryReplicaSyncUpManager;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -319,6 +320,7 @@ public class ReplicationTest {
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
             currentNode, storeKeyConverterFactory, null);
+    ClusterMapChangeListener clusterMapChangeListener = clusterMap.getClusterMapChangeListener();
     // find the special partition (not on current node) and get an irrelevant replica from it
     PartitionId absentPartition = clusterMap.getSpecialPartition();
     ReplicaId irrelevantReplica = absentPartition.getReplicaIds().get(0);
@@ -349,14 +351,14 @@ public class ReplicationTest {
 
     // Test Case 1: replication manager encountered exception during startup (remote replica addition/removal will be skipped)
     replicationManager.startWithException();
-    replicationManager.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
+    clusterMapChangeListener.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
     // verify that PartitionInfo stays unchanged
     verifyRemoteReplicaInfo(partitionInfo, addedReplica, false);
     verifyRemoteReplicaInfo(partitionInfo, peerReplicaToRemove, true);
 
     // Test Case 2: replication manager is successfully started
     replicationManager.start();
-    replicationManager.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
+    clusterMapChangeListener.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
     // verify that PartitionInfo has latest remote replica infos
     verifyRemoteReplicaInfo(partitionInfo, addedReplica, true);
     verifyRemoteReplicaInfo(partitionInfo, peerReplicaToRemove, false);

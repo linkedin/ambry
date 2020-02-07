@@ -62,6 +62,7 @@ public class MockClusterMap implements ClusterMap {
   private String localDatacenterName;
 
   private final MockPartitionId specialPartition;
+  private ClusterMapChangeListener clusterMapChangeListener = null;
 
   private RuntimeException exceptionOnSnapshot = null;
 
@@ -539,12 +540,19 @@ public class MockClusterMap implements ClusterMap {
 
   @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
-    // No-op.
+    this.clusterMapChangeListener = clusterMapChangeListener;
   }
 
   @Override
   public void close() {
     // No-op.
+  }
+
+  /**
+   * @return {@link ClusterMapChangeListener} registered to this cluster map.
+   */
+  public ClusterMapChangeListener getClusterMapChangeListener() {
+    return clusterMapChangeListener;
   }
 
   /**

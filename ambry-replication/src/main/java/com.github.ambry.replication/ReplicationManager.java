@@ -241,6 +241,9 @@ public class ReplicationManager extends ReplicationEngine {
         .add(partitionInfo);
   }
 
+  /**
+   * Implementation of {@link ClusterMapChangeListener} that helps replication manager react to cluster map changes.
+   */
   class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {
     /**
      * {@inheritDoc}
