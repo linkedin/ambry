@@ -126,6 +126,13 @@ public enum ResponseStatus {
   }
 
   /**
+   * @return status code of this {@link ResponseStatus}
+   */
+  public int getStatusCode() {
+    return statusCode;
+  }
+
+  /**
    * @return {@code true} if status code is 2xx which means success. {@code false} otherwise.
    */
   public boolean isSuccess() {

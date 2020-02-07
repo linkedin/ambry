@@ -369,8 +369,35 @@ class NettyResponseChannel implements RestResponseChannel {
         .checkThresholds(requestPerfToCheck))) {
       // this means either response is 5xx or request missed one of thresholds, the request should be unsatisfied
       restRequestMetricsTracker.markUnsatisfied();
+      logUnsatisfiedRequest(requestPerfToCheck);
     }
     restRequestMetricsTracker.recordMetrics();
+  }
+
+  /**
+   * Log unsatisfied request (print out request/response info and performance indices)
+   * @param requestPerfToCheck the performance indices associated with this request.
+   */
+  private void logUnsatisfiedRequest(Map<PerformanceIndex, Long> requestPerfToCheck) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("Unsatisfied request: uri=").append(request.getUri()).append("; method=").append(request.getRestMethod());
+    if (request.getRestMethod() == RestMethod.POST) {
+      sb.append("; location=").append((String) getHeader(RestUtils.Headers.LOCATION));
+    }
+    sb.append("; status=").append(responseStatus.getStatusCode());
+    Object blobSize = getHeader(RestUtils.Headers.BLOB_SIZE);
+    if (blobSize != null) {
+      sb.append("; blob size=").append((String) blobSize);
+    }
+    for (Map.Entry<PerformanceIndex, Long> entry : requestPerfToCheck.entrySet()) {
+      sb.append("; ").append(entry.getKey().toString()).append("=").append(entry.getValue());
+      if (entry.getKey() == PerformanceIndex.AverageBandwidth) {
+        sb.append("bytes/sec");
+      } else {
+        sb.append("ms");
+      }
+    }
+    logger.warn(sb.toString());
   }
 
   /**
