@@ -471,7 +471,6 @@ public class CloudBlobMetadata {
       if (value.encryptionOrigin != EncryptionOrigin.NONE) {
         gen.writeStringField(FIELD_ENCRYPTION_ORIGIN, value.encryptionOrigin.toString());
         if (value.encryptionOrigin == EncryptionOrigin.VCR) {
-          gen.writeStringField(FIELD_ENCRYPTION_ORIGIN, value.encryptionOrigin.toString());
           gen.writeStringField(FIELD_VCR_KMS_CONTEXT, value.vcrKmsContext);
           gen.writeStringField(FIELD_CRYPTO_AGENT_FACTORY, value.cryptoAgentFactory);
           gen.writeNumberField(FIELD_ENCRYPTED_SIZE, value.encryptedSize);
