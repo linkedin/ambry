@@ -127,7 +127,7 @@ public class ReplicationManager extends ReplicationEngine {
    */
   public boolean addReplica(ReplicaId replicaId) {
     if (partitionToPartitionInfo.containsKey(replicaId.getPartitionId())) {
-      logger.error("{} already exists in replication manager, rejecting adding replica request.",
+      logger.error("Partition {} already exists in replication manager, rejecting adding replica request.",
           replicaId.getPartitionId());
       return false;
     }
@@ -137,11 +137,11 @@ public class ReplicationManager extends ReplicationEngine {
       remoteReplicaInfos = createRemoteReplicaInfos(peerReplicas, replicaId);
       updatePartitionInfoMaps(remoteReplicaInfos, replicaId);
     }
-    logger.info("Assigning thread for {}", replicaId.getPartitionId());
+    logger.info("Assigning thread for partition {}", replicaId.getPartitionId());
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
     // No need to update persistor to explicitly persist tokens for new replica because background persistor will
     // periodically persist all tokens including new added replica's
-    logger.info("{} is successfully added into replication manager", replicaId.getPartitionId());
+    logger.info("Partition {} is successfully added into replication manager", replicaId.getPartitionId());
     return true;
   }
 
@@ -152,7 +152,7 @@ public class ReplicationManager extends ReplicationEngine {
    */
   public boolean removeReplica(ReplicaId replicaId) {
     if (!partitionToPartitionInfo.containsKey(replicaId.getPartitionId())) {
-      logger.error("{} doesn't exist in replication manager, skipping removing replica request.",
+      logger.error("Partition {} doesn't exist in replication manager, skipping removing replica request.",
           replicaId.getPartitionId());
       return false;
     }
@@ -165,7 +165,7 @@ public class ReplicationManager extends ReplicationEngine {
       return v;
     });
     partitionToPartitionInfo.remove(replicaId.getPartitionId());
-    logger.info("{} is successfully removed from replication manager", replicaId.getPartitionId());
+    logger.info("Partition {} is successfully removed from replication manager", replicaId.getPartitionId());
     return true;
   }
 
@@ -303,6 +303,15 @@ public class ReplicationManager extends ReplicationEngine {
       // set local store state to OFFLINE and initiate disconnection
       store.setCurrentState(ReplicaState.OFFLINE);
       replicaSyncUpManager.initiateDisconnection(localReplica);
+    }
+
+    @Override
+    public void onPartitionBecomeDroppedFromOffline(String partitionName) {
+      ReplicaId replica = storeManager.getReplica(partitionName);
+      // if code arrives here, we don't need to check if replica exists, it has been checked in StatsManager
+      // here we attempt to remove replica from replication manager. If replica doesn't exist, log info but don't fail
+      // the transition
+      removeReplica(replica);
     }
   }
 }

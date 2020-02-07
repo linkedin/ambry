@@ -72,7 +72,7 @@ public class MockReplicationManager extends ReplicationManager {
         dataNodeId, storeKeyConverterFactory, null);
   }
 
-  MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
+  public MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
       StoreKeyConverterFactory storeKeyConverterFactory, ClusterParticipant clusterParticipant)
       throws ReplicationException {

@@ -19,7 +19,6 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -166,7 +165,7 @@ public class ClusterMapUtils {
    */
   static List<String> getSealedReplicas(InstanceConfig instanceConfig) {
     List<String> sealedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
-    return sealedReplicas == null ? Collections.emptyList() : sealedReplicas;
+    return sealedReplicas == null ? new ArrayList<>() : sealedReplicas;
   }
 
   /**
@@ -177,7 +176,7 @@ public class ClusterMapUtils {
    */
   static List<String> getStoppedReplicas(InstanceConfig instanceConfig) {
     List<String> stoppedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.STOPPED_REPLICAS_STR);
-    return stoppedReplicas == null ? Collections.emptyList() : stoppedReplicas;
+    return stoppedReplicas == null ? new ArrayList<>() : stoppedReplicas;
   }
 
   /**
@@ -217,7 +216,6 @@ public class ClusterMapUtils {
     String http2PortStr = instanceConfig.getRecord().getSimpleField(HTTP2_PORT_STR);
     return http2PortStr == null ? null : Integer.valueOf(http2PortStr);
   }
-
 
   /**
    * Get the xid associated with this instance. The xid is like a timestamp or a change number, so if it is absent,

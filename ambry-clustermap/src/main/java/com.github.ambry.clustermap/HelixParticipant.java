@@ -328,8 +328,19 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    */
   private boolean removeOldReplicaInfo(ReplicaId replicaId, InstanceConfig instanceConfig) {
     boolean removalResult = true;
-    boolean replicaFound = false;
+    boolean instanceConfigUpdated = false;
+    boolean replicaFound;
     String partitionName = replicaId.getPartitionId().toPathString();
+    List<String> stoppedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.STOPPED_REPLICAS_STR);
+    List<String> sealedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
+    stoppedReplicas = stoppedReplicas == null ? new ArrayList<>() : stoppedReplicas;
+    sealedReplicas = sealedReplicas == null ? new ArrayList<>() : sealedReplicas;
+    if (stoppedReplicas.remove(partitionName) || sealedReplicas.remove(partitionName)) {
+      logger.info("Removing partition {} from stopped and sealed list", partitionName);
+      instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicas);
+      instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
+      instanceConfigUpdated = true;
+    }
     Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
     Map<String, String> diskInfo = mountPathToDiskInfos.get(replicaId.getMountPath());
     if (diskInfo != null) {
@@ -354,12 +365,14 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
           mountPathToDiskInfos.put(replicaId.getMountPath(), diskInfo);
           // update InstanceConfig
           instanceConfig.getRecord().setMapFields(mountPathToDiskInfos);
-          logger.info("Updating config: {} in Helix by removing partition {}", instanceConfig, partitionName);
-          removalResult = helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+          instanceConfigUpdated = true;
         }
       }
     }
-    if (!replicaFound) {
+    if (instanceConfigUpdated) {
+      logger.info("Updating config: {} in Helix by removing partition {}", instanceConfig, partitionName);
+      removalResult = helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+    } else {
       logger.warn("Partition {} is not found on instance {}, skipping removing it from InstanceConfig in Helix.",
           partitionName, instanceName);
     }
@@ -535,12 +548,33 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         throw e;
       }
     }
-    // 3. take actions in storage manager (stop the store)
+    // 3. take actions in storage manager (stop the store and update instanceConfig)
     PartitionStateChangeListener storageManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
     if (storageManagerListener != null) {
       storageManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
     }
-    // 4. todo update instanceConfig in helix
+  }
+
+  @Override
+  public void onPartitionBecomeDroppedFromOffline(String partitionName) {
+    // 1. remove old replica from StatsManager
+    PartitionStateChangeListener statsManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
+    if (statsManagerListener != null) {
+      statsManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+    }
+    // 2. remove old replica from ReplicationManager
+    PartitionStateChangeListener replicationManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+    if (replicationManagerListener != null) {
+      replicationManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+    }
+    // 3. remove old replica from StorageManager and delete store directory
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+    }
   }
 }

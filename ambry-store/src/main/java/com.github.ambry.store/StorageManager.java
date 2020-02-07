@@ -404,11 +404,11 @@ public class StorageManager implements StoreManager {
           // update InstanceConfig in Helix
           try {
             if (!clusterParticipant.updateDataNodeInfoInCluster(replicaToAdd, true)) {
-              logger.error("Failed to add partition {} into InstanceConfig for {}", partitionName,
-                  currentNode.getHostname());
+              logger.error("Failed to add partition {} into InstanceConfig of current node", partitionName);
               throw new StateTransitionException("Failed to add partition " + partitionName + " into InstanceConfig",
                   StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
             }
+            logger.info("Partition {} is successfully added into InstanceConfig of current node", partitionName);
           } catch (IllegalStateException e) {
             throw new StateTransitionException(e.getMessage(),
                 StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
@@ -498,6 +498,40 @@ public class StorageManager implements StoreManager {
         throw new StateTransitionException("Failed to shutdown store " + partitionName, ReplicaOperationFailure);
       }
       logger.info("Store {} is successfully shut down during Inactive-To-Offline transition", partitionName);
+      if (clusterParticipant != null) {
+        // update InstanceConfig in Helix
+        try {
+          if (!clusterParticipant.updateDataNodeInfoInCluster(replica, false)) {
+            logger.error("Failed to remove partition {} from InstanceConfig of current node", partitionName);
+            throw new StateTransitionException("Failed to remove partition " + partitionName + " from InstanceConfig",
+                StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+          }
+          logger.info("Partition {} is successfully removed from InstanceConfig of current node", partitionName);
+        } catch (IllegalStateException e) {
+          throw new StateTransitionException(e.getMessage(),
+              StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+        }
+      }
+    }
+
+    @Override
+    public void onPartitionBecomeDroppedFromOffline(String partitionName) {
+      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+      // get the store (skip the state check here, because the store should be stopped in previous transition)
+      BlobStore store = (BlobStore) getStore(replica.getPartitionId(), true);
+      if (removeBlobStore(replica.getPartitionId())) {
+        try {
+          store.deleteStoreFiles();
+        } catch (Exception e) {
+          throw new StateTransitionException("Failed to delete directory for store " + partitionName,
+              ReplicaOperationFailure);
+        }
+      } else {
+        throw new StateTransitionException("Failed to remove store " + partitionName + " from storage manager",
+            ReplicaOperationFailure);
+      }
+      partitionNameToReplicaId.remove(partitionName);
+      logger.info("Partition {} is successfully dropped on current node", partitionName);
     }
   }
 }
