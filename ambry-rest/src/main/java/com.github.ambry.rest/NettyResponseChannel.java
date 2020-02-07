@@ -380,7 +380,7 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private void logUnsatisfiedRequest(Map<PerformanceIndex, Long> requestPerfToCheck) {
     StringBuilder sb = new StringBuilder();
-    sb.append("Unsatisfied request: ").append(request.getUri()).append("  method=").append(request.getRestMethod());
+    sb.append("Unsatisfied request: ").append(request.getUri()).append("; method=").append(request.getRestMethod());
     if (request.getRestMethod() == RestMethod.POST) {
       sb.append("; location=").append((String) getHeader(RestUtils.Headers.LOCATION));
     }
@@ -390,7 +390,7 @@ class NettyResponseChannel implements RestResponseChannel {
       sb.append("; blob size=").append((String) blobSize);
     }
     for (Map.Entry<PerformanceIndex, Long> entry : requestPerfToCheck.entrySet()) {
-      sb.append("; ").append(entry.getKey().toString()).append(": ").append(entry.getValue());
+      sb.append("; ").append(entry.getKey().toString()).append("=").append(entry.getValue());
       if (entry.getKey() == PerformanceIndex.AverageBandwidth) {
         sb.append("bytes/sec");
       } else {
