@@ -25,8 +25,8 @@ import java.util.Set;
 
 
 /**
- * The replication feed that provides next list of blobs to replicate from azure and corresponding {@link FindToken}
- * using cosmos update time field.
+ * The replication feed that provides next list of blobs to replicate from Azure and corresponding {@link FindToken}
+ * using Cosmos update time field.
  */
 public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFeed {
 
@@ -44,7 +44,7 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
 
   /**
    * Constructor for {@link CosmosUpdateTimeBasedReplicationFeed} object.
-   * @param cosmosDataAccessor {@link CosmosDataAccessor} object to run cosmos change feed queries.
+   * @param cosmosDataAccessor {@link CosmosDataAccessor} object to run Cosmos change feed queries.
    * @param azureMetrics {@link AzureMetrics} object.
    */
   public CosmosUpdateTimeBasedReplicationFeed(CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics) {

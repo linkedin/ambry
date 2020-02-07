@@ -15,17 +15,17 @@ package com.github.ambry.cloud.azure;
 
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.replication.FindToken;
-import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
- * The replication feed that provides next list of blobs to replicate from azure and corresponding {@link FindToken}
- * using cosmos change feed apis.
+ * The replication feed that provides next list of blobs to replicate from Azure and corresponding {@link FindToken}
+ * using Cosmos change feed apis.
  */
 public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFeed {
 
@@ -70,8 +70,8 @@ public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFee
     }
 
     /**
-     * Return the azure request id.
-     * @return azure request id.
+     * Return the Azure request id.
+     * @return Azure request id.
      */
     String getAzureRequestId() {
       return azureRequestId;
@@ -86,6 +86,7 @@ public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFee
     }
   }
 
+  // change feed cache by paritition id
   private final ConcurrentHashMap<String, ChangeFeedCacheEntry> changeFeedCache;
   private final int defaultCacheSize;
   private final CosmosDataAccessor cosmosDataAccessor;
@@ -107,7 +108,7 @@ public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFee
    * Get next set of change feed entries for the specified partition, after the {@code cosmosChangeFeedFindToken}.
    * The number of entries is capped by maxEntriesSize.
    * This method creates a cache for change feed entries. If the {@code cosmosChangeFeedFindToken} is not valid,
-   * or if all the items in the cache are consumed, then it queries cosmos for new entries.
+   * or if all the items in the cache are consumed, then it queries Cosmos for new entries.
    * @param cosmosChangeFeedFindToken {@link CosmosChangeFeedFindToken} after which the next entries have to be returned.
    * @param results {@link List} of {@link CloudBlobMetadata} objects which will be populated by new entries.
    * @param maxEntriesSize maximum size of all the blobs returned in {@code results}
@@ -123,19 +124,20 @@ public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFee
     }
 
     long resultSize = 0;
+    List<CloudBlobMetadata> fetchedEntries = changeFeedCache.get(partitionId).getFetchedEntries();
     while (true) {
-      if (index < changeFeedCache.get(partitionId).getFetchedEntries().size()) {
-        if (resultSize + changeFeedCache.get(partitionId).getFetchedEntries().get(index).getSize() < maxEntriesSize
-            || resultSize == 0) {
-          results.add(changeFeedCache.get(partitionId).getFetchedEntries().get(index));
-          resultSize = resultSize + changeFeedCache.get(partitionId).getFetchedEntries().get(index).getSize();
+      if (index < fetchedEntries.size()) {
+        if (resultSize + fetchedEntries.get(index).getSize() < maxEntriesSize || resultSize == 0) {
+          results.add(fetchedEntries.get(index));
+          resultSize = resultSize + fetchedEntries.get(index).getSize();
           index++;
         } else {
           break;
         }
       } else {
         populateChangeFeedCache(partitionId, cosmosChangeFeedFindToken.getEndContinuationToken());
-        if (cacheEmpty(partitionId)) {
+        fetchedEntries = changeFeedCache.get(partitionId).getFetchedEntries();
+        if (fetchedEntries.isEmpty()) {
           // this means that there are no new changes
           break;
         }
@@ -166,20 +168,15 @@ public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFee
    */
   private boolean isCacheValid(String partitionId, CosmosChangeFeedFindToken cosmosChangeFeedFindToken) {
     ChangeFeedCacheEntry changeFeedCacheEntry = changeFeedCache.get(partitionId);
-    return Utils.checkNullableStringEquals(cosmosChangeFeedFindToken.getAzureTokenRequestId(),
-        changeFeedCacheEntry.getAzureRequestId()) && Utils.checkNullableStringEquals(
-        cosmosChangeFeedFindToken.getStartContinuationToken(), changeFeedCacheEntry.getStartContinuationToken())
-        && Utils.checkNullableStringEquals(cosmosChangeFeedFindToken.getEndContinuationToken(),
-        changeFeedCacheEntry.getEndContinuationToken())
+    return Objects.equals(cosmosChangeFeedFindToken.getAzureTokenRequestId(), changeFeedCacheEntry.getAzureRequestId())
+        && Objects.equals(cosmosChangeFeedFindToken.getStartContinuationToken(),
+        changeFeedCacheEntry.getStartContinuationToken()) && Objects.equals(
+        cosmosChangeFeedFindToken.getEndContinuationToken(), changeFeedCacheEntry.getEndContinuationToken())
         && cosmosChangeFeedFindToken.getTotalItems() == changeFeedCacheEntry.getFetchedEntries().size();
   }
 
-  private boolean cacheEmpty(String partitionId) {
-    return changeFeedCache.get(partitionId).getFetchedEntries().size() == 0;
-  }
-
   /**
-   * Populate change feed cache by querying cosmos for the next set of change feed entries after the specified request continuation token.
+   * Populate change feed cache by querying Cosmos for the next set of change feed entries after the specified request continuation token.
    * @param partitionId Partition for which the change feed cache needs to be populated.
    * @param startRequestContinuationToken request continuation token from which the change feed query needs to be made.
    */

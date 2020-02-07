@@ -41,7 +41,7 @@ import static org.mockito.Mockito.*;
 
 
 /**
- * Class to define utilities for azure tests.
+ * Class to define utilities for Azure tests.
  */
 class AzureTestUtils {
 

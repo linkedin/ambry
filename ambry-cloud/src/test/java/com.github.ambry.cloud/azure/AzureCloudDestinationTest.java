@@ -97,13 +97,13 @@ public class AzureCloudDestinationTest {
   private long creationTime = System.currentTimeMillis();
   private long deletionTime = creationTime + 10000;
   private long expirationTime = Utils.Infinite_Time;
-  private AzureReplicationFeedType azureReplicationFeedType;
+  private AzureReplicationFeed.FeedType azureReplicationFeedType;
 
   /**
    * Parameterized constructor.
    * @param azureReplicationFeedType type of replication feed used by {@link AzureCloudDestination}
    */
-  public AzureCloudDestinationTest(AzureReplicationFeedType azureReplicationFeedType) {
+  public AzureCloudDestinationTest(AzureReplicationFeed.FeedType azureReplicationFeedType) {
     super();
     this.azureReplicationFeedType = azureReplicationFeedType;
   }
@@ -114,8 +114,8 @@ public class AzureCloudDestinationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> input() {
-    return Arrays.asList(
-        new Object[][]{{AzureReplicationFeedType.COSMOS_UPDATE_TIME}, {AzureReplicationFeedType.COSMOS_CHANGE_FEED}});
+    return Arrays.asList(new Object[][]{{AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME},
+        {AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED}});
   }
 
   @Before
@@ -374,7 +374,6 @@ public class AzureCloudDestinationTest {
     azureMetrics = new AzureMetrics(new MetricRegistry());
     azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
         azureMetrics, azureReplicationFeedType);
-    // todo token test for all replication feed types
     List<BlobId> blobIdList = new ArrayList<>();
     List<Document> docList = new ArrayList<>();
     for (int j = 0; j < numBlobs; j++) {

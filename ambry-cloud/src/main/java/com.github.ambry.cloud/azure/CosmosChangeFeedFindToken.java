@@ -26,12 +26,12 @@ import static com.github.ambry.utils.Utils.*;
 
 
 /**
- * Class representing the replication token to track replication progress in azure.
+ * Class representing the replication token to track replication progress using Cosmos change feed.
  */
 public class CosmosChangeFeedFindToken implements FindToken {
   private final short version;
   private final long bytesRead;
-  private final FindTokenType findTokenType = FindTokenType.CloudBased;
+  private final FindTokenType type = FindTokenType.CloudBased;
   private final String startContinuationToken;
   private final String endContinuationToken;
   private final int index;
@@ -57,28 +57,23 @@ public class CosmosChangeFeedFindToken implements FindToken {
   /**
    * Create {@link CosmosChangeFeedFindToken} from provided values.
    * @param bytesRead bytes read by remote so far.
-   * @param startContinuationToken start token from cosmos.
-   * @param endContinuationToken end token from cosmos.
+   * @param startContinuationToken start token from Cosmos.
+   * @param endContinuationToken end token from Cosmos.
    * @param index index in cache upto which items are consumed by remote.
    * @param totalItems total number of items in cache.
    * @param azureTokenRequestId request id of the change feed query.
    */
   public CosmosChangeFeedFindToken(long bytesRead, String startContinuationToken, String endContinuationToken,
       int index, int totalItems, String azureTokenRequestId) {
-    this.version = DEFAULT_VERSION;
-    this.bytesRead = bytesRead;
-    this.startContinuationToken = startContinuationToken;
-    this.endContinuationToken = endContinuationToken;
-    this.index = index;
-    this.totalItems = totalItems;
-    this.azureTokenRequestId = azureTokenRequestId;
+    this(bytesRead, startContinuationToken, endContinuationToken, index, totalItems, azureTokenRequestId,
+        DEFAULT_VERSION);
   }
 
   /**
    * Constructor to create a {@link CosmosChangeFeedFindToken} with specified token values and specified version.
    * @param bytesRead bytes read by remote so far.
-   * @param startContinuationToken start token from cosmos.
-   * @param endContinuationToken end token from cosmos.
+   * @param startContinuationToken start token from Cosmos.
+   * @param endContinuationToken end token from Cosmos.
    * @param index index in cache upto which items are consumed by remote.
    * @param totalItems total number of items in cache.
    * @param azureTokenRequestId request id of the change feed query.
@@ -166,11 +161,11 @@ public class CosmosChangeFeedFindToken implements FindToken {
     }
     CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) o;
     return cosmosChangeFeedFindToken.getVersion() == getVersion()
-        && cosmosChangeFeedFindToken.getBytesRead() == getBytesRead() && checkNullableStringEquals(
-        cosmosChangeFeedFindToken.getStartContinuationToken(), startContinuationToken) && checkNullableStringEquals(
+        && cosmosChangeFeedFindToken.getBytesRead() == getBytesRead() && Objects.equals(
+        cosmosChangeFeedFindToken.getStartContinuationToken(), startContinuationToken) && Objects.equals(
         cosmosChangeFeedFindToken.getEndContinuationToken(), endContinuationToken)
         && cosmosChangeFeedFindToken.getTotalItems() == totalItems && cosmosChangeFeedFindToken.getIndex() == index
-        && checkNullableStringEquals(cosmosChangeFeedFindToken.getAzureTokenRequestId(), azureTokenRequestId);
+        && Objects.equals(cosmosChangeFeedFindToken.getAzureTokenRequestId(), azureTokenRequestId);
   }
 
   /**
@@ -207,17 +202,12 @@ public class CosmosChangeFeedFindToken implements FindToken {
   }
 
   @Override
-  public FindTokenType getType() {
-    return findTokenType;
-  }
-
-  @Override
   public short getVersion() {
     return version;
   }
 
-  public FindTokenType getFindTokenType() {
-    return findTokenType;
+  public FindTokenType getType() {
+    return type;
   }
 
   /**

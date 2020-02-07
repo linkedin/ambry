@@ -34,7 +34,7 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
   private final AzureCloudConfig azureCloudConfig;
   private final String clusterName;
   private final AzureMetrics azureMetrics;
-  private final AzureReplicationFeedType azureReplicationFeedType;
+  private final AzureReplicationFeed.FeedType azureReplicationFeedType;
 
   /**
    * Constructor for {@link AzureCloudDestinationFactory}
@@ -65,16 +65,16 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
   /**
    * Derive the replication feed type to use from the type of token factory passed in the config.
    * @param verifiableProperties properties containing configs.
-   * @return {@link AzureReplicationFeedType} object.
+   * @return {@link AzureReplicationFeed.FeedType} object.
    */
-  public static AzureReplicationFeedType getReplicationFeedType(VerifiableProperties verifiableProperties) {
+  public static AzureReplicationFeed.FeedType getReplicationFeedType(VerifiableProperties verifiableProperties) {
     ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
     if (replicationConfig.replicationCloudTokenFactory.equals(
         CosmosChangeFeedFindTokenFactory.class.getCanonicalName())) {
-      return AzureReplicationFeedType.COSMOS_CHANGE_FEED;
+      return AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
     } else if (replicationConfig.replicationCloudTokenFactory.equals(
         CosmosUpdateTimeFindTokenFactory.class.getCanonicalName())) {
-      return AzureReplicationFeedType.COSMOS_UPDATE_TIME;
+      return AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME;
     }
     throw new IllegalArgumentException(String.format(
         "Unable to get azure replication feed type due to unknown replicationCloudFindTokenFactory config %s",

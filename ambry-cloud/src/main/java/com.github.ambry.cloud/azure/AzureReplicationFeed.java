@@ -20,9 +20,17 @@ import java.util.List;
 
 
 /**
- * The replication feed that provides next list of blobs to replicate from azure, and a bookmark in form of {@link FindToken}.
+ * The replication feed that provides next list of blobs to replicate from Azure, and a bookmark in form of {@link FindToken}.
  */
 public interface AzureReplicationFeed {
+
+  enum FeedType {
+    /** Replication feed is obtained from cosmos change feed api */
+    COSMOS_CHANGE_FEED,
+
+    /** Replication feed is obtained from cosmos queries ordered by update time */
+    COSMOS_UPDATE_TIME
+  }
 
   /**
    * Populate the next set of {@link CloudBlobMetadata} objects in {@code nextEntries} of specified partition {@code partitionPath}

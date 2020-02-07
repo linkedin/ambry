@@ -26,7 +26,7 @@ import java.util.Set;
 
 
 /**
- * {@link FindToken} object to act as bookmark for replication based on cosmos update time field.
+ * {@link FindToken} object to act as bookmark for replication based on Cosmos update time field.
  */
 public class CosmosUpdateTimeFindToken implements FindToken {
 

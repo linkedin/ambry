@@ -14,7 +14,6 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.cloud.azure.AzureReplicationFeedType;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.Collections;
 

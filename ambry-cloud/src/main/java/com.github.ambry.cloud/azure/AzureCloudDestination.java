@@ -83,10 +83,10 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureCloudConfig the {@link AzureCloudConfig} to use.
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
-   * @param azureReplicationFeedType {@link AzureReplicationFeedType} to use for replication from azure.
+   * @param azureReplicationFeedType {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
    */
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
-      AzureMetrics azureMetrics, AzureReplicationFeedType azureReplicationFeedType) {
+      AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType) {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =
@@ -110,7 +110,7 @@ class AzureCloudDestination implements CloudDestination {
         .withConsistencyLevel(ConsistencyLevel.Session)
         .build();
     cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, azureCloudConfig, azureMetrics);
-    azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType);
+    azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
     this.deadBlobsQueryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
     logger.info("Created Azure destination");
@@ -123,11 +123,11 @@ class AzureCloudDestination implements CloudDestination {
    * @param cosmosCollectionLink the CosmosDB collection link to use.
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
-   * @param azureReplicationFeedType the {@link AzureReplicationFeedType} to use for replication from azure.
+   * @param azureReplicationFeedType the {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
    */
   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
       AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String clusterName,
-      AzureMetrics azureMetrics, AzureReplicationFeedType azureReplicationFeedType) {
+      AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType) {
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
@@ -135,7 +135,7 @@ class AzureCloudDestination implements CloudDestination {
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
     this.deadBlobsQueryLimit = CloudConfig.DEFAULT_COMPACTION_QUERY_LIMIT;
     cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
-    azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType);
+    azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
   }
 
   /**
@@ -421,11 +421,14 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   /**
-   * Return corresponding {@link AzureReplicationFeed} object for specified {@link AzureReplicationFeedType}.
+   * Return corresponding {@link AzureReplicationFeed} object for specified {@link AzureReplicationFeed.FeedType}.
    * @param azureReplicationFeedType replication feed type.
+   * @param cosmosDataAccessor {@link CosmosDataAccessor} object.
+   * @param azureMetrics {@link AzureMetrics} object.
    * @return {@link AzureReplicationFeed} object.
    */
-  private AzureReplicationFeed getReplicationFeedObj(AzureReplicationFeedType azureReplicationFeedType) {
+  private static AzureReplicationFeed getReplicationFeedObj(AzureReplicationFeed.FeedType azureReplicationFeedType,
+      CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics) {
     switch (azureReplicationFeedType) {
       case COSMOS_CHANGE_FEED:
         return new CosmosChangeFeedBasedReplicationFeed(cosmosDataAccessor, azureMetrics);

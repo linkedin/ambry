@@ -13,7 +13,7 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.cloud.azure.AzureReplicationFeedType;
+import com.github.ambry.cloud.azure.AzureReplicationFeed;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.cloud.azure.CosmosUpdateTimeFindToken;
 import com.github.ambry.commons.BlobId;
@@ -112,10 +112,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final AtomicInteger blobsUploadedCounter = new AtomicInteger(0);
   private final ChangeFeed changeFeed = new ChangeFeed();
   private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
-  private final AzureReplicationFeedType azureReplicationFeedType;
+  private final AzureReplicationFeed.FeedType azureReplicationFeedType;
 
-  private final static AzureReplicationFeedType DEFAULT_AZURE_REPLICATION_FEED_TYPE =
-      AzureReplicationFeedType.COSMOS_CHANGE_FEED;
+  private final static AzureReplicationFeed.FeedType DEFAULT_AZURE_REPLICATION_FEED_TYPE =
+      AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
 
   /**
    * Instantiate {@link LatchBasedInMemoryCloudDestination}.
@@ -133,10 +133,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   /**
    * Instantiate {@link LatchBasedInMemoryCloudDestination}.
    * @param blobIdsToTrack a list of blobs that {@link LatchBasedInMemoryCloudDestination} tracks.
-   * @param azureReplicationFeedType {@link AzureReplicationFeedType} object.
+   * @param azureReplicationFeedType {@link AzureReplicationFeed.FeedType} object.
    */
   public LatchBasedInMemoryCloudDestination(List<BlobId> blobIdsToTrack,
-      AzureReplicationFeedType azureReplicationFeedType) {
+      AzureReplicationFeed.FeedType azureReplicationFeedType) {
     logger.debug("Constructing LatchBasedInMemoryCloudDestination with {} tracked blobs", blobIdsToTrack.size());
     this.blobIdsToTrack.addAll(blobIdsToTrack);
     uploadLatch = new CountDownLatch(blobIdsToTrack.size());

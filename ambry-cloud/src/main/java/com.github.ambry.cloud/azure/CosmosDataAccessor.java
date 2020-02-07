@@ -158,7 +158,7 @@ public class CosmosDataAccessor {
   }
 
   /**
-   * Query cosmos change feed to get the next set of {@code CloudBlobMetadata} objects in specified {@code partitionPath}
+   * Query Cosmos change feed to get the next set of {@code CloudBlobMetadata} objects in specified {@code partitionPath}
    * after {@code requestContinationToken}, capped by specified {@code maxFeedSize} representing the max number of items to
    * be queried from the change feed.
    * @param requestContinationToken Continuation token after which change feed is requested.
