@@ -42,9 +42,9 @@ import static org.junit.Assert.*;
 
 
 /**
- * Tests for {@link CopyingAsyncWritableChannel}.
+ * Tests for {@link RetainingAsyncWritableChannel}.
  */
-public class CopyingAsyncWritableChannelTest {
+public class RetainingAsyncWritableChannelTest {
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   @Before
@@ -58,34 +58,35 @@ public class CopyingAsyncWritableChannelTest {
   }
 
   /**
-   * Test that {@link CopyingAsyncWritableChannel} behaves as expected: chunks are copied, callback completed
-   * immediately after {@link CopyingAsyncWritableChannel#write} method completes.
+   * Test that {@link RetainingAsyncWritableChannel} behaves as expected: chunks are copied, callback completed
+   * immediately after {@link RetainingAsyncWritableChannel#write} method completes.
    */
   @Test
   public void basicsTest() throws Exception {
     List<byte[]> inputBuffers = getBuffers(1000, 20, 201, 0, 79, 1005);
-    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel();
+//    List<byte[]> inputBuffers = getBuffers(1000);
+    RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
     for (int i = 0; i < inputBuffers.size(); i++) {
       ByteBuffer buf = ByteBuffer.wrap(inputBuffers.get(i));
       writeAndCheckCallback(buf, channel, buf.remaining(), null, null);
-      checkStream(inputBuffers.subList(0, i + 1), channel);
     }
+    checkStream(inputBuffers, channel);
     channel.close();
     writeAndCheckCallback(ByteBuffer.allocate(0), channel, 0, ClosedChannelException.class, null);
   }
 
   /**
-   * Test that {@link CopyingAsyncWritableChannel} behaves as expected: chunks are copied, callback completed
-   * immediately after {@link CopyingAsyncWritableChannel#write} method completes.
+   * Test that {@link RetainingAsyncWritableChannel} behaves as expected: chunks are copied, callback completed
+   * immediately after {@link RetainingAsyncWritableChannel#write} method completes.
    */
   @Test
   public void basicsTestWithNettyByteBuf() throws Exception {
     for (boolean useCompositeByteBuf : Arrays.asList(false, true)) {
       List<byte[]> inputBuffers = getBuffers(1000, 20, 201, 0, 79, 1005);
-      CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel();
+      RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
       for (int i = 0; i < inputBuffers.size(); i++) {
         byte[] data = inputBuffers.get(i);
-        ByteBuf chunk = null;
+        ByteBuf chunk;
         if (data.length == 0) {
           chunk = Unpooled.wrappedBuffer(data);
         } else if (!useCompositeByteBuf) {
@@ -102,8 +103,8 @@ public class CopyingAsyncWritableChannelTest {
           chunk = composite;
         }
         writeAndCheckCallback(chunk, channel, chunk.readableBytes(), null, null);
-        checkStream(inputBuffers.subList(0, i + 1), channel);
       }
+      checkStream(inputBuffers, channel);
       channel.close();
       writeAndCheckCallback(ByteBuffer.allocate(0), channel, 0, ClosedChannelException.class, null);
     }
@@ -116,9 +117,8 @@ public class CopyingAsyncWritableChannelTest {
   @Test
   public void bufferModificationTest() throws Exception {
     byte[] inputBuffer = TestUtils.getRandomBytes(100);
-    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel();
+    RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
     writeAndCheckCallback(ByteBuffer.wrap(inputBuffer), channel, inputBuffer.length, null, null);
-    checkStream(Collections.singletonList(inputBuffer), channel);
     // mutate the input array and check that stream still matches the original content.
     byte[] originalBuffer = Arrays.copyOf(inputBuffer, inputBuffer.length);
     inputBuffer[50]++;
@@ -131,7 +131,7 @@ public class CopyingAsyncWritableChannelTest {
   @Test
   public void sizeLimitTest() throws Exception {
     List<byte[]> inputBuffers = getBuffers(1000, 20, 5);
-    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel(1023);
+    RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel(1023);
     for (Iterator<byte[]> iter = inputBuffers.iterator(); iter.hasNext(); ) {
       ByteBuffer buf = ByteBuffer.wrap(iter.next());
       if (iter.hasNext()) {
@@ -156,14 +156,14 @@ public class CopyingAsyncWritableChannelTest {
   }
 
   /**
-   * Test the behavior of {@link CopyingAsyncWritableChannel#write(ByteBuffer, Callback)}.
+   * Test the behavior of {@link RetainingAsyncWritableChannel#write(ByteBuffer, Callback)}.
    * @param buf the buffer to write.
    * @param channel the channel to write to.
    * @param bytesWritten the expected number of bytes written.
    * @param exceptionClass if non-null, check that the write operation encountered this exception.
    * @param errorCode if non-null, check that the cause {@link RestServiceException} has this error code.
    */
-  private static <E extends Exception> void writeAndCheckCallback(Object buf, CopyingAsyncWritableChannel channel,
+  private static <E extends Exception> void writeAndCheckCallback(Object buf, RetainingAsyncWritableChannel channel,
       long bytesWritten, Class<E> exceptionClass, RestServiceErrorCode errorCode) throws Exception {
     int remainingBeforeWrite = remainingBytes(buf);
     FutureResult<Long> callbackResult = new FutureResult<>();
@@ -200,13 +200,13 @@ public class CopyingAsyncWritableChannelTest {
   }
 
   /**
-   * Write the buffer to the given {@link CopyingAsyncWritableChannel}.
+   * Write the buffer to the given {@link RetainingAsyncWritableChannel}.
    * @param buf The buffer.
    * @param channel The given channel.
    * @param callbackResult The callback function to invoke when finishing writing.
    * @return The {@link FutureResult} returned from write method.
    */
-  private static FutureResult<Long> writeBufferToChannel(Object buf, CopyingAsyncWritableChannel channel,
+  private static FutureResult<Long> writeBufferToChannel(Object buf, RetainingAsyncWritableChannel channel,
       FutureResult<Long> callbackResult) {
     if (buf instanceof ByteBuffer) {
       return (FutureResult<Long>) channel.write((ByteBuffer) buf, callbackResult::done);
@@ -219,15 +219,16 @@ public class CopyingAsyncWritableChannelTest {
   }
 
   /**
-   * Check that the content in the stream returned by {@link CopyingAsyncWritableChannel#getContentAsInputStream()}
+   * Check that the content in the stream returned by {@link RetainingAsyncWritableChannel#consumeContentAsInputStream()}
    * matches expectations.
    * @param expectedContent the expected content.
    * @param channel the channel that contains the copied content.
    */
-  private static void checkStream(List<byte[]> expectedContent, CopyingAsyncWritableChannel channel) throws Exception {
+  private static void checkStream(List<byte[]> expectedContent, RetainingAsyncWritableChannel channel)
+      throws Exception {
     assertEquals("Bytes written does not match expected content length",
         expectedContent.stream().mapToLong(buf -> buf.length).sum(), channel.getBytesWritten());
-    try (InputStream inputStream = channel.getContentAsInputStream()) {
+    try (InputStream inputStream = channel.consumeContentAsInputStream()) {
       for (byte[] buf : expectedContent) {
         byte[] readBuf = new byte[buf.length];
         int read = 0;

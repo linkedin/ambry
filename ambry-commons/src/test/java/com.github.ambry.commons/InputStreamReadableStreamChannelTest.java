@@ -118,7 +118,7 @@ public class InputStreamReadableStreamChannelTest {
     // Read after close.
     channel = new InputStreamReadableStreamChannel(stream, EXECUTOR_SERVICE);
     channel.close();
-    CopyingAsyncWritableChannel writeChannel = new CopyingAsyncWritableChannel();
+    RetainingAsyncWritableChannel writeChannel = new RetainingAsyncWritableChannel();
     callback = new ReadIntoCallback();
     try {
       channel.readInto(writeChannel, callback).get();
@@ -132,7 +132,7 @@ public class InputStreamReadableStreamChannelTest {
 
     // Reading more than once.
     channel = new InputStreamReadableStreamChannel(stream, EXECUTOR_SERVICE);
-    writeChannel = new CopyingAsyncWritableChannel();
+    writeChannel = new RetainingAsyncWritableChannel();
     channel.readInto(writeChannel, null);
     try {
       channel.readInto(writeChannel, null);
@@ -192,7 +192,7 @@ public class InputStreamReadableStreamChannelTest {
       assertEquals("Reported size of channel incorrect", -1, channel.getSize());
     }
     assertTrue("Channel should be open", channel.isOpen());
-    CopyingAsyncWritableChannel writableChannel = new CopyingAsyncWritableChannel(src.length);
+    RetainingAsyncWritableChannel writableChannel = new RetainingAsyncWritableChannel(src.length);
     ReadIntoCallback callback = new ReadIntoCallback();
     long bytesRead = channel.readInto(writableChannel, callback).get(1, TimeUnit.SECONDS);
     callback.awaitCallback();
@@ -202,7 +202,8 @@ public class InputStreamReadableStreamChannelTest {
     assertEquals("Total bytes written does not match (callback)", src.length, callback.bytesRead);
     assertEquals("Total bytes written does not match (future)", src.length, bytesRead);
     assertArrayEquals("Data does not match", src,
-        Utils.readBytesFromStream(writableChannel.getContentAsInputStream(), (int) writableChannel.getBytesWritten()));
+        Utils.readBytesFromStream(writableChannel.consumeContentAsInputStream(),
+            (int) writableChannel.getBytesWritten()));
     channel.close();
     assertFalse("Channel should be closed", channel.isOpen());
     writableChannel.close();
