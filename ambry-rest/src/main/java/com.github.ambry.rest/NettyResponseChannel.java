@@ -380,7 +380,7 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private void logUnsatisfiedRequest(Map<PerformanceIndex, Long> requestPerfToCheck) {
     StringBuilder sb = new StringBuilder();
-    sb.append("Unsatisfied request: ").append(request.getUri()).append("; method=").append(request.getRestMethod());
+    sb.append("Unsatisfied request: uri=").append(request.getUri()).append("; method=").append(request.getRestMethod());
     if (request.getRestMethod() == RestMethod.POST) {
       sb.append("; location=").append((String) getHeader(RestUtils.Headers.LOCATION));
     }
