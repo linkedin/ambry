@@ -17,7 +17,8 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.store.Store;
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 
@@ -27,7 +28,7 @@ public class PartitionInfo {
   private final PartitionId partitionId;
   private final Store store;
   private final ReplicaId localReplicaId;
-  private final ReentrantLock lock = new ReentrantLock();
+  private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
   public PartitionInfo(List<RemoteReplicaInfo> remoteReplicas, PartitionId partitionId, Store store,
       ReplicaId localReplicaId) {
@@ -42,7 +43,12 @@ public class PartitionInfo {
   }
 
   public List<RemoteReplicaInfo> getRemoteReplicaInfos() {
-    return remoteReplicas;
+    rwLock.readLock().lock();
+    try {
+      return remoteReplicas;
+    } finally {
+      rwLock.readLock().unlock();
+    }
   }
 
   public Store getStore() {
@@ -59,7 +65,7 @@ public class PartitionInfo {
    * @return {@code true} if remote replica info is added. {@code false} if it is already present
    */
   boolean addReplicaInfoIfAbsent(RemoteReplicaInfo remoteReplicaInfo) {
-    lock.lock();
+    rwLock.writeLock().lock();
     boolean isAdded = false;
     try {
       List<RemoteReplicaInfo> foundSameReplica = remoteReplicas.stream()
@@ -70,25 +76,33 @@ public class PartitionInfo {
         isAdded = true;
       }
     } finally {
-      lock.unlock();
+      rwLock.writeLock().unlock();
     }
     return isAdded;
   }
 
   /**
    * Remove {@link RemoteReplicaInfo} from this {@link PartitionInfo} if it is present.
-   * @param remoteReplicaInfo the {@link RemoteReplicaInfo} to remove.
+   * @param remoteReplica the {@link RemoteReplicaInfo} to remove.
    * @return {@code true} if given remote replica info previously existed and is successfully removed. {@code false}, otherwise.
    */
-  boolean removeRelicaInfoIfPresent(RemoteReplicaInfo remoteReplicaInfo) {
-    lock.lock();
-    boolean isRemoved;
+  RemoteReplicaInfo removeReplicaInfoIfPresent(ReplicaId remoteReplica) {
+    rwLock.writeLock().lock();
+    RemoteReplicaInfo replicaInfoToRemove = null;
     try {
-      isRemoved = remoteReplicas.remove(remoteReplicaInfo);
+      for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicas) {
+        if (remoteReplicaInfo.getReplicaId().getDataNodeId() == remoteReplica.getDataNodeId()) {
+          replicaInfoToRemove = remoteReplicaInfo;
+          break;
+        }
+      }
+      if (replicaInfoToRemove != null) {
+        remoteReplicas.remove(replicaInfoToRemove);
+      }
     } finally {
-      lock.unlock();
+      rwLock.writeLock().unlock();
     }
-    return isRemoved;
+    return replicaInfoToRemove;
   }
 
   @Override

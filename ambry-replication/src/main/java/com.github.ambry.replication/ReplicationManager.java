@@ -53,7 +53,7 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
 /**
  * Set up replicas based on {@link ReplicationEngine} and do replication across all data centers.
  */
-public class ReplicationManager extends ReplicationEngine implements ClusterMapChangeListener {
+public class ReplicationManager extends ReplicationEngine {
   protected final CountDownLatch startupLatch = new CountDownLatch(1);
   protected boolean started = false;
   private final StoreConfig storeConfig;
@@ -71,7 +71,7 @@ public class ReplicationManager extends ReplicationEngine implements ClusterMapC
         storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager);
     this.storeConfig = storeConfig;
     this.currentNode = dataNode;
-    clusterMap.registerClusterMapListener(this);
+    clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
     // initialize all partitions
     for (ReplicaId replicaId : replicaIds) {
@@ -132,84 +132,6 @@ public class ReplicationManager extends ReplicationEngine implements ClusterMapC
       logger.error("IO error while starting replication", e);
     } finally {
       startupLatch.countDown();
-    }
-  }
-
-  /**
-   * {@inheritDoc}
-   * Note that, this method should be thread-safe because multiple threads (from different cluster change handlers) may
-   * concurrently update remote replica infos.
-   */
-  @Override
-  public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
-    // 1. wait for start() to complete
-    try {
-      startupLatch.await();
-    } catch (InterruptedException e) {
-      logger.warn("Waiting for startup is interrupted.");
-    }
-    if (started) {
-      // Read-write lock avoids contention between addReplica()/removeReplica() and onReplicaAddedOrRemoved() methods.
-      // Read lock for current method should suffice because multiple threads from cluster change handlers should be able
-      // to access partitionToPartitionInfo map. Each thead only updates PartitionInfo of certain partition and synchronization
-      // is only required within PartitionInfo. Also, addRemoteReplicaInfoToReplicaThread() is thread-safe which allows
-      // several threads from cluster change handlers to add remoteReplicaInfo
-      rwLock.readLock().lock();
-      try {
-        // 2. determine if added/removed replicas have peer replica on local node.
-        //    We skip the replica on current node because it should already be added/removed by state transition thread.
-        Set<ReplicaId> addedPeerReplicas = addedReplicas.stream()
-            .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != currentNode)
-            .collect(Collectors.toSet());
-        Set<ReplicaId> removedPeerReplicas = removedReplicas.stream()
-            .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != currentNode)
-            .collect(Collectors.toSet());
-
-        // No additional synchronization is required because cluster change handler of each dc only updates replica-threads
-        // belonging to certain dc. Hence, there is only one thread adding/removing remote replicas within a certain dc.
-
-        // 3. create replicaInfo for new remote replicas and assign them to replica-threads.
-        List<RemoteReplicaInfo> replicaInfosToAdd = new ArrayList<>();
-        for (ReplicaId remoteReplica : addedPeerReplicas) {
-          PartitionInfo partitionInfo = partitionToPartitionInfo.get(remoteReplica.getPartitionId());
-          // create findToken, remoteReplicaInfo
-          FindToken findToken =
-              this.tokenHelper.getFindTokenFactoryFromReplicaType(remoteReplica.getReplicaType()).getNewFindToken();
-          RemoteReplicaInfo remoteReplicaInfo =
-              new RemoteReplicaInfo(remoteReplica, partitionInfo.getLocalReplicaId(), partitionInfo.getStore(),
-                  findToken,
-                  TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
-                  SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
-          logger.info("Adding remote replica {} on {} to partition info.", remoteReplica.getReplicaPath(),
-              remoteReplica.getDataNodeId());
-          if (partitionInfo.addReplicaInfoIfAbsent(remoteReplicaInfo)) {
-            replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
-          }
-          replicaInfosToAdd.add(remoteReplicaInfo);
-        }
-        addRemoteReplicaInfoToReplicaThread(replicaInfosToAdd, true);
-
-        // 4. remove replicaInfo from existing partitionInfo and replica-threads
-        List<RemoteReplicaInfo> replicaInfosToRemove = new ArrayList<>();
-        for (ReplicaId remoteReplica : removedPeerReplicas) {
-          PartitionInfo partitionInfo = partitionToPartitionInfo.get(remoteReplica.getPartitionId());
-          List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>(partitionInfo.getRemoteReplicaInfos());
-          for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
-            if (remoteReplicaInfo.getReplicaId().getDataNodeId() == remoteReplica.getDataNodeId()) {
-              logger.info("Removing remote replica {} on {} from replica threads.", remoteReplica.getReplicaPath(),
-                  remoteReplica.getDataNodeId());
-              replicaInfosToRemove.add(remoteReplicaInfo);
-              if (partitionInfo.removeRelicaInfoIfPresent(remoteReplicaInfo)) {
-                replicationMetrics.removeMetricsForRemoteReplicaInfo(remoteReplicaInfo);
-              }
-              break;
-            }
-          }
-        }
-        removeRemoteReplicaInfoFromReplicaThread(replicaInfosToRemove);
-      } finally {
-        rwLock.readLock().unlock();
-      }
     }
   }
 
@@ -317,6 +239,82 @@ public class ReplicationManager extends ReplicationEngine implements ClusterMapC
     partitionToPartitionInfo.put(partition, partitionInfo);
     mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
         .add(partitionInfo);
+  }
+
+  class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {
+    /**
+     * {@inheritDoc}
+     * Note that, this method should be thread-safe because multiple threads (from different cluster change handlers) may
+     * concurrently update remote replica infos.
+     */
+    @Override
+    public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
+      // 1. wait for start() to complete
+      try {
+        startupLatch.await();
+      } catch (InterruptedException e) {
+        logger.warn("Waiting for startup is interrupted.");
+        throw new IllegalStateException("Replication manager startup is interrupted while updating remote replicas");
+      }
+      if (started) {
+        // Read-write lock avoids contention between addReplica()/removeReplica() and onReplicaAddedOrRemoved() methods.
+        // Read lock for current method should suffice because multiple threads from cluster change handlers should be able
+        // to access partitionToPartitionInfo map. Each thead only updates PartitionInfo of certain partition and synchronization
+        // is only required within PartitionInfo. Also, addRemoteReplicaInfoToReplicaThread() is thread-safe which allows
+        // several threads from cluster change handlers to add remoteReplicaInfo
+        rwLock.readLock().lock();
+        try {
+          // 2. determine if added/removed replicas have peer replica on local node.
+          //    We skip the replica on current node because it should already be added/removed by state transition thread.
+          Set<ReplicaId> addedPeerReplicas = addedReplicas.stream()
+              .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != currentNode)
+              .collect(Collectors.toSet());
+          Set<ReplicaId> removedPeerReplicas = removedReplicas.stream()
+              .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != currentNode)
+              .collect(Collectors.toSet());
+
+          // No additional synchronization is required because cluster change handler of each dc only updates replica-threads
+          // belonging to certain dc. Hence, there is only one thread adding/removing remote replicas within a certain dc.
+
+          // 3. create replicaInfo for new remote replicas and assign them to replica-threads.
+          List<RemoteReplicaInfo> replicaInfosToAdd = new ArrayList<>();
+          for (ReplicaId remoteReplica : addedPeerReplicas) {
+            PartitionInfo partitionInfo = partitionToPartitionInfo.get(remoteReplica.getPartitionId());
+            // create findToken, remoteReplicaInfo
+            FindToken findToken =
+                tokenHelper.getFindTokenFactoryFromReplicaType(remoteReplica.getReplicaType()).getNewFindToken();
+            RemoteReplicaInfo remoteReplicaInfo =
+                new RemoteReplicaInfo(remoteReplica, partitionInfo.getLocalReplicaId(), partitionInfo.getStore(),
+                    findToken,
+                    TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
+                    SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
+            logger.info("Adding remote replica {} on {} to partition info.", remoteReplica.getReplicaPath(),
+                remoteReplica.getDataNodeId());
+            if (partitionInfo.addReplicaInfoIfAbsent(remoteReplicaInfo)) {
+              replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
+              replicaInfosToAdd.add(remoteReplicaInfo);
+            }
+          }
+          addRemoteReplicaInfoToReplicaThread(replicaInfosToAdd, true);
+
+          // 4. remove replicaInfo from existing partitionInfo and replica-threads
+          List<RemoteReplicaInfo> replicaInfosToRemove = new ArrayList<>();
+          for (ReplicaId remoteReplica : removedPeerReplicas) {
+            PartitionInfo partitionInfo = partitionToPartitionInfo.get(remoteReplica.getPartitionId());
+            RemoteReplicaInfo removedReplicaInfo = partitionInfo.removeReplicaInfoIfPresent(remoteReplica);
+            if (removedReplicaInfo != null) {
+              replicationMetrics.removeMetricsForRemoteReplicaInfo(removedReplicaInfo);
+              logger.info("Removing remote replica {} on {} from replica threads.", remoteReplica.getReplicaPath(),
+                  remoteReplica.getDataNodeId());
+              replicaInfosToRemove.add(removedReplicaInfo);
+            }
+          }
+          removeRemoteReplicaInfoFromReplicaThread(replicaInfosToRemove);
+        } finally {
+          rwLock.readLock().unlock();
+        }
+      }
+    }
   }
 
   /**
