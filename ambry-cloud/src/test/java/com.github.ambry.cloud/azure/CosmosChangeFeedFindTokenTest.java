@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -21,7 +22,6 @@ import java.util.Random;
 import java.util.UUID;
 import org.junit.Test;
 
-import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 
 
@@ -169,7 +169,7 @@ public class CosmosChangeFeedFindTokenTest {
   }
 
   /**
-   * helper to seriliaze token.
+   * helper to serialize token.
    * @param token {@code AzureFindToken} object to serialize
    * @return DataInputStream serialized stream
    */
@@ -179,14 +179,11 @@ public class CosmosChangeFeedFindTokenTest {
     bufWrap.putShort(token.getVersion());
     bufWrap.putShort((short) token.getType().ordinal());
     bufWrap.putLong(token.getBytesRead());
-    bufWrap.putInt(getNullableStringLength(token.getStartContinuationToken()));
-    bufWrap.put(nullableStringToBytes(token.getEndContinuationToken()));
-    bufWrap.putInt(getNullableStringLength(token.getEndContinuationToken()));
-    bufWrap.put(nullableStringToBytes(token.getEndContinuationToken()));
+    Utils.serializeNullableString(bufWrap, token.getStartContinuationToken());
+    Utils.serializeNullableString(bufWrap, token.getEndContinuationToken());
     bufWrap.putInt(token.getIndex());
     bufWrap.putInt(token.getTotalItems());
-    bufWrap.putInt(getNullableStringLength(token.getAzureTokenRequestId()));
-    bufWrap.put(nullableStringToBytes(token.getAzureTokenRequestId()));
+    Utils.serializeNullableString(bufWrap, token.getAzureTokenRequestId());
     return new DataInputStream(new ByteArrayInputStream(buf));
   }
 }

@@ -15,6 +15,7 @@ package com.github.ambry.cloud.azure;
 
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -113,11 +114,11 @@ public class CosmosChangeFeedFindToken implements FindToken {
                   FindTokenType.CloudBased));
         }
         long bytesRead = stream.readLong();
-        String startContinuationToken = extractStringFromStream(inputStream);
-        String endContinuationToken = extractStringFromStream(inputStream);
+        String startContinuationToken = Utils.readIntString(inputStream);
+        String endContinuationToken = Utils.readIntString(inputStream);
         int index = inputStream.readInt();
         int totalItems = inputStream.readInt();
-        String azureTokenRequestId = extractStringFromStream(inputStream);
+        String azureTokenRequestId = Utils.readIntString(inputStream);
         cosmosChangeFeedFindToken =
             new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
                 azureTokenRequestId, version);
@@ -126,19 +127,6 @@ public class CosmosChangeFeedFindToken implements FindToken {
         throw new IllegalStateException("Unknown version of cloud token: " + version);
     }
     return cosmosChangeFeedFindToken;
-  }
-
-  /**
-   * Extract string from the {@link DataInputStream}.
-   * @param inputStream {@link DataInputStream} to extract String from.
-   * @return extracted String from {@code inputStream}.
-   * @throws IOException in case of exception while reading from stream.
-   */
-  private static String extractStringFromStream(DataInputStream inputStream) throws IOException {
-    int size = inputStream.readInt();
-    byte[] bytes = new byte[size];
-    inputStream.read(bytes);
-    return new String(bytes);
   }
 
   /**
@@ -151,14 +139,11 @@ public class CosmosChangeFeedFindToken implements FindToken {
     bufWrap.putShort(getVersion());
     bufWrap.putShort((short) getType().ordinal());
     bufWrap.putLong(getBytesRead());
-    bufWrap.putInt(getNullableStringLength(startContinuationToken));
-    bufWrap.put(nullableStringToBytes(startContinuationToken));
-    bufWrap.putInt(getNullableStringLength(endContinuationToken));
-    bufWrap.put(nullableStringToBytes(endContinuationToken));
+    Utils.serializeNullableString(bufWrap, startContinuationToken);
+    Utils.serializeNullableString(bufWrap, endContinuationToken);
     bufWrap.putInt(index);
     bufWrap.putInt(totalItems);
-    bufWrap.putInt(getNullableStringLength(azureTokenRequestId));
-    bufWrap.put(nullableStringToBytes(azureTokenRequestId));
+    Utils.serializeNullableString(bufWrap, azureTokenRequestId);
     return buf;
   }
 
