@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.FindResult;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -451,8 +452,9 @@ public class AzureCloudDestinationTest {
     cloudBlobMetadataList.stream().forEach(doc -> mockChangeFeedQuery.add(doc));
     FindToken findToken = new CosmosChangeFeedFindToken();
     // Run the query
-    List<CloudBlobMetadata> firstResult = new ArrayList<>();
-    findToken = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize, firstResult);
+    FindResult findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    List<CloudBlobMetadata> firstResult = findResult.getMetadataList();
+    findToken = findResult.getUpdatedFindToken();
     assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
 
     assertEquals("Find token has wrong end continuation token", ((CosmosChangeFeedFindToken) findToken).getIndex(),
@@ -461,8 +463,10 @@ public class AzureCloudDestinationTest {
         Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
     cloudBlobMetadataList = cloudBlobMetadataList.subList(firstResult.size(), cloudBlobMetadataList.size());
 
-    List<CloudBlobMetadata> secondResult = new ArrayList<>();
-    findToken = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize, secondResult);
+    findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    List<CloudBlobMetadata> secondResult = findResult.getMetadataList();
+    findToken = findResult.getUpdatedFindToken();
+
     assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
     assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
 
@@ -470,8 +474,8 @@ public class AzureCloudDestinationTest {
         Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
 
     // Rerun with max size below blob size, and make sure it returns one result
-    List<CloudBlobMetadata> thirdResult = new ArrayList<>();
-    azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize - 1, thirdResult);
+    findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize - 1);
+    List<CloudBlobMetadata> thirdResult = findResult.getMetadataList();
     assertEquals("Expected one result", 1, thirdResult.size());
   }
 
@@ -510,9 +514,9 @@ public class AzureCloudDestinationTest {
         mockResponse);
     CosmosUpdateTimeFindToken findToken = new CosmosUpdateTimeFindToken();
     // Run the query
-    List<CloudBlobMetadata> firstResult = new ArrayList<>();
-    findToken = (CosmosUpdateTimeFindToken) azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken,
-        maxTotalSize, firstResult);
+    FindResult findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    List<CloudBlobMetadata> firstResult = findResult.getMetadataList();
+    findToken = (CosmosUpdateTimeFindToken) findResult.getUpdatedFindToken();
     assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
 
     docList = docList.subList(firstResult.size(), docList.size());
@@ -522,17 +526,16 @@ public class AzureCloudDestinationTest {
         new HashSet<>(Collections.singletonList(firstResult.get(firstResult.size() - 1).getId())));
 
     mockObservableForQuery(docList, mockResponse);
-    List<CloudBlobMetadata> secondResult = new ArrayList<>();
-    findToken = (CosmosUpdateTimeFindToken) azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken,
-        maxTotalSize, secondResult);
+    findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    List<CloudBlobMetadata> secondResult = findResult.getMetadataList();
+    findToken = (CosmosUpdateTimeFindToken) findResult.getUpdatedFindToken();
     assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
     assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
 
     mockObservableForQuery(docList, mockResponse);
-    List<CloudBlobMetadata> finalResult = new ArrayList<>();
-    azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2, finalResult);
+    findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2);
     // Rerun with max size below blob size, and make sure it returns one result
-    assertEquals("Expected one result", 1, finalResult.size());
+    assertEquals("Expected one result", 1, findResult.getMetadataList().size());
   }
 
   /**
@@ -568,9 +571,9 @@ public class AzureCloudDestinationTest {
         mockResponse);
     CosmosUpdateTimeFindToken findToken = new CosmosUpdateTimeFindToken();
     // Run the query
-    List<CloudBlobMetadata> firstResult = new ArrayList<>();
-    findToken = (CosmosUpdateTimeFindToken) azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken,
-        maxTotalSize, firstResult);
+    FindResult findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    List<CloudBlobMetadata> firstResult = findResult.getMetadataList();
+    findToken = (CosmosUpdateTimeFindToken) findResult.getUpdatedFindToken();
     assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
 
     assertEquals("Find token has wrong last update time", findToken.getLastUpdateTime(),
@@ -580,10 +583,9 @@ public class AzureCloudDestinationTest {
         resultBlobIdSet);
 
     mockObservableForQuery(docList, mockResponse);
-    List<CloudBlobMetadata> secondResult = new ArrayList<>();
-    CosmosUpdateTimeFindToken secondFindToken =
-        (CosmosUpdateTimeFindToken) azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken,
-            maxTotalSize, secondResult);
+    findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    List<CloudBlobMetadata> secondResult = findResult.getMetadataList();
+    CosmosUpdateTimeFindToken secondFindToken = (CosmosUpdateTimeFindToken) findResult.getUpdatedFindToken();
     assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
     assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
 
@@ -595,16 +597,15 @@ public class AzureCloudDestinationTest {
 
     mockObservableForQuery(docList, mockResponse);
     // Rerun with max size below blob size, and make sure it returns one result
-    ArrayList<CloudBlobMetadata> finalResult = new ArrayList<>();
-    azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2, finalResult);
+    findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2);
+    List<CloudBlobMetadata> finalResult = findResult.getMetadataList();
     assertEquals("Expected one result", 1, finalResult.size());
 
     mockObservableForQuery(docList, mockResponse);
     // Rerun final time, and make sure that it returns all the remaining blobs
-    List<CloudBlobMetadata> thirdResult = new ArrayList<>();
-    CosmosUpdateTimeFindToken thirdFindToken =
-        (CosmosUpdateTimeFindToken) azureDest.findEntriesSince(blobId.getPartition().toPathString(), secondFindToken,
-            maxTotalSize, thirdResult);
+    findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), secondFindToken, maxTotalSize);
+    List<CloudBlobMetadata> thirdResult = findResult.getMetadataList();
+    CosmosUpdateTimeFindToken thirdFindToken = (CosmosUpdateTimeFindToken) findResult.getUpdatedFindToken();
     assertEquals("Unexpected doc count", totalBlobs - (firstResult.size() + secondResult.size()), thirdResult.size());
     assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size() + secondResult.size()),
         thirdResult.get(0).getId());

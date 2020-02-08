@@ -20,6 +20,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
@@ -246,11 +247,10 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public FindToken findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
-      List<CloudBlobMetadata> nextEntries) throws CloudStorageException {
+  public FindResult findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries)
+      throws CloudStorageException {
     try {
-      return azureReplicationFeed.getNextEntriesAndUpdatedToken(findToken, nextEntries, maxTotalSizeOfEntries,
-          partitionPath);
+      return azureReplicationFeed.getNextEntriesAndUpdatedToken(findToken, maxTotalSizeOfEntries, partitionPath);
     } catch (DocumentClientException dex) {
       throw toCloudStorageException("Failed to query blobs for partition " + partitionPath, dex);
     }

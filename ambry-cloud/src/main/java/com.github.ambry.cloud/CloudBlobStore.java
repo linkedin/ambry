@@ -416,17 +416,16 @@ class CloudBlobStore implements Store {
   @Override
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     try {
-      List<CloudBlobMetadata> results = new ArrayList<>();
-      FindToken outputToken =
-          cloudDestination.findEntriesSince(partitionId.toPathString(), token, maxTotalSizeOfEntries, results);
-      if (results.isEmpty()) {
-        return new FindInfo(Collections.emptyList(), outputToken);
+      FindResult findResult =
+          cloudDestination.findEntriesSince(partitionId.toPathString(), token, maxTotalSizeOfEntries);
+      if (findResult.getMetadataList().isEmpty()) {
+        return new FindInfo(Collections.emptyList(), findResult.getUpdatedFindToken());
       }
       List<MessageInfo> messageEntries = new ArrayList<>();
-      for (CloudBlobMetadata metadata : results) {
+      for (CloudBlobMetadata metadata : findResult.getMetadataList()) {
         messageEntries.add(getMessageInfoFromMetadata(metadata));
       }
-      return new FindInfo(messageEntries, outputToken);
+      return new FindInfo(messageEntries, findResult.getUpdatedFindToken());
     } catch (CloudStorageException | IOException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
     }

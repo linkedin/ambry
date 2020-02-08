@@ -18,6 +18,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.FindResult;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -333,15 +334,14 @@ public class AzureIntegrationTest {
 
     FindToken findToken = findTokenFactory.getNewFindToken();
     // Call findEntriesSince in a loop until no new entries are returned
-    List<CloudBlobMetadata> results;
+    FindResult findResult;
     int numQueries = 0;
     int totalBlobsReturned = 0;
     do {
-      results = new ArrayList<>();
-      findToken = azureDest.findEntriesSince(partitionPath, findToken, maxTotalSize, results);
+      findResult = azureDest.findEntriesSince(partitionPath, findToken, maxTotalSize);
       numQueries++;
-      totalBlobsReturned += results.size();
-    } while (!results.isEmpty());
+      totalBlobsReturned += findResult.getMetadataList().size();
+    } while (!findResult.getMetadataList().isEmpty());
 
     assertEquals("Wrong number of queries", expectedNumQueries, numQueries);
     assertEquals("Wrong number of blobs", blobCount, totalBlobsReturned);

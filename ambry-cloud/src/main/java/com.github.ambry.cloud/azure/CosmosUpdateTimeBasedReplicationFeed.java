@@ -14,11 +14,13 @@
 package com.github.ambry.cloud.azure;
 
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.FindResult;
 import com.github.ambry.replication.FindToken;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
 import com.microsoft.azure.cosmosdb.SqlParameter;
 import com.microsoft.azure.cosmosdb.SqlParameterCollection;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Set;
@@ -53,9 +55,8 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
   }
 
   @Override
-  public CosmosUpdateTimeFindToken getNextEntriesAndUpdatedToken(FindToken curfindToken,
-      List<CloudBlobMetadata> nextEntries, long maxTotalSizeOfEntries, String partitionPath)
-      throws DocumentClientException {
+  public FindResult getNextEntriesAndUpdatedToken(FindToken curfindToken, long maxTotalSizeOfEntries,
+      String partitionPath) throws DocumentClientException {
     CosmosUpdateTimeFindToken findToken = (CosmosUpdateTimeFindToken) curfindToken;
     SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
         new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, AzureCloudDestination.getFindSinceQueryLimit()),
@@ -63,14 +64,14 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
     List<CloudBlobMetadata> queryResults =
         cosmosDataAccessor.queryMetadata(partitionPath, entriesSinceQuery, azureMetrics.findSinceQueryTime);
     if (queryResults.isEmpty()) {
-      return findToken;
+      return new FindResult(new ArrayList<>(), findToken);
     }
     if (queryResults.get(0).getLastUpdateTime() == findToken.getLastUpdateTime()) {
       filterOutLastReadBlobs(queryResults, findToken.getLastUpdateTimeReadBlobIds(), findToken.getLastUpdateTime());
     }
-    List<CloudBlobMetadata> cappedRsults = CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
-    nextEntries.addAll(cappedRsults);
-    return CosmosUpdateTimeFindToken.getUpdatedToken(findToken, cappedRsults);
+    List<CloudBlobMetadata> cappedResults =
+        CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
+    return new FindResult(cappedResults, CosmosUpdateTimeFindToken.getUpdatedToken(findToken, cappedResults));
   }
 
   /**

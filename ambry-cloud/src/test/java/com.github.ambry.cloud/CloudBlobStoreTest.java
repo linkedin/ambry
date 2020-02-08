@@ -306,8 +306,8 @@ public class CloudBlobStoreTest {
         new CosmosChangeFeedFindToken(blobSize * numBlobsFound, "start", "end", 0, numBlobsFound,
             UUID.randomUUID().toString());
     //create a list of 10 blobs with total size less than maxSize, and return it as part of query ChangeFeed
-    when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong(), anyList())).thenReturn(
-        cosmosChangeFeedFindToken);
+    when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong())).thenReturn(
+        new FindResult(Collections.emptyList(), cosmosChangeFeedFindToken));
     CosmosChangeFeedFindToken startToken = new CosmosChangeFeedFindToken();
     FindInfo findInfo = store.findEntriesSince(startToken, maxTotalSize);
     CosmosChangeFeedFindToken outputToken = (CosmosChangeFeedFindToken) findInfo.getFindToken();
@@ -321,8 +321,8 @@ public class CloudBlobStoreTest {
     cosmosChangeFeedFindToken =
         new CosmosChangeFeedFindToken(blobSize * 2 * numBlobsFound, "start2", "end2", 0, numBlobsFound,
             UUID.randomUUID().toString());
-    when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong(), anyList())).thenReturn(
-        cosmosChangeFeedFindToken);
+    when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong())).thenReturn(
+        new FindResult(Collections.emptyList(), cosmosChangeFeedFindToken));
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
     outputToken = (CosmosChangeFeedFindToken) findInfo.getFindToken();
     assertEquals(blobSize * 2 * numBlobsFound, outputToken.getBytesRead());
@@ -331,8 +331,8 @@ public class CloudBlobStoreTest {
 
     // 3) call find with new token, no more data, verify token unchanged
     metadataList = Collections.emptyList();
-    when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong(), anyList())).thenReturn(
-        outputToken);
+    when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong())).thenReturn(
+        new FindResult(Collections.emptyList(), outputToken));
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
     assertTrue(findInfo.getMessageEntries().isEmpty());
     FindToken finalToken = findInfo.getFindToken();

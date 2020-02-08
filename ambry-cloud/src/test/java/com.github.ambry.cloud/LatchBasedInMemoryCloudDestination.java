@@ -229,13 +229,12 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public FindToken findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
-      List<CloudBlobMetadata> nextEntries) {
+  public FindResult findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries) {
     switch (azureReplicationFeedType) {
       case COSMOS_CHANGE_FEED:
-        return findChangeFeedBasedEntries(partitionPath, findToken, maxTotalSizeOfEntries, nextEntries);
+        return findChangeFeedBasedEntries(partitionPath, findToken, maxTotalSizeOfEntries);
       case COSMOS_UPDATE_TIME:
-        return findUpdateTimeBasedEntries(partitionPath, findToken, maxTotalSizeOfEntries, nextEntries);
+        return findUpdateTimeBasedEntries(partitionPath, findToken, maxTotalSizeOfEntries);
       default:
         throw new IllegalArgumentException(
             String.format("Unknown azure replication feed type: %s", azureReplicationFeedType));
@@ -248,12 +247,13 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
    * @param partitionPath the partition to query.
    * @param findToken the {@link com.github.ambry.replication.FindToken} specifying the boundary for the query.
    * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
-   * @param nextEntries a List of {@link CloudBlobMetadata} referencing the blobs returned by the query.
-   * @return updated {@link com.github.ambry.replication.FindToken} object.
+   * @return {@link FindResult} instance that contains updated {@link CosmosChangeFeedFindToken} object which can act as a bookmark for
+   * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
    * @throws CloudStorageException
    */
-  private FindToken findChangeFeedBasedEntries(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
-      List<CloudBlobMetadata> nextEntries) {
+  private FindResult findChangeFeedBasedEntries(String partitionPath, FindToken findToken,
+      long maxTotalSizeOfEntries) {
+    List<CloudBlobMetadata> nextEntries = new ArrayList<>();
     String continuationToken = ((CosmosChangeFeedFindToken) findToken).getEndContinuationToken();
     List<BlobId> blobIds = new ArrayList<>();
     getFeed(continuationToken, maxTotalSizeOfEntries, blobIds);
@@ -266,7 +266,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
               createEndContinuationToken(blobIds), 0, blobIds.size(), changeFeed.getReqUuid(),
               cosmosChangeFeedFindToken.getVersion());
     }
-    return cosmosChangeFeedFindToken;
+    return new FindResult(nextEntries, cosmosChangeFeedFindToken);
   }
 
   /**
@@ -275,12 +275,13 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
    * @param partitionPath the partition to query.
    * @param findToken the {@link com.github.ambry.replication.FindToken} specifying the boundary for the query.
    * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
-   * @param nextEntries a List of {@link CloudBlobMetadata} referencing the blobs returned by the query.
-   * @return updated {@link com.github.ambry.replication.FindToken} object.
+   * @return {@link FindResult} instance that contains updated {@link CosmosUpdateTimeFindToken} object which can act as a bookmark for
+   * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
    * @throws CloudStorageException
    */
-  private FindToken findUpdateTimeBasedEntries(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
-      List<CloudBlobMetadata> nextEntries) {
+  private FindResult findUpdateTimeBasedEntries(String partitionPath, FindToken findToken,
+      long maxTotalSizeOfEntries) {
+    List<CloudBlobMetadata> nextEntries = new ArrayList<>();
     CosmosUpdateTimeFindToken cosmosUpdateTimeFindToken = (CosmosUpdateTimeFindToken) findToken;
     List<CloudBlobMetadata> entries = new LinkedList<>();
     for (BlobId blobId : map.keySet()) {
@@ -295,7 +296,8 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
     List<CloudBlobMetadata> cappedRsults = CloudBlobMetadata.capMetadataListBySize(entries, maxTotalSizeOfEntries);
     nextEntries.addAll(cappedRsults);
-    return CosmosUpdateTimeFindToken.getUpdatedToken(cosmosUpdateTimeFindToken, cappedRsults);
+    return new FindResult(nextEntries,
+        CosmosUpdateTimeFindToken.getUpdatedToken(cosmosUpdateTimeFindToken, cappedRsults));
   }
 
   private String createEndContinuationToken(List<BlobId> blobIds) {

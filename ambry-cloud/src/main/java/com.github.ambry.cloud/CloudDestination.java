@@ -87,12 +87,12 @@ public interface CloudDestination {
    * @param partitionPath the partition to query.
    * @param findToken the {@link com.github.ambry.replication.FindToken} specifying the boundary for the query.
    * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
-   * @param nextEntries a List of {@link CloudBlobMetadata} referencing the blobs returned by the query.
-   * @return updated {@link com.github.ambry.replication.FindToken} object.
+   * @return {@link FindResult} instance that contains updated {@link FindToken} object which can act as a bookmark for
+   * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries referencing the blobs returned by the query.
    * @throws CloudStorageException
    */
-  FindToken findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries,
-      List<CloudBlobMetadata> nextEntries) throws CloudStorageException;
+  FindResult findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries)
+      throws CloudStorageException;
 
   /**
    * Permanently delete the specified blobs in the cloud destination.

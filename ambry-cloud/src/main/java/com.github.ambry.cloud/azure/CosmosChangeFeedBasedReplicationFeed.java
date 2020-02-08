@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.FindResult;
 import com.github.ambry.replication.FindToken;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
 import java.util.ArrayList;
@@ -115,7 +116,7 @@ public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFee
    * @param partitionId Partition for which change feed entries have to be returned.
    * @return updated {@link CosmosChangeFeedFindToken} after processing the next set of entries.
    */
-  public CosmosChangeFeedFindToken getNextEntriesAndToken(CosmosChangeFeedFindToken cosmosChangeFeedFindToken,
+  private CosmosChangeFeedFindToken getNextEntriesAndToken(CosmosChangeFeedFindToken cosmosChangeFeedFindToken,
       List<CloudBlobMetadata> results, long maxEntriesSize, String partitionId) throws DocumentClientException {
     int index = cosmosChangeFeedFindToken.getIndex();
     if (!changeFeedCache.containsKey(partitionId) || !isCacheValid(partitionId, cosmosChangeFeedFindToken)) {
@@ -153,11 +154,13 @@ public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFee
   }
 
   @Override
-  public CosmosChangeFeedFindToken getNextEntriesAndUpdatedToken(FindToken curfindToken,
-      List<CloudBlobMetadata> nextEntries, long maxTotalSizeOfEntries, String partitionPath)
-      throws DocumentClientException {
-    return getNextEntriesAndToken((CosmosChangeFeedFindToken) curfindToken, nextEntries, maxTotalSizeOfEntries,
-        partitionPath);
+  public FindResult getNextEntriesAndUpdatedToken(FindToken curfindToken, long maxTotalSizeOfEntries,
+      String partitionPath) throws DocumentClientException {
+    List<CloudBlobMetadata> nextEntries = new ArrayList<>();
+    FindToken updatedToken =
+        getNextEntriesAndToken((CosmosChangeFeedFindToken) curfindToken, nextEntries, maxTotalSizeOfEntries,
+            partitionPath);
+    return new FindResult(nextEntries, updatedToken);
   }
 
   /**

@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.FindResult;
 import com.github.ambry.replication.FindToken;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
 import java.util.List;
@@ -37,11 +38,11 @@ public interface AzureReplicationFeed {
    * from the specified {@link FindToken} such that total size of all blobs in the entries are less or equal to {@code maxTotalSizeOfEntries}.
    * This method should return at least one blob, if exists, after {@code curfindToken}, irrespective of {@code maxTotalSizeOfEntries} requirement.
    * @param curfindToken current {@link FindToken} object that acts as a bookmark to return blobs after.
-   * @param nextEntries {@link List} to populate next {@link CloudBlobMetadata} objects in.
    * @param maxTotalSizeOfEntries max total size of all the {@link CloudBlobMetadata} objects returned.
    * @param partitionPath partition of the blobs.
-   * @return Updated {@link FindToken} object which can act as a bookmark for subsequent requests.
+   * @return {@link FindResult} instance that contains updated {@link FindToken} object which can act as a bookmark for
+   * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
    */
-  FindToken getNextEntriesAndUpdatedToken(FindToken curfindToken, List<CloudBlobMetadata> nextEntries,
-      long maxTotalSizeOfEntries, String partitionPath) throws DocumentClientException;
+  FindResult getNextEntriesAndUpdatedToken(FindToken curfindToken, long maxTotalSizeOfEntries, String partitionPath)
+      throws DocumentClientException;
 }
