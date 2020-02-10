@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
+import com.microsoft.azure.cosmosdb.AccessCondition;
 import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
 import com.microsoft.azure.cosmosdb.DocumentCollection;
@@ -25,6 +26,7 @@ import com.microsoft.azure.cosmosdb.PartitionKey;
 import com.microsoft.azure.cosmosdb.RequestOptions;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.internal.HttpConstants;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -41,6 +43,7 @@ public class CosmosDataAccessor {
   private final AsyncDocumentClient asyncDocumentClient;
   private final String cosmosCollectionLink;
   private final AzureMetrics azureMetrics;
+  private Callable<Void> updateCallback = null;
 
   /** Production constructor */
   CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, AzureCloudConfig azureCloudConfig,
@@ -53,6 +56,11 @@ public class CosmosDataAccessor {
     this.asyncDocumentClient = asyncDocumentClient;
     this.cosmosCollectionLink = cosmosCollectionLink;
     this.azureMetrics = azureMetrics;
+  }
+
+  /** Visible for testing */
+  void setUpdateCallback(Callable callback) {
+    this.updateCallback = callback;
   }
 
   /**
@@ -109,16 +117,50 @@ public class CosmosDataAccessor {
   }
 
   /**
-   * Replace the blob metadata document in the CosmosDB collection, retrying as necessary.
+   * Update the blob metadata document in the CosmosDB collection, retrying as necessary.
    * @param blobId the {@link BlobId} for which metadata is replaced.
-   * @param doc the blob metadata document.
+   * @param fieldName the metadata field to update.
+   * @param value the new value for the field.
    * @return the {@link ResourceResponse} returned by the operation, if successful.
+   * Returns {@Null} if the document is not found or the field already has the specified value.
    * @throws DocumentClientException if the operation failed.
    */
-  ResourceResponse<Document> replaceMetadata(BlobId blobId, Document doc) throws DocumentClientException {
+  ResourceResponse<Document> updateMetadata(BlobId blobId, String fieldName, Object value)
+      throws DocumentClientException {
+    ResourceResponse<Document> response = readMetadata(blobId);
+    Document doc = response.getResource();
+    if (doc == null) {
+      logger.warn("Blob metadata record not found: {}", blobId.getID());
+      return null;
+    }
+    // Update only if value has changed
+    if (value.equals(doc.get(fieldName))) {
+      logger.debug("No change in value for {} in blob {}", fieldName, blobId.getID());
+      return null;
+    }
+
+    if (updateCallback != null) {
+      try {
+        updateCallback.call();
+      } catch (Exception ex) {
+      }
+    }
+
+    doc.set(fieldName, value);
     RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
-    return executeCosmosAction(() -> asyncDocumentClient.replaceDocument(doc, options).toBlocking().single(),
-        azureMetrics.documentUpdateTime);
+    // Set condition to ensure we don't clobber a concurrent update
+    AccessCondition accessCondition = new AccessCondition();
+    accessCondition.setCondition(doc.getETag());
+    options.setAccessCondition(accessCondition);
+    try {
+      return executeCosmosAction(() -> asyncDocumentClient.replaceDocument(doc, options).toBlocking().single(),
+          azureMetrics.documentUpdateTime);
+    } catch (DocumentClientException e) {
+      if (e.getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
+        azureMetrics.blobUpdateConflictCount.inc();
+      }
+      throw e;
+    }
   }
 
   /**
@@ -140,12 +182,13 @@ public class CosmosDataAccessor {
           asyncDocumentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions).toBlocking().getIterator();
       operationTimer.stop();
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
+      double requestCharge = 0;
       while (iterator.hasNext()) {
-        iterator.next()
-            .getResults()
-            .iterator()
-            .forEachRemaining(doc -> metadataList.add(createMetadataFromDocument(doc)));
+        FeedResponse<Document> response = iterator.next();
+        requestCharge += response.getRequestCharge();
+        response.getResults().iterator().forEachRemaining(doc -> metadataList.add(createMetadataFromDocument(doc)));
       }
+      // TODO: Track request charge per record (requestCharge / metadataList.size())
       return metadataList;
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {

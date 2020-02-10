@@ -86,7 +86,6 @@ class AzureCloudDestination implements CloudDestination {
   private final AsyncDocumentClient asyncDocumentClient;
   private final CosmosDataAccessor cosmosDataAccessor;
   private final AzureMetrics azureMetrics;
-  private final String clusterName;
   private final long retentionPeriodMs;
   private final int deadBlobsQueryLimit;
 
@@ -105,7 +104,6 @@ class AzureCloudDestination implements CloudDestination {
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =
         new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
-    this.clusterName = clusterName;
     // Set up CosmosDB connection, including retry options and any proxy setting
     ConnectionPolicy connectionPolicy = new ConnectionPolicy();
     RetryOptions retryOptions = new RetryOptions();
@@ -144,7 +142,6 @@ class AzureCloudDestination implements CloudDestination {
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
-    this.clusterName = clusterName;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
     this.deadBlobsQueryLimit = CloudConfig.DEFAULT_COMPACTION_QUERY_LIMIT;
@@ -322,20 +319,11 @@ class AzureCloudDestination implements CloudDestination {
 
     try {
       if (!azureBlobDataAccessor.updateBlobMetadata(blobId, fieldName, value)) {
+        // TODO: what if this is a retry where ABS has been updated but Cosmos has not?
         return false;
       }
 
-      ResourceResponse<Document> response = cosmosDataAccessor.readMetadata(blobId);
-      Document doc = response.getResource();
-      if (doc == null) {
-        logger.warn("Blob metadata record not found: {}", blobId.getID());
-        return false;
-      }
-      // Update only if value has changed
-      if (!value.equals(doc.get(fieldName))) {
-        doc.set(fieldName, value);
-        cosmosDataAccessor.replaceMetadata(blobId, doc);
-      }
+      cosmosDataAccessor.updateMetadata(blobId, fieldName, value);
       logger.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
       azureMetrics.blobUpdatedCount.inc();
       return true;
@@ -430,6 +418,14 @@ class AzureCloudDestination implements CloudDestination {
    */
   AzureBlobDataAccessor getAzureBlobDataAccessor() {
     return azureBlobDataAccessor;
+  }
+
+  /**
+   * Visible for test
+   * @return the {@link AzureMetrics}
+   */
+  AzureMetrics getAzureMetrics() {
+    return azureMetrics;
   }
 
   /**

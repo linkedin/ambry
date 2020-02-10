@@ -32,6 +32,7 @@ public class AzureMetrics {
   public static final String BLOB_DOWNLOAD_TIME = "BlobDownloadTime";
   public static final String BLOB_UPDATE_TIME = "BlobUpdateTime";
   public static final String BLOB_UPDATED_COUNT = "BlobUpdatedCount";
+  public static final String BLOB_UPDATE_CONFLICT_COUNT = "BlobUpdateConflictCount";
   public static final String DOCUMENT_CREATE_TIME = "DocumentCreateTime";
   public static final String DOCUMENT_READ_TIME = "DocumentReadTime";
   public static final String DOCUMENT_UPDATE_TIME = "DocumentUpdateTime";
@@ -62,6 +63,8 @@ public class AzureMetrics {
   public final Counter blobDownloadErrorCount;
   public final Counter blobUploadConflictCount;
   public final Counter blobUpdatedCount;
+  /** Attempts to update blob metadata that fail due to concurrent update (412) */
+  public final Counter blobUpdateConflictCount;
   public final Timer blobUploadTime;
   public final Timer blobDownloadTime;
   public final Timer blobUpdateTime;
@@ -101,6 +104,8 @@ public class AzureMetrics {
     blobUploadConflictCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_CONFLICT_COUNT));
     blobUpdatedCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATED_COUNT));
+    blobUpdateConflictCount =
+        registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_CONFLICT_COUNT));
     blobUploadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_TIME));
     blobDownloadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_TIME));
     blobUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TIME));
