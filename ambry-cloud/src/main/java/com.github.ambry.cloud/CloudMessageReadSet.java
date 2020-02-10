@@ -72,7 +72,7 @@ class CloudMessageReadSet implements MessageReadSet {
   @Override
   public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
     // TODO: read from cloud based store and write to AsyncWritableChannel is needed in the future.
-    throw new NotImplementedException();
+    throw new UnsupportedOperationException();
   }
 
   @Override

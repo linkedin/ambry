@@ -23,7 +23,6 @@ import com.github.ambry.rest.Http2ClientChannelInitializer;
 import com.github.ambry.rest.Http2ClientStreamInitializer;
 import com.github.ambry.rest.Http2ResponseHandler;
 import com.github.ambry.rest.NettySslHttp2Factory;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.bootstrap.Bootstrap;
