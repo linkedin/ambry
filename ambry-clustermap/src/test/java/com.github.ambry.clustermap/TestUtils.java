@@ -865,14 +865,13 @@ public class TestUtils {
           updateJsonPartitionLayout(partitionClass, partitionState), clusterMapConfig);
     }
 
-    void addNewPartition(TestHardwareLayout testHardwareLayout, List<DataNode> dataNodes, String partitionClass,
-        String localDc) {
-      this.partitionCount += 1;
-      this.partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(),
-          addPartitionAndUpdateJsonPartitionLayout(partitionClass, dataNodes), localDc);
+    void addNewPartition(TestHardwareLayout testHardwareLayout, List<DataNode> dataNodes, String partitionClass) {
+      partitionCount += 1;
+      partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(),
+          addPartitionAndUpdateJsonPartitionLayout(partitionClass, dataNodes), clusterMapConfig);
     }
 
-    void removeReplicaFromPartition(Replica replicaToRemove, String localDc) {
+    void removeReplicaFromPartition(Replica replicaToRemove) {
       version += 1;
       String partitionName = replicaToRemove.getPartitionId().toPathString();
       int index;
@@ -901,10 +900,11 @@ public class TestUtils {
       JSONObject jsonPartitionLayout =
           getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), version, partitionCount,
               jsonPartitions);
-      this.partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), jsonPartitionLayout, localDc);
+      this.partitionLayout =
+          new PartitionLayout(testHardwareLayout.getHardwareLayout(), jsonPartitionLayout, clusterMapConfig);
     }
 
-    void addReplicaToPartition(DataNode newReplicaNode, Partition partition, String localDc) {
+    void addReplicaToPartition(DataNode newReplicaNode, Partition partition) {
       version += 1;
       int index;
       for (index = 0; index < jsonPartitions.length(); ++index) {
@@ -922,7 +922,8 @@ public class TestUtils {
       JSONObject jsonPartitionLayout =
           getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), version, partitionCount,
               jsonPartitions);
-      this.partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), jsonPartitionLayout, localDc);
+      this.partitionLayout =
+          new PartitionLayout(testHardwareLayout.getHardwareLayout(), jsonPartitionLayout, clusterMapConfig);
     }
 
     private JSONObject addPartitionAndUpdateJsonPartitionLayout(String partitionClass,

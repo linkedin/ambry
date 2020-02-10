@@ -298,7 +298,7 @@ public class ClusterChangeHandlerTest {
     nodesToHostNewPartition.addAll(Arrays.asList(localDcNode1, localDcNode2));
     nodesToHostNewPartition.addAll(Arrays.asList(remoteDcNode1, remoteDcNode2));
     nodesToHostNewPartition.addAll(newAddedNodes);
-    testPartitionLayout.addNewPartition(testHardwareLayout, nodesToHostNewPartition, DEFAULT_PARTITION_CLASS, localDc);
+    testPartitionLayout.addNewPartition(testHardwareLayout, nodesToHostNewPartition, DEFAULT_PARTITION_CLASS);
 
     // write new HardwareLayout and PartitionLayout into files
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
@@ -392,7 +392,7 @@ public class ClusterChangeHandlerTest {
         .get();
     DataNode nodeToAddReplica =
         localDatacenter.getDataNodes().stream().filter(node -> !localDcNodes.contains(node)).findFirst().get();
-    testPartitionLayout.addReplicaToPartition(nodeToAddReplica, testPartition, localDc);
+    testPartitionLayout.addReplicaToPartition(nodeToAddReplica, testPartition);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // 3. We upgrade helix by adding new replica to the chosen node in local dc. This is to mock "replica addition" on
     //    chosen node and chosen node updates its instanceConfig in Helix. There should be 7 (= 6+1) replicas in the
@@ -411,7 +411,7 @@ public class ClusterChangeHandlerTest {
         .filter(r -> r.getDataNodeId().getDatacenterName().equals(localDc) && r.getDataNodeId() != nodeToAddReplica)
         .findFirst()
         .get();
-    testPartitionLayout.removeReplicaFromPartition(oldReplica, localDc);
+    testPartitionLayout.removeReplicaFromPartition(oldReplica);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // 5. upgrade Helix again to mock one of the old replicas is removed and the node (where replica previously resides)
     //    updates the InstanceConfig in Helix. The number of replicas should become 6 again.
