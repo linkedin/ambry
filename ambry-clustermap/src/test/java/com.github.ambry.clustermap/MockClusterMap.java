@@ -62,6 +62,7 @@ public class MockClusterMap implements ClusterMap {
   private String localDatacenterName;
 
   private final MockPartitionId specialPartition;
+  private ClusterMapChangeListener clusterMapChangeListener = null;
 
   private RuntimeException exceptionOnSnapshot = null;
 
@@ -249,7 +250,7 @@ public class MockClusterMap implements ClusterMap {
     return ports;
   }
 
-  protected ArrayList<Port> getListOfPorts(int port, int sslPort) {
+  public static ArrayList<Port> getListOfPorts(int port, int sslPort) {
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(port, PortType.PLAINTEXT));
     ports.add(new Port(sslPort, PortType.SSL));
@@ -538,8 +539,20 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
+  public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
+    this.clusterMapChangeListener = clusterMapChangeListener;
+  }
+
+  @Override
   public void close() {
     // No-op.
+  }
+
+  /**
+   * @return {@link ClusterMapChangeListener} registered to this cluster map.
+   */
+  public ClusterMapChangeListener getClusterMapChangeListener() {
+    return clusterMapChangeListener;
   }
 
   /**

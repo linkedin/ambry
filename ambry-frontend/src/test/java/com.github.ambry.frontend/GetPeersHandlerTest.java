@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -384,8 +385,11 @@ class TailoredPeersClusterMap implements ClusterMap {
   }
 
   @Override
-  public void close() {
+  public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
+  }
 
+  @Override
+  public void close() {
   }
 
   @Override

@@ -153,6 +153,11 @@ class StaticClusterManager implements ClusterMap {
     return metricRegistry;
   }
 
+  @Override
+  public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
+    throw new UnsupportedOperationException("Registering clustermap listener is not supported in static clustermap");
+  }
+
   // Administrative API
   // -----------------------
 
@@ -535,8 +540,7 @@ class StaticClusterManager implements ClusterMap {
 
   @Override
   public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
-    throw new UnsupportedOperationException(
-        "Adding new replica is currently not supported in static cluster manager.");
+    throw new UnsupportedOperationException("Adding new replica is currently not supported in static cluster manager.");
   }
 
   @Override
