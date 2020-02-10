@@ -128,7 +128,6 @@ public class AmbryServerRequestsTest {
   private final MockStorageManager storageManager;
   private final MockReplicationManager replicationManager;
   private final MockStatsManager statsManager;
-  private final AmbryServerRequests ambryRequests;
   private final MockRequestResponseChannel requestResponseChannel = new MockRequestResponseChannel();
   private final Set<StoreKey> validKeysInStore = new HashSet<>();
   private final Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
@@ -138,6 +137,7 @@ public class AmbryServerRequestsTest {
   private final ReplicaStatusDelegate mockDelegate = Mockito.mock(ReplicaStatusDelegate.class);
   private final boolean putRequestShareMemory;
   private final boolean validateRequestOnStoreState;
+  private AmbryServerRequests ambryRequests;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -149,15 +149,7 @@ public class AmbryServerRequestsTest {
     this.putRequestShareMemory = putRequestShareMemory;
     this.validateRequestOnStoreState = validateRequestOnStoreState;
     clusterMap = new MockClusterMap();
-    Properties properties = new Properties();
-    properties.setProperty("clustermap.cluster.name", "test");
-    properties.setProperty("clustermap.datacenter.name", "DC1");
-    properties.setProperty("clustermap.host.name", "localhost");
-    properties.setProperty("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
-    properties.setProperty("replication.no.of.intra.dc.replica.threads", "1");
-    properties.setProperty("replication.no.of.inter.dc.replica.threads", "1");
-    properties.setProperty("server.validate.request.based.on.store.state",
-        Boolean.toString(validateRequestOnStoreState));
+    Properties properties = createProperties(validateRequestOnStoreState, true);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
     serverConfig = new ServerConfig(verifiableProperties);
@@ -182,6 +174,21 @@ public class AmbryServerRequestsTest {
     storageManager.start();
     Mockito.when(mockDelegate.unseal(any())).thenReturn(true);
     Mockito.when(mockDelegate.unmarkStopped(anyList())).thenReturn(true);
+  }
+
+  private static Properties createProperties(boolean validateRequestOnStoreState,
+      boolean handleUndeleteRequestEnabled) {
+    Properties properties = new Properties();
+    properties.setProperty("clustermap.cluster.name", "test");
+    properties.setProperty("clustermap.datacenter.name", "DC1");
+    properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
+    properties.setProperty("replication.no.of.intra.dc.replica.threads", "1");
+    properties.setProperty("replication.no.of.inter.dc.replica.threads", "1");
+    properties.setProperty("server.validate.request.based.on.store.state",
+        Boolean.toString(validateRequestOnStoreState));
+    properties.setProperty("server.handle.undelete.request.enabled", Boolean.toString(handleUndeleteRequestEnabled));
+    return properties;
   }
 
   /**
@@ -780,6 +787,36 @@ public class AmbryServerRequestsTest {
   }
 
   /**
+   * Tests for server config to enable and disable UNDELETE
+   */
+  @Test
+  public void undeleteEnableDisableTest() throws Exception {
+    Properties properties = createProperties(validateRequestOnStoreState, false);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    ServerConfig serverConfig = new ServerConfig(verifiableProperties);
+    ServerMetrics serverMetrics =
+        new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
+    AmbryServerRequests other = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
+        storeKeyConverterFactory, statsManager);
+
+    AmbryServerRequests temp = ambryRequests;
+    ambryRequests = other;
+    try {
+      MockPartitionId id = (MockPartitionId) clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+      int correlationId = TestUtils.RANDOM.nextInt();
+      String clientId = UtilsTest.getRandomString(10);
+      BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+          ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+          Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
+      long opTimeMs = SystemTime.getInstance().milliseconds();
+      doUndelete(correlationId++, clientId, blobId, opTimeMs, ServerErrorCode.Temporarily_Disabled);
+    } finally {
+      ambryRequests = temp;
+    }
+  }
+
+  /**
    * Tests for success and failure scenarios for UNDELETE
    */
   @Test
@@ -855,7 +892,8 @@ public class AmbryServerRequestsTest {
     Response response = sendRequestGetResponse(request,
         EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest).contains(requestType)
             ? ServerErrorCode.No_Error : expectedErrorCode);
-    if (expectedErrorCode.equals(ServerErrorCode.No_Error) || forceCheckOpReceived) {
+    if (expectedErrorCode.equals(ServerErrorCode.No_Error) || (
+        forceCheckOpReceived && !expectedErrorCode.equals(ServerErrorCode.Temporarily_Disabled))) {
       assertEquals("Operation received at the store not as expected", requestType,
           MockStorageManager.operationReceived);
     }

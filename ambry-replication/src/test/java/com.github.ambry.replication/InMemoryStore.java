@@ -223,20 +223,14 @@ class InMemoryStore implements Store {
   @Override
   public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
     for (MessageInfo info : messageSetToDelete.getMessageSetInfo()) {
-      MessageInfo prev = getMessageInfo(info.getStoreKey(), messageInfos, true, true, true);
-      if (prev == null) {
-        throw new StoreException("Not Found", StoreErrorCodes.ID_Not_Found);
-      } else if (prev.isDeleted() && prev.getLifeVersion() == info.getLifeVersion()) {
-        throw new StoreException("Deleted", StoreErrorCodes.ID_Deleted);
-      }
       try {
         messageSetToDelete.writeTo(log);
       } catch (StoreException e) {
         throw new IllegalStateException(e);
       }
-      messageInfos.add(new MessageInfo(info.getStoreKey(), info.getSize(), true, prev.isTtlUpdated(), false,
-          prev.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
-          prev.getLifeVersion()));
+      messageInfos.add(new MessageInfo(info.getStoreKey(), info.getSize(), true, info.isTtlUpdated(), false,
+          info.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
+          info.getLifeVersion()));
     }
   }
 

@@ -615,6 +615,10 @@ public class AmbryServerRequests extends AmbryRequests {
       metrics.partitionReadOnlyError.inc();
       return ServerErrorCode.Partition_ReadOnly;
     }
+    if (requestType.equals(RequestOrResponseType.UndeleteRequest) && !serverConfig.serverHandleUndeleteRequestEnabled) {
+      metrics.temporarilyDisabledError.inc();
+      return ServerErrorCode.Temporarily_Disabled;
+    }
     // Ensure the request is enabled.
     if (!isRequestEnabled(requestType, partition)) {
       metrics.temporarilyDisabledError.inc();
