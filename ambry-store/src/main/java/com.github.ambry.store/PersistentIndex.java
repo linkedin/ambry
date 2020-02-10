@@ -732,19 +732,19 @@ class PersistentIndex {
     // This is from recovery or replication, make sure the last value is a put and the first value's lifeVersion is strictly
     // less than the given lifeVersion. We don't care about the first value's type, it can be a put, ttl_update or delete, it
     // can even be an undelete.
-    IndexValue firstValue = values.get(0);
-    IndexValue lastValue = values.get(values.size() - 1);
-    if (!lastValue.isPut()) {
+    IndexValue latestValue = values.get(0);
+    IndexValue oldestValue = values.get(values.size() - 1);
+    if (!oldestValue.isPut()) {
       throw new StoreException("Id " + key + " requires first value to be a put in index " + dataDir,
           StoreErrorCodes.ID_Deleted_Permanently);
     }
-    if (firstValue.getLifeVersion() >= lifeVersion) {
+    if (latestValue.getLifeVersion() >= lifeVersion) {
       throw new StoreException(
-          "LifeVersion conflict in index. Id " + key + " LifeVersion: " + firstValue.getLifeVersion()
+          "LifeVersion conflict in index. Id " + key + " LifeVersion: " + latestValue.getLifeVersion()
               + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
     }
-    maybeChangeExpirationDate(lastValue, values);
-    if (isExpired(lastValue)) {
+    maybeChangeExpirationDate(oldestValue, values);
+    if (isExpired(oldestValue)) {
       throw new StoreException("Id " + key + " already expired in index " + dataDir, StoreErrorCodes.TTL_Expired);
     }
   }
@@ -775,25 +775,25 @@ class PersistentIndex {
             StoreErrorCodes.ID_Undeleted);
       }
     }
-    // First item has to be put and last item has to be a delete.
+    // Latest value has to be put and oldest value has to be a delete.
     // PutRecord can't expire and delete record can't be older than the delete retention time.
-    IndexValue firstValue = values.get(0);
-    IndexValue lastValue = values.get(values.size() - 1);
-    if (firstValue.isUndelete()) {
+    IndexValue latestValue = values.get(0);
+    IndexValue oldestValue = values.get(values.size() - 1);
+    if (latestValue.isUndelete()) {
       throw new StoreException("Id " + key + " is already undeleted in index" + dataDir, StoreErrorCodes.ID_Undeleted);
     }
-    if (!lastValue.isPut() || !firstValue.isDelete()) {
+    if (!oldestValue.isPut() || !latestValue.isDelete()) {
       throw new StoreException(
           "Id " + key + " requires first value to be a put and last value to be a delete in index " + dataDir,
           StoreErrorCodes.ID_Not_Deleted);
     }
-    if (firstValue.getOperationTimeInMs() + TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays)
+    if (latestValue.getOperationTimeInMs() + TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays)
         < time.milliseconds()) {
       throw new StoreException("Id " + key + " already permanently deleted in index " + dataDir,
           StoreErrorCodes.ID_Deleted_Permanently);
     }
-    maybeChangeExpirationDate(lastValue, values);
-    if (isExpired(lastValue)) {
+    maybeChangeExpirationDate(oldestValue, values);
+    if (isExpired(oldestValue)) {
       throw new StoreException("Id " + key + " already expired in index " + dataDir, StoreErrorCodes.TTL_Expired);
     }
   }

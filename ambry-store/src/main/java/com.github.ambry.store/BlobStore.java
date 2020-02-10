@@ -663,6 +663,7 @@ public class BlobStore implements Store {
         logger.trace("Store : {} undelete mark written to log", dataDir);
         FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
         index.markAsUndeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
+        // TODO: update blobstore stats for undelete (2020-02-10)
       }
       onSuccess();
       return lifeVersion;
