@@ -248,7 +248,7 @@ public class MockClusterMap implements ClusterMap {
     return new MockClusterMap(recoveryNode, vcrNode, dcName);
   }
 
-  protected ArrayList<Port> getListOfPorts(int port, Integer sslPort, Integer http2Port) {
+  public static ArrayList<Port> getListOfPorts(int port, Integer sslPort, Integer http2Port) {
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(port, PortType.PLAINTEXT));
     if (sslPort != null) {
