@@ -156,7 +156,7 @@ public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFee
       List<CloudBlobMetadata> results, long maxEntriesSize, String partitionId) throws DocumentClientException {
     int index = cosmosChangeFeedFindToken.getIndex();
     String cacheSesionId = cosmosChangeFeedFindToken.getCacheSessionId();
-    if (!changeFeedCache.containsKey(cacheSesionId) || !isCacheValid(cacheSesionId, cosmosChangeFeedFindToken)) {
+    if (!changeFeedCache.containsKey(cacheSesionId) || !isCacheValid(partitionId, cosmosChangeFeedFindToken)) {
       // the cache may not be valid. So we cannot use session id
       cacheSesionId = populateChangeFeedCache(partitionId, cosmosChangeFeedFindToken.getStartContinuationToken());
       // invalidate the previous token's cache
