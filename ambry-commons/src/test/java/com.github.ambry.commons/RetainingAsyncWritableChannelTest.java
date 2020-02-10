@@ -64,7 +64,6 @@ public class RetainingAsyncWritableChannelTest {
   @Test
   public void basicsTest() throws Exception {
     List<byte[]> inputBuffers = getBuffers(1000, 20, 201, 0, 79, 1005);
-//    List<byte[]> inputBuffers = getBuffers(1000);
     RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
     for (int i = 0; i < inputBuffers.size(); i++) {
       ByteBuffer buf = ByteBuffer.wrap(inputBuffers.get(i));
@@ -117,12 +116,13 @@ public class RetainingAsyncWritableChannelTest {
   @Test
   public void bufferModificationTest() throws Exception {
     byte[] inputBuffer = TestUtils.getRandomBytes(100);
-    RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
-    writeAndCheckCallback(ByteBuffer.wrap(inputBuffer), channel, inputBuffer.length, null, null);
-    // mutate the input array and check that stream still matches the original content.
-    byte[] originalBuffer = Arrays.copyOf(inputBuffer, inputBuffer.length);
-    inputBuffer[50]++;
-    checkStream(Collections.singletonList(originalBuffer), channel);
+    try (RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel()) {
+      writeAndCheckCallback(ByteBuffer.wrap(inputBuffer), channel, inputBuffer.length, null, null);
+      // mutate the input array and check that stream still matches the original content.
+      byte[] originalBuffer = Arrays.copyOf(inputBuffer, inputBuffer.length);
+      inputBuffer[50]++;
+      checkStream(Collections.singletonList(originalBuffer), channel);
+    }
   }
 
   /**
@@ -131,19 +131,20 @@ public class RetainingAsyncWritableChannelTest {
   @Test
   public void sizeLimitTest() throws Exception {
     List<byte[]> inputBuffers = getBuffers(1000, 20, 5);
-    RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel(1023);
-    for (Iterator<byte[]> iter = inputBuffers.iterator(); iter.hasNext(); ) {
-      ByteBuffer buf = ByteBuffer.wrap(iter.next());
-      if (iter.hasNext()) {
-        writeAndCheckCallback(buf, channel, buf.remaining(), null, null);
-      } else {
-        writeAndCheckCallback(buf, channel, buf.remaining(), RestServiceException.class,
-            RestServiceErrorCode.RequestTooLarge);
+    try (RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel(1023)) {
+      for (Iterator<byte[]> iter = inputBuffers.iterator(); iter.hasNext(); ) {
+        ByteBuffer buf = ByteBuffer.wrap(iter.next());
+        if (iter.hasNext()) {
+          writeAndCheckCallback(buf, channel, buf.remaining(), null, null);
+        } else {
+          writeAndCheckCallback(buf, channel, buf.remaining(), RestServiceException.class,
+              RestServiceErrorCode.RequestTooLarge);
+        }
       }
+      // test that no more writes are accepted after size limit exceeded.
+      writeAndCheckCallback(ByteBuffer.wrap(TestUtils.getRandomBytes(10)), channel, 0, RestServiceException.class,
+          RestServiceErrorCode.RequestTooLarge);
     }
-    // test that no more writes are accepted after size limit exceeded.
-    writeAndCheckCallback(ByteBuffer.wrap(TestUtils.getRandomBytes(10)), channel, 0, RestServiceException.class,
-        RestServiceErrorCode.RequestTooLarge);
   }
 
   /**
