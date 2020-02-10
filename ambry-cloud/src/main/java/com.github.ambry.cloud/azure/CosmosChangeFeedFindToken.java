@@ -36,7 +36,7 @@ public class CosmosChangeFeedFindToken implements FindToken {
   private final String endContinuationToken;
   private final int index;
   private final int totalItems;
-  private final String azureTokenRequestId;
+  private final String cacheSessionId;
 
   private final static short VERSION_0 = 0;
   private final static short DEFAULT_VERSION = VERSION_0;
@@ -51,7 +51,7 @@ public class CosmosChangeFeedFindToken implements FindToken {
     index = -1;
     endContinuationToken = "";
     totalItems = -1;
-    azureTokenRequestId = "";
+    cacheSessionId = "";
   }
 
   /**
@@ -61,12 +61,11 @@ public class CosmosChangeFeedFindToken implements FindToken {
    * @param endContinuationToken end token from Cosmos.
    * @param index index in cache upto which items are consumed by remote.
    * @param totalItems total number of items in cache.
-   * @param azureTokenRequestId request id of the change feed query.
+   * @param cacheSessionId request id of the change feed query.
    */
   public CosmosChangeFeedFindToken(long bytesRead, String startContinuationToken, String endContinuationToken,
-      int index, int totalItems, String azureTokenRequestId) {
-    this(bytesRead, startContinuationToken, endContinuationToken, index, totalItems, azureTokenRequestId,
-        DEFAULT_VERSION);
+      int index, int totalItems, String cacheSessionId) {
+    this(bytesRead, startContinuationToken, endContinuationToken, index, totalItems, cacheSessionId, DEFAULT_VERSION);
   }
 
   /**
@@ -76,18 +75,18 @@ public class CosmosChangeFeedFindToken implements FindToken {
    * @param endContinuationToken end token from Cosmos.
    * @param index index in cache upto which items are consumed by remote.
    * @param totalItems total number of items in cache.
-   * @param azureTokenRequestId request id of the change feed query.
+   * @param cacheSessionId request id of the change feed query.
    * @param version token version.
    */
   public CosmosChangeFeedFindToken(long bytesRead, String startContinuationToken, String endContinuationToken,
-      int index, int totalItems, String azureTokenRequestId, short version) {
+      int index, int totalItems, String cacheSessionId, short version) {
     this.version = version;
     this.bytesRead = bytesRead;
     this.startContinuationToken = startContinuationToken;
     this.endContinuationToken = endContinuationToken;
     this.index = index;
     this.totalItems = totalItems;
-    this.azureTokenRequestId = azureTokenRequestId;
+    this.cacheSessionId = cacheSessionId;
   }
 
   /**
@@ -113,10 +112,10 @@ public class CosmosChangeFeedFindToken implements FindToken {
         String endContinuationToken = Utils.readIntString(inputStream);
         int index = inputStream.readInt();
         int totalItems = inputStream.readInt();
-        String azureTokenRequestId = Utils.readIntString(inputStream);
+        String cacheSessionId = Utils.readIntString(inputStream);
         cosmosChangeFeedFindToken =
             new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
-                azureTokenRequestId, version);
+                cacheSessionId, version);
         break;
       default:
         throw new IllegalStateException("Unknown version of cloud token: " + version);
@@ -138,7 +137,7 @@ public class CosmosChangeFeedFindToken implements FindToken {
     Utils.serializeNullableString(bufWrap, endContinuationToken);
     bufWrap.putInt(index);
     bufWrap.putInt(totalItems);
-    Utils.serializeNullableString(bufWrap, azureTokenRequestId);
+    Utils.serializeNullableString(bufWrap, cacheSessionId);
     return buf;
   }
 
@@ -148,7 +147,7 @@ public class CosmosChangeFeedFindToken implements FindToken {
    */
   public int size() {
     return 2 * Short.BYTES + Long.BYTES + 5 * Integer.BYTES + getNullableStringLength(startContinuationToken)
-        + getNullableStringLength(endContinuationToken) + getNullableStringLength(azureTokenRequestId);
+        + getNullableStringLength(endContinuationToken) + getNullableStringLength(cacheSessionId);
   }
 
   @Override
@@ -165,7 +164,7 @@ public class CosmosChangeFeedFindToken implements FindToken {
         cosmosChangeFeedFindToken.getStartContinuationToken(), startContinuationToken) && Objects.equals(
         cosmosChangeFeedFindToken.getEndContinuationToken(), endContinuationToken)
         && cosmosChangeFeedFindToken.getTotalItems() == totalItems && cosmosChangeFeedFindToken.getIndex() == index
-        && Objects.equals(cosmosChangeFeedFindToken.getAzureTokenRequestId(), azureTokenRequestId);
+        && Objects.equals(cosmosChangeFeedFindToken.getCacheSessionId(), cacheSessionId);
   }
 
   /**
@@ -211,17 +210,17 @@ public class CosmosChangeFeedFindToken implements FindToken {
   }
 
   /**
-   * Return azureTokenRequestId of the current token.
-   * @return azureTokenRequestId.
+   * Return cacheSessionId of the current token.
+   * @return cacheSessionId.
    */
-  public String getAzureTokenRequestId() {
-    return azureTokenRequestId;
+  public String getCacheSessionId() {
+    return cacheSessionId;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(startContinuationToken, endContinuationToken, index, totalItems, azureTokenRequestId,
-        getVersion(), getBytesRead(), getType());
+    return Objects.hash(startContinuationToken, endContinuationToken, index, totalItems, cacheSessionId, getVersion(),
+        getBytesRead(), getType());
   }
 
   @Override
@@ -234,7 +233,7 @@ public class CosmosChangeFeedFindToken implements FindToken {
     sb.append(" endContinuationToken: ").append(endContinuationToken);
     sb.append(" index: ").append(index);
     sb.append(" totalItems: ").append(totalItems);
-    sb.append(" azureTokenRequestId: ").append(azureTokenRequestId);
+    sb.append(" cacheSessionId: ").append(cacheSessionId);
     return sb.toString();
   }
 }

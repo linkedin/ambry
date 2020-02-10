@@ -183,7 +183,7 @@ public class CosmosChangeFeedFindTokenTest {
     Utils.serializeNullableString(bufWrap, token.getEndContinuationToken());
     bufWrap.putInt(token.getIndex());
     bufWrap.putInt(token.getTotalItems());
-    Utils.serializeNullableString(bufWrap, token.getAzureTokenRequestId());
+    Utils.serializeNullableString(bufWrap, token.getCacheSessionId());
     return new DataInputStream(new ByteArrayInputStream(buf));
   }
 }
