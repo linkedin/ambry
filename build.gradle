@@ -243,8 +243,8 @@ project(':ambry-server') {
 project(':ambry-store') {
     dependencies {
         compile project(':ambry-api'),
-                project(':ambry-utils')
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
+                project(':ambry-utils'),
+                project(':ambry-messageformat')
         compile "net.smacke:jaydio:$jaydioVersion"
         testCompile project(':ambry-clustermap')
         testCompile project(':ambry-clustermap').sourceSets.test.output

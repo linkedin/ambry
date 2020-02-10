@@ -246,6 +246,11 @@ class InMemoryStore implements Store {
   }
 
   @Override
+  public short undelete(MessageInfo info) throws StoreException {
+    throw new UnsupportedOperationException("Undelete unsupported for now");
+  }
+
+  @Override
   public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries) throws StoreException {
     // unused function
     MockFindToken mockToken = (MockFindToken) token;
