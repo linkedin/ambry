@@ -349,7 +349,8 @@ project(':ambry-router') {
                 project(':ambry-messageformat'),
                 project(':ambry-protocol'),
                 project(':ambry-network'),
-                project(':ambry-cloud')
+                project(':ambry-cloud'),
+                project(':ambry-rest')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
         compile "io.netty:netty-buffer:$nettyVersion"

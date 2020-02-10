@@ -329,9 +329,9 @@ public class ReplicationTest {
     ReplicaId peerReplicaToRemove =
         existingReplica.getPartitionId().getReplicaIds().stream().filter(r -> r != existingReplica).findFirst().get();
     // create a new node and place a peer of existing replica on it.
-    MockDataNodeId remoteNode =
-        createDataNode(getListOfPorts(PLAIN_TEXT_PORT_START_NUMBER + 10, SSL_PORT_START_NUMBER + 10),
-            clusterMap.getDatacenterName((byte) 0), 3);
+    MockDataNodeId remoteNode = createDataNode(
+        getListOfPorts(PLAIN_TEXT_PORT_START_NUMBER + 10, SSL_PORT_START_NUMBER + 10, HTTP2_PORT_START_NUMBER + 10),
+        clusterMap.getDatacenterName((byte) 0), 3);
     ReplicaId addedReplica =
         new MockReplicaId(remoteNode.getPort(), (MockPartitionId) existingReplica.getPartitionId(), remoteNode, 0);
     // populate added replica and removed replica lists

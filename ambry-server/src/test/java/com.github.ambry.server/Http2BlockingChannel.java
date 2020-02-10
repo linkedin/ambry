@@ -19,6 +19,9 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Send;
+import com.github.ambry.rest.Http2ClientChannelInitializer;
+import com.github.ambry.rest.Http2ClientStreamInitializer;
+import com.github.ambry.rest.Http2ResponseHandler;
 import com.github.ambry.rest.NettySslHttp2Factory;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
@@ -26,9 +29,7 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -39,12 +40,15 @@ import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2StreamChannel;
 import io.netty.handler.codec.http2.Http2StreamChannelBootstrap;
+import io.netty.util.concurrent.Promise;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,14 +59,14 @@ import org.slf4j.LoggerFactory;
  */
 public class Http2BlockingChannel implements ConnectedChannel {
   private static final Logger logger = LoggerFactory.getLogger(Http2BlockingChannel.class);
-  private final Http2ResponseHandler http2ResponseHandler;
   private final String hostName;
   private final int port;
   private EventLoopGroup workerGroup;
   private Channel channel;
+  private Promise<ByteBuf> responsePromise;
+  private Http2StreamChannelBootstrap http2StreamChannelBootstrap;
 
   public Http2BlockingChannel(String hostName, int port) {
-    http2ResponseHandler = new Http2ResponseHandler();
     this.hostName = hostName;
     this.port = port;
   }
@@ -86,6 +90,8 @@ public class Http2BlockingChannel implements ConnectedChannel {
     // Start the client.
     channel = b.connect().syncUninterruptibly().channel();
     logger.info("Connected to remote host");
+    Http2ClientStreamInitializer initializer = new Http2ClientStreamInitializer(new Http2ResponseHandler());
+    http2StreamChannelBootstrap = new Http2StreamChannelBootstrap(channel).handler(initializer);
   }
 
   @Override
@@ -103,24 +109,27 @@ public class Http2BlockingChannel implements ConnectedChannel {
     byteBufferChannel.getBuffer().position(0);
     ByteBuf byteBuf = Unpooled.wrappedBuffer(byteBufferChannel.getBuffer());
 
-    Http2ClientStreamInitializer initializer = new Http2ClientStreamInitializer(http2ResponseHandler);
-    Http2StreamChannel childChannel =
-        new Http2StreamChannelBootstrap(channel).handler(initializer).open().syncUninterruptibly().getNow();
+    Http2StreamChannel childChannel = http2StreamChannelBootstrap.open().syncUninterruptibly().getNow();
     Http2Headers http2Headers = new DefaultHttp2Headers().method(HttpMethod.POST.asciiName()).scheme("https").path("/");
+    responsePromise = childChannel.eventLoop().newPromise();
+    childChannel.attr(Http2ResponseHandler.RESPONSE_PROMISE).set(responsePromise);
 
     DefaultHttp2HeadersFrame headersFrame = new DefaultHttp2HeadersFrame(http2Headers, false);
     DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(byteBuf, true);
-    ChannelPromise childChannelPromise = childChannel.newPromise();
     childChannel.write(headersFrame);
-    ChannelFuture channelFuture = childChannel.write(dataFrame);
+    childChannel.write(dataFrame);
     childChannel.flush();
-    http2ResponseHandler.put(channelFuture, childChannelPromise);
   }
 
   @Override
   public ChannelOutput receive() throws IOException {
-    Http2ResponseHandler.StreamResult streamResult = http2ResponseHandler.awaitResponses(5, TimeUnit.SECONDS);
-    DataInputStream dataInputStream = new NettyByteBufDataInputStream(streamResult.getByteBuf());
+    ByteBuf responseByteBuf;
+    try {
+      responseByteBuf = responsePromise.get(3, TimeUnit.SECONDS);
+    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      throw new IOException("No response received in 3 seconds.");
+    }
+    DataInputStream dataInputStream = new NettyByteBufDataInputStream(responseByteBuf);
     return new ChannelOutput(dataInputStream, dataInputStream.readLong());
   }
 

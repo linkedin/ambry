@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
@@ -94,6 +95,7 @@ public class ServerHardDeleteTest {
     props.setProperty("clustermap.datacenter.name", "DC1");
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
+    TestSSLUtils.addHttp2Properties(props);
     VerifiableProperties propverify = new VerifiableProperties(props);
     server = new AmbryServer(propverify, mockClusterAgentsFactory, notificationSystem, time);
     server.startup();

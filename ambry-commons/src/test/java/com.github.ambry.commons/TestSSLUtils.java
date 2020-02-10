@@ -181,6 +181,17 @@ public class TestSSLUtils {
   }
 
   /**
+   * Setup HTTP2 server related properties.
+   * @param properties the {@link Properties} instance.
+   */
+  public static void addHttp2Properties(Properties properties) {
+    properties.setProperty("rest.server.rest.request.service.factory",
+        "com.github.ambry.server.StorageRestRequestService");
+    properties.setProperty("rest.server.nio.server.factory", "com.github.ambry.rest.StorageServerNettyFactory");
+    properties.setProperty("ssl.client.authentication", "none");
+  }
+
+  /**
    * Generate a cert and add SSL related properties to {@code props}
    * @param props the {@link Properties} instance.
    * @param sslEnabledDatacenters a comma separated list of datacenters where SSL should be enabled.

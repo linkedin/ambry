@@ -15,6 +15,8 @@ package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
@@ -72,6 +74,11 @@ class InMemoryStore implements Store {
       bufferToWrite.position(savedPos);
       bufferToWrite.limit(savedLimit);
       return sizeToWrite;
+    }
+
+    @Override
+    public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
+
     }
 
     @Override

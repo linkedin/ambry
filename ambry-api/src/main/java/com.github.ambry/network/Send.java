@@ -35,7 +35,7 @@ public interface Send {
   /**
    * Placeholder to support {@link AsyncWritableChannel}
    */
-  default void writeTo(AsyncWritableChannel channel, Callback<Long> callback) throws IOException {
+  default void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
     return;
   }
 

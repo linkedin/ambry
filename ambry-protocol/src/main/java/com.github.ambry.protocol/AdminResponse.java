@@ -13,6 +13,8 @@
  */
 package com.github.ambry.protocol;
 
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -59,13 +61,28 @@ public class AdminResponse extends Response {
     return new AdminResponse(correlationId, clientId, error);
   }
 
-  @Override
-  public long writeTo(WritableByteChannel channel) throws IOException {
+  /**
+   * A private method shared by {@link AdminResponse#writeTo(WritableByteChannel)} and
+   * {@link AdminResponse#writeTo(AsyncWritableChannel, Callback)}.
+   * This method allocate bufferToSend and write headers to it if bufferToSend is null.
+   */
+  private void prepareBufferToSend() {
     if (bufferToSend == null) {
       serializeIntoBuffer();
       bufferToSend.flip();
     }
+  }
+
+  @Override
+  public long writeTo(WritableByteChannel channel) throws IOException {
+    prepareBufferToSend();
     return bufferToSend.hasRemaining() ? channel.write(bufferToSend) : 0;
+  }
+
+  @Override
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
+    prepareBufferToSend();
+    channel.write(bufferToSend, callback);
   }
 
   @Override

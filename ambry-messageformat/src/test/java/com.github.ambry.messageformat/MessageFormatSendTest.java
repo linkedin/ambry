@@ -14,6 +14,8 @@
 package com.github.ambry.messageformat;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MockId;
 import com.github.ambry.store.MockIdFactory;
@@ -84,6 +86,11 @@ public class MessageFormatSendTest {
       int written = channel.write(buffers.get(index));
       buffers.get(index).clear();
       return written;
+    }
+
+    @Override
+    public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
+
     }
 
     @Override

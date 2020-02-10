@@ -14,6 +14,8 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.network.Send;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
@@ -264,6 +266,11 @@ public class MessageFormatSend implements Send {
       }
     }
     return written;
+  }
+
+  @Override
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
+      readSet.writeTo(channel, callback);
   }
 
   @Override
