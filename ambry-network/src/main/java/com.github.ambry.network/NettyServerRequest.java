@@ -16,13 +16,17 @@ package com.github.ambry.network;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.utils.SystemTime;
+import java.io.IOException;
 import java.io.InputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * A wrapper class at the network layer for NettyRequest based RestRequest.
  */
 public class NettyServerRequest implements NetworkRequest {
+  private static final Logger LOGGER = LoggerFactory.getLogger(NettyServerRequest.class);
   private final InputStream inputStream;
   private final RestResponseChannel restResponseChannel;
   private final RestRequest restRequest;
@@ -43,6 +47,15 @@ public class NettyServerRequest implements NetworkRequest {
   @Override
   public long getStartTimeInMs() {
     return startTimeInMs;
+  }
+
+  @Override
+  public void release() {
+    try {
+      inputStream.close();
+    } catch (IOException e) {
+      LOGGER.warn("Exception closing request's InputStream", e);
+    }
   }
 
   public RestRequest getRestRequest() {

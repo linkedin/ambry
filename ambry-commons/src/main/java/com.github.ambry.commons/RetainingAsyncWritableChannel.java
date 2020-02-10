@@ -52,14 +52,14 @@ public class RetainingAsyncWritableChannel implements AsyncWritableChannel {
    * Construct a {@link RetainingAsyncWritableChannel} with the size limit set to {@link Long#MAX_VALUE}.
    */
   public RetainingAsyncWritableChannel() {
-    this(Long.MAX_VALUE);
+    this(Integer.MAX_VALUE);
   }
 
   /**
    * @param sizeLimitInBytes the maximum number of bytes that can be written to this channel. If this limit is exceeded,
    *                         a {@link RestServiceException} will be provided to the write callback.
    */
-  public RetainingAsyncWritableChannel(long sizeLimitInBytes) {
+  public RetainingAsyncWritableChannel(int sizeLimitInBytes) {
     this.sizeLimitInBytes = sizeLimitInBytes;
   }
 
