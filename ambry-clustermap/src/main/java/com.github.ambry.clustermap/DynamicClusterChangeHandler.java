@@ -24,7 +24,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.NotificationContext;
@@ -45,9 +44,6 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   private final String dcName;
   private final Object notificationLock = new Object();
-  private final AtomicBoolean instanceConfigInitialized = new AtomicBoolean(false);
-  private final AtomicBoolean liveStateInitialized = new AtomicBoolean(false);
-  private final AtomicBoolean idealStateInitialized = new AtomicBoolean(false);
   private final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final AtomicLong sealedStateChangeCounter;
   private final ConcurrentHashMap<String, Exception> initializationFailureMap;
@@ -64,6 +60,9 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   private final ConcurrentHashMap<AmbryDataNode, Set<AmbryDisk>> ambryDataNodeToAmbryDisks = new ConcurrentHashMap<>();
   private final AtomicLong errorCount = new AtomicLong(0);
 
+  private volatile boolean instanceConfigInitialized = false;
+  private volatile boolean liveStateInitialized = false;
+  private volatile boolean idealStateInitialized = false;
   private volatile ConcurrentHashMap<String, String> partitionNameToResource = new ConcurrentHashMap<>();
   private AtomicReference<RoutingTableSnapshot> routingTableSnapshotRef = new AtomicReference<>();
   private ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
@@ -112,7 +111,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   public void onInstanceConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
     try {
       synchronized (notificationLock) {
-        if (!instanceConfigInitialized.get()) {
+        if (!instanceConfigInitialized) {
           logger.info("Received initial notification for instance config change from {}", dcName);
         } else {
           logger.info("Instance config change triggered from {}", dcName);
@@ -121,15 +120,14 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
         try {
           addOrUpdateInstanceInfos(configs);
         } catch (Exception e) {
-          if (!instanceConfigInitialized.get()) {
+          if (!instanceConfigInitialized) {
             logger.error("Exception occurred when initializing instances in {}: ", dcName, e);
             initializationFailureMap.putIfAbsent(dcName, e);
-            instanceConfigInitialized.set(true);
           } else {
             logger.error("Exception occurred at runtime when handling instance config changes in {}: ", dcName, e);
           }
         } finally {
-          instanceConfigInitialized.set(true);
+          instanceConfigInitialized = true;
         }
         sealedStateChangeCounter.incrementAndGet();
         helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
@@ -145,14 +143,12 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
    * Bootstrap tool).
    * @param idealState a list of {@link IdealState} that specifies ideal location of replicas.
    * @param changeContext the {@link NotificationContext} associated.
-   * @throws InterruptedException
    */
   @Override
-  public void onIdealStateChange(List<IdealState> idealState, NotificationContext changeContext)
-      throws InterruptedException {
-    if (!idealStateInitialized.get()) {
+  public void onIdealStateChange(List<IdealState> idealState, NotificationContext changeContext) {
+    if (!idealStateInitialized) {
       logger.info("Received initial notification for IdealState change from {}", dcName);
-      idealStateInitialized.set(true);
+      idealStateInitialized = true;
     } else {
       logger.info("IdealState change triggered from {}", dcName);
     }
@@ -175,9 +171,9 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   @Override
   public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
     try {
-      if (!liveStateInitialized.get()) {
+      if (!liveStateInitialized) {
         logger.info("Received initial notification for live instance change from {}", dcName);
-        liveStateInitialized.set(true);
+        liveStateInitialized = true;
       } else {
         logger.info("Live instance change triggered from {}", dcName);
       }
