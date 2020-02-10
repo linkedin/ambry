@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  * The replication feed that provides next list of blobs to replicate from Azure and corresponding {@link FindToken}
  * using Cosmos change feed apis.
  */
-public class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFeed {
+public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFeed {
 
   /**
    * Class representing change feed cache for each partition.
