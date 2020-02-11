@@ -61,6 +61,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1213,6 +1214,14 @@ public class GetBlobOperationTest {
                   writableChannel.getNextChunk();
                   writableChannel.resolveOldestChunk(null);
                   chunksLeftToRead--;
+                }
+                ByteBuf buffer = null;
+                while(true){
+                  buffer = writableChannel.getNextByteBuf(0);
+                  if (buffer == null) {
+                    break;
+                  }
+                  writableChannel.resolveOldestChunk(new ClosedChannelException());
                 }
                 result.getBlobResult.getBlobDataChannel().close();
               } catch (Exception e) {

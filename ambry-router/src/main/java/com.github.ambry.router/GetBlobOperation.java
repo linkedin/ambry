@@ -48,6 +48,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -103,6 +104,7 @@ class GetBlobOperation extends GetOperation {
   private ListIterator<CompositeBlobInfo.ChunkMetadata> chunkIdIterator;
   // chunk index to retrieved chunk buffer mapping.
   private Map<Integer, ByteBuf> chunkIndexToBuf;
+  private Map<Integer, ByteBuf> chunkIndexToBufWaitingForRelease;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
   // the blob info that is populated on OperationType.BlobInfo or OperationType.All
@@ -363,10 +365,18 @@ class GetBlobOperation extends GetOperation {
       public void onCompletion(Long result, Exception exception) {
         bytesWritten.addAndGet(result);
         if (exception != null) {
-          setOperationException(exception);
+          if (exception instanceof RouterException) {
+            setOperationException(exception);
+          } else if (exception instanceof ClosedChannelException) {
+            setOperationException(new RouterException(
+                "The ReadableStreamChannel for blob data has been closed by the user before all chunks were written out.",
+                RouterErrorCode.ChannelClosed));
+          } else {
+            setOperationException(exception);
+          }
         }
         int currentNumChunk = numChunksWrittenOut.get();
-        ByteBuf byteBuf = chunkIndexToBuf.remove(currentNumChunk);
+        ByteBuf byteBuf = chunkIndexToBufWaitingForRelease.remove(currentNumChunk);
         if (byteBuf != null) {
           byteBuf.release();
         }
@@ -442,9 +452,12 @@ class GetBlobOperation extends GetOperation {
       // if there are chunks available to be written out, do now.
       if (firstChunk.isComplete() && readCalled) {
         while (operationException.get() == null && chunkIndexToBuf.containsKey(indexOfNextChunkToWriteOut)) {
-          ByteBuf byteBuf = chunkIndexToBuf.get(indexOfNextChunkToWriteOut);
-          asyncWritableChannel.write(byteBuf.nioBuffer(), chunkAsyncWriteCallback);
-          indexOfNextChunkToWriteOut++;
+          ByteBuf byteBuf = chunkIndexToBuf.remove(indexOfNextChunkToWriteOut);
+          if (byteBuf != null) {
+            asyncWritableChannel.write(byteBuf.nioBuffer(), chunkAsyncWriteCallback);
+            chunkIndexToBufWaitingForRelease.put(indexOfNextChunkToWriteOut, byteBuf);
+            indexOfNextChunkToWriteOut++;
+          }
         }
         if (operationException.get() != null || numChunksWrittenOut.get() == numChunksTotal) {
           completeRead();
@@ -1224,6 +1237,7 @@ class GetBlobOperation extends GetOperation {
         }
         blobType = blobData.getBlobType();
         chunkIndexToBuf = new ConcurrentHashMap<>();
+        chunkIndexToBufWaitingForRelease = new ConcurrentHashMap<>();
         if (rawMode) {
           if (blobData != null) {
             // RawMode, release blob data.
