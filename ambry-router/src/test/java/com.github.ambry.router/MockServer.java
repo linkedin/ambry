@@ -16,13 +16,12 @@ package com.github.ambry.router;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.network.BoundedNettyByteBufReceive;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageMetadata;
+import com.github.ambry.network.BoundedNettyByteBufReceive;
 import com.github.ambry.network.ByteBufferSend;
 import com.github.ambry.network.Send;
 import com.github.ambry.protocol.DeleteRequest;
@@ -38,6 +37,7 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferChannel;
@@ -168,7 +168,7 @@ class MockServer {
       // set it in the partitionResponseInfo
       if (getError == ServerErrorCode.No_Error || getError == ServerErrorCode.Blob_Expired
           || getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Not_Found
-          || getError == ServerErrorCode.Blob_Authorization_Failure) {
+          || getError == ServerErrorCode.Blob_Authorization_Failure || getError == ServerErrorCode.Disk_Unavailable) {
         partitionError = getError;
         serverError = ServerErrorCode.No_Error;
       } else {
