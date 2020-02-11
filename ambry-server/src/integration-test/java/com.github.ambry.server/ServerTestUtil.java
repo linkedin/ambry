@@ -524,7 +524,7 @@ final class ServerTestUtil {
       channel.send(undeleteRequest);
       stream = channel.receive().getInputStream();
       undeleteResponse = UndeleteResponse.readFrom(new DataInputStream(stream));
-      assertEquals("Undelete blob should succeed", ServerErrorCode.Blob_Already_Undeleted, undeleteResponse.getError());
+      assertEquals("Undelete blob should fail", ServerErrorCode.Blob_Already_Undeleted, undeleteResponse.getError());
 
       // get an undeleted blob, which should succeed
       getRequest1 = new GetRequest(1, "clientid1", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
