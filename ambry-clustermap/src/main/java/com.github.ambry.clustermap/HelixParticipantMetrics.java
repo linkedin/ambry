@@ -17,8 +17,6 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -32,7 +30,6 @@ class HelixParticipantMetrics {
   final AtomicInteger offlineCount = new AtomicInteger();
   // no need to record exact number of "dropped" partition, a counter to track partition-dropped events would suffice
   final Counter partitionDroppedCount;
-  private static final Logger logger = LoggerFactory.getLogger(HelixParticipantMetrics.class);
 
   HelixParticipantMetrics(MetricRegistry metricRegistry) {
     Gauge<Integer> bootstrapPartitionCount = bootstrapCount::get;
