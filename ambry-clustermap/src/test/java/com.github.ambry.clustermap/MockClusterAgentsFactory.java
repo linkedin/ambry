@@ -133,10 +133,6 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         public boolean updateDataNodeInfoInCluster(ReplicaId replicaId, boolean shouldExist) {
           return false;
         }
-
-        @Override
-        public void initializeParticipantMetrics(int localPartitionCount) {
-        }
       };
     }
     return clusterParticipant;

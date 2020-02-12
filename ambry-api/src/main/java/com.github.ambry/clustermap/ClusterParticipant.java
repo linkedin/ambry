@@ -88,7 +88,8 @@ public interface ClusterParticipant extends AutoCloseable {
    * Initialize participant related metrics if needed.
    * @param localPartitionCount total number of partitions on local node.
    */
-  void initializeParticipantMetrics(int localPartitionCount);
+  default void initializeParticipantMetrics(int localPartitionCount) {
+  }
 
   /**
    * Terminate the participant.

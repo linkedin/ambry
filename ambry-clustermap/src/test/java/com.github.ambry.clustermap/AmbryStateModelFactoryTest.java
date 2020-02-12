@@ -50,7 +50,7 @@ public class AmbryStateModelFactoryTest {
   }
 
   public AmbryStateModelFactoryTest(String stateModelDef) throws Exception {
-    List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
+    List<TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new TestUtils.ZkInfo(null, "DC0", (byte) 0, 2299, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     Properties props = new Properties();

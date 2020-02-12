@@ -21,6 +21,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * Metrics for {@link HelixParticipant} to monitor partition state transitions.
+ */
 class HelixParticipantMetrics {
   final AtomicInteger bootstrapCount = new AtomicInteger();
   final AtomicInteger standbyCount = new AtomicInteger();
@@ -57,7 +60,8 @@ class HelixParticipantMetrics {
   void setLocalPartitionCount(int partitionCount) {
     // this method should be invoked before participation, so the initial value is expected to be 0.
     if (!offlineCount.compareAndSet(0, partitionCount)) {
-      logger.warn("Number of OFFLINE partitions has changed before initializing participant metrics");
+      throw new IllegalStateException(
+          "Number of OFFLINE partitions has changed before initializing participant metrics");
     }
   }
 }
