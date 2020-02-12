@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import io.netty.buffer.ByteBuf;
 import java.io.InputStream;
 
 
@@ -33,9 +34,11 @@ public interface NetworkRequest {
   long getStartTimeInMs();
 
   /**
-   * Release any resource this request is holding.
+   * Release any resource this request is holding. By default it returns false so this method can be compatible
+   * with {@link ByteBuf#release()}
+   * @return {@code true} if and only if the reference count became {@code 0} and this object has been deallocated
    */
   default boolean release() {
-    return true;
-  };
+    return false;
+  }
 }

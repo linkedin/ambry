@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import io.netty.buffer.ByteBuf;
@@ -27,7 +28,7 @@ import org.slf4j.LoggerFactory;
 
 
 // The request at the network layer
-class SocketServerRequest implements NetworkRequest, ByteBufHolder {
+class SocketServerRequest extends AbstractByteBufHolder<SocketServerRequest> implements NetworkRequest {
   private final int processor;
   private final String connectionId;
   private final InputStream input;
@@ -54,16 +55,6 @@ class SocketServerRequest implements NetworkRequest, ByteBufHolder {
     return startTimeInMs;
   }
 
-  @Override
-  public boolean release() {
-    return content.release();
-  }
-
-  @Override
-  public boolean release(int decrement) {
-    return content.release(decrement);
-  }
-
   public int getProcessor() {
     return processor;
   }
@@ -78,53 +69,9 @@ class SocketServerRequest implements NetworkRequest, ByteBufHolder {
   }
 
   @Override
-  public SocketServerRequest copy() {
-    return replace(content().copy());
-  }
-
-  @Override
-  public SocketServerRequest duplicate() {
-    return replace(content().duplicate());
-  }
-
-  @Override
-  public SocketServerRequest retainedDuplicate() {
-    return replace(content().retainedDuplicate());
-  }
-
-  @Override
   public SocketServerRequest replace(ByteBuf content) {
     SocketServerRequest request = new SocketServerRequest(getProcessor(), getConnectionId(), content);
     return request;
-  }
-
-  @Override
-  public int refCnt() {
-    return content.refCnt();
-  }
-
-  @Override
-  public SocketServerRequest retain() {
-    content.retain();
-    return this;
-  }
-
-  @Override
-  public SocketServerRequest retain(int increment) {
-    content.retain(increment);
-    return this;
-  }
-
-  @Override
-  public SocketServerRequest touch() {
-    content.touch();
-    return this;
-  }
-
-  @Override
-  public SocketServerRequest touch(Object hint) {
-    content.touch(hint);
-    return this;
   }
 }
 

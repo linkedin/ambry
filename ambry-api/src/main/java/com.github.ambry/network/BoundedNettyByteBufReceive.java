@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.utils.AbstractByteBufHolder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufHolder;
@@ -27,7 +28,7 @@ import org.slf4j.LoggerFactory;
 /**
  * A netty {@link ByteBuf} version of Receive to buffer the incoming request or response.
  */
-public class BoundedNettyByteBufReceive implements ByteBufHolder {
+public class BoundedNettyByteBufReceive extends AbstractByteBufHolder<BoundedNettyByteBufReceive> {
 
   private ByteBuf buffer = null;
   private ByteBuf sizeBuffer = null;
@@ -123,70 +124,8 @@ public class BoundedNettyByteBufReceive implements ByteBufHolder {
   }
 
   @Override
-  public BoundedNettyByteBufReceive copy() {
-    return replace(content().copy());
-  }
-
-  @Override
-  public BoundedNettyByteBufReceive duplicate() {
-    return replace(content().duplicate());
-  }
-
-  @Override
-  public BoundedNettyByteBufReceive retainedDuplicate() {
-    return replace(content().retainedDuplicate());
-  }
-
-  @Override
   public BoundedNettyByteBufReceive replace(ByteBuf content) {
     BoundedNettyByteBufReceive receive = new BoundedNettyByteBufReceive(content, sizeToRead);
     return receive;
-  }
-
-  @Override
-  public int refCnt() {
-    return buffer.refCnt();
-  }
-
-  @Override
-  public BoundedNettyByteBufReceive retain() {
-    buffer.retain();
-    return this;
-  }
-
-  @Override
-  public BoundedNettyByteBufReceive retain(int increment) {
-    buffer.retain(increment);
-    return this;
-  }
-
-  @Override
-  public BoundedNettyByteBufReceive touch() {
-    buffer.touch();
-    return this;
-  }
-
-  @Override
-  public BoundedNettyByteBufReceive touch(Object hint) {
-    buffer.touch(hint);
-    return this;
-  }
-
-  @Override
-  public boolean release() {
-    if (buffer != null) {
-      return buffer.release();
-    } else {
-      return false;
-    }
-  }
-
-  @Override
-  public boolean release(int decrement) {
-    if (buffer != null) {
-      return buffer.release(decrement);
-    } else {
-      return false;
-    }
   }
 }

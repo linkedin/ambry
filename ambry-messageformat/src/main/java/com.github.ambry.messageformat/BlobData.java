@@ -13,6 +13,7 @@
  */
 package com.github.ambry.messageformat;
 
+import com.github.ambry.utils.AbstractByteBufHolder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 
@@ -20,7 +21,7 @@ import io.netty.buffer.ByteBufHolder;
 /**
  * Contains the blob stream along with some required info
  */
-public class BlobData implements ByteBufHolder {
+public class BlobData extends AbstractByteBufHolder<BlobData> {
   private final BlobType blobType;
   private final long size;
   private ByteBuf content;
@@ -57,62 +58,8 @@ public class BlobData implements ByteBufHolder {
   }
 
   @Override
-  public BlobData copy() {
-    return replace(content().copy());
-  }
-
-  @Override
-  public BlobData duplicate() {
-    return replace(content().duplicate());
-  }
-
-  @Override
-  public BlobData retainedDuplicate() {
-    return replace(content().retainedDuplicate());
-  }
-
-  @Override
   public BlobData replace(ByteBuf content) {
     BlobData data = new BlobData(blobType, size, content);
     return data;
-  }
-
-  @Override
-  public int refCnt() {
-    return content.refCnt();
-  }
-
-  @Override
-  public BlobData retain() {
-    content.retain();
-    return this;
-  }
-
-  @Override
-  public BlobData retain(int increment) {
-    content.retain(increment);
-    return this;
-  }
-
-  @Override
-  public BlobData touch() {
-    content.touch();
-    return this;
-  }
-
-  @Override
-  public BlobData touch(Object hint) {
-    content.touch(hint);
-    return this;
-  }
-
-  @Override
-  public boolean release() {
-    return content.release();
-  }
-
-  @Override
-  public boolean release(int decrement) {
-    return content.release(decrement);
   }
 }

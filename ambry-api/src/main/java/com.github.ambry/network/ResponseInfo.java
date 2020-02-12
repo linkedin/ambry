@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.utils.AbstractByteBufHolder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 
@@ -24,7 +25,7 @@ import io.netty.buffer.ByteBufHolder;
  * was an error sending the request or a non-null ByteBuffer containing the successful response received for this
  * request. Also, this class contains {@link DataNodeId} to which the request is issued.
  */
-public class ResponseInfo implements ByteBufHolder {
+public class ResponseInfo extends AbstractByteBufHolder<ResponseInfo> {
   private final RequestInfo requestInfo;
   private final NetworkClientErrorCode error;
   private final DataNodeId dataNode;
@@ -87,74 +88,8 @@ public class ResponseInfo implements ByteBufHolder {
   }
 
   @Override
-  public ResponseInfo copy() {
-    return replace(content().copy());
-  }
-
-  @Override
-  public ResponseInfo duplicate() {
-    return replace(content().duplicate());
-  }
-
-  @Override
-  public ResponseInfo retainedDuplicate() {
-    return replace(content().retainedDuplicate());
-  }
-
-  @Override
   public ResponseInfo replace(ByteBuf content) {
     ResponseInfo info = new ResponseInfo(requestInfo, error, content, dataNode);
     return info;
-  }
-
-  @Override
-  public int refCnt() {
-    return content.refCnt();
-  }
-
-  @Override
-  public ResponseInfo retain() {
-    content.retain();
-    return this;
-  }
-
-  @Override
-  public ResponseInfo retain(int increment) {
-    content.retain(increment);
-    return this;
-  }
-
-  @Override
-  public ResponseInfo touch() {
-    if (content != null) {
-      content.touch();
-    }
-    return this;
-  }
-
-  @Override
-  public ResponseInfo touch(Object hint) {
-    if (content != null) {
-      content.touch(hint);
-    }
-    return this;
-  }
-
-  @Override
-  public boolean release() {
-    if (content != null) {
-      return content.release();
-    } else {
-      return false;
-    }
-  }
-
-  @Override
-  public boolean release(int decrement) {
-    if (content != null) {
-      return content.release(decrement);
-    } else {
-      return false;
-    }
   }
 }
