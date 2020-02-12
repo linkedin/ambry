@@ -17,7 +17,6 @@ import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufHolder;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;

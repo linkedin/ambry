@@ -16,7 +16,6 @@ package com.github.ambry.network;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufHolder;
 
 
 /**

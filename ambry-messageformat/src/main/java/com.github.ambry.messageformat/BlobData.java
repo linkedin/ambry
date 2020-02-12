@@ -15,7 +15,6 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.AbstractByteBufHolder;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufHolder;
 
 
 /**

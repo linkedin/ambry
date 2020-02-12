@@ -16,7 +16,6 @@ package com.github.ambry.network;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.ByteBufHolder;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
