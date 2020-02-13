@@ -60,6 +60,7 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SSLBlockingChannel;
+import com.github.ambry.network.http2.Http2BlockingChannel;
 import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
@@ -121,7 +122,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLSocketFactory;
-import org.junit.Assert;
 
 import static org.junit.Assert.*;
 
@@ -240,7 +240,7 @@ final class ServerTestUtil {
         assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
         assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
       } catch (MessageFormatException e) {
-        Assert.fail();
+        fail();
       }
 
       // get blob properties with expired flag set
@@ -262,7 +262,7 @@ final class ServerTestUtil {
         assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
         assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
       } catch (MessageFormatException e) {
-        Assert.fail();
+        fail();
       }
 
       // get blob properties for expired blob
@@ -304,7 +304,7 @@ final class ServerTestUtil {
         assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
         assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
       } catch (MessageFormatException e) {
-        Assert.fail();
+        fail();
       }
 
       // get user metadata
@@ -315,7 +315,7 @@ final class ServerTestUtil {
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
-        Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
+        assertArrayEquals(usermetadata, userMetadataOutput.array());
         if (testEncryption) {
           assertNotNull("MessageMetadata should not have been null",
               resp2.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -344,7 +344,7 @@ final class ServerTestUtil {
       assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
       // verify user metadata
       ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(responseStream);
-      Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
+      assertArrayEquals(usermetadata, userMetadataOutput.array());
       if (testEncryption) {
         assertNotNull("MessageMetadata should not have been null",
             resp3.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -365,12 +365,12 @@ final class ServerTestUtil {
       BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
       byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
       // verify content
-      Assert.assertArrayEquals("Content mismatch", data, actualBlobData);
+      assertArrayEquals("Content mismatch.", data, actualBlobData);
       if (testEncryption) {
-        Assert.assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
-        Assert.assertArrayEquals("EncryptionKey mismatch", encryptionKey, blobAll.getBlobEncryptionKey().array());
+        assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
+        assertArrayEquals("EncryptionKey mismatch", encryptionKey, blobAll.getBlobEncryptionKey().array());
       } else {
-        Assert.assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
+        assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
       }
 
       // get blob data
@@ -492,7 +492,7 @@ final class ServerTestUtil {
       responseStream = resp1.getInputStream();
       blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
       actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
-      Assert.assertArrayEquals("Content mismatch", data, actualBlobData);
+      assertArrayEquals("Content mismatch.", data, actualBlobData);
 
       // delete a blob on a restarted store , which should succeed
       deleteRequest = new DeleteRequest(1, "deleteClient", blobId1, System.currentTimeMillis());
@@ -509,7 +509,7 @@ final class ServerTestUtil {
       channel.disconnect();
     } catch (Exception e) {
       e.printStackTrace();
-      Assert.fail();
+      fail();
     } finally {
       List<? extends ReplicaId> replicaIds = cluster.getClusterMap()
           .getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS)
@@ -769,7 +769,7 @@ final class ServerTestUtil {
           assertEquals("Expiration time mismatch (MessageInfo)", expectedExpiryTimeMs,
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
-          Assert.fail();
+          fail();
         }
 
         // get user metadata
@@ -780,7 +780,7 @@ final class ServerTestUtil {
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
         try {
           ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
-          Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
+          assertArrayEquals(usermetadata, userMetadataOutput.array());
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -794,7 +794,7 @@ final class ServerTestUtil {
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
           e.printStackTrace();
-          Assert.fail();
+          fail();
         }
 
         // get blob
@@ -805,7 +805,7 @@ final class ServerTestUtil {
         try {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
           byte[] blobout = getBlobDataAndRelease(blobData);
-          Assert.assertArrayEquals(data, blobout);
+          assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -819,7 +819,7 @@ final class ServerTestUtil {
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
           e.printStackTrace();
-          Assert.fail();
+          fail();
         }
 
         // get blob all
@@ -834,16 +834,16 @@ final class ServerTestUtil {
           assertEquals("Expiration time mismatch (MessageInfo)", expectedExpiryTimeMs,
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
           byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
-          Assert.assertArrayEquals(data, blobout);
+          assertArrayEquals(data, blobout);
           if (testEncryption) {
-            Assert.assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
-            Assert.assertArrayEquals("EncryptionKey mismatch", encryptionKey, blobAll.getBlobEncryptionKey().array());
+            assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
+            assertArrayEquals("EncryptionKey mismatch", encryptionKey, blobAll.getBlobEncryptionKey().array());
           } else {
-            Assert.assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
+            assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
           }
         } catch (MessageFormatException e) {
           e.printStackTrace();
-          Assert.fail();
+          fail();
         }
       }
     }
@@ -984,7 +984,7 @@ final class ServerTestUtil {
       GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
-        Assert.assertTrue(blobsDeleted.contains(blobIds.get(j)));
+        assertTrue(blobsDeleted.contains(blobIds.get(j)));
       } else {
         try {
           BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
@@ -995,7 +995,7 @@ final class ServerTestUtil {
           assertEquals("Expiration time mismatch in MessageInfo", Utils.Infinite_Time,
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
-          Assert.fail();
+          fail();
         }
       }
 
@@ -1007,11 +1007,11 @@ final class ServerTestUtil {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
-        Assert.assertTrue(blobsDeleted.contains(blobIds.get(j)));
+        assertTrue(blobsDeleted.contains(blobIds.get(j)));
       } else {
         try {
           ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
-          Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
+          assertArrayEquals(usermetadata, userMetadataOutput.array());
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -1024,7 +1024,7 @@ final class ServerTestUtil {
           assertEquals("Expiration time mismatch in MessageInfo", Utils.Infinite_Time,
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
-          Assert.fail();
+          fail();
         }
       }
 
@@ -1035,12 +1035,12 @@ final class ServerTestUtil {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
-        Assert.assertTrue(blobsDeleted.contains(blobIds.get(j)));
+        assertTrue(blobsDeleted.contains(blobIds.get(j)));
       } else {
         try {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
           byte[] blobout = getBlobDataAndRelease(blobData);
-          Assert.assertArrayEquals(data, blobout);
+          assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -1053,7 +1053,7 @@ final class ServerTestUtil {
           assertEquals("Expiration time mismatch in MessageInfo", Utils.Infinite_Time,
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
-          Assert.fail();
+          fail();
         }
       }
 
@@ -1064,24 +1064,24 @@ final class ServerTestUtil {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
-        Assert.assertTrue(blobsDeleted.contains(blobIds.get(j)));
+        assertTrue(blobsDeleted.contains(blobIds.get(j)));
         blobsDeleted.remove(blobIds.get(j));
         blobsChecked.add(blobIds.get(j));
       } else {
         try {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), blobIdFactory);
           byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
-          Assert.assertArrayEquals(data, blobout);
+          assertArrayEquals(data, blobout);
           if (testEncryption) {
-            Assert.assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
-            Assert.assertArrayEquals("EncryptionKey mismatch", encryptionKey, blobAll.getBlobEncryptionKey().array());
+            assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
+            assertArrayEquals("EncryptionKey mismatch", encryptionKey, blobAll.getBlobEncryptionKey().array());
           } else {
-            Assert.assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
+            assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
           }
           assertEquals("Expiration time mismatch in MessageInfo", Utils.Infinite_Time,
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
-          Assert.fail();
+          fail();
         }
       }
     }
@@ -1130,7 +1130,7 @@ final class ServerTestUtil {
       GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
-        Assert.assertTrue(blobsChecked.contains(blobIds.get(j)));
+        assertTrue(blobsChecked.contains(blobIds.get(j)));
       } else {
         try {
           BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
@@ -1139,7 +1139,7 @@ final class ServerTestUtil {
           assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
           assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
         } catch (MessageFormatException e) {
-          Assert.fail();
+          fail();
         }
       }
 
@@ -1151,11 +1151,11 @@ final class ServerTestUtil {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
-        Assert.assertTrue(blobsChecked.contains(blobIds.get(j)));
+        assertTrue(blobsChecked.contains(blobIds.get(j)));
       } else {
         try {
           ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
-          Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
+          assertArrayEquals(usermetadata, userMetadataOutput.array());
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -1166,7 +1166,7 @@ final class ServerTestUtil {
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
           }
         } catch (MessageFormatException e) {
-          Assert.fail();
+          fail();
         }
       }
 
@@ -1177,12 +1177,12 @@ final class ServerTestUtil {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
-        Assert.assertTrue(blobsChecked.contains(blobIds.get(j)));
+        assertTrue(blobsChecked.contains(blobIds.get(j)));
       } else {
         try {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
           byte[] blobout = getBlobDataAndRelease(blobData);
-          Assert.assertArrayEquals(data, blobout);
+          assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -1193,7 +1193,7 @@ final class ServerTestUtil {
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
           }
         } catch (MessageFormatException e) {
-          Assert.fail();
+          fail();
         }
       }
 
@@ -1204,21 +1204,21 @@ final class ServerTestUtil {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
-        Assert.assertTrue(blobsChecked.contains(blobIds.get(j)));
+        assertTrue(blobsChecked.contains(blobIds.get(j)));
         blobsChecked.remove(blobIds.get(j));
       } else {
         try {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), blobIdFactory);
           byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
-          Assert.assertArrayEquals(data, blobout);
+          assertArrayEquals(data, blobout);
           if (testEncryption) {
-            Assert.assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
-            Assert.assertArrayEquals("EncryptionKey mismatch", encryptionKey, blobAll.getBlobEncryptionKey().array());
+            assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
+            assertArrayEquals("EncryptionKey mismatch", encryptionKey, blobAll.getBlobEncryptionKey().array());
           } else {
-            Assert.assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
+            assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
           }
         } catch (MessageFormatException e) {
-          Assert.fail();
+          fail();
         }
       }
     }
@@ -1409,7 +1409,7 @@ final class ServerTestUtil {
     InputStream responseStream = resp2.getInputStream();
     BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
     byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
-    Assert.assertArrayEquals("Content mismatch", data, actualBlobData);
+    assertArrayEquals("Content mismatch.", data, actualBlobData);
 
     // delete a blob on a restarted store , which should succeed
     deleteRequest = new DeleteRequest(1, "clientId2", blobId2, System.currentTimeMillis());
@@ -1578,7 +1578,7 @@ final class ServerTestUtil {
         assertEquals("ContainerId mismatch", propertyList.get(2).getContainerId(), propertyOutput.getContainerId());
         assertEquals("IsEncrypted mismatch", propertyList.get(2).isEncrypted(), propertyOutput.isEncrypted());
       } catch (MessageFormatException e) {
-        Assert.fail();
+        fail();
       }
       // get user metadata
       ids.clear();
@@ -1592,7 +1592,7 @@ final class ServerTestUtil {
       assertEquals(ServerErrorCode.No_Error, resp2.getPartitionResponseInfoList().get(0).getErrorCode());
       try {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
-        Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
+        assertArrayEquals(usermetadata, userMetadataOutput.array());
         if (testEncryption) {
           assertNotNull("MessageMetadata should not have been null",
               resp2.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -1603,7 +1603,7 @@ final class ServerTestUtil {
               resp2.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
         }
       } catch (MessageFormatException e) {
-        Assert.fail();
+        fail();
       }
 
       // get blob
@@ -1617,7 +1617,7 @@ final class ServerTestUtil {
       try {
         BlobData blobData = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
         byte[] blobout = getBlobDataAndRelease(blobData);
-        Assert.assertArrayEquals(dataList.get(0), blobout);
+        assertArrayEquals(dataList.get(0), blobout);
         if (testEncryption) {
           assertNotNull("MessageMetadata should not have been null",
               resp3.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -1628,7 +1628,7 @@ final class ServerTestUtil {
               resp3.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
         }
       } catch (MessageFormatException e) {
-        Assert.fail();
+        fail();
       }
 
       // get blob all
@@ -1642,7 +1642,7 @@ final class ServerTestUtil {
       try {
         BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp4.getInputStream(), blobIdFactory);
         byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
-        Assert.assertArrayEquals(dataList.get(0), blobout);
+        assertArrayEquals(dataList.get(0), blobout);
         if (testEncryption) {
           assertNotNull("MessageMetadata should not have been null", blobAll.getBlobEncryptionKey());
           assertArrayEquals("EncryptionKey mismatch", encryptionKeyList.get(0), blobAll.getBlobEncryptionKey().array());
@@ -1650,7 +1650,7 @@ final class ServerTestUtil {
           assertNull("MessageMetadata should have been null", blobAll.getBlobEncryptionKey());
         }
       } catch (MessageFormatException e) {
-        Assert.fail();
+        fail();
       }
 
       if (!testEncryption) {
@@ -1814,7 +1814,7 @@ final class ServerTestUtil {
         checkBlobContent(clusterMap, blobIdList.get(9), channel1, dataList.get(9), encryptionKeyList.get(9));
         checkBlobContent(clusterMap, blobIdList.get(10), channel1, dataList.get(10), encryptionKeyList.get(10));
       } catch (MessageFormatException e) {
-        Assert.fail();
+        fail();
       }
 
       // check that the ttl update went through
@@ -1885,7 +1885,7 @@ final class ServerTestUtil {
         checkBlobContent(clusterMap, blobIdList.get(9), channel1, dataList.get(9), encryptionKeyList.get(9));
         checkBlobContent(clusterMap, blobIdList.get(10), channel1, dataList.get(10), encryptionKeyList.get(10));
       } catch (MessageFormatException e) {
-        Assert.fail();
+        fail();
       }
 
       // check that the ttl updates are present
@@ -1899,7 +1899,7 @@ final class ServerTestUtil {
       channel3.disconnect();
     } catch (Exception e) {
       e.printStackTrace();
-      Assert.fail();
+      fail();
     }
   }
 
@@ -1988,7 +1988,7 @@ final class ServerTestUtil {
 
               // read remote port
               int port = dataInputStream.readInt();
-              Assert.assertTrue(setToCheck.contains(partitionId.toString() + hostname + port));
+              assertTrue(setToCheck.contains(partitionId.toString() + hostname + port));
               setToCheck.remove(partitionId.toString() + hostname + port);
               // read total bytes read from local store
               dataInputStream.readLong();
@@ -2002,8 +2002,7 @@ final class ServerTestUtil {
               long parsedToken = endTokenOffset == null ? -1 : endTokenOffset.getOffset();
               System.out.println("The parsed token is " + parsedToken);
               if (partitionId.isEqual(targetPartition)) {
-                Assert.assertFalse(
-                    "Parsed offset: " + parsedToken + " must not be larger than target value: " + targetOffset,
+                assertFalse("Parsed offset: " + parsedToken + " must not be larger than target value: " + targetOffset,
                     parsedToken > targetOffset);
                 if (parsedToken == targetOffset) {
                   numFound++;
@@ -2015,7 +2014,7 @@ final class ServerTestUtil {
             long crc = crcStream.getValue();
             assertEquals(crc, dataInputStream.readLong());
           } catch (IOException e) {
-            Assert.fail();
+            fail();
           } finally {
             dataInputStream.close();
           }
@@ -2026,7 +2025,7 @@ final class ServerTestUtil {
       }
     }
     if (!foundTarget) {
-      Assert.fail("Could not find target token offset: " + targetOffset);
+      fail("Could not find target token offset: " + targetOffset);
     }
   }
 
@@ -2038,7 +2037,7 @@ final class ServerTestUtil {
         result.getBlobInfo().getBlobProperties().getBlobSize());
     CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel();
     blob.readInto(channel, null).get(1, TimeUnit.SECONDS);
-    Assert.assertArrayEquals(data,
+    assertArrayEquals(data,
         Utils.readBytesFromStream(channel.getContentAsInputStream(), (int) channel.getBytesWritten()));
   }
 
@@ -2058,14 +2057,14 @@ final class ServerTestUtil {
     assertEquals(ServerErrorCode.No_Error, resp.getError());
     BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
     byte[] blobout = getBlobDataAndRelease(blobData);
-    Assert.assertArrayEquals(dataToCheck, blobout);
+    assertArrayEquals(dataToCheck, blobout);
     if (encryptionKey != null) {
-      Assert.assertNotNull("EncryptionKey should not have been null",
+      assertNotNull("EncryptionKey should not have been null",
           resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
-      Assert.assertArrayEquals("EncryptionKey mismatch", encryptionKey,
+      assertArrayEquals("EncryptionKey mismatch", encryptionKey,
           resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0).getEncryptionKey().array());
     } else {
-      Assert.assertNull("EncryptionKey should have been null",
+      assertNull("EncryptionKey should have been null",
           resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
     }
   }
@@ -2160,7 +2159,7 @@ final class ServerTestUtil {
     InputStream responseStream = response.getInputStream();
     BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, storeKeyFactory);
     byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
-    assertArrayEquals("Content mismatch", expectedBlobData, actualBlobData);
+    assertArrayEquals("Content mismatch.", expectedBlobData, actualBlobData);
     messageInfo = response.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0);
     assertEquals("Blob ID not as expected", blobId, messageInfo.getStoreKey());
     assertEquals("TTL update state not as expected", ttlUpdated, messageInfo.isTtlUpdated());
@@ -2193,7 +2192,7 @@ final class ServerTestUtil {
       channel = new SSLBlockingChannel(hostName, targetPort.getPort(), new MetricRegistry(), 10000, 10000, 10000, 4000,
           sslSocketFactory, sslConfig);
     } else if (targetPort.getPortType() == PortType.HTTP2) {
-      channel = new Http2BlockingChannel(hostName, targetPort.getPort());
+      channel = new Http2BlockingChannel(hostName, targetPort.getPort(), sslConfig);
     }
     return channel;
   }

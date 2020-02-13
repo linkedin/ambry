@@ -192,6 +192,8 @@ project(':ambry-commons') {
                 project(':ambry-messageformat'),
                 project(':ambry-utils')
         compile "org.conscrypt:conscrypt-openjdk-uber:$conscryptVersion"
+        compile "io.netty:netty-all:$nettyVersion"
+        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
@@ -205,6 +207,8 @@ project(':ambry-network') {
                 project(':ambry-utils'),
                 project(':ambry-commons'),
                 project(':ambry-clustermap')
+        compile "io.netty:netty-all:$nettyVersion"
+        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output

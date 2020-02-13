@@ -38,7 +38,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
-import com.github.ambry.rest.NettySslFactory;
+import com.github.ambry.commons.NettySslFactory;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServiceException;
