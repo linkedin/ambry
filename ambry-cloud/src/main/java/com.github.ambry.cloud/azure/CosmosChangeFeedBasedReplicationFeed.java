@@ -141,7 +141,6 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
             CACHE_VALID_DURATION_IN_MS, CACHE_VALID_DURATION_IN_MS, TimeUnit.MILLISECONDS);
   }
 
-  @Override
   /**
    * Get next set of change feed entries for the specified partition, after the {@code curFindToken}.
    * The number of entries is capped by maxEntriesSize.
@@ -153,7 +152,9 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
    * @return {@link FindResult} instance that contains updated {@link FindToken} object which can act as a bookmark for
    * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
    * @throws {@link DocumentClientException}.
-   */ public FindResult getNextEntriesAndUpdatedToken(FindToken curFindToken, long maxTotalSizeOfEntries,
+   */
+  @Override
+  public FindResult getNextEntriesAndUpdatedToken(FindToken curFindToken, long maxTotalSizeOfEntries,
       String partitionPath) throws DocumentClientException {
     List<CloudBlobMetadata> nextEntries = new ArrayList<>();
     CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) curFindToken;

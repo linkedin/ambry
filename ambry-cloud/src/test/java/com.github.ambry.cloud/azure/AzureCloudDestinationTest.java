@@ -393,6 +393,7 @@ public class AzureCloudDestinationTest {
   }
 
   /** Test findEntriesSince when cloud destination uses change feed based token. */
+  @Test
   public void testFindEntriesSinceUsingChangeFeed() throws Exception {
     long chunkSize = 110000;
     long maxTotalSize = 1000000; // between 9 and 10 chunks
@@ -446,6 +447,7 @@ public class AzureCloudDestinationTest {
   }
 
   /** Test findEntriesSince when cloud destination uses update time based token. */
+  @Test
   public void testFindEntriesSinceUsingUpdateTime() throws Exception {
     testFindEntriesSinceWithUniqueUpdateTimes();
     testFindEntriesSinceWithNonUniqueUpdateTimes();
