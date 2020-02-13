@@ -166,8 +166,8 @@ public class AmbryServer {
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       storageManager =
-          new StorageManager(storeConfig, diskManagerConfig, serverConfig, scheduler, registry, storeKeyFactory,
-              clusterMap, nodeId, new BlobStoreHardDelete(), clusterParticipant, time, new BlobStoreRecovery());
+          new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
+              new BlobStoreHardDelete(), clusterParticipant, time, new BlobStoreRecovery());
       storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
@@ -263,9 +263,7 @@ public class AmbryServer {
       if (vcrClusterSpectator != null) {
         vcrClusterSpectator.spectate();
       }
-      if (!serverConfig.serverShouldNotParticipateInCluster) {
-        clusterParticipant.participate(ambryHealthReports);
-      }
+      clusterParticipant.participate(ambryHealthReports);
 
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;

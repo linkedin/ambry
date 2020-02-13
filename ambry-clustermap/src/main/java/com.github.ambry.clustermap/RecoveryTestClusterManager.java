@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,7 +31,7 @@ import org.slf4j.LoggerFactory;
  * It provides a merged view of the static and helix clusters.
  */
 public class RecoveryTestClusterManager implements ClusterMap {
-  private final Logger logger = LoggerFactory.getLogger(CompositeClusterManager.class);
+  private final Logger logger = LoggerFactory.getLogger(RecoveryTestClusterManager.class);
   final StaticClusterManager staticClusterManager;
   final HelixClusterManager helixClusterManager;
   final Map<AmbryDisk, Disk> ambryDiskToDiskMap;
@@ -42,8 +43,8 @@ public class RecoveryTestClusterManager implements ClusterMap {
    * @param helixClusterManager the {@link HelixClusterManager} object.
    */
   RecoveryTestClusterManager(StaticClusterManager staticClusterManager, HelixClusterManager helixClusterManager) {
-    this.staticClusterManager = staticClusterManager;
-    this.helixClusterManager = helixClusterManager;
+    this.staticClusterManager = Objects.requireNonNull(staticClusterManager);
+    this.helixClusterManager = Objects.requireNonNull(helixClusterManager);
     ambryDataNodeToDataNodeMap = new HashMap<>();
     ambryDiskToDiskMap = new HashMap<>();
   }
@@ -200,9 +201,7 @@ public class RecoveryTestClusterManager implements ClusterMap {
 
   @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
-    if (helixClusterManager != null) {
-      helixClusterManager.registerClusterMapListener(clusterMapChangeListener);
-    }
+    helixClusterManager.registerClusterMapListener(clusterMapChangeListener);
   }
 
   @Override

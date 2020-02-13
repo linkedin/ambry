@@ -27,7 +27,6 @@ import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.DiskManagerConfig;
-import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
@@ -89,7 +88,7 @@ public class StorageManager implements StoreManager {
    * @param time the {@link Time} instance to use.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    */
-  public StorageManager(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig, ServerConfig serverConfig,
+  public StorageManager(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
       ScheduledExecutorService scheduler, MetricRegistry registry, StoreKeyFactory keyFactory, ClusterMap clusterMap,
       DataNodeId dataNodeId, MessageStoreHardDelete hardDelete, ClusterParticipant clusterParticipant, Time time,
       MessageStoreRecovery recovery) throws StoreException {
@@ -104,8 +103,7 @@ public class StorageManager implements StoreManager {
     this.clusterMap = clusterMap;
     this.clusterParticipant = clusterParticipant;
     currentNode = dataNodeId;
-    replicaStatusDelegate = (clusterParticipant == null || serverConfig.serverShouldNotParticipateInCluster) ? null
-        : new ReplicaStatusDelegate(clusterParticipant);
+    replicaStatusDelegate = clusterParticipant == null ? null : new ReplicaStatusDelegate(clusterParticipant);
     metrics = new StorageManagerMetrics(registry);
     storeMainMetrics = new StoreMetrics(registry);
     storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);

@@ -28,7 +28,6 @@ import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -547,9 +546,9 @@ public class StatsManagerTest {
     MockClusterMap clusterMap = new MockClusterMap();
     DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(currentNode);
-    StorageManager storageManager = new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties),
-        new ServerConfig(verifiableProperties), Utils.newScheduler(1, true), new MetricRegistry(), null, clusterMap,
-        currentNode, null, clusterParticipant, new MockTime(), null);
+    StorageManager storageManager =
+        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
+            new MetricRegistry(), null, clusterMap, currentNode, null, clusterParticipant, new MockTime(), null);
     storageManager.start();
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());

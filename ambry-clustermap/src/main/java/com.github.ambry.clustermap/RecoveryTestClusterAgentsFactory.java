@@ -14,21 +14,26 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
- *
+ * A factory class to construct {@link RecoveryTestClusterManager} and a no op {@link ClusterParticipant}.
+ * Only one instance of each type of objects will ever be created by this factory.
  */
 public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
-  private static final Logger logger = LoggerFactory.getLogger(CompositeClusterAgentsFactory.class);
+  private static final Logger logger = LoggerFactory.getLogger(RecoveryTestClusterAgentsFactory.class);
   private final StaticClusterAgentsFactory staticClusterAgentsFactory;
   private final HelixClusterAgentsFactory helixClusterAgentsFactory;
-  private RecoveryTestClusterManager recoveryTestClusterManager;
-  private ClusterParticipant clusterParticipant;
+  private final AtomicReference<RecoveryTestClusterManager> recoveryTestClusterManagerRef = new AtomicReference<>();
+  private final AtomicReference<ClusterParticipant> clusterParticipantRef = new AtomicReference<>();
 
   /**
    * Create an instance of this class.
@@ -56,7 +61,7 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
    */
   @Override
   public RecoveryTestClusterManager getClusterMap() throws IOException {
-    if (recoveryTestClusterManager == null) {
+    if (recoveryTestClusterManagerRef.get() == null) {
       StaticClusterManager staticClusterManager = staticClusterAgentsFactory.getClusterMap();
       HelixClusterManager helixClusterManager = null;
       try {
@@ -64,16 +69,63 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
       } catch (Exception e) {
         logger.error("Helix cluster manager instantiation failed with exception", e);
       }
-      recoveryTestClusterManager = new RecoveryTestClusterManager(staticClusterManager, helixClusterManager);
+      recoveryTestClusterManagerRef.compareAndSet(null,
+          new RecoveryTestClusterManager(staticClusterManager, helixClusterManager));
     }
-    return recoveryTestClusterManager;
+    return recoveryTestClusterManagerRef.get();
   }
 
   @Override
   public ClusterParticipant getClusterParticipant() throws IOException {
-    if (clusterParticipant == null) {
-      clusterParticipant = helixClusterAgentsFactory.getClusterParticipant();
+    if (clusterParticipantRef.get() == null) {
+      // create a no op cluster participant that does nothing. Just sits idly by!!! ¯\_(ツ)_/¯
+      ClusterParticipant clusterParticipant = new ClusterParticipant() {
+        @Override
+        public void participate(List<AmbryHealthReport> ambryHealthReports) {
+          return;
+        }
+
+        @Override
+        public void close() {
+        }
+
+        @Override
+        public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+          return false;
+        }
+
+        @Override
+        public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean markStop) {
+          return false;
+        }
+
+        @Override
+        public List<String> getSealedReplicas() {
+          return Collections.emptyList();
+        }
+
+        @Override
+        public List<String> getStoppedReplicas() {
+          return Collections.emptyList();
+        }
+
+        @Override
+        public void registerPartitionStateChangeListener(StateModelListenerType listenerType,
+            PartitionStateChangeListener partitionStateChangeListener) {
+        }
+
+        @Override
+        public ReplicaSyncUpManager getReplicaSyncUpManager() {
+          return null;
+        }
+
+        @Override
+        public boolean updateDataNodeInfoInCluster(ReplicaId replicaId, boolean shouldExist) {
+          return false;
+        }
+      };
+      clusterParticipantRef.compareAndSet(null, clusterParticipant);
     }
-    return clusterParticipant;
+    return clusterParticipantRef.get();
   }
 }
