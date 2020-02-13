@@ -37,6 +37,7 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -224,9 +225,9 @@ public class ReplicationTest {
     DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
-    StorageManager storageManager =
-        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null);
+    StorageManager storageManager = new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties),
+        new ServerConfig(verifiableProperties), Utils.newScheduler(1, true), new MetricRegistry(), null, clusterMap,
+        dataNodeId, null, null, new MockTime(), null);
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
@@ -313,9 +314,9 @@ public class ReplicationTest {
         clusterMap.getDataNodes().stream().filter(d -> !specialPartitionNodes.contains(d)).findFirst().get();
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
-    StorageManager storageManager =
-        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, currentNode, null, null, new MockTime(), null);
+    StorageManager storageManager = new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties),
+        new ServerConfig(verifiableProperties), Utils.newScheduler(1, true), new MetricRegistry(), null, clusterMap,
+        currentNode, null, null, new MockTime(), null);
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
@@ -1933,11 +1934,7 @@ public class ReplicationTest {
   private ReplicaId getNewReplicaToAdd(MockClusterMap clusterMap) {
     DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);
     PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
-    return newPartition.getReplicaIds()
-        .stream()
-        .filter(r -> ((ReplicaId) r).getDataNodeId() == currentNode)
-        .findFirst()
-        .get();
+    return newPartition.getReplicaIds().stream().filter(r -> r.getDataNodeId() == currentNode).findFirst().get();
   }
 
   /**
@@ -1954,9 +1951,9 @@ public class ReplicationTest {
     DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
-    StorageManager storageManager =
-        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, dataNodeId, null, clusterParticipant, new MockTime(), null);
+    StorageManager storageManager = new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties),
+        new ServerConfig(verifiableProperties), Utils.newScheduler(1, true), new MetricRegistry(), null, clusterMap,
+        dataNodeId, null, clusterParticipant, new MockTime(), null);
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,

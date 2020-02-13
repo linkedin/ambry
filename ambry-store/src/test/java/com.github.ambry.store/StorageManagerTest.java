@@ -34,6 +34,7 @@ import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryHealthReport;
@@ -80,6 +81,7 @@ public class StorageManagerTest {
   private DiskManagerConfig diskManagerConfig;
   private ClusterMapConfig clusterMapConfig;
   private StoreConfig storeConfig;
+  private ServerConfig serverConfig;
   private MockClusterMap clusterMap;
   private MetricRegistry metricRegistry;
 
@@ -673,8 +675,8 @@ public class StorageManagerTest {
     // by default, storeCompactionTriggers = "" which makes compaction executor = null during initialization
     VerifiableProperties vProps = new VerifiableProperties(new Properties());
     storageManager =
-        new StorageManager(new StoreConfig(vProps), diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
-            new MockIdFactory(), clusterMap, dataNode, new DummyMessageStoreHardDelete(), null,
+        new StorageManager(new StoreConfig(vProps), diskManagerConfig, serverConfig, Utils.newScheduler(1, false),
+            metricRegistry, new MockIdFactory(), clusterMap, dataNode, new DummyMessageStoreHardDelete(), null,
             SystemTime.getInstance(), new DummyMessageStoreRecovery());
     storageManager.start();
     for (ReplicaId replica : replicas) {
@@ -1058,9 +1060,9 @@ public class StorageManagerTest {
    */
   private StorageManager createStorageManager(DataNodeId currentNode, MetricRegistry metricRegistry,
       ClusterParticipant clusterParticipant) throws StoreException {
-    return new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
-        new MockIdFactory(), clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipant,
-        SystemTime.getInstance(), new DummyMessageStoreRecovery());
+    return new StorageManager(storeConfig, diskManagerConfig, serverConfig, Utils.newScheduler(1, false),
+        metricRegistry, new MockIdFactory(), clusterMap, currentNode, new DummyMessageStoreHardDelete(),
+        clusterParticipant, SystemTime.getInstance(), new DummyMessageStoreRecovery());
   }
 
   /**
@@ -1165,6 +1167,7 @@ public class StorageManagerTest {
     diskManagerConfig = new DiskManagerConfig(vProps);
     storeConfig = new StoreConfig(vProps);
     clusterMapConfig = new ClusterMapConfig(vProps);
+    serverConfig = new ServerConfig(vProps);
   }
 
   // unrecognizedDirsOnDiskTest() helpers
@@ -1264,9 +1267,9 @@ public class StorageManagerTest {
     boolean controlCompactionReturnVal = false;
 
     MockStorageManager(DataNodeId currentNode, ClusterParticipant clusterParticipant) throws Exception {
-      super(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), new MetricRegistry(), new MockIdFactory(),
-          clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipant, SystemTime.getInstance(),
-          new DummyMessageStoreRecovery());
+      super(storeConfig, diskManagerConfig, serverConfig, Utils.newScheduler(1, false), metricRegistry,
+          new MockIdFactory(), clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipant,
+          SystemTime.getInstance(), new DummyMessageStoreRecovery());
     }
 
     @Override

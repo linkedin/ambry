@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatInputStream;
@@ -150,7 +151,7 @@ class MockStorageManager extends StorageManager {
       try {
         MessageFormatInputStream stream =
             new UndeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                info.getOperationTimeMs(), (short) returnValueOfUndelete);
+                info.getOperationTimeMs(), returnValueOfUndelete);
         // Update info to add stream size;
         info = new MessageInfo(info.getStoreKey(), stream.getSize(), false, false, true, Utils.Infinite_Time, null,
             info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(), returnValueOfUndelete);
@@ -396,8 +397,8 @@ class MockStorageManager extends StorageManager {
 
   MockStorageManager(Set<StoreKey> validKeysInStore, ClusterMap clusterMap, DataNodeId dataNodeId,
       FindTokenHelper findTokenHelper) throws StoreException {
-    super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
-        null, clusterMap, dataNodeId, null, null, new MockTime(), null);
+    super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), new ServerConfig(VPROPS), Utils.newScheduler(1, true),
+        new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null);
     this.validKeysInStore = validKeysInStore;
     this.findTokenHelper = findTokenHelper;
     for (ReplicaId replica : clusterMap.getReplicaIds(dataNodeId)) {
@@ -406,8 +407,8 @@ class MockStorageManager extends StorageManager {
   }
 
   MockStorageManager(Map<PartitionId, Store> map, DataNodeId dataNodeId) throws Exception {
-    super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), null, new MetricRegistry(), null,
-        new MockClusterMap(), dataNodeId, null, null, SystemTime.getInstance(), null);
+    super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), new ServerConfig(VPROPS), null, new MetricRegistry(),
+        null, new MockClusterMap(), dataNodeId, null, null, SystemTime.getInstance(), null);
     storeMap = map;
   }
 

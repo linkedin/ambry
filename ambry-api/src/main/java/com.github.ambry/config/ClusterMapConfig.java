@@ -14,6 +14,7 @@
 package com.github.ambry.config;
 
 import org.apache.helix.model.LeaderStandbySMD;
+import org.json.JSONObject;
 
 
 /**
@@ -231,6 +232,20 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clustermapUpdateDatanodeInfo;
 
+  /**
+   * Partition layout json for recovery test cluster map.
+   */
+  @Config("clustermap.recovery.test.partition.layout")
+  @Default("{}")
+  public final JSONObject clustermapRecoveryTestPartitionLayout;
+
+  /**
+   * Hardware layout json for recovery test cluster map.
+   */
+  @Config("clustermap.recovery.test.hardware.layout")
+  @Default("{}")
+  public final JSONObject clustermapRecoveryTestHardwareLayout;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -279,5 +294,9 @@ public class ClusterMapConfig {
     clustermapWritablePartitionMinReplicaCount =
         verifiableProperties.getIntInRange("clustermap.writable.partition.min.replica.count", 3, 0, Integer.MAX_VALUE);
     clustermapUpdateDatanodeInfo = verifiableProperties.getBoolean("clustermap.update.datanode.info", false);
+    clustermapRecoveryTestHardwareLayout =
+        new JSONObject(verifiableProperties.getString("clustermap.recovery.test.hardware.layout", "{}"));
+    clustermapRecoveryTestPartitionLayout =
+        new JSONObject(verifiableProperties.getString("clustermap.recovery.test.partition.layout", "{}"));
   }
 }
