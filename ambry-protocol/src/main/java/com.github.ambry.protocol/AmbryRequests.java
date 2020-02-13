@@ -666,8 +666,8 @@ public class AmbryRequests implements RequestAPI {
         MessageInfo info =
             new MessageInfo(convertedBlobId, 0, convertedBlobId.getAccountId(), convertedBlobId.getContainerId(),
                 undeleteRequest.getOperationTimeMs());
-        Store storeToDelete = storeManager.getStore(undeleteRequest.getBlobId().getPartition());
-        short lifeVersion = storeToDelete.undelete(info);
+        Store storeToUndelete = storeManager.getStore(undeleteRequest.getBlobId().getPartition());
+        short lifeVersion = storeToUndelete.undelete(info);
         response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), lifeVersion);
         if (notification != null) {
           notification.onBlobReplicaUndeleted(currentNode.getHostname(), currentNode.getPort(),
@@ -680,13 +680,19 @@ public class AmbryRequests implements RequestAPI {
         metrics.idNotFoundError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
         metrics.ttlExpiredError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted_Permanently) {
         metrics.idDeletedError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.Life_Version_Conflict) {
+        metrics.lifeVersionConflictError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.ID_Not_Deleted) {
+        metrics.idNotDeletedError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.ID_Undeleted) {
+        metrics.idUndeletedError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
-        metrics.deleteAuthorizationFailure.inc();
+        metrics.undeleteAuthorizationFailure.inc();
       } else {
         logInErrorLevel = true;
-        metrics.unExpectedStoreDeleteError.inc();
+        metrics.unExpectedStoreUndeleteError.inc();
       }
       if (logInErrorLevel) {
         logger.error("Store exception on a undelete with error code {} for request {}", e.getErrorCode(),
@@ -701,7 +707,7 @@ public class AmbryRequests implements RequestAPI {
       logger.error("Unknown exception for undelete request " + undeleteRequest, e);
       response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
           ServerErrorCode.Unknown_Error);
-      metrics.unExpectedStoreDeleteError.inc();
+      metrics.unExpectedStoreUndeleteError.inc();
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
