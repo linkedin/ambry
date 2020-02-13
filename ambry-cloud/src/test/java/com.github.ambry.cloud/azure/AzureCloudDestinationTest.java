@@ -32,7 +32,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.Document;
@@ -48,8 +47,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -63,8 +60,8 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 import org.mockito.internal.util.reflection.FieldSetter;
+import org.mockito.junit.MockitoJUnitRunner;
 import rx.Observable;
 
 import static com.github.ambry.cloud.azure.AzureTestUtils.*;
@@ -75,7 +72,7 @@ import static org.mockito.BDDMockito.*;
 
 
 /** Test cases for {@link AzureCloudDestination} */
-@RunWith(Parameterized.class)
+@RunWith(MockitoJUnitRunner.class)
 public class AzureCloudDestinationTest {
 
   private final String base64key = Base64.encodeBase64String("ambrykey".getBytes());
@@ -98,26 +95,8 @@ public class AzureCloudDestinationTest {
   private long creationTime = System.currentTimeMillis();
   private long deletionTime = creationTime + 10000;
   private long expirationTime = Utils.Infinite_Time;
-  private AzureReplicationFeed.FeedType azureReplicationFeedType;
-
-  /**
-   * Parameterized constructor.
-   * @param azureReplicationFeedType type of replication feed used by {@link AzureCloudDestination}
-   */
-  public AzureCloudDestinationTest(AzureReplicationFeed.FeedType azureReplicationFeedType) {
-    super();
-    this.azureReplicationFeedType = azureReplicationFeedType;
-  }
-
-  /**
-   * static method to generate parameters.
-   * @return {@link Collection} of parameters.
-   */
-  @Parameterized.Parameters
-  public static List<Object[]> input() {
-    return Arrays.asList(new Object[][]{{AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME},
-        {AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED}});
-  }
+  private final AzureReplicationFeed.FeedType defaultAzureReplicationFeedType =
+      AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
 
   @Before
   public void setup() throws Exception {
@@ -148,7 +127,7 @@ public class AzureCloudDestinationTest {
     configProps.setProperty("clustermap.host.name", "localhost");
     azureMetrics = new AzureMetrics(new MetricRegistry());
     azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-        azureMetrics, azureReplicationFeedType);
+        azureMetrics, defaultAzureReplicationFeedType);
   }
 
   /**
@@ -374,7 +353,7 @@ public class AzureCloudDestinationTest {
     // Reset metrics
     azureMetrics = new AzureMetrics(new MetricRegistry());
     azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-        azureMetrics, azureReplicationFeedType);
+        azureMetrics, defaultAzureReplicationFeedType);
     List<BlobId> blobIdList = new ArrayList<>();
     List<Document> docList = new ArrayList<>();
     for (int j = 0; j < numBlobs; j++) {
@@ -413,21 +392,8 @@ public class AzureCloudDestinationTest {
     assertEquals(1, azureMetrics.deadBlobsQueryTime.getCount());
   }
 
-  /** Test findEntriesSince. */
-  @Test
-  public void testFindEntriesSince() throws Exception {
-    switch (azureReplicationFeedType) {
-      case COSMOS_CHANGE_FEED:
-        testFindEntriesSinceUsingChangeFeed();
-        break;
-      case COSMOS_UPDATE_TIME:
-        testFindEntriesSinceUsingUpdateTime();
-        break;
-    }
-  }
-
   /** Test findEntriesSince when cloud destination uses change feed based token. */
-  private void testFindEntriesSinceUsingChangeFeed() throws Exception {
+  public void testFindEntriesSinceUsingChangeFeed() throws Exception {
     long chunkSize = 110000;
     long maxTotalSize = 1000000; // between 9 and 10 chunks
     long startTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
@@ -446,31 +412,31 @@ public class AzureCloudDestinationTest {
     }
 
     MockChangeFeedQuery mockChangeFeedQuery = new MockChangeFeedQuery();
-    AzureReplicationFeed azureReplicationFeed = getReplicationFeedObj(mockChangeFeedQuery);
+    AzureReplicationFeed azureReplicationFeed =
+        new CosmosChangeFeedBasedReplicationFeed(mockChangeFeedQuery, azureMetrics);
     FieldSetter.setField(azureDest, azureDest.getClass().getDeclaredField("azureReplicationFeed"),
         azureReplicationFeed);
     cloudBlobMetadataList.stream().forEach(doc -> mockChangeFeedQuery.add(doc));
-    FindToken findToken = new CosmosChangeFeedFindToken();
+    CosmosChangeFeedFindToken findToken = new CosmosChangeFeedFindToken();
     // Run the query
     FindResult findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
     List<CloudBlobMetadata> firstResult = findResult.getMetadataList();
-    findToken = findResult.getUpdatedFindToken();
+    findToken = (CosmosChangeFeedFindToken) findResult.getUpdatedFindToken();
     assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
 
-    assertEquals("Find token has wrong end continuation token", ((CosmosChangeFeedFindToken) findToken).getIndex(),
-        firstResult.size());
-    assertEquals("Find token has wrong totalItems count", ((CosmosChangeFeedFindToken) findToken).getTotalItems(),
+    assertEquals("Find token has wrong end continuation token", (findToken).getIndex(), firstResult.size());
+    assertEquals("Find token has wrong totalItems count", (findToken).getTotalItems(),
         Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
     cloudBlobMetadataList = cloudBlobMetadataList.subList(firstResult.size(), cloudBlobMetadataList.size());
 
     findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
     List<CloudBlobMetadata> secondResult = findResult.getMetadataList();
-    findToken = findResult.getUpdatedFindToken();
+    findToken = (CosmosChangeFeedFindToken) findResult.getUpdatedFindToken();
 
     assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
     assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
 
-    assertEquals("Find token has wrong totalItems count", ((CosmosChangeFeedFindToken) findToken).getTotalItems(),
+    assertEquals("Find token has wrong totalItems count", (findToken).getTotalItems(),
         Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
 
     // Rerun with max size below blob size, and make sure it returns one result
@@ -480,7 +446,7 @@ public class AzureCloudDestinationTest {
   }
 
   /** Test findEntriesSince when cloud destination uses update time based token. */
-  private void testFindEntriesSinceUsingUpdateTime() throws Exception {
+  public void testFindEntriesSinceUsingUpdateTime() throws Exception {
     testFindEntriesSinceWithUniqueUpdateTimes();
     testFindEntriesSinceWithNonUniqueUpdateTimes();
   }
@@ -489,7 +455,7 @@ public class AzureCloudDestinationTest {
    * Test findEntriesSince with all entries having unique updateTimes.
    * @throws Exception
    */
-  private void testFindEntriesSinceWithUniqueUpdateTimes() throws Exception {
+  public void testFindEntriesSinceWithUniqueUpdateTimes() throws Exception {
     long chunkSize = 110000;
     long maxTotalSize = 1000000; // between 9 and 10 chunks
     long startTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
@@ -644,7 +610,7 @@ public class AzureCloudDestinationTest {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     AzureCloudDestination dest =
-        new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, azureReplicationFeedType);
+        new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, defaultAzureReplicationFeedType);
     try {
       dest.getAzureBlobDataAccessor().testConnectivity();
       fail("Expected exception");
@@ -668,7 +634,7 @@ public class AzureCloudDestinationTest {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     AzureCloudDestination dest =
-        new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, azureReplicationFeedType);
+        new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, defaultAzureReplicationFeedType);
     assertNull("Expected null proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
     assertNull("Expected null proxy for Cosmos", dest.getAsyncDocumentClient().getConnectionPolicy().getProxy());
 
@@ -678,24 +644,13 @@ public class AzureCloudDestinationTest {
     configProps.setProperty(CloudConfig.VCR_PROXY_HOST, proxyHost);
     configProps.setProperty(CloudConfig.VCR_PROXY_PORT, String.valueOf(proxyPort));
     cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
-    dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, azureReplicationFeedType);
+    dest =
+        new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, defaultAzureReplicationFeedType);
     assertNotNull("Expected proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
     InetSocketAddress proxy = dest.getAsyncDocumentClient().getConnectionPolicy().getProxy();
     assertNotNull("Expected proxy for Cosmos", proxy);
     assertEquals("Wrong host", proxyHost, proxy.getHostName());
     assertEquals("Wrong port", proxyPort, proxy.getPort());
-  }
-
-  private AzureReplicationFeed getReplicationFeedObj(CosmosDataAccessor cosmosDataAccessor) {
-    switch (azureReplicationFeedType) {
-      case COSMOS_CHANGE_FEED:
-        return new CosmosChangeFeedBasedReplicationFeed(cosmosDataAccessor, azureMetrics);
-      case COSMOS_UPDATE_TIME:
-        return new CosmosUpdateTimeBasedReplicationFeed(cosmosDataAccessor, azureMetrics);
-      default:
-        throw new IllegalArgumentException(
-            String.format("Unknown cloud replication feed type: %s", azureReplicationFeedType));
-    }
   }
 
   /**

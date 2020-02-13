@@ -380,7 +380,7 @@ class AzureCloudDestination implements CloudDestination {
    * Return {@code findSinceQueryLimit}
    * @return value of {@code findSinceQueryLimit}
    */
-  public static int getFindSinceQueryLimit() {
+  static int getFindSinceQueryLimit() {
     return findSinceQueryLimit;
   }
 

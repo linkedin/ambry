@@ -15,7 +15,6 @@ package com.github.ambry.cloud.azure;
 
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
-import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -96,7 +95,6 @@ public class CosmosChangeFeedFindToken implements FindToken {
    * @throws IOException
    */
   public static CosmosChangeFeedFindToken fromBytes(DataInputStream inputStream) throws IOException {
-    CosmosChangeFeedFindToken cosmosChangeFeedFindToken;
     DataInputStream stream = new DataInputStream(inputStream);
     short version = stream.readShort();
     switch (version) {
@@ -108,19 +106,16 @@ public class CosmosChangeFeedFindToken implements FindToken {
                   FindTokenType.CloudBased));
         }
         long bytesRead = stream.readLong();
-        String startContinuationToken = Utils.readIntString(inputStream);
-        String endContinuationToken = Utils.readIntString(inputStream);
+        String startContinuationToken = readIntString(inputStream);
+        String endContinuationToken = readIntString(inputStream);
         int index = inputStream.readInt();
         int totalItems = inputStream.readInt();
-        String cacheSessionId = Utils.readIntString(inputStream);
-        cosmosChangeFeedFindToken =
-            new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
-                cacheSessionId, version);
-        break;
+        String cacheSessionId = readIntString(inputStream);
+        return new CosmosChangeFeedFindToken(bytesRead, startContinuationToken, endContinuationToken, index, totalItems,
+            cacheSessionId, version);
       default:
         throw new IllegalStateException("Unknown version of cloud token: " + version);
     }
-    return cosmosChangeFeedFindToken;
   }
 
   /**
@@ -130,14 +125,14 @@ public class CosmosChangeFeedFindToken implements FindToken {
   public byte[] toBytes() {
     byte[] buf = new byte[size()];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
-    bufWrap.putShort(getVersion());
-    bufWrap.putShort((short) getType().ordinal());
-    bufWrap.putLong(getBytesRead());
-    Utils.serializeNullableString(bufWrap, startContinuationToken);
-    Utils.serializeNullableString(bufWrap, endContinuationToken);
+    bufWrap.putShort(version);
+    bufWrap.putShort((short) type.ordinal());
+    bufWrap.putLong(bytesRead);
+    serializeNullableString(bufWrap, startContinuationToken);
+    serializeNullableString(bufWrap, endContinuationToken);
     bufWrap.putInt(index);
     bufWrap.putInt(totalItems);
-    Utils.serializeNullableString(bufWrap, cacheSessionId);
+    serializeNullableString(bufWrap, cacheSessionId);
     return buf;
   }
 
@@ -159,10 +154,9 @@ public class CosmosChangeFeedFindToken implements FindToken {
       return false;
     }
     CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) o;
-    return cosmosChangeFeedFindToken.getVersion() == getVersion()
-        && cosmosChangeFeedFindToken.getBytesRead() == getBytesRead() && Objects.equals(
-        cosmosChangeFeedFindToken.getStartContinuationToken(), startContinuationToken) && Objects.equals(
-        cosmosChangeFeedFindToken.getEndContinuationToken(), endContinuationToken)
+    return cosmosChangeFeedFindToken.getVersion() == version && cosmosChangeFeedFindToken.getBytesRead() == bytesRead
+        && Objects.equals(cosmosChangeFeedFindToken.getStartContinuationToken(), startContinuationToken)
+        && Objects.equals(cosmosChangeFeedFindToken.getEndContinuationToken(), endContinuationToken)
         && cosmosChangeFeedFindToken.getTotalItems() == totalItems && cosmosChangeFeedFindToken.getIndex() == index
         && Objects.equals(cosmosChangeFeedFindToken.getCacheSessionId(), cacheSessionId);
   }

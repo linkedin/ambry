@@ -104,7 +104,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
      * Return the creation time stamp.
      * @return  {@code creationTimestamp}
      */
-    public long getCreationimestamp() {
+    public long getCreationTimestamp() {
       return creationTimestamp;
     }
 
@@ -114,7 +114,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
      * @return true if this entry is expired. false otherwise.
      */
     boolean isExpired() {
-      return creationTimestamp < System.currentTimeMillis() - CACHE_INVALIDATION_DURATION_IN_MILLIS;
+      return creationTimestamp < System.currentTimeMillis() - CACHE_VALID_DURATION_IN_MS;
     }
   }
 
@@ -123,7 +123,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
   private final int defaultCacheSize;
   private final CosmosDataAccessor cosmosDataAccessor;
   private final AzureMetrics azureMetrics;
-  private final static long CACHE_INVALIDATION_DURATION_IN_MILLIS = 60 * 60 * 1000; //1 hour
+  private final static long CACHE_VALID_DURATION_IN_MS = 60 * 60 * 1000; //1 hour
 
   /**
    * Constructor to create a {@link CosmosChangeFeedBasedReplicationFeed} object.
@@ -138,27 +138,30 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     // schedule periodic invalidation of cache
     Utils.newScheduler(1, false)
         .scheduleAtFixedRate(() -> changeFeedCache.entrySet().removeIf(entry -> entry.getValue().isExpired()),
-            CACHE_INVALIDATION_DURATION_IN_MILLIS, CACHE_INVALIDATION_DURATION_IN_MILLIS, TimeUnit.MILLISECONDS);
+            CACHE_VALID_DURATION_IN_MS, CACHE_VALID_DURATION_IN_MS, TimeUnit.MILLISECONDS);
   }
 
+  @Override
   /**
-   * Get next set of change feed entries for the specified partition, after the {@code cosmosChangeFeedFindToken}.
+   * Get next set of change feed entries for the specified partition, after the {@code curFindToken}.
    * The number of entries is capped by maxEntriesSize.
-   * This method creates a cache for change feed entries. If the {@code cosmosChangeFeedFindToken} is not valid,
+   * This method creates a cache for change feed entries. If the {@code curFindToken} is not valid,
    * or if all the items in the cache are consumed, then it queries Cosmos for new entries.
-   * @param cosmosChangeFeedFindToken {@link CosmosChangeFeedFindToken} after which the next entries have to be returned.
-   * @param results {@link List} of {@link CloudBlobMetadata} objects which will be populated by new entries.
-   * @param maxEntriesSize maximum size of all the blobs returned in {@code results}
-   * @param partitionId Partition for which change feed entries have to be returned.
-   * @return updated {@link CosmosChangeFeedFindToken} after processing the next set of entries.
-   */
-  private CosmosChangeFeedFindToken getNextEntriesAndToken(CosmosChangeFeedFindToken cosmosChangeFeedFindToken,
-      List<CloudBlobMetadata> results, long maxEntriesSize, String partitionId) throws DocumentClientException {
+   * @param curFindToken {@link FindToken} after which the next entries have to be returned.
+   * @param maxTotalSizeOfEntries maximum size of all the blobs returned.
+   * @param partitionPath Partition for which change feed entries have to be returned.
+   * @return {@link FindResult} instance that contains updated {@link FindToken} object which can act as a bookmark for
+   * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
+   * @throws {@link DocumentClientException}.
+   */ public FindResult getNextEntriesAndUpdatedToken(FindToken curFindToken, long maxTotalSizeOfEntries,
+      String partitionPath) throws DocumentClientException {
+    List<CloudBlobMetadata> nextEntries = new ArrayList<>();
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) curFindToken;
     int index = cosmosChangeFeedFindToken.getIndex();
     String cacheSesionId = cosmosChangeFeedFindToken.getCacheSessionId();
-    if (!changeFeedCache.containsKey(cacheSesionId) || !isCacheValid(partitionId, cosmosChangeFeedFindToken)) {
+    if (!changeFeedCache.containsKey(cacheSesionId) || !isCacheValid(partitionPath, cosmosChangeFeedFindToken)) {
       // the cache may not be valid. So we cannot use session id
-      cacheSesionId = populateChangeFeedCache(partitionId, cosmosChangeFeedFindToken.getStartContinuationToken());
+      cacheSesionId = populateChangeFeedCache(partitionPath, cosmosChangeFeedFindToken.getStartContinuationToken());
       // invalidate the previous token's cache
       changeFeedCache.remove(cosmosChangeFeedFindToken.getCacheSessionId());
       index = 0;
@@ -169,8 +172,8 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     List<CloudBlobMetadata> fetchedEntries = changeFeedCache.get(cacheSesionId).getFetchedEntries();
     while (true) {
       if (index < fetchedEntries.size()) {
-        if (resultSize + fetchedEntries.get(index).getSize() < maxEntriesSize || resultSize == 0) {
-          results.add(fetchedEntries.get(index));
+        if (resultSize + fetchedEntries.get(index).getSize() < maxTotalSizeOfEntries || resultSize == 0) {
+          nextEntries.add(fetchedEntries.get(index));
           resultSize = resultSize + fetchedEntries.get(index).getSize();
           index++;
         } else {
@@ -178,7 +181,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
         }
       } else {
         // we can reuse the session id in this case, because we know that the cache ran out of new items.
-        populateChangeFeedCache(partitionId, cosmosChangeFeedFindToken.getEndContinuationToken(),
+        populateChangeFeedCache(partitionPath, cosmosChangeFeedFindToken.getEndContinuationToken(),
             cosmosChangeFeedFindToken.getCacheSessionId());
         fetchedEntries = changeFeedCache.get(cacheSesionId).getFetchedEntries();
         if (fetchedEntries.isEmpty()) {
@@ -189,20 +192,11 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
       }
     }
 
-    return new CosmosChangeFeedFindToken(cosmosChangeFeedFindToken.getBytesRead() + resultSize,
+    FindToken updatedToken = new CosmosChangeFeedFindToken(cosmosChangeFeedFindToken.getBytesRead() + resultSize,
         changeFeedCache.get(cacheSesionId).getStartContinuationToken(),
         changeFeedCache.get(cacheSesionId).getEndContinuationToken(), index,
         changeFeedCache.get(cacheSesionId).getFetchedEntries().size(), cacheSesionId,
         cosmosChangeFeedFindToken.getVersion());
-  }
-
-  @Override
-  public FindResult getNextEntriesAndUpdatedToken(FindToken curfindToken, long maxTotalSizeOfEntries,
-      String partitionPath) throws DocumentClientException {
-    List<CloudBlobMetadata> nextEntries = new ArrayList<>();
-    FindToken updatedToken =
-        getNextEntriesAndToken((CosmosChangeFeedFindToken) curfindToken, nextEntries, maxTotalSizeOfEntries,
-            partitionPath);
     return new FindResult(nextEntries, updatedToken);
   }
 

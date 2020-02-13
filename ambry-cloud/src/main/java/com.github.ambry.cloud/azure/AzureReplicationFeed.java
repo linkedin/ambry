@@ -34,14 +34,16 @@ public interface AzureReplicationFeed {
   }
 
   /**
-   * Populate the next set of {@link CloudBlobMetadata} objects in {@code nextEntries} of specified partition {@code partitionPath}
-   * from the specified {@link FindToken} such that total size of all blobs in the entries are less or equal to {@code maxTotalSizeOfEntries}.
-   * This method should return at least one blob, if exists, after {@code curfindToken}, irrespective of {@code maxTotalSizeOfEntries} requirement.
+   * Returns an ordered sequenced list of blobs within the specified partition and updated
+   * {@link com.github.ambry.replication.FindToken}, such that total size of all blobs in the list are less or equal to
+   * {@code maxTotalSizeOfEntries}. This method should return at least one blob, if exists, after {@code curfindToken},
+   * irrespective of {@code maxTotalSizeOfEntries} requirement.
    * @param curfindToken current {@link FindToken} object that acts as a bookmark to return blobs after.
    * @param maxTotalSizeOfEntries max total size of all the {@link CloudBlobMetadata} objects returned.
    * @param partitionPath partition of the blobs.
    * @return {@link FindResult} instance that contains updated {@link FindToken} object which can act as a bookmark for
    * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
+   * @throws {@link DocumentClientException}.
    */
   FindResult getNextEntriesAndUpdatedToken(FindToken curfindToken, long maxTotalSizeOfEntries, String partitionPath)
       throws DocumentClientException;

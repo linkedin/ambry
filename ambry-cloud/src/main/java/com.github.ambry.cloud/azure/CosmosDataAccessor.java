@@ -179,6 +179,8 @@ public class CosmosDataAccessor {
       changeFeedOptions.setRequestContinuation(requestContinationToken);
     }
     try {
+      // FIXME: Using single() for the observable returned by toBlocking() works for now. But if a high enough maxFeedSize
+      //  is passed, to result in multiple feed pages, single() will throw an exception.
       FeedResponse<Document> feedResponse =
           asyncDocumentClient.queryDocumentChangeFeed(cosmosCollectionLink, changeFeedOptions)
               .limit(1)
