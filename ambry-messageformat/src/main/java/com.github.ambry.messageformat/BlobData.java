@@ -58,7 +58,6 @@ public class BlobData extends AbstractByteBufHolder<BlobData> {
 
   @Override
   public BlobData replace(ByteBuf content) {
-    BlobData data = new BlobData(blobType, size, content);
-    return data;
+    return new BlobData(blobType, size, content);
   }
 }

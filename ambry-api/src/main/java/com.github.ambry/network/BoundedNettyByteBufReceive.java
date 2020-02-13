@@ -114,17 +114,13 @@ public class BoundedNettyByteBufReceive extends AbstractByteBufHolder<BoundedNet
     return sizeRead;
   }
 
-  /**
-   * Returns the byte buffer received.
-   * @return
-   */
+  @Override
   public ByteBuf content() {
     return buffer;
   }
 
   @Override
   public BoundedNettyByteBufReceive replace(ByteBuf content) {
-    BoundedNettyByteBufReceive receive = new BoundedNettyByteBufReceive(content, sizeToRead);
-    return receive;
+    return new BoundedNettyByteBufReceive(content, sizeToRead);
   }
 }

@@ -77,7 +77,7 @@ public class ResponseInfo extends AbstractByteBufHolder<ResponseInfo> {
 
   @Override
   public String toString() {
-    return "ResponseInfo{" + "requestInfo=" + requestInfo + ", error=" + error + ", response=" + content + ", dataNode="
+    return "ResponseInfo{requestInfo=" + requestInfo + ", error=" + error + ", response=" + content + ", dataNode="
         + dataNode + '}';
   }
 
@@ -88,7 +88,6 @@ public class ResponseInfo extends AbstractByteBufHolder<ResponseInfo> {
 
   @Override
   public ResponseInfo replace(ByteBuf content) {
-    ResponseInfo info = new ResponseInfo(requestInfo, error, content, dataNode);
-    return info;
+    return new ResponseInfo(requestInfo, error, content, dataNode);
   }
 }

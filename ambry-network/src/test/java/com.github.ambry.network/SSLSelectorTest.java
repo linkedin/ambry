@@ -19,6 +19,7 @@ import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
@@ -37,6 +38,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.conscrypt.Conscrypt;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -55,6 +57,17 @@ public class SSLSelectorTest {
   private Selector selector;
   private final File trustStoreFile;
   private final NetworkConfig networkConfig;
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -219,6 +232,7 @@ public class SSLSelectorTest {
         assertTrue("Received connectionId is as expected ", connectionIds.contains(receive.getConnectionId()));
         assertEquals("Check the request counter", 0, Integer.parseInt(pieces[1]));
         responseCount++;
+        receive.getReceivedBytes().release();
       }
 
       // prepare new sends for the next round

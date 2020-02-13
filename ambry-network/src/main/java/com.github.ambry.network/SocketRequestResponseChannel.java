@@ -69,8 +69,7 @@ class SocketServerRequest extends AbstractByteBufHolder<SocketServerRequest> imp
 
   @Override
   public SocketServerRequest replace(ByteBuf content) {
-    SocketServerRequest request = new SocketServerRequest(getProcessor(), getConnectionId(), content);
-    return request;
+    return new SocketServerRequest(getProcessor(), getConnectionId(), content);
   }
 }
 

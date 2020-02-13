@@ -119,7 +119,7 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   }
 
   /**
-   * Utility to extract a byte buffer from a {@link Send} object, skipping the size header.
+   * Utility to extract a {@link ByteBuf} from a {@link Send} object, skipping the size header.
    * @param payload the payload whose bytes we want.
    */
   static ByteBuf byteBufFromPayload(Send payload) throws IOException {
