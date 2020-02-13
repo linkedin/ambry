@@ -12,13 +12,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.rest;
+package com.github.ambry.network.http2;
 
 import com.github.ambry.commons.SSLFactory;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.pool.AbstractChannelPoolHandler;
+import io.netty.channel.pool.ChannelPoolHandler;
 import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
 import io.netty.handler.codec.http2.Http2MultiplexHandler;
 import io.netty.handler.codec.http2.Http2Settings;
@@ -26,31 +27,27 @@ import io.netty.handler.ssl.SslHandler;
 
 
 /**
- * A {@link ChannelInitializer} to be used with {@link Http2BlockingChannel}. Calling {@link #initChannel(SocketChannel)}
- * adds the necessary handlers to a channel's pipeline so that it may handle requests.
+ * A {@link ChannelPoolHandler} to be used with {@link Http2ChannelPoolMap}.
  */
-public class Http2ClientChannelInitializer extends ChannelInitializer<SocketChannel> {
+public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
   private final SSLFactory sslFactory;
   private final String host;
   private final int port;
 
   /**
-   * Construct a {@link Http2ClientChannelInitializer}.
+   * Construct a {@link Http2ChannelPoolHandler}.
    * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
    *                   or {@code null} if SSL is not enabled in this pipeline.
    */
-  public Http2ClientChannelInitializer(SSLFactory sslFactory, String host, int port) {
+  public Http2ChannelPoolHandler(SSLFactory sslFactory, String host, int port) {
+    this.sslFactory = sslFactory;
     this.host = host;
     this.port = port;
-    this.sslFactory = sslFactory;
   }
 
   @Override
-  protected void initChannel(SocketChannel ch) throws Exception {
+  public void channelCreated(Channel ch) throws Exception {
     ChannelPipeline pipeline = ch.pipeline();
-    if (sslFactory == null) {
-      throw new IllegalArgumentException("ssl factory shouldn't be null");
-    }
     SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(host, port, SSLFactory.Mode.CLIENT));
     pipeline.addLast(sslHandler);
     pipeline.addLast(Http2FrameCodecBuilder.forClient().initialSettings(Http2Settings.defaultSettings()).build());

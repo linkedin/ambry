@@ -12,8 +12,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.rest;
+package com.github.ambry.commons;
 
+import com.github.ambry.commons.NettySslFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import org.junit.Test;
 

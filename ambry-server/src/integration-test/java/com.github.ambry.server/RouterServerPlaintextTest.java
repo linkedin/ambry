@@ -18,6 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.server.RouterServerTestFramework.*;
 import com.github.ambry.utils.SystemTime;
@@ -77,7 +78,7 @@ public class RouterServerPlaintextTest {
     Properties properties = getRouterProperties("DC1");
 
     Properties serverProperties = new Properties();
-    TestSSLUtils.addHttp2Properties(serverProperties);
+    TestSSLUtils.addHttp2Properties(serverProperties, SSLFactory.Mode.SERVER, true);
     plaintextCluster = new MockCluster(serverProperties, false, SystemTime.getInstance());
     MockNotificationSystem notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);
