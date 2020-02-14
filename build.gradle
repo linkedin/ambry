@@ -11,23 +11,22 @@
 buildscript {
     repositories {
         mavenCentral()
+        mavenLocal()
     }
     apply from: file('gradle/buildscript.gradle'), to: buildscript
 }
 
-plugins {
-    id 'org.shipkit.java' version '2.2.5' apply false
-}
-if (!project.hasProperty('disableShipkit')) {
-    apply plugin: 'org.shipkit.java'
-}
+apply plugin: 'org.shipkit.shipkit-auto-version'
+println "Building version $version"
 
 apply from: file('gradle/license.gradle')
 apply from: file('gradle/environment.gradle')
 apply from: file("gradle/dependency-versions.gradle")
+apply from: file("gradle/ci-release.gradle")
 
-allprojects {
+allprojects {    
     group = "com.github.ambry"
+    version = rootProject.version //TODO: fix in https://github.com/shipkit/org.shipkit.shipkit-auto-version
 
     apply plugin: 'eclipse'
     apply plugin: 'idea'
@@ -42,6 +41,8 @@ allprojects {
 
 subprojects {
     apply plugin: 'java'
+    apply from: "$rootDir/gradle/java-publishing.gradle"    
+
     sourceCompatibility = 1.8
     targetCompatibility = 1.8
 
@@ -109,22 +110,7 @@ subprojects {
         group = 'verification'
     }
     allTest.dependsOn test
-    allTest.dependsOn intTest
-
-    task testJar(type: Jar, dependsOn: testClasses) {
-        from sourceSets.test.output
-        classifier = 'test'
-    }
-
-    artifacts {
-        archives testJar
-    }
-
-    if (!project.hasProperty('disableShipkit')) {
-        // add test jars to maven publication if using shipkit
-        publishing.publications.javaLibrary.artifact testJar
-    }
-
+    allTest.dependsOn intTest    
     javadoc {
         // TODO audit and fix our javadocs so that we don't need this setting
         // This is mainly for cases where param/throws tags don't have descriptions

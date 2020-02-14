@@ -1,0 +1,77 @@
+assert plugins.hasPlugin("java")
+
+apply plugin: 'maven-publish'
+apply plugin: 'com.jfrog.bintray'
+
+tasks.withType(Jar) {
+    from "$rootDir/LICENSE"
+    from "$rootDir/NOTICE"
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource    
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir  
+}
+
+task testJar(type: Jar, dependsOn: testClasses) {
+    from sourceSets.test.output
+    classifier = 'test'
+}
+
+artifacts {
+    archives sourcesJar
+    archives javadocJar
+    archives testJar
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            
+            artifact javadocJar
+            artifact sourcesJar
+            artifact testJar
+        }
+    }
+}
+
+bintray { //docs: https://github.com/bintray/gradle-bintray-plugin
+    user = System.getenv("BINTRAY_USER")
+    key = System.getenv("BINTRAY_API_KEY")
+
+    publish = true
+    dryRun = project.hasProperty("bintray.dryRun")? true : false //useful for testing
+
+    publications = ['maven'] 
+
+    pkg {
+        repo = 'test-repo'
+        userOrg = 'linkedin'
+        name = 'ambry'
+        
+        licenses = ['Apache-2.0']
+        labels = ['blob storage']
+        version {
+            // disable gpg signing to speed up publishing
+            gpg {
+                sign = false
+            }
+            // disable upload to maven central
+            mavenCentralSync {
+                sync = false
+            }
+        }
+    }    
+}
+
+bintrayUpload {
+    doFirst {
+        println "Publishing $jar.baseName to Bintray (dryRun: $dryRun, repo: $repoName, publish: $publish)"
+    }
+}

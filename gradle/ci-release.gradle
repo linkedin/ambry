@@ -1,0 +1,37 @@
+task bintrayUploadAll {
+    description = "Runs 'bintrayUpload' tasks from all projects"
+    mustRunAfter "gitPush" //git push is easier to rollback so we run it first
+}
+
+allprojects {
+    tasks.matching { it.name == "bintrayUpload" }.all {
+        bintrayUploadAll.dependsOn it
+    }
+}
+
+task ciPerformRelease {
+    description = "Performs the release, intended to be ran on CI"
+    dependsOn "gitTag", "gitPush", "bintrayUploadAll"    
+}
+
+task gitTag {
+    description = "Creates annotated tag 'v$version'"
+
+    doLast {
+        println "Setting Git user and email to Travis CI"
+        exec { commandLine "git", "config", "user.email", "travis@travis-ci.org" }
+        exec { commandLine "git", "config", "user.name", "Travis CI" }
+        println "Creating tag v$version"
+        exec { commandLine "git", "tag", "-a", "-m", "Release $version", "v$version" }
+        println "Created tag v$version"
+    }
+}
+
+task gitPush(type: Exec) {
+    description = "Pushes tags by running 'git push --tags'. Hides secret key from git push output."
+    mustRunAfter "gitTag" //tag first, push later
+    
+    doFirst { println "Pushing tag v$version" }
+    commandLine "./gradle/git-push.sh", "v$version"
+    doLast { println "Pushed tag v$version" }
+}
