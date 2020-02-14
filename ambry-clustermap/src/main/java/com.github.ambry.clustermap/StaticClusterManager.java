@@ -155,7 +155,7 @@ class StaticClusterManager implements ClusterMap {
 
   @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
-    throw new UnsupportedOperationException("Registering clustermap listener is not supported in static clustermap");
+    // no op for static cluster manager
   }
 
   // Administrative API
