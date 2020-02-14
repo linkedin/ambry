@@ -64,7 +64,7 @@ class AzureCloudDestination implements CloudDestination {
   private static final String LIMIT_PARAM = "@limit";
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
   static final int ID_QUERY_BATCH_SIZE = 1000;
-  private static final int findSinceQueryLimit = 1000;
+  private static final int FIND_SINCE_QUERY_LIMIT = 1000;
   private static final String DEAD_BLOBS_QUERY_TEMPLATE =
       "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND "
           + THRESHOLD_PARAM + ")" + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND "
@@ -381,7 +381,7 @@ class AzureCloudDestination implements CloudDestination {
    * @return value of {@code findSinceQueryLimit}
    */
   static int getFindSinceQueryLimit() {
-    return findSinceQueryLimit;
+    return FIND_SINCE_QUERY_LIMIT;
   }
 
   /**

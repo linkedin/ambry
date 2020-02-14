@@ -18,11 +18,13 @@ import com.github.ambry.cloud.FindResult;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
+import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 
@@ -30,12 +32,12 @@ import java.util.concurrent.TimeUnit;
  * The replication feed that provides next list of blobs to replicate from Azure and corresponding {@link FindToken}
  * using Cosmos change feed apis.
  */
-public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFeed {
+public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFeed, Closeable {
 
   /**
    * Class representing change feed cache for each partition.
    */
-  class ChangeFeedCacheEntry {
+  static class ChangeFeedCacheEntry {
     private final String startContinuationToken;
     private final String endContinuationToken;
     private final String cacheSessionId;
@@ -123,7 +125,8 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
   private final int defaultCacheSize;
   private final CosmosDataAccessor cosmosDataAccessor;
   private final AzureMetrics azureMetrics;
-  private final static long CACHE_VALID_DURATION_IN_MS = 60 * 60 * 1000; //1 hour
+  private final ScheduledExecutorService scheduler;
+  private final static long CACHE_VALID_DURATION_IN_MS = TimeUnit.HOURS.toMillis(1); //1 hour
 
   /**
    * Constructor to create a {@link CosmosChangeFeedBasedReplicationFeed} object.
@@ -136,9 +139,9 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     this.cosmosDataAccessor = cosmosDataAccessor;
     this.azureMetrics = azureMetrics;
     // schedule periodic invalidation of cache
-    Utils.newScheduler(1, false)
-        .scheduleAtFixedRate(() -> changeFeedCache.entrySet().removeIf(entry -> entry.getValue().isExpired()),
-            CACHE_VALID_DURATION_IN_MS, CACHE_VALID_DURATION_IN_MS, TimeUnit.MILLISECONDS);
+    scheduler = Utils.newScheduler(1, false);
+    scheduler.scheduleAtFixedRate(() -> changeFeedCache.entrySet().removeIf(entry -> entry.getValue().isExpired()),
+        CACHE_VALID_DURATION_IN_MS, CACHE_VALID_DURATION_IN_MS, TimeUnit.MILLISECONDS);
   }
 
   /**
@@ -159,10 +162,10 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     List<CloudBlobMetadata> nextEntries = new ArrayList<>();
     CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) curFindToken;
     int index = cosmosChangeFeedFindToken.getIndex();
-    String cacheSesionId = cosmosChangeFeedFindToken.getCacheSessionId();
-    if (!changeFeedCache.containsKey(cacheSesionId) || !isCacheValid(partitionPath, cosmosChangeFeedFindToken)) {
+    String cacheSessionId = cosmosChangeFeedFindToken.getCacheSessionId();
+    if (!changeFeedCache.containsKey(cacheSessionId) || !isCacheValid(partitionPath, cosmosChangeFeedFindToken)) {
       // the cache may not be valid. So we cannot use session id
-      cacheSesionId = populateChangeFeedCache(partitionPath, cosmosChangeFeedFindToken.getStartContinuationToken());
+      cacheSessionId = populateChangeFeedCache(partitionPath, cosmosChangeFeedFindToken.getStartContinuationToken());
       // invalidate the previous token's cache
       changeFeedCache.remove(cosmosChangeFeedFindToken.getCacheSessionId());
       index = 0;
@@ -170,7 +173,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
 
     long resultSize = 0;
 
-    List<CloudBlobMetadata> fetchedEntries = changeFeedCache.get(cacheSesionId).getFetchedEntries();
+    List<CloudBlobMetadata> fetchedEntries = changeFeedCache.get(cacheSessionId).getFetchedEntries();
     while (true) {
       if (index < fetchedEntries.size()) {
         if (resultSize + fetchedEntries.get(index).getSize() < maxTotalSizeOfEntries || resultSize == 0) {
@@ -184,7 +187,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
         // we can reuse the session id in this case, because we know that the cache ran out of new items.
         populateChangeFeedCache(partitionPath, cosmosChangeFeedFindToken.getEndContinuationToken(),
             cosmosChangeFeedFindToken.getCacheSessionId());
-        fetchedEntries = changeFeedCache.get(cacheSesionId).getFetchedEntries();
+        fetchedEntries = changeFeedCache.get(cacheSessionId).getFetchedEntries();
         if (fetchedEntries.isEmpty()) {
           // this means that there are no new changes
           break;
@@ -194,11 +197,16 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     }
 
     FindToken updatedToken = new CosmosChangeFeedFindToken(cosmosChangeFeedFindToken.getBytesRead() + resultSize,
-        changeFeedCache.get(cacheSesionId).getStartContinuationToken(),
-        changeFeedCache.get(cacheSesionId).getEndContinuationToken(), index,
-        changeFeedCache.get(cacheSesionId).getFetchedEntries().size(), cacheSesionId,
+        changeFeedCache.get(cacheSessionId).getStartContinuationToken(),
+        changeFeedCache.get(cacheSessionId).getEndContinuationToken(), index,
+        changeFeedCache.get(cacheSessionId).getFetchedEntries().size(), cacheSessionId,
         cosmosChangeFeedFindToken.getVersion());
     return new FindResult(nextEntries, updatedToken);
+  }
+
+  @Override
+  public void close() {
+    Utils.shutDownExecutorService(scheduler, 5, TimeUnit.MINUTES);
   }
 
   /**

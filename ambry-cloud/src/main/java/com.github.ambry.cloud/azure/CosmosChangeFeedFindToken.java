@@ -122,6 +122,7 @@ public class CosmosChangeFeedFindToken implements FindToken {
    * Serialize {@link CosmosChangeFeedFindToken} to byte array.
    * @return serialized byte array.
    */
+  @Override
   public byte[] toBytes() {
     byte[] buf = new byte[size()];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
@@ -199,6 +200,7 @@ public class CosmosChangeFeedFindToken implements FindToken {
     return version;
   }
 
+  @Override
   public FindTokenType getType() {
     return type;
   }

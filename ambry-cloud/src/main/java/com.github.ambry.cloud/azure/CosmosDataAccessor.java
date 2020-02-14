@@ -32,7 +32,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.observables.BlockingObservable;
@@ -181,8 +180,7 @@ public class CosmosDataAccessor {
     }
     try {
       FeedResponse<Document> feedResponse = executeCosmosChangeFeedQuery(changeFeedOptions, timer);
-      changeFeed.addAll(
-          feedResponse.getResults().stream().map(doc -> createMetadataFromDocument(doc)).collect(Collectors.toList()));
+      feedResponse.getResults().stream().map(doc -> createMetadataFromDocument(doc)).forEach(changeFeed::add);
       return feedResponse.getResponseContinuation();
     } catch (RuntimeException rex) {
       azureMetrics.changeFeedQueryFailureCount.inc();
