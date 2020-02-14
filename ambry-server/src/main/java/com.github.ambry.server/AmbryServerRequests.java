@@ -122,6 +122,9 @@ public class AmbryServerRequests extends AmbryRequests {
    * @return {@code true} if the request is enabled. {@code false} otherwise.
    */
   private boolean isRequestEnabled(RequestOrResponseType requestType, PartitionId id) {
+    if (requestType.equals(RequestOrResponseType.UndeleteRequest) && !serverConfig.serverHandleUndeleteRequestEnabled) {
+      return false;
+    }
     Set<PartitionId> requestDisableInfo = requestsDisableInfo.get(requestType);
     // 1. check if request is disabled by admin request
     if (requestDisableInfo != null && requestDisableInfo.contains(id)) {
@@ -614,10 +617,6 @@ public class AmbryServerRequests extends AmbryRequests {
         && partition.getPartitionState() == PartitionState.READ_ONLY) {
       metrics.partitionReadOnlyError.inc();
       return ServerErrorCode.Partition_ReadOnly;
-    }
-    if (requestType.equals(RequestOrResponseType.UndeleteRequest) && !serverConfig.serverHandleUndeleteRequestEnabled) {
-      metrics.temporarilyDisabledError.inc();
-      return ServerErrorCode.Temporarily_Disabled;
     }
     // Ensure the request is enabled.
     if (!isRequestEnabled(requestType, partition)) {
