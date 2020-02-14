@@ -162,10 +162,10 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     List<CloudBlobMetadata> nextEntries = new ArrayList<>();
     CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) curFindToken;
     int index = cosmosChangeFeedFindToken.getIndex();
-    String cacheSessionId = cosmosChangeFeedFindToken.getCacheSessionId();
-    if (!changeFeedCache.containsKey(cacheSessionId) || !isCacheValid(partitionPath, cosmosChangeFeedFindToken)) {
+    ChangeFeedCacheEntry changeFeedCacheEntry = changeFeedCache.get(cosmosChangeFeedFindToken.getCacheSessionId());
+    if (changeFeedCacheEntry == null || !isCacheValid(partitionPath, cosmosChangeFeedFindToken, changeFeedCacheEntry)) {
       // the cache may not be valid. So we cannot use session id
-      cacheSessionId = populateChangeFeedCache(partitionPath, cosmosChangeFeedFindToken.getStartContinuationToken());
+      changeFeedCacheEntry = getNextChangeFeed(partitionPath, cosmosChangeFeedFindToken.getStartContinuationToken());
       // invalidate the previous token's cache
       changeFeedCache.remove(cosmosChangeFeedFindToken.getCacheSessionId());
       index = 0;
@@ -173,7 +173,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
 
     long resultSize = 0;
 
-    List<CloudBlobMetadata> fetchedEntries = changeFeedCache.get(cacheSessionId).getFetchedEntries();
+    List<CloudBlobMetadata> fetchedEntries = changeFeedCacheEntry.getFetchedEntries();
     while (true) {
       if (index < fetchedEntries.size()) {
         if (resultSize + fetchedEntries.get(index).getSize() < maxTotalSizeOfEntries || resultSize == 0) {
@@ -185,9 +185,9 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
         }
       } else {
         // we can reuse the session id in this case, because we know that the cache ran out of new items.
-        populateChangeFeedCache(partitionPath, cosmosChangeFeedFindToken.getEndContinuationToken(),
-            cosmosChangeFeedFindToken.getCacheSessionId());
-        fetchedEntries = changeFeedCache.get(cacheSessionId).getFetchedEntries();
+        changeFeedCacheEntry = getNextChangeFeed(partitionPath, changeFeedCacheEntry.getEndContinuationToken(),
+            changeFeedCacheEntry.getCacheSessionId());
+        fetchedEntries = changeFeedCacheEntry.getFetchedEntries();
         if (fetchedEntries.isEmpty()) {
           // this means that there are no new changes
           break;
@@ -197,10 +197,10 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     }
 
     FindToken updatedToken = new CosmosChangeFeedFindToken(cosmosChangeFeedFindToken.getBytesRead() + resultSize,
-        changeFeedCache.get(cacheSessionId).getStartContinuationToken(),
-        changeFeedCache.get(cacheSessionId).getEndContinuationToken(), index,
-        changeFeedCache.get(cacheSessionId).getFetchedEntries().size(), cacheSessionId,
+        changeFeedCacheEntry.getStartContinuationToken(), changeFeedCacheEntry.getEndContinuationToken(), index,
+        changeFeedCacheEntry.getFetchedEntries().size(), changeFeedCacheEntry.getCacheSessionId(),
         cosmosChangeFeedFindToken.getVersion());
+    changeFeedCache.put(changeFeedCacheEntry.getCacheSessionId(), changeFeedCacheEntry);
     return new FindResult(nextEntries, updatedToken);
   }
 
@@ -215,8 +215,8 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
    * @param cosmosChangeFeedFindToken {@link CosmosChangeFeedFindToken} object.
    * @return true is cache is valid. false otherwise.
    */
-  private boolean isCacheValid(String partitionId, CosmosChangeFeedFindToken cosmosChangeFeedFindToken) {
-    ChangeFeedCacheEntry changeFeedCacheEntry = changeFeedCache.get(cosmosChangeFeedFindToken.getCacheSessionId());
+  private boolean isCacheValid(String partitionId, CosmosChangeFeedFindToken cosmosChangeFeedFindToken,
+      ChangeFeedCacheEntry changeFeedCacheEntry) {
     return Objects.equals(cosmosChangeFeedFindToken.getCacheSessionId(), changeFeedCacheEntry.getCacheSessionId())
         && Objects.equals(cosmosChangeFeedFindToken.getStartContinuationToken(),
         changeFeedCacheEntry.getStartContinuationToken()) && Objects.equals(
@@ -230,13 +230,11 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
    * continuation token. Also generate a new session id for the cache.
    * @param partitionId Partition for which the change feed cache needs to be populated.
    * @param startRequestContinuationToken request continuation token from which the change feed query needs to be made.
-   * @return new cache session id.
+   * @return {@link ChangeFeedCacheEntry} object representing new cache entry.
    */
-  private String populateChangeFeedCache(String partitionId, String startRequestContinuationToken)
+  private ChangeFeedCacheEntry getNextChangeFeed(String partitionId, String startRequestContinuationToken)
       throws DocumentClientException {
-    String cacheSessionId = UUID.randomUUID().toString();
-    populateChangeFeedCache(partitionId, startRequestContinuationToken, cacheSessionId);
-    return cacheSessionId;
+    return getNextChangeFeed(partitionId, startRequestContinuationToken, UUID.randomUUID().toString());
   }
 
   /**
@@ -244,9 +242,10 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
    * @param partitionId Partition for which the change feed cache needs to be populated.
    * @param startRequestContinuationToken request continuation token from which the change feed query needs to be made.
    * @param cacheSessionId cacheSessionId to use in the cache.
+   * @return {@link ChangeFeedCacheEntry} object representing new cache entry.
    */
-  private void populateChangeFeedCache(String partitionId, String startRequestContinuationToken, String cacheSessionId)
-      throws DocumentClientException {
+  private ChangeFeedCacheEntry getNextChangeFeed(String partitionId, String startRequestContinuationToken,
+      String cacheSessionId) throws DocumentClientException {
     List<CloudBlobMetadata> changeFeedEntries = new ArrayList<>(defaultCacheSize);
     String newRequestContinuationToken =
         cosmosDataAccessor.queryChangeFeed(startRequestContinuationToken, defaultCacheSize, changeFeedEntries,
@@ -254,6 +253,6 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     ChangeFeedCacheEntry changeFeedCacheEntry =
         new ChangeFeedCacheEntry(startRequestContinuationToken, newRequestContinuationToken, cacheSessionId,
             changeFeedEntries, partitionId);
-    changeFeedCache.put(cacheSessionId, changeFeedCacheEntry);
+    return changeFeedCacheEntry;
   }
 }
