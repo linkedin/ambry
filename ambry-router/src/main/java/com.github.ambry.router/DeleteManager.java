@@ -142,7 +142,7 @@ class DeleteManager {
     long startTime = time.milliseconds();
     DeleteResponse deleteResponse =
         RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
-            DeleteResponse::readFrom, DeleteResponse::getError, false);
+            DeleteResponse::readFrom, DeleteResponse::getError);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     int correlationId = ((DeleteRequest) routerRequestInfo.getRequest()).getCorrelationId();
     DeleteOperation deleteOperation = correlationIdToDeleteOperation.remove(correlationId);

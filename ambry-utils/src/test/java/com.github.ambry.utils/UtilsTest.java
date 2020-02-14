@@ -199,50 +199,6 @@ public class UtilsTest {
   }
 
   @Test
-  public void testGetByteBufferInputStreamFromCrcStreamShareMemory() throws Exception {
-    int blobSize = 1000;
-    // The first 8 bytes are the size of blob, the next 1000 bytes are the blob content, the next 8 bytes are the crc
-    // value, and we do this twice.
-    int bufferSize = (Long.SIZE / Byte.SIZE + blobSize + Long.SIZE / Byte.SIZE) * 2;
-    byte[] firstRandomBytes = new byte[blobSize];
-    byte[] secondRandomBytes = new byte[blobSize];
-    new Random().nextBytes(firstRandomBytes);
-    new Random().nextBytes(secondRandomBytes);
-
-    ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
-    ByteBufferOutputStream bbos = new ByteBufferOutputStream(buffer);
-
-    // Fill the buffer
-    byte[] arrayToFill = firstRandomBytes;
-    while (arrayToFill != null) {
-      CrcOutputStream crcStream = new CrcOutputStream(bbos);
-      DataOutputStream dos = new DataOutputStream(crcStream);
-      dos.writeLong((long) blobSize);
-      dos.write(arrayToFill);
-      buffer.putLong(crcStream.getValue());
-      arrayToFill = (arrayToFill == firstRandomBytes) ? secondRandomBytes : null;
-    }
-
-    buffer.flip();
-    byte[] expectedArray = firstRandomBytes;
-    while (expectedArray != null) {
-      CrcInputStream cis = new CrcInputStream(new ByteBufferDataInputStream(buffer));
-      DataInputStream dis = new DataInputStream(cis);
-      long dataSize = dis.readLong();
-      assertEquals(dataSize, blobSize);
-      ByteBufferInputStream obtained = Utils.getByteBufferInputStreamFromCrcInputStream(cis, (int) dataSize);
-      // Make sure these two ByteBuffers actually share the underlying memory.
-      assertEquals(getByteArrayFromByteBuffer(buffer), getByteArrayFromByteBuffer(obtained.getByteBuffer()));
-      byte[] obtainedArray = new byte[blobSize];
-      obtained.read(obtainedArray);
-      assertArrayEquals(obtainedArray, expectedArray);
-      long crcRead = buffer.getLong();
-      assertEquals(crcRead, cis.getValue());
-      expectedArray = (expectedArray == firstRandomBytes) ? secondRandomBytes : null;
-    }
-  }
-
-  @Test
   public void testGetByteBufferInputStreamFromCrcStreamShareMemoryWithNettyByteBuf() throws Exception {
     int blobSize = 1000;
     // The first 8 bytes are the size of blob, the next 1000 bytes are the blob content, the next 8 bytes are the crc

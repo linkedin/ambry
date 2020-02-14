@@ -25,7 +25,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
-import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
@@ -208,12 +207,7 @@ public class RestServer {
         || nioServer == null) {
       throw new InstantiationException("Some of the server components were null");
     }
-    NetworkConfig networkConfig = new NetworkConfig(verifiableProperties);
-    if (networkConfig.networkUseNettyByteBuf) {
-      nettyInternalMetrics = new NettyInternalMetrics(metricRegistry, new NettyConfig(verifiableProperties));
-    } else {
-      nettyInternalMetrics = null;
-    }
+    nettyInternalMetrics = new NettyInternalMetrics(metricRegistry, new NettyConfig(verifiableProperties));
     logger.trace("Instantiated RestServer");
   }
 

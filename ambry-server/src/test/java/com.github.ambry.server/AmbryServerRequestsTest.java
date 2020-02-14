@@ -135,18 +135,16 @@ public class AmbryServerRequestsTest {
   private final ReplicationConfig replicationConfig;
   private final ServerConfig serverConfig;
   private final ReplicaStatusDelegate mockDelegate = Mockito.mock(ReplicaStatusDelegate.class);
-  private final boolean putRequestShareMemory;
   private final boolean validateRequestOnStoreState;
   private AmbryServerRequests ambryRequests;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
+    return Arrays.asList(new Object[][]{{false}, {true}});
   }
 
-  public AmbryServerRequestsTest(boolean putRequestShareMemory, boolean validateRequestOnStoreState)
+  public AmbryServerRequestsTest(boolean validateRequestOnStoreState)
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
-    this.putRequestShareMemory = putRequestShareMemory;
     this.validateRequestOnStoreState = validateRequestOnStoreState;
     clusterMap = new MockClusterMap();
     Properties properties = createProperties(validateRequestOnStoreState, true);
@@ -858,7 +856,7 @@ public class AmbryServerRequestsTest {
    */
   private Response sendRequestGetResponse(RequestOrResponse request, ServerErrorCode expectedServerErrorCode)
       throws InterruptedException, IOException {
-    NetworkRequest mockRequest = MockRequest.fromRequest(request, this.putRequestShareMemory);
+    NetworkRequest mockRequest = MockRequest.fromRequest(request);
     ambryRequests.handleRequests(mockRequest);
     assertEquals("Request accompanying response does not match original request", mockRequest,
         requestResponseChannel.lastOriginalRequest);
@@ -1471,13 +1469,13 @@ public class AmbryServerRequestsTest {
      * @return an instance of {@link MockRequest} that represents {@code request}.
      * @throws IOException
      */
-    static MockRequest fromRequest(RequestOrResponse request, boolean shareMemory) throws IOException {
+    static MockRequest fromRequest(RequestOrResponse request) throws IOException {
       ByteBuffer buffer = ByteBuffer.allocate((int) request.sizeInBytes());
       request.writeTo(new ByteBufferChannel(buffer));
       buffer.flip();
       // read length (to bring it to a state where AmbryRequests can handle it).
       buffer.getLong();
-      return new MockRequest(shareMemory ? new ByteBufferDataInputStream(buffer) : new ByteBufferInputStream(buffer));
+      return new MockRequest(new ByteBufferDataInputStream(buffer));
     }
 
     /**

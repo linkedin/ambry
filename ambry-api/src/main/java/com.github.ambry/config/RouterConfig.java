@@ -94,7 +94,6 @@ public class RouterConfig {
       "router.operation.tracker.histogram.cache.timeout.ms";
   public static final String ROUTER_MAX_IN_MEM_PUT_CHUNKS = "router.max.in.mem.put.chunks";
   public static final String ROUTER_MAX_IN_MEM_GET_CHUNKS = "router.max.in.mem.get.chunks";
-  public static final String ROUTER_GET_BLOB_OPERATION_SHARE_MEMORY = "router.get.blob.operation.share.memory";
   public static final String ROUTER_GET_ELIGIBLE_REPLICAS_BY_STATE_ENABLED =
       "router.get.eligible.replicas.by.state.enabled";
   public static final String ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET = "router.put.use.dynamic.success.target";
@@ -441,13 +440,6 @@ public class RouterConfig {
   public final int routerMaxInMemGetChunks;
 
   /**
-   * If {@code true}, the blob data shares memory with networking buffer in GetBlobOperation
-   */
-  @Config(ROUTER_GET_BLOB_OPERATION_SHARE_MEMORY)
-  @Default("false")
-  public final boolean routerGetBlobOperationShareMemory;
-
-  /**
    * if {@code true}, operation tracker will get replicas in required states based on the type of operation. This helps
    * dynamically manage replicas in cluster (i.e. add/remove/move replicas) without restarting frontends.
    */
@@ -558,7 +550,6 @@ public class RouterConfig {
         Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
     routerMaxInMemGetChunks = verifiableProperties.getIntInRange(ROUTER_MAX_IN_MEM_GET_CHUNKS, 4, 1,
         Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
-    routerGetBlobOperationShareMemory = verifiableProperties.getBoolean(ROUTER_GET_BLOB_OPERATION_SHARE_MEMORY, false);
     routerGetEligibleReplicasByStateEnabled =
         verifiableProperties.getBoolean(ROUTER_GET_ELIGIBLE_REPLICAS_BY_STATE_ENABLED, false);
     routerPutUseDynamicSuccessTarget = verifiableProperties.getBoolean(ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET, false);

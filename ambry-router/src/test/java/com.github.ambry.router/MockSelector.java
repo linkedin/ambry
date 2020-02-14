@@ -14,29 +14,19 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.NetworkConfig;
-import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.BoundedByteBufferReceive;
 import com.github.ambry.network.BoundedNettyByteBufReceive;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.NetworkReceive;
 import com.github.ambry.network.NetworkSend;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.Selector;
-import com.github.ambry.utils.ByteBufferChannel;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
-import java.io.SequenceInputStream;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Properties;
 import java.util.concurrent.atomic.AtomicReference;
 
 
@@ -129,24 +119,9 @@ class MockSelector extends Selector {
           disconnected.add(send.getConnectionId());
         } else {
           MockServer server = connIdToServer.get(send.getConnectionId());
-          BoundedByteBufferReceive receive = server.send(send.getPayload());
+          BoundedNettyByteBufReceive receive = server.send(send.getPayload());
           if (receive != null) {
-            if (!config.networkUseNettyByteBuf) {
-              receives.add(new NetworkReceive(send.getConnectionId(), receive, time));
-            } else {
-              // Convert a BoundedByteBufferReceive to BoundedNettyByteBufReceive
-              BoundedNettyByteBufReceive boundedNettyByteBufReceive = new BoundedNettyByteBufReceive();
-              ByteBuffer buffer = (ByteBuffer) receive.getAndRelease();
-              ByteBuffer sizeBuffer = ByteBuffer.allocate(Long.BYTES);
-              sizeBuffer.putLong(buffer.remaining() + Long.BYTES);
-              sizeBuffer.flip();
-              ReadableByteChannel channel = Channels.newChannel(
-                  new SequenceInputStream(new ByteBufferInputStream(sizeBuffer), new ByteBufferInputStream(buffer)));
-              while (!boundedNettyByteBufReceive.isReadComplete()) {
-                boundedNettyByteBufReceive.readFrom(channel);
-              }
-              receives.add(new NetworkReceive(send.getConnectionId(), boundedNettyByteBufReceive, time));
-            }
+            receives.add(new NetworkReceive(send.getConnectionId(), receive, time));
           }
         }
       }

@@ -255,7 +255,7 @@ public class MessageFormatInputStreamTest {
     } else {
       Assert.assertEquals(null, blobAll.getBlobEncryptionKey());
     }
-    ByteBuf byteBuf = blobAll.getBlobData().getAndRelease();
+    ByteBuf byteBuf = blobAll.getBlobData().content();
     try {
       Assert.assertEquals(Unpooled.wrappedBuffer(data), byteBuf);
     } finally {

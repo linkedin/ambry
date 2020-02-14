@@ -24,6 +24,7 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CryptoServiceConfig;
@@ -120,7 +121,6 @@ public class GetBlobOperationTest {
   private final RouterCallback routerCallback;
   private final String operationTrackerType;
   private final boolean testEncryption;
-  private final boolean networkUseNetty;
   private MockKeyManagementService kms = null;
   private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
@@ -181,10 +181,9 @@ public class GetBlobOperationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false, false},
-        {SimpleOperationTracker.class.getSimpleName(), false, true},
-        {AdaptiveOperationTracker.class.getSimpleName(), false, false},
-        {AdaptiveOperationTracker.class.getSimpleName(), true, false}});
+    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false},
+        {AdaptiveOperationTracker.class.getSimpleName(), false},
+        {AdaptiveOperationTracker.class.getSimpleName(), true}});
   }
 
   /**
@@ -193,11 +192,9 @@ public class GetBlobOperationTest {
    * @param operationTrackerType the type of {@link OperationTracker} to use.
    * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
    */
-  public GetBlobOperationTest(String operationTrackerType, boolean testEncryption, boolean networkUseNetty)
-      throws Exception {
+  public GetBlobOperationTest(String operationTrackerType, boolean testEncryption) throws Exception {
     this.operationTrackerType = operationTrackerType;
     this.testEncryption = testEncryption;
-    this.networkUseNetty = networkUseNetty;
     // Defaults. Tests may override these and do new puts as appropriate.
     maxChunkSize = random.nextInt(1024 * 1024) + 1;
     // a blob size that is greater than the maxChunkSize and is not a multiple of it. Will result in a composite blob.
@@ -287,7 +284,8 @@ public class GetBlobOperationTest {
           new PutRequest(random.nextInt(), "clientId", blobId, blobProperties, userMetadataBuf.duplicate(),
               blobContent.duplicate(), blobContent.remaining(), blobType,
               blobEncryptionKey == null ? null : blobEncryptionKey.duplicate());
-      server.send(request);
+      // Make sure we release the BoundedNettyByteBufReceive.
+      server.send(request).release();
     }
   }
 
@@ -407,7 +405,7 @@ public class GetBlobOperationTest {
         // extract chunk ids
         BlobAll blobAll =
             MessageFormatRecord.deserializeBlobAll(new ByteArrayInputStream(payload.array()), blobIdFactory);
-        ByteBuf metadataBuffer = blobAll.getBlobData().getAndRelease();
+        ByteBuf metadataBuffer = blobAll.getBlobData().content();
         try {
           CompositeBlobInfo compositeBlobInfo =
               MetadataContentSerDe.deserializeMetadataContentRecord(metadataBuffer.nioBuffer(), blobIdFactory);
@@ -574,7 +572,7 @@ public class GetBlobOperationTest {
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
-            Utils.createDataInputStreamFromBuffer(responseInfo.getResponse()), mockClusterMap) : null;
+            new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
         responseInfo.release();
       }
@@ -629,7 +627,7 @@ public class GetBlobOperationTest {
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
-            Utils.createDataInputStreamFromBuffer(responseInfo.getResponse()), mockClusterMap) : null;
+            new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
         responseInfo.release();
       }
@@ -1434,8 +1432,7 @@ public class GetBlobOperationTest {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
-        DataInputStream dis = Utils.createDataInputStreamFromBuffer(responseInfo.getResponse(),
-            routerConfig.routerGetBlobOperationShareMemory);
+        DataInputStream dis = new NettyByteBufDataInputStream(responseInfo.content());
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(dis, mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
         responseInfo.release();
@@ -1623,7 +1620,6 @@ public class GetBlobOperationTest {
     properties.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
     properties.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "true");
     properties.setProperty("router.get.blob.operation.share.memory", "true");
-    properties.setProperty("network.use.netty.byte.buf", Boolean.toString(networkUseNetty));
     return properties;
   }
 }

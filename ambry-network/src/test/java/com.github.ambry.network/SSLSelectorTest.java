@@ -19,13 +19,14 @@ import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
+import io.netty.buffer.ByteBuf;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
@@ -37,6 +38,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.conscrypt.Conscrypt;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -55,6 +57,17 @@ public class SSLSelectorTest {
   private Selector selector;
   private final File trustStoreFile;
   private final NetworkConfig networkConfig;
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -212,14 +225,14 @@ public class SSLSelectorTest {
 
       // handle any responses we may have gotten
       for (NetworkReceive receive : selector.completedReceives()) {
-        ByteBuffer payload = (ByteBuffer) (receive.getReceivedBytes().getAndRelease());
+        ByteBuf payload = receive.getReceivedBytes().content();
         String[] pieces = SelectorTest.asString(payload).split("&");
         assertEquals("Should be in the form 'conn-counter'", 2, pieces.length);
         assertEquals("Check the source", receive.getConnectionId(), pieces[0]);
-        assertEquals("Check that the receive has kindly been rewound", 0, payload.position());
         assertTrue("Received connectionId is as expected ", connectionIds.contains(receive.getConnectionId()));
         assertEquals("Check the request counter", 0, Integer.parseInt(pieces[1]));
         responseCount++;
+        receive.getReceivedBytes().release();
       }
 
       // prepare new sends for the next round
@@ -335,8 +348,12 @@ public class SSLSelectorTest {
       selector.poll(1000L);
       for (NetworkReceive receive : selector.completedReceives()) {
         if (receive.getConnectionId().equals(connectionId)) {
-          ByteBuffer payload = (ByteBuffer) (receive.getReceivedBytes().getAndRelease());
-          return SelectorTest.asString(payload);
+          ByteBuf payload = receive.getReceivedBytes().content();
+          try {
+            return SelectorTest.asString(payload);
+          } finally {
+            payload.release();
+          }
         }
       }
     }
