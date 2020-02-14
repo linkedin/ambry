@@ -242,7 +242,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     List<CloudBlobMetadata> changeFeedEntries = new ArrayList<>(defaultCacheSize);
     String newRequestContinuationToken =
         cosmosDataAccessor.queryChangeFeed(startRequestContinuationToken, defaultCacheSize, changeFeedEntries,
-            partitionId);
+            partitionId, azureMetrics.changeFeedQueryTime);
     ChangeFeedCacheEntry changeFeedCacheEntry =
         new ChangeFeedCacheEntry(startRequestContinuationToken, newRequestContinuationToken, cacheSessionId,
             changeFeedEntries, partitionId);

@@ -449,15 +449,18 @@ public class AzureCloudDestinationTest {
   /** Test findEntriesSince when cloud destination uses update time based token. */
   @Test
   public void testFindEntriesSinceUsingUpdateTime() throws Exception {
-    testFindEntriesSinceWithUniqueUpdateTimes();
-    testFindEntriesSinceWithNonUniqueUpdateTimes();
+    AzureCloudDestination updateTimeBasedAzureCloudDestination =
+        new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
+            azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME);
+    testFindEntriesSinceWithUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
+    testFindEntriesSinceWithNonUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
   }
 
   /**
    * Test findEntriesSince with all entries having unique updateTimes.
    * @throws Exception
    */
-  public void testFindEntriesSinceWithUniqueUpdateTimes() throws Exception {
+  private void testFindEntriesSinceWithUniqueUpdateTimes(AzureCloudDestination azureDest) throws Exception {
     long chunkSize = 110000;
     long maxTotalSize = 1000000; // between 9 and 10 chunks
     long startTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
@@ -510,7 +513,7 @@ public class AzureCloudDestinationTest {
    * Test findEntriesSince with entries having non unique updateTimes.
    * @throws Exception
    */
-  private void testFindEntriesSinceWithNonUniqueUpdateTimes() throws Exception {
+  private void testFindEntriesSinceWithNonUniqueUpdateTimes(AzureCloudDestination azureDest) throws Exception {
     long chunkSize = 110000;
     long maxTotalSize = 1000000; // between 9 and 10 chunks
     long startTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);

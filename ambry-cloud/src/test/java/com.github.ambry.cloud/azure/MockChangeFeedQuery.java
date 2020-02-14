@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.util.HashMap;
@@ -46,8 +47,9 @@ public class MockChangeFeedQuery extends CosmosDataAccessor {
     blobIdToContinuationTokenMap.put(blobId, Integer.toString(continuationTokenCounter));
   }
 
+  @Override
   public String queryChangeFeed(String requestContinuationToken, int maxFeedSize, List<CloudBlobMetadata> changeFeed,
-      String partitionId) {
+      String partitionPath, Timer timer) {
     if (requestContinuationToken.equals("")) {
       requestContinuationToken = "0";
     }
