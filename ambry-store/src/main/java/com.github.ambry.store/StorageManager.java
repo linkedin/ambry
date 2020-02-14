@@ -177,6 +177,7 @@ public class StorageManager implements StoreManager {
       if (clusterParticipant != null) {
         clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StorageManagerListener,
             new PartitionStateChangeListenerImpl());
+        clusterParticipant.initializeParticipantMetrics(partitionNameToReplicaId.size());
       }
       logger.info("Starting storage manager complete");
     } finally {

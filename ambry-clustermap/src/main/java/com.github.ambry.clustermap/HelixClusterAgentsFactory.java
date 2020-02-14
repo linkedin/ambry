@@ -60,7 +60,7 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
   @Override
   public HelixParticipant getClusterParticipant() throws IOException {
     if (helixParticipant == null) {
-      helixParticipant = new HelixParticipant(clusterMapConfig, helixFactory);
+      helixParticipant = new HelixParticipant(clusterMapConfig, helixFactory, metricRegistry);
     }
     return helixParticipant;
   }
