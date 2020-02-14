@@ -76,6 +76,8 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
+import com.github.ambry.protocol.UndeleteRequest;
+import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptionsBuilder;
@@ -494,6 +496,13 @@ final class ServerTestUtil {
       actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
       Assert.assertArrayEquals("Content mismatch", data, actualBlobData);
 
+      // undelete a not-deleted blob should return fail
+      UndeleteRequest undeleteRequest = new UndeleteRequest(1, "undeleteClient", blobId1, System.currentTimeMillis());
+      channel.send(undeleteRequest);
+      stream = channel.receive().getInputStream();
+      UndeleteResponse undeleteResponse = UndeleteResponse.readFrom(new DataInputStream(stream));
+      assertEquals("Undelete blob should succeed", ServerErrorCode.Blob_Not_Deleted, undeleteResponse.getError());
+
       // delete a blob on a restarted store , which should succeed
       deleteRequest = new DeleteRequest(1, "deleteClient", blobId1, System.currentTimeMillis());
       channel.send(deleteRequest);
@@ -501,6 +510,31 @@ final class ServerTestUtil {
       deleteResponse = DeleteResponse.readFrom(new DataInputStream(stream));
       assertEquals("Delete blob on restarted store should succeed", ServerErrorCode.No_Error,
           deleteResponse.getError());
+
+      // undelete a deleted blob, which should succeed
+      undeleteRequest = new UndeleteRequest(2, "undeleteClient", blobId1, System.currentTimeMillis());
+      channel.send(undeleteRequest);
+      stream = channel.receive().getInputStream();
+      undeleteResponse = UndeleteResponse.readFrom(new DataInputStream(stream));
+      assertEquals("Undelete blob should succeed", ServerErrorCode.No_Error, undeleteResponse.getError());
+      assertEquals("Undelete life version mismatch", undeleteResponse.getLifeVersion(), (short) 1);
+
+      // undelete an already undeleted blob, which should fail
+      undeleteRequest = new UndeleteRequest(3, "undeleteClient", blobId1, System.currentTimeMillis());
+      channel.send(undeleteRequest);
+      stream = channel.receive().getInputStream();
+      undeleteResponse = UndeleteResponse.readFrom(new DataInputStream(stream));
+      assertEquals("Undelete blob should fail", ServerErrorCode.Blob_Already_Undeleted, undeleteResponse.getError());
+
+      // get an undeleted blob, which should succeed
+      getRequest1 = new GetRequest(1, "clientid1", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
+      channel.send(getRequest1);
+      stream = channel.receive().getInputStream();
+      resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      responseStream = resp1.getInputStream();
+      blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
+      actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
+      Assert.assertArrayEquals("Content mismatch", data, actualBlobData);
 
       // Bounce servers to make them read the persisted token file.
       cluster.stopServers();

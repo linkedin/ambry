@@ -247,6 +247,7 @@ public class MockCluster {
     props.setProperty("store.validate.authorization", "true");
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     props.setProperty("server.enable.store.data.prefetch", Boolean.toString(enableDataPrefetch));
+    props.setProperty("server.handle.undelete.request.enabled", "true");
     props.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     props.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "100");
     props.putAll(sslProperties);

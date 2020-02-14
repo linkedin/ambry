@@ -505,7 +505,7 @@ public class MessageFormatInputStreamTest {
    * @param updateTimeMs the expected time of update
    * @throws Exception any error.
    */
-  private static void checkUndeleteMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
+  public static void checkUndeleteMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
       short containerId, long updateTimeMs, short lifeVersion) throws Exception {
     checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key, lifeVersion);
     checkUndeleteSubRecord(stream, accountId, containerId, updateTimeMs);

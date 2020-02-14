@@ -13,6 +13,8 @@
  */
 package com.github.ambry.protocol;
 
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -80,9 +82,7 @@ public class UndeleteResponse extends Response {
     }
   }
 
-  @Override
-  public long writeTo(WritableByteChannel channel) throws IOException {
-    long written = 0;
+  private void prepareBuffer() {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
@@ -91,10 +91,22 @@ public class UndeleteResponse extends Response {
       }
       bufferToSend.flip();
     }
+  }
+
+  @Override
+  public long writeTo(WritableByteChannel channel) throws IOException {
+    long written = 0;
+    prepareBuffer();
     if (bufferToSend.remaining() > 0) {
       written = channel.write(bufferToSend);
     }
     return written;
+  }
+
+  @Override
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
+    prepareBuffer();
+    channel.write(bufferToSend, callback);
   }
 
   @Override
