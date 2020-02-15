@@ -23,6 +23,7 @@ import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.FindResult;
@@ -44,6 +45,7 @@ import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -56,6 +58,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.apache.commons.codec.binary.Base64;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -128,6 +131,13 @@ public class AzureCloudDestinationTest {
     azureMetrics = new AzureMetrics(new MetricRegistry());
     azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
         azureMetrics, defaultAzureReplicationFeedType);
+  }
+
+  @After
+  public void tearDown() throws Exception {
+    if (azureDest != null) {
+      azureDest.close();
+    }
   }
 
   /**
@@ -352,31 +362,35 @@ public class AzureCloudDestinationTest {
   private void testQueryMetadata(int numBlobs, int expectedQueries) throws Exception {
     // Reset metrics
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-        azureMetrics, defaultAzureReplicationFeedType);
-    List<BlobId> blobIdList = new ArrayList<>();
-    List<Document> docList = new ArrayList<>();
-    for (int j = 0; j < numBlobs; j++) {
-      BlobId blobId = generateBlobId();
-      blobIdList.add(blobId);
-      CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.NONE);
-      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, objectMapper));
-    }
+    try {
+      azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
+          azureMetrics, defaultAzureReplicationFeedType);
+      List<BlobId> blobIdList = new ArrayList<>();
+      List<Document> docList = new ArrayList<>();
+      for (int j = 0; j < numBlobs; j++) {
+        BlobId blobId = generateBlobId();
+        blobIdList.add(blobId);
+        CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
+            CloudBlobMetadata.EncryptionOrigin.NONE);
+        docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, objectMapper));
+      }
 
-    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
-    mockObservableForQuery(docList, mockResponse);
+      Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
+      mockObservableForQuery(docList, mockResponse);
 
-    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        mockResponse);
-    Set<BlobId> blobIdSet = new HashSet<>(blobIdList);
-    assertEquals(blobIdList.size(), blobIdSet.size());
-    Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(blobIdList);
-    for (BlobId blobId : blobIdList) {
-      assertEquals("Unexpected id in metadata", blobId.getID(), metadataMap.get(blobId.getID()).getId());
+      when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
+          mockResponse);
+      Set<BlobId> blobIdSet = new HashSet<>(blobIdList);
+      assertEquals(blobIdList.size(), blobIdSet.size());
+      Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(blobIdList);
+      for (BlobId blobId : blobIdList) {
+        assertEquals("Unexpected id in metadata", blobId.getID(), metadataMap.get(blobId.getID()).getId());
+      }
+      assertEquals(expectedQueries, azureMetrics.documentQueryCount.getCount());
+      assertEquals(expectedQueries, azureMetrics.missingKeysQueryTime.getCount());
+    } finally {
+      azureDest.close();
     }
-    assertEquals(expectedQueries, azureMetrics.documentQueryCount.getCount());
-    assertEquals(expectedQueries, azureMetrics.missingKeysQueryTime.getCount());
   }
 
   /** Test getDeadBlobs */
@@ -413,47 +427,60 @@ public class AzureCloudDestinationTest {
     }
 
     MockChangeFeedQuery mockChangeFeedQuery = new MockChangeFeedQuery();
-    AzureReplicationFeed azureReplicationFeed =
-        new CosmosChangeFeedBasedReplicationFeed(mockChangeFeedQuery, azureMetrics);
-    FieldSetter.setField(azureDest, azureDest.getClass().getDeclaredField("azureReplicationFeed"),
-        azureReplicationFeed);
-    cloudBlobMetadataList.stream().forEach(doc -> mockChangeFeedQuery.add(doc));
-    CosmosChangeFeedFindToken findToken = new CosmosChangeFeedFindToken();
-    // Run the query
-    FindResult findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
-    List<CloudBlobMetadata> firstResult = findResult.getMetadataList();
-    findToken = (CosmosChangeFeedFindToken) findResult.getUpdatedFindToken();
-    assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
+    AzureReplicationFeed azureReplicationFeed = null;
+    try {
+      azureReplicationFeed = new CosmosChangeFeedBasedReplicationFeed(mockChangeFeedQuery, azureMetrics);
+      FieldSetter.setField(azureDest, azureDest.getClass().getDeclaredField("azureReplicationFeed"),
+          azureReplicationFeed);
+      cloudBlobMetadataList.stream().forEach(doc -> mockChangeFeedQuery.add(doc));
+      CosmosChangeFeedFindToken findToken = new CosmosChangeFeedFindToken();
+      // Run the query
+      FindResult findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+      List<CloudBlobMetadata> firstResult = findResult.getMetadataList();
+      findToken = (CosmosChangeFeedFindToken) findResult.getUpdatedFindToken();
+      assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
 
-    assertEquals("Find token has wrong end continuation token", (findToken).getIndex(), firstResult.size());
-    assertEquals("Find token has wrong totalItems count", (findToken).getTotalItems(),
-        Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
-    cloudBlobMetadataList = cloudBlobMetadataList.subList(firstResult.size(), cloudBlobMetadataList.size());
+      assertEquals("Find token has wrong end continuation token", (findToken).getIndex(), firstResult.size());
+      assertEquals("Find token has wrong totalItems count", (findToken).getTotalItems(),
+          Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
+      cloudBlobMetadataList = cloudBlobMetadataList.subList(firstResult.size(), cloudBlobMetadataList.size());
 
-    findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
-    List<CloudBlobMetadata> secondResult = findResult.getMetadataList();
-    findToken = (CosmosChangeFeedFindToken) findResult.getUpdatedFindToken();
+      findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+      List<CloudBlobMetadata> secondResult = findResult.getMetadataList();
+      findToken = (CosmosChangeFeedFindToken) findResult.getUpdatedFindToken();
 
-    assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
-    assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
+      assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
+      assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
 
-    assertEquals("Find token has wrong totalItems count", (findToken).getTotalItems(),
-        Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
+      assertEquals("Find token has wrong totalItems count", (findToken).getTotalItems(),
+          Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
 
-    // Rerun with max size below blob size, and make sure it returns one result
-    findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize - 1);
-    List<CloudBlobMetadata> thirdResult = findResult.getMetadataList();
-    assertEquals("Expected one result", 1, thirdResult.size());
+      // Rerun with max size below blob size, and make sure it returns one result
+      findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize - 1);
+      List<CloudBlobMetadata> thirdResult = findResult.getMetadataList();
+      assertEquals("Expected one result", 1, thirdResult.size());
+    } finally {
+      if (azureReplicationFeed != null) {
+        azureReplicationFeed.close();
+      }
+    }
   }
 
   /** Test findEntriesSince when cloud destination uses update time based token. */
   @Test
   public void testFindEntriesSinceUsingUpdateTime() throws Exception {
-    AzureCloudDestination updateTimeBasedAzureCloudDestination =
-        new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-            azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME);
-    testFindEntriesSinceWithUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
-    testFindEntriesSinceWithNonUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
+    AzureCloudDestination updateTimeBasedAzureCloudDestination = null;
+    try {
+      updateTimeBasedAzureCloudDestination =
+          new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
+              azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME);
+      testFindEntriesSinceWithUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
+      testFindEntriesSinceWithNonUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
+    } finally {
+      if (updateTimeBasedAzureCloudDestination != null) {
+        updateTimeBasedAzureCloudDestination.close();
+      }
+    }
   }
 
   /**
@@ -599,13 +626,18 @@ public class AzureCloudDestinationTest {
 
   /** Test constructor with invalid connection string. */
   @Test
-  public void testInitClientException() {
+  public void testInitClientException() throws IOException {
     CloudDestinationFactory factory =
         new AzureCloudDestinationFactory(new VerifiableProperties(configProps), new MetricRegistry());
+    CloudDestination cloudDestination = null;
     try {
-      factory.getCloudDestination();
+      cloudDestination = factory.getCloudDestination();
       fail("Expected exception");
     } catch (IllegalStateException ex) {
+    } finally {
+      if (cloudDestination != null) {
+        cloudDestination.close();
+      }
     }
   }
 
@@ -614,17 +646,22 @@ public class AzureCloudDestinationTest {
   public void testAzureConnection() throws Exception {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudDestination dest =
-        new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, defaultAzureReplicationFeedType);
+    AzureCloudDestination dest = null;
     try {
-      dest.getAzureBlobDataAccessor().testConnectivity();
-      fail("Expected exception");
-    } catch (IllegalStateException expected) {
-    }
-    try {
-      dest.getCosmosDataAccessor().testConnectivity();
-      fail("Expected exception");
-    } catch (IllegalStateException expected) {
+      dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics,
+          defaultAzureReplicationFeedType);
+      try {
+        dest.getAzureBlobDataAccessor().testConnectivity();
+        fail("Expected exception");
+      } catch (IllegalStateException expected) {
+      }
+      try {
+        dest.getCosmosDataAccessor().testConnectivity();
+        fail("Expected exception");
+      } catch (IllegalStateException expected) {
+      }
+    } finally {
+      dest.close();
     }
   }
 
@@ -635,13 +672,20 @@ public class AzureCloudDestinationTest {
   @Ignore
   @Test
   public void testProxy() throws Exception {
-    // Test without proxy
+    AzureCloudDestination dest = null;
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudDestination dest =
-        new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, defaultAzureReplicationFeedType);
-    assertNull("Expected null proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
-    assertNull("Expected null proxy for Cosmos", dest.getAsyncDocumentClient().getConnectionPolicy().getProxy());
+    try {
+      // Test without proxy
+      dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics,
+          defaultAzureReplicationFeedType);
+      assertNull("Expected null proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
+      assertNull("Expected null proxy for Cosmos", dest.getAsyncDocumentClient().getConnectionPolicy().getProxy());
+    } finally {
+      if (dest != null) {
+        dest.close();
+      }
+    }
 
     // Test with proxy
     String proxyHost = "azure-proxy.randomcompany.com";
@@ -649,13 +693,19 @@ public class AzureCloudDestinationTest {
     configProps.setProperty(CloudConfig.VCR_PROXY_HOST, proxyHost);
     configProps.setProperty(CloudConfig.VCR_PROXY_PORT, String.valueOf(proxyPort));
     cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
-    dest =
-        new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics, defaultAzureReplicationFeedType);
-    assertNotNull("Expected proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
-    InetSocketAddress proxy = dest.getAsyncDocumentClient().getConnectionPolicy().getProxy();
-    assertNotNull("Expected proxy for Cosmos", proxy);
-    assertEquals("Wrong host", proxyHost, proxy.getHostName());
-    assertEquals("Wrong port", proxyPort, proxy.getPort());
+    try {
+      dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics,
+          defaultAzureReplicationFeedType);
+      assertNotNull("Expected proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
+      InetSocketAddress proxy = dest.getAsyncDocumentClient().getConnectionPolicy().getProxy();
+      assertNotNull("Expected proxy for Cosmos", proxy);
+      assertEquals("Wrong host", proxyHost, proxy.getHostName());
+      assertEquals("Wrong port", proxyPort, proxy.getPort());
+    } finally {
+      if (dest != null) {
+        dest.close();
+      }
+    }
   }
 
   /**

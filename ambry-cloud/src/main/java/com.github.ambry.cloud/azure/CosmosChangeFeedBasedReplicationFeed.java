@@ -18,7 +18,6 @@ import com.github.ambry.cloud.FindResult;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
-import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -32,7 +31,7 @@ import java.util.concurrent.TimeUnit;
  * The replication feed that provides next list of blobs to replicate from Azure and corresponding {@link FindToken}
  * using Cosmos change feed apis.
  */
-public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFeed, Closeable {
+public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFeed {
 
   /**
    * Class representing change feed cache for each partition.
@@ -43,7 +42,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     private final String cacheSessionId;
     private final List<CloudBlobMetadata> fetchedEntries;
     private final String partitionId;
-    private long creationTimestamp;
+    private final long creationTimestamp;
 
     /**
      * Constructor for {@link ChangeFeedCacheEntry}.
@@ -60,6 +59,15 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
       this.fetchedEntries = fetchedEntries;
       this.partitionId = partitionId;
       this.creationTimestamp = System.currentTimeMillis();
+    }
+
+    /**
+     * Shallow copy Constructor for {@link ChangeFeedCacheEntry}, which copies all fields except creationTimestamp.
+     * @param old old {@link ChangeFeedCacheEntry} object.
+     */
+    ChangeFeedCacheEntry(ChangeFeedCacheEntry old) {
+      this(old.getStartContinuationToken(), old.getEndContinuationToken(), old.getCacheSessionId(),
+          old.getFetchedEntries(), old.getPartitionId());
     }
 
     /**
@@ -200,7 +208,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
         changeFeedCacheEntry.getStartContinuationToken(), changeFeedCacheEntry.getEndContinuationToken(), index,
         changeFeedCacheEntry.getFetchedEntries().size(), changeFeedCacheEntry.getCacheSessionId(),
         cosmosChangeFeedFindToken.getVersion());
-    changeFeedCache.put(changeFeedCacheEntry.getCacheSessionId(), changeFeedCacheEntry);
+    changeFeedCache.put(changeFeedCacheEntry.getCacheSessionId(), new ChangeFeedCacheEntry(changeFeedCacheEntry));
     return new FindResult(nextEntries, updatedToken);
   }
 

@@ -74,6 +74,10 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
     return new FindResult(cappedResults, CosmosUpdateTimeFindToken.getUpdatedToken(findToken, cappedResults));
   }
 
+  @Override
+  public void close() {
+  }
+
   /**
    * Filter out {@link CloudBlobMetadata} objects from lastUpdateTime ordered {@code cloudBlobMetadataList} whose
    * lastUpdateTime is {@code lastUpdateTime} and id is in {@code lastReadBlobIds}.

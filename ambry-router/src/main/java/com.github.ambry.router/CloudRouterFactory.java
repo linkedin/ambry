@@ -119,8 +119,12 @@ public class CloudRouterFactory implements RouterFactory {
   public Router getRouter() throws InstantiationException {
     try {
       MetricRegistry registry = clusterMap.getMetricRegistry();
+      CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
+      CloudDestinationFactory cloudDestinationFactory =
+          Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties, registry);
+      CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
       RequestHandlerPool requestHandlerPool =
-          getRequestHandlerPool(verifiableProperties, clusterMap, notificationSystem);
+          getRequestHandlerPool(verifiableProperties, clusterMap, notificationSystem, cloudDestination, cloudConfig);
       NetworkClientFactory networkClientFactory =
           new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(),
               new NetworkConfig(verifiableProperties), new NetworkMetrics(registry), time);
@@ -129,6 +133,7 @@ public class CloudRouterFactory implements RouterFactory {
               cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
       // Make sure requestHandlerPool is shut down properly
       router.addResourceToClose(requestHandlerPool);
+      router.addResourceToClose(cloudDestination);
       logger.info("Instantiated NonBlockingRouter");
       return router;
     } catch (Exception e) {
@@ -146,17 +151,14 @@ public class CloudRouterFactory implements RouterFactory {
    * @throws Exception if the construction fails.
    */
   static RequestHandlerPool getRequestHandlerPool(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem) throws Exception {
+      NotificationSystem notificationSystem, CloudDestination cloudDestination, CloudConfig cloudConfig)
+      throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-    CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
     // TODO: move properties into maybe routerConfig, frontendConfig
     ServerConfig serverConfig = new ServerConfig(verifiableProperties);
     MetricRegistry registry = clusterMap.getMetricRegistry();
 
     DataNodeId nodeId = new CloudDataNode(cloudConfig, clusterMapConfig);
-    CloudDestinationFactory cloudDestinationFactory =
-        Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties, registry);
-    CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
     VcrMetrics vcrMetrics = new VcrMetrics(registry);
     StoreManager cloudStorageManager =
         new CloudStorageManager(verifiableProperties, vcrMetrics, cloudDestination, clusterMap);

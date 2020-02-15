@@ -211,6 +211,11 @@ class AzureCloudDestination implements CloudDestination {
     return metadataList.stream().collect(Collectors.toMap(CloudBlobMetadata::getId, Function.identity()));
   }
 
+  @Override
+  public void close() throws IOException {
+    azureReplicationFeed.close();
+  }
+
   /**
    * Get metadata for specified list of blobs.
    * @param blobIds {@link List} of {@link BlobId}s to get metadata of.

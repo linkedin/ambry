@@ -17,13 +17,14 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.replication.FindToken;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
+import java.io.Closeable;
 import java.util.List;
 
 
 /**
  * The replication feed that provides next list of blobs to replicate from Azure, and a bookmark in form of {@link FindToken}.
  */
-public interface AzureReplicationFeed {
+public interface AzureReplicationFeed extends Closeable {
 
   enum FeedType {
     /** Replication feed is obtained from cosmos change feed api */

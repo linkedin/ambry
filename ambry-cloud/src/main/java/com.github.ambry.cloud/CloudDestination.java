@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.replication.FindToken;
+import java.io.Closeable;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
@@ -24,7 +25,7 @@ import java.util.Map;
 /**
  * An interface representing an interaction with a cloud destination, that allows replicating blob operations.
  */
-public interface CloudDestination {
+public interface CloudDestination extends Closeable {
 
   /**
    * Upload blob to the cloud destination.

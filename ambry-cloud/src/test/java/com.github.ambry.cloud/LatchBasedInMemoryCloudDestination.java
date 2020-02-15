@@ -241,6 +241,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     }
   }
 
+  @Override
+  public void close() {
+  }
+
   /**
    * Populates an ordered sequenced list of blobs in the specified partition in {@code nextEntries} {@link List},
    * ordered by change feed. Returns the updated {@link com.github.ambry.replication.FindToken}.
@@ -251,8 +255,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
    * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
    * @throws CloudStorageException
    */
-  private FindResult findChangeFeedBasedEntries(String partitionPath, FindToken findToken,
-      long maxTotalSizeOfEntries) {
+  private FindResult findChangeFeedBasedEntries(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries) {
     List<CloudBlobMetadata> nextEntries = new ArrayList<>();
     String continuationToken = ((CosmosChangeFeedFindToken) findToken).getEndContinuationToken();
     List<BlobId> blobIds = new ArrayList<>();
@@ -279,8 +282,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
    * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
    * @throws CloudStorageException
    */
-  private FindResult findUpdateTimeBasedEntries(String partitionPath, FindToken findToken,
-      long maxTotalSizeOfEntries) {
+  private FindResult findUpdateTimeBasedEntries(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries) {
     List<CloudBlobMetadata> nextEntries = new ArrayList<>();
     CosmosUpdateTimeFindToken cosmosUpdateTimeFindToken = (CosmosUpdateTimeFindToken) findToken;
     List<CloudBlobMetadata> entries = new LinkedList<>();

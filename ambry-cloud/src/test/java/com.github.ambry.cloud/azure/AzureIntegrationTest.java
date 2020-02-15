@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -126,6 +127,13 @@ public class AzureIntegrationTest {
     VerifiableProperties verProps = new VerifiableProperties(props);
     azureDest =
         (AzureCloudDestination) new AzureCloudDestinationFactory(verProps, new MetricRegistry()).getCloudDestination();
+  }
+
+  @After
+  public void destroy() throws IOException {
+    if (azureDest != null) {
+      azureDest.close();
+    }
   }
 
   /**

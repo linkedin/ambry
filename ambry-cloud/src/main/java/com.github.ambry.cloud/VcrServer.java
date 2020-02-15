@@ -37,8 +37,8 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.protocol.RequestHandlerPool;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -75,6 +75,7 @@ public class VcrServer {
   private CloudDestinationFactory cloudDestinationFactory;
   private VcrRequests requests;
   private RequestHandlerPool requestHandlerPool;
+  private CloudDestination cloudDestination;
 
   /**
    * VcrServer constructor.
@@ -147,7 +148,7 @@ public class VcrServer {
 
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
-      CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
+      cloudDestination = cloudDestinationFactory.getCloudDestination();
       VcrMetrics vcrMetrics = new VcrMetrics(registry);
       CloudStorageManager cloudStorageManager =
           new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);
@@ -224,6 +225,9 @@ public class VcrServer {
       }
       if (virtualReplicatorCluster != null) {
         virtualReplicatorCluster.close();
+      }
+      if (cloudDestination != null) {
+        cloudDestination.close();
       }
       logger.info("VCR shutdown completed");
     } catch (Exception e) {
