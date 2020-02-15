@@ -75,8 +75,7 @@ public class RecoveryTestClusterManager implements ClusterMap {
    */
   @Override
   public List<PartitionId> getAllPartitionIds(String partitionClass) {
-    List<PartitionId> staticPartitionIds = staticClusterManager.getAllPartitionIds(partitionClass);
-    return staticPartitionIds;
+    return staticClusterManager.getAllPartitionIds(partitionClass);
   }
 
   /**

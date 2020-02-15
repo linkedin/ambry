@@ -41,7 +41,6 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
    * @param hardwareLayoutFilePath the path to the hardware layout file.
    * @param partitionLayoutFilePath the path to the partition layout file.
    * @throws JSONException if there is an exception parsing the layout files.
-   * @throws IOException if there is an IO error accessing or reading the layout files.
    */
   public RecoveryTestClusterAgentsFactory(ClusterMapConfig clusterMapConfig, String hardwareLayoutFilePath,
       String partitionLayoutFilePath) throws JSONException {
@@ -56,7 +55,7 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
   /**
    * Create and return a {@link RecoveryTestClusterManager}.
    * @return the constructed {@link RecoveryTestClusterManager}.
-   * @throws Exception if constructing the underlying {@link StaticClusterManager} or the {@link HelixClusterManager}
+   * @throws IOException if constructing the underlying {@link StaticClusterManager} or the {@link HelixClusterManager}
    * throws an Exception.
    */
   @Override
@@ -68,6 +67,8 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
         helixClusterManager = helixClusterAgentsFactory.getClusterMap();
       } catch (Exception e) {
         logger.error("Helix cluster manager instantiation failed with exception", e);
+        throw new IOException(
+            String.format("Helix cluster manager instantiation failed with exception %s", e.getMessage()));
       }
       recoveryTestClusterManagerRef.compareAndSet(null,
           new RecoveryTestClusterManager(staticClusterManager, helixClusterManager));
@@ -82,7 +83,6 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
       ClusterParticipant clusterParticipant = new ClusterParticipant() {
         @Override
         public void participate(List<AmbryHealthReport> ambryHealthReports) {
-          return;
         }
 
         @Override
