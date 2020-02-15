@@ -45,7 +45,7 @@ The log will be available at `logs/frontend.log`. Alternately, you can change th
 ##### Step 4: Interact with Ambry !
 We are now ready to store and retrieve data from Ambry. Let us start by storing a simple image. For demonstration purposes, we will use an image `demo.gif` that has been copied into the `target` folder.
 ###### POST
-    $ curl -i -H "x-ambry-blob-size : `wc -c demo.gif | xargs | cut -d" " -f1`" -H "x-ambry-service-id : CUrlUpload"  -H "x-ambry-owner-id : `whoami`" -H "x-ambry-content-type : image/gif" -H "x-ambry-um-description : Demonstration Image" http://localhost:1174/ --data-binary @demo.gif
+    $ curl -i -H "x-ambry-service-id:CUrlUpload"  -H "x-ambry-owner-id:`whoami`" -H "x-ambry-content-type:image/gif" -H "x-ambry-um-description:Demonstration Image" http://localhost:1174/ --data-binary @demo.gif
     HTTP/1.1 201 Created
     Location: AmbryID
     Content-Length: 0
