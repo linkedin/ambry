@@ -24,6 +24,7 @@ import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -311,11 +312,23 @@ class DiskManager {
       if (!running) {
         logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
       } else {
+        // Clean up existing dir associated with this replica to add. Here we re-create a new store because we don't
+        // know the state of files in old directory. (The old directory was created last time when adding this replica
+        // but failed at some point before updating InstanceConfig)
+        File storeDir = new File(replica.getReplicaPath());
+        if (storeDir.exists()) {
+          logger.info("Deleting previous store directory associated with {}", replica);
+          try {
+            Utils.deleteFileOrDirectory(storeDir);
+          } catch (Exception e) {
+            throw new IOException("Couldn't delete store directory " + replica.getReplicaPath(), e);
+          }
+          logger.info("Old store directory is deleted for {}", replica);
+        }
         BlobStore store =
             new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
                 storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
                 time);
-        // TODO In future PR, store.start() should contain logic for recovery  OFFLINE -> BOOTSTRAP -> STANDBY
         store.start();
         // collect store segment requirements and add into DiskSpaceAllocator
         List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());

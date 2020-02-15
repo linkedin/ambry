@@ -219,6 +219,20 @@ public class StorageManagerTest {
     assertFalse("Add store onto the DiskManager which is not running should fail",
         storageManager.addBlobStore(newPartition2.getReplicaIds().get(0)));
     storageManager.getDiskManager(localReplicas.get(0).getPartitionId()).start();
+    // test replica addition can correctly handle existing dir (should delete it and create a new one)
+    // To verify the directory has been recreated, we purposely put a test file in previous dir.
+    PartitionId newPartition3 =
+        new MockPartitionId(12L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), 0);
+    ReplicaId replicaToAdd = newPartition3.getReplicaIds().get(0);
+    File previousDir = new File(replicaToAdd.getReplicaPath());
+    File testFile = new File(previousDir, "testFile");
+    MockClusterMap.deleteFileOrDirectory(previousDir);
+    assertTrue("Cannot create dir for " + replicaToAdd.getReplicaPath(), previousDir.mkdir());
+    assertTrue("Cannot create test file within previous dir", testFile.createNewFile());
+    assertTrue("Adding new store should succeed", storageManager.addBlobStore(replicaToAdd));
+    assertFalse("Test file should not exist", testFile.exists());
+    assertNotNull("Store associated new added replica should not be null",
+        storageManager.getStore(newPartition3, false));
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
     // test add store but fail to add segment requirements to DiskSpaceAllocator. (This is simulated by inducing
     // addRequiredSegments failure to make store inaccessible)

@@ -395,7 +395,9 @@ public class StorageManager implements StoreManager {
           throw new StateTransitionException(
               "New replica " + partitionName + " is not found in clustermap for " + currentNode, ReplicaNotFound);
         }
-        // Attempt to add store into storage manager. If store already exists, fail adding store request.
+        // Attempt to add store into storage manager. If store already exists on disk (but not in clustermap), make
+        // sure old store of this replica is deleted (this store may be created in previous replica addition but failed
+        // at some point). Then a brand new store associated with this replica should be created and started.
         if (!addBlobStore(replicaToAdd)) {
           logger.error("Failed to add store {} into storage manager", partitionName);
           throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
