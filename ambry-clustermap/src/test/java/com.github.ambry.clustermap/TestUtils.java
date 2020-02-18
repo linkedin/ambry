@@ -865,6 +865,82 @@ public class TestUtils {
           updateJsonPartitionLayout(partitionClass, partitionState), clusterMapConfig);
     }
 
+    void addNewPartition(TestHardwareLayout testHardwareLayout, List<DataNode> dataNodes, String partitionClass) {
+      partitionCount += 1;
+      partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(),
+          addPartitionAndUpdateJsonPartitionLayout(partitionClass, dataNodes), clusterMapConfig);
+    }
+
+    void removeReplicaFromPartition(Replica replicaToRemove) {
+      version += 1;
+      String partitionName = replicaToRemove.getPartitionId().toPathString();
+      int index;
+      for (index = 0; index < jsonPartitions.length(); ++index) {
+        String partitionId = String.valueOf(((JSONObject) jsonPartitions.get(index)).get("id"));
+        if (partitionId.equals(partitionName)) {
+          break;
+        }
+      }
+      JSONObject jsonPartition = (JSONObject) jsonPartitions.get(index);
+      JSONArray jsonReplicas = (JSONArray) jsonPartition.get("replicas");
+      int replicaIdx;
+      DataNode targetNode = (DataNode) replicaToRemove.getDataNodeId();
+      for (replicaIdx = 0; replicaIdx < jsonReplicas.length(); ++replicaIdx) {
+        JSONObject jsonReplica = (JSONObject) jsonReplicas.get(replicaIdx);
+        String hostname = (String) jsonReplica.get("hostname");
+        int port = (int) jsonReplica.get("port");
+        if (hostname.equals(targetNode.getHostname()) && port == targetNode.getPort()) {
+          break;
+        }
+      }
+      // remove given replica from replicas
+      jsonReplicas.remove(replicaIdx);
+      jsonPartition.put("replicas", jsonReplicas);
+      jsonPartitions.put(index, jsonPartition);
+      JSONObject jsonPartitionLayout =
+          getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), version, partitionCount,
+              jsonPartitions);
+      this.partitionLayout =
+          new PartitionLayout(testHardwareLayout.getHardwareLayout(), jsonPartitionLayout, clusterMapConfig);
+    }
+
+    void addReplicaToPartition(DataNode newReplicaNode, Partition partition) {
+      version += 1;
+      int index;
+      for (index = 0; index < jsonPartitions.length(); ++index) {
+        String partitionId = String.valueOf(((JSONObject) jsonPartitions.get(index)).get("id"));
+        if (partitionId.equals(partition.toPathString())) {
+          break;
+        }
+      }
+      JSONObject jsonPartition = (JSONObject) jsonPartitions.get(index);
+      JSONArray jsonReplicas = (JSONArray) jsonPartition.get("replicas");
+      List<Disk> disks = newReplicaNode.getDisks();
+      jsonReplicas.put(getJsonReplica(disks.get((new Random()).nextInt(disks.size()))));
+      jsonPartition.put("replicas", jsonReplicas);
+      jsonPartitions.put(index, jsonPartition);
+      JSONObject jsonPartitionLayout =
+          getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), version, partitionCount,
+              jsonPartitions);
+      this.partitionLayout =
+          new PartitionLayout(testHardwareLayout.getHardwareLayout(), jsonPartitionLayout, clusterMapConfig);
+    }
+
+    private JSONObject addPartitionAndUpdateJsonPartitionLayout(String partitionClass,
+        List<DataNode> nodesToHostNewPartition) {
+      version += 1;
+      int nextPartitionIndex = jsonPartitions.length();
+      List<Disk> disksToPlaceNewPartition = new ArrayList<>();
+      Random random = new Random();
+      nodesToHostNewPartition.forEach(
+          node -> disksToPlaceNewPartition.add(node.getDisks().get(random.nextInt(node.getDisks().size()))));
+      JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(disksToPlaceNewPartition);
+      jsonPartitions.put(
+          getJsonPartition(nextPartitionIndex, partitionClass, partitionState, replicaCapacityInBytes, jsonReplicas));
+      return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), version, partitionCount,
+          jsonPartitions);
+    }
+
     public PartitionLayout getPartitionLayout() {
       return partitionLayout;
     }
