@@ -33,6 +33,7 @@ import io.netty.handler.codec.http.HttpVersion;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
@@ -124,7 +125,8 @@ public class RestTestUtils {
   public static JSONObject getJsonizedResponseBody(ReadableStreamChannel channel) throws Exception {
     RetainingAsyncWritableChannel asyncWritableChannel = new RetainingAsyncWritableChannel((int) channel.getSize());
     channel.readInto(asyncWritableChannel, null).get();
-    return new JSONObject(new String(Utils.readBytesFromStream(asyncWritableChannel.consumeContentAsInputStream(),
-        (int) asyncWritableChannel.getBytesWritten())));
+    try (InputStream is = asyncWritableChannel.consumeContentAsInputStream()) {
+      return new JSONObject(new String(Utils.readBytesFromStream(is, (int) asyncWritableChannel.getBytesWritten())));
+    }
   }
 }

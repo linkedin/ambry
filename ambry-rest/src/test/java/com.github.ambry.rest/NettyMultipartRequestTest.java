@@ -41,6 +41,7 @@ import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
 import io.netty.handler.codec.http.multipart.MemoryFileUpload;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.Charset;
@@ -509,8 +510,9 @@ public class NettyMultipartRequestTest {
     }
     asyncWritableChannel = new RetainingAsyncWritableChannel(expectedRequestSize);
     request.readInto(asyncWritableChannel, null).get();
-    readOutput = Utils.readBytesFromStream(asyncWritableChannel.consumeContentAsInputStream(),
-        (int) asyncWritableChannel.getBytesWritten());
+    try (InputStream is = asyncWritableChannel.consumeContentAsInputStream()) {
+      readOutput = Utils.readBytesFromStream(is, (int) asyncWritableChannel.getBytesWritten());
+    }
     assertArrayEquals(RestUtils.MultipartPost.BLOB_PART + " content does not match", blobData.array(), readOutput);
     assertArrayEquals("Part by part digest should match digest of whole", wholeDigest, request.getDigest());
     closeRequestAndValidate(request);

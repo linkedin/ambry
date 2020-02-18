@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,6 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.buffer.Unpooled;
-import io.netty.buffer.UnpooledByteBufAllocator;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -66,7 +64,9 @@ public class RetainingAsyncWritableChannel implements AsyncWritableChannel {
   /**
    * @inheritDoc
    *
-   * This method requires copying
+   * This method requires copying the buffer because {@link ByteBuffer}s do not have the concept of a reference count,
+   * so the other side is free to reuse the buffer after the callback has been called (as opposed to when the ref count
+   * reaches 0).
    */
   @Override
   public Future<Long> write(ByteBuffer src, Callback<Long> callback) {
@@ -75,6 +75,7 @@ public class RetainingAsyncWritableChannel implements AsyncWritableChannel {
       ByteBuf copy = src.isDirect() ? ByteBufAllocator.DEFAULT.directBuffer(src.remaining())
           : PooledByteBufAllocator.DEFAULT.heapBuffer(src.remaining());
       copy.writeBytes(src);
+      src.position(src.limit());
       return copy;
     }, callback);
   }
@@ -89,6 +90,14 @@ public class RetainingAsyncWritableChannel implements AsyncWritableChannel {
     }, callback);
   }
 
+  /**
+   * Internal method for writing to the channel that allows for a pluggable action to be taken to produce a
+   * retained {@link ByteBuf} that can be added to the composite buffer.
+   * @param retainedBufSupplier creates a retained {@link ByteBuf} that can be freely added to a
+   *                            {@link CompositeByteBuf}.
+   * @param callback called once the buffer has been added.
+   * @return a future that is completed once the buffer has been added.
+   */
   private Future<Long> writeInternal(Supplier<ByteBuf> retainedBufSupplier, Callback<Long> callback) {
     FutureResult<Long> future = new FutureResult<>();
     ByteBuf buf = null;
@@ -155,7 +164,7 @@ public class RetainingAsyncWritableChannel implements AsyncWritableChannel {
         throw new IllegalStateException("Content already consumed or channel was closed.");
       }
       try {
-        return compositeBuffer;
+        return compositeBuffer.asReadOnly();
       } finally {
         compositeBuffer = null;
       }

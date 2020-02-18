@@ -61,7 +61,7 @@ public class StorageRestRequestService implements RestRequestService {
     restRequest.readInto(asyncWritableChannel, (result, exception) -> {
       try {
         requestResponseChannel.sendRequest(new NettyServerRequest(restRequest, restResponseChannel,
-            asyncWritableChannel.consumeContentAsInputStream()));
+            asyncWritableChannel.consumeContentAsByteBuf()));
       } catch (InterruptedException e) {
         //TODO  close requestResponseChannel.closeConnection() on error
         logger.error("Failed to SendRequest to requestResponseChannel.", e);

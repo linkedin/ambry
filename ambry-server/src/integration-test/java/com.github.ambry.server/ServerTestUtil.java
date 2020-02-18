@@ -2072,8 +2072,9 @@ final class ServerTestUtil {
         result.getBlobInfo().getBlobProperties().getBlobSize());
     RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
     blob.readInto(channel, null).get(1, TimeUnit.SECONDS);
-    Assert.assertArrayEquals(data,
-        Utils.readBytesFromStream(channel.consumeContentAsInputStream(), (int) channel.getBytesWritten()));
+    try (InputStream is = channel.consumeContentAsInputStream()) {
+      Assert.assertArrayEquals(data, Utils.readBytesFromStream(is, (int) channel.getBytesWritten()));
+    }
   }
 
   private static void checkBlobContent(MockClusterMap clusterMap, BlobId blobId, ConnectedChannel channel,

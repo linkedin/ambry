@@ -28,12 +28,12 @@ import org.slf4j.LoggerFactory;
 
 // The request at the network layer
 class SocketServerRequest extends AbstractByteBufHolder<SocketServerRequest> implements NetworkRequest {
+  private static final Logger logger = LoggerFactory.getLogger(SocketServerRequest.class);
   private final int processor;
   private final String connectionId;
   private final InputStream input;
   private final long startTimeInMs;
-  private static final Logger logger = LoggerFactory.getLogger(SocketServerRequest.class);
-  private ByteBuf content;
+  private final ByteBuf content;
 
   public SocketServerRequest(int processor, String connectionId, ByteBuf content) {
     this.processor = processor;
