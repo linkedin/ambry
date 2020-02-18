@@ -143,7 +143,6 @@ class GetBlobOperation extends GetOperation {
     firstChunk = new FirstGetChunk();
   }
 
-
   /**
    * Release all the {@link ByteBuf} in the map. Use {@link ConcurrentHashMap#remove(Object)} method to avoid
    * conflict with the release call in the chunk async callback.
@@ -764,7 +763,7 @@ class GetBlobOperation extends GetOperation {
       if (!successfullyDeserialized) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
         ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
-        ByteBuf chunkBuf = blobData.getAndRelease();
+        ByteBuf chunkBuf = blobData.content();
 
         try {
           boolean launchedJob = maybeLaunchCryptoJob(chunkBuf, null, encryptionKey, chunkBlobId);
@@ -1220,7 +1219,7 @@ class GetBlobOperation extends GetOperation {
         if (rawMode) {
           if (blobData != null) {
             // RawMode, release blob data.
-            blobData.getAndRelease().release();
+            blobData.release();
           }
           // Return the raw bytes from storage
           if (encryptionKey != null) {
@@ -1291,7 +1290,7 @@ class GetBlobOperation extends GetOperation {
      */
     private void handleMetadataBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey)
         throws IOException, MessageFormatException {
-      ByteBuf serializedMetadataContent = blobData.getAndRelease();
+      ByteBuf serializedMetadataContent = blobData.content();
       try {
         compositeBlobInfo =
             MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent.nioBuffer(), blobIdFactory);
@@ -1376,8 +1375,8 @@ class GetBlobOperation extends GetOperation {
      * @param encryptionKey encryption key for the blob. Could be null for non encrypted blob.
      */
     private void handleSimpleBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey) {
-      ByteBuf chunkBuf = blobData.getAndRelease();
       try {
+        ByteBuf chunkBuf = blobData.content();
         boolean rangeResolutionFailure = false;
         if (encryptionKey == null) {
           totalSize = blobData.getSize();
@@ -1401,7 +1400,7 @@ class GetBlobOperation extends GetOperation {
           }
         }
       } finally {
-        chunkBuf.release();
+        blobData.release();
       }
     }
 

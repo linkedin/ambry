@@ -1,5 +1,5 @@
 /**
- * Copyright 2019 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.cloud.azure;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -25,13 +25,13 @@ import static org.junit.Assert.*;
 
 
 /**
- * Test for {@link CloudFindTokenFactory}
+ * Test for {@link CosmosUpdateTimeFindTokenFactory}
  */
-public class CloudFindTokenFactoryTest {
+public class CosmosUpdateTimeFindTokenFactoryTest {
 
   /**
    * test get find token from stream
-   * @throws IOException if an IO exception happens during deserialization
+   * @throws java.io.IOException if an IO exception happens during deserialization
    */
   @Test
   public void getFindTokenTest() throws IOException {
@@ -43,10 +43,12 @@ public class CloudFindTokenFactoryTest {
     lastReadBlobIds.add("blobid1");
     lastReadBlobIds.add("blobid2");
 
-    CloudFindToken cloudFindToken1 = new CloudFindToken(version, latestBlobUpdateTime, bytesRead, lastReadBlobIds);
-    DataInputStream stream = new DataInputStream(new ByteArrayInputStream(cloudFindToken1.toBytes()));
-    CloudFindToken cloudFindToken2 = (CloudFindToken) new CloudFindTokenFactory().getFindToken(stream);
-    assertEquals("incorrect token returned from factory", cloudFindToken1, cloudFindToken2);
+    CosmosUpdateTimeFindToken cosmosUpdateTimeFindToken1 =
+        new CosmosUpdateTimeFindToken(version, latestBlobUpdateTime, bytesRead, lastReadBlobIds);
+    DataInputStream stream = new DataInputStream(new ByteArrayInputStream(cosmosUpdateTimeFindToken1.toBytes()));
+    CosmosUpdateTimeFindToken cosmosUpdateTimeFindToken2 =
+        (CosmosUpdateTimeFindToken) new CosmosUpdateTimeFindTokenFactory().getFindToken(stream);
+    assertEquals("incorrect token returned from factory", cosmosUpdateTimeFindToken1, cosmosUpdateTimeFindToken2);
   }
 
   /**
@@ -54,8 +56,9 @@ public class CloudFindTokenFactoryTest {
    */
   @Test
   public void getNewFindTokenTest() {
-    CloudFindToken cloudFindToken1 = (CloudFindToken) new CloudFindTokenFactory().getNewFindToken();
-    CloudFindToken cloudFindToken2 = new CloudFindToken();
-    assertEquals("tokens should be equal", cloudFindToken1, cloudFindToken2);
+    CosmosUpdateTimeFindToken cosmosUpdateTimeFindToken1 =
+        (CosmosUpdateTimeFindToken) new CosmosUpdateTimeFindTokenFactory().getNewFindToken();
+    CosmosUpdateTimeFindToken cosmosUpdateTimeFindToken2 = new CosmosUpdateTimeFindToken();
+    assertEquals("tokens should be equal", cosmosUpdateTimeFindToken1, cosmosUpdateTimeFindToken2);
   }
 }

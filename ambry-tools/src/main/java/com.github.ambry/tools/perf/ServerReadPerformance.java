@@ -261,12 +261,11 @@ public class ServerReadPerformance {
             long sizeRead = 0;
             byte[] outputBuffer = new byte[(int) blobData.getSize()];
             ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
-            ByteBuf buffer = blobData.getAndRelease();
+            ByteBuf buffer = blobData.content();
             try {
               buffer.readBytes(streamOut, (int) blobData.getSize());
             } finally {
               buffer.release();
-              buffer = null;
             }
             long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
             totalTimeTaken.addAndGet(latencyPerBlob);

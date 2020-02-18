@@ -13,9 +13,10 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.utils.AbstractByteBufHolder;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
-import io.netty.util.ReferenceCountUtil;
-import java.io.IOException;
+import io.netty.buffer.ByteBuf;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -26,19 +27,19 @@ import org.slf4j.LoggerFactory;
 
 
 // The request at the network layer
-class SocketServerRequest implements NetworkRequest {
+class SocketServerRequest extends AbstractByteBufHolder<SocketServerRequest> implements NetworkRequest {
   private final int processor;
   private final String connectionId;
   private final InputStream input;
   private final long startTimeInMs;
   private static final Logger logger = LoggerFactory.getLogger(SocketServerRequest.class);
-  private Object buffer;
+  private ByteBuf content;
 
-  public SocketServerRequest(int processor, String connectionId, Object buffer, InputStream input) throws IOException {
+  public SocketServerRequest(int processor, String connectionId, ByteBuf content) {
     this.processor = processor;
     this.connectionId = connectionId;
-    this.buffer = buffer;
-    this.input = input;
+    this.content = content;
+    this.input = new NettyByteBufDataInputStream(content);
     this.startTimeInMs = SystemTime.getInstance().milliseconds();
     logger.trace("Processor {} received request : {}", processor, connectionId);
   }
@@ -53,20 +54,22 @@ class SocketServerRequest implements NetworkRequest {
     return startTimeInMs;
   }
 
-  @Override
-  public void release() {
-    if (buffer != null) {
-      ReferenceCountUtil.release(buffer);
-      buffer = null;
-    }
-  }
-
   public int getProcessor() {
     return processor;
   }
 
   public String getConnectionId() {
     return connectionId;
+  }
+
+  @Override
+  public ByteBuf content() {
+    return content;
+  }
+
+  @Override
+  public SocketServerRequest replace(ByteBuf content) {
+    return new SocketServerRequest(getProcessor(), getConnectionId(), content);
   }
 }
 
@@ -114,7 +117,7 @@ class SocketServerResponse implements NetworkResponse {
 }
 
 interface ResponseListener {
-  public void onResponse(int processorId);
+  void onResponse(int processorId);
 }
 
 /**

@@ -89,6 +89,13 @@ public class ClusterMapConfig {
   public final String clusterMapClusterAgentsFactory;
 
   /**
+   * The cluster change handler to use for Cluster Map.
+   */
+  @Config("clustermap.cluster.change.handler.type")
+  @Default("SimpleClusterChangeHandler")
+  public final String clusterMapClusterChangeHandlerType;
+
+  /**
    * Serialized json containing the information about all the zk hosts that the Helix based cluster manager should
    * be aware of. This information should be of the following form:
    *
@@ -252,6 +259,8 @@ public class ClusterMapConfig {
     clusterMapSslEnabledDatacenters = verifiableProperties.getString("clustermap.ssl.enabled.datacenters", "");
     clusterMapClusterAgentsFactory = verifiableProperties.getString("clustermap.clusteragents.factory",
         "com.github.ambry.clustermap.StaticClusterAgentsFactory");
+    clusterMapClusterChangeHandlerType =
+        verifiableProperties.getString("clustermap.cluster.change.handler.type", "SimpleClusterChangeHandler");
     clusterMapDcsZkConnectStrings = verifiableProperties.getString("clustermap.dcs.zk.connect.strings", "");
     clusterMapClusterName = verifiableProperties.getString("clustermap.cluster.name");
     clusterMapDatacenterName = verifiableProperties.getString("clustermap.datacenter.name");

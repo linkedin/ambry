@@ -39,11 +39,12 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -68,6 +69,7 @@ import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -120,6 +122,7 @@ public class NonBlockingRouterTest {
   byte[] putUserMetadata;
   byte[] putContent;
   ReadableStreamChannel putChannel;
+  private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   /**
    * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
@@ -152,9 +155,15 @@ public class NonBlockingRouterTest {
     accountService = new InMemAccountService(false, true);
   }
 
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
   @After
   public void after() {
     Assert.assertEquals("Current operations count should be 0", 0, NonBlockingRouter.currentOperationsCount.get());
+    nettyByteBufLeakHelper.afterTest();
   }
 
   /**
@@ -1083,8 +1092,8 @@ public class NonBlockingRouterTest {
    * @param blobId the id of the blob to get/delete. For puts, this will be null.
    * @throws Exception
    */
-  private void testResponseDeserializationError(OperationHelper opHelper, SocketNetworkClient networkClient, BlobId blobId)
-      throws Exception {
+  private void testResponseDeserializationError(OperationHelper opHelper, SocketNetworkClient networkClient,
+      BlobId blobId) throws Exception {
     mockSelectorState.set(MockSelectorState.Good);
     FutureResult futureResult = opHelper.submitOperation(blobId);
     int requestParallelism = opHelper.requestParallelism;
@@ -1107,9 +1116,9 @@ public class NonBlockingRouterTest {
       allRequests.clear();
     } while (responseInfoList.size() < requestParallelism);
     // corrupt the first response.
-    ByteBuffer response = (ByteBuffer) responseInfoList.get(0).getResponse();
-    byte b = response.get(response.limit() - 1);
-    response.put(response.limit() - 1, (byte) ~b);
+    ByteBuf response = responseInfoList.get(0).content();
+    byte b = response.getByte(response.writerIndex() - 1);
+    response.setByte(response.writerIndex() - 1, (byte) ~b);
     for (ResponseInfo responseInfo : responseInfoList) {
       opHelper.handleResponse(responseInfo);
     }

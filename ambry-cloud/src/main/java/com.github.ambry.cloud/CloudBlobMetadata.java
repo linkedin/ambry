@@ -86,7 +86,8 @@ public class CloudBlobMetadata {
     /** Encrypted by Router */
     ROUTER,
     /** Encrypted by VCR */
-    VCR}
+    VCR
+  }
 
   /**
    * Default constructor (for JSONSerializer).
@@ -420,8 +421,8 @@ public class CloudBlobMetadata {
     return (Objects.equals(id, om.id) && Objects.equals(partitionId, om.partitionId) && accountId == om.accountId
         && containerId == om.containerId && size == om.size && creationTime == om.creationTime
         && uploadTime == om.uploadTime && expirationTime == om.expirationTime && deletionTime == om.deletionTime
-        && nameSchemeVersion == om.nameSchemeVersion && encryptionOrigin == om.encryptionOrigin && Objects.equals(vcrKmsContext,
-        om.vcrKmsContext) && Objects.equals(cryptoAgentFactory, om.cryptoAgentFactory)
+        && nameSchemeVersion == om.nameSchemeVersion && encryptionOrigin == om.encryptionOrigin && Objects.equals(
+        vcrKmsContext, om.vcrKmsContext) && Objects.equals(cryptoAgentFactory, om.cryptoAgentFactory)
         && encryptedSize == om.encryptedSize);
   }
 

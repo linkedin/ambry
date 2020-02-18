@@ -26,6 +26,7 @@ import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -185,13 +186,13 @@ class RouterUtils {
    */
   static <R extends Response> R extractResponseAndNotifyResponseHandler(ResponseHandler responseHandler,
       NonBlockingRouterMetrics routerMetrics, ResponseInfo responseInfo, Deserializer<R> deserializer,
-      Function<R, ServerErrorCode> errorExtractor, boolean shareMemory) {
+      Function<R, ServerErrorCode> errorExtractor) {
     R response = null;
     ReplicaId replicaId = responseInfo.getRequestInfo().getReplicaId();
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode == null) {
       try {
-        DataInputStream dis = Utils.createDataInputStreamFromBuffer(responseInfo.getResponse(), shareMemory);
+        DataInputStream dis = new NettyByteBufDataInputStream(responseInfo.content());
         response = deserializer.readFrom(dis);
         responseHandler.onEvent(replicaId, errorExtractor.apply(response));
       } catch (Exception e) {

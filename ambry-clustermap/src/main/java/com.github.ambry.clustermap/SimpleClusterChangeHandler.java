@@ -436,7 +436,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
               new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
                   replicaCapacity, isSealed);
           ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
-          ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toString(), replica);
+          ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);
         }
       }
     }

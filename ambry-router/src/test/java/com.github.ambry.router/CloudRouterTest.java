@@ -13,6 +13,8 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -28,6 +30,7 @@ import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
@@ -126,8 +129,14 @@ public class CloudRouterTest extends NonBlockingRouterTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
+    CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
+    CloudDestinationFactory cloudDestinationFactory =
+        Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties,
+            mockClusterMap.getMetricRegistry());
+    CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
     RequestHandlerPool requestHandlerPool =
-        CloudRouterFactory.getRequestHandlerPool(verifiableProperties, mockClusterMap, notificationSystem);
+        CloudRouterFactory.getRequestHandlerPool(verifiableProperties, mockClusterMap, notificationSystem,
+            cloudDestination, cloudConfig);
     NetworkClientFactory networkClientFactory =
         new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(),
             new NetworkConfig(verifiableProperties), new NetworkMetrics(routerMetrics.getMetricRegistry()),

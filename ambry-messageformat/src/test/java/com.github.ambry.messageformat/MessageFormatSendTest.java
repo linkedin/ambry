@@ -23,6 +23,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -36,6 +37,7 @@ import java.util.List;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -46,6 +48,18 @@ import org.junit.runners.Parameterized;
 public class MessageFormatSendTest {
   private final String putFormat;
   private static short messageFormatHeaderVersionSaved;
+
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
@@ -475,8 +489,9 @@ public class MessageFormatSendTest {
       Assert.assertEquals(BlobType.DataBlob, deserializedBlob.getBlobData().getBlobType());
       Assert.assertEquals(blob[i].length, deserializedBlob.getBlobData().getSize());
       byte[] readBlob = new byte[blob[i].length];
-      deserializedBlob.getBlobData().getAndRelease().readBytes(readBlob);
+      deserializedBlob.getBlobData().content().readBytes(readBlob);
       Assert.assertArrayEquals(blob[i], readBlob);
+      deserializedBlob.getBlobData().release();
 
       if (headerVersions[i] == MessageFormatRecord.Message_Header_Version_V1) {
         Assert.assertEquals(null, send.getMessageMetadataList().get(i));

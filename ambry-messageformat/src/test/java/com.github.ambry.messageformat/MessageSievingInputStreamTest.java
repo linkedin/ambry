@@ -977,7 +977,7 @@ public class MessageSievingInputStreamTest {
     Assert.assertEquals(containerId, propsFromStream.getContainerId());
     Assert.assertEquals(ByteBuffer.wrap(usermetadata), userMetadataFromStream);
     Assert.assertEquals(blobType, blobDataFromStream.getBlobType());
-    ByteBuf byteBuf = blobDataFromStream.getAndRelease();
+    ByteBuf byteBuf = blobDataFromStream.content();
     try {
       Assert.assertEquals(Unpooled.wrappedBuffer(data), byteBuf);
     } finally {
@@ -1086,7 +1086,7 @@ class ValidatingKeyConvertingTransformer implements Transformer {
           MessageInfo transformedMsgInfo;
           PutMessageFormatInputStream transformedStream =
               new PutMessageFormatInputStream(newKey, encryptionKey, props, metadata,
-                  new ByteBufInputStream(blobData.getAndRelease(), true), blobData.getSize(), blobData.getBlobType());
+                  new ByteBufInputStream(blobData.content(), true), blobData.getSize(), blobData.getBlobType());
           transformedMsgInfo =
               new MessageInfo(newKey, transformedStream.getSize(), msgInfo.isDeleted(), msgInfo.isTtlUpdated(),
                   msgInfo.getExpirationTimeInMs(), msgInfo.getCrc(), msgInfo.getAccountId(), msgInfo.getContainerId(),

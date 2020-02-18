@@ -16,7 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.network.BoundedByteBufferReceive;
+import com.github.ambry.network.BoundedNettyByteBufReceive;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
@@ -82,12 +82,12 @@ class MockServer {
 
   /**
    * Take in a request in the form of {@link Send} and return a response in the form of a
-   * {@link BoundedByteBufferReceive}.
+   * {@link BoundedNettyByteBufReceive}.
    * @param send the request.
    * @return the response.
    * @throws IOException if there was an error in interpreting the request.
    */
-  public BoundedByteBufferReceive send(Send send) throws IOException {
+  public BoundedNettyByteBufReceive send(Send send) throws IOException {
     if (!shouldRespond) {
       return null;
     }
@@ -116,9 +116,9 @@ class MockServer {
     response.writeTo(channel);
     ByteBuffer payload = channel.getBuffer();
     payload.flip();
-    BoundedByteBufferReceive boundedByteBufferReceive = new BoundedByteBufferReceive();
-    boundedByteBufferReceive.readFrom(Channels.newChannel(new ByteBufferInputStream(payload)));
-    return boundedByteBufferReceive;
+    BoundedNettyByteBufReceive receive = new BoundedNettyByteBufReceive();
+    receive.readFrom(Channels.newChannel(new ByteBufferInputStream(payload)));
+    return receive;
   }
 
   /**

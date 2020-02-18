@@ -1237,7 +1237,7 @@ public class ReplicationTest {
         StoreKey remoteId = remoteInfo.getStoreKey();
         if (seen.add(remoteId)) {
           StoreKey localId = storeKeyConverter.convert(Collections.singleton(remoteId)).get(remoteId);
-          MessageInfo localInfo = getMessageInfo(localId, localInfos, false, false);
+          MessageInfo localInfo = getMessageInfo(localId, localInfos, false, false, false);
           if (localId == null) {
             // this is a deprecated ID. There should be no messages locally
             assertNull(remoteId + " is deprecated and should have no entries", localInfo);
@@ -1593,7 +1593,7 @@ public class ReplicationTest {
 
       // ensure that the first key is not deleted in the local host
       assertNull(toDeleteId + " should not be deleted in the local host",
-          getMessageInfo(toDeleteId, localHost.infosByPartition.get(partitionId), true, false));
+          getMessageInfo(toDeleteId, localHost.infosByPartition.get(partitionId), true, false, false));
     }
 
     StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
@@ -2119,7 +2119,7 @@ public class ReplicationTest {
       // test that the first key has been marked deleted
       List<MessageInfo> messageInfos = localHost.infosByPartition.get(entry.getKey());
       StoreKey deletedId = messageInfos.get(0).getStoreKey();
-      assertNotNull(deletedId + " should have been deleted", getMessageInfo(deletedId, messageInfos, true, false));
+      assertNotNull(deletedId + " should have been deleted", getMessageInfo(deletedId, messageInfos, true, false, false));
       Map<StoreKey, Boolean> ignoreState = new HashMap<>();
       for (StoreKey toBeIgnored : idsToBeIgnoredByPartition.get(entry.getKey())) {
         ignoreState.put(toBeIgnored, false);
@@ -2236,7 +2236,7 @@ public class ReplicationTest {
    */
   private void addDeleteMessagesToReplicasOfPartition(PartitionId partitionId, StoreKey id, List<MockHost> hosts)
       throws MessageFormatException, IOException {
-    MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false, false);
+    MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false, false, false);
     short aid;
     short cid;
     if (putMsg == null) {
@@ -2292,7 +2292,7 @@ public class ReplicationTest {
    */
   public static void addTtlUpdateMessagesToReplicasOfPartition(PartitionId partitionId, StoreKey id,
       List<MockHost> hosts, long expirationTime) throws MessageFormatException, IOException {
-    MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false, false);
+    MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false, false, false);
     short aid;
     short cid;
     if (putMsg == null) {
@@ -2382,10 +2382,11 @@ public class ReplicationTest {
    * @param id the {@link StoreKey} to look for.
    * @param messageInfos the {@link MessageInfo} list.
    * @param deleteMsg {@code true} if delete msg is requested. {@code false} otherwise
+   * @param undeleteMsg {@code true} if undelete msg is requested. {@code false} otherwise
    * @param ttlUpdateMsg {@code true} if ttl update msg is requested. {@code false} otherwise
    * @return the delete {@link MessageInfo} if it exists in {@code messageInfos}. {@code null otherwise.}
    */
-  static MessageInfo getMessageInfo(StoreKey id, List<MessageInfo> messageInfos, boolean deleteMsg,
+  static MessageInfo getMessageInfo(StoreKey id, List<MessageInfo> messageInfos, boolean deleteMsg, boolean undeleteMsg,
       boolean ttlUpdateMsg) {
     MessageInfo toRet = null;
     for (MessageInfo messageInfo : messageInfos) {
@@ -2393,10 +2394,14 @@ public class ReplicationTest {
         if (deleteMsg && messageInfo.isDeleted()) {
           toRet = messageInfo;
           break;
-        } else if (ttlUpdateMsg && messageInfo.isTtlUpdated()) {
+        } else if (undeleteMsg && messageInfo.isUndeleted()) {
           toRet = messageInfo;
           break;
-        } else if (!deleteMsg && !ttlUpdateMsg) {
+        } else if (ttlUpdateMsg && !messageInfo.isUndeleted() && !messageInfo.isDeleted()
+            && messageInfo.isTtlUpdated()) {
+          toRet = messageInfo;
+          break;
+        } else if (!deleteMsg && !ttlUpdateMsg && !undeleteMsg) {
           toRet = messageInfo;
           break;
         }
@@ -2412,15 +2417,15 @@ public class ReplicationTest {
    * @return a merged {@link MessageInfo} for {@code key}
    */
   static MessageInfo getMergedMessageInfo(StoreKey key, List<MessageInfo> partitionInfos) {
-    MessageInfo info = getMessageInfo(key, partitionInfos, true, false);
+    MessageInfo info = getMessageInfo(key, partitionInfos, true, true, false);
     if (info == null) {
-      info = getMessageInfo(key, partitionInfos, false, false);
+      info = getMessageInfo(key, partitionInfos, false, false, false);
     }
-    MessageInfo ttlUpdateInfo = getMessageInfo(key, partitionInfos, false, true);
+    MessageInfo ttlUpdateInfo = getMessageInfo(key, partitionInfos, false, false, true);
     if (ttlUpdateInfo != null) {
-      info = new MessageInfo(info.getStoreKey(), info.getSize(), info.isDeleted(), true,
+      info = new MessageInfo(info.getStoreKey(), info.getSize(), info.isDeleted(), true, info.isUndeleted(),
           ttlUpdateInfo.getExpirationTimeInMs(), info.getCrc(), info.getAccountId(), info.getContainerId(),
-          info.getOperationTimeMs());
+          info.getOperationTimeMs(), info.getLifeVersion());
     }
     return info;
   }

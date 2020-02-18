@@ -29,6 +29,8 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -41,7 +43,9 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.TreeMap;
 import java.util.stream.LongStream;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 
@@ -58,6 +62,7 @@ public class PutOperationTest {
   private final int requestParallelism = 3;
   private final int successTarget = 1;
   private final Random random = new Random();
+  private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   public PutOperationTest() throws Exception {
     Properties properties = new Properties();
@@ -69,6 +74,16 @@ public class PutOperationTest {
     VerifiableProperties vProps = new VerifiableProperties(properties);
     routerConfig = new RouterConfig(vProps);
     time = new MockTime();
+  }
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
   }
 
   /**
@@ -115,8 +130,9 @@ public class PutOperationTest {
 
     // 1.
     ResponseInfo responseInfo = getResponseInfo(requestInfos.get(0));
-    PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
-        Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
+    PutResponse putResponse =
+        responseInfo.getError() == null ? PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()))
+            : null;
     op.handleResponse(responseInfo, putResponse);
     responseInfo.release();
     // 2.
@@ -135,7 +151,7 @@ public class PutOperationTest {
     for (int i = 3; i < requestInfos.size(); i++) {
       responseInfo = getResponseInfo(requestInfos.get(i));
       putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
-          Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
+          new NettyByteBufDataInputStream(responseInfo.content())) : null;
       op.handleResponse(responseInfo, putResponse);
       responseInfo.release();
     }
@@ -164,7 +180,7 @@ public class PutOperationTest {
     for (int i = 0; i < requestInfos.size(); i++) {
       responseInfo = getResponseInfo(requestInfos.get(i));
       putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
-          Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
+          new NettyByteBufDataInputStream(responseInfo.content())) : null;
       op.handleResponse(responseInfo, putResponse);
       responseInfo.release();
     }
@@ -175,8 +191,9 @@ public class PutOperationTest {
     Assert.assertFalse("Operation should not be complete yet", op.isOperationComplete());
     // once the metadata request succeeds, it should complete the operation.
     responseInfo = getResponseInfo(requestInfos.get(0));
-    putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
-        Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
+    putResponse =
+        responseInfo.getError() == null ? PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()))
+            : null;
     op.handleResponse(responseInfo, putResponse);
     responseInfo.release();
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
@@ -211,9 +228,11 @@ public class PutOperationTest {
     // make 1st request of first chunk encounter Temporarily_Disabled
     mockServer.setServerErrorForAllRequests(ServerErrorCode.Temporarily_Disabled);
     ResponseInfo responseInfo = getResponseInfo(requestInfos.get(0));
-    PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
-        Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
+    PutResponse putResponse =
+        responseInfo.getError() == null ? PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()))
+            : null;
     op.handleResponse(responseInfo, putResponse);
+    responseInfo.release();
     PutOperation.PutChunk putChunk = op.getPutChunks().get(0);
     SimpleOperationTracker operationTracker = (SimpleOperationTracker) putChunk.getOperationTrackerInUse();
     Assert.assertEquals("Disabled count should be 1", 1, operationTracker.getDisabledCount());
@@ -221,9 +240,11 @@ public class PutOperationTest {
     // make 2nd request of first chunk encounter Replica_Unavailable
     mockServer.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
     responseInfo = getResponseInfo(requestInfos.get(1));
-    putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
-        Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
+    putResponse =
+        responseInfo.getError() == null ? PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()))
+            : null;
     op.handleResponse(responseInfo, putResponse);
+    responseInfo.release();
     putChunk = op.getPutChunks().get(0);
     Assert.assertEquals("Failure count should be 1", 1,
         ((SimpleOperationTracker) putChunk.getOperationTrackerInUse()).getFailedCount());
@@ -327,7 +348,7 @@ public class PutOperationTest {
    */
   private ResponseInfo getResponseInfo(RequestInfo requestInfo) throws IOException {
     NetworkReceive networkReceive = new NetworkReceive(null, mockServer.send(requestInfo.getRequest()), time);
-    return new ResponseInfo(requestInfo, null, networkReceive.getReceivedBytes().getAndRelease());
+    return new ResponseInfo(requestInfo, null, networkReceive.getReceivedBytes().content());
   }
 }
 

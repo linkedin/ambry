@@ -15,7 +15,6 @@ package com.github.ambry.utils;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
@@ -220,28 +219,6 @@ public class Utils {
   }
 
   /**
-   * A helper function to return a {@link ByteBuffer} from given {@link ByteBufferDataInputStream} at the given size.
-   * The returned {@link ByteBuffer} will share the memory with the underlying {@link ByteBuffer} in {@link ByteBufferDataInputStream}.
-   * @param stream The {@link ByteBufferDataInputStream} to read {@link ByteBuffer} out.
-   * @param dataSize The size of {@link ByteBuffer}.
-   * @return The {@link ByteBuffer}
-   * @throws IOException Unexpected IO errors.
-   */
-  private static ByteBuffer getByteBufferFromByteBufferDataInputStream(ByteBufferDataInputStream stream, int dataSize)
-      throws IOException {
-    ByteBuffer byteBuffer = stream.getBuffer();
-    int startIndex = byteBuffer.position();
-    int oldLimit = byteBuffer.limit();
-
-    byteBuffer.limit(startIndex + dataSize);
-    ByteBuffer dataBuffer = byteBuffer.slice();
-    byteBuffer.limit(oldLimit);
-    // Change the byte buffer's position as if the data is fetched.
-    byteBuffer.position(startIndex + dataSize);
-    return dataBuffer;
-  }
-
-  /**
    * Create a {@link ByteBufferInputStream} from the {@link CrcInputStream} by sharing the underlying memory if the
    * crcStream is built upon a {@link ByteBufferDataInputStream}.
    * @param crcStream The crcStream to read {@link ByteBuffer} out.
@@ -288,10 +265,7 @@ public class Utils {
   public static ByteBuffer readByteBufferFromCrcInputStream(CrcInputStream crcStream, int dataSize) throws IOException {
     ByteBuffer output;
     InputStream inputStream = crcStream.getUnderlyingInputStream();
-    if (inputStream instanceof ByteBufferDataInputStream) {
-      output = getByteBufferFromByteBufferDataInputStream((ByteBufferDataInputStream) inputStream, dataSize);
-      crcStream.updateCrc(output.duplicate());
-    } else if (inputStream instanceof NettyByteBufDataInputStream) {
+    if (inputStream instanceof NettyByteBufDataInputStream) {
       // getBuffer() doesn't increase the reference count on this ByteBuf.
       ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
       // construct a java.nio.ByteBuffer to create a ByteBufferInputStream
@@ -323,10 +297,6 @@ public class Utils {
       output = nettyByteBuf.retainedSlice(startIndex, dataSize);
       crcStream.updateCrc(output.nioBuffer());
       nettyByteBuf.readerIndex(startIndex + dataSize);
-    } else if (inputStream instanceof ByteBufferDataInputStream) {
-      ByteBuffer buffer = getByteBufferFromByteBufferDataInputStream((ByteBufferDataInputStream) inputStream, dataSize);
-      crcStream.updateCrc(buffer.duplicate());
-      output = Unpooled.wrappedBuffer(buffer);
     } else {
       ByteBuffer buffer = getByteBufferFromInputStream(crcStream, dataSize);
       output = Unpooled.wrappedBuffer(buffer);
@@ -910,33 +880,6 @@ public class Utils {
   public static byte[] readBytesFromByteBuf(ByteBuf buffer, byte[] data, int offset, int size) throws IOException {
     buffer.readBytes(data, offset, size);
     return data;
-  }
-
-  /**
-   * Create a {@link DataInputStream} from the given buffer, which has to be either a {@link ByteBuffer} or a {@link ByteBuf}.
-   * This is equivalent to {@link #createDataInputStreamFromBuffer(Object, boolean)}, where the {@code shareMemory} is false.
-   * @param buffer The buffer where we are going to create a {@link DataInputStream} from.
-   * @return {@link DataInputStream}.
-   */
-  public static DataInputStream createDataInputStreamFromBuffer(Object buffer) {
-    return createDataInputStreamFromBuffer(buffer, false);
-  }
-
-  /**
-   * Create a {@link DataInputStream} from the given buffer, which has to be either a {@link ByteBuffer} or a {@link ByteBuf}.
-   * @param buffer The buffer where we are going to create a {@link DataInputStream} from.
-   * @param shareMemory If true, the {@link DataInputStream} would share the memory with the given buffer.
-   * @return {@link DataInputStream}.
-   */
-  public static DataInputStream createDataInputStreamFromBuffer(Object buffer, boolean shareMemory) {
-    if (shareMemory) {
-      return buffer instanceof ByteBuf ? new NettyByteBufDataInputStream((ByteBuf) buffer)
-          : new ByteBufferDataInputStream((ByteBuffer) buffer);
-    } else {
-      InputStream src = buffer instanceof ByteBuf ? new ByteBufInputStream((ByteBuf) buffer)
-          : new ByteBufferInputStream((ByteBuffer) buffer);
-      return new DataInputStream(src);
-    }
   }
 
   /**

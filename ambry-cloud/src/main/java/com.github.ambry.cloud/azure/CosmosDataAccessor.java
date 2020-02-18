@@ -16,6 +16,8 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.utils.Utils;
+import com.microsoft.azure.cosmosdb.ChangeFeedOptions;
 import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
 import com.microsoft.azure.cosmosdb.DocumentCollection;
@@ -32,6 +34,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import rx.observables.BlockingObservable;
 
 
 public class CosmosDataAccessor {
@@ -135,10 +138,7 @@ public class CosmosDataAccessor {
     feedOptions.setPartitionKey(new PartitionKey(partitionPath));
     // TODO: consolidate error count here
     try {
-      Timer.Context operationTimer = timer.time();
-      Iterator<FeedResponse<Document>> iterator =
-          asyncDocumentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions).toBlocking().getIterator();
-      operationTimer.stop();
+      Iterator<FeedResponse<Document>> iterator = executeCosmosQuery(querySpec, feedOptions, timer).getIterator();
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
       while (iterator.hasNext()) {
         iterator.next()
@@ -152,6 +152,45 @@ public class CosmosDataAccessor {
         throw (DocumentClientException) rex.getCause();
       }
       throw rex;
+    }
+  }
+
+  /**
+   * Query Cosmos change feed to get the next set of {@code CloudBlobMetadata} objects in specified {@code partitionPath}
+   * after {@code requestContinationToken}, capped by specified {@code maxFeedSize} representing the max number of items to
+   * be queried from the change feed.
+   * @param requestContinuationToken Continuation token after which change feed is requested.
+   * @param maxFeedSize max item count to be requested in the feed query.
+   * @param changeFeed {@link CloudBlobMetadata} {@code List} to be populated with the next set of entries returned by change feed query.
+   * @param partitionPath partition for which the change feed is requested.
+   * @param timer the {@link Timer} to use to record query time (excluding waiting).
+   * @return next continuation token.
+   * @throws DocumentClientException
+   */
+  public String queryChangeFeed(String requestContinuationToken, int maxFeedSize, List<CloudBlobMetadata> changeFeed,
+      String partitionPath, Timer timer) throws DocumentClientException {
+    azureMetrics.changeFeedQueryCount.inc();
+    ChangeFeedOptions changeFeedOptions = new ChangeFeedOptions();
+    changeFeedOptions.setPartitionKey(new PartitionKey(partitionPath));
+    changeFeedOptions.setMaxItemCount(maxFeedSize);
+    if (Utils.isNullOrEmpty(requestContinuationToken)) {
+      changeFeedOptions.setStartFromBeginning(true);
+    } else {
+      changeFeedOptions.setRequestContinuation(requestContinuationToken);
+    }
+    try {
+      FeedResponse<Document> feedResponse = executeCosmosChangeFeedQuery(changeFeedOptions, timer);
+      feedResponse.getResults().stream().map(doc -> createMetadataFromDocument(doc)).forEach(changeFeed::add);
+      return feedResponse.getResponseContinuation();
+    } catch (RuntimeException rex) {
+      azureMetrics.changeFeedQueryFailureCount.inc();
+      if (rex.getCause() instanceof DocumentClientException) {
+        throw (DocumentClientException) rex.getCause();
+      }
+      throw rex;
+    } catch (Exception ex) {
+      azureMetrics.changeFeedQueryFailureCount.inc();
+      throw ex;
     }
   }
 
@@ -192,6 +231,43 @@ public class CosmosDataAccessor {
       }
     }
     return resourceResponse;
+  }
+
+  /**
+   * Utility method to call Cosmos document query method and record the query time.
+   * @param sqlQuerySpec the DocumentDB query to execute.
+   * @param feedOptions {@link FeedOptions} object specifying the options associated with the method.
+   * @param timer the {@link Timer} to use to record query time (excluding waiting).
+   * @return {@link BlockingObservable} object containing the query response.
+   */
+  private BlockingObservable<FeedResponse<Document>> executeCosmosQuery(SqlQuerySpec sqlQuerySpec,
+      FeedOptions feedOptions, Timer timer) {
+    Timer.Context operationTimer = timer.time();
+    try {
+      return asyncDocumentClient.queryDocuments(cosmosCollectionLink, sqlQuerySpec, feedOptions).toBlocking();
+    } finally {
+      operationTimer.stop();
+    }
+  }
+
+  /**
+   * Utility method to call Cosmos change feed query method and record the query time.
+   * @param changeFeedOptions {@link ChangeFeedOptions} object specifying the options associated with the method.
+   * @param timer the {@link Timer} to use to record query time (excluding waiting).
+   * @return {@link FeedResponse} object representing the query response.
+   */
+  private FeedResponse<Document> executeCosmosChangeFeedQuery(ChangeFeedOptions changeFeedOptions, Timer timer) {
+    Timer.Context operationTimer = timer.time();
+    try {
+      // FIXME: Using single() for the observable returned by toBlocking() works for now. But if a high enough maxFeedSize
+      //  is passed, to result in multiple feed pages, single() will throw an exception.
+      return asyncDocumentClient.queryDocumentChangeFeed(cosmosCollectionLink, changeFeedOptions)
+          .limit(1)
+          .toBlocking()
+          .single();
+    } finally {
+      operationTimer.stop();
+    }
   }
 
   private String getDocumentLink(String documentId) {

@@ -277,7 +277,7 @@ class PartitionLayout {
   }
 
   public List<String> getAllPartitionNames() {
-    return partitionMap.values().stream().map(partition -> partition.toPathString()).collect(Collectors.toList());
+    return partitionMap.values().stream().map(Partition::toPathString).collect(Collectors.toList());
   }
 
   @Override
@@ -285,7 +285,7 @@ class PartitionLayout {
     try {
       return toJSONObject().toString(2);
     } catch (JSONException e) {
-      logger.error("JSONException caught in toString: {}", e.getCause());
+      logger.error("JSONException caught in toString: ", e.getCause());
     }
     return null;
   }

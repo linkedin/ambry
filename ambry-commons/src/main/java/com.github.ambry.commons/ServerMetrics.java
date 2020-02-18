@@ -100,6 +100,12 @@ public class ServerMetrics {
   public final Histogram deleteBlobSendTimeInMs;
   public final Histogram deleteBlobTotalTimeInMs;
 
+  public final Histogram undeleteBlobRequestQueueTimeInMs;
+  public final Histogram undeleteBlobProcessingTimeInMs;
+  public final Histogram undeleteBlobResponseQueueTimeInMs;
+  public final Histogram undeleteBlobSendTimeInMs;
+  public final Histogram undeleteBlobTotalTimeInMs;
+
   public final Histogram updateBlobTtlRequestQueueTimeInMs;
   public final Histogram updateBlobTtlProcessingTimeInMs;
   public final Histogram updateBlobTtlResponseQueueTimeInMs;
@@ -157,6 +163,7 @@ public class ServerMetrics {
   public final Meter getBlobAllByReplicaRequestRate;
   public final Meter getBlobInfoRequestRate;
   public final Meter deleteBlobRequestRate;
+  public final Meter undeleteBlobRequestRate;
   public final Meter updateBlobTtlRequestRate;
   public final Meter replicaMetadataRequestRate;
   public final Meter triggerCompactionRequestRate;
@@ -183,6 +190,7 @@ public class ServerMetrics {
   public final Counter unExpectedStoreGetError;
   public final Counter unExpectedStoreTtlUpdateError;
   public final Counter unExpectedStoreDeleteError;
+  public final Counter unExpectedStoreUndeleteError;
   public final Counter unExpectedAdminOperationError;
   public final Counter unExpectedStoreFindEntriesError;
   public final Counter idAlreadyExistError;
@@ -190,11 +198,15 @@ public class ServerMetrics {
   public final Counter unknownFormatError;
   public final Counter idNotFoundError;
   public final Counter idDeletedError;
+  public final Counter idUndeletedError;
+  public final Counter idNotDeletedError;
+  public final Counter lifeVersionConflictError;
   public final Counter ttlExpiredError;
   public final Counter badRequestError;
   public final Counter temporarilyDisabledError;
   public final Counter getAuthorizationFailure;
   public final Counter deleteAuthorizationFailure;
+  public final Counter undeleteAuthorizationFailure;
   public final Counter ttlUpdateAuthorizationFailure;
   public final Counter ttlAlreadyUpdatedError;
   public final Counter ttlUpdateRejectedError;
@@ -303,6 +315,15 @@ public class ServerMetrics {
     deleteBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobSendTime"));
     deleteBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobTotalTime"));
 
+    undeleteBlobRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "UndeleteBlobRequestQueueTime"));
+    undeleteBlobProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "UndeleteBlobProcessingTime"));
+    undeleteBlobResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "UndeleteBlobResponseQueueTime"));
+    undeleteBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "UndeleteBlobSendTime"));
+    undeleteBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "UndeleteBlobTotalTime"));
+
     updateBlobTtlRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "UpdateBlobTtlRequestQueueTime"));
     updateBlobTtlProcessingTimeInMs =
@@ -399,6 +420,7 @@ public class ServerMetrics {
         registry.meter(MetricRegistry.name(requestClass, "GetBlobAllByReplicaRequestRate"));
     getBlobInfoRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobInfoRequestRate"));
     deleteBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "DeleteBlobRequestRate"));
+    undeleteBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "UndeleteBlobRequestRate"));
     updateBlobTtlRequestRate = registry.meter(MetricRegistry.name(requestClass, "UpdateBlobTtlRequestRate"));
     replicaMetadataRequestRate = registry.meter(MetricRegistry.name(requestClass, "ReplicaMetadataRequestRate"));
     triggerCompactionRequestRate = registry.meter(MetricRegistry.name(requestClass, "TriggerCompactionRequestRate"));
@@ -426,12 +448,16 @@ public class ServerMetrics {
     unknownFormatError = registry.counter(MetricRegistry.name(requestClass, "UnknownFormatError"));
     idNotFoundError = registry.counter(MetricRegistry.name(requestClass, "IDNotFoundError"));
     idDeletedError = registry.counter(MetricRegistry.name(requestClass, "IDDeletedError"));
+    idUndeletedError = registry.counter(MetricRegistry.name(requestClass, "IDUndeletedError"));
+    idNotDeletedError = registry.counter(MetricRegistry.name(requestClass, "IDNotDeletedError"));
+    lifeVersionConflictError = registry.counter(MetricRegistry.name(requestClass, "lifeVersionConflictError"));
     ttlExpiredError = registry.counter(MetricRegistry.name(requestClass, "TTLExpiredError"));
     temporarilyDisabledError = registry.counter(MetricRegistry.name(requestClass, "TemporarilyDisabledError"));
     badRequestError = registry.counter(MetricRegistry.name(requestClass, "BadRequestError"));
     unExpectedStorePutError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStorePutError"));
     unExpectedStoreGetError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreGetError"));
     unExpectedStoreDeleteError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreDeleteError"));
+    unExpectedStoreUndeleteError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreUndeleteError"));
     unExpectedAdminOperationError =
         registry.counter(MetricRegistry.name(requestClass, "UnexpectedAdminOperationError"));
     unExpectedStoreTtlUpdateError =
@@ -440,6 +466,7 @@ public class ServerMetrics {
         registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreFindEntriesError"));
     getAuthorizationFailure = registry.counter(MetricRegistry.name(requestClass, "GetAuthorizationFailure"));
     deleteAuthorizationFailure = registry.counter(MetricRegistry.name(requestClass, "DeleteAuthorizationFailure"));
+    undeleteAuthorizationFailure = registry.counter(MetricRegistry.name(requestClass, "UndeleteAuthorizationFailure"));
     ttlUpdateAuthorizationFailure =
         registry.counter(MetricRegistry.name(requestClass, "TtlUpdateAuthorizationFailure"));
     ttlAlreadyUpdatedError = registry.counter(MetricRegistry.name(requestClass, "TtlAlreadyUpdatedError"));

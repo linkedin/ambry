@@ -55,9 +55,9 @@ public class AzureCompactionTool {
     // User needs to specify this option to actually delete blobs
     boolean testMode = !optionSet.has(PURGE_OPTION);
 
+    CloudDestination azureDest = null;
     try {
-      CloudDestination azureDest =
-          new AzureCloudDestinationFactory(verifiableProperties, new MetricRegistry()).getCloudDestination();
+      azureDest = new AzureCloudDestinationFactory(verifiableProperties, new MetricRegistry()).getCloudDestination();
       CloudStorageCompactor compactor =
           new CloudStorageCompactor(azureDest, Collections.emptySet(), new VcrMetrics(new MetricRegistry()), testMode);
       int result = compactor.compactPartition(partitionPath);
@@ -68,6 +68,10 @@ public class AzureCompactionTool {
       System.err.println("Command " + commandName + " failed with " + ex);
       logger.error("Command {} failed", commandName, ex);
       System.exit(1);
+    } finally {
+      if (azureDest != null) {
+        azureDest.close();
+      }
     }
   }
 }

@@ -20,13 +20,16 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Utils;
+import com.microsoft.azure.cosmosdb.ChangeFeedOptions;
 import com.microsoft.azure.cosmosdb.Document;
+import com.microsoft.azure.cosmosdb.DocumentClientException;
 import com.microsoft.azure.cosmosdb.FeedOptions;
 import com.microsoft.azure.cosmosdb.FeedResponse;
 import com.microsoft.azure.cosmosdb.RequestOptions;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.junit.Before;
@@ -123,9 +126,52 @@ public class CosmosDataAccessorTest {
     assertEquals(0, azureMetrics.retryWaitTime.getCount());
   }
 
+  /** Test change feed query. */
+  @Test
+  public void testQueryChangeFeedNormal() throws Exception {
+    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
+    List<Document> docList =
+        Collections.singletonList(AzureTestUtils.createDocumentFromCloudBlobMetadata(blobMetadata, objectMapper));
+    mockObservableForChangeFeedQuery(docList, mockResponse);
+    when(mockumentClient.queryDocumentChangeFeed(anyString(), any(ChangeFeedOptions.class))).thenReturn(mockResponse);
+    // test with non null requestContinuationToken
+    List<CloudBlobMetadata> metadataList = doQueryChangeFeed("test");
+    assertEquals("Expected single entry", 1, metadataList.size());
+    CloudBlobMetadata outputMetadata = metadataList.get(0);
+    assertEquals("Returned metadata does not match original", blobMetadata, outputMetadata);
+    assertEquals(1, azureMetrics.changeFeedQueryCount.getCount());
+    assertEquals(0, azureMetrics.changeFeedQueryFailureCount.getCount());
+
+    // test with a null continuation token
+    metadataList = doQueryChangeFeed(null);
+    assertEquals("Expected single entry", 1, metadataList.size());
+    outputMetadata = metadataList.get(0);
+    assertEquals("Returned metadata does not match original", blobMetadata, outputMetadata);
+    assertEquals(2, azureMetrics.changeFeedQueryCount.getCount());
+    assertEquals(0, azureMetrics.changeFeedQueryFailureCount.getCount());
+
+    // test when queryChangeFeed throws exception
+    when(mockumentClient.queryDocumentChangeFeed(anyString(), any(ChangeFeedOptions.class))).thenThrow(
+        new RuntimeException("mock exception", new DocumentClientException(404)));
+    try {
+      doQueryChangeFeed(null);
+    } catch (DocumentClientException e) {
+    }
+    assertEquals(3, azureMetrics.changeFeedQueryCount.getCount());
+    assertEquals(1, azureMetrics.changeFeedQueryFailureCount.getCount());
+  }
+
   /** Utility method to run metadata query with default parameters. */
   private List<CloudBlobMetadata> doQueryMetadata() throws Exception {
     return cosmosAccessor.queryMetadata(blobId.getPartition().toPathString(), new SqlQuerySpec("select * from c"),
         azureMetrics.missingKeysQueryTime);
+  }
+
+  /** Utility method to run metadata query with default parameters. */
+  private List<CloudBlobMetadata> doQueryChangeFeed(String continuationToken) throws Exception {
+    List<CloudBlobMetadata> changeFeed = new ArrayList<>();
+    cosmosAccessor.queryChangeFeed(continuationToken, 1000, changeFeed, blobId.getPartition().toPathString(),
+        azureMetrics.changeFeedQueryTime);
+    return changeFeed;
   }
 }

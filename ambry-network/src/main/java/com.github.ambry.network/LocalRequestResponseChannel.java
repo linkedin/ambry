@@ -14,7 +14,9 @@
 package com.github.ambry.network;
 
 import com.github.ambry.utils.ByteBufferChannel;
-import com.github.ambry.utils.ByteBufferOutputStream;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufOutputStream;
+import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -67,8 +69,7 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   public void sendResponse(Send payloadToSend, NetworkRequest originalRequest, ServerNetworkResponseMetrics metrics) {
     try {
       LocalChannelRequest localRequest = (LocalChannelRequest) originalRequest;
-      ResponseInfo responseInfo =
-          new ResponseInfo(localRequest.requestInfo, null, byteBufferFromPayload(payloadToSend));
+      ResponseInfo responseInfo = new ResponseInfo(localRequest.requestInfo, null, byteBufFromPayload(payloadToSend));
       BlockingQueue<ResponseInfo> responseQueue = getResponseQueue(localRequest.processorId);
       responseQueue.put(responseInfo);
       logger.debug("Added response for {}, size now {}", localRequest.processorId, responseQueue.size());
@@ -118,17 +119,16 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   }
 
   /**
-   * Utility to extract a byte buffer from a {@link Send} object, skipping the size header.
+   * Utility to extract a {@link ByteBuf} from a {@link Send} object, skipping the size header.
    * @param payload the payload whose bytes we want.
    */
-  static ByteBuffer byteBufferFromPayload(Send payload) throws IOException {
+  static ByteBuf byteBufFromPayload(Send payload) throws IOException {
     int bufferSize = (int) payload.sizeInBytes() - sizeByteArray.length;
-    ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
+    ByteBuf buffer = Unpooled.buffer(bufferSize);
     // Skip the size header
-    long bytesWritten = payload.writeTo(new ByteBufferChannel(ByteBuffer.wrap(sizeByteArray)));
-    WritableByteChannel byteChannel = Channels.newChannel(new ByteBufferOutputStream(buffer));
+    payload.writeTo(new ByteBufferChannel(ByteBuffer.wrap(sizeByteArray)));
+    WritableByteChannel byteChannel = Channels.newChannel(new ByteBufOutputStream(buffer));
     payload.writeTo(byteChannel);
-    buffer.rewind();
     return buffer;
   }
 

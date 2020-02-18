@@ -55,6 +55,7 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -316,7 +317,7 @@ public class ServerAdminTool implements Closeable {
             serverAdminTool.getBlob(dataNodeId, blobId, config.getOption, clusterMap);
         if (bResponse.getFirst() == ServerErrorCode.No_Error) {
           LOGGER.info("Blob type of {} from {} is {}", blobId, dataNodeId, bResponse.getSecond().getBlobType());
-          ByteBuf buffer = bResponse.getSecond().getAndRelease();
+          ByteBuf buffer = bResponse.getSecond().content();
           try {
             writeByteBufToFile(buffer, outputFileStream);
           } finally {
@@ -656,7 +657,7 @@ public class ServerAdminTool implements Closeable {
         new AdminRequest(AdminRequestOrResponseType.TriggerCompaction, partitionId, correlationId.incrementAndGet(),
             CLIENT_ID);
     ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, adminRequest);
-    AdminResponse adminResponse = AdminResponse.readFrom(Utils.createDataInputStreamFromBuffer(response.getResponse()));
+    AdminResponse adminResponse = AdminResponse.readFrom(new NettyByteBufDataInputStream(response.content()));
     response.release();
     return adminResponse.getError();
   }
@@ -679,7 +680,7 @@ public class ServerAdminTool implements Closeable {
             CLIENT_ID);
     RequestControlAdminRequest controlRequest = new RequestControlAdminRequest(toControl, enable, adminRequest);
     ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
-    AdminResponse adminResponse = AdminResponse.readFrom(Utils.createDataInputStreamFromBuffer(response.getResponse()));
+    AdminResponse adminResponse = AdminResponse.readFrom(new NettyByteBufDataInputStream(response.content()));
     response.release();
     return adminResponse.getError();
   }
@@ -702,7 +703,7 @@ public class ServerAdminTool implements Closeable {
             CLIENT_ID);
     ReplicationControlAdminRequest controlRequest = new ReplicationControlAdminRequest(origins, enable, adminRequest);
     ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
-    AdminResponse adminResponse = AdminResponse.readFrom(Utils.createDataInputStreamFromBuffer(response.getResponse()));
+    AdminResponse adminResponse = AdminResponse.readFrom(new NettyByteBufDataInputStream(response.content()));
     response.release();
     return adminResponse.getError();
   }
@@ -728,7 +729,7 @@ public class ServerAdminTool implements Closeable {
     BlobStoreControlAdminRequest controlRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, storeControlRequestType, adminRequest);
     ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
-    AdminResponse adminResponse = AdminResponse.readFrom(Utils.createDataInputStreamFromBuffer(response.getResponse()));
+    AdminResponse adminResponse = AdminResponse.readFrom(new NettyByteBufDataInputStream(response.content()));
     response.release();
     return adminResponse.getError();
   }
@@ -756,7 +757,7 @@ public class ServerAdminTool implements Closeable {
         new CatchupStatusAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
     ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, catchupStatusRequest);
     CatchupStatusAdminResponse adminResponse =
-        CatchupStatusAdminResponse.readFrom(Utils.createDataInputStreamFromBuffer(response.getResponse()));
+        CatchupStatusAdminResponse.readFrom(new NettyByteBufDataInputStream(response.content()));
     response.release();
     return new Pair<>(adminResponse.getError(),
         adminResponse.getError() == ServerErrorCode.No_Error && adminResponse.isCaughtUp());
@@ -784,7 +785,7 @@ public class ServerAdminTool implements Closeable {
     GetRequest getRequest =
         new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, flags, partitionRequestInfos, getOption);
     ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, getRequest);
-    InputStream serverResponseStream = Utils.createDataInputStreamFromBuffer(response.getResponse());
+    InputStream serverResponseStream = new NettyByteBufDataInputStream(response.content());
     response.release();
     GetResponse getResponse = GetResponse.readFrom(new DataInputStream(serverResponseStream), clusterMap);
     ServerErrorCode partitionErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
