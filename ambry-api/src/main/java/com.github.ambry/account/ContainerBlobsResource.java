@@ -68,4 +68,9 @@ public class ContainerBlobsResource implements AclService.Resource {
   public int hashCode() {
     return resourceId.hashCode();
   }
+
+  @Override
+  public String toString() {
+    return RESOURCE_TYPE + ":" + resourceId;
+  }
 }
