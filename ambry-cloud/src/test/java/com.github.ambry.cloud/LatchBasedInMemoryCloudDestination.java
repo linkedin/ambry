@@ -13,12 +13,17 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.cloud.azure.AzureReplicationFeed;
+import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
+import com.github.ambry.cloud.azure.CosmosUpdateTimeFindToken;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Pair;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -26,11 +31,13 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +48,61 @@ import org.slf4j.LoggerFactory;
  */
 public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
+  /**
+   * Class representing change feed for {@link LatchBasedInMemoryCloudDestination}
+   */
+  class ChangeFeed {
+    private final Map<String, BlobId> continuationTokenToBlobIdMap = new HashMap<>();
+    private final Map<BlobId, String> blobIdToContinuationTokenMap = new HashMap<>();
+    private int continuationTokenCounter = -1;
+    private final String reqUuid = UUID.randomUUID().toString();
+
+    /**
+     * Add a blobid to the change feed.
+     * @param blobId {@link BlobId} to add.
+     */
+    void add(BlobId blobId) {
+      if (blobIdToContinuationTokenMap.containsKey(blobId)) {
+        continuationTokenToBlobIdMap.put(blobIdToContinuationTokenMap.get(blobId), null);
+      }
+      continuationTokenToBlobIdMap.put(Integer.toString(++continuationTokenCounter), blobId);
+      blobIdToContinuationTokenMap.put(blobId, Integer.toString(continuationTokenCounter));
+    }
+
+    /**
+     * Return continuation token for specified {@link BlobId}
+     * @param blobId {@link BlobId} object.
+     * @return continuation token.
+     */
+    String getContinuationTokenForBlob(BlobId blobId) {
+      return blobIdToContinuationTokenMap.get(blobId);
+    }
+
+    /**
+     * Return continuation token to blob id map.
+     * @return {@code continuationTokenToBlobIdMap}.
+     */
+    Map<String, BlobId> getContinuationTokenToBlobIdMap() {
+      return continuationTokenToBlobIdMap;
+    }
+
+    /**
+     * Return continuation token counter.
+     * @return {@code continuationTokenCounter}.
+     */
+    int getContinuationTokenCounter() {
+      return continuationTokenCounter;
+    }
+
+    /**
+     * Return request uuid.
+     * @return {@code reqUuid}
+     */
+    String getReqUuid() {
+      return reqUuid;
+    }
+  }
+
   private final Map<BlobId, Pair<CloudBlobMetadata, byte[]>> map = new HashMap<>();
   private final CountDownLatch uploadLatch;
   private final CountDownLatch downloadLatch;
@@ -48,10 +110,16 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final Map<String, byte[]> tokenMap = new ConcurrentHashMap<>();
   private final AtomicLong bytesUploadedCounter = new AtomicLong(0);
   private final AtomicInteger blobsUploadedCounter = new AtomicInteger(0);
+  private final ChangeFeed changeFeed = new ChangeFeed();
   private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
+  private final AzureReplicationFeed.FeedType azureReplicationFeedType;
+
+  private final static AzureReplicationFeed.FeedType DEFAULT_AZURE_REPLICATION_FEED_TYPE =
+      AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
 
   /**
    * Instantiate {@link LatchBasedInMemoryCloudDestination}.
+   * Use this constructor for tests where type of azure replication feed doesn't matter.
    * @param blobIdsToTrack a list of blobs that {@link LatchBasedInMemoryCloudDestination} tracks.
    */
   public LatchBasedInMemoryCloudDestination(List<BlobId> blobIdsToTrack) {
@@ -59,6 +127,21 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     this.blobIdsToTrack.addAll(blobIdsToTrack);
     uploadLatch = new CountDownLatch(blobIdsToTrack.size());
     downloadLatch = new CountDownLatch(blobIdsToTrack.size());
+    this.azureReplicationFeedType = DEFAULT_AZURE_REPLICATION_FEED_TYPE;
+  }
+
+  /**
+   * Instantiate {@link LatchBasedInMemoryCloudDestination}.
+   * @param blobIdsToTrack a list of blobs that {@link LatchBasedInMemoryCloudDestination} tracks.
+   * @param azureReplicationFeedType {@link AzureReplicationFeed.FeedType} object.
+   */
+  public LatchBasedInMemoryCloudDestination(List<BlobId> blobIdsToTrack,
+      AzureReplicationFeed.FeedType azureReplicationFeedType) {
+    logger.debug("Constructing LatchBasedInMemoryCloudDestination with {} tracked blobs", blobIdsToTrack.size());
+    this.blobIdsToTrack.addAll(blobIdsToTrack);
+    uploadLatch = new CountDownLatch(blobIdsToTrack.size());
+    downloadLatch = new CountDownLatch(blobIdsToTrack.size());
+    this.azureReplicationFeedType = azureReplicationFeedType;
   }
 
   @Override
@@ -83,6 +166,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     }
     cloudBlobMetadata.setLastUpdateTime(System.currentTimeMillis());
     map.put(blobId, new Pair<>(cloudBlobMetadata, outputStream.toByteArray()));
+    changeFeed.add(blobId);
     blobsUploadedCounter.incrementAndGet();
     if (blobIdsToTrack.remove(blobId)) {
       uploadLatch.countDown();
@@ -112,6 +196,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     }
     map.get(blobId).getFirst().setDeletionTime(deletionTime);
     map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
+    changeFeed.add(blobId);
     return true;
   }
 
@@ -120,6 +205,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     if (map.containsKey(blobId)) {
       map.get(blobId).getFirst().setExpirationTime(expirationTime);
       map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
+      changeFeed.add(blobId);
       return true;
     } else {
       return false;
@@ -143,12 +229,66 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken,
-      long maxTotalSizeOfEntries) {
+  public FindResult findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries) {
+    switch (azureReplicationFeedType) {
+      case COSMOS_CHANGE_FEED:
+        return findChangeFeedBasedEntries(partitionPath, findToken, maxTotalSizeOfEntries);
+      case COSMOS_UPDATE_TIME:
+        return findUpdateTimeBasedEntries(partitionPath, findToken, maxTotalSizeOfEntries);
+      default:
+        throw new IllegalArgumentException(
+            String.format("Unknown azure replication feed type: %s", azureReplicationFeedType));
+    }
+  }
+
+  @Override
+  public void close() {
+  }
+
+  /**
+   * Populates an ordered sequenced list of blobs in the specified partition in {@code nextEntries} {@link List},
+   * ordered by change feed. Returns the updated {@link com.github.ambry.replication.FindToken}.
+   * @param partitionPath the partition to query.
+   * @param findToken the {@link com.github.ambry.replication.FindToken} specifying the boundary for the query.
+   * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
+   * @return {@link FindResult} instance that contains updated {@link CosmosChangeFeedFindToken} object which can act as a bookmark for
+   * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
+   * @throws CloudStorageException
+   */
+  private FindResult findChangeFeedBasedEntries(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries) {
+    List<CloudBlobMetadata> nextEntries = new ArrayList<>();
+    String continuationToken = ((CosmosChangeFeedFindToken) findToken).getEndContinuationToken();
+    List<BlobId> blobIds = new ArrayList<>();
+    getFeed(continuationToken, maxTotalSizeOfEntries, blobIds);
+    nextEntries.addAll(blobIds.stream().map(blobId -> map.get(blobId).getFirst()).collect(Collectors.toList()));
+    CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) findToken;
+    if (blobIds.size() != 0) {
+      long bytesToBeRead = nextEntries.stream().mapToLong(CloudBlobMetadata::getSize).sum();
+      cosmosChangeFeedFindToken =
+          new CosmosChangeFeedFindToken(bytesToBeRead, changeFeed.getContinuationTokenForBlob(blobIds.get(0)),
+              createEndContinuationToken(blobIds), 0, blobIds.size(), changeFeed.getReqUuid(),
+              cosmosChangeFeedFindToken.getVersion());
+    }
+    return new FindResult(nextEntries, cosmosChangeFeedFindToken);
+  }
+
+  /**
+   * Populates an ordered sequenced list of blobs in the specified partition in {@code nextEntries} {@link List},
+   * ordered by update time of blobs. Returns the updated {@link com.github.ambry.replication.FindToken}.
+   * @param partitionPath the partition to query.
+   * @param findToken the {@link com.github.ambry.replication.FindToken} specifying the boundary for the query.
+   * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
+   * @return {@link FindResult} instance that contains updated {@link CosmosUpdateTimeFindToken} object which can act as a bookmark for
+   * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
+   * @throws CloudStorageException
+   */
+  private FindResult findUpdateTimeBasedEntries(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries) {
+    List<CloudBlobMetadata> nextEntries = new ArrayList<>();
+    CosmosUpdateTimeFindToken cosmosUpdateTimeFindToken = (CosmosUpdateTimeFindToken) findToken;
     List<CloudBlobMetadata> entries = new LinkedList<>();
     for (BlobId blobId : map.keySet()) {
-      if (map.get(blobId).getFirst().getLastUpdateTime() >= findToken.getLastUpdateTime()) {
-        if (findToken.getLastUpdateTimeReadBlobIds().contains(map.get(blobId).getFirst().getId())) {
+      if (map.get(blobId).getFirst().getLastUpdateTime() >= cosmosUpdateTimeFindToken.getLastUpdateTime()) {
+        if (cosmosUpdateTimeFindToken.getLastUpdateTimeReadBlobIds().contains(map.get(blobId).getFirst().getId())) {
           continue;
         }
         entries.add(map.get(blobId).getFirst());
@@ -156,7 +296,48 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     }
     Collections.sort(entries, Comparator.comparingLong(CloudBlobMetadata::getLastUpdateTime));
 
-    return CloudBlobMetadata.capMetadataListBySize(entries, maxTotalSizeOfEntries);
+    List<CloudBlobMetadata> cappedRsults = CloudBlobMetadata.capMetadataListBySize(entries, maxTotalSizeOfEntries);
+    nextEntries.addAll(cappedRsults);
+    return new FindResult(nextEntries,
+        CosmosUpdateTimeFindToken.getUpdatedToken(cosmosUpdateTimeFindToken, cappedRsults));
+  }
+
+  private String createEndContinuationToken(List<BlobId> blobIds) {
+    return Integer.toString(
+        Integer.parseInt(changeFeed.getContinuationTokenForBlob(blobIds.get(blobIds.size() - 1))) + 1);
+  }
+
+  /**
+   * Get the change feed starting from given continuation token upto {@code maxLimit} number of items.
+   * @param continuationToken starting token for the change feed.
+   * @param maxTotalSizeOfEntries max size of all the blobs returned in changefeed.
+   * @param feed {@link List} of {@link BlobId}s to be populated with the change feed.
+   */
+  private void getFeed(String continuationToken, long maxTotalSizeOfEntries, List<BlobId> feed) {
+    int continuationTokenCounter = changeFeed.getContinuationTokenCounter();
+    if (continuationToken.equals("")) {
+      continuationToken = "0";
+    }
+    // there are no changes since last continuation token or there is no change feed at all, then return
+    if (Integer.parseInt(continuationToken) == continuationTokenCounter + 1 || continuationTokenCounter == -1) {
+      return;
+    }
+    // check if its an invalid continuation token
+    if (!changeFeed.getContinuationTokenToBlobIdMap().containsKey(continuationToken)) {
+      throw new IllegalArgumentException("Invalid continuation token");
+    }
+    // iterate through change feed till it ends or maxLimit or maxTotalSizeofEntries is reached
+    String continuationTokenCtr = continuationToken;
+    long totalFeedSize = 0;
+    while (changeFeed.getContinuationTokenToBlobIdMap().containsKey(continuationTokenCtr)
+        && totalFeedSize < maxTotalSizeOfEntries) {
+      if (changeFeed.getContinuationTokenToBlobIdMap().get(continuationTokenCtr) != null) {
+        feed.add(changeFeed.getContinuationTokenToBlobIdMap().get(continuationTokenCtr));
+        totalFeedSize +=
+            map.get(changeFeed.getContinuationTokenToBlobIdMap().get(continuationTokenCtr)).getFirst().getSize();
+      }
+      continuationTokenCtr = Integer.toString(Integer.parseInt(continuationTokenCtr) + 1);
+    }
   }
 
   @Override
@@ -164,7 +345,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     return 0;
   }
 
-  public boolean doesBlobExist(BlobId blobId) {
+  boolean doesBlobExist(BlobId blobId) {
     return map.containsKey(blobId);
   }
 
@@ -196,11 +377,11 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     return tokenMap;
   }
 
-  public int getBlobsUploaded() {
+  int getBlobsUploaded() {
     return blobsUploadedCounter.get();
   }
 
-  public long getBytesUploaded() {
+  long getBytesUploaded() {
     return bytesUploadedCounter.get();
   }
 

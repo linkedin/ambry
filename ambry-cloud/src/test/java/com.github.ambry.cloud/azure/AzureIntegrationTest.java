@@ -16,14 +16,20 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudFindToken;
+import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.FindResult;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenFactory;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
@@ -33,17 +39,19 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,7 +63,7 @@ import static org.junit.Assert.*;
  * Integration Test cases for {@link AzureCloudDestination}
  * Must supply file azure-test.properties in classpath with valid config property values.
  */
-@RunWith(MockitoJUnitRunner.class)
+@RunWith(Parameterized.class)
 @Ignore
 public class AzureIntegrationTest {
 
@@ -63,6 +71,8 @@ public class AzureIntegrationTest {
   private final String vcrKmsContext = "backup-default";
   private final String cryptoAgentFactory = CloudConfig.DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS;
   private AzureCloudDestination azureDest;
+  private FindTokenFactory findTokenFactory;
+  private final String replicationCloudTokenFactory;
   private int blobSize = 1024;
   private byte dataCenterId = 66;
   private short accountId = 101;
@@ -72,6 +82,31 @@ public class AzureIntegrationTest {
   private int retentionPeriodDays = 1;
   private String propFileName = "azure-test.properties";
   private String tokenFileName = "replicaTokens";
+
+  /**
+   * Parameterized constructor.
+   * @param replicationCloudTokenFactory type of token factory used by {@link CloudDestination}
+   */
+  public AzureIntegrationTest(String replicationCloudTokenFactory) throws ReflectiveOperationException {
+    super();
+    this.replicationCloudTokenFactory = replicationCloudTokenFactory;
+    Properties properties = new Properties();
+    properties.setProperty("replication.cloud.token.factory", replicationCloudTokenFactory);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
+    findTokenFactory =
+        new FindTokenHelper(null, replicationConfig).getFindTokenFactoryFromReplicaType(ReplicaType.CLOUD_BACKED);
+  }
+
+  /**
+   * static method to generate parameters.
+   * @return {@link Collection} of parameters.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> input() {
+    return Arrays.asList(new Object[][]{{"com.github.ambry.cloud.azure.CosmosUpdateTimeFindTokenFactory"},
+        {"com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory"}});
+  }
 
   @Before
   public void setup() {
@@ -87,10 +122,18 @@ public class AzureIntegrationTest {
     props.setProperty("clustermap.cluster.name", "Integration-Test");
     props.setProperty("clustermap.datacenter.name", "uswest");
     props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("replication.cloud.token.factory", replicationCloudTokenFactory);
     props.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
     VerifiableProperties verProps = new VerifiableProperties(props);
     azureDest =
         (AzureCloudDestination) new AzureCloudDestinationFactory(verProps, new MetricRegistry()).getCloudDestination();
+  }
+
+  @After
+  public void destroy() throws IOException {
+    if (azureDest != null) {
+      azureDest.close();
+    }
   }
 
   /**
@@ -106,8 +149,8 @@ public class AzureIntegrationTest {
     InputStream inputStream = new ByteArrayInputStream(uploadData);
     long now = System.currentTimeMillis();
     CloudBlobMetadata cloudBlobMetadata =
-        new CloudBlobMetadata(blobId, now, now + 60000, blobSize,
-            CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
+        new CloudBlobMetadata(blobId, now, now + 60000, blobSize, CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext,
+            cryptoAgentFactory, blobSize);
     assertTrue("Expected upload to return true",
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
 
@@ -297,17 +340,16 @@ public class AzureIntegrationTest {
           azureDest.uploadBlob(blobId, chunkSize, cloudBlobMetadata, inputStream));
     }
 
-    CloudFindToken findToken = new CloudFindToken();
+    FindToken findToken = findTokenFactory.getNewFindToken();
     // Call findEntriesSince in a loop until no new entries are returned
-    List<CloudBlobMetadata> results;
+    FindResult findResult;
     int numQueries = 0;
     int totalBlobsReturned = 0;
     do {
-      results = azureDest.findEntriesSince(partitionPath, findToken, maxTotalSize);
+      findResult = azureDest.findEntriesSince(partitionPath, findToken, maxTotalSize);
       numQueries++;
-      totalBlobsReturned += results.size();
-      findToken = CloudFindToken.getUpdatedToken(findToken, results);
-    } while (!results.isEmpty());
+      totalBlobsReturned += findResult.getMetadataList().size();
+    } while (!findResult.getMetadataList().isEmpty());
 
     assertEquals("Wrong number of queries", expectedNumQueries, numQueries);
     assertEquals("Wrong number of blobs", blobCount, totalBlobsReturned);
