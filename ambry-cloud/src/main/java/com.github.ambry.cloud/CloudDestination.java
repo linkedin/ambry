@@ -14,6 +14,8 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.replication.FindToken;
+import java.io.Closeable;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
@@ -23,7 +25,7 @@ import java.util.Map;
 /**
  * An interface representing an interaction with a cloud destination, that allows replicating blob operations.
  */
-public interface CloudDestination {
+public interface CloudDestination extends Closeable {
 
   /**
    * Upload blob to the cloud destination.
@@ -81,15 +83,17 @@ public interface CloudDestination {
   List<CloudBlobMetadata> getDeadBlobs(String partitionPath) throws CloudStorageException;
 
   /**
-   * Returns a sequenced list of blobs in the specified partition, ordered by update time starting from the
-   * specified time.
+   * Returns an ordered sequenced list of blobs within the specified partition and updated
+   * {@link com.github.ambry.replication.FindToken}, such that total size of all blobs in the list are less or equal to
+   * {@code maxTotalSizeOfEntries}
    * @param partitionPath the partition to query.
-   * @param findToken the {@link CloudFindToken} specifying the boundary for the query.
+   * @param findToken the {@link com.github.ambry.replication.FindToken} specifying the boundary for the query.
    * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
-   * @return a List of {@link CloudBlobMetadata} referencing the blobs returned by the query.
+   * @return {@link FindResult} instance that contains updated {@link FindToken} object which can act as a bookmark for
+   * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries referencing the blobs returned by the query.
    * @throws CloudStorageException
    */
-  List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken, long maxTotalSizeOfEntries)
+  FindResult findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries)
       throws CloudStorageException;
 
   /**

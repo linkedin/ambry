@@ -34,6 +34,8 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -53,6 +55,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -104,6 +107,7 @@ public class GetBlobInfoOperationTest {
   private ReplicaId localReplica;
   private ReplicaId remoteReplica;
   private String localDcName;
+  private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   /**
    * Running for both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}, with and without encryption
@@ -168,6 +172,11 @@ public class GetBlobInfoOperationTest {
     }
   }
 
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
   @After
   public void after() {
     if (networkClient != null) {
@@ -177,6 +186,7 @@ public class GetBlobInfoOperationTest {
     if (cryptoJobHandler != null) {
       cryptoJobHandler.close();
     }
+    nettyByteBufLeakHelper.afterTest();
   }
 
   /**
@@ -246,13 +256,13 @@ public class GetBlobInfoOperationTest {
     List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
     for (ResponseInfo responseInfo : responses) {
       GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
-          Utils.createDataInputStreamFromBuffer(responseInfo.getResponse()), mockClusterMap) : null;
+          new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
       op.handleResponse(responseInfo, getResponse);
-      responseInfo.release();
       if (op.isOperationComplete()) {
         break;
       }
     }
+    responses.forEach(ResponseInfo::release);
     if (testEncryption) {
       Assert.assertTrue("Latch should have been zeroed ", onPollLatch.await(500, TimeUnit.MILLISECONDS));
       op.poll(requestRegistrationCallback);
@@ -714,13 +724,13 @@ public class GetBlobInfoOperationTest {
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
-            Utils.createDataInputStreamFromBuffer(responseInfo.getResponse()), mockClusterMap) : null;
+            new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
-        responseInfo.release();
         if (op.isOperationComplete()) {
           break;
         }
       }
+      responses.forEach(ResponseInfo::release);
     }
   }
 

@@ -15,6 +15,8 @@ package com.github.ambry.network;
 
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.router.Callback;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 
@@ -32,6 +34,14 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
+    DataInputStream stream = new DataInputStream(request.getInputStream());
+    try {
+      // The first 8 bytes is size of the request. TCP implementation uses this size to allocate buffer. See {@link BoundedReceive}
+      // Here we just need to consume it.
+      stream.readLong();
+    } catch (IOException e) {
+      throw new IllegalStateException("stream read error." + e);
+    }
     requestQueue.put(request);
   }
 
@@ -46,11 +56,8 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
 
     RestResponseChannel restResponseChannel = ((NettyServerRequest) originalRequest).getRestResponseChannel();
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, payloadToSend.sizeInBytes());
-    try {
-      payloadToSend.writeTo(restResponseChannel, null); // an extra copy
-    } catch (IOException e) {
-      throw new InterruptedException(e.toString());
-    }
+    payloadToSend.writeTo(restResponseChannel, (result, exception) -> {
+    });// an extra copy
   }
 
   /**

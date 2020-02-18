@@ -29,7 +29,6 @@ import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -458,7 +457,7 @@ public class HardDeleteVerifier {
               }
 
               if (isDeleted) {
-                ByteBuf byteBuf = output.getAndRelease();
+                ByteBuf byteBuf = output.content();
                 try {
                   if (!verifyZeroed(metadata.array()) || !verifyZeroed(
                       Utils.readBytesFromByteBuf(byteBuf, new byte[(int) output.getSize()], 0,
@@ -478,7 +477,6 @@ public class HardDeleteVerifier {
                   }
                 } finally {
                   byteBuf.release();
-                  byteBuf = null;
                 }
               } else {
                 unDeletedPuts++;
@@ -735,7 +733,7 @@ public class HardDeleteVerifier {
 
     if (!caughtException) {
       if (isDeleted) {
-        ByteBuf byteBuf = blobData.getAndRelease();
+        ByteBuf byteBuf = blobData.content();
         try {
           asExpected = verifyZeroed(usermetadata.array()) && verifyZeroed(
               Utils.readBytesFromByteBuf(byteBuf, new byte[(int) blobData.getSize()], 0, (int) blobData.getSize()));
@@ -743,11 +741,10 @@ public class HardDeleteVerifier {
           asExpected = false;
         } finally {
           byteBuf.release();
-          byteBuf = null;
         }
       } else {
-        ByteBuf byteBuf = blobData.getAndRelease();
-        ByteBuf oldByteBuf = oldBlobData.getAndRelease();
+        ByteBuf byteBuf = blobData.content();
+        ByteBuf oldByteBuf = oldBlobData.content();
         try {
           asExpected = Arrays.equals(usermetadata.array(), oldUsermetadata.array()) && Arrays.equals(
               Utils.readBytesFromByteBuf(byteBuf, new byte[(int) blobData.getSize()], 0, (int) blobData.getSize()),
@@ -758,8 +755,6 @@ public class HardDeleteVerifier {
         } finally {
           byteBuf.release();
           oldByteBuf.release();
-          byteBuf = null;
-          oldByteBuf = null;
         }
       }
       return asExpected;

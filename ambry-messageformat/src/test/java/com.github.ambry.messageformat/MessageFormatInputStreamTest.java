@@ -255,7 +255,7 @@ public class MessageFormatInputStreamTest {
     } else {
       Assert.assertEquals(null, blobAll.getBlobEncryptionKey());
     }
-    ByteBuf byteBuf = blobAll.getBlobData().getAndRelease();
+    ByteBuf byteBuf = blobAll.getBlobData().content();
     try {
       Assert.assertEquals(Unpooled.wrappedBuffer(data), byteBuf);
     } finally {
@@ -505,7 +505,7 @@ public class MessageFormatInputStreamTest {
    * @param updateTimeMs the expected time of update
    * @throws Exception any error.
    */
-  private static void checkUndeleteMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
+  public static void checkUndeleteMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
       short containerId, long updateTimeMs, short lifeVersion) throws Exception {
     checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key, lifeVersion);
     checkUndeleteSubRecord(stream, accountId, containerId, updateTimeMs);

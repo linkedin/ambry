@@ -41,7 +41,7 @@ import static org.mockito.Mockito.*;
 
 
 /**
- * Class to define utilities for azure tests.
+ * Class to define utilities for Azure tests.
  */
 class AzureTestUtils {
 
@@ -131,12 +131,30 @@ class AzureTestUtils {
   static void mockObservableForQuery(List<Document> documentList, Observable<FeedResponse<Document>> mockResponse) {
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
+    Observable<FeedResponse<Document>> mockObservable = mock(Observable.class);
     when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
     Iterator<FeedResponse<Document>> iterator = mock(Iterator.class);
     when(mockBlockingObservable.getIterator()).thenReturn(iterator);
     when(iterator.hasNext()).thenReturn(true).thenReturn(false);
     when(iterator.next()).thenReturn(feedResponse);
     when(feedResponse.getResults()).thenReturn(documentList);
+  }
+
+  /**
+   * Utility to mock the query call chain of {@link AsyncDocumentClient} such that query returns {@code documentList}.
+   * @param documentList {@link List <Document>} of documents to return from mocked call.
+   * @param mockResponse {@link Observable} mocked response.
+   */
+  static void mockObservableForChangeFeedQuery(List<Document> documentList,
+      Observable<FeedResponse<Document>> mockResponse) {
+    FeedResponse<Document> feedResponse = mock(FeedResponse.class);
+    BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
+    Observable<FeedResponse<Document>> mockObservable = mock(Observable.class);
+    when(mockResponse.limit(anyInt())).thenReturn(mockObservable);
+    when(mockObservable.toBlocking()).thenReturn(mockBlockingObservable);
+    when(mockBlockingObservable.single()).thenReturn(feedResponse);
+    when(feedResponse.getResults()).thenReturn(documentList);
+    Iterator<FeedResponse<Document>> iterator = mock(Iterator.class);
   }
 
   /**

@@ -15,6 +15,7 @@ package com.github.ambry.server;
 
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.SystemTime;
@@ -47,7 +48,10 @@ public class ServerPlaintextTest {
     routerProps = new Properties();
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
-    plaintextCluster = new MockCluster(new Properties(), false, SystemTime.getInstance());
+
+    Properties serverProperties = new Properties();
+    TestSSLUtils.addHttp2Properties(serverProperties);
+    plaintextCluster = new MockCluster(serverProperties, false, SystemTime.getInstance());
     notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);
     plaintextCluster.startServers();

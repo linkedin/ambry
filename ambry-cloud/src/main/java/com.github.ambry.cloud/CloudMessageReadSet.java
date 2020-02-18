@@ -14,6 +14,8 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
@@ -25,6 +27,7 @@ import java.nio.channels.WritableByteChannel;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 
 /**
@@ -64,6 +67,12 @@ class CloudMessageReadSet implements MessageReadSet {
     }
     logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written, blobIdStr);
     return written;
+  }
+
+  @Override
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
+    // TODO: read from cloud based store and write to AsyncWritableChannel is needed in the future.
+    throw new UnsupportedOperationException();
   }
 
   @Override

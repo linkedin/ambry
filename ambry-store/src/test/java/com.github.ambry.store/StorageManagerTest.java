@@ -219,6 +219,20 @@ public class StorageManagerTest {
     assertFalse("Add store onto the DiskManager which is not running should fail",
         storageManager.addBlobStore(newPartition2.getReplicaIds().get(0)));
     storageManager.getDiskManager(localReplicas.get(0).getPartitionId()).start();
+    // test replica addition can correctly handle existing dir (should delete it and create a new one)
+    // To verify the directory has been recreated, we purposely put a test file in previous dir.
+    PartitionId newPartition3 =
+        new MockPartitionId(12L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), 0);
+    ReplicaId replicaToAdd = newPartition3.getReplicaIds().get(0);
+    File previousDir = new File(replicaToAdd.getReplicaPath());
+    File testFile = new File(previousDir, "testFile");
+    MockClusterMap.deleteFileOrDirectory(previousDir);
+    assertTrue("Cannot create dir for " + replicaToAdd.getReplicaPath(), previousDir.mkdir());
+    assertTrue("Cannot create test file within previous dir", testFile.createNewFile());
+    assertTrue("Adding new store should succeed", storageManager.addBlobStore(replicaToAdd));
+    assertFalse("Test file should not exist", testFile.exists());
+    assertNotNull("Store associated new added replica should not be null",
+        storageManager.getStore(newPartition3, false));
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
     // test add store but fail to add segment requirements to DiskSpaceAllocator. (This is simulated by inducing
     // addRequiredSegments failure to make store inaccessible)
@@ -348,6 +362,7 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
 
     // 5. mock disable compaction failure
+    mockHelixParticipant = new MockClusterParticipant();
     MockStorageManager mockStorageManager = new MockStorageManager(localNode, mockHelixParticipant);
     mockStorageManager.start();
     try {
@@ -390,6 +405,32 @@ public class StorageManagerTest {
     assertTrue("Helix participant transition didn't get invoked within 1 sec",
         participantLatch.await(1, TimeUnit.SECONDS));
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
+   * Test that initializing participant metrics fails because the initial offline partition count is not zero.
+   * @throws Exception
+   */
+  @Test
+  public void initParticipantMetricsFailureTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    // create first storage manager and start
+    StorageManager storageManager1 = createStorageManager(localNode, new MetricRegistry(), mockHelixParticipant);
+    storageManager1.start();
+    shutdownAndAssertStoresInaccessible(storageManager1, localReplicas);
+    // create second storage manager with same mock helix participant
+    StorageManager storageManager2 = createStorageManager(localNode, new MetricRegistry(), mockHelixParticipant);
+    try {
+      storageManager2.start();
+      fail("should fail because offline partition count is non-zero before initialization");
+    } catch (IllegalStateException e) {
+      // expected
+    } finally {
+      shutdownAndAssertStoresInaccessible(storageManager2, localReplicas);
+    }
   }
 
   /**
@@ -1166,7 +1207,7 @@ public class StorageManagerTest {
     Set<ReplicaId> stoppedReplicas = new HashSet<>();
 
     MockClusterParticipant() throws IOException {
-      super(clusterMapConfig, new MockHelixManagerFactory());
+      super(clusterMapConfig, new MockHelixManagerFactory(), new MetricRegistry());
     }
 
     @Override
@@ -1223,7 +1264,7 @@ public class StorageManagerTest {
     boolean controlCompactionReturnVal = false;
 
     MockStorageManager(DataNodeId currentNode, ClusterParticipant clusterParticipant) throws Exception {
-      super(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, new MockIdFactory(),
+      super(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), new MetricRegistry(), new MockIdFactory(),
           clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipant, SystemTime.getInstance(),
           new DummyMessageStoreRecovery());
     }

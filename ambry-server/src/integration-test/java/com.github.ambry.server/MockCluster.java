@@ -247,6 +247,7 @@ public class MockCluster {
     props.setProperty("store.validate.authorization", "true");
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     props.setProperty("server.enable.store.data.prefetch", Boolean.toString(enableDataPrefetch));
+    props.setProperty("server.handle.undelete.request.enabled", "true");
     props.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     props.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "100");
     props.putAll(sslProperties);
@@ -373,6 +374,7 @@ class EventTracker {
   private final int numberOfReplicas;
   private final Helper creationHelper;
   private final Helper deletionHelper;
+  private final Helper undeleteHelper;
   private final ConcurrentMap<UpdateType, Helper> updateHelpers = new ConcurrentHashMap<>();
 
   /**
@@ -440,6 +442,7 @@ class EventTracker {
     numberOfReplicas = expectedNumberOfReplicas;
     creationHelper = new Helper();
     deletionHelper = new Helper();
+    undeleteHelper = new Helper();
   }
 
   /**
@@ -458,6 +461,15 @@ class EventTracker {
    */
   void trackDeletion(String host, int port) {
     deletionHelper.track(host, port);
+  }
+
+  /**
+   * Tracks the undelete event that arrived on {@code host}:{@code port}.
+   * @param host the host that received the undelete
+   * @param port the port of the host that describes the instance along with {@code host}.
+   */
+  void trackUndelete(String host, int port) {
+    undeleteHelper.track(host, port);
   }
 
   /**
@@ -565,6 +577,11 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
+  public void onBlobUndeleted(String blobId, String serviceId, Account account, Container container) {
+    // ignore
+  }
+
+  @Override
   public synchronized void onBlobReplicaCreated(String sourceHost, int port, String blobId,
       BlobReplicaSourceType sourceType) {
     objectTracker.computeIfAbsent(blobId, k -> new EventTracker(getNumReplicas(blobId)))
@@ -583,6 +600,12 @@ class MockNotificationSystem implements NotificationSystem {
       BlobReplicaSourceType sourceType, UpdateType updateType, MessageInfo info) {
     objectTracker.computeIfAbsent(blobId, k -> new EventTracker(getNumReplicas(blobId)))
         .trackUpdate(sourceHost, port, updateType);
+  }
+
+  @Override
+  public void onBlobReplicaUndeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+    objectTracker.computeIfAbsent(blobId, k -> new EventTracker(getNumReplicas(blobId)))
+        .trackUndelete(sourceHost, port);
   }
 
   @Override

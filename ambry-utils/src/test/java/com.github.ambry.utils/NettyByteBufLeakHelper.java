@@ -16,6 +16,7 @@ package com.github.ambry.utils;
 import io.netty.buffer.PoolArenaMetric;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocatorMetric;
+import io.netty.util.internal.SystemPropertyUtil;
 import java.util.List;
 import org.junit.Assert;
 
@@ -42,7 +43,9 @@ public class NettyByteBufLeakHelper {
    * Constructor to create a {@link NettyByteBufLeakHelper}.
    */
   public NettyByteBufLeakHelper() {
-    cachedEnabled = Integer.parseInt(System.getProperty("io.netty.allocator.maxCachedBufferCapacity", "0")) != 0;
+    // The allocator cache is enabled by default if this property is not set. The default value of 32k comes from
+    // PooledByteBufAllocator.DEFAULT_MAX_CACHED_BUFFER_CAPACITY (private constant)
+    cachedEnabled = SystemPropertyUtil.getInt("io.netty.allocator.maxCachedBufferCapacity", 32 * 1024) != 0;
   }
 
   /**

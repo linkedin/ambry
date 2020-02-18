@@ -1,5 +1,5 @@
 /**
- * Copyright 2019 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,8 +11,9 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.cloud.azure;
 
+import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
 import java.io.DataInputStream;
@@ -25,9 +26,9 @@ import java.util.Set;
 
 
 /**
- * FindToken implementation used by the {@link CloudBlobStore}.
+ * {@link FindToken} object to act as bookmark for replication based on Cosmos update time field.
  */
-public class CloudFindToken implements FindToken {
+public class CosmosUpdateTimeFindToken implements FindToken {
 
   static final short VERSION_0 = 0;
   static final short CURRENT_VERSION = VERSION_0;
@@ -38,12 +39,12 @@ public class CloudFindToken implements FindToken {
   private final long bytesRead;
 
   /** Constructor for start token */
-  public CloudFindToken() {
+  public CosmosUpdateTimeFindToken() {
     this((short) 0, 0, new HashSet<>());
   }
 
   /** Constructor for in-progress token */
-  public CloudFindToken(long lastUpdateTime, long bytesRead, Set<String> lastUpdateTimeReadBlobIds) {
+  public CosmosUpdateTimeFindToken(long lastUpdateTime, long bytesRead, Set<String> lastUpdateTimeReadBlobIds) {
     this.version = CURRENT_VERSION;
     this.type = FindTokenType.CloudBased;
     this.lastUpdateTime = lastUpdateTime;
@@ -51,8 +52,9 @@ public class CloudFindToken implements FindToken {
     this.lastUpdateTimeReadBlobIds = new HashSet<>(lastUpdateTimeReadBlobIds);
   }
 
-  /** Constructor for reading token that can have older version*/
-  public CloudFindToken(short version, long lastUpdateTime, long bytesRead, Set<String> lastUpdateTimeReadBlobIds) {
+  /** Constructor for reading token that can have older version */
+  public CosmosUpdateTimeFindToken(short version, long lastUpdateTime, long bytesRead,
+      Set<String> lastUpdateTimeReadBlobIds) {
     this.version = version;
     this.type = FindTokenType.CloudBased;
     this.lastUpdateTime = lastUpdateTime;
@@ -62,11 +64,12 @@ public class CloudFindToken implements FindToken {
 
   /**
    * Utility to construct a new CloudFindToken from a previous instance and the results of a findEntriesSince query.
-   * @param prevToken previous {@link CloudFindToken}.
+   * @param prevToken previous {@link CosmosUpdateTimeFindToken}.
    * @param queryResults List of {@link CloudBlobMetadata} objects.
    * @return the updated token.
    */
-  public static CloudFindToken getUpdatedToken(CloudFindToken prevToken, List<CloudBlobMetadata> queryResults) {
+  public static CosmosUpdateTimeFindToken getUpdatedToken(CosmosUpdateTimeFindToken prevToken,
+      List<CloudBlobMetadata> queryResults) {
     if (queryResults.isEmpty()) {
       return prevToken;
     }
@@ -90,12 +93,13 @@ public class CloudFindToken implements FindToken {
     }
 
     long bytesReadThisQuery = queryResults.stream().mapToLong(CloudBlobMetadata::getSize).sum();
-    return new CloudFindToken(lastUpdateTime, prevToken.getBytesRead() + bytesReadThisQuery, lastUpdateTimeReadBlobIds);
+    return new CosmosUpdateTimeFindToken(lastUpdateTime, prevToken.getBytesRead() + bytesReadThisQuery,
+        lastUpdateTimeReadBlobIds);
   }
 
   @Override
   public byte[] toBytes() {
-    byte[] buf = null;
+    byte[] buf;
     switch (version) {
       case VERSION_0:
         int size = 2 * Short.BYTES + 2 * Long.BYTES + Short.BYTES;
@@ -132,8 +136,8 @@ public class CloudFindToken implements FindToken {
    * @return deserialized {@code CloudFindToken} object.
    * @throws IOException
    */
-  static CloudFindToken fromBytes(DataInputStream inputStream) throws IOException {
-    CloudFindToken cloudFindToken = null;
+  static CosmosUpdateTimeFindToken fromBytes(DataInputStream inputStream) throws IOException {
+    CosmosUpdateTimeFindToken cloudFindToken;
     DataInputStream stream = new DataInputStream(inputStream);
     short version = stream.readShort();
     switch (version) {
@@ -150,7 +154,7 @@ public class CloudFindToken implements FindToken {
           blobIds.add(new String(blobIdBytes));
           numBlobs--;
         }
-        cloudFindToken = new CloudFindToken(version, lastUpdateTime, bytesRead, blobIds);
+        cloudFindToken = new CosmosUpdateTimeFindToken(version, lastUpdateTime, bytesRead, blobIds);
         break;
       default:
         throw new IllegalStateException("Unknown version: " + version);
@@ -163,10 +167,18 @@ public class CloudFindToken implements FindToken {
     return bytesRead;
   }
 
+  /**
+   * Return {@code lastUpdateTime}.
+   * @return {@code lastUpdateTime}
+   */
   public long getLastUpdateTime() {
     return lastUpdateTime;
   }
 
+  /**
+   * Return {@code lastUpdateTimeReadBlobIds}
+   * @return {@code lastUpdateTimeReadBlobIds}
+   */
   public Set<String> getLastUpdateTimeReadBlobIds() {
     return lastUpdateTimeReadBlobIds;
   }
@@ -179,7 +191,7 @@ public class CloudFindToken implements FindToken {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    CloudFindToken that = (CloudFindToken) o;
+    CosmosUpdateTimeFindToken that = (CosmosUpdateTimeFindToken) o;
     return version == that.version && lastUpdateTime == that.lastUpdateTime && bytesRead == that.bytesRead
         && lastUpdateTimeReadBlobIds.equals(that.lastUpdateTimeReadBlobIds);
   }

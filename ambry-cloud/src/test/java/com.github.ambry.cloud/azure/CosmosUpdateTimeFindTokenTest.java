@@ -1,5 +1,5 @@
 /**
- * Copyright 2019 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.cloud.azure;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -26,9 +26,9 @@ import static org.junit.Assert.*;
 
 
 /**
- * Test for {@link CloudFindToken}
+ * Test for {@link CosmosUpdateTimeFindToken}
  */
-public class CloudFindTokenTest {
+public class CosmosUpdateTimeFindTokenTest {
 
   /**
    * Test for correctness of {@code CloudFindToken#equals(Object)}
@@ -44,40 +44,40 @@ public class CloudFindTokenTest {
     lastReadBlobIds.add("blobid2");
 
     //compare empty tokens
-    ensureEqual(new CloudFindToken(), new CloudFindToken());
+    ensureEqual(new CosmosUpdateTimeFindToken(), new CosmosUpdateTimeFindToken());
 
     //compare token constructed from all constructors
-    CloudFindToken token1 = new CloudFindToken(lastBlobUpdateTime, bytesRead, lastReadBlobIds);
-    CloudFindToken token2 = new CloudFindToken(lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    CosmosUpdateTimeFindToken token1 = new CosmosUpdateTimeFindToken(lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    CosmosUpdateTimeFindToken token2 = new CosmosUpdateTimeFindToken(lastBlobUpdateTime, bytesRead, lastReadBlobIds);
     ensureEqual(token1, token2);
 
-    token1 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
-    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    token1 = new CosmosUpdateTimeFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    token2 = new CosmosUpdateTimeFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
     ensureEqual(token1, token2);
 
     //ensure inequality for any unequal field
-    token2 = new CloudFindToken((short) 1, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    token2 = new CosmosUpdateTimeFindToken((short) 1, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(version, lastBlobUpdateTime + 100, bytesRead, lastReadBlobIds);
+    token2 = new CosmosUpdateTimeFindToken(version, lastBlobUpdateTime + 100, bytesRead, lastReadBlobIds);
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, new HashSet<>());
+    token2 = new CosmosUpdateTimeFindToken(version, lastBlobUpdateTime, bytesRead, new HashSet<>());
     ensureUnequal(token1, token2);
 
     Set<String> unEqualBlobidSet = new HashSet<>();
     unEqualBlobidSet.add("blobid1");
-    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, unEqualBlobidSet);
+    token2 = new CosmosUpdateTimeFindToken(version, lastBlobUpdateTime, bytesRead, unEqualBlobidSet);
     ensureUnequal(token1, token2);
 
     unEqualBlobidSet.add("blobid3");
-    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, unEqualBlobidSet);
+    token2 = new CosmosUpdateTimeFindToken(version, lastBlobUpdateTime, bytesRead, unEqualBlobidSet);
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead + 10, lastReadBlobIds);
+    token2 = new CosmosUpdateTimeFindToken(version, lastBlobUpdateTime, bytesRead + 10, lastReadBlobIds);
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken();
+    token2 = new CosmosUpdateTimeFindToken();
     ensureUnequal(token1, token2);
   }
 
@@ -98,18 +98,20 @@ public class CloudFindTokenTest {
     //Deserialization test
 
     //token with invalid version
-    CloudFindToken invalidToken = new CloudFindToken((short) 1, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    CosmosUpdateTimeFindToken invalidToken =
+        new CosmosUpdateTimeFindToken((short) 1, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
     DataInputStream tokenStream = getSerializedStream(invalidToken);
     try {
-      CloudFindToken.fromBytes(tokenStream);
+      CosmosUpdateTimeFindToken.fromBytes(tokenStream);
       fail("deserialization of token with invalid version should have failed");
     } catch (IllegalStateException ise) {
     }
 
     //valid token
-    CloudFindToken token = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    CosmosUpdateTimeFindToken token =
+        new CosmosUpdateTimeFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
     tokenStream = getSerializedStream(token);
-    CloudFindToken deSerToken = CloudFindToken.fromBytes(tokenStream);
+    CosmosUpdateTimeFindToken deSerToken = CosmosUpdateTimeFindToken.fromBytes(tokenStream);
     assertEquals("Stream should have ended ", 0, tokenStream.available());
     assertEquals(token, deSerToken);
 
@@ -118,14 +120,14 @@ public class CloudFindTokenTest {
     //token with invalid version
     DataInputStream serializedStream = getSerializedStream(invalidToken);
     try {
-      CloudFindToken.fromBytes(serializedStream);
+      CosmosUpdateTimeFindToken.fromBytes(serializedStream);
       fail("serialization of token with invalid version should have failed");
     } catch (IllegalStateException ise) {
     }
 
     //valid token
     serializedStream = new DataInputStream(new ByteArrayInputStream(token.toBytes()));
-    deSerToken = CloudFindToken.fromBytes(serializedStream);
+    deSerToken = CosmosUpdateTimeFindToken.fromBytes(serializedStream);
     assertEquals("Stream should have ended ", 0, serializedStream.available());
     assertEquals(token, deSerToken);
   }
@@ -135,7 +137,7 @@ public class CloudFindTokenTest {
    * @param token1
    * @param token2
    */
-  private void ensureEqual(CloudFindToken token1, CloudFindToken token2) {
+  private void ensureEqual(CosmosUpdateTimeFindToken token1, CosmosUpdateTimeFindToken token2) {
     assertEquals("Tokens should match", token1, token2);
     assertEquals("Hashcode of tokens should match", token1.hashCode(), token2.hashCode());
   }
@@ -145,7 +147,7 @@ public class CloudFindTokenTest {
    * @param token1
    * @param token2
    */
-  private void ensureUnequal(CloudFindToken token1, CloudFindToken token2) {
+  private void ensureUnequal(CosmosUpdateTimeFindToken token1, CosmosUpdateTimeFindToken token2) {
     assertFalse("Tokens shouldn't match", token1.equals(token2));
   }
 
@@ -154,7 +156,7 @@ public class CloudFindTokenTest {
    * @param token {@code CloudFindToken} object to serialize
    * @return DataInputStream serialized stream
    */
-  private DataInputStream getSerializedStream(CloudFindToken token) {
+  private DataInputStream getSerializedStream(CosmosUpdateTimeFindToken token) {
     int size = 2 * Short.BYTES + 2 * Long.BYTES + Short.BYTES;
     for (String blobId : token.getLastUpdateTimeReadBlobIds()) {
       size += Short.BYTES; //for size of string
@@ -179,3 +181,4 @@ public class CloudFindTokenTest {
     return new DataInputStream(new ByteArrayInputStream(buf));
   }
 }
+

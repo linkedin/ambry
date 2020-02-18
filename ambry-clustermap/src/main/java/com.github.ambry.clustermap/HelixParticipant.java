@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.Utils;
@@ -51,6 +52,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private final String zkConnectStr;
   private final Object helixAdministrationLock = new Object();
   private final ClusterMapConfig clusterMapConfig;
+  private final HelixParticipantMetrics participantMetrics;
   private HelixManager manager;
   private String instanceName;
   private HelixAdmin helixAdmin;
@@ -63,10 +65,13 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * Instantiate a HelixParticipant.
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this participant.
    * @param helixFactory the {@link HelixFactory} to use to get the {@link HelixManager}.
+   * @param metricRegistry the {@link MetricRegistry} to instantiate {@link HelixParticipantMetrics}.
    * @throws IOException if there is an error in parsing the JSON serialized ZK connect string config.
    */
-  public HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) throws IOException {
+  public HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory, MetricRegistry metricRegistry)
+      throws IOException {
     this.clusterMapConfig = clusterMapConfig;
+    participantMetrics = new HelixParticipantMetrics(metricRegistry);
     clusterName = clusterMapConfig.clusterMapClusterName;
     instanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
@@ -88,6 +93,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     partitionStateChangeListeners = new HashMap<>();
   }
 
+  @Override
+  public void initializeParticipantMetrics(int localPartitionCount) {
+    participantMetrics.setLocalPartitionCount(localPartitionCount);
+  }
+
   /**
    * Initiate the participation by registering via the {@link HelixManager} as a participant to the associated
    * Helix cluster.
@@ -100,7 +110,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig, this));
+        new AmbryStateModelFactory(clusterMapConfig, this, participantMetrics));
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
       synchronized (helixAdministrationLock) {

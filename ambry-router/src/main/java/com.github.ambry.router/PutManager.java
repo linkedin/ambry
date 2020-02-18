@@ -143,6 +143,7 @@ class PutManager {
         PutOperation.forUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
             userMetaData, channel, options, futureResult, callback, routerCallback, chunkArrivalListener, kms,
             cryptoService, cryptoJobHandler, time, blobProperties, partitionClass);
+    // TODO: netty send this request
     putOperations.add(putOperation);
     putOperation.startOperation();
   }
@@ -219,7 +220,7 @@ class PutManager {
     long startTime = time.milliseconds();
     PutResponse putResponse =
         RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
-            PutResponse::readFrom, PutResponse::getError, false);
+            PutResponse::readFrom, PutResponse::getError);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     int correlationId = routerRequestInfo.getRequest().getCorrelationId();
     // Get the PutOperation that generated the request.

@@ -13,6 +13,8 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 
@@ -36,7 +38,15 @@ public interface MessageReadSet {
   long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException;
 
   /**
-   * Returns the total number of messages in this set
+   * This method is intend to write prefetched data from {@link MessageReadSet} to {@link AsyncWritableChannel}. Data
+   * should be ready in memory(no blocking call) before write to {@link AsyncWritableChannel} asynchronously. Callback is
+   * called when the entire batch of writes succeeds or fails.
+   * @param channel the channel into which the data needs to be written to
+   * @param callback The callback when data is fully wrote to the channel.
+   */
+  void writeTo(AsyncWritableChannel channel, Callback<Long> callback);
+
+  /**
    * @return The total number of messages in this set
    */
   int count();

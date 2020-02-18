@@ -15,6 +15,8 @@ package com.github.ambry.store;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
@@ -206,6 +208,27 @@ class StoreMessageReadSet implements MessageReadSet {
     }
     logger.trace("Written {} bytes to the write channel from the file channel : {}", written, options.getFile());
     return written;
+  }
+
+  @Override
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
+    int lastIndex = readOptions.size() - 1;
+    int i = 0;
+    for (BlobReadOptions options : readOptions) {
+      ByteBuffer buf = options.getPrefetchedData();
+      if (buf == null) {
+        callback.onCompletion(null, new IllegalStateException("Data should be prefetched."));
+      }
+      buf.position(0);
+      if (i == lastIndex) {
+        // only the last one needs callback.
+        channel.write(buf, callback);
+      } else {
+        // TODO: Stop writing to the channel whenever there is an exception and stop the for loop.
+        channel.write(buf, null);
+      }
+      i++;
+    }
   }
 
   @Override

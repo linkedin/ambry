@@ -25,6 +25,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -120,6 +121,7 @@ public class CloudAndStoreReplicationTest {
     if (!vcrRecoveryPartitionConfig.isEmpty()) {
       recoveryProperties.setProperty("vcr.recovery.partitions", vcrRecoveryPartitionConfig);
     }
+    TestSSLUtils.addHttp2Properties(recoveryProperties);
 
     // create vcr node
     List<Port> vcrPortList = Arrays.asList(new Port(12310, PortType.PLAINTEXT), new Port(12410, PortType.SSL));

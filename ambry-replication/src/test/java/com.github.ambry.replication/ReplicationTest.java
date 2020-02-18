@@ -16,10 +16,13 @@ package com.github.ambry.replication;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.AmbryReplicaSyncUpManager;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockHelixParticipant;
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -97,6 +100,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.MockClusterMap.*;
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
@@ -154,6 +158,7 @@ public class ReplicationTest {
     properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "200");
     properties.setProperty("replication.replica.thread.idle.sleep.duration.ms", "1000");
+    properties.setProperty("replication.track.per.partition.lag.from.remote", "true");
     properties.put("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 2L));
     verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
@@ -282,6 +287,115 @@ public class ReplicationTest {
     ReplicationManager mockManager = Mockito.spy(replicationManager);
     assertFalse("Remove non-existent replica should return false", replicationManager.removeReplica(replicaToTest));
     verify(mockManager, never()).removeRemoteReplicaInfoFromReplicaThread(anyList());
+    storageManager.shutdown();
+  }
+
+  /**
+   * Test cluster map change callback in {@link ReplicationManager} when any remote replicas are added or removed.
+   * Test setup: attempt to add 3 replicas and remove 3 replicas respectively. The three replicas are picked as follows:
+   *   (1) 1st replica on current node (should skip)
+   *   (2) 2nd replica on remote node sharing partition with current one (should be added or removed)
+   *   (3) 3rd replica on remote node but doesn't share partition with current one (should skip)
+   * @throws Exception
+   */
+  @Test
+  public void onReplicaAddedOrRemovedCallbackTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
+    // pick a node with no special partition as current node
+    Set<DataNodeId> specialPartitionNodes = clusterMap.getSpecialPartition()
+        .getReplicaIds()
+        .stream()
+        .map(ReplicaId::getDataNodeId)
+        .collect(Collectors.toSet());
+    DataNodeId currentNode =
+        clusterMap.getDataNodes().stream().filter(d -> !specialPartitionNodes.contains(d)).findFirst().get();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    StorageManager storageManager =
+        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
+            new MetricRegistry(), null, clusterMap, currentNode, null, null, new MockTime(), null);
+    storageManager.start();
+    MockReplicationManager replicationManager =
+        new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
+            currentNode, storeKeyConverterFactory, null);
+    ClusterMapChangeListener clusterMapChangeListener = clusterMap.getClusterMapChangeListener();
+    // find the special partition (not on current node) and get an irrelevant replica from it
+    PartitionId absentPartition = clusterMap.getSpecialPartition();
+    ReplicaId irrelevantReplica = absentPartition.getReplicaIds().get(0);
+    // find an existing replica on current node and one of its peer replicas on remote node
+    ReplicaId existingReplica = clusterMap.getReplicaIds(currentNode).get(0);
+    ReplicaId peerReplicaToRemove =
+        existingReplica.getPartitionId().getReplicaIds().stream().filter(r -> r != existingReplica).findFirst().get();
+    // create a new node and place a peer of existing replica on it.
+    MockDataNodeId remoteNode = createDataNode(
+        getListOfPorts(PLAIN_TEXT_PORT_START_NUMBER + 10, SSL_PORT_START_NUMBER + 10, HTTP2_PORT_START_NUMBER + 10),
+        clusterMap.getDatacenterName((byte) 0), 3);
+    ReplicaId addedReplica =
+        new MockReplicaId(remoteNode.getPort(), (MockPartitionId) existingReplica.getPartitionId(), remoteNode, 0);
+    // populate added replica and removed replica lists
+    List<ReplicaId> replicasToAdd = new ArrayList<>(Arrays.asList(existingReplica, addedReplica, irrelevantReplica));
+    List<ReplicaId> replicasToRemove =
+        new ArrayList<>(Arrays.asList(existingReplica, peerReplicaToRemove, irrelevantReplica));
+    PartitionInfo partitionInfo =
+        replicationManager.getPartitionToPartitionInfoMap().get(existingReplica.getPartitionId());
+    assertNotNull("PartitionInfo is not found", partitionInfo);
+    RemoteReplicaInfo peerReplicaInfo = partitionInfo.getRemoteReplicaInfos()
+        .stream()
+        .filter(info -> info.getReplicaId() == peerReplicaToRemove)
+        .findFirst()
+        .get();
+    // get the replica-thread for this peer replica
+    ReplicaThread peerReplicaThread = peerReplicaInfo.getReplicaThread();
+
+    // Test Case 1: replication manager encountered exception during startup (remote replica addition/removal will be skipped)
+    replicationManager.startWithException();
+    clusterMapChangeListener.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
+    // verify that PartitionInfo stays unchanged
+    verifyRemoteReplicaInfo(partitionInfo, addedReplica, false);
+    verifyRemoteReplicaInfo(partitionInfo, peerReplicaToRemove, true);
+
+    // Test Case 2: startup latch is interrupted
+    CountDownLatch initialLatch = replicationManager.startupLatch;
+    CountDownLatch mockLatch = Mockito.mock(CountDownLatch.class);
+    doThrow(new InterruptedException()).when(mockLatch).await();
+    replicationManager.startupLatch = mockLatch;
+    try {
+      clusterMapChangeListener.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
+      fail("should fail because startup latch is interrupted");
+    } catch (IllegalStateException e) {
+      // expected
+    }
+    replicationManager.startupLatch = initialLatch;
+
+    // Test Case 3: replication manager is successfully started
+    replicationManager.start();
+    clusterMapChangeListener.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
+    // verify that PartitionInfo has latest remote replica infos
+    verifyRemoteReplicaInfo(partitionInfo, addedReplica, true);
+    verifyRemoteReplicaInfo(partitionInfo, peerReplicaToRemove, false);
+    verifyRemoteReplicaInfo(partitionInfo, irrelevantReplica, false);
+    // verify new added replica is assigned to a certain thread
+    ReplicaThread replicaThread =
+        replicationManager.getDataNodeIdToReplicaThreadMap().get(addedReplica.getDataNodeId());
+    assertNotNull("There is no ReplicaThread assocated with new replica", replicaThread);
+    Optional<RemoteReplicaInfo> findResult = replicaThread.getRemoteReplicaInfos()
+        .get(remoteNode)
+        .stream()
+        .filter(info -> info.getReplicaId() == addedReplica)
+        .findAny();
+    assertTrue("New added remote replica info should exist in corresponding thread", findResult.isPresent());
+
+    // verify the removed replica info's thread is null
+    assertNull("Thread in removed replica info should be null", peerReplicaInfo.getReplicaThread());
+    findResult = peerReplicaThread.getRemoteReplicaInfos()
+        .get(peerReplicaToRemove.getDataNodeId())
+        .stream()
+        .filter(info -> info.getReplicaId() == peerReplicaToRemove)
+        .findAny();
+    assertFalse("Previous replica thread should not contain RemoteReplicaInfo that is already removed",
+        findResult.isPresent());
     storageManager.shutdown();
   }
 
@@ -1123,7 +1237,7 @@ public class ReplicationTest {
         StoreKey remoteId = remoteInfo.getStoreKey();
         if (seen.add(remoteId)) {
           StoreKey localId = storeKeyConverter.convert(Collections.singleton(remoteId)).get(remoteId);
-          MessageInfo localInfo = getMessageInfo(localId, localInfos, false, false);
+          MessageInfo localInfo = getMessageInfo(localId, localInfos, false, false, false);
           if (localId == null) {
             // this is a deprecated ID. There should be no messages locally
             assertNull(remoteId + " is deprecated and should have no entries", localInfo);
@@ -1479,7 +1593,7 @@ public class ReplicationTest {
 
       // ensure that the first key is not deleted in the local host
       assertNull(toDeleteId + " should not be deleted in the local host",
-          getMessageInfo(toDeleteId, localHost.infosByPartition.get(partitionId), true, false));
+          getMessageInfo(toDeleteId, localHost.infosByPartition.get(partitionId), true, false, false));
     }
 
     StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
@@ -1798,6 +1912,24 @@ public class ReplicationTest {
 
   // helpers
 
+  /**
+   * Verify remote replica info is/isn't present in given {@link PartitionInfo}.
+   * @param partitionInfo the {@link PartitionInfo} to check if it contains remote replica info
+   * @param remoteReplica remote replica to check
+   * @param shouldExist if {@code true}, remote replica info should exist. {@code false} otherwise
+   */
+  private void verifyRemoteReplicaInfo(PartitionInfo partitionInfo, ReplicaId remoteReplica, boolean shouldExist) {
+    Optional<RemoteReplicaInfo> findResult =
+        partitionInfo.getRemoteReplicaInfos().stream().filter(info -> info.getReplicaId() == remoteReplica).findAny();
+    if (shouldExist) {
+      assertTrue("Expected remote replica info is not found in partition info", findResult.isPresent());
+      assertEquals("Node of remote replica is not expected", remoteReplica.getDataNodeId(),
+          findResult.get().getReplicaId().getDataNodeId());
+    } else {
+      assertFalse("Remote replica info should no long exist in partition info", findResult.isPresent());
+    }
+  }
+
   private ReplicaId getNewReplicaToAdd(MockClusterMap clusterMap) {
     DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);
     PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
@@ -1987,7 +2119,7 @@ public class ReplicationTest {
       // test that the first key has been marked deleted
       List<MessageInfo> messageInfos = localHost.infosByPartition.get(entry.getKey());
       StoreKey deletedId = messageInfos.get(0).getStoreKey();
-      assertNotNull(deletedId + " should have been deleted", getMessageInfo(deletedId, messageInfos, true, false));
+      assertNotNull(deletedId + " should have been deleted", getMessageInfo(deletedId, messageInfos, true, false, false));
       Map<StoreKey, Boolean> ignoreState = new HashMap<>();
       for (StoreKey toBeIgnored : idsToBeIgnoredByPartition.get(entry.getKey())) {
         ignoreState.put(toBeIgnored, false);
@@ -2104,7 +2236,7 @@ public class ReplicationTest {
    */
   private void addDeleteMessagesToReplicasOfPartition(PartitionId partitionId, StoreKey id, List<MockHost> hosts)
       throws MessageFormatException, IOException {
-    MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false, false);
+    MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false, false, false);
     short aid;
     short cid;
     if (putMsg == null) {
@@ -2160,7 +2292,7 @@ public class ReplicationTest {
    */
   public static void addTtlUpdateMessagesToReplicasOfPartition(PartitionId partitionId, StoreKey id,
       List<MockHost> hosts, long expirationTime) throws MessageFormatException, IOException {
-    MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false, false);
+    MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false, false, false);
     short aid;
     short cid;
     if (putMsg == null) {
@@ -2250,10 +2382,11 @@ public class ReplicationTest {
    * @param id the {@link StoreKey} to look for.
    * @param messageInfos the {@link MessageInfo} list.
    * @param deleteMsg {@code true} if delete msg is requested. {@code false} otherwise
+   * @param undeleteMsg {@code true} if undelete msg is requested. {@code false} otherwise
    * @param ttlUpdateMsg {@code true} if ttl update msg is requested. {@code false} otherwise
    * @return the delete {@link MessageInfo} if it exists in {@code messageInfos}. {@code null otherwise.}
    */
-  static MessageInfo getMessageInfo(StoreKey id, List<MessageInfo> messageInfos, boolean deleteMsg,
+  static MessageInfo getMessageInfo(StoreKey id, List<MessageInfo> messageInfos, boolean deleteMsg, boolean undeleteMsg,
       boolean ttlUpdateMsg) {
     MessageInfo toRet = null;
     for (MessageInfo messageInfo : messageInfos) {
@@ -2261,10 +2394,14 @@ public class ReplicationTest {
         if (deleteMsg && messageInfo.isDeleted()) {
           toRet = messageInfo;
           break;
-        } else if (ttlUpdateMsg && messageInfo.isTtlUpdated()) {
+        } else if (undeleteMsg && messageInfo.isUndeleted()) {
           toRet = messageInfo;
           break;
-        } else if (!deleteMsg && !ttlUpdateMsg) {
+        } else if (ttlUpdateMsg && !messageInfo.isUndeleted() && !messageInfo.isDeleted()
+            && messageInfo.isTtlUpdated()) {
+          toRet = messageInfo;
+          break;
+        } else if (!deleteMsg && !ttlUpdateMsg && !undeleteMsg) {
           toRet = messageInfo;
           break;
         }
@@ -2280,15 +2417,15 @@ public class ReplicationTest {
    * @return a merged {@link MessageInfo} for {@code key}
    */
   static MessageInfo getMergedMessageInfo(StoreKey key, List<MessageInfo> partitionInfos) {
-    MessageInfo info = getMessageInfo(key, partitionInfos, true, false);
+    MessageInfo info = getMessageInfo(key, partitionInfos, true, true, false);
     if (info == null) {
-      info = getMessageInfo(key, partitionInfos, false, false);
+      info = getMessageInfo(key, partitionInfos, false, false, false);
     }
-    MessageInfo ttlUpdateInfo = getMessageInfo(key, partitionInfos, false, true);
+    MessageInfo ttlUpdateInfo = getMessageInfo(key, partitionInfos, false, false, true);
     if (ttlUpdateInfo != null) {
-      info = new MessageInfo(info.getStoreKey(), info.getSize(), info.isDeleted(), true,
+      info = new MessageInfo(info.getStoreKey(), info.getSize(), info.isDeleted(), true, info.isUndeleted(),
           ttlUpdateInfo.getExpirationTimeInMs(), info.getCrc(), info.getAccountId(), info.getContainerId(),
-          info.getOperationTimeMs());
+          info.getOperationTimeMs(), info.getLifeVersion());
     }
     return info;
   }

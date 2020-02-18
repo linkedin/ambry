@@ -15,6 +15,7 @@ package com.github.ambry.commons;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
@@ -124,6 +125,10 @@ public class ResponseHandlerTest {
     @Override
     public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
       return null;
+    }
+
+    @Override
+    public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
     }
 
     @Override

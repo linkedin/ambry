@@ -216,6 +216,7 @@ public class RestUtils {
      * Response header indicating the reason a request is non compliant.
      */
     public final static String NON_COMPLIANCE_WARNING = "x-ambry-non-compliance-warning";
+
   }
 
   public static final class TrackingHeaders {

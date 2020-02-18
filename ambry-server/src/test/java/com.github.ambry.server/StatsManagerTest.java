@@ -36,6 +36,7 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.MockReplicationManager;
 import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StorageManager;
@@ -704,6 +705,11 @@ public class StatsManagerTest {
 
     @Override
     public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public short undelete(MessageInfo info) throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
 

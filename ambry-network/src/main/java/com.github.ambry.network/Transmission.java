@@ -16,7 +16,6 @@ package com.github.ambry.network;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
-import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.channels.SelectionKey;
@@ -76,9 +75,7 @@ public abstract class Transmission {
   }
 
   protected void initializeNetworkReceive() {
-    BoundedReceive boundedReceive =
-        config.networkUseNettyByteBuf ? new BoundedNettyByteBufReceive() : new BoundedByteBufferReceive();
-    networkReceive = new NetworkReceive(getConnectionId(), boundedReceive, time);
+    networkReceive = new NetworkReceive(getConnectionId(), new BoundedNettyByteBufReceive(), time);
   }
 
   /**
@@ -181,7 +178,7 @@ public abstract class Transmission {
 
   protected void release() {
     if (networkReceive != null) {
-      ReferenceCountUtil.release(networkReceive.getReceivedBytes().getAndRelease());
+      networkReceive.getReceivedBytes().release();
     }
   }
 

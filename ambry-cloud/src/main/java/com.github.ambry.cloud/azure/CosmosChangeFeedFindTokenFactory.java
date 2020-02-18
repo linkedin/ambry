@@ -1,5 +1,5 @@
 /**
- * Copyright 2019 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.cloud.azure;
 
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
@@ -19,15 +19,17 @@ import java.io.DataInputStream;
 import java.io.IOException;
 
 
-public class CloudFindTokenFactory implements FindTokenFactory {
-
+/**
+ * Factory that creates {@link CosmosChangeFeedFindToken} objects.
+ */
+public class CosmosChangeFeedFindTokenFactory implements FindTokenFactory {
   @Override
   public FindToken getFindToken(DataInputStream stream) throws IOException {
-    return CloudFindToken.fromBytes(stream);
+    return CosmosChangeFeedFindToken.fromBytes(stream);
   }
 
   @Override
   public FindToken getNewFindToken() {
-    return new CloudFindToken();
+    return new CosmosChangeFeedFindToken();
   }
 }

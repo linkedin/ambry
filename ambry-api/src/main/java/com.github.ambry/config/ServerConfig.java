@@ -93,6 +93,13 @@ public class ServerConfig {
   @Default("false")
   public final boolean serverValidateRequestBasedOnStoreState;
 
+  /**
+   * True to enable ambry server handling undelete requests.
+   */
+  @Config("server.handle.undelete.request.enabled")
+  @Default("false")
+  public final boolean serverHandleUndeleteRequestEnabled;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
@@ -110,5 +117,7 @@ public class ServerConfig {
         Utils.splitString(verifiableProperties.getString("server.stats.reports.to.publish", ""), ",");
     serverValidateRequestBasedOnStoreState =
         verifiableProperties.getBoolean("server.validate.request.based.on.store.state", false);
+    serverHandleUndeleteRequestEnabled =
+        verifiableProperties.getBoolean("server.handle.undelete.request.enabled", false);
   }
 }

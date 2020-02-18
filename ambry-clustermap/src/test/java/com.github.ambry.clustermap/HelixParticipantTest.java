@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.IOException;
@@ -91,7 +92,8 @@ public class HelixParticipantTest {
     int port = 2200;
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
     HelixParticipant helixParticipant =
-        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory);
+        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory,
+            new MetricRegistry());
     helixParticipant.participate(Collections.emptyList());
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
@@ -180,9 +182,11 @@ public class HelixParticipantTest {
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
     String instanceNameDummy = ClusterMapUtils.getInstanceName("dummyHost", 2200);
     HelixParticipant helixParticipant =
-        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory);
+        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory,
+            new MetricRegistry());
     HelixParticipant helixParticipantDummy =
-        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(propsDummy)), helixManagerFactory);
+        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(propsDummy)), helixManagerFactory,
+            new MetricRegistry());
     HelixParticipant helixParticipantSpy = Mockito.spy(helixParticipant);
     helixParticipant.participate(Collections.emptyList());
     helixParticipantDummy.participate(Collections.emptyList());
@@ -274,7 +278,8 @@ public class HelixParticipantTest {
     // Connect failure.
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     helixManagerFactory.getHelixManager().beBad = true;
-    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
     try {
       helixParticipant.participate(Collections.emptyList());
       fail("Participation should have failed");
@@ -286,7 +291,7 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.cluster.name", "");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
-      new HelixParticipant(clusterMapConfig, helixManagerFactory);
+      new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
       fail("Instantiation should have failed");
     } catch (IllegalStateException e) {
       // OK
@@ -296,7 +301,7 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", "");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
-      new HelixParticipant(clusterMapConfig, helixManagerFactory);
+      new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
       fail("Instantiation should have failed");
     } catch (IOException e) {
       // OK
@@ -310,7 +315,7 @@ public class HelixParticipantTest {
   @Test
   public void testHelixParticipant() throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
+    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
     participant.participate(Collections.emptyList());
     MockHelixManagerFactory.MockHelixManager helixManager = helixManagerFactory.getHelixManager();
     assertTrue(helixManager.isConnected());
@@ -335,7 +340,7 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(true));
     props.setProperty("clustermap.port", String.valueOf(localNode.getPort()));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
+    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
     // create InstanceConfig for local node. Also, put existing replica into sealed list
     List<String> sealedList = new ArrayList<>();
     sealedList.add(existingReplica.getPartitionId().toPathString());

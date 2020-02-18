@@ -14,8 +14,8 @@
 package com.github.ambry.network;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.utils.AbstractByteBufHolder;
 import io.netty.buffer.ByteBuf;
-import io.netty.util.ReferenceCountUtil;
 
 
 /**
@@ -24,26 +24,33 @@ import io.netty.util.ReferenceCountUtil;
  * was an error sending the request or a non-null ByteBuffer containing the successful response received for this
  * request. Also, this class contains {@link DataNodeId} to which the request is issued.
  */
-public class ResponseInfo {
+public class ResponseInfo extends AbstractByteBufHolder<ResponseInfo> {
   private final RequestInfo requestInfo;
   private final NetworkClientErrorCode error;
   private final DataNodeId dataNode;
-  private Object response;
+  private ByteBuf content;
 
   /**
    * Constructs a ResponseInfo with the given parameters.
    * @param requestInfo the {@link RequestInfo} associated with this response.
    * @param error the error encountered in sending this request, if there is any.
-   * @param response the response received for this request.
+   * @param content the response received for this request.
    */
-  public ResponseInfo(RequestInfo requestInfo, NetworkClientErrorCode error, Object response) {
-    this(requestInfo, error, response, requestInfo == null ? null : requestInfo.getReplicaId().getDataNodeId());
+  public ResponseInfo(RequestInfo requestInfo, NetworkClientErrorCode error, ByteBuf content) {
+    this(requestInfo, error, content, requestInfo == null ? null : requestInfo.getReplicaId().getDataNodeId());
   }
 
-  public ResponseInfo(RequestInfo requestInfo, NetworkClientErrorCode error, Object response, DataNodeId dataNode) {
+  /**
+   * Constructs a ResponseInfo with the given parameters.
+   * @param requestInfo the {@link RequestInfo} associated with this response.
+   * @param error the error encountered in sending this request, if there is any.
+   * @param content the response received for this request.
+   * @param dataNode the {@link DataNodeId} of this request.
+   */
+  public ResponseInfo(RequestInfo requestInfo, NetworkClientErrorCode error, ByteBuf content, DataNodeId dataNode) {
     this.requestInfo = requestInfo;
     this.error = error;
-    this.response = response;
+    this.content = content;
     this.dataNode = dataNode;
   }
 
@@ -62,35 +69,6 @@ public class ResponseInfo {
   }
 
   /**
-   * @return the response received for this request.
-   */
-  public Object getResponse() {
-    return response;
-  }
-
-  /**
-   * Decrease the reference count of underlying response.
-   */
-  public void release() {
-    if (response != null) {
-      ReferenceCountUtil.release(response);
-      response = null;
-    }
-  }
-
-  /**
-   * Tries to call {@link ByteBuf#touch(Object)} if the specified message implements
-   * {@link ByteBuf}.  If the specified message doesn't implement {@link ByteBuf},
-   * this method does nothing.
-   * @param hint hint object.
-   */
-  public void touch(Object hint) {
-    if (response != null) {
-      ReferenceCountUtil.touch(response, hint);
-    }
-  }
-
-  /**
    * @return the {@link DataNodeId} with which the response is associated.
    */
   public DataNodeId getDataNode() {
@@ -99,7 +77,17 @@ public class ResponseInfo {
 
   @Override
   public String toString() {
-    return "ResponseInfo{" + "requestInfo=" + requestInfo + ", error=" + error + ", response=" + response
-        + ", dataNode=" + dataNode + '}';
+    return "ResponseInfo{requestInfo=" + requestInfo + ", error=" + error + ", response=" + content + ", dataNode="
+        + dataNode + '}';
+  }
+
+  @Override
+  public ByteBuf content() {
+    return content;
+  }
+
+  @Override
+  public ResponseInfo replace(ByteBuf content) {
+    return new ResponseInfo(requestInfo, error, content, dataNode);
   }
 }

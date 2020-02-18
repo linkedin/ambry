@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
@@ -81,7 +82,8 @@ public class AmbryReplicaSyncUpManagerTest {
     mockHelixParticipant.currentReplica = currentReplica;
     mockHelixParticipant.replicaSyncUpService = replicaSyncUpService;
     stateModel =
-        new AmbryPartitionStateModel(RESOURCE_NAME, partition.toPathString(), mockHelixParticipant, clusterMapConfig);
+        new AmbryPartitionStateModel(RESOURCE_NAME, partition.toPathString(), mockHelixParticipant, clusterMapConfig,
+            new HelixParticipantMetrics(new MetricRegistry()));
     mockMessage = Mockito.mock(Message.class);
     when(mockMessage.getPartitionName()).thenReturn(partition.toPathString());
     when(mockMessage.getResourceName()).thenReturn(RESOURCE_NAME);

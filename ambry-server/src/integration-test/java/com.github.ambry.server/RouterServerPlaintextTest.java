@@ -18,6 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.server.RouterServerTestFramework.*;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
@@ -74,7 +75,10 @@ public class RouterServerPlaintextTest {
   @BeforeClass
   public static void initializeTests() throws Exception {
     Properties properties = getRouterProperties("DC1");
-    plaintextCluster = new MockCluster(new Properties(), false, SystemTime.getInstance());
+
+    Properties serverProperties = new Properties();
+    TestSSLUtils.addHttp2Properties(serverProperties);
+    plaintextCluster = new MockCluster(serverProperties, false, SystemTime.getInstance());
     MockNotificationSystem notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);
     plaintextCluster.startServers();

@@ -252,7 +252,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected void removeRemoteReplicaInfoFromReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos) {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
       // Thread safe with addRemoteReplicaInfoToReplicaThread.
-      // For ReplicationManger, for same thread, removeRemoteReplicaInfo() ensures lock is held by only one thread at any time.
+      // For ReplicationManger, removeRemoteReplicaInfo() ensures lock is held by only one thread at any time.
       // For CloudBackUpManager with HelixVcrCluster, Helix requires acknowledgement before next message for the same
       // resource, which means methods in HelixVcrStateModel will be executed sequentially for same partition.
       // So do listener actions in addPartition() and removePartition().
