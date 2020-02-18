@@ -656,7 +656,12 @@ public class HelixClusterManager implements ClusterMap {
      * @param replicas list of {@link AmbryReplica} to be added.
      */
     void addReplicasToPartition(AmbryPartition partition, List<AmbryReplica> replicas) {
-      ambryPartitionToAmbryReplicas.computeIfAbsent(partition, k -> ConcurrentHashMap.newKeySet()).addAll(replicas);
+      AmbryPartition currentPartition = addPartitionIfAbsent(partition, replicas.get(0).getCapacityInBytes());
+      ambryPartitionToAmbryReplicas.compute(currentPartition, (k, v) -> {
+        // calling addPartitionIfAbsent guarantees that v is not null
+        v.addAll(replicas);
+        return v;
+      });
       clusterWideAllocatedRawCapacityBytes.getAndAdd(replicas.get(0).getCapacityInBytes() * replicas.size());
     }
 

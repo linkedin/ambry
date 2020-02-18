@@ -16,16 +16,17 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
@@ -298,12 +299,14 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
     ConcurrentHashMap<String, AmbryReplica> currentReplicasOnNode = ambryDataNodeToAmbryReplicas.get(dataNode);
     ConcurrentHashMap<String, AmbryReplica> replicasFromConfig = new ConcurrentHashMap<>();
     Map<String, Map<String, String>> diskInfos = instanceConfig.getRecord().getMapFields();
+    Map<String, AmbryDisk> mountPathToDisk = ambryDataNodeToAmbryDisks.get(dataNode)
+        .stream()
+        .collect(Collectors.toMap(AmbryDisk::getMountPath, disk -> disk));
+    Map<AmbryPartition, List<AmbryReplica>> replicaToAddByPartition = new HashMap<>();
     for (Map.Entry<String, Map<String, String>> entry : diskInfos.entrySet()) {
       String mountPath = entry.getKey();
       Map<String, String> diskInfo = entry.getValue();
-      Optional<AmbryDisk> potentialDisk =
-          ambryDataNodeToAmbryDisks.get(dataNode).stream().filter(d -> d.getMountPath().equals(mountPath)).findFirst();
-      AmbryDisk disk = potentialDisk.orElse(null);
+      AmbryDisk disk = mountPathToDisk.getOrDefault(mountPath, null);
       if (disk == null) {
         logger.info("Temporarily don't support adding new disk to existing node.");
         // TODO support dynamically adding disk in the future
@@ -340,23 +343,37 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
             updateReplicaStateAndOverrideIfNeeded(replica, sealedReplicas, stoppedReplicas);
             // add new created replica to "replicasFromConfig" map
             replicasFromConfig.put(partitionName, replica);
-            // add new replica to specific partition
-            clusterChangeHandlerCallback.addReplicasToPartition(mappedPartition, Collections.singletonList(replica));
+            // Put new replica into partition-to-replica map temporarily (this is to avoid any exception thrown within the
+            // loop before updating "ambryDataNodeToAmbryReplicas" map. If we update call addReplicasToPartition here
+            // immediately, the exception may cause inconsistency between "ambryPartitionToAmbryReplicas" and
+            // "ambryDataNodeToAmbryReplicas")
+            replicaToAddByPartition.put(mappedPartition, Collections.singletonList(replica));
           }
         }
       }
     }
+    // update ambryDataNodeToAmbryReplicas map
+    replicaToAddByPartition.forEach(clusterChangeHandlerCallback::addReplicasToPartition);
     // update ambryDataNodeToAmbryReplicas map by adding "replicasFromConfig"
     ambryDataNodeToAmbryReplicas.put(instanceNameToAmbryDataNode.get(instanceName), replicasFromConfig);
-    // compare replicasFromConfig with current replica set to derive old replicas that are removed
-    Set<AmbryReplica> previousReplicas = new HashSet<>(currentReplicasOnNode.values());
+    // Derive old replicas that are removed and delete them from partition
+/*    Set<AmbryReplica> previousReplicas = new HashSet<>(currentReplicasOnNode.values());
     previousReplicas.removeAll(replicasFromConfig.values());
     for (AmbryReplica ambryReplica : previousReplicas) {
       logger.info("Removing replica {} from existing node {}", ambryReplica.getPartitionId().toPathString(),
           instanceName);
       clusterChangeHandlerCallback.removeReplicasFromPartition(ambryReplica.getPartitionId(),
           Collections.singletonList(ambryReplica));
-    }
+    }*/
+    currentReplicasOnNode.keySet()
+        .stream()
+        .filter(partitionName -> !replicasFromConfig.containsKey(partitionName))
+        .forEach(pName -> {
+          logger.info("Removing replica {} from existing node {}", pName, instanceName);
+          AmbryReplica ambryReplica = currentReplicasOnNode.get(pName);
+          clusterChangeHandlerCallback.removeReplicasFromPartition(ambryReplica.getPartitionId(),
+              Collections.singletonList(ambryReplica));
+        });
   }
 
   /**
