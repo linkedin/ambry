@@ -18,8 +18,7 @@ addons:
 branches:
   except: # don't build tags
     - /^v\d/
-install:
- - true # skips unnecessary ./gradlew assemble (https://docs.travis-ci.com/user/customizing-the-build/#Skipping-the-Installation-Step) 
+install: skip # skips unnecessary ./gradlew assemble (https://docs.travis-ci.com/user/job-lifecycle/#skipping-the-installation-phase) 
 script:
   - ./travis-build.sh
 after_success:

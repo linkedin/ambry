@@ -24,7 +24,7 @@ apply from: file('gradle/environment.gradle')
 apply from: file("gradle/dependency-versions.gradle")
 apply from: file("gradle/ci-release.gradle")
 
-allprojects {    
+allprojects {
     group = "com.github.ambry"
     version = rootProject.version //TODO: fix in https://github.com/shipkit/org.shipkit.shipkit-auto-version
 
