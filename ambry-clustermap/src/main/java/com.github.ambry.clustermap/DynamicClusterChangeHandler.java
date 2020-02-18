@@ -357,14 +357,6 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
     // update ambryDataNodeToAmbryReplicas map by adding "replicasFromConfig"
     ambryDataNodeToAmbryReplicas.put(instanceNameToAmbryDataNode.get(instanceName), replicasFromConfig);
     // Derive old replicas that are removed and delete them from partition
-/*    Set<AmbryReplica> previousReplicas = new HashSet<>(currentReplicasOnNode.values());
-    previousReplicas.removeAll(replicasFromConfig.values());
-    for (AmbryReplica ambryReplica : previousReplicas) {
-      logger.info("Removing replica {} from existing node {}", ambryReplica.getPartitionId().toPathString(),
-          instanceName);
-      clusterChangeHandlerCallback.removeReplicasFromPartition(ambryReplica.getPartitionId(),
-          Collections.singletonList(ambryReplica));
-    }*/
     currentReplicasOnNode.keySet()
         .stream()
         .filter(partitionName -> !replicasFromConfig.containsKey(partitionName))
