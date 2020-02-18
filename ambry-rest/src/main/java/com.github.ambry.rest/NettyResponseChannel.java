@@ -67,7 +67,7 @@ import org.slf4j.LoggerFactory;
  * Netty specific implementation of {@link RestResponseChannel} used to return responses via Netty. It is supported by
  * an underlying Netty channel whose handle this class has in the form of a {@link ChannelHandlerContext}.
  * <p/>
- * Data is sent in the order that threads call {@link #write(ByteBuffer, Callback)}.
+ * Data is sent in the order that threads call {@link #write(ByteBuf, Callback)}.
  * <p/>
  * If a write through this class fails at any time, the underlying channel will be closed immediately and no more writes
  * will be accepted and all scheduled writes will be notified of the failure.
@@ -127,6 +127,23 @@ class NettyResponseChannel implements RestResponseChannel {
 
   @Override
   public Future<Long> write(ByteBuffer src, Callback<Long> callback) {
+    return write(Unpooled.wrappedBuffer(src), new Callback<Long>() {
+      @Override
+      public void onCompletion(Long result, Exception exception) {
+        if (exception == null) {
+          src.position(src.limit());
+        } else {
+          src.position(result.intValue());
+        }
+        if (callback != null) {
+          callback.onCompletion(result, exception);
+        }
+      }
+    });
+  }
+
+  @Override
+  public Future<Long> write(ByteBuf src, Callback<Long> callback) {
     long writeProcessingStartTime = System.currentTimeMillis();
     if (!responseMetadataWriteInitiated.get()) {
       maybeWriteResponseMetadata(responseMetadata, new ResponseMetadataWriteListener());
@@ -151,7 +168,7 @@ class NettyResponseChannel implements RestResponseChannel {
       logger.debug("Scheduling a chunk cleanup on channel {} because Content-Length is 0", ctx.channel());
       Exception exception = null;
       // this is only allowed to be a 0 sized buffer.
-      if (src.remaining() > 0) {
+      if (src.readableBytes() > 0) {
         exception = new IllegalStateException("Provided non zero size content after setting Content-Length to 0");
         if (!writeFuture.isDone()) {
           writeFuture.setFailure(exception);
@@ -750,7 +767,7 @@ class NettyResponseChannel implements RestResponseChannel {
     /**
      * The bytes associated with this chunk.
      */
-    final ByteBuffer buffer;
+    final ByteBuf buffer;
     /**
      * The number of bytes that will need to be written.
      */
@@ -773,12 +790,12 @@ class NettyResponseChannel implements RestResponseChannel {
 
     /**
      * Creates a chunk.
-     * @param buffer the {@link ByteBuffer} that forms the data of this chunk.
+     * @param buffer the {@link ByteBuf} that forms the data of this chunk.
      * @param callback the {@link Callback} to invoke when {@link #writeCompleteThreshold} is reached.
      */
-    Chunk(ByteBuffer buffer, Callback<Long> callback) {
+    Chunk(ByteBuf buffer, Callback<Long> callback) {
       this.buffer = buffer;
-      bytesToBeWritten = buffer.remaining();
+      bytesToBeWritten = buffer.readableBytes();
       this.callback = callback;
       writeCompleteThreshold = totalBytesReceived.addAndGet(bytesToBeWritten);
       chunksToWriteCount.incrementAndGet();
@@ -811,7 +828,6 @@ class NettyResponseChannel implements RestResponseChannel {
       long bytesWritten = 0;
       if (exception == null) {
         bytesWritten = bytesToBeWritten;
-        buffer.position(buffer.limit());
       }
       nettyMetrics.bytesWriteRate.mark(bytesWritten);
       future.done(bytesWritten, exception);
@@ -877,14 +893,13 @@ class NettyResponseChannel implements RestResponseChannel {
       Chunk chunk = chunksToWrite.poll();
       if (chunk != null) {
         chunk.onDequeue();
-        ByteBuf buf = Unpooled.wrappedBuffer(chunk.buffer);
-        progress.addAndGet(chunk.buffer.remaining());
+        progress.addAndGet(chunk.buffer.readableBytes());
         chunksAwaitingCallback.add(chunk);
         if (chunk.isLast) {
-          content = new DefaultLastHttpContent(buf);
+          content = new DefaultLastHttpContent(chunk.buffer);
           sentLastChunk = true;
         } else {
-          content = new DefaultHttpContent(buf);
+          content = new DefaultHttpContent(chunk.buffer);
         }
       } else if (allChunksWritten() && !sentLastChunk) {
         // Send last chunk for this input

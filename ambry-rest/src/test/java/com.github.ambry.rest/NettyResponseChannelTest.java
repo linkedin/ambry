@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Callback;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
@@ -64,6 +65,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -79,10 +82,21 @@ import static org.mockito.Mockito.*;
  * {@link MockNettyMessageProcessor#handleContent(HttpContent)}.
  */
 public class NettyResponseChannelTest {
+  private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
 
   /**
    * Tests the common workflow of the {@link NettyResponseChannel} i.e., add some content to response body via
-   * {@link NettyResponseChannel#write(ByteBuffer, Callback)} and then complete the response.
+   * {@link NettyResponseChannel#write(ByteBuf, Callback)} and then complete the response.
    * <p/>
    * These responses have the header Transfer-Encoding set to chunked.
    * @throws Exception
@@ -1400,9 +1414,9 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   private void handleContent(HttpContent httpContent) throws Exception {
     if (request != null) {
       boolean isLast = httpContent instanceof LastHttpContent;
-      ByteBuffer content = ByteBuffer.wrap(httpContent.content().array());
       ChannelWriteCallback callback = new ChannelWriteCallback();
-      callback.setFuture(restResponseChannel.write(content, callback));
+      // Retain this content since SimpleChannelInboundHandler would auto release it after the channelRead0.
+      callback.setFuture(restResponseChannel.write(httpContent.content().retain(), callback));
       writeCallbacksToVerify.add(callback);
       if (isLast) {
         restResponseChannel.onResponseComplete(null);
