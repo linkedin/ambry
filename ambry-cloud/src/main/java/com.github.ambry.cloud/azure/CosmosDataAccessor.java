@@ -182,13 +182,10 @@ public class CosmosDataAccessor {
     try {
       Iterator<FeedResponse<Document>> iterator = executeCosmosQuery(querySpec, feedOptions, timer).getIterator();
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
-      double requestCharge = 0;
       while (iterator.hasNext()) {
         FeedResponse<Document> response = iterator.next();
-        requestCharge += response.getRequestCharge();
         response.getResults().iterator().forEachRemaining(doc -> metadataList.add(createMetadataFromDocument(doc)));
       }
-      // TODO: Track request charge per record (requestCharge / metadataList.size())
       return metadataList;
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
