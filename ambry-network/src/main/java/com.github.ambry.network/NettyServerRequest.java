@@ -19,17 +19,13 @@ import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import io.netty.buffer.ByteBuf;
-import java.io.IOException;
 import java.io.InputStream;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
  * A wrapper class at the network layer for NettyRequest based RestRequest.
  */
 public class NettyServerRequest extends AbstractByteBufHolder<NettyServerRequest> implements NetworkRequest {
-  private static final Logger LOGGER = LoggerFactory.getLogger(NettyServerRequest.class);
   private final InputStream inputStream;
   private final RestResponseChannel restResponseChannel;
   private final RestRequest restRequest;
