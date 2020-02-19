@@ -48,7 +48,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -371,15 +370,7 @@ class GetBlobOperation extends GetOperation {
       public void onCompletion(Long result, Exception exception) {
         bytesWritten.addAndGet(result);
         if (exception != null) {
-          if (exception instanceof RouterException) {
-            setOperationException(exception);
-          } else if (exception instanceof ClosedChannelException) {
-            setOperationException(new RouterException(
-                "The ReadableStreamChannel for blob data has been closed by the user before all chunks were written out.",
-                RouterErrorCode.ChannelClosed));
-          } else {
-            setOperationException(exception);
-          }
+          setOperationException(exception);
         }
         int currentNumChunk = numChunksWrittenOut.get();
         ByteBuf byteBuf = chunkIndexToBufWaitingForRelease.remove(currentNumChunk);
