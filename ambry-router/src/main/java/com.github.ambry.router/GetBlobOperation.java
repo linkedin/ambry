@@ -152,12 +152,6 @@ class GetBlobOperation extends GetOperation {
     if (chunkIndexToBuf == null) {
       return;
     }
-    for (Integer key : chunkIndexToBufWaitingForRelease.keySet()) {
-      ByteBuf byteBuf = chunkIndexToBufWaitingForRelease.remove(key);
-      if (byteBuf != null) {
-        byteBuf.release();
-      }
-    }
     for (Integer key : chunkIndexToBuf.keySet()) {
       ByteBuf byteBuf = chunkIndexToBuf.remove(key);
       if (byteBuf != null) {
@@ -451,8 +445,8 @@ class GetBlobOperation extends GetOperation {
         while (operationException.get() == null && chunkIndexToBuf.containsKey(indexOfNextChunkToWriteOut)) {
           ByteBuf byteBuf = chunkIndexToBuf.remove(indexOfNextChunkToWriteOut);
           if (byteBuf != null) {
-            asyncWritableChannel.write(byteBuf.nioBuffer(), chunkAsyncWriteCallback);
             chunkIndexToBufWaitingForRelease.put(indexOfNextChunkToWriteOut, byteBuf);
+            asyncWritableChannel.write(byteBuf.nioBuffer(), chunkAsyncWriteCallback);
             indexOfNextChunkToWriteOut++;
           }
         }

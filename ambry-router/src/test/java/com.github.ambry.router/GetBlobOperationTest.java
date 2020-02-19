@@ -1212,6 +1212,9 @@ public class GetBlobOperationTest {
                   chunksLeftToRead--;
                 }
                 result.getBlobResult.getBlobDataChannel().close();
+                while (writableChannel.getNextChunk(100) != null) {
+                  writableChannel.resolveOldestChunk(null);
+                }
               } catch (Exception e) {
                 callbackException.set(e);
               } finally {
