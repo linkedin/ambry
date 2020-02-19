@@ -391,8 +391,6 @@ class GetBlobOperation extends GetOperation {
       }
     };
 
-    private Object closeLock = new Object();
-
     /**
      * The bytes that will be read from this channel is not known until the read is complete.
      * @return -1
