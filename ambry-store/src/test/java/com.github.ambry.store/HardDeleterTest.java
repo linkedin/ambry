@@ -29,12 +29,16 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -72,28 +76,45 @@ public class HardDeleterTest {
       logSegmentName = log.getFirstSegment().getName();
     }
 
-    void add(MockId id) throws IOException, StoreException {
+    void add(MockId id) throws StoreException {
       Offset offset = new Offset(logSegmentName, nextOffset);
       short acccountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       IndexValue indexValue =
-          new IndexValue(sizeOfEntry, offset, IndexValue.FLAGS_DEFAULT_VALUE, 12345, time.milliseconds(), acccountId,
-              containerId, (short) 0);
+          new IndexValue(sizeOfEntry, offset, IndexValue.FLAGS_DEFAULT_VALUE, time.milliseconds() + 12345,
+              time.milliseconds(), acccountId, containerId, (short) 0);
       index.addToIndex(new IndexEntry(id, indexValue),
           new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
       ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
+      byteBuffer.put(TestUtils.getRandomBytes((int) sizeOfEntry));
+      byteBuffer.flip();
       log.appendFrom(byteBuffer);
       offsetMap.put(nextOffset, new MessageInfo(id, sizeOfEntry, acccountId, containerId, time.milliseconds()));
       nextOffset += sizeOfEntry;
     }
 
-    void delete(MockId id) throws IOException, StoreException {
+    void delete(MockId id) throws StoreException {
       Offset offset = new Offset(logSegmentName, nextOffset);
       index.markAsDeleted(id, new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)),
           time.milliseconds());
       ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
       log.appendFrom(byteBuffer);
       nextOffset += sizeOfEntry;
+    }
+
+    void undelete(MockId id) throws StoreException {
+      Offset offset = new Offset(logSegmentName, nextOffset);
+      index.markAsUndeleted(id, new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)),
+          time.milliseconds());
+      ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
+      log.appendFrom(byteBuffer);
+      nextOffset += sizeOfEntry;
+    }
+
+    ByteBuffer readRecord(StoreKey key) throws IOException, StoreException {
+      BlobReadOptions readOptions = index.getBlobReadInfo(key, EnumSet.allOf(StoreGetOptions.class));
+      readOptions.doPrefetch(0, readOptions.getMessageInfo().getSize());
+      return readOptions.getPrefetchedData();
     }
 
     @Override
@@ -121,10 +142,12 @@ public class HardDeleterTest {
           if (!hasNext()) {
             throw new NoSuchElementException();
           }
-          --count;
-          ByteBuffer buf = ByteBuffer.allocate((int) sizeOfEntry);
+          count--;
+          ByteBuffer buf = ByteBuffer.allocate(100);
           byte[] recoveryInfo = new byte[100];
           Arrays.fill(recoveryInfo, (byte) 0);
+          buf.put(recoveryInfo);
+          buf.flip();
           ByteBufferInputStream stream = new ByteBufferInputStream(buf);
           ReadableByteChannel channel = Channels.newChannel(stream);
           HardDeleteInfo hardDeleteInfo = new HardDeleteInfo(channel, 100, 100, recoveryInfo);
@@ -217,8 +240,6 @@ public class HardDeleterTest {
     }
     helper.exception = null;
     index.hardDelete();
-    index.persistAndAdvanceStartTokenSafeToPersist();
-    index.pruneHardDeleteRecoveryRange();
     helper.exception = new IOException(StoreException.IO_ERROR_STR);
     try {
       index.performHardDeleteRecovery();
@@ -253,6 +274,17 @@ public class HardDeleterTest {
       MockId blobId08 = new MockId("id08");
       MockId blobId09 = new MockId("id09");
       MockId blobId10 = new MockId("id10");
+      List<StoreKey> keys = new ArrayList<>();
+      keys.add(blobId01);
+      keys.add(blobId02);
+      keys.add(blobId03);
+      keys.add(blobId04);
+      keys.add(blobId05);
+      keys.add(blobId06);
+      keys.add(blobId07);
+      keys.add(blobId08);
+      keys.add(blobId09);
+      keys.add(blobId10);
 
       helper.add(blobId01);
       helper.add(blobId02);
@@ -260,8 +292,8 @@ public class HardDeleterTest {
       helper.add(blobId04);
 
       helper.delete(blobId03);
-
       helper.add(blobId05);
+
       helper.add(blobId06);
       helper.add(blobId07);
 
@@ -270,80 +302,162 @@ public class HardDeleterTest {
 
       helper.add(blobId08);
       helper.add(blobId09);
+
+      helper.delete(blobId01);
       helper.add(blobId10);
 
       helper.delete(blobId10);
-      helper.delete(blobId01);
       helper.delete(blobId08);
+
+      helper.undelete(blobId03);
+      helper.undelete(blobId01);
 
       // Let enough time to pass so that the above records become eligible for hard deletes.
       time.sleep(TimeUnit.DAYS.toMillis(2));
 
+      boolean recordContentChecked = false;
       for (int i = 0; i < 3; i++) {
         assertEquals("There should have been no progress reported for hard deletes", 0, index.getHardDeleteProgress());
         // The first * shows where startTokenSafeToPersist is
         // The second * shows where startToken/endToken are before the operations.
         // Note since we are only depicting values before and after hardDelete() is done, startToken and endToken
         // will be the same.
+        StoreFindToken token = (StoreFindToken) index.hardDeleter.getStartTokenSafeToPersistTo();
+        assertEquals("Token type mismatch", token.getType(), FindTokenType.Uninitialized);
+        Set<StoreKey> hardDeletedKeys = new HashSet<>();
 
-        // indexes: **[1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
-        // journal:                                       [10 10d 1d 8]
+        // indexes: **[1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10] [8d 10d] [1u 3u]
+        // journal:                                                     [1d 8d 3u 1u]
         boolean tokenMovedForward = index.hardDelete();
         Assert.assertTrue(tokenMovedForward);
+        if (!recordContentChecked) {
+          checkRecordHardDeleted(keys, hardDeletedKeys);
+        }
+        assertEquals("Recovery range size mismatch", 0, index.hardDeleter.getHardDeleteRecoveryRange().getSize());
         // startToken = endToken = 2.
 
         // call into the log flush hooks so that startTokenSafeToPersist = startToken = 2.
         index.persistAndAdvanceStartTokenSafeToPersist();
+        token = (StoreFindToken) index.hardDeleter.getStartTokenSafeToPersistTo();
+        assertEquals("Token type mismatch", token.getType(), FindTokenType.IndexBased);
+        assertEquals("Token key mismatch", token.getStoreKey(), blobId02);
+        // Token still points to the first index segment, and the start offset of the first segment is 0
+        assertEquals("Token offset mismatch", token.getOffset().getOffset(), 0);
 
-        // indexes: [1 2**] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
-        // journal:                                       [10 10d 1d 8]
+        // indexes: [1 2**] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10] [8d 10d] [1u 3u]
+        // journal:                                                     [1d 8d 3u 1u]
         tokenMovedForward = index.hardDelete();
         Assert.assertTrue(tokenMovedForward);
+        if (!recordContentChecked) {
+          checkRecordHardDeleted(keys, hardDeletedKeys);
+        }
+        assertEquals("Recovery range size mismatch", 0, index.hardDeleter.getHardDeleteRecoveryRange().getSize());
+
+        // Without moving the token forward, make sure it's still the old value.
+        token = (StoreFindToken) index.hardDeleter.getStartTokenSafeToPersistTo();
+        assertEquals("Token type mismatch", token.getType(), FindTokenType.IndexBased);
+        assertEquals("Token key mismatch", token.getStoreKey(), blobId02);
+        assertEquals("Token offset mismatch", token.getOffset().getOffset(), 0);
         // startToken = endToken = 4.
 
-        // indexes: [1 2*] [3 4*] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
-        // journal:                                       [10 10d 1d 8]
+        // indexes: [1 2*] [3 4*] [3d 5] [6 7] [2d 6d] [8 9] [1d 10] [8d 10d] [1u 3u]
+        // journal:                                                     [10d 8d 3u 1u]
         tokenMovedForward = index.hardDelete();
         Assert.assertTrue(tokenMovedForward);
+        // blob03 is deleted in this index segment, but it's undeleted later.
+        if (!recordContentChecked) {
+          checkRecordHardDeleted(keys, hardDeletedKeys);
+        }
+        assertEquals("Recovery range size mismatch", 0, index.hardDeleter.getHardDeleteRecoveryRange().getSize());
         // startToken = 5, endToken = 5, startTokenSafeToPersist = 2
 
-        // indexes: [1 2*] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10d] [8]
-        // journal:                                       [10 10d 1d 8]
+        // indexes: [1 2*] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10] [8d 10d] [1u 3u]
+        // journal:                                                     [10d 8d 3u 1u]
         index.persistAndAdvanceStartTokenSafeToPersist();
+        token = (StoreFindToken) index.hardDeleter.getStartTokenSafeToPersistTo();
+        assertEquals("Token type mismatch", token.getType(), FindTokenType.IndexBased);
+        assertEquals("Token key mismatch", token.getStoreKey(), blobId05);
+        // Token moves to third segment, the start offset of the third segment is 4 * sizeOfEntry
+        assertEquals("Token offset mismatch", token.getOffset().getOffset(), 2 * 2 * helper.sizeOfEntry);
         tokenMovedForward = index.hardDelete();
         Assert.assertTrue(tokenMovedForward);
+        if (!recordContentChecked) {
+          checkRecordHardDeleted(keys, hardDeletedKeys);
+        }
+        assertEquals("Recovery range size mismatch", 0, index.hardDeleter.getHardDeleteRecoveryRange().getSize());
         // startToken = 7, endToken = 7, starttokenSafeToPersist = 5
         // 3d just got pruned.
 
-        // indexes: [1 2] [3 4] [3d 5*] [6 7*] [2d 6d] [8 9] [1d 10d] [8]
-        // journal:                                       [10 10d 1d 8]
+        // indexes: [1 2] [3 4] [3d 5*] [6 7*] [2d 6d] [8 9] [1d 10] [8d 10d] [1u 3u]
+        // journal:                                                     [10d 8d 3u 1u]
         tokenMovedForward = index.hardDelete();
         Assert.assertTrue(tokenMovedForward);
+        hardDeletedKeys.add(blobId02);
+        hardDeletedKeys.add(blobId06);
+        if (!recordContentChecked) {
+          checkRecordHardDeleted(keys, hardDeletedKeys);
+        }
+        // blobid02 and blobid06
+        assertEquals("Recovery range size mismatch", 2, index.hardDeleter.getHardDeleteRecoveryRange().getSize());
 
-        // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d*] [8 9] [1d 10d] [8]
-        // journal:                                       [10 10d 1d 8]
+        // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d*] [8 9] [1d 10] [8d 10d] [1u 3u]
+        // journal:                                                     [10d 8d 3u 1u]
         tokenMovedForward = index.hardDelete();
         Assert.assertTrue(tokenMovedForward);
+        if (!recordContentChecked) {
+          checkRecordHardDeleted(keys, hardDeletedKeys);
+        }
+        // Didn't perform hard delete, so blobid02 and blobid06
+        assertEquals("Recovery range size mismatch", 2, index.hardDeleter.getHardDeleteRecoveryRange().getSize());
 
-        // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
-        // journal:                                       [10 10d 1d 8]
+        // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9*] [1d 10] [8d 10d] [1u 3u]
+        // journal:                                                     [10d 8d 3u 1u]
         index.persistAndAdvanceStartTokenSafeToPersist();
+        token = (StoreFindToken) index.hardDeleter.getStartTokenSafeToPersistTo();
+        assertEquals("Token type mismatch", token.getType(), FindTokenType.IndexBased);
+        assertEquals("Token key mismatch", token.getStoreKey(), blobId09);
+        assertEquals("Token offset mismatch", token.getOffset().getOffset(), 5 * 2 * helper.sizeOfEntry);
         tokenMovedForward = index.hardDelete();
         Assert.assertTrue(tokenMovedForward);
+        // blob01 is deleted in this index segment, but it's undeleted later
+        if (!recordContentChecked) {
+          checkRecordHardDeleted(keys, hardDeletedKeys);
+        }
+        assertEquals("Recovery range size mismatch", 0, index.hardDeleter.getHardDeleteRecoveryRange().getSize());
 
-        // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
-        // journal:                                       [10 10d* 1d 8]
-
+        // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10*] [8d 10d] [1u 3u]
+        // journal:                                                     [10d 8d 3u 1u]
         tokenMovedForward = index.hardDelete();
         Assert.assertTrue(tokenMovedForward);
+        hardDeletedKeys.add(blobId10);
+        hardDeletedKeys.add(blobId08);
+        if (!recordContentChecked) {
+          checkRecordHardDeleted(keys, hardDeletedKeys);
+        }
+        // blobid08 and blobid10
+        assertEquals("Recovery range size mismatch", 2, index.hardDeleter.getHardDeleteRecoveryRange().getSize());
 
-        // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
-        // journal:                                       [10 10d 1d 8*]
-        // All caught up, so token should not have moved forward.
+        // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10] [8d 10d] [1u 3u]
+        // journal:                                                     [10d 8d* 3u 1u]
+        tokenMovedForward = index.hardDelete();
+        Assert.assertTrue(tokenMovedForward);
+        if (!recordContentChecked) {
+          checkRecordHardDeleted(keys, hardDeletedKeys);
+        }
+        assertEquals("Recovery range size mismatch", 2, index.hardDeleter.getHardDeleteRecoveryRange().getSize());
+
+        // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10] [8d 10d] [1u 3u]
+        // journal:                                                     [10d 8d 3u 1u*]
+        // All caught up, hardDelete should not move token forward.
         tokenMovedForward = index.hardDelete();
         Assert.assertFalse(tokenMovedForward);
 
         index.persistAndAdvanceStartTokenSafeToPersist();
+        token = (StoreFindToken) index.hardDeleter.getStartTokenSafeToPersistTo();
+        assertEquals("Token type mismatch", token.getType(), FindTokenType.JournalBased);
+        // JournalBased Token is not inclusive, so offset pointing to 1u is the offset of 1u.
+        assertEquals("Token offset mismatch", token.getOffset().getOffset(), 17 * helper.sizeOfEntry);
+        assertEquals("Recovery range size mismatch", 0, index.hardDeleter.getHardDeleteRecoveryRange().getSize());
 
         // directly prune the recovery range completely (which should happen since we flushed till the endToken).
         index.pruneHardDeleteRecoveryRange();
@@ -354,11 +468,29 @@ public class HardDeleterTest {
 
         // reset the internal tokens
         index.resetHardDeleterTokens();
+        recordContentChecked = true;
       }
       index.close(false);
     } catch (Exception e) {
       e.printStackTrace();
       assertEquals(false, true);
+    }
+  }
+
+  private void checkRecordHardDeleted(List<StoreKey> allKeys, Set<StoreKey> deletedKeys)
+      throws IOException, StoreException {
+    byte[] zeros = new byte[100];
+    Arrays.fill(zeros, (byte) 0);
+    for (StoreKey key : allKeys) {
+      ByteBuffer recordContent = helper.readRecord(key);
+      byte[] obtained = new byte[100];
+      recordContent.position(100);
+      recordContent.get(obtained, 0, 100);
+      if (deletedKeys.contains(key)) {
+        assertArrayEquals("HardDeleted Put Record should be zeroed out", obtained, zeros);
+      } else {
+        assertFalse("HardDeleted Put Record should not be zeroed out", Arrays.equals(zeros, obtained));
+      }
     }
   }
 
