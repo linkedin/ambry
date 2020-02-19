@@ -13,18 +13,11 @@
  */
 package com.github.ambry.store;
 
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 
 
 public class DummyMessageStoreHardDelete implements MessageStoreHardDelete {
-  HashMap<Long, MessageInfo> dummyMap;
-
-  public DummyMessageStoreHardDelete(HashMap<Long, MessageInfo> dummyMap) {
-    this.dummyMap = dummyMap;
-  }
-
   public DummyMessageStoreHardDelete() {
   }
 
@@ -47,11 +40,6 @@ public class DummyMessageStoreHardDelete implements MessageStoreHardDelete {
         throw new UnsupportedOperationException();
       }
     };
-  }
-
-  @Override
-  public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
-    return dummyMap.get(offset);
   }
 }
 

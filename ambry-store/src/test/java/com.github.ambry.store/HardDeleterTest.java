@@ -139,11 +139,6 @@ public class HardDeleterTest {
 
       return new MockMessageStoreHardDeleteIterator(readSet);
     }
-
-    @Override
-    public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
-      return offsetMap.get(offset);
-    }
   }
 
   private MockIndex index = null;

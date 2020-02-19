@@ -19,7 +19,6 @@ import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
-import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -162,25 +161,6 @@ public class IndexTest {
    */
   @Test
   public void getBlobReadInfoTest() throws StoreException, IOException {
-    final AtomicReference<MockId> idRequested = new AtomicReference<>();
-    state.hardDelete = new MessageStoreHardDelete() {
-      @Override
-      public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
-          List<byte[]> recoveryInfoList) throws IOException {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) throws IOException {
-        MockId id = idRequested.get();
-        if (id == null) {
-          throw new IllegalStateException("No ID was set before making a call to getBlobReadInfo()");
-        }
-        IndexValue value = state.getExpectedValue(id, true);
-        return new MessageInfo(id, value.getSize(), value.getExpiresAtMs(), value.getAccountId(),
-            value.getContainerId(), value.getOperationTimeInMs());
-      }
-    };
     state.reloadIndex(true, false);
     List<EnumSet<StoreGetOptions>> allCombos = new ArrayList<>();
     allCombos.add(EnumSet.noneOf(StoreGetOptions.class));
@@ -188,7 +168,6 @@ public class IndexTest {
     allCombos.add(EnumSet.of(StoreGetOptions.Store_Include_Deleted));
     allCombos.add(EnumSet.allOf(StoreGetOptions.class));
     for (MockId id : state.allKeys.keySet()) {
-      idRequested.set(id);
       for (EnumSet<StoreGetOptions> getOptions : allCombos) {
         if (state.liveKeys.contains(id)) {
           verifyBlobReadOptions(id, getOptions, null);
@@ -207,19 +186,6 @@ public class IndexTest {
     // try to get BlobReadOption for a non existent key
     MockId nonExistentId = state.getUniqueId();
     verifyBlobReadOptions(nonExistentId, EnumSet.allOf(StoreGetOptions.class), StoreErrorCodes.ID_Not_Found);
-    // test getBlobReadInfo encounters I/O error
-    MessageStoreHardDelete mockHardDelete = Mockito.mock(MessageStoreHardDelete.class);
-    state.hardDelete = mockHardDelete;
-    state.reloadIndex(true, false);
-    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockHardDelete)
-        .getMessageInfo(any(Read.class), anyLong(), any(StoreKeyFactory.class));
-    verifyBlobReadOptions(state.deletedKeyWithPutInSameSegment, EnumSet.of(StoreGetOptions.Store_Include_Deleted),
-        StoreErrorCodes.IOError);
-    // test that when IOException's error message is null, the error code should be Unknown_Error
-    doThrow(new IOException()).when(mockHardDelete)
-        .getMessageInfo(any(Read.class), anyLong(), any(StoreKeyFactory.class));
-    verifyBlobReadOptions(state.deletedKeyWithPutInSameSegment, EnumSet.of(StoreGetOptions.Store_Include_Deleted),
-        StoreErrorCodes.Unknown_Error);
   }
 
   /**
