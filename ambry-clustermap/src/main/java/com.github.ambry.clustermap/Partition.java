@@ -44,7 +44,7 @@ class Partition implements PartitionId {
   private static final short Current_Version = 1;
   private static final int Partition_Size_In_Bytes = Version_Field_Size_In_Bytes + 8;
 
-  private final List<Replica> replicas;
+  private final List<ReplicaId> replicas;
   private final Long id;
   PartitionState partitionState;
   long replicaCapacityInBytes;
@@ -76,7 +76,7 @@ class Partition implements PartitionId {
         : hardwareLayout.getClusterMapConfig().clusterMapDefaultPartitionClass;
     this.partitionState = PartitionState.valueOf(jsonObject.getString("partitionState"));
     this.replicaCapacityInBytes = jsonObject.getLong("replicaCapacityInBytes");
-    this.replicas = new ArrayList<Replica>(jsonObject.getJSONArray("replicas").length());
+    this.replicas = new ArrayList<ReplicaId>(jsonObject.getJSONArray("replicas").length());
     for (int i = 0; i < jsonObject.getJSONArray("replicas").length(); ++i) {
       this.replicas.add(i, new Replica(hardwareLayout, this, jsonObject.getJSONArray("replicas").getJSONObject(i)));
     }
@@ -128,7 +128,7 @@ class Partition implements PartitionId {
     return replicaCapacityInBytes;
   }
 
-  List<Replica> getReplicas() {
+  List<ReplicaId> getReplicas() {
     return replicas;
   }
 
@@ -164,7 +164,7 @@ class Partition implements PartitionId {
   }
 
   // For constructing new Partition
-  void addReplica(Replica replica) {
+  void addReplica(ReplicaId replica) {
     replicas.add(replica);
 
     validate();
@@ -172,15 +172,15 @@ class Partition implements PartitionId {
 
   private void validateConstraints() {
     // Ensure each replica is on distinct Disk and DataNode.
-    Set<DataNode> dataNodeSet = new HashSet<DataNode>();
-    Set<Disk> diskSet = new HashSet<Disk>();
+    Set<DataNodeId> dataNodeSet = new HashSet<>();
+    Set<DiskId> diskSet = new HashSet<>();
 
-    for (Replica replica : replicas) {
-      if (!diskSet.add((Disk) replica.getDiskId())) {
+    for (ReplicaId replica : replicas) {
+      if (!diskSet.add(replica.getDiskId())) {
         throw new IllegalStateException(
             "Multiple Replicas for same Partition are layed out on same Disk: " + toString());
       }
-      if (!dataNodeSet.add(((Disk) replica.getDiskId()).getDataNode())) {
+      if (!dataNodeSet.add((replica.getDiskId()).getDataNodeId())) {
         throw new IllegalStateException(
             "Multiple Replicas for same Partition are layed out on same DataNode: " + toString());
       }
@@ -200,8 +200,8 @@ class Partition implements PartitionId {
         .put("partitionState", partitionState.name())
         .put("replicaCapacityInBytes", replicaCapacityInBytes)
         .put("replicas", new JSONArray());
-    for (Replica replica : replicas) {
-      jsonObject.accumulate("replicas", replica.toJSONObject());
+    for (ReplicaId replica : replicas) {
+      jsonObject.accumulate("replicas", ((Replica) replica).toJSONObject());
     }
     return jsonObject;
   }

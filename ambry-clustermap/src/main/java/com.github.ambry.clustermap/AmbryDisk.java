@@ -113,6 +113,11 @@ class AmbryDisk implements DiskId, Resource {
     return datanode;
   }
 
+  @Override
+  public DataNodeId getDataNodeId() {
+    return datanode;
+  }
+
   /**
    * Set the hard state of this disk dynamically.
    * @param newState the updated {@link HardwareState}

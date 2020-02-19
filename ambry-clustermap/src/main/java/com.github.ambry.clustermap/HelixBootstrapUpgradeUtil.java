@@ -974,7 +974,7 @@ class HelixBootstrapUpgradeUtil {
     HelixAdmin admin = adminForDc.get(dc.getName());
     Set<String> allInstancesInHelix = new HashSet<>(admin.getInstancesInCluster(clusterName));
     for (DataNodeId dataNodeId : dc.getDataNodes()) {
-      Map<String, Map<String, Replica>> mountPathToReplicas = getMountPathToReplicas(staticClusterMap, dataNodeId);
+      Map<String, Map<String, ReplicaId>> mountPathToReplicas = getMountPathToReplicas(staticClusterMap, dataNodeId);
       DataNode dataNode = (DataNode) dataNodeId;
       String instanceName = getInstanceName(dataNode);
       ensureOrThrow(allInstancesInHelix.remove(instanceName), "Instance not present in Helix " + instanceName);
@@ -990,7 +990,7 @@ class HelixBootstrapUpgradeUtil {
             "Capacity mismatch for instance " + instanceName + " disk " + disk.getMountPath());
 
         Set<String> replicasInClusterMap;
-        Map<String, Replica> replicaList = mountPathToReplicas.get(disk.getMountPath());
+        Map<String, ReplicaId> replicaList = mountPathToReplicas.get(disk.getMountPath());
         replicasInClusterMap = new HashSet<>();
         if (replicaList != null) {
           replicasInClusterMap.addAll(replicaList.keySet());
@@ -1002,7 +1002,7 @@ class HelixBootstrapUpgradeUtil {
           replicasInHelix = new HashSet<>();
         } else {
           replicasInHelix = new HashSet<>();
-          List<String> replicaInfoList = Arrays.asList(replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR));
+          String[] replicaInfoList = replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR);
           for (String replicaInfo : replicaInfoList) {
             String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
             // This is schema specific, but the assumption is that partition id and capacity fields should always be
@@ -1010,11 +1010,11 @@ class HelixBootstrapUpgradeUtil {
             ensureOrThrow(info.length >= 2,
                 "Replica info field should have at least two fields - partition id and capacity");
             replicasInHelix.add(info[0]);
-            Replica replica = replicaList.get(info[0]);
+            ReplicaId replica = replicaList.get(info[0]);
             ensureOrThrow(info[1].equals(Long.toString(replica.getCapacityInBytes())),
                 "Replica capacity should be the same.");
             if (info.length > 2) {
-              ensureOrThrow(info[2].equals(replica.getPartition().getPartitionClass()),
+              ensureOrThrow(info[2].equals(replica.getPartitionId().getPartitionClass()),
                   "Partition class should be the same.");
             }
           }
@@ -1089,13 +1089,13 @@ class HelixBootstrapUpgradeUtil {
       String partitionName = Long.toString(partition.getId());
       Set<String> replicaHostsInHelix = allPartitionsToInstancesInHelix.remove(partitionName);
       Set<String> expectedInHelix = new HashSet<>();
-      List<Replica> replicasInStatic = partition.getReplicas()
+      List<ReplicaId> replicasInStatic = partition.getReplicas()
           .stream()
           .filter(replica -> replica.getDataNodeId().getDatacenterName().equals(dcName))
           .collect(Collectors.toList());
       ensureOrThrow(replicasInStatic.size() == 0 || replicaHostsInHelix != null,
           "No replicas found for partition " + partitionName + " in Helix");
-      for (Replica replica : replicasInStatic) {
+      for (ReplicaId replica : replicasInStatic) {
         String instanceName = getInstanceName(replica.getDataNodeId());
         expectedInHelix.add(instanceName);
         ensureOrThrow(replicaHostsInHelix.remove(instanceName),
@@ -1128,16 +1128,16 @@ class HelixBootstrapUpgradeUtil {
    * @param dataNodeId the {@link DataNodeId} of interest.
    * @return the constructed map.
    */
-  private static Map<String, Map<String, Replica>> getMountPathToReplicas(StaticClusterManager staticClusterMap,
+  private static Map<String, Map<String, ReplicaId>> getMountPathToReplicas(StaticClusterManager staticClusterMap,
       DataNodeId dataNodeId) {
-    Map<String, Map<String, Replica>> mountPathToReplicas = new HashMap<>();
-    for (Replica replica : staticClusterMap.getReplicas(dataNodeId)) {
-      Map<String, Replica> replicaStrs = mountPathToReplicas.get(replica.getMountPath());
+    Map<String, Map<String, ReplicaId>> mountPathToReplicas = new HashMap<>();
+    for (ReplicaId replica : staticClusterMap.getReplicas(dataNodeId)) {
+      Map<String, ReplicaId> replicaStrs = mountPathToReplicas.get(replica.getMountPath());
       if (replicaStrs != null) {
-        replicaStrs.put(Long.toString(replica.getPartition().getId()), replica);
+        replicaStrs.put(replica.getPartitionId().toPathString(), replica);
       } else {
         replicaStrs = new HashMap<>();
-        replicaStrs.put(Long.toString(replica.getPartition().getId()), replica);
+        replicaStrs.put(replica.getPartitionId().toPathString(), replica);
         mountPathToReplicas.put(replica.getMountPath(), replicaStrs);
       }
     }

@@ -101,6 +101,11 @@ class Disk implements DiskId {
     return dataNode;
   }
 
+  @Override
+  public DataNodeId getDataNodeId() {
+    return dataNode;
+  }
+
   HardwareState getHardState() {
     return diskStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }

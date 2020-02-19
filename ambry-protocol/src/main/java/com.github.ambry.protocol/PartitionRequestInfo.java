@@ -42,7 +42,7 @@ public class PartitionRequestInfo {
     totalIdSize = 0;
     for (BlobId id : blobIds) {
       totalIdSize += id.sizeInBytes();
-      if (!partitionId.equals(id.getPartition())) {
+      if (!partitionId.toPathString().equals(id.getPartition().toPathString())) {
         throw new IllegalArgumentException("Not all blob IDs in GetRequest are from the same partition.");
       }
     }

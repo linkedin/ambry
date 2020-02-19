@@ -99,4 +99,9 @@ public class MockDiskId implements DiskId {
     result = 31 * result + dataNode.hashCode();
     return result;
   }
+
+  @Override
+  public DataNodeId getDataNodeId() {
+    return dataNode;
+  }
 }

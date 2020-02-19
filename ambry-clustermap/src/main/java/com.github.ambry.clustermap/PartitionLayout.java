@@ -194,10 +194,10 @@ class PartitionLayout {
 
   private void validateUniqueness() {
     // Validate uniqueness of each logical component. Partition uniqueness is validated by method addPartition.
-    Set<Replica> replicaSet = new HashSet<Replica>();
+    Set<ReplicaId> replicaSet = new HashSet<>();
 
     for (Partition partition : partitionMap.values()) {
-      for (Replica replica : partition.getReplicas()) {
+      for (ReplicaId replica : partition.getReplicaIds()) {
         if (!replicaSet.add(replica)) {
           throw new IllegalStateException("Duplicate Replica detected: " + replica.toString());
         }

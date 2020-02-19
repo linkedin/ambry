@@ -1933,11 +1933,7 @@ public class ReplicationTest {
   private ReplicaId getNewReplicaToAdd(MockClusterMap clusterMap) {
     DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);
     PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
-    return newPartition.getReplicaIds()
-        .stream()
-        .filter(r -> ((ReplicaId) r).getDataNodeId() == currentNode)
-        .findFirst()
-        .get();
+    return newPartition.getReplicaIds().stream().filter(r -> r.getDataNodeId() == currentNode).findFirst().get();
   }
 
   /**
