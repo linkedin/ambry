@@ -27,10 +27,10 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
@@ -591,9 +591,20 @@ public class GetBlobInfoOperationTest {
             ServerErrorCode.Blob_Authorization_Failure, ServerErrorCode.Blob_Not_Found));
     for (ServerErrorCode serverErrorCode : serverErrors) {
       mockServerLayout.getMockServers().forEach(server -> server.setServerErrorForAllRequests(serverErrorCode));
-      assertOperationFailure(
-          EnumSet.of(ServerErrorCode.Disk_Unavailable, ServerErrorCode.Replica_Unavailable).contains(serverErrorCode)
-              ? RouterErrorCode.AmbryUnavailable : RouterErrorCode.UnexpectedInternalError);
+      RouterErrorCode expectedRouterError;
+      switch (serverErrorCode) {
+        case Replica_Unavailable:
+          expectedRouterError = RouterErrorCode.AmbryUnavailable;
+          break;
+        case Disk_Unavailable:
+          // if all the disks are unavailable (which should be extremely rare), after replacing these disks, the blob is
+          // definitely not present.
+          expectedRouterError = RouterErrorCode.BlobDoesNotExist;
+          break;
+        default:
+          expectedRouterError = RouterErrorCode.UnexpectedInternalError;
+      }
+      assertOperationFailure(expectedRouterError);
     }
   }
 

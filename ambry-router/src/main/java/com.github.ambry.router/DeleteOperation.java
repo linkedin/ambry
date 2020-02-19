@@ -195,25 +195,33 @@ class DeleteOperation {
               new RouterException("Received wrong response that is not for the corresponding request.",
                   RouterErrorCode.UnexpectedInternalError));
         } else {
-          ServerErrorCode getError = deleteResponse.getError();
-          if (getError == ServerErrorCode.No_Error || getError == ServerErrorCode.Blob_Deleted) {
+          ServerErrorCode serverError = deleteResponse.getError();
+          if (serverError == ServerErrorCode.No_Error || serverError == ServerErrorCode.Blob_Deleted) {
             operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
             if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
               logger.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
                   replica.getDataNodeId().getDatacenterName());
               routerMetrics.crossColoSuccessCount.inc();
             }
+          } else if (serverError == ServerErrorCode.Disk_Unavailable) {
+            logger.trace("Replica {} returned Disk_Unavailable for a delete request with correlationId : {} ", replica,
+                deleteRequest.getCorrelationId());
+            operationTracker.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
+            setOperationException(
+                new RouterException("Server returned: " + serverError, RouterErrorCode.AmbryUnavailable));
+            routerMetrics.routerRequestErrorCount.inc();
+            routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).deleteRequestErrorCount.inc();
           } else {
             logger.trace("Replica {} returned an error {} for a delete request with response correlationId : {} ",
-                replica, getError, deleteRequest.getCorrelationId());
-            RouterErrorCode routerErrorCode = processServerError(getError);
-            if (getError == ServerErrorCode.Blob_Authorization_Failure) {
+                replica, serverError, deleteRequest.getCorrelationId());
+            RouterErrorCode routerErrorCode = processServerError(serverError);
+            if (serverError == ServerErrorCode.Blob_Authorization_Failure) {
               // this is a successful response and one that completes the operation regardless of whether the
               // success target has been reached or not.
               operationCompleted = true;
             }
             // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
-            onErrorResponse(replica, new RouterException("Server returned: " + getError, routerErrorCode));
+            onErrorResponse(replica, new RouterException("Server returned: " + serverError, routerErrorCode));
           }
         }
       }

@@ -296,16 +296,24 @@ class GetBlobInfoOperation extends GetOperation {
           logger.trace("Replica  {} returned error {} with response correlationId {} ",
               getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
           RouterErrorCode routerErrorCode = processServerError(getError);
-          if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
-              || getError == ServerErrorCode.Blob_Authorization_Failure) {
-            // this is a successful response and one that completes the operation regardless of whether the
-            // success target has been reached or not.
-            operationCompleted = true;
+          if (getError == ServerErrorCode.Disk_Unavailable) {
+            operationTracker.onResponse(getRequestInfo.replicaId, TrackedRequestFinalState.DISK_DOWN);
+            setOperationException(new RouterException("Server returned: " + getError, routerErrorCode));
+            routerMetrics.routerRequestErrorCount.inc();
+            routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getBlobInfoRequestErrorCount
+                .inc();
+          } else {
+            if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
+                || getError == ServerErrorCode.Blob_Authorization_Failure) {
+              // this is a successful response and one that completes the operation regardless of whether the
+              // success target has been reached or not.
+              operationCompleted = true;
+            }
+            // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
+            // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
+            onErrorResponse(getRequestInfo.replicaId,
+                new RouterException("Server returned: " + getError, routerErrorCode));
           }
-          // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
-          // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
-          onErrorResponse(getRequestInfo.replicaId,
-              new RouterException("Server returned: " + getError, routerErrorCode));
         }
       }
     } else {

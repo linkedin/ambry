@@ -728,7 +728,7 @@ public class OperationTrackerTest {
   }
 
   /**
-   * Test the case when NotFound Error should be disabled since the origin DC is unknown.
+   * Test the case where operation has failed on not found when origin DC is unknown and number of NotFound hits threshold.
    */
   @Test
   public void originDcNotFoundUnknownOriginDcTest() {
@@ -744,7 +744,7 @@ public class OperationTrackerTest {
       ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
     }
     assertFalse("Operation should have not succeeded", ot.hasSucceeded());
-    assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertTrue("Operation should have failed on NOT_FOUND", ot.hasFailedOnNotFound());
     assertTrue("Operation should be done", ot.isDone());
   }
 
@@ -778,6 +778,76 @@ public class OperationTrackerTest {
       assertEquals("Should be originatingDcName DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertTrue("Operation should have failed on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  @Test
+  public void deleteOperationWithDiskDownAndNotFoundTest() {
+    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
+    initialize();
+    originatingDcName = localDcName;
+    OperationTracker ot =
+        getOperationTracker(true, 2, 3, true, Integer.MAX_VALUE, RouterOperation.DeleteOperation, false);
+    sendRequests(ot, 3, false);
+    assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
+    // set up test case in originating dc where 1st replica returns Disk_Unavailable, 2nd returns Deleted, 3rd returns Not_Found
+    ReplicaId replica = inflightReplicas.poll();
+    ot.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
+    replica = inflightReplicas.poll();
+    ot.onResponse(replica, TrackedRequestFinalState.SUCCESS);
+    replica = inflightReplicas.poll();
+    ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+    assertFalse("Operation should not fail on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertFalse("Operation is not yet complete", ot.isDone());
+    // make remaining replicas return Not_Found
+    for (int i = 0; i < 3; ++i) {
+      sendRequests(ot, 3, false);
+      for (int j = 0; j < 3; ++j) {
+        replica = inflightReplicas.poll();
+        ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+      }
+    }
+    assertTrue("Operation should fail on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  @Test
+  public void getOperationWithDiskDownAndNotFoundTest() {
+    initialize();
+    originatingDcName = localDcName;
+    OperationTracker ot =
+        getOperationTracker(true, 1, 3, true, Integer.MAX_VALUE, RouterOperation.GetBlobOperation, false);
+    sendRequests(ot, 3, false);
+    // set up test case in originating dc where 1st and 2nd replica return Disk_Unavailable, 3rd returns Not_Found
+    ReplicaId replica;
+    for (int i = 0; i < 2; ++i) {
+      replica = inflightReplicas.poll();
+      ot.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
+      assertEquals("Should be originatingDcName DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
+    }
+    replica = inflightReplicas.poll();
+    ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+    assertFalse("Operation should not fail on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertFalse("Operation is not yet complete", ot.isDone());
+    // make remaining replicas return either Disk_Unavailable or Not_Found
+    for (int i = 0; i < 2; ++i) {
+      sendRequests(ot, 3, false);
+      for (int j = 0; j < 3; ++j) {
+        replica = inflightReplicas.poll();
+        ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+      }
+    }
+    sendRequests(ot, 3, false);
+    for (int i = 0; i < 2; ++i) {
+      replica = inflightReplicas.poll();
+      ot.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
+    }
+    // although now we have diskDownCount + totalNotFoundCount = 11, GET operation should not fail at this point of time
+    assertFalse("Operation should not fail on NOT_FOUND", ot.hasFailedOnNotFound());
+    // after last replica return NotFound, the operation has indeed failed on NotFound
+    replica = inflightReplicas.poll();
+    ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+    assertTrue("Operation should fail on NOT_FOUND", ot.hasFailedOnNotFound());
     assertTrue("Operation should be done", ot.isDone());
   }
 
