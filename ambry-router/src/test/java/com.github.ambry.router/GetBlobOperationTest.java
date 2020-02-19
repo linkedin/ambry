@@ -895,12 +895,27 @@ public class GetBlobOperationTest {
     serverErrors.remove(ServerErrorCode.No_Error);
     serverErrors.remove(ServerErrorCode.Blob_Authorization_Failure);
     boolean goodServerMarked = false;
+    boolean notFoundSetInOriginalDC = false;
     for (MockServer mockServer : mockServers) {
-      if (!goodServerMarked && mockServer.getDataCenter().equals(dcWherePutHappened)) {
-        mockServer.setServerErrorForAllRequests(ServerErrorCode.No_Error);
-        goodServerMarked = true;
+      ServerErrorCode code = serverErrors.get(random.nextInt(serverErrors.size()));
+      // make sure in the original dc, we don't set Blob_Not_Found twice.
+      if (mockServer.getDataCenter().equals(dcWherePutHappened)) {
+        if (!goodServerMarked) {
+          mockServer.setServerErrorForAllRequests(ServerErrorCode.No_Error);
+          goodServerMarked = true;
+        } else {
+          if (!notFoundSetInOriginalDC) {
+            mockServer.setServerErrorForAllRequests(code);
+            notFoundSetInOriginalDC = code == ServerErrorCode.Blob_Not_Found;
+          } else {
+            while (code == ServerErrorCode.Blob_Not_Found) {
+              code = serverErrors.get(random.nextInt(serverErrors.size()));
+            }
+            mockServer.setServerErrorForAllRequests(code);
+          }
+        }
       } else {
-        mockServer.setServerErrorForAllRequests(serverErrors.get(random.nextInt(serverErrors.size())));
+        mockServer.setServerErrorForAllRequests(code);
       }
     }
     getAndAssertSuccess();
