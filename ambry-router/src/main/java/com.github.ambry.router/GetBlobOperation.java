@@ -153,6 +153,12 @@ class GetBlobOperation extends GetOperation {
     if (chunkIndexToBuf == null) {
       return;
     }
+    for (Integer key : chunkIndexToBufWaitingForRelease.keySet()) {
+      ByteBuf byteBuf = chunkIndexToBufWaitingForRelease.remove(key);
+      if (byteBuf != null) {
+        byteBuf.release();
+      }
+    }
     for (Integer key : chunkIndexToBuf.keySet()) {
       ByteBuf byteBuf = chunkIndexToBuf.remove(key);
       if (byteBuf != null) {
@@ -384,6 +390,8 @@ class GetBlobOperation extends GetOperation {
         routerCallback.onPollReady();
       }
     };
+
+    private Object closeLock = new Object();
 
     /**
      * The bytes that will be read from this channel is not known until the read is complete.

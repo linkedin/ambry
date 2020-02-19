@@ -18,6 +18,7 @@ import java.security.GeneralSecurityException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,6 +69,11 @@ class CryptoJobHandler implements Closeable {
         } else {
           logger.error("Unknown type of job seen : " + task.getClass());
         }
+      }
+      try {
+        scheduler.awaitTermination(1000, TimeUnit.MILLISECONDS);
+      } catch (Exception e) {
+        logger.error("Unexpected exception while waiting for crypto jobs to terminate", e);
       }
     }
   }

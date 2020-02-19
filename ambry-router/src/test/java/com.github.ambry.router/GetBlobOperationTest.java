@@ -171,9 +171,6 @@ public class GetBlobOperationTest {
   public void after() {
     router.close();
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
-    if (cryptoJobHandler != null) {
-      cryptoJobHandler.close();
-    }
     nettyByteBufLeakHelper.afterTest();
   }
 
@@ -1214,14 +1211,6 @@ public class GetBlobOperationTest {
                   writableChannel.getNextChunk();
                   writableChannel.resolveOldestChunk(null);
                   chunksLeftToRead--;
-                }
-                ByteBuf buffer = null;
-                while(true){
-                  buffer = writableChannel.getNextByteBuf(0);
-                  if (buffer == null) {
-                    break;
-                  }
-                  writableChannel.resolveOldestChunk(new ClosedChannelException());
                 }
                 result.getBlobResult.getBlobDataChannel().close();
               } catch (Exception e) {
