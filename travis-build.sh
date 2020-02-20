@@ -4,7 +4,7 @@
 set -e
 
 echo "Building and testing artifacts, and creating pom files"
-./gradlew -s -i --scan build publishToMavenLocal codeCoverageReport
+./gradlew -s --scan build publishToMavenLocal codeCoverageReport
 
 echo "Testing Bintray publication by uploading in dry run mode"
 ./gradlew -s -i --scan bintrayUploadAll -Pbintray.dryRun
