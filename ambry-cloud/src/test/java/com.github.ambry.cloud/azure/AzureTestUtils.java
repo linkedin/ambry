@@ -131,9 +131,9 @@ class AzureTestUtils {
   static void mockObservableForQuery(List<Document> documentList, Observable<FeedResponse<Document>> mockResponse) {
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
-    Observable<FeedResponse<Document>> mockObservable = mock(Observable.class);
     when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
     Iterator<FeedResponse<Document>> iterator = mock(Iterator.class);
+    when(mockBlockingObservable.single()).thenReturn(feedResponse);
     when(mockBlockingObservable.getIterator()).thenReturn(iterator);
     when(iterator.hasNext()).thenReturn(true).thenReturn(false);
     when(iterator.next()).thenReturn(feedResponse);

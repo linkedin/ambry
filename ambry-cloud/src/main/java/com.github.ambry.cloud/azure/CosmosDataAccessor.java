@@ -140,13 +140,37 @@ public class CosmosDataAccessor {
     try {
       Iterator<FeedResponse<Document>> iterator = executeCosmosQuery(querySpec, feedOptions, timer).getIterator();
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
+      // TODO: Track request charge per record (requestCharge / metadataList.size())
+      double requestCharge = 0.0;
       while (iterator.hasNext()) {
-        iterator.next()
-            .getResults()
-            .iterator()
-            .forEachRemaining(doc -> metadataList.add(createMetadataFromDocument(doc)));
+        FeedResponse<Document> response = iterator.next();
+        requestCharge += response.getRequestCharge();
+        response.getResults().iterator().forEachRemaining(doc -> metadataList.add(createMetadataFromDocument(doc)));
       }
+      logger.debug("Request charge {} for {} records returned", requestCharge, metadataList.size());
       return metadataList;
+    } catch (RuntimeException rex) {
+      if (rex.getCause() instanceof DocumentClientException) {
+        throw (DocumentClientException) rex.getCause();
+      }
+      throw rex;
+    }
+  }
+
+  /**
+   * Get the number of blobs in the specified partition matching the specified DocumentDB query.
+   * @param partitionPath the partition to query.
+   * @param querySpec the DocumentDB query to execute.
+   * @param timer the {@link Timer} to use to record query time (excluding waiting).
+   * @return the number of matching blobs.
+   */
+  int countMetadata(String partitionPath, SqlQuerySpec querySpec, Timer timer)
+      throws DocumentClientException {
+    FeedOptions feedOptions = new FeedOptions();
+    feedOptions.setPartitionKey(new PartitionKey(partitionPath));
+    try {
+      FeedResponse<Document> response = executeCosmosQuery(querySpec, feedOptions, timer).single();
+      return ((Number) response.getResults().get(0).getHashMap().values().stream().findFirst().get()).intValue();
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
         throw (DocumentClientException) rex.getCause();

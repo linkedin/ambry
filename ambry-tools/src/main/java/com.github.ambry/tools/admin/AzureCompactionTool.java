@@ -18,6 +18,7 @@ import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageCompactor;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
 import java.util.Collections;
@@ -54,13 +55,15 @@ public class AzureCompactionTool {
     String partitionPath = partitions.get(0);
     // User needs to specify this option to actually delete blobs
     boolean testMode = !optionSet.has(PURGE_OPTION);
+    long now = System.currentTimeMillis();
 
     CloudDestination azureDest = null;
     try {
       azureDest = new AzureCloudDestinationFactory(verifiableProperties, new MetricRegistry()).getCloudDestination();
+      CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
       CloudStorageCompactor compactor =
-          new CloudStorageCompactor(azureDest, Collections.emptySet(), new VcrMetrics(new MetricRegistry()), testMode);
-      int result = compactor.compactPartition(partitionPath);
+          new CloudStorageCompactor(azureDest, cloudConfig, Collections.emptySet(), new VcrMetrics(new MetricRegistry()), testMode);
+      int result = compactor.compactPartition(partitionPath, now);
       String resultMessage =
           String.format("In partition %s: %d blobs %s", partitionPath, result, testMode ? "ready to purge" : "purged");
       System.out.println(resultMessage);

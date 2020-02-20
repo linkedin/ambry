@@ -77,10 +77,23 @@ public interface CloudDestination extends Closeable {
    * Get the list of blobs in the specified partition that have been deleted or expired for at least the
    * configured retention period.
    * @param partitionPath the partition to query.
+   * @param cutoffTime the cutoff time for the query time range.
+   * @param maxEntries the max number of metadata records to return.
    * @return a List of {@link CloudBlobMetadata} referencing the dead blobs found.
    * @throws CloudStorageException
    */
-  List<CloudBlobMetadata> getDeadBlobs(String partitionPath) throws CloudStorageException;
+  List<CloudBlobMetadata> getDeadBlobs(String partitionPath, long cutoffTime, int maxEntries)
+      throws CloudStorageException;
+
+  /**
+   * Get the number of blobs in the specified partition that have been deleted or expired for at least the
+   * configured retention period.
+   * @param partitionPath the partition to query.
+   * @param cutoffTime the cutoff time for the query time range.
+   * @return the number of dead blobs found.
+   * @throws CloudStorageException
+   */
+  int getDeadBlobCount(String partitionPath, long cutoffTime) throws CloudStorageException;
 
   /**
    * Returns an ordered sequenced list of blobs within the specified partition and updated
