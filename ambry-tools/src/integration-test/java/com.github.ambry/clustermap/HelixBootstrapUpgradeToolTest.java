@@ -352,7 +352,7 @@ public class HelixBootstrapUpgradeToolTest {
 
     // Add a new replica for partition1. Find a disk on a data node that does not already have a replica for partition1.
     HashSet<DataNodeId> partition1Nodes = new HashSet<>();
-    for (Replica replica : partition1.getReplicas()) {
+    for (ReplicaId replica : partition1.getReplicas()) {
       partition1Nodes.add(replica.getDataNodeId());
     }
     Disk diskForNewReplica;
@@ -410,7 +410,7 @@ public class HelixBootstrapUpgradeToolTest {
 
     // Add a new replica for partition1. Find a disk on a data node that does not already have a replica for partition1.
     HashSet<DataNodeId> partition1Nodes = new HashSet<>();
-    for (Replica replica : partition1.getReplicas()) {
+    for (ReplicaId replica : partition1.getReplicas()) {
       partition1Nodes.add(replica.getDataNodeId());
     }
     Disk diskForNewReplica;

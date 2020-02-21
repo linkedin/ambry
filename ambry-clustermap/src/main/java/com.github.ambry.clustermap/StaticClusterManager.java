@@ -123,14 +123,14 @@ class StaticClusterManager implements ClusterMap {
 
   @Override
   public List<ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
-    List<Replica> replicas = getReplicas(dataNodeId);
+    List<ReplicaId> replicas = getReplicas(dataNodeId);
     return new ArrayList<ReplicaId>(replicas);
   }
 
-  List<Replica> getReplicas(DataNodeId dataNodeId) {
-    List<Replica> replicas = new ArrayList<Replica>();
+  List<ReplicaId> getReplicas(DataNodeId dataNodeId) {
+    List<ReplicaId> replicas = new ArrayList<ReplicaId>();
     for (PartitionId partition : partitionLayout.getPartitions(null)) {
-      for (Replica replica : ((Partition) partition).getReplicas()) {
+      for (ReplicaId replica : partition.getReplicaIds()) {
         if (replica.getDataNodeId().equals(dataNodeId)) {
           replicas.add(replica);
         }
@@ -176,7 +176,7 @@ class StaticClusterManager implements ClusterMap {
   long getAllocatedRawCapacityInBytes(Datacenter datacenter) {
     long allocatedRawCapacityInBytes = 0;
     for (PartitionId partition : partitionLayout.getPartitions(null)) {
-      for (Replica replica : ((Partition) partition).getReplicas()) {
+      for (ReplicaId replica : partition.getReplicaIds()) {
         Disk disk = (Disk) replica.getDiskId();
         if (disk.getDataNode().getDatacenter().equals(datacenter)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();
@@ -189,7 +189,7 @@ class StaticClusterManager implements ClusterMap {
   long getAllocatedRawCapacityInBytes(DataNodeId dataNode) {
     long allocatedRawCapacityInBytes = 0;
     for (PartitionId partition : partitionLayout.getPartitions(null)) {
-      for (Replica replica : ((Partition) partition).getReplicas()) {
+      for (ReplicaId replica : partition.getReplicaIds()) {
         Disk disk = (Disk) replica.getDiskId();
         if (disk.getDataNode().equals(dataNode)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();
@@ -202,7 +202,7 @@ class StaticClusterManager implements ClusterMap {
   long getAllocatedRawCapacityInBytes(Disk disk) {
     long allocatedRawCapacityInBytes = 0;
     for (PartitionId partition : partitionLayout.getPartitions(null)) {
-      for (Replica replica : ((Partition) partition).getReplicas()) {
+      for (ReplicaId replica : partition.getReplicaIds()) {
         Disk currentDisk = (Disk) replica.getDiskId();
         if (currentDisk.equals(disk)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();

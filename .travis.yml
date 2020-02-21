@@ -15,11 +15,11 @@ addons:
     packages:
       - oracle-java8-installer
       - oracle-java8-unlimited-jce-policy
-#don't build tags
 branches:
-  except:
+  except: # don't build tags
     - /^v\d/
+install: skip # skips unnecessary ./gradlew assemble (https://docs.travis-ci.com/user/job-lifecycle/#skipping-the-installation-phase) 
 script:
-  - ./gradlew -s --scan build codeCoverageReport && ./gradlew -s -i --scan ciPerformRelease
+  - ./travis-build.sh
 after_success:
   - bash <(curl -s https://codecov.io/bash)

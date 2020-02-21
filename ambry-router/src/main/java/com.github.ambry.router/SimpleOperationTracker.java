@@ -80,10 +80,13 @@ class SimpleOperationTracker implements OperationTracker {
   // It's decided by the success target of each mutation operations, including put, delete, update ttl etc.
   protected int originatingDcNotFoundFailureThreshold = 0;
   protected int originatingDcNotFoundCount = 0;
+  protected int totalNotFoundCount = 0;
+  protected int diskDownCount = 0;
 
   private final OpTrackerIterator otIterator;
   private final RouterOperation routerOperation;
   private final RouterConfig routerConfig;
+  private boolean crossColoEnabled = false;
   private Iterator<ReplicaId> replicaIterator;
   private static final Logger logger = LoggerFactory.getLogger(SimpleOperationTracker.class);
 
@@ -120,7 +123,6 @@ class SimpleOperationTracker implements OperationTracker {
   SimpleOperationTracker(RouterConfig routerConfig, RouterOperation routerOperation, PartitionId partitionId,
       String originatingDcName, boolean shuffleReplicas) {
     // populate tracker parameters based on operation type
-    boolean crossColoEnabled = false;
     boolean includeNonOriginatingDcReplicas = true;
     int numOfReplicasRequired = Integer.MAX_VALUE;
     this.routerConfig = routerConfig;
@@ -270,8 +272,10 @@ class SimpleOperationTracker implements OperationTracker {
 
   @Override
   public boolean hasFailedOnNotFound() {
-    return originatingDcNotFoundFailureThreshold > 0
-        && originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold;
+    return (originatingDcNotFoundFailureThreshold > 0
+        && originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold) || (crossColoEnabled
+        && diskDownCount + totalNotFoundCount > totalReplicaCount - successTarget);
+    // To account for GET operation, the threshold should be  >= totalReplicaCount - (success target - 1)
   }
 
   @Override
@@ -299,10 +303,13 @@ class SimpleOperationTracker implements OperationTracker {
         failedCount++;
         // NOT_FOUND is a special error. When tracker sees >= numReplicasInOriginatingDc - 1 "NOT_FOUND" from the
         // originating DC, we can be sure the operation will end up with a NOT_FOUND error.
-        if (trackedRequestFinalState == TrackedRequestFinalState.NOT_FOUND && replicaId.getDataNodeId()
-            .getDatacenterName()
-            .equals(originatingDcName)) {
-          originatingDcNotFoundCount++;
+        if (trackedRequestFinalState == TrackedRequestFinalState.NOT_FOUND) {
+          totalNotFoundCount++;
+          if (replicaId.getDataNodeId().getDatacenterName().equals(originatingDcName)) {
+            originatingDcNotFoundCount++;
+          }
+        } else if (trackedRequestFinalState == TrackedRequestFinalState.DISK_DOWN) {
+          diskDownCount++;
         }
     }
   }

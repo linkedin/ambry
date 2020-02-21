@@ -39,6 +39,7 @@ class Replica implements ReplicaId {
   private volatile boolean isStopped = false;
   private final ResourceStatePolicy resourceStatePolicy;
   private final ReplicaType replicaType;
+  private final ClusterMapConfig clusterMapConfig;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -48,6 +49,7 @@ class Replica implements ReplicaId {
     }
     this.partition = partition;
     this.disk = disk;
+    this.clusterMapConfig = clusterMapConfig;
     try {
       ResourceStatePolicyFactory resourceStatePolicyFactory =
           Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
@@ -93,7 +95,7 @@ class Replica implements ReplicaId {
 
   @Override
   public List<ReplicaId> getPeerReplicaIds() {
-    List<Replica> peerReplicas = getPeerReplicas();
+    List<ReplicaId> peerReplicas = getPeerReplicas();
     return new ArrayList<>(peerReplicas);
   }
 
@@ -157,13 +159,17 @@ class Replica implements ReplicaId {
     return replicaType;
   }
 
+  public ClusterMapConfig getClusterMapConfig() {
+    return clusterMapConfig;
+  }
+
   Partition getPartition() {
     return partition;
   }
 
-  List<Replica> getPeerReplicas() {
-    List<Replica> peers = new ArrayList<Replica>(partition.getReplicas().size());
-    for (Replica peer : partition.getReplicas()) {
+  List<ReplicaId> getPeerReplicas() {
+    List<ReplicaId> peers = new ArrayList<>(partition.getReplicaIds().size());
+    for (ReplicaId peer : partition.getReplicas()) {
       if (!peer.equals(this)) {
         peers.add(peer);
       }

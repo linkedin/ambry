@@ -14,6 +14,7 @@
 package com.github.ambry.config;
 
 import org.apache.helix.model.LeaderStandbySMD;
+import org.json.JSONObject;
 
 
 /**
@@ -87,6 +88,13 @@ public class ClusterMapConfig {
   @Config("clustermap.clusteragents.factory")
   @Default("com.github.ambry.clustermap.StaticClusterAgentsFactory")
   public final String clusterMapClusterAgentsFactory;
+
+  /**
+   * The cluster change handler to use for Cluster Map.
+   */
+  @Config("clustermap.cluster.change.handler.type")
+  @Default("SimpleClusterChangeHandler")
+  public final String clusterMapClusterChangeHandlerType;
 
   /**
    * Serialized json containing the information about all the zk hosts that the Helix based cluster manager should
@@ -231,6 +239,20 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clustermapUpdateDatanodeInfo;
 
+  /**
+   * Partition layout json for recovery test cluster map.
+   */
+  @Config("clustermap.recovery.test.partition.layout")
+  @Default("{}")
+  public final JSONObject clustermapRecoveryTestPartitionLayout;
+
+  /**
+   * Hardware layout json for recovery test cluster map.
+   */
+  @Config("clustermap.recovery.test.hardware.layout")
+  @Default("{}")
+  public final JSONObject clustermapRecoveryTestHardwareLayout;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -252,6 +274,8 @@ public class ClusterMapConfig {
     clusterMapSslEnabledDatacenters = verifiableProperties.getString("clustermap.ssl.enabled.datacenters", "");
     clusterMapClusterAgentsFactory = verifiableProperties.getString("clustermap.clusteragents.factory",
         "com.github.ambry.clustermap.StaticClusterAgentsFactory");
+    clusterMapClusterChangeHandlerType =
+        verifiableProperties.getString("clustermap.cluster.change.handler.type", "SimpleClusterChangeHandler");
     clusterMapDcsZkConnectStrings = verifiableProperties.getString("clustermap.dcs.zk.connect.strings", "");
     clusterMapClusterName = verifiableProperties.getString("clustermap.cluster.name");
     clusterMapDatacenterName = verifiableProperties.getString("clustermap.datacenter.name");
@@ -279,5 +303,9 @@ public class ClusterMapConfig {
     clustermapWritablePartitionMinReplicaCount =
         verifiableProperties.getIntInRange("clustermap.writable.partition.min.replica.count", 3, 0, Integer.MAX_VALUE);
     clustermapUpdateDatanodeInfo = verifiableProperties.getBoolean("clustermap.update.datanode.info", false);
+    clustermapRecoveryTestHardwareLayout =
+        new JSONObject(verifiableProperties.getString("clustermap.recovery.test.hardware.layout", "{}"));
+    clustermapRecoveryTestPartitionLayout =
+        new JSONObject(verifiableProperties.getString("clustermap.recovery.test.partition.layout", "{}"));
   }
 }
