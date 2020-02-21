@@ -22,6 +22,9 @@ import java.util.Set;
  * The configs for the replication layer
  */
 public class ReplicationConfig {
+
+  public static final String REPLICATION_CLOUD_TOKEN_FACTORY = "replication.cloud.token.factory";
+
   /**
    * The factory class the replication uses to creates its tokens
    */
@@ -32,7 +35,7 @@ public class ReplicationConfig {
   /**
    * The factory class the replication uses to create cloud token
    */
-  @Config("replication.cloud.token.factory")
+  @Config(REPLICATION_CLOUD_TOKEN_FACTORY)
   @Default("com.github.ambry.cloud.azure.CosmosUpdateTimeFindTokenFactory")
   public final String replicationCloudTokenFactory;
 
@@ -162,7 +165,7 @@ public class ReplicationConfig {
 
     replicationStoreTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
-    replicationCloudTokenFactory = verifiableProperties.getString("replication.cloud.token.factory",
+    replicationCloudTokenFactory = verifiableProperties.getString(REPLICATION_CLOUD_TOKEN_FACTORY,
         "com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory");
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
