@@ -27,6 +27,7 @@ import com.microsoft.azure.cosmosdb.PartitionKey;
 import com.microsoft.azure.cosmosdb.RequestOptions;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.internal.Constants;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -170,7 +171,7 @@ public class CosmosDataAccessor {
     feedOptions.setPartitionKey(new PartitionKey(partitionPath));
     try {
       FeedResponse<Document> response = executeCosmosQuery(querySpec, feedOptions, timer).single();
-      return ((Number) response.getResults().get(0).getHashMap().values().stream().findFirst().get()).intValue();
+      return response.getResults().get(0).getLong(Constants.Properties.AGGREGATE).intValue();
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
         throw (DocumentClientException) rex.getCause();
