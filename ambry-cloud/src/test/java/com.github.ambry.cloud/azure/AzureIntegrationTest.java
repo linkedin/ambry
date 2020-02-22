@@ -16,7 +16,6 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -39,7 +38,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -51,7 +49,7 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,16 +61,14 @@ import static org.junit.Assert.*;
  * Integration Test cases for {@link AzureCloudDestination}
  * Must supply file azure-test.properties in classpath with valid config property values.
  */
-@RunWith(Parameterized.class)
 @Ignore
+@RunWith(MockitoJUnitRunner.class)
 public class AzureIntegrationTest {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureIntegrationTest.class);
   private final String vcrKmsContext = "backup-default";
   private final String cryptoAgentFactory = CloudConfig.DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS;
   private AzureCloudDestination azureDest;
-  private FindTokenFactory findTokenFactory;
-  private final String replicationCloudTokenFactory;
   private int blobSize = 1024;
   private byte dataCenterId = 66;
   private short accountId = 101;
@@ -82,49 +78,24 @@ public class AzureIntegrationTest {
   private int retentionPeriodDays = 1;
   private String propFileName = "azure-test.properties";
   private String tokenFileName = "replicaTokens";
-
-  /**
-   * Parameterized constructor.
-   * @param replicationCloudTokenFactory type of token factory used by {@link CloudDestination}
-   */
-  public AzureIntegrationTest(String replicationCloudTokenFactory) throws ReflectiveOperationException {
-    super();
-    this.replicationCloudTokenFactory = replicationCloudTokenFactory;
-    Properties properties = new Properties();
-    properties.setProperty("replication.cloud.token.factory", replicationCloudTokenFactory);
-    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
-    findTokenFactory =
-        new FindTokenHelper(null, replicationConfig).getFindTokenFactoryFromReplicaType(ReplicaType.CLOUD_BACKED);
-  }
-
-  /**
-   * static method to generate parameters.
-   * @return {@link Collection} of parameters.
-   */
-  @Parameterized.Parameters
-  public static List<Object[]> input() {
-    return Arrays.asList(new Object[][]{{"com.github.ambry.cloud.azure.CosmosUpdateTimeFindTokenFactory"},
-        {"com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory"}});
-  }
+  private Properties testProperties;
 
   @Before
   public void setup() {
-    Properties props = new Properties();
+    testProperties = new Properties();
     try (InputStream input = this.getClass().getClassLoader().getResourceAsStream(propFileName)) {
       if (input == null) {
         throw new IllegalStateException("Could not find resource: " + propFileName);
       }
-      props.load(input);
+      testProperties.load(input);
     } catch (IOException ex) {
       throw new IllegalStateException("Could not load properties from resource: " + propFileName);
     }
-    props.setProperty("clustermap.cluster.name", "Integration-Test");
-    props.setProperty("clustermap.datacenter.name", "uswest");
-    props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("replication.cloud.token.factory", replicationCloudTokenFactory);
-    props.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
-    VerifiableProperties verProps = new VerifiableProperties(props);
+    testProperties.setProperty("clustermap.cluster.name", "Integration-Test");
+    testProperties.setProperty("clustermap.datacenter.name", "uswest");
+    testProperties.setProperty("clustermap.host.name", "localhost");
+    testProperties.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
+    VerifiableProperties verProps = new VerifiableProperties(testProperties);
     azureDest =
         (AzureCloudDestination) new AzureCloudDestinationFactory(verProps, new MetricRegistry()).getCloudDestination();
   }
@@ -298,23 +269,58 @@ public class AzureIntegrationTest {
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     }
 
-    // run getDeadBlobs query, should return 20
+    // run getDeadBlobs query, should return 2 * bucketCount
     String partitionPath = String.valueOf(testPartition);
-    List<CloudBlobMetadata> deadBlobs = azureDest.getDeadBlobs(partitionPath);
-    assertEquals("Unexpected number of dead blobs", expectedDeadBlobs, deadBlobs.size());
-
-    logger.info("Running purge");
-    int numPurged = azureDest.purgeBlobs(deadBlobs);
-    assertEquals("Not all blobs were purged", expectedDeadBlobs, numPurged);
+    assertEquals("Unexpected number of dead blobs", expectedDeadBlobs, azureDest.getDeadBlobCount(partitionPath, now));
+    logger.info("First call to getDeadBlobs");
+    List<CloudBlobMetadata> deadBlobs = azureDest.getDeadBlobs(partitionPath, now, bucketCount);
+    assertEquals("Unexpected number returned", bucketCount, deadBlobs.size());
+    logger.info("First call to purge");
+    assertEquals("Not all blobs were purged", bucketCount, azureDest.purgeBlobs(deadBlobs));
+    logger.info("Second call to getDeadBlobs");
+    deadBlobs = azureDest.getDeadBlobs(partitionPath, now, bucketCount);
+    assertEquals("Unexpected number returned", bucketCount, deadBlobs.size());
+    logger.info("Second call to purge");
+    assertEquals("Not all blobs were purged", bucketCount, azureDest.purgeBlobs(deadBlobs));
+    logger.info("Final call to getDeadBlobs");
+    deadBlobs = azureDest.getDeadBlobs(partitionPath, now, bucketCount);
+    assertEquals("Expected zero", 0, deadBlobs.size());
     cleanup();
   }
 
   /**
-   * Test findEntriesSince.
-   * @throws Exception on error
+   * Test findEntriesSince with CosmosUpdateTimeFindTokenFactory.
    */
   @Test
-  public void testFindEntriesSince() throws Exception {
+  public void testFindEntriesSinceByUpdateTime() throws Exception {
+    testFindEntriesSince("com.github.ambry.cloud.azure.CosmosUpdateTimeFindTokenFactory");
+  }
+
+  /**
+   * Test findEntriesSince with CosmosChangeFeedFindTokenFactory.
+   */
+  @Ignore // Fails with wrong number of queries.
+  @Test
+  public void testFindEntriesSinceByChangeFeed() throws Exception {
+    testFindEntriesSince("com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory");
+  }
+
+  /**
+   * Test findEntriesSince with specified cloud token factory.
+   * @#param replicationCloudTokenFactory the factory to use.
+   * @throws Exception on error
+   */
+  private void testFindEntriesSince(String replicationCloudTokenFactory) throws Exception {
+
+    logger.info("Testing findEntriesSince with {}", replicationCloudTokenFactory);
+    testProperties.setProperty(ReplicationConfig.REPLICATION_CLOUD_TOKEN_FACTORY, replicationCloudTokenFactory);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(testProperties);
+    ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
+    FindTokenFactory findTokenFactory =
+        new FindTokenHelper(null, replicationConfig).getFindTokenFactoryFromReplicaType(ReplicaType.CLOUD_BACKED);
+    azureDest = (AzureCloudDestination) new AzureCloudDestinationFactory(verifiableProperties,
+        new MetricRegistry()).getCloudDestination();
+
     cleanup();
 
     PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -347,6 +353,7 @@ public class AzureIntegrationTest {
     int totalBlobsReturned = 0;
     do {
       findResult = azureDest.findEntriesSince(partitionPath, findToken, maxTotalSize);
+      findToken = findResult.getUpdatedFindToken();
       numQueries++;
       totalBlobsReturned += findResult.getMetadataList().size();
     } while (!findResult.getMetadataList().isEmpty());

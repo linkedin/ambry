@@ -15,9 +15,11 @@ package com.github.ambry.cloud;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.config.CloudConfig;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,8 +28,11 @@ public class CloudStorageCompactor implements Runnable {
   private static final Logger logger = LoggerFactory.getLogger(CloudStorageCompactor.class);
   private final CloudDestination cloudDestination;
   private final Set<PartitionId> partitions;
+  private final int queryLimit;
+  private final long compactionTimeLimitMs;
   private final VcrMetrics vcrMetrics;
   private final boolean testMode;
+  private final CloudRequestAgent requestAgent;
 
   /**
    * Public constructor.
@@ -36,12 +41,15 @@ public class CloudStorageCompactor implements Runnable {
    * @param vcrMetrics the metrics to update.
    * @param testMode if true, the compaction methods only perform the query but do not actually remove the blobs.
    */
-  public CloudStorageCompactor(CloudDestination cloudDestination, Set<PartitionId> partitions, VcrMetrics vcrMetrics,
-      boolean testMode) {
+  public CloudStorageCompactor(CloudDestination cloudDestination, CloudConfig cloudConfig, Set<PartitionId> partitions,
+      VcrMetrics vcrMetrics, boolean testMode) {
     this.cloudDestination = cloudDestination;
     this.partitions = partitions;
     this.vcrMetrics = vcrMetrics;
+    this.queryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
+    compactionTimeLimitMs = TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours);
     this.testMode = testMode;
+    requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
   }
 
   @Override
@@ -77,7 +85,7 @@ public class CloudStorageCompactor implements Runnable {
       }
       logger.info("Running compaction on partition {}", partitionPath);
       try {
-        totalBlobsPurged += compactPartition(partitionPath);
+        totalBlobsPurged += compactPartition(partitionPath, startTime);
       } catch (CloudStorageException ex) {
         logger.error("Compaction failed for partition {}", partitionPath, ex);
       }
@@ -91,14 +99,25 @@ public class CloudStorageCompactor implements Runnable {
   /**
    * Purge the inactive blobs in the specified partition.
    * @param partitionPath the partition to compact.
-   * @return the number of blobs purged.
+   * @param cutoffTime the time at which a blob's active status should be evaluated.
+   * @return the number of blobs purged or found.
    */
-  public int compactPartition(String partitionPath) throws CloudStorageException {
-    List<CloudBlobMetadata> deadBlobs = cloudDestination.getDeadBlobs(partitionPath);
-    if (!testMode) {
-      return cloudDestination.purgeBlobs(deadBlobs);
-    } else {
-      return deadBlobs.size();
+  public int compactPartition(String partitionPath, long cutoffTime) throws CloudStorageException {
+    if (testMode) {
+      return cloudDestination.getDeadBlobCount(partitionPath, cutoffTime);
     }
+
+    int numDeadBlobs = 0;
+    // Iterate until returned list size < limit or time runs out
+    while (System.currentTimeMillis() < cutoffTime + compactionTimeLimitMs) {
+      List<CloudBlobMetadata> deadBlobs =
+          requestAgent.doWithRetries(() -> cloudDestination.getDeadBlobs(partitionPath, cutoffTime, queryLimit),
+              "GetDeadBlobs");
+      numDeadBlobs += cloudDestination.purgeBlobs(deadBlobs);
+      if (deadBlobs.size() < queryLimit) {
+        break;
+      }
+    }
+    return numDeadBlobs;
   }
 }
