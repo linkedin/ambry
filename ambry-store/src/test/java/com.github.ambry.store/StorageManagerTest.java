@@ -1052,7 +1052,32 @@ public class StorageManagerTest {
    */
   @Test
   public void residualDirDeletionTest() throws Exception {
-    // todo add test to delete residual store dir
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    // create an extra store dir at one of the mount paths
+    String mountPath = replicas.get(0).getMountPath();
+    String extraPartitionName = "1000";
+    File extraStoreDir = new File(mountPath, extraPartitionName);
+    assertTrue("Can't create an extra store dir", extraStoreDir.mkdir());
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    storageManager.start();
+    // failure case: IOException when deleting store dir
+    File invalidDir = new File(extraStoreDir.getAbsolutePath(), "invalidDir");
+    invalidDir.deleteOnExit();
+    assertTrue("Couldn't create dir within store dir", invalidDir.mkdir());
+    assertTrue("Could not make unreadable", invalidDir.setReadable(false));
+    try {
+      mockHelixParticipant.onPartitionBecomeDroppedFromOffline(extraPartitionName);
+      fail("should fail because there is IOException when deleting store dir");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code is not expected", ReplicaOperationFailure, e.getErrorCode());
+    }
+    assertTrue("Could not make readable", invalidDir.setReadable(true));
+    // trigger OFFLINE -> DROPPED transition on extra partition. Storage manager should delete residual store dir.
+    mockHelixParticipant.onPartitionBecomeDroppedFromOffline(extraPartitionName);
+    assertFalse("Extra store dir should not exist", extraStoreDir.exists());
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
   // helpers

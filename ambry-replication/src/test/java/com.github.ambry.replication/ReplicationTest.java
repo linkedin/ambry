@@ -729,7 +729,6 @@ public class ReplicationTest {
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
     StorageManager storageManager = managers.getFirst();
-    //MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
     AmbryReplicaSyncUpManager replicaSyncUpManager =
         (AmbryReplicaSyncUpManager) mockHelixParticipant.getReplicaSyncUpManager();
     CountDownLatch participantLatch = new CountDownLatch(1);

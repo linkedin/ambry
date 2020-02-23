@@ -617,6 +617,8 @@ public class StorageManager implements StoreManager {
           logger.error("Exception occurs when deleting residual dir of replica {} with error msg: {}", partitionName,
               e.getMessage());
           metrics.resumeDecommissionErrorCount.inc();
+          throw new StateTransitionException("Failed to delete residual dir of store " + partitionName,
+              ReplicaOperationFailure);
         }
         return;
       }
