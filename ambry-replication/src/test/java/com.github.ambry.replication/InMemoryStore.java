@@ -16,12 +16,12 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
-import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
-import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.router.Callback;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
@@ -402,6 +402,11 @@ class InMemoryStore implements Store {
   @Override
   public long getEndPositionOfLastPut() throws StoreException {
     throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public boolean recoverFromDecommission() {
+    return false;
   }
 
   @Override

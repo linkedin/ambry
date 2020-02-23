@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.StatsManagerConfig;
+import com.github.ambry.router.Callback;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
@@ -88,6 +89,7 @@ class StatsManager {
     partitionToReplicaMap =
         replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
+    storageManager.registerDecommissionCallback(new ReplicaDecommissionCallback());
     if (clusterParticipant != null) {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener,
           new PartitionStateChangeListenerImpl());
@@ -366,6 +368,16 @@ class StatsManager {
       }
     }
     return unreachableStores;
+  }
+
+  /**
+   * A callback used to complete decommission on given replica that encountered failure last time.
+   */
+  private class ReplicaDecommissionCallback implements Callback<ReplicaId> {
+    @Override
+    public void onCompletion(ReplicaId result, Exception exception) {
+      removeReplica(result);
+    }
   }
 
   /**

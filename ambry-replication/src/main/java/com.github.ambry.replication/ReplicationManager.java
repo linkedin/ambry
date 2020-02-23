@@ -29,6 +29,7 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.router.Callback;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
@@ -88,6 +89,7 @@ public class ReplicationManager extends ReplicationEngine {
         logger.error("Not replicating to partition " + partition + " because an initialized store could not be found");
       }
     }
+    storeManager.registerDecommissionCallback(new ReplicaDecommissionCallback());
     // register replication manager's state change listener if clusterParticipant is not null
     if (clusterParticipant != null) {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
@@ -321,6 +323,16 @@ public class ReplicationManager extends ReplicationEngine {
   }
 
   /**
+   * A callback used to complete decommission on given replica that encountered failure last time.
+   */
+  private class ReplicaDecommissionCallback implements Callback<ReplicaId> {
+    @Override
+    public void onCompletion(ReplicaId result, Exception exception) {
+      removeReplica(result);
+    }
+  }
+
+  /**
    * {@link PartitionStateChangeListener} to capture changes in partition state.
    */
   class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
@@ -414,11 +426,9 @@ public class ReplicationManager extends ReplicationEngine {
 
     @Override
     public void onPartitionBecomeDroppedFromOffline(String partitionName) {
-      ReplicaId replica = storeManager.getReplica(partitionName);
-      // if code arrives here, we don't need to check if replica exists, it has been checked in StatsManager
-      // here we attempt to remove replica from replication manager. If replica doesn't exist, log info but don't fail
-      // the transition
-      removeReplica(replica);
+      // Actual Dropped-To-Offline action is performed within StorageManager. It invokes ReplicaDecommissionCallback in
+      // this class to complete decommission work if there is any (i.e. remove replica from in-mem data structure). So,
+      // this method can be no-op.
     }
   }
 }

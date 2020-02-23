@@ -568,19 +568,20 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeDroppedFromOffline(String partitionName) {
-    // 1. remove old replica from StatsManager
-    PartitionStateChangeListener statsManagerListener =
-        partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
-    if (statsManagerListener != null) {
-      statsManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
-    }
-    // 2. remove old replica from ReplicationManager
-    PartitionStateChangeListener replicationManagerListener =
-        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
-    if (replicationManagerListener != null) {
-      replicationManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
-    }
-    // 3. remove old replica from StorageManager and delete store directory
+//    // 1. remove old replica from StatsManager
+//    PartitionStateChangeListener statsManagerListener =
+//        partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
+//    if (statsManagerListener != null) {
+//      statsManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+//    }
+//    // 2. remove old replica from ReplicationManager
+//    PartitionStateChangeListener replicationManagerListener =
+//        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+//    if (replicationManagerListener != null) {
+//      replicationManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+//    }
+    // remove old replica from StorageManager and delete store directory (this also includes recover from decommission
+    // failure and remove old replica from replication/stats manager)
     PartitionStateChangeListener storageManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
     if (storageManagerListener != null) {

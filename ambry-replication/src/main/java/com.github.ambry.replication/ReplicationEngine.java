@@ -169,6 +169,15 @@ public abstract class ReplicationEngine implements ReplicationAPI {
           // Inactive-To-Offline transition.
           if (updated && replicaSyncUpManager.isSyncUpComplete(localReplica)) {
             replicaSyncUpManager.onDeactivationComplete(localReplica);
+//            if (localStore.recoverFromDecommission()) {
+//              // if the store is recovering from decommission failure (probably node crashed in the middle of decommission),
+//              // we directly set store state to OFFLINE and initiate disconnection. Note that, Helix will never trigger
+//              // Inactive-To-Offline transition again because the replica is no longer in IdealState.
+//              localStore.setCurrentState(ReplicaState.OFFLINE);
+//              logger.info("Initiating disconnection for {}, which is recovering from decommission failure.",
+//                  localReplica);
+//              replicaSyncUpManager.initiateDisconnection(localReplica);
+//            }
           }
         } else if (localStore.isDecommissionInProgress() && localStore.getCurrentState() == ReplicaState.OFFLINE) {
           // if local store is in OFFLINE state, we need more info to determine if replica is really in Inactive-To-Offline
@@ -179,6 +188,11 @@ public abstract class ReplicationEngine implements ReplicationAPI {
                   localStore.getSizeInBytes() - totalBytesRead);
           if (updated && replicaSyncUpManager.isSyncUpComplete(localReplica)) {
             replicaSyncUpManager.onDisconnectionComplete(localReplica);
+//            if (localStore.recoverFromDecommission()) {
+//              // if the store is recovering from previous decommission failure, this node should complete remaining
+//              // decommission steps by itself. There is no more state transition associated with this replica.
+//              storeManager.resumeDecommission(localReplica);
+//            }
           }
         }
       }

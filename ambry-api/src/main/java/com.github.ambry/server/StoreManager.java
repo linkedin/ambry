@@ -15,6 +15,7 @@ package com.github.ambry.server;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.router.Callback;
 import com.github.ambry.store.Store;
 import java.util.List;
 
@@ -97,4 +98,17 @@ public interface StoreManager {
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled);
+
+//  /**
+//   * Resume decommission for given local {@link ReplicaId}. This may happen when previous decommission failed or was
+//   * paused for some reason.
+//   * @param replicaId the replica to be decommissioned.
+//   */
+//  void resumeDecommission(ReplicaId replicaId);
+
+  /**
+   * Register callback against local {@link ReplicaId} that performs cleanup logic for decommission.
+   * @param callback the {@link Callback} that will be called on completion
+   */
+  void registerDecommissionCallback(Callback<ReplicaId> callback);
 }

@@ -34,6 +34,7 @@ public class StorageManagerMetrics {
   public final Counter diskMountPathFailures;
   public final Counter diskDownCount;
   public final Counter unexpectedDirsOnDisk;
+  public final Counter resumeDecommissionErrorCount;
 
   // DiskSpaceAllocator related metrics
   public final Histogram diskSpaceAllocatorStartTimeMs;
@@ -62,6 +63,8 @@ public class StorageManagerMetrics {
         registry.histogram(MetricRegistry.name(StorageManager.class, "StorageManagerStartTimeMs"));
     storageManagerShutdownTimeMs =
         registry.histogram(MetricRegistry.name(StorageManager.class, "StorageManagerShutdownTimeMs"));
+    resumeDecommissionErrorCount =
+        registry.counter(MetricRegistry.name(StorageManager.class, "ResumeDecommissionErrorCount"));
     diskStartTimeMs = registry.histogram(MetricRegistry.name(DiskManager.class, "DiskStartTimeMs"));
     diskShutdownTimeMs = registry.histogram(MetricRegistry.name(DiskManager.class, "DiskShutdownTimeMs"));
     totalStoreStartFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreStartFailures"));

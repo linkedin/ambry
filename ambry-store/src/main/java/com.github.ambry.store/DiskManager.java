@@ -68,6 +68,7 @@ class DiskManager {
   private final StoreKeyFactory keyFactory;
   private final MessageStoreRecovery recovery;
   private final MessageStoreHardDelete hardDelete;
+  private final List<String> unexpectedDirs = new ArrayList<>();
   private boolean running = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -532,8 +533,14 @@ class DiskManager {
   }
 
   /**
+   * @return unexpected directories on this disk.
+   */
+  List<String> getUnexpectedDirs() {
+    return unexpectedDirs;
+  }
+
+  /**
    * Reports any unrecognized directories on disk
-   * TODO go to unrecognized dir and check if there is remove store event log. If yes, this method should clean up that
    * store dir and return swap segment to reserve pool if needed.
    */
   private void reportUnrecognizedDirs() {
@@ -542,7 +549,6 @@ class DiskManager {
       metrics.diskMountPathFailures.inc();
       logger.warn("Could not list the directories in {}", disk.getMountPath());
     } else {
-      List<String> unexpectedDirs = new ArrayList<>();
       for (File dir : dirs) {
         String absPath = dir.getAbsolutePath();
         if (!expectedDirs.contains(absPath)) {

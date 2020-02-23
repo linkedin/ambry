@@ -279,6 +279,11 @@ class MockStorageManager extends StorageManager {
       throw new UnsupportedOperationException("Method not supported");
     }
 
+    @Override
+    public boolean recoverFromDecommission() {
+      throw new UnsupportedOperationException("Method not supported");
+    }
+
     public void shutdown() throws StoreException {
       throwExceptionIfRequired();
       started = false;

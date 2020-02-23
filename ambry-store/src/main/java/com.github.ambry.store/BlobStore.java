@@ -88,6 +88,7 @@ public class BlobStore implements Store {
   private boolean started;
   private FileLock fileLock;
   private volatile ReplicaState currentState;
+  private volatile boolean recoverFromDecommission = false;
   protected PersistentIndex index;
 
   /**
@@ -826,6 +827,15 @@ public class BlobStore implements Store {
   @Override
   public ReplicaState getCurrentState() {
     return currentState;
+  }
+
+  @Override
+  public boolean recoverFromDecommission() {
+    return recoverFromDecommission;
+  }
+
+  void markRecoveryFromDecommission() {
+    recoverFromDecommission = true;
   }
 
   /**

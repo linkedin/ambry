@@ -558,14 +558,7 @@ public class StatsManagerTest {
     MockStatsManager mockStatsManager =
         new MockStatsManager(storageManager, localReplicas, new MetricRegistry(), statsManagerConfig,
             clusterParticipant);
-    // 1. test replica not found error
-    try {
-      clusterParticipant.onPartitionBecomeDroppedFromOffline("-1");
-      fail("should fail because replica is not found");
-    } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
-    }
-    // 2. attempt to remove replica while store is still running (remove store failure case)
+    // 1. attempt to remove replica while store is still running (remove store failure case)
     ReplicaId replicaToDrop = localReplicas.get(0);
     try {
       clusterParticipant.onPartitionBecomeDroppedFromOffline(replicaToDrop.getPartitionId().toPathString());
@@ -573,7 +566,7 @@ public class StatsManagerTest {
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
-    // 4. shutdown the store but introduce file deletion failure (put a invalid dir in store dir)
+    // 2. shutdown the store but introduce file deletion failure (put a invalid dir in store dir)
     storageManager.shutdownBlobStore(replicaToDrop.getPartitionId());
     File invalidDir = new File(replicaToDrop.getReplicaPath(), "invalidDir");
     invalidDir.deleteOnExit();
@@ -588,7 +581,7 @@ public class StatsManagerTest {
     // reset permission to allow deletion to succeed.
     assertTrue("Could not make readable", invalidDir.setReadable(true));
     assertTrue("Could not delete invalid dir", invalidDir.delete());
-    // 5. success case (remove another replica because previous replica has been removed from in-mem data structures)
+    // 3. success case (remove another replica because previous replica has been removed from in-mem data structures)
     ReplicaId replica = localReplicas.get(1);
     storageManager.shutdownBlobStore(replica.getPartitionId());
     clusterParticipant.onPartitionBecomeDroppedFromOffline(replica.getPartitionId().toPathString());
@@ -777,6 +770,11 @@ public class StatsManagerTest {
 
     @Override
     public long getEndPositionOfLastPut() throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public boolean recoverFromDecommission() {
       throw new IllegalStateException("Not implemented");
     }
 

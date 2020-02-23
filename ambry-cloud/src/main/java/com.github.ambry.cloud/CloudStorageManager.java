@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.Callback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
@@ -134,6 +135,10 @@ public class CloudStorageManager implements StoreManager {
      * the local partition status for a vcr node should always be available.
      */
     return ServerErrorCode.No_Error;
+  }
+
+  @Override
+  public void registerDecommissionCallback(Callback<ReplicaId> callback) {
   }
 
   /**
