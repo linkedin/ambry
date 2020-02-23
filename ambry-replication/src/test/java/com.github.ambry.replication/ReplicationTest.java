@@ -716,6 +716,42 @@ public class ReplicationTest {
     storageManager.shutdown();
   }
 
+  @Test
+  public void replicaResumeDecommissionTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    // choose a replica on local node and put decommission file into its dir
+    ReplicaId localReplica = clusterMap.getReplicaIds(clusterMap.getDataNodeIds().get(0)).get(0);
+    String partitionName = localReplica.getPartitionId().toPathString();
+    File decommissionFile = new File(localReplica.getReplicaPath(), "decommission_in_progress");
+    assertTrue("Can't create decommission file", decommissionFile.createNewFile());
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    //MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    AmbryReplicaSyncUpManager replicaSyncUpManager =
+        (AmbryReplicaSyncUpManager) mockHelixParticipant.getReplicaSyncUpManager();
+    CountDownLatch participantLatch = new CountDownLatch(1);
+    Utils.newThread(() -> {
+      mockHelixParticipant.onPartitionBecomeDroppedFromOffline(partitionName);
+      participantLatch.countDown();
+    }, false).start();
+    while (!replicaSyncUpManager.getPartitionToDeactivationLatch().containsKey(partitionName)) {
+      Thread.sleep(100);
+    }
+    replicaSyncUpManager.onDeactivationComplete(localReplica);
+    while (!replicaSyncUpManager.getPartitionToDisconnectionLatch().containsKey(partitionName)) {
+      Thread.sleep(100);
+    }
+    replicaSyncUpManager.onDisconnectionComplete(localReplica);
+    assertTrue("Offline-To-Dropped transition didn't complete within 1 sec",
+        participantLatch.await(1, TimeUnit.SECONDS));
+    File storeDir = new File(localReplica.getReplicaPath());
+    assertFalse("Store dir should not exist", storeDir.exists());
+    storageManager.shutdown();
+  }
+
   /**
    * Tests pausing all partitions and makes sure that the replica thread pauses. Also tests that it resumes when one
    * eligible partition is reenabled and that replication completes successfully.
@@ -935,9 +971,7 @@ public class ReplicationTest {
             null, null);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
     ReplicaThread replicaThread = replicasAndThread.getSecond();
-
-
-        /*
+    /*
         STORE KEY CONVERTER MAPPING
         Key     Value
         B0      B0'
@@ -963,8 +997,7 @@ public class ReplicationTest {
         and B2 is invalid for L
         so it does not count as missing
         Missing Keys: 1
-
-     */
+    */
     Map<PartitionId, List<BlobId>> partitionIdToDeleteBlobId = new HashMap<>();
     Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
     Map<PartitionId, BlobId> expectedPartitionIdToDeleteBlobId = new HashMap<>();
@@ -2267,7 +2300,6 @@ public class ReplicationTest {
   public static void addPutMessagesToReplicasOfPartition(StoreKey id, short accountId, short containerId,
       PartitionId partitionId, List<MockHost> hosts, long operationTime, long expirationTime)
       throws MessageFormatException, IOException {
-    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     // add a PUT message with expiration time less than VCR threshold to remote host.
     boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
     ReplicationTest.PutMsgInfoAndBuffer msgInfoAndBuffer = createPutMessage(id, accountId, containerId, toEncrypt);

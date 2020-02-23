@@ -426,9 +426,9 @@ public class ReplicationManager extends ReplicationEngine {
 
     @Override
     public void onPartitionBecomeDroppedFromOffline(String partitionName) {
-      // Actual Dropped-To-Offline action is performed within StorageManager. It invokes ReplicaDecommissionCallback in
-      // this class to complete decommission work if there is any (i.e. remove replica from in-mem data structure). So,
-      // this method can be no-op.
+      // The actual Dropped-To-Offline action is performed within StorageManager. It invokes ReplicaDecommissionCallback
+      // in this class to complete decommission work if there is any (i.e. remove replica from in-mem data structure).
+      // So, this method can be no-op.
     }
   }
 }

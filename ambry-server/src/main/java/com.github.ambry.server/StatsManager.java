@@ -437,14 +437,9 @@ class StatsManager {
 
     @Override
     public void onPartitionBecomeDroppedFromOffline(String partitionName) {
-      // check if partition exists
-      ReplicaId replica = storageManager.getReplica(partitionName);
-      if (replica == null) {
-        throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
-            ReplicaNotFound);
-      }
-      // remove replica from in-mem data structure. If replica doesn't exist, log info but don't fail the transition
-      removeReplica(replica);
+      // The actual Dropped-To-Offline action is performed within StorageManager. It invokes ReplicaDecommissionCallback
+      // in this class to complete decommission work if there is any (i.e. remove replica from in-mem data structure).
+      // So, this method can be no-op.
     }
   }
 }

@@ -99,13 +99,6 @@ public interface StoreManager {
    */
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled);
 
-//  /**
-//   * Resume decommission for given local {@link ReplicaId}. This may happen when previous decommission failed or was
-//   * paused for some reason.
-//   * @param replicaId the replica to be decommissioned.
-//   */
-//  void resumeDecommission(ReplicaId replicaId);
-
   /**
    * Register callback against local {@link ReplicaId} that performs cleanup logic for decommission.
    * @param callback the {@link Callback} that will be called on completion

@@ -209,6 +209,14 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     countDownLatch(partitionToDisconnectionLatch, replicaId.getPartitionId().toPathString());
   }
 
+  public ConcurrentHashMap<String, CountDownLatch> getPartitionToDeactivationLatch() {
+    return partitionToDeactivationLatch;
+  }
+
+  public ConcurrentHashMap<String, CountDownLatch> getPartitionToDisconnectionLatch() {
+    return partitionToDisconnectionLatch;
+  }
+
   /**
    * clean up in-mem maps
    */

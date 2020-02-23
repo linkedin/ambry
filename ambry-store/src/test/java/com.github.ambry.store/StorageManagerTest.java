@@ -1046,6 +1046,15 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
+  /**
+   * Test that residual directory associated with removed replica is deleted correctly during OFFLINE -> DROPPED transition.
+   * @throws Exception
+   */
+  @Test
+  public void residualDirDeletionTest() throws Exception {
+    // todo add test to delete residual store dir
+  }
+
   // helpers
 
   /**

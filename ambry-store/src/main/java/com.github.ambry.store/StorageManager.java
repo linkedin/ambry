@@ -435,8 +435,8 @@ public class StorageManager implements StoreManager {
       callback.onCompletion(replica, null);
     }
     // 7. remove replica from storage manager and delete whole store dir
+    BlobStore store = (BlobStore) getStore(replica.getPartitionId(), true);
     if (removeBlobStore(replica.getPartitionId())) {
-      BlobStore store = (BlobStore) getStore(replica.getPartitionId(), true);
       store.deleteStoreFiles();
     } else {
       throw new IllegalStateException("Failed to remote store " + partitionName + " from storage manager");
