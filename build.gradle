@@ -43,7 +43,17 @@ allprojects {
 
 subprojects {
     apply plugin: 'java'
-    if (!project.hasProperty('disableShipkit')) {
+    if (project.hasProperty('disableShipkit')) {
+        // internal builds still want the test jar, but not sources/javadoc targets
+        task testJar(type: Jar, dependsOn: testClasses) {
+            from sourceSets.test.output
+            classifier = 'test'
+        }
+
+        artifacts {
+            archives testJar
+        }
+    } else {
         apply from: "$rootDir/gradle/java-publishing.gradle"
     }
 
