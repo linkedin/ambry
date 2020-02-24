@@ -78,6 +78,8 @@ subprojects {
 
     dependencies {
         compile "org.slf4j:slf4j-api:$slf4jVersion"
+        testCompile "log4j:log4j:$log4jVersion"
+        testCompile "org.slf4j:slf4j-log4j12:$slf4jVersion"
         testCompile "junit:junit:$junitVersion"
         testCompile "org.mockito:mockito-core:2.+"
         testRuntime project(':log4j-test-config')
