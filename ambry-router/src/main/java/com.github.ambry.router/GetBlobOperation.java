@@ -103,6 +103,7 @@ class GetBlobOperation extends GetOperation {
   private ListIterator<CompositeBlobInfo.ChunkMetadata> chunkIdIterator;
   // chunk index to retrieved chunk buffer mapping.
   private Map<Integer, ByteBuf> chunkIndexToBuf;
+  private Map<Integer, ByteBuf> chunkIndexToBufWaitingForRelease;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
   // the blob info that is populated on OperationType.BlobInfo or OperationType.All
@@ -366,7 +367,7 @@ class GetBlobOperation extends GetOperation {
           setOperationException(exception);
         }
         int currentNumChunk = numChunksWrittenOut.get();
-        ByteBuf byteBuf = chunkIndexToBuf.remove(currentNumChunk);
+        ByteBuf byteBuf = chunkIndexToBufWaitingForRelease.remove(currentNumChunk);
         if (byteBuf != null) {
           byteBuf.release();
         }
@@ -442,9 +443,12 @@ class GetBlobOperation extends GetOperation {
       // if there are chunks available to be written out, do now.
       if (firstChunk.isComplete() && readCalled) {
         while (operationException.get() == null && chunkIndexToBuf.containsKey(indexOfNextChunkToWriteOut)) {
-          ByteBuf byteBuf = chunkIndexToBuf.get(indexOfNextChunkToWriteOut);
-          asyncWritableChannel.write(byteBuf.nioBuffer(), chunkAsyncWriteCallback);
-          indexOfNextChunkToWriteOut++;
+          ByteBuf byteBuf = chunkIndexToBuf.remove(indexOfNextChunkToWriteOut);
+          if (byteBuf != null) {
+            chunkIndexToBufWaitingForRelease.put(indexOfNextChunkToWriteOut, byteBuf);
+            asyncWritableChannel.write(byteBuf.nioBuffer(), chunkAsyncWriteCallback);
+            indexOfNextChunkToWriteOut++;
+          }
         }
         if (operationException.get() != null || numChunksWrittenOut.get() == numChunksTotal) {
           completeRead();
@@ -1224,6 +1228,7 @@ class GetBlobOperation extends GetOperation {
         }
         blobType = blobData.getBlobType();
         chunkIndexToBuf = new ConcurrentHashMap<>();
+        chunkIndexToBufWaitingForRelease = new ConcurrentHashMap<>();
         if (rawMode) {
           if (blobData != null) {
             // RawMode, release blob data.

@@ -93,6 +93,7 @@ public class EncryptJob implements CryptoJob {
    * Close the job with the given {@code gse}
    * @param gse the {@link GeneralSecurityException} that needs to be set while invoking callback for the job
    */
+  @Override
   public void closeJob(GeneralSecurityException gse) {
     callback.onCompletion(null, gse);
   }
