@@ -316,6 +316,8 @@ project(':ambry-rest') {
         compile "io.netty:netty-all:$nettyVersion"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
         compile "javax.servlet:javax.servlet-api:$javaxVersion"
+        runtimeOnly "log4j:log4j:$log4jVersion"
+        runtimeOnly "org.slf4j:slf4j-log4j12:$slf4jVersion"
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
@@ -362,8 +364,6 @@ project(':ambry-frontend') {
                 project(':ambry-rest'),
                 project(':ambry-router')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        runtimeOnly "log4j:log4j:$log4jVersion"
-        runtimeOnly "org.slf4j:slf4j-log4j12:$slf4jVersion"
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-account').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
