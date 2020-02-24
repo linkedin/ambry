@@ -22,7 +22,9 @@ println "Building version $version"
 apply from: file('gradle/license.gradle')
 apply from: file('gradle/environment.gradle')
 apply from: file("gradle/dependency-versions.gradle")
-apply from: file("gradle/ci-release.gradle")
+if (!project.hasProperty('disableShipkit')) {
+    apply from: file("gradle/ci-release.gradle")
+}
 
 allprojects {
     group = "com.github.ambry"
@@ -41,7 +43,9 @@ allprojects {
 
 subprojects {
     apply plugin: 'java'
-    apply from: "$rootDir/gradle/java-publishing.gradle"    
+    if (!project.hasProperty('disableShipkit')) {
+        apply from: "$rootDir/gradle/java-publishing.gradle"
+    }
 
     sourceCompatibility = 1.8
     targetCompatibility = 1.8
@@ -110,7 +114,7 @@ subprojects {
         group = 'verification'
     }
     allTest.dependsOn test
-    allTest.dependsOn intTest    
+    allTest.dependsOn intTest
     javadoc {
         // TODO audit and fix our javadocs so that we don't need this setting
         // This is mainly for cases where param/throws tags don't have descriptions
