@@ -1061,9 +1061,8 @@ class PersistentIndex {
     if (putValue != null) {
       // use the expiration time from the original value because it may have been updated
       readOptions = new BlobReadOptions(log, putValue.getOffset(),
-          new MessageInfo(key, putValue.getSize(), true, value.isFlagSet(IndexValue.Flags.Ttl_Update_Index),
-              value.getExpiresAtMs(), putValue.getAccountId(), putValue.getContainerId(),
-              putValue.getOperationTimeInMs()));
+          new MessageInfo(key, putValue.getSize(), true, value.isTTLUpdate(), value.getExpiresAtMs(),
+              putValue.getAccountId(), putValue.getContainerId(), putValue.getOperationTimeInMs()));
     } else {
       // PUT record no longer available.
       throw new StoreException("Did not find PUT index entry for key [" + key
