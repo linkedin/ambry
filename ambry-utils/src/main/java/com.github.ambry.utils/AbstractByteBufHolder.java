@@ -22,7 +22,7 @@ import io.netty.buffer.ByteBufHolder;
  * only have to provide necessary implementation of a few methods.
  * @param <T> The subclass type.
  */
-public abstract class AbstractByteBufHolder<T extends AbstractByteBufHolder> implements ByteBufHolder {
+public abstract class AbstractByteBufHolder<T extends AbstractByteBufHolder<T>> implements ByteBufHolder {
 
   @Override
   public abstract ByteBuf content();

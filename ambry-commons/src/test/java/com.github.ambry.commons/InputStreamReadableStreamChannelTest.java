@@ -15,6 +15,7 @@ package com.github.ambry.commons;
 
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -26,6 +27,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -36,6 +39,17 @@ import static org.junit.Assert.*;
  */
 public class InputStreamReadableStreamChannelTest {
   private static final ExecutorService EXECUTOR_SERVICE = Executors.newSingleThreadExecutor();
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
 
   /**
    * Tests different types of {@link InputStream} and different sizes of the stream and ensures that the data is read
@@ -118,7 +132,7 @@ public class InputStreamReadableStreamChannelTest {
     // Read after close.
     channel = new InputStreamReadableStreamChannel(stream, EXECUTOR_SERVICE);
     channel.close();
-    CopyingAsyncWritableChannel writeChannel = new CopyingAsyncWritableChannel();
+    RetainingAsyncWritableChannel writeChannel = new RetainingAsyncWritableChannel();
     callback = new ReadIntoCallback();
     try {
       channel.readInto(writeChannel, callback).get();
@@ -132,7 +146,7 @@ public class InputStreamReadableStreamChannelTest {
 
     // Reading more than once.
     channel = new InputStreamReadableStreamChannel(stream, EXECUTOR_SERVICE);
-    writeChannel = new CopyingAsyncWritableChannel();
+    writeChannel = new RetainingAsyncWritableChannel();
     channel.readInto(writeChannel, null);
     try {
       channel.readInto(writeChannel, null);
@@ -192,7 +206,7 @@ public class InputStreamReadableStreamChannelTest {
       assertEquals("Reported size of channel incorrect", -1, channel.getSize());
     }
     assertTrue("Channel should be open", channel.isOpen());
-    CopyingAsyncWritableChannel writableChannel = new CopyingAsyncWritableChannel(src.length);
+    RetainingAsyncWritableChannel writableChannel = new RetainingAsyncWritableChannel(src.length);
     ReadIntoCallback callback = new ReadIntoCallback();
     long bytesRead = channel.readInto(writableChannel, callback).get(1, TimeUnit.SECONDS);
     callback.awaitCallback();
@@ -201,8 +215,10 @@ public class InputStreamReadableStreamChannelTest {
     }
     assertEquals("Total bytes written does not match (callback)", src.length, callback.bytesRead);
     assertEquals("Total bytes written does not match (future)", src.length, bytesRead);
-    assertArrayEquals("Data does not match", src,
-        Utils.readBytesFromStream(writableChannel.getContentAsInputStream(), (int) writableChannel.getBytesWritten()));
+    try (InputStream is = writableChannel.consumeContentAsInputStream()) {
+      assertArrayEquals("Data does not match", src,
+          Utils.readBytesFromStream(is, (int) writableChannel.getBytesWritten()));
+    }
     channel.close();
     assertFalse("Channel should be closed", channel.isOpen());
     writableChannel.close();

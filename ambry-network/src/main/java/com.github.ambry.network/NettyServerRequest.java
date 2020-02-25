@@ -15,23 +15,28 @@ package com.github.ambry.network;
 
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.utils.AbstractByteBufHolder;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
+import io.netty.buffer.ByteBuf;
 import java.io.InputStream;
 
 
 /**
  * A wrapper class at the network layer for NettyRequest based RestRequest.
  */
-public class NettyServerRequest implements NetworkRequest {
+public class NettyServerRequest extends AbstractByteBufHolder<NettyServerRequest> implements NetworkRequest {
   private final InputStream inputStream;
   private final RestResponseChannel restResponseChannel;
   private final RestRequest restRequest;
   private final long startTimeInMs;
+  private final ByteBuf content;
 
-  public NettyServerRequest(RestRequest restRequest, RestResponseChannel restResponseChannel, InputStream inputStream) {
+  public NettyServerRequest(RestRequest restRequest, RestResponseChannel restResponseChannel, ByteBuf content) {
     this.restRequest = restRequest;
     this.restResponseChannel = restResponseChannel;
-    this.inputStream = inputStream;
+    this.content = content;
+    this.inputStream = new NettyByteBufDataInputStream(content);
     this.startTimeInMs = SystemTime.getInstance().milliseconds();
   }
 
@@ -51,6 +56,16 @@ public class NettyServerRequest implements NetworkRequest {
 
   public RestResponseChannel getRestResponseChannel() {
     return restResponseChannel;
+  }
+
+  @Override
+  public ByteBuf content() {
+    return content;
+  }
+
+  @Override
+  public NettyServerRequest replace(ByteBuf content) {
+    return new NettyServerRequest(getRestRequest(), getRestResponseChannel(), content);
   }
 }
 

@@ -38,7 +38,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
-import com.github.ambry.commons.CopyingAsyncWritableChannel;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -2070,10 +2070,11 @@ final class ServerTestUtil {
     ReadableStreamChannel blob = result.getBlobDataChannel();
     assertEquals("Size does not match that of data", data.length,
         result.getBlobInfo().getBlobProperties().getBlobSize());
-    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel();
+    RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
     blob.readInto(channel, null).get(1, TimeUnit.SECONDS);
-    Assert.assertArrayEquals(data,
-        Utils.readBytesFromStream(channel.getContentAsInputStream(), (int) channel.getBytesWritten()));
+    try (InputStream is = channel.consumeContentAsInputStream()) {
+      Assert.assertArrayEquals(data, Utils.readBytesFromStream(is, (int) channel.getBytesWritten()));
+    }
   }
 
   private static void checkBlobContent(MockClusterMap clusterMap, BlobId blobId, ConnectedChannel channel,

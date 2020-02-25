@@ -15,7 +15,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
-import com.github.ambry.commons.CopyingAsyncWritableChannel;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.AsyncWritableChannel;
@@ -41,6 +41,7 @@ import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
 import io.netty.handler.codec.http.multipart.MemoryFileUpload;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.Charset;
@@ -481,7 +482,7 @@ public class NettyMultipartRequestTest {
     assertEquals("Request size does not match", expectedRequestSize, request.getSize());
     request.prepare();
 
-    CopyingAsyncWritableChannel asyncWritableChannel;
+    RetainingAsyncWritableChannel asyncWritableChannel;
     byte[] readOutput;
     Map<String, Object> args = request.getArgs();
     ByteBuffer blobData = ByteBuffer.allocate(0);
@@ -507,10 +508,11 @@ public class NettyMultipartRequestTest {
         }
       }
     }
-    asyncWritableChannel = new CopyingAsyncWritableChannel(expectedRequestSize);
+    asyncWritableChannel = new RetainingAsyncWritableChannel(expectedRequestSize);
     request.readInto(asyncWritableChannel, null).get();
-    readOutput = Utils.readBytesFromStream(asyncWritableChannel.getContentAsInputStream(),
-        (int) asyncWritableChannel.getBytesWritten());
+    try (InputStream is = asyncWritableChannel.consumeContentAsInputStream()) {
+      readOutput = Utils.readBytesFromStream(is, (int) asyncWritableChannel.getBytesWritten());
+    }
     assertArrayEquals(RestUtils.MultipartPost.BLOB_PART + " content does not match", blobData.array(), readOutput);
     assertArrayEquals("Part by part digest should match digest of whole", wholeDigest, request.getDigest());
     closeRequestAndValidate(request);
