@@ -86,7 +86,7 @@ class NettyResponseChannel implements RestResponseChannel {
   private final ChunkedWriteHandler chunkedWriteHandler;
   private final PerformanceConfig perfConfig;
 
-  private final static Logger logger = LoggerFactory.getLogger(NettyResponseChannel.class);
+  private static final Logger logger = LoggerFactory.getLogger(NettyResponseChannel.class);
   private final HttpResponse responseMetadata = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
   // tracks whether onResponseComplete() has been called. Helps make it idempotent and also treats response channel as
   // closed if this is true.
@@ -127,19 +127,19 @@ class NettyResponseChannel implements RestResponseChannel {
 
   @Override
   public Future<Long> write(ByteBuffer src, Callback<Long> callback) {
-    return write(Unpooled.wrappedBuffer(src), new Callback<Long>() {
+    FutureResult<Long> futureResult = new FutureResult<>();
+    write(Unpooled.wrappedBuffer(src), new Callback<Long>() {
       @Override
       public void onCompletion(Long result, Exception exception) {
-        if (exception == null) {
-          src.position(src.limit());
-        } else {
-          src.position(result.intValue());
-        }
+        long r = result == null ? (long) 0 : result.longValue();
+        src.position((int) r);
+        futureResult.done(r, exception);
         if (callback != null) {
           callback.onCompletion(result, exception);
         }
       }
     });
+    return futureResult;
   }
 
   @Override
@@ -460,7 +460,7 @@ class NettyResponseChannel implements RestResponseChannel {
 
   /**
    * Builds and sends an error response to the client based on {@code cause}.
-   *j@param exception the cause of the request handling failure.
+   * @param exception the cause of the request handling failure.
    * @return {@code true} if error response was scheduled to be sent. {@code false} otherwise.
    */
   private boolean maybeSendErrorResponse(Exception exception) {
@@ -895,11 +895,12 @@ class NettyResponseChannel implements RestResponseChannel {
         chunk.onDequeue();
         progress.addAndGet(chunk.buffer.readableBytes());
         chunksAwaitingCallback.add(chunk);
+        // Since netty would release the outbound message after finishing writing, here we have to increase the ref-counter.
         if (chunk.isLast) {
-          content = new DefaultLastHttpContent(chunk.buffer);
+          content = new DefaultLastHttpContent(chunk.buffer.retain());
           sentLastChunk = true;
         } else {
-          content = new DefaultHttpContent(chunk.buffer);
+          content = new DefaultHttpContent(chunk.buffer.retain());
         }
       } else if (allChunksWritten() && !sentLastChunk) {
         // Send last chunk for this input

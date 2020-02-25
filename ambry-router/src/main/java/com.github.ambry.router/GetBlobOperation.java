@@ -446,7 +446,7 @@ class GetBlobOperation extends GetOperation {
           ByteBuf byteBuf = chunkIndexToBuf.remove(indexOfNextChunkToWriteOut);
           if (byteBuf != null) {
             chunkIndexToBufWaitingForRelease.put(indexOfNextChunkToWriteOut, byteBuf);
-            asyncWritableChannel.write(byteBuf.nioBuffer(), chunkAsyncWriteCallback);
+            asyncWritableChannel.write(byteBuf, chunkAsyncWriteCallback);
             indexOfNextChunkToWriteOut++;
           }
         }
