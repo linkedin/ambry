@@ -234,9 +234,9 @@ public class BlobIdTransformer implements Transformer {
               oldProperties.getCreationTimeInMs(), newBlobId.getAccountId(), newBlobId.getContainerId(),
               oldProperties.isEncrypted(), null);
 
-      // BlobIDTransformer only exists on ambry-server and we don't enable netty on ambry server yet. So And blobData.getAndRelease
-      // will return an Unpooled ByteBuf, it's not required to release it.
-      // @todo, when enabling netty in ambry-server, release this ByteBuf.
+      // BlobIDTransformer only exists on ambry-server and replication between servers is relying on blocking channel
+      // which is still using java ByteBuffer. So, no need to consider releasing stuff.
+      // @todo, when netty Bytebuf is adopted for blocking channel on ambry-server, remember to release this ByteBuf.
       PutMessageFormatInputStream putMessageFormatInputStream =
           new PutMessageFormatInputStream(newKey, blobEncryptionKey, newProperties, userMetaData,
               new ByteBufInputStream(blobDataBytes, true), blobData.getSize(), blobData.getBlobType());

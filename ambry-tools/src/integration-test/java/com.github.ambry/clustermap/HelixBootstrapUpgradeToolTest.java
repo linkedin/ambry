@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
@@ -184,7 +185,7 @@ public class HelixBootstrapUpgradeToolTest {
     // bootstrap a cluster
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.OLD_STATE_MODEL_DEF);
+        ClusterMapConfig.OLD_STATE_MODEL_DEF, false);
     // add new state model def
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
@@ -225,7 +226,7 @@ public class HelixBootstrapUpgradeToolTest {
       try {
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
-            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, false);
         fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
       } catch (IllegalArgumentException e) {
         // OK
@@ -248,7 +249,7 @@ public class HelixBootstrapUpgradeToolTest {
     dataNode = new DataNode(dataNode.getDatacenter(), jsonObject, clusterMapConfig);
     InstanceConfig referenceInstanceConfig =
         HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
-            Collections.emptyMap(), null);
+            new ConcurrentHashMap<>(), null);
     // Assert that xid field does not get set in InstanceConfig when it is the default.
     assertNull(referenceInstanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR));
 
@@ -257,7 +258,7 @@ public class HelixBootstrapUpgradeToolTest {
     dataNode = new DataNode(dataNode.getDatacenter(), jsonObject, clusterMapConfig);
     InstanceConfig instanceConfig =
         HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
-            Collections.emptyMap(), null);
+            new ConcurrentHashMap<>(), null);
     assertEquals("10", instanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR));
     assertThat(referenceInstanceConfig.getRecord(), not(equalTo(instanceConfig.getRecord())));
 
@@ -269,7 +270,7 @@ public class HelixBootstrapUpgradeToolTest {
     // set the field to null. The created InstanceConfig should not have null fields.
     referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, null);
     instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
-        Collections.emptyMap(), referenceInstanceConfig);
+        new ConcurrentHashMap<>(), referenceInstanceConfig);
     // Stopped replicas should be an empty list and not null, so set that in referenceInstanceConfig for comparison.
     referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, Collections.emptyList());
     assertEquals(instanceConfig.getRecord(), referenceInstanceConfig.getRecord());
@@ -278,7 +279,7 @@ public class HelixBootstrapUpgradeToolTest {
     List<String> stoppedReplicas = Arrays.asList("11", "15");
     referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicas);
     instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
-        Collections.emptyMap(), referenceInstanceConfig);
+        new ConcurrentHashMap<>(), referenceInstanceConfig);
     assertEquals(instanceConfig.getRecord(), referenceInstanceConfig.getRecord());
   }
 
@@ -487,7 +488,7 @@ public class HelixBootstrapUpgradeToolTest {
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, new HelixAdminFactory(),
-        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, false);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 
