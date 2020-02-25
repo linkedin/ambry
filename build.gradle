@@ -114,6 +114,8 @@ subprojects {
         classpath = sourceSets.intTest.runtimeClasspath
         testLogging {
             exceptionFormat = 'full'
+            events 'started', 'failed', 'passed', 'skipped'
+            showStandardStreams = false
         }
         maxHeapSize = "3g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
