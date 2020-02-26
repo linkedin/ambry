@@ -480,6 +480,7 @@ public class HelixBootstrapUpgradeToolTest {
    */
   @Test
   public void testResourceChangeOnlyOption() throws Exception {
+    String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
     // Test regular bootstrap. This is to ensure InstanceConfig and IdealState are there before testing changing
     // IdealState (to trigger replica movement)
     long expectedResourceCount =
@@ -502,12 +503,22 @@ public class HelixBootstrapUpgradeToolTest {
     Disk diskForNewReplica;
     do {
       diskForNewReplica = testHardwareLayout.getRandomDisk();
-    } while (partition1Nodes.contains(diskForNewReplica.getDataNode()));
+    } while (partition1Nodes.contains(diskForNewReplica.getDataNode()) || !diskForNewReplica.getDataNode()
+        .getDatacenterName()
+        .equals("DC1"));
     // Add new replica into partition1
     ReplicaId replicaToAdd = new Replica(partition1, diskForNewReplica, testHardwareLayout.clusterMapConfig);
     partition1.addReplica(replicaToAdd);
     // Remove a replica from partition2.
     ReplicaId removedReplica = partition2.getReplicas().remove(0);
+
+    String dcName = replicaToAdd.getDataNodeId().getDatacenterName();
+    ZkInfo zkInfo = dcsToZkInfo.get(dcName);
+    ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+    InstanceConfig instanceConfig =
+        admin.getInstanceConfig(clusterName, HelixBootstrapUpgradeUtil.getInstanceName(replicaToAdd.getDataNodeId()));
+    // deep copy for subsequent verification
+    InstanceConfig previousInstanceConfig = new InstanceConfig(instanceConfig.getRecord());
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
@@ -522,18 +533,33 @@ public class HelixBootstrapUpgradeToolTest {
     verifyIdealStateForPartition(replicaToAdd, true, 4, expectedResourceCount);
     // 2. removed old replica is no longer present in the IdealState
     verifyIdealStateForPartition(removedReplica, false, 2, expectedResourceCount);
+
+    // verify the InstanceConfig stays unchanged
+    InstanceConfig currentInstanceConfig =
+        admin.getInstanceConfig(clusterName, HelixBootstrapUpgradeUtil.getInstanceName(replicaToAdd.getDataNodeId()));
+    assertEquals("InstanceConfig should stay unchanged", previousInstanceConfig.getRecord(),
+        currentInstanceConfig.getRecord());
   }
 
+  /***
+   * A helper method to verify IdealState for given replica's partition. It checks number of replicas (represented by
+   * instances) under certain partition and verifies new added replica exists or removed old replica is no longer present.
+   * @param replica the replica to check if it exists (could be either added replica or removed replica)
+   * @param shouldExist if {@code true}, it means the given replica is newly added and should exist in IdealState.
+   *                    {@code false} otherwise.
+   * @param expectedReplicaCountForPartition expected number of replicas under certain partition
+   * @param expectedResourceCount expected total number resource count in this cluster.
+   */
   private void verifyIdealStateForPartition(ReplicaId replica, boolean shouldExist,
       int expectedReplicaCountForPartition, long expectedResourceCount) {
     String dcName = replica.getDataNodeId().getDatacenterName();
     ZkInfo zkInfo = dcsToZkInfo.get(dcName);
+    String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
     ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
     if (!activeDcSet.contains(dcName)) {
       Assert.assertFalse("Cluster should not be present, as dc " + dcName + " is not enabled",
-          admin.getClusters().contains(CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP));
+          admin.getClusters().contains(clusterName));
     } else {
-      String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
       List<String> resources = admin.getResourcesInCluster(clusterName);
       assertEquals("Resource count mismatch", expectedResourceCount, resources.size());
       String partitionName = replica.getPartitionId().toPathString();
