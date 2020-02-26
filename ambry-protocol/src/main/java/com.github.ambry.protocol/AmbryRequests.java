@@ -397,7 +397,7 @@ public class AmbryRequests implements RequestAPI {
       } else {
         BlobId convertedBlobId = (BlobId) convertedStoreKey;
         MessageInfo info =
-            new MessageInfo(convertedStoreKey, 0, convertedBlobId.getAccountId(), convertedBlobId.getContainerId(),
+            new MessageInfo(convertedStoreKey, -1, convertedBlobId.getAccountId(), convertedBlobId.getContainerId(),
                 deleteRequest.getDeletionTimeInMs());
         Store storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
         storeToDelete.delete(Collections.singletonList(info));
@@ -466,7 +466,7 @@ public class AmbryRequests implements RequestAPI {
       } else {
         BlobId convertedStoreKey =
             (BlobId) getConvertedStoreKeys(Collections.singletonList(updateRequest.getBlobId())).get(0);
-        MessageInfo info = new MessageInfo(convertedStoreKey, 0, false, true, updateRequest.getExpiresAtMs(),
+        MessageInfo info = new MessageInfo(convertedStoreKey, -1, false, true, updateRequest.getExpiresAtMs(),
             convertedStoreKey.getAccountId(), convertedStoreKey.getContainerId(), updateRequest.getOperationTimeInMs());
         Store store = storeManager.getStore(updateRequest.getBlobId().getPartition());
         store.updateTtl(Collections.singletonList(info));
@@ -650,7 +650,7 @@ public class AmbryRequests implements RequestAPI {
       } else {
         BlobId convertedBlobId = (BlobId) convertedStoreKey;
         MessageInfo info =
-            new MessageInfo(convertedBlobId, 0, convertedBlobId.getAccountId(), convertedBlobId.getContainerId(),
+            new MessageInfo(convertedBlobId, -1, convertedBlobId.getAccountId(), convertedBlobId.getContainerId(),
                 undeleteRequest.getOperationTimeMs());
         Store storeToUndelete = storeManager.getStore(undeleteRequest.getBlobId().getPartition());
         short lifeVersion = storeToUndelete.undelete(info);
