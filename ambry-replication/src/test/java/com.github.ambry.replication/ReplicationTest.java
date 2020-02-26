@@ -90,6 +90,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -716,6 +717,10 @@ public class ReplicationTest {
     storageManager.shutdown();
   }
 
+  /**
+   * Test that resuming decommission on certain replica behaves correctly.
+   * @throws Exception
+   */
   @Test
   public void replicaResumeDecommissionTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
@@ -729,8 +734,47 @@ public class ReplicationTest {
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
     StorageManager storageManager = managers.getFirst();
+    // failure case 1: store is not started when resuming decommission
+    storageManager.shutdownBlobStore(localReplica.getPartitionId());
+    try {
+      mockHelixParticipant.onPartitionBecomeDroppedFromOffline(partitionName);
+      fail("should fail");
+    } catch (StateTransitionException e) {
+      assertEquals("Mismatch in error code", ReplicaOperationFailure, e.getErrorCode());
+    }
+    storageManager.startBlobStore(localReplica.getPartitionId());
+
+    // failure case 2: fail to remove replica from InstanceConfig in Helix
     AmbryReplicaSyncUpManager replicaSyncUpManager =
         (AmbryReplicaSyncUpManager) mockHelixParticipant.getReplicaSyncUpManager();
+    mockHelixParticipant.updateNodeInfoReturnVal = false;
+    CountDownLatch executionLatch = new CountDownLatch(1);
+    AtomicBoolean exceptionOccurred = new AtomicBoolean(false);
+    Utils.newThread(() -> {
+      try {
+        mockHelixParticipant.onPartitionBecomeDroppedFromOffline(partitionName);
+        fail("shoud fail because updating node info returns false");
+      } catch (StateTransitionException e) {
+        exceptionOccurred.getAndSet(true);
+        assertEquals("Mismatch in error code", ReplicaOperationFailure, e.getErrorCode());
+      } finally {
+        executionLatch.countDown();
+      }
+    }, false).start();
+    while (!replicaSyncUpManager.getPartitionToDeactivationLatch().containsKey(partitionName)) {
+      Thread.sleep(100);
+    }
+    replicaSyncUpManager.onDeactivationComplete(localReplica);
+    while (!replicaSyncUpManager.getPartitionToDisconnectionLatch().containsKey(partitionName)) {
+      Thread.sleep(100);
+    }
+    replicaSyncUpManager.onDisconnectionComplete(localReplica);
+    assertTrue("Offline-To-Dropped transition didn't complete within 1 sec", executionLatch.await(1, TimeUnit.SECONDS));
+    assertTrue("State transition exception should be thrown", exceptionOccurred.get());
+    mockHelixParticipant.updateNodeInfoReturnVal = null;
+    storageManager.startBlobStore(localReplica.getPartitionId());
+
+    // success case
     CountDownLatch participantLatch = new CountDownLatch(1);
     Utils.newThread(() -> {
       mockHelixParticipant.onPartitionBecomeDroppedFromOffline(partitionName);

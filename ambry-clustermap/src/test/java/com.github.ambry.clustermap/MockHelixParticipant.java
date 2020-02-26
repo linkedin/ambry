@@ -31,6 +31,7 @@ import static org.mockito.Mockito.*;
 
 
 public class MockHelixParticipant extends HelixParticipant {
+  public Boolean updateNodeInfoReturnVal = null;
   CountDownLatch listenerLatch = null;
   ReplicaState replicaState = ReplicaState.OFFLINE;
   ReplicaId currentReplica = null;
@@ -111,6 +112,12 @@ public class MockHelixParticipant extends HelixParticipant {
   @Override
   public List<String> getStoppedReplicas() {
     return stoppedReplicas.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList());
+  }
+
+  @Override
+  public boolean updateDataNodeInfoInCluster(ReplicaId replicaId, boolean shouldExist) {
+    return updateNodeInfoReturnVal == null ? super.updateDataNodeInfoInCluster(replicaId, shouldExist)
+        : updateNodeInfoReturnVal;
   }
 
   @Override

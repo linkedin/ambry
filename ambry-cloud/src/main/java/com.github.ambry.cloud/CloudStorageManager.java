@@ -21,6 +21,7 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -115,6 +116,11 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public ReplicaId getReplica(String partitionName) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public Collection<PartitionId> getLocalPartitions() {
     throw new UnsupportedOperationException("Method not supported");
   }
 
