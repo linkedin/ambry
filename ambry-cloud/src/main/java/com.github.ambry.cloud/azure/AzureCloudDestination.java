@@ -96,9 +96,11 @@ class AzureCloudDestination implements CloudDestination {
         new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
     // Set up CosmosDB connection, including retry options and any proxy setting
     ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-    RetryOptions retryOptions = new RetryOptions();
-    retryOptions.setMaxRetryAttemptsOnThrottledRequests(azureCloudConfig.cosmosMaxRetries);
-    connectionPolicy.setRetryOptions(retryOptions);
+    connectionPolicy.setRequestTimeoutInMillis(cloudConfig.cloudRequestTimeout);
+    // Note: retry decisions are made at CloudBlobStore level, not here.
+    RetryOptions noRetries = new RetryOptions();
+    noRetries.setMaxRetryAttemptsOnThrottledRequests(0);
+    connectionPolicy.setRetryOptions(noRetries);
     if (azureCloudConfig.cosmosDirectHttps) {
       logger.info("Using CosmosDB DirectHttps connection mode");
       connectionPolicy.setConnectionMode(ConnectionMode.Direct);

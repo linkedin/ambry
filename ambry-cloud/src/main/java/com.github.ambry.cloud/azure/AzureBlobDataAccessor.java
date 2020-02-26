@@ -31,6 +31,7 @@ import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.azure.storage.common.policy.RequestRetryOptions;
+import com.azure.storage.common.policy.RetryPolicyType;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
@@ -60,8 +61,6 @@ import org.slf4j.LoggerFactory;
 public class AzureBlobDataAccessor {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureBlobDataAccessor.class);
-  private static final String SEPARATOR = "-";
-  private static final int batchPurgeTimeoutSec = 60;
   private final BlobServiceClient storageClient;
   private final BlobBatchClient blobBatchClient;
   private final Configuration storageConfiguration;
@@ -71,6 +70,8 @@ public class AzureBlobDataAccessor {
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
   private ProxyOptions proxyOptions;
   private final int purgeBatchSize;
+  private final Duration requestTimeout, uploadTimeout, batchTimeout;
+  private final BlobRequestConditions defaultRequestConditions = null;
 
   /**
    * Production constructor
@@ -92,12 +93,15 @@ public class AzureBlobDataAccessor {
       logger.info("Using proxy: {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
     }
     HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
+    requestTimeout = Duration.ofMillis(cloudConfig.cloudRequestTimeout);
+    uploadTimeout = Duration.ofMillis(cloudConfig.cloudUploadRequestTimeout);
+    batchTimeout = Duration.ofMillis(cloudConfig.cloudBatchRequestTimeout);
 
-    // TODO: may want to set different retry options depending on live serving or replication mode
-    RequestRetryOptions requestRetryOptions = new RequestRetryOptions();
+    // Note: retry decisions are made at CloudBlobStore level, not here.
+    RequestRetryOptions noRetries = new RequestRetryOptions(RetryPolicyType.FIXED, 1, null, null, null, null);
     storageClient = new BlobServiceClientBuilder().connectionString(azureCloudConfig.azureStorageConnectionString)
         .httpClient(client)
-        .retryOptions(requestRetryOptions)
+        .retryOptions(noRetries)
         .configuration(storageConfiguration)
         .buildClient();
     blobBatchClient = new BlobBatchClientBuilder(storageClient).buildClient();
@@ -118,6 +122,9 @@ public class AzureBlobDataAccessor {
     this.azureMetrics = azureMetrics;
     this.blobBatchClient = blobBatchClient;
     this.purgeBatchSize = AzureCloudConfig.DEFAULT_PURGE_BATCH_SIZE;
+    requestTimeout = null;
+    uploadTimeout = null;
+    batchTimeout = null;
   }
 
   /**
@@ -147,7 +154,7 @@ public class AzureBlobDataAccessor {
       BlockBlobClient blobClient = getBlockBlobClient(blobId, true);
       Map<String, String> metadata = cloudBlobMetadata.toMap();
       blobClient.uploadWithResponse(blobInputStream, inputLength, null, metadata, null, null, blobRequestConditions,
-          null, Context.NONE);
+          uploadTimeout, Context.NONE);
       logger.debug("Uploaded blob {} to ABS", blobId);
       azureMetrics.blobUploadSuccessCount.inc();
       return true;
@@ -179,32 +186,11 @@ public class AzureBlobDataAccessor {
       throws BlobStorageException, IOException {
     try {
       BlockBlobClient blobClient = getBlockBlobClient(containerName, fileName, true);
-      blobClient.uploadWithResponse(inputStream, inputStream.available(), null, null, null, null, null, null,
-          Context.NONE);
+      blobClient.uploadWithResponse(inputStream, inputStream.available(), null, null, null, null,
+          defaultRequestConditions, uploadTimeout, Context.NONE);
     } catch (UncheckedIOException e) {
       // error processing input stream
       throw e.getCause();
-    }
-  }
-
-  /**
-   * Delete a file from blob storage.
-   * @param containerName name of the container containing blob to delete.
-   * @param fileName name of the blob.
-   * @return {@code true} if the deletion was successful, {@code false} if the blob was not found.
-   * @throws BlobStorageException for any error on ABS side.
-   */
-  public boolean deleteFile(String containerName, String fileName) throws BlobStorageException {
-    try {
-      BlockBlobClient blobClient = getBlockBlobClient(containerName, fileName, false);
-      blobClient.delete();
-      return true;
-    } catch (BlobStorageException e) {
-      if (isNotFoundError(e.getErrorCode())) {
-        return false;
-      } else {
-        throw e;
-      }
     }
   }
 
@@ -222,7 +208,8 @@ public class AzureBlobDataAccessor {
       throws BlobStorageException {
     try {
       BlockBlobClient blobClient = getBlockBlobClient(containerName, fileName, false);
-      blobClient.download(outputStream);
+      blobClient.downloadWithResponse(outputStream, null, null, defaultRequestConditions, false, requestTimeout,
+          Context.NONE);
       return true;
     } catch (BlobStorageException e) {
       if (!errorOnNotFound && isNotFoundError(e.getErrorCode())) {
@@ -239,7 +226,7 @@ public class AzureBlobDataAccessor {
   void testConnectivity() {
     try {
       // TODO: Turn on verbose logging during this call (how to do in v12?)
-      storageClient.getBlobContainerClient("partition-0").existsWithResponse(Duration.ofSeconds(1), Context.NONE);
+      storageClient.getBlobContainerClient("partition-0").existsWithResponse(Duration.ofSeconds(5), Context.NONE);
       logger.info("Blob storage connection test succeeded.");
     } catch (BlobStorageException ex) {
       throw new IllegalStateException("Blob storage connection test failed", ex);
@@ -284,7 +271,8 @@ public class AzureBlobDataAccessor {
       BlockBlobClient blobClient = getBlockBlobClient(blobId, false);
       Timer.Context storageTimer = azureMetrics.blobUpdateTime.time();
       try {
-        BlobProperties blobProperties = blobClient.getProperties();
+        BlobProperties blobProperties =
+            blobClient.getPropertiesWithResponse(defaultRequestConditions, requestTimeout, Context.NONE).getValue();
         if (blobProperties == null) {
           logger.debug("Blob {} not found.", blobId);
           return false;
@@ -297,7 +285,7 @@ public class AzureBlobDataAccessor {
           metadata.put(fieldName, textValue);
           // Set condition to ensure we don't clobber another update
           BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(etag);
-          blobClient.setMetadataWithResponse(metadata, blobRequestConditions, null, Context.NONE);
+          blobClient.setMetadataWithResponse(metadata, blobRequestConditions, requestTimeout, Context.NONE);
         }
         return true;
       } finally {
@@ -332,7 +320,7 @@ public class AzureBlobDataAccessor {
         BlobLayout blobLayout = blobLayoutStrategy.getDataBlobLayout(blobMetadata);
         responseList.add(blobBatch.deleteBlob(blobLayout.containerName, blobLayout.blobFilePath));
       }
-      blobBatchClient.submitBatchWithResponse(blobBatch, false, Duration.ofSeconds(batchPurgeTimeoutSec), Context.NONE);
+      blobBatchClient.submitBatchWithResponse(blobBatch, false, batchTimeout, Context.NONE);
       for (int j = 0; j < responseList.size(); j++) {
         Response<Void> response = responseList.get(j);
         CloudBlobMetadata blobMetadata = batchOfBlobs.get(j);

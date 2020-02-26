@@ -28,7 +28,6 @@ public class AzureCloudConfig {
   public static final String COSMOS_ENDPOINT = "cosmos.endpoint";
   public static final String COSMOS_COLLECTION_LINK = "cosmos.collection.link";
   public static final String COSMOS_KEY = "cosmos.key";
-  public static final String COSMOS_MAX_RETRIES = "cosmos.max.retries";
   public static final String COSMOS_DIRECT_HTTPS = "cosmos.direct.https";
   public static final String AZURE_PURGE_BATCH_SIZE = "azure.purge.batch.size";
   public static final String AZURE_NAME_SCHEME_VERSION = "azure.name.scheme.version";
@@ -36,7 +35,6 @@ public class AzureCloudConfig {
   // Per docs.microsoft.com/en-us/rest/api/storageservices/blob-batch
   public static final int MAX_PURGE_BATCH_SIZE = 256;
   public static final int DEFAULT_PURGE_BATCH_SIZE = 100;
-  public static final int DEFAULT_COSMOS_MAX_RETRIES = 5;
   public static final int DEFAULT_NAME_SCHEME_VERSION = 0;
   public static final String DEFAULT_CONTAINER_STRATEGY = "Partition";
 
@@ -64,13 +62,6 @@ public class AzureCloudConfig {
   @Config(COSMOS_KEY)
   public final String cosmosKey;
 
-  /**
-   * The maximum number of retries for Cosmos DB requests.
-   */
-  @Config(COSMOS_MAX_RETRIES)
-  @Default("5")
-  public final int cosmosMaxRetries;
-
   @Config(AZURE_PURGE_BATCH_SIZE)
   @Default("100")
   public final int azurePurgeBatchSize;
@@ -96,7 +87,6 @@ public class AzureCloudConfig {
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
     cosmosCollectionLink = verifiableProperties.getString(COSMOS_COLLECTION_LINK);
     cosmosKey = verifiableProperties.getString(COSMOS_KEY);
-    cosmosMaxRetries = verifiableProperties.getInt(COSMOS_MAX_RETRIES, DEFAULT_COSMOS_MAX_RETRIES);
     azurePurgeBatchSize =
         verifiableProperties.getIntInRange(AZURE_PURGE_BATCH_SIZE, DEFAULT_PURGE_BATCH_SIZE, 1, MAX_PURGE_BATCH_SIZE);
     cosmosDirectHttps = verifiableProperties.getBoolean(COSMOS_DIRECT_HTTPS, false);
