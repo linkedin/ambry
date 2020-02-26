@@ -939,7 +939,7 @@ class HelixBootstrapUpgradeUtil {
    * @param dataNode the {@link DataNodeId} of the data node.
    * @return the instance name string.
    */
-  private static String getInstanceName(DataNodeId dataNode) {
+  static String getInstanceName(DataNodeId dataNode) {
     return ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
   }
 
@@ -978,6 +978,7 @@ class HelixBootstrapUpgradeUtil {
     info("Verifying equivalency of static cluster: " + clusterNameInStaticClusterMap + " with the "
         + "corresponding cluster in Helix: " + clusterName);
     CountDownLatch verificationLatch = new CountDownLatch(adminForDc.size());
+    AtomicInteger errorCount = new AtomicInteger();
     for (Datacenter dc : hardwareLayout.getDatacenters()) {
       HelixAdmin admin = adminForDc.get(dc.getName());
       if (admin == null) {
@@ -987,12 +988,19 @@ class HelixBootstrapUpgradeUtil {
       ensureOrThrow(admin.getClusters().contains(clusterName),
           "Cluster not found in ZK " + dataCenterToZkAddress.get(dc.getName()));
       Utils.newThread(() -> {
-        verifyResourcesAndPartitionEquivalencyInDc(dc, clusterName, partitionLayout);
-        verifyDataNodeAndDiskEquivalencyInDc(dc, clusterName, partitionLayout);
-        verificationLatch.countDown();
+        try {
+          verifyResourcesAndPartitionEquivalencyInDc(dc, clusterName, partitionLayout);
+          verifyDataNodeAndDiskEquivalencyInDc(dc, clusterName, partitionLayout);
+        } catch (Throwable t) {
+          logger.error("[{}] error message: {}", dc.getName().toUpperCase(), t.getMessage());
+          errorCount.getAndIncrement();
+        } finally {
+          verificationLatch.countDown();
+        }
       }, false).start();
     }
     verificationLatch.await(5, TimeUnit.MINUTES);
+    ensureOrThrow(errorCount.get() == 0, "Error occurred when verifying equivalency with static cluster map");
     info("Successfully verified equivalency of static cluster: " + clusterNameInStaticClusterMap
         + " with the corresponding cluster in Helix: " + clusterName);
   }
@@ -1035,41 +1043,39 @@ class HelixBootstrapUpgradeUtil {
             "[" + dcName.toUpperCase() + "] Capacity mismatch for instance " + instanceName + " disk "
                 + disk.getMountPath());
 
-        Set<String> replicasInClusterMap;
-        Map<String, ReplicaId> replicaList = mountPathToReplicas.get(disk.getMountPath());
-        replicasInClusterMap = new HashSet<>();
-        if (replicaList != null) {
-          replicasInClusterMap.addAll(replicaList.keySet());
-        }
-
-        Set<String> replicasInHelix;
-        String replicasStr = diskInfoInHelix.get(ClusterMapUtils.REPLICAS_STR);
-        if (replicasStr.isEmpty()) {
-          replicasInHelix = new HashSet<>();
-        } else {
-          replicasInHelix = new HashSet<>();
-          String[] replicaInfoList = replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR);
-          for (String replicaInfo : replicaInfoList) {
-            String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
-            // This is schema specific, but the assumption is that partition id and capacity fields should always be
-            // there. At this time these are the only things checked.
-            ensureOrThrow(info.length >= 2, "[" + dcName.toUpperCase()
-                + "] Replica info field should have at least two fields - partition id and capacity");
-            replicasInHelix.add(info[0]);
-            ReplicaId replica = replicaList.get(info[0]);
-            ensureOrThrow(info[1].equals(Long.toString(replica.getCapacityInBytes())),
-                "[" + dcName.toUpperCase() + "] Replica capacity should be the same.");
-            if (info.length > 2) {
-              ensureOrThrow(info[2].equals(replica.getPartitionId().getPartitionClass()),
-                  "[" + dcName.toUpperCase() + "] Partition class should be the same.");
+        // We skip checking replicaInfo if this operation only updates resource(IdealState) without changing InstanceConfig
+        // Replica infos are expected to be different on certain nodes.
+        if (!resourceChangeOnly) {
+          Set<String> replicasInClusterMap = new HashSet<>();
+          Map<String, ReplicaId> replicaList = mountPathToReplicas.get(disk.getMountPath());
+          if (replicaList != null) {
+            replicasInClusterMap.addAll(replicaList.keySet());
+          }
+          Set<String> replicasInHelix = new HashSet<>();
+          String replicasStr = diskInfoInHelix.get(ClusterMapUtils.REPLICAS_STR);
+          if (!replicasStr.isEmpty()) {
+            String[] replicaInfoList = replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR);
+            for (String replicaInfo : replicaInfoList) {
+              String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
+              // This is schema specific, but the assumption is that partition id and capacity fields should always be
+              // there. At this time these are the only things checked.
+              ensureOrThrow(info.length >= 2, "[" + dcName.toUpperCase()
+                  + "] Replica info field should have at least two fields - partition id and capacity");
+              replicasInHelix.add(info[0]);
+              ReplicaId replica = replicaList.get(info[0]);
+              ensureOrThrow(info[1].equals(Long.toString(replica.getCapacityInBytes())),
+                  "[" + dcName.toUpperCase() + "] Replica capacity should be the same.");
+              if (info.length > 2) {
+                ensureOrThrow(info[2].equals(replica.getPartitionId().getPartitionClass()),
+                    "[" + dcName.toUpperCase() + "] Partition class should be the same.");
+              }
             }
           }
+          ensureOrThrow(replicasInClusterMap.equals(replicasInHelix),
+              "[" + dcName.toUpperCase() + "] Replica information not consistent for instance " + instanceName
+                  + " disk " + disk.getMountPath() + "\n in Helix: " + replicaList + "\n in static clustermap: "
+                  + replicasInClusterMap);
         }
-
-        ensureOrThrow(replicasInClusterMap.equals(replicasInHelix),
-            "[" + dcName.toUpperCase() + "] Replica information not consistent for instance " + instanceName + " disk "
-                + disk.getMountPath() + "\n in Helix: " + replicaList + "\n in static clustermap: "
-                + replicasInClusterMap);
       }
       ensureOrThrow(diskInfos.isEmpty(),
           "[" + dcName.toUpperCase() + "] Instance " + instanceName + " has extra disks in Helix: " + diskInfos);

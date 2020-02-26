@@ -34,6 +34,7 @@ import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
+import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONException;
@@ -470,6 +471,91 @@ public class HelixBootstrapUpgradeToolTest {
         assertTrue("Instance name doesn't exist", newReplicaMap.containsKey(instanceName));
         assertEquals("Mount path is not expected", diskForNewReplica.getMountPath(), newReplicaMap.get(instanceName));
       }
+    }
+  }
+
+  /**
+   * Test that when resourceChangeOnly is specified, Helix bootstrap tool updates resource(IdealState) only without
+   * changing InstanceConfig.
+   */
+  @Test
+  public void testResourceChangeOnlyOption() throws Exception {
+    // Test regular bootstrap. This is to ensure InstanceConfig and IdealState are there before testing changing
+    // IdealState (to trigger replica movement)
+    long expectedResourceCount =
+        (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
+
+    // Now, change the replica count for two partitions.
+    int totalPartitionCount = testPartitionLayout.getPartitionCount();
+    int firstPartitionIndex = RANDOM.nextInt(totalPartitionCount);
+    int secondPartitionIndex = (firstPartitionIndex + 1) % totalPartitionCount;
+    List<PartitionId> allPartitions = testPartitionLayout.getPartitionLayout().getPartitions(null);
+    Partition partition1 = (Partition) allPartitions.get(firstPartitionIndex);
+    Partition partition2 = (Partition) allPartitions.get(secondPartitionIndex);
+
+    // Add a new replica for partition1. Find a disk on a data node that does not already have a replica for partition1.
+    HashSet<DataNodeId> partition1Nodes = new HashSet<>();
+    for (ReplicaId replica : partition1.getReplicas()) {
+      partition1Nodes.add(replica.getDataNodeId());
+    }
+    Disk diskForNewReplica;
+    do {
+      diskForNewReplica = testHardwareLayout.getRandomDisk();
+    } while (partition1Nodes.contains(diskForNewReplica.getDataNode()));
+    // Add new replica into partition1
+    ReplicaId replicaToAdd = new Replica(partition1, diskForNewReplica, testHardwareLayout.clusterMapConfig);
+    partition1.addReplica(replicaToAdd);
+    // Remove a replica from partition2.
+    ReplicaId removedReplica = partition2.getReplicas().remove(0);
+    Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    // upgrade Helix by updating IdealState only (resourceChangeOnly = true)
+    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, true);
+    verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
+
+    // verify IdealState has been updated
+    // 1. new added replica is indeed present in the IdealState
+    verifyIdealStateForPartition(replicaToAdd, true, 4, expectedResourceCount);
+    // 2. removed old replica is no longer present in the IdealState
+    verifyIdealStateForPartition(removedReplica, false, 2, expectedResourceCount);
+  }
+
+  private void verifyIdealStateForPartition(ReplicaId replica, boolean shouldExist,
+      int expectedReplicaCountForPartition, long expectedResourceCount) {
+    String dcName = replica.getDataNodeId().getDatacenterName();
+    ZkInfo zkInfo = dcsToZkInfo.get(dcName);
+    ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+    if (!activeDcSet.contains(dcName)) {
+      Assert.assertFalse("Cluster should not be present, as dc " + dcName + " is not enabled",
+          admin.getClusters().contains(CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP));
+    } else {
+      String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+      List<String> resources = admin.getResourcesInCluster(clusterName);
+      assertEquals("Resource count mismatch", expectedResourceCount, resources.size());
+      String partitionName = replica.getPartitionId().toPathString();
+      boolean resourceFound = false;
+      for (String resource : resources) {
+        IdealState idealState = admin.getResourceIdealState(clusterName, resource);
+        if (idealState.getPartitionSet().contains(partitionName)) {
+          resourceFound = true;
+          Set<String> instances = idealState.getInstanceSet(partitionName);
+          assertEquals("Replica number is not expected", expectedReplicaCountForPartition, instances.size());
+          String instanceNameOfNewReplica = HelixBootstrapUpgradeUtil.getInstanceName(replica.getDataNodeId());
+          if (shouldExist) {
+            assertTrue("Instance set doesn't include new instance that holds added replica",
+                instances.contains(instanceNameOfNewReplica));
+          } else {
+            assertFalse("Instance that holds deleted replica should not exist in the set",
+                instances.contains(instanceNameOfNewReplica));
+          }
+          break;
+        }
+      }
+      assertTrue("No corresponding resource found for partition " + partitionName, resourceFound);
     }
   }
 
