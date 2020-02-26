@@ -21,6 +21,7 @@ import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -68,7 +69,7 @@ public class VcrBackupTest {
   @Before
   public void setup() throws Exception {
     Properties props = new Properties();
-    TestSSLUtils.addHttp2Properties(props);
+    TestSSLUtils.addHttp2Properties(props, SSLFactory.Mode.SERVER, true);
     mockCluster = new MockCluster(props, false, SystemTime.getInstance(), 1, 1, numOfPartitions);
     notificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
     mockCluster.initializeServers(notificationSystem);
