@@ -131,7 +131,7 @@ class NettyResponseChannel implements RestResponseChannel {
     write(Unpooled.wrappedBuffer(src), new Callback<Long>() {
       @Override
       public void onCompletion(Long result, Exception exception) {
-        long r = result == null ? (long) 0 : result.longValue();
+        long r = result == null ? src.position() : result.longValue();
         src.position((int) r);
         futureResult.done(r, exception);
         if (callback != null) {
@@ -828,6 +828,7 @@ class NettyResponseChannel implements RestResponseChannel {
       long bytesWritten = 0;
       if (exception == null) {
         bytesWritten = bytesToBeWritten;
+        buffer.skipBytes((int)bytesWritten);
       }
       nettyMetrics.bytesWriteRate.mark(bytesWritten);
       future.done(bytesWritten, exception);
@@ -897,10 +898,10 @@ class NettyResponseChannel implements RestResponseChannel {
         chunksAwaitingCallback.add(chunk);
         // Since netty would release the outbound message after finishing writing, here we have to increase the ref-counter.
         if (chunk.isLast) {
-          content = new DefaultLastHttpContent(chunk.buffer.retain());
+          content = new DefaultLastHttpContent(chunk.buffer.retainedDuplicate());
           sentLastChunk = true;
         } else {
-          content = new DefaultHttpContent(chunk.buffer.retain());
+          content = new DefaultHttpContent(chunk.buffer.retainedDuplicate());
         }
       } else if (allChunksWritten() && !sentLastChunk) {
         // Send last chunk for this input
