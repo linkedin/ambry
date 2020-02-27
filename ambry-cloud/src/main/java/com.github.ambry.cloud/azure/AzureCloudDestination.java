@@ -301,20 +301,11 @@ class AzureCloudDestination implements CloudDestination {
 
     try {
       if (!azureBlobDataAccessor.updateBlobMetadata(blobId, fieldName, value)) {
+        // TODO: what if this is a retry where ABS has been updated but Cosmos has not?
         return false;
       }
 
-      ResourceResponse<Document> response = cosmosDataAccessor.readMetadata(blobId);
-      Document doc = response.getResource();
-      if (doc == null) {
-        logger.warn("Blob metadata record not found: {}", blobId.getID());
-        return false;
-      }
-      // Update only if value has changed
-      if (!value.equals(doc.get(fieldName))) {
-        doc.set(fieldName, value);
-        cosmosDataAccessor.replaceMetadata(blobId, doc);
-      }
+      cosmosDataAccessor.updateMetadata(blobId, fieldName, value);
       logger.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
       azureMetrics.blobUpdatedCount.inc();
       return true;
@@ -417,6 +408,14 @@ class AzureCloudDestination implements CloudDestination {
    */
   AzureBlobDataAccessor getAzureBlobDataAccessor() {
     return azureBlobDataAccessor;
+  }
+
+  /**
+   * Visible for test
+   * @return the {@link AzureMetrics}
+   */
+  AzureMetrics getAzureMetrics() {
+    return azureMetrics;
   }
 
   /**

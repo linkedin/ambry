@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,6 +73,7 @@ public class AzureBlobDataAccessor {
   private final int purgeBatchSize;
   private final Duration requestTimeout, uploadTimeout, batchTimeout;
   private final BlobRequestConditions defaultRequestConditions = null;
+  private Callable<?> updateCallback = null;
 
   /**
    * Production constructor
@@ -125,6 +127,11 @@ public class AzureBlobDataAccessor {
     requestTimeout = null;
     uploadTimeout = null;
     batchTimeout = null;
+  }
+
+  /** Visible for testing */
+  void setUpdateCallback(Callable<?> callback) {
+    this.updateCallback = callback;
   }
 
   /**
@@ -283,7 +290,14 @@ public class AzureBlobDataAccessor {
         String textValue = String.valueOf(value);
         if (!textValue.equals(metadata.get(fieldName))) {
           metadata.put(fieldName, textValue);
-          // Set condition to ensure we don't clobber another update
+          if (updateCallback != null) {
+            try {
+              updateCallback.call();
+            } catch (Exception ex) {
+              logger.error("Error in update callback", ex);
+            }
+          }
+          // Set condition to ensure we don't clobber a concurrent update
           BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(etag);
           blobClient.setMetadataWithResponse(metadata, blobRequestConditions, requestTimeout, Context.NONE);
         }
@@ -296,7 +310,7 @@ public class AzureBlobDataAccessor {
         return false;
       }
       if (e.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
-        // TODO: blob was updated (race condition), retry the update
+        azureMetrics.blobUpdateConflictCount.inc();
       }
       throw e;
     }

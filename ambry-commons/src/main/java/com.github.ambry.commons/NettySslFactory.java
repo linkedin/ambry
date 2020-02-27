@@ -12,10 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.rest;
+package com.github.ambry.commons;
 
-import com.github.ambry.commons.JdkSslFactory;
-import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBufAllocator;

@@ -16,7 +16,6 @@ package com.github.ambry.messageformat;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.store.HardDeleteInfo;
-import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageStoreHardDelete;
 import com.github.ambry.store.MockId;
@@ -397,29 +396,6 @@ public class BlobStoreHardDeleteTest {
     // create log and write to it
     ReadImp readImp = new ReadImp();
     ArrayList<Long> msgOffsets = readImp.initialize(blobVersions, blobTypes);
-
-    // read a put record.
-    MessageInfo info = hardDelete.getMessageInfo(readImp, msgOffsets.get(0), keyFactory);
-
-    // read a ttl update record
-    hardDelete.getMessageInfo(readImp, msgOffsets.get(3), keyFactory);
-
-    // read a delete record.
-    hardDelete.getMessageInfo(readImp, msgOffsets.get(4), keyFactory);
-
-    // read from a random location.
-    try {
-      hardDelete.getMessageInfo(readImp, (msgOffsets.get(0) + msgOffsets.get(1)) / 2, keyFactory);
-      Assert.fail("Should have failed to read data from a random location");
-    } catch (IOException e) {
-    }
-
-    // offset outside of valid range.
-    try {
-      hardDelete.getMessageInfo(readImp, (msgOffsets.get(msgOffsets.size() - 1) + 1), keyFactory);
-      Assert.fail("Should have failed to read data from an offset out of valid range");
-    } catch (IOException e) {
-    }
 
     Iterator<HardDeleteInfo> iter =
         hardDelete.getHardDeleteMessages(readImp.getMessageReadSet(), keyFactory, readImp.getRecoveryInfoList());

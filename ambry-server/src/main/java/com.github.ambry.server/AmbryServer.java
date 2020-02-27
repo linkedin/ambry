@@ -51,7 +51,7 @@ import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
-import com.github.ambry.rest.NettySslHttp2Factory;
+import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
 import com.github.ambry.rest.RestRequestHandler;

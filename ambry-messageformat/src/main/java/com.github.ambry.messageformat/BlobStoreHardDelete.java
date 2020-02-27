@@ -14,15 +14,12 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.HardDeleteInfo;
-import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageStoreHardDelete;
-import com.github.ambry.store.Read;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
-import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -48,76 +45,6 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
   public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory storeKeyFactory,
       List<byte[]> recoveryInfoList) throws IOException {
     return new BlobStoreHardDeleteIterator(readSet, storeKeyFactory, recoveryInfoList);
-  }
-
-  @Override
-  public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory storeKeyFactory) throws IOException {
-    try {
-      // read message header
-      ByteBuffer headerVersion = ByteBuffer.allocate(Version_Field_Size_In_Bytes);
-      read.readInto(headerVersion, offset);
-      offset += headerVersion.capacity();
-      headerVersion.flip();
-      short version = headerVersion.getShort();
-      MessageHeader_Format headerFormat;
-      ReadInputStream stream;
-      long endOffset;
-      if (!isValidHeaderVersion(version)) {
-        throw new MessageFormatException("Version not known while reading message - " + version,
-            MessageFormatErrorCodes.Unknown_Format_Version);
-      }
-      ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(version));
-      header.putShort(version);
-      read.readInto(header, offset);
-      offset += header.capacity() - headerVersion.capacity();
-      header.flip();
-      headerFormat = getMessageHeader(version, header);
-      headerFormat.verifyHeader();
-      endOffset = offset + headerFormat.getPayloadRelativeOffset() + headerFormat.getMessageSize();
-
-      stream = new ReadInputStream(read, offset, endOffset);
-      StoreKey key = storeKeyFactory.getStoreKey(new DataInputStream(stream));
-      if (headerFormat.hasEncryptionKeyRecord()) {
-        deserializeBlobEncryptionKey(stream);
-      }
-      short lifeVersion = 0;
-      if (headerFormat.hasLifeVersion()) {
-        lifeVersion = headerFormat.getLifeVersion();
-      }
-      // read the appropriate type of message based on the relative offset that is set
-      if (headerFormat.isPutRecord()) {
-        BlobProperties properties = deserializeBlobProperties(stream);
-        return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), false, false,
-            false, Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()),
-            null, properties.getAccountId(), properties.getContainerId(), properties.getCreationTimeInMs(),
-            lifeVersion);
-      } else {
-        UpdateRecord updateRecord = deserializeUpdateRecord(stream);
-        boolean deleted = false, ttlUpdated = false, undeleted = false;
-        switch (updateRecord.getType()) {
-          case DELETE:
-            deleted = true;
-            break;
-          case TTL_UPDATE:
-            ttlUpdated = true;
-            break;
-          case UNDELETE:
-            undeleted = true;
-            break;
-          default:
-            throw new IllegalStateException("Unknown update record type: " + updateRecord.getType());
-        }
-        return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), deleted,
-            ttlUpdated, undeleted, updateRecord.getAccountId(), updateRecord.getContainerId(),
-            updateRecord.getUpdateTimeInMs(), lifeVersion);
-      }
-    } catch (MessageFormatException e) {
-      // log in case where we were not able to parse a message.
-      throw new IOException("Message format exception while parsing messages ", e);
-    } catch (IndexOutOfBoundsException e) {
-      // log in case where were not able to read a complete message.
-      throw new IOException("Trying to read more than the available bytes");
-    }
   }
 }
 

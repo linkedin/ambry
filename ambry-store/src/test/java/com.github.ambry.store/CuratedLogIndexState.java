@@ -1635,15 +1635,6 @@ class CuratedLogIndexState {
 
       return new MockMessageStoreHardDeleteIterator(readSet);
     }
-
-    @Override
-    public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
-      String segmentName = ((LogSegment) read).getName();
-      Pair<MockId, LogEntry> idAndValue = logOrder.get(new Offset(segmentName, offset));
-      IndexValue value = idAndValue.getSecond().indexValue;
-      return new MessageInfo(idAndValue.getFirst(), value.getSize(), value.getExpiresAtMs(), value.getAccountId(),
-          value.getContainerId(), value.getOperationTimeInMs());
-    }
   }
 
   /**
