@@ -39,4 +39,11 @@ public interface DiskId extends Resource {
    * @return the raw capacity in bytes
    */
   long getRawCapacityInBytes();
+
+  /**
+   * Gets the data node of this disk.
+   *
+   * @return {@link DataNodeId} hosting this disk.
+   */
+  DataNodeId getDataNodeId();
 }

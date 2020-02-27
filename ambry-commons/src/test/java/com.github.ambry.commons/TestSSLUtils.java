@@ -181,14 +181,21 @@ public class TestSSLUtils {
   }
 
   /**
-   * Setup HTTP2 server related properties.
+   * Setup HTTP2 server related properties. The method should be called after
+   * {@link TestSSLUtils#addSSLProperties(Properties, String, SSLFactory.Mode, File, String)}
    * @param properties the {@link Properties} instance.
+   * @param mode whether to generate the "client" or "server" certificate.
+   * @param sslHttp2SelfSign whether cert is self signed or not.
    */
-  public static void addHttp2Properties(Properties properties) {
-    properties.setProperty("rest.server.rest.request.service.factory",
-        "com.github.ambry.server.StorageRestRequestService");
-    properties.setProperty("rest.server.nio.server.factory", "com.github.ambry.rest.StorageServerNettyFactory");
-    properties.setProperty("ssl.client.authentication", "none");
+  public static void addHttp2Properties(Properties properties, SSLFactory.Mode mode, boolean sslHttp2SelfSign) {
+
+    if (mode == SSLFactory.Mode.SERVER) {
+      properties.setProperty("rest.server.rest.request.service.factory",
+          "com.github.ambry.server.StorageRestRequestService");
+      properties.setProperty("rest.server.nio.server.factory", "com.github.ambry.rest.StorageServerNettyFactory");
+      properties.setProperty("ssl.client.authentication", "required");
+    }
+    properties.setProperty("ssl.http2.self.sign", Boolean.toString(sslHttp2SelfSign));
   }
 
   /**
@@ -260,6 +267,29 @@ public class TestSSLUtils {
       File trustStoreFile, String certAlias) throws IOException, GeneralSecurityException {
     Properties props = new Properties();
     addSSLProperties(props, sslEnabledDatacenters, mode, trustStoreFile, certAlias, SSL_CONTEXT_PROVIDER);
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
+    return new VerifiableProperties(props);
+  }
+
+  /**
+   * Creates VerifiableProperties with HTTP2 related configs based on the values passed and few other
+   * pre-populated values
+   * @param sslEnabledDatacenters Comma separated list of datacenters against which ssl connections should be
+   *                              established
+   * @param mode Represents if the caller is a client or server
+   * @param trustStoreFile File path of the truststore file
+   * @param certAlias alias used for the certificate
+   * @return {@link VerifiableProperties} with all the required values populated
+   * @throws IOException
+   * @throws GeneralSecurityException
+   */
+  public static VerifiableProperties createHttp2Props(String sslEnabledDatacenters, SSLFactory.Mode mode,
+      File trustStoreFile, String certAlias) throws IOException, GeneralSecurityException {
+    Properties props = new Properties();
+    addSSLProperties(props, sslEnabledDatacenters, mode, trustStoreFile, certAlias, SSL_CONTEXT_PROVIDER);
+    addHttp2Properties(props, mode, false);
     props.setProperty("clustermap.cluster.name", "test");
     props.setProperty("clustermap.datacenter.name", "dc1");
     props.setProperty("clustermap.host.name", "localhost");

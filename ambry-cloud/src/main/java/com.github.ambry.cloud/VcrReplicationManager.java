@@ -82,7 +82,7 @@ public class VcrReplicationManager extends ReplicationEngine {
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, cloudDestination);
     this.cloudStorageCompactor =
-        new CloudStorageCompactor(cloudDestination, partitionToPartitionInfo.keySet(), vcrMetrics, false);
+        new CloudStorageCompactor(cloudDestination, cloudConfig, partitionToPartitionInfo.keySet(), vcrMetrics, false);
   }
 
   @Override

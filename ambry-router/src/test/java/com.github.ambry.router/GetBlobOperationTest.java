@@ -24,8 +24,6 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
-import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
@@ -39,10 +37,10 @@ import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
-import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -54,6 +52,8 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -77,6 +77,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -105,6 +106,7 @@ public class GetBlobOperationTest {
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
+  private static final String LOCAL_DC = "DC3";
   private final int replicasCount;
   private final int maxChunkSize;
   private final MockTime time = new MockTime();
@@ -168,9 +170,6 @@ public class GetBlobOperationTest {
   public void after() {
     router.close();
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
-    if (cryptoJobHandler != null) {
-      cryptoJobHandler.close();
-    }
     nettyByteBufLeakHelper.afterTest();
   }
 
@@ -612,7 +611,6 @@ public class GetBlobOperationTest {
     routerConfig = new RouterConfig(new VerifiableProperties(props));
 
     GetBlobOperation op = createOperation(routerConfig, null);
-    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
     correlationIdToGetOperation.clear();
     for (MockServer server : mockServerLayout.getMockServers()) {
       server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
@@ -714,6 +712,34 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test the case where originating dc returns 2 Disk_Unavailable and 1 Not_Found and rest replicas return Not_Found.
+   * In this case, result of GET operation will be Not_Found.
+   * @throws Exception
+   */
+  @Test
+  public void testCombinedDiskDownAndNotFoundCase() throws Exception {
+    doPut();
+    List<MockServer> localDcServers = mockServerLayout.getMockServers()
+        .stream()
+        .filter(s -> s.getDataCenter().equals(LOCAL_DC))
+        .collect(Collectors.toList());
+    mockServerLayout.getMockServers().forEach(s -> {
+      if (!localDcServers.contains(s)) {
+        s.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+      }
+    });
+    for (int i = 0; i < 3; ++i) {
+      if (i < 2) {
+        localDcServers.get(i).setServerErrorForAllRequests(ServerErrorCode.Disk_Unavailable);
+      } else {
+        localDcServers.get(i).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+      }
+    }
+    getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDoesNotExist);
+    mockServerLayout.getMockServers().forEach(MockServer::resetServerErrors);
+  }
+
+  /**
    * Test the case where servers return different {@link ServerErrorCode} or success, and the {@link GetBlobOperation}
    * is able to resolve and conclude the correct {@link RouterErrorCode}. The get operation should be able
    * to resolve the router error code as {@code Blob_Authorization_Failure}.
@@ -784,9 +810,20 @@ public class GetBlobOperationTest {
     for (ServerErrorCode serverErrorCode : serverErrors) {
       mockServerLayout.getMockServers().forEach(server -> server.setServerErrorForAllRequests(serverErrorCode));
       GetBlobOperation op = createOperationAndComplete(null);
-      assertFailureAndCheckErrorCode(op,
-          EnumSet.of(ServerErrorCode.Disk_Unavailable, ServerErrorCode.Replica_Unavailable).contains(serverErrorCode)
-              ? RouterErrorCode.AmbryUnavailable : RouterErrorCode.UnexpectedInternalError);
+      RouterErrorCode expectedRouterError;
+      switch (serverErrorCode) {
+        case Replica_Unavailable:
+          expectedRouterError = RouterErrorCode.AmbryUnavailable;
+          break;
+        case Disk_Unavailable:
+          // if all the disks are unavailable (which should be extremely rare), after replacing these disks, the blob is
+          // definitely not present.
+          expectedRouterError = RouterErrorCode.BlobDoesNotExist;
+          break;
+        default:
+          expectedRouterError = RouterErrorCode.UnexpectedInternalError;
+      }
+      assertFailureAndCheckErrorCode(op, expectedRouterError);
     }
   }
 
@@ -855,12 +892,27 @@ public class GetBlobOperationTest {
     serverErrors.remove(ServerErrorCode.No_Error);
     serverErrors.remove(ServerErrorCode.Blob_Authorization_Failure);
     boolean goodServerMarked = false;
+    boolean notFoundSetInOriginalDC = false;
     for (MockServer mockServer : mockServers) {
-      if (!goodServerMarked && mockServer.getDataCenter().equals(dcWherePutHappened)) {
-        mockServer.setServerErrorForAllRequests(ServerErrorCode.No_Error);
-        goodServerMarked = true;
+      ServerErrorCode code = serverErrors.get(random.nextInt(serverErrors.size()));
+      // make sure in the original dc, we don't set Blob_Not_Found twice.
+      if (mockServer.getDataCenter().equals(dcWherePutHappened)) {
+        if (!goodServerMarked) {
+          mockServer.setServerErrorForAllRequests(ServerErrorCode.No_Error);
+          goodServerMarked = true;
+        } else {
+          if (!notFoundSetInOriginalDC) {
+            mockServer.setServerErrorForAllRequests(code);
+            notFoundSetInOriginalDC = code == ServerErrorCode.Blob_Not_Found;
+          } else {
+            while (code == ServerErrorCode.Blob_Not_Found) {
+              code = serverErrors.get(random.nextInt(serverErrors.size()));
+            }
+            mockServer.setServerErrorForAllRequests(code);
+          }
+        }
       } else {
-        mockServer.setServerErrorForAllRequests(serverErrors.get(random.nextInt(serverErrors.size())));
+        mockServer.setServerErrorForAllRequests(code);
       }
     }
     getAndAssertSuccess();
@@ -1160,6 +1212,9 @@ public class GetBlobOperationTest {
                   chunksLeftToRead--;
                 }
                 result.getBlobResult.getBlobDataChannel().close();
+                while (writableChannel.getNextChunk(100) != null) {
+                  writableChannel.resolveOldestChunk(null);
+                }
               } catch (Exception e) {
                 callbackException.set(e);
               } finally {
@@ -1609,7 +1664,7 @@ public class GetBlobOperationTest {
   private Properties getDefaultNonBlockingRouterProperties(boolean excludeTimeout) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC3");
+    properties.setProperty("router.datacenter.name", LOCAL_DC);
     properties.setProperty("router.put.request.parallelism", Integer.toString(3));
     properties.setProperty("router.put.success.target", Integer.toString(2));
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(maxChunkSize));

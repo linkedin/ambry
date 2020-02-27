@@ -17,7 +17,7 @@ package com.github.ambry.frontend;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.commons.CopyingAsyncWritableChannel;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
@@ -122,17 +122,18 @@ class PostAccountsHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(frontendMetrics.postAccountsSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
+        RetainingAsyncWritableChannel channel =
+            new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
         restRequest.readInto(channel, fetchAccountUpdateBodyCallback(channel));
       }, uri, LOGGER, finalCallback);
     }
 
     /**
      * After reading the body of the account update request, call {@link AccountService#updateAccounts}.
-     * @param channel the {@link CopyingAsyncWritableChannel} to read data out of.
+     * @param channel the {@link RetainingAsyncWritableChannel} to read data out of.
      * @return a {@link Callback} to be used with {@link RestRequest#readInto}.
      */
-    private Callback<Long> fetchAccountUpdateBodyCallback(CopyingAsyncWritableChannel channel) {
+    private Callback<Long> fetchAccountUpdateBodyCallback(RetainingAsyncWritableChannel channel) {
       return buildCallback(frontendMetrics.postAccountsReadRequestMetrics, bytesRead -> {
         updateAccounts(readJsonFromChannel(channel));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());

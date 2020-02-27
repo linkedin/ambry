@@ -13,7 +13,7 @@
  */
 package com.github.ambry.rest;
 
-import com.github.ambry.commons.CopyingAsyncWritableChannel;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
@@ -33,6 +33,7 @@ import io.netty.handler.codec.http.HttpVersion;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
@@ -122,9 +123,10 @@ public class RestTestUtils {
    * @throws Exception
    */
   public static JSONObject getJsonizedResponseBody(ReadableStreamChannel channel) throws Exception {
-    CopyingAsyncWritableChannel asyncWritableChannel = new CopyingAsyncWritableChannel((int) channel.getSize());
+    RetainingAsyncWritableChannel asyncWritableChannel = new RetainingAsyncWritableChannel((int) channel.getSize());
     channel.readInto(asyncWritableChannel, null).get();
-    return new JSONObject(new String(Utils.readBytesFromStream(asyncWritableChannel.getContentAsInputStream(),
-        (int) asyncWritableChannel.getBytesWritten())));
+    try (InputStream is = asyncWritableChannel.consumeContentAsInputStream()) {
+      return new JSONObject(new String(Utils.readBytesFromStream(is, (int) asyncWritableChannel.getBytesWritten())));
+    }
   }
 }

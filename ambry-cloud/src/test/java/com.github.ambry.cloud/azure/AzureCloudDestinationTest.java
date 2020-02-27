@@ -397,13 +397,21 @@ public class AzureCloudDestinationTest {
   @Test
   public void testGetDeadBlobs() throws Exception {
     Observable<FeedResponse<Document>> mockResponse = getMockedObservableForQueryWithNoResults();
-
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
         mockResponse);
-    List<CloudBlobMetadata> metadataList = azureDest.getDeadBlobs(blobId.getPartition().toPathString());
+    long now = System.currentTimeMillis();
+    List<CloudBlobMetadata> metadataList = azureDest.getDeadBlobs(blobId.getPartition().toPathString(), now, 10);
     assertEquals("Expected no dead blobs", 0, metadataList.size());
     assertEquals(1, azureMetrics.documentQueryCount.getCount());
     assertEquals(1, azureMetrics.deadBlobsQueryTime.getCount());
+
+    mockResponse = mock(Observable.class);
+    Document countDoc = new Document();
+    countDoc.set("_aggregate", Long.valueOf(0));
+    mockObservableForQuery(Collections.singletonList(countDoc), mockResponse);
+    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
+        mockResponse);
+    assertEquals("Expected no dead blobs", 0, azureDest.getDeadBlobCount(blobId.getPartition().toPathString(), now));
   }
 
   /** Test findEntriesSince when cloud destination uses change feed based token. */

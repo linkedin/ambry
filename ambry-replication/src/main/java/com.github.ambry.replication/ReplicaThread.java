@@ -851,7 +851,9 @@ public class ReplicaThread implements Runnable {
               getResponse.getPartitionResponseInfoList().get(partitionResponseInfoIndex);
           responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
           partitionResponseInfoIndex++;
-          if (partitionResponseInfo.getPartition().compareTo(remoteReplicaInfo.getReplicaId().getPartitionId()) != 0) {
+          if (!partitionResponseInfo.getPartition()
+              .toPathString()
+              .equals(remoteReplicaInfo.getReplicaId().getPartitionId().toPathString())) {
             throw new IllegalStateException(
                 "The partition id from partitionResponseInfo " + partitionResponseInfo.getPartition()
                     + " and from remoteReplicaInfo " + remoteReplicaInfo.getReplicaId().getPartitionId()

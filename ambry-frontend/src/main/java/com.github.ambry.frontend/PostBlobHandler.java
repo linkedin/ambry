@@ -15,7 +15,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.CopyingAsyncWritableChannel;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -174,7 +174,8 @@ class PostBlobHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postSecurityPostProcessRequestMetrics, securityCheckResult -> {
         if (RestUtils.getRequestPath(restRequest).matchesOperation(Operations.STITCH)) {
-          CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
+          RetainingAsyncWritableChannel channel =
+              new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
@@ -190,7 +191,7 @@ class PostBlobHandler {
      * @param blobInfo
      * @return
      */
-    private Callback<Long> fetchStitchRequestBodyCallback(CopyingAsyncWritableChannel channel, BlobInfo blobInfo) {
+    private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),

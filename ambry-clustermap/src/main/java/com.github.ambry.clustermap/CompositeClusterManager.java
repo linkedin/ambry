@@ -274,7 +274,7 @@ class CompositeClusterManager implements ClusterMap {
     staticClusterManager.onReplicaEvent(replicaId, event);
     if (helixClusterManager != null) {
       AmbryReplica ambryReplica = helixClusterManager.getReplicaForPartitionOnNode(replicaId.getDataNodeId(),
-          replicaId.getPartitionId().toString());
+          replicaId.getPartitionId().toPathString());
       helixClusterManager.onReplicaEvent(ambryReplica, event);
     }
   }

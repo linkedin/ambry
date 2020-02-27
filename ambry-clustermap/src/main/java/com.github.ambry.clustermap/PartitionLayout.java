@@ -194,10 +194,10 @@ class PartitionLayout {
 
   private void validateUniqueness() {
     // Validate uniqueness of each logical component. Partition uniqueness is validated by method addPartition.
-    Set<Replica> replicaSet = new HashSet<Replica>();
+    Set<ReplicaId> replicaSet = new HashSet<>();
 
     for (Partition partition : partitionMap.values()) {
-      for (Replica replica : partition.getReplicas()) {
+      for (ReplicaId replica : partition.getReplicaIds()) {
         if (!replicaSet.add(replica)) {
           throw new IllegalStateException("Duplicate Replica detected: " + replica.toString());
         }
@@ -277,7 +277,7 @@ class PartitionLayout {
   }
 
   public List<String> getAllPartitionNames() {
-    return partitionMap.values().stream().map(partition -> partition.toPathString()).collect(Collectors.toList());
+    return partitionMap.values().stream().map(Partition::toPathString).collect(Collectors.toList());
   }
 
   @Override
@@ -285,7 +285,7 @@ class PartitionLayout {
     try {
       return toJSONObject().toString(2);
     } catch (JSONException e) {
-      logger.error("JSONException caught in toString: {}", e.getCause());
+      logger.error("JSONException caught in toString: ", e.getCause());
     }
     return null;
   }

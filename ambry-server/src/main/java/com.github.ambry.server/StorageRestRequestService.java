@@ -13,7 +13,7 @@
  */
 package com.github.ambry.server;
 
-import com.github.ambry.commons.CopyingAsyncWritableChannel;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.network.NettyServerRequest;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
 import com.github.ambry.rest.RestRequest;
@@ -57,11 +57,11 @@ public class StorageRestRequestService implements RestRequestService {
 
   @Override
   public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    CopyingAsyncWritableChannel asyncWritableChannel = new CopyingAsyncWritableChannel();
+    RetainingAsyncWritableChannel asyncWritableChannel = new RetainingAsyncWritableChannel();
     restRequest.readInto(asyncWritableChannel, (result, exception) -> {
       try {
-        requestResponseChannel.sendRequest(
-            new NettyServerRequest(restRequest, restResponseChannel, asyncWritableChannel.getContentAsInputStream()));
+        requestResponseChannel.sendRequest(new NettyServerRequest(restRequest, restResponseChannel,
+            asyncWritableChannel.consumeContentAsByteBuf()));
       } catch (InterruptedException e) {
         //TODO  close requestResponseChannel.closeConnection() on error
         logger.error("Failed to SendRequest to requestResponseChannel.", e);

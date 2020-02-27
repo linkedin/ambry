@@ -66,12 +66,13 @@ import static org.junit.Assume.*;
  */
 @RunWith(Parameterized.class)
 public class HelixClusterManagerTest {
+  static final long CURRENT_XID = 64;
+  static final String clusterNamePrefixInHelix = "Ambry-";
   private final HashMap<String, com.github.ambry.utils.TestUtils.ZkInfo> dcsToZkInfo = new HashMap<>();
   private final String[] dcs = new String[]{"DC0", "DC1"};
-  private final TestUtils.TestHardwareLayout testHardwareLayout;
+  private final TestHardwareLayout testHardwareLayout;
   private final TestPartitionLayout testPartitionLayout;
   private final String clusterNameStatic = "HelixClusterManagerTestCluster";
-  private final String clusterNamePrefixInHelix = "Ambry-";
   private final ClusterMapConfig clusterMapConfig;
   private final MockHelixCluster helixCluster;
   private final String hostname;
@@ -88,7 +89,6 @@ public class HelixClusterManagerTest {
   private final boolean listenCrossColo;
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
-  private static final long CURRENT_XID = 64;
 
   // for verifying getPartitions() and getWritablePartitions()
   private static final String SPECIAL_PARTITION_CLASS = "specialPartitionClass";
@@ -1398,7 +1398,7 @@ public class HelixClusterManagerTest {
   /**
    * A Mock implementation of {@link HelixFactory} that returns the {@link MockHelixManager}
    */
-  private static class MockHelixManagerFactory extends HelixFactory {
+  static class MockHelixManagerFactory extends HelixFactory {
     private final MockHelixCluster helixCluster;
     private final Exception beBadException;
     private final Map<String, ZNRecord> znRecordMap;

@@ -188,18 +188,26 @@ class TtlUpdateOperation {
               new RouterException("Received wrong response that is not for the corresponding request.",
                   RouterErrorCode.UnexpectedInternalError));
         } else {
-          ServerErrorCode getError = ttlUpdateResponse.getError();
-          if (getError == ServerErrorCode.No_Error || getError == ServerErrorCode.Blob_Already_Updated) {
+          ServerErrorCode serverError = ttlUpdateResponse.getError();
+          if (serverError == ServerErrorCode.No_Error || serverError == ServerErrorCode.Blob_Already_Updated) {
             operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
             if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
               LOGGER.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
                   replica.getDataNodeId().getDatacenterName());
               routerMetrics.crossColoSuccessCount.inc();
             }
+          } else if (serverError == ServerErrorCode.Disk_Unavailable) {
+            LOGGER.debug(
+                "Replica {} returned Disk_Unavailable for a Ttl update request with response correlationId : {} ",
+                replica.getDataNodeId(), ttlUpdateResponse.getCorrelationId());
+            operationTracker.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
+            setOperationException(
+                new RouterException("Server returned: " + serverError, RouterErrorCode.AmbryUnavailable));
+            routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).ttlUpdateRequestErrorCount.inc();
           } else {
             LOGGER.debug("Replica {} returned an error {} for a Ttl update request with response correlationId : {} ",
-                replica.getDataNodeId(), getError, ttlUpdateResponse.getCorrelationId());
-            RouterErrorCode routerErrorCode = processServerError(getError);
+                replica.getDataNodeId(), serverError, ttlUpdateResponse.getCorrelationId());
+            RouterErrorCode routerErrorCode = processServerError(serverError);
             if (ttlUpdateResponse.getError() == ServerErrorCode.Blob_Authorization_Failure) {
               // this is a successful response and one that completes the operation regardless of whether the
               // success target has been reached or not.
@@ -207,7 +215,7 @@ class TtlUpdateOperation {
             }
             // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
             // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
-            onErrorResponse(replica, new RouterException("Server returned: " + getError, routerErrorCode));
+            onErrorResponse(replica, new RouterException("Server returned: " + serverError, routerErrorCode));
           }
         }
       }

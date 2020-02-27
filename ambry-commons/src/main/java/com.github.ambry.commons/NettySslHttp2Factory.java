@@ -12,10 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.rest;
+package com.github.ambry.commons;
 
-import com.github.ambry.commons.JdkSslFactory;
-import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.SSLConfig;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.codec.http2.Http2SecurityUtil;
@@ -33,8 +31,6 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static com.github.ambry.rest.NettySslFactory.*;
 
 
 /**
@@ -98,7 +94,7 @@ public class NettySslHttp2Factory implements SSLFactory {
       logger.info("Using Self Signed Certificate.");
     } else {
       sslContextBuilder = SslContextBuilder.forServer(NettySslFactory.getKeyManagerFactory(config))
-          .trustManager(getTrustManagerFactory(config));
+          .trustManager(NettySslFactory.getTrustManagerFactory(config));
     }
     return sslContextBuilder.sslProvider(SslContext.defaultClientProvider())
         .clientAuth(NettySslFactory.getClientAuth(config))
@@ -127,8 +123,8 @@ public class NettySslHttp2Factory implements SSLFactory {
       logger.info("Using Self Signed Certificate.");
     } else {
       sslContextBuilder = SslContextBuilder.forClient()
-          .keyManager(getKeyManagerFactory(config))
-          .trustManager(getTrustManagerFactory(config));
+          .keyManager(NettySslFactory.getKeyManagerFactory(config))
+          .trustManager(NettySslFactory.getTrustManagerFactory(config));
     }
     return sslContextBuilder.sslProvider(SslContext.defaultClientProvider())
         /* NOTE: the cipher filter may not include all ciphers required by the HTTP/2 specification.

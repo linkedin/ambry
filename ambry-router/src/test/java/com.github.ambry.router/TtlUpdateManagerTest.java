@@ -24,9 +24,9 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
@@ -194,6 +194,7 @@ public class TtlUpdateManagerTest {
     errorCodeMap.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
     errorCodeMap.put(ServerErrorCode.Blob_Update_Not_Allowed, RouterErrorCode.BlobUpdateNotAllowed);
     errorCodeMap.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
+    System.out.println("server count = " + serverCount);
     for (ServerErrorCode errorCode : ServerErrorCode.values()) {
       if (errorCode == ServerErrorCode.No_Error || errorCode == ServerErrorCode.Blob_Already_Updated) {
         continue;
@@ -205,7 +206,11 @@ public class TtlUpdateManagerTest {
       serverErrorCodes.set(5, errorCode);
       Collections.shuffle(serverErrorCodes);
       setServerErrorCodes(serverErrorCodes, serverLayout);
-      RouterErrorCode expected = errorCodeMap.getOrDefault(errorCode, RouterErrorCode.UnexpectedInternalError);
+      // In production, disk_unavailable usually means disk is bad with I/O errors. For now, the only way to fix this is
+      // to replace disk and relies on replication to restore data. If all replicas return disk unavailable (should be
+      // extremely rare in real world), it means blob is no long present and it's ok to return BlobDoesNotExist.
+      RouterErrorCode expected = errorCode == ServerErrorCode.Disk_Unavailable ? RouterErrorCode.BlobDoesNotExist
+          : errorCodeMap.getOrDefault(errorCode, RouterErrorCode.UnexpectedInternalError);
       executeOpAndVerify(blobIds, expected, false, true, true, false);
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
@@ -464,7 +469,8 @@ public class TtlUpdateManagerTest {
       List<ServerErrorCode> shuffled = new ArrayList<>(serverErrorCodes);
       Collections.shuffle(shuffled);
       setServerErrorCodes(shuffled, serverLayout);
-      executeOpAndVerify(blobIds, expected.get(i), false, true, true, false);
+      RouterErrorCode expectedRouterError = resolveRouterErrorCode(serverErrorCodes, expected.get(i));
+      executeOpAndVerify(blobIds, expectedRouterError, false, true, true, false);
       if (i * 2 + 1 < serverErrorCodes.size()) {
         serverErrorCodes.set(i * 2, ServerErrorCode.Blob_Not_Found);
         serverErrorCodes.set(i * 2 + 1, ServerErrorCode.Blob_Not_Found);
@@ -472,6 +478,32 @@ public class TtlUpdateManagerTest {
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
     assertTtl(router, blobIds, TTL_SECS);
+  }
+
+  /**
+   * Helper method to resolve router error code. This accounts for combined disk_unavailable and not_found situation.
+   * @param serverErrorCodes a list of error code which servers will return.
+   * @param routerErrorCode the router error code solely decided by getPrecedenceLevel() method (which might be overridden)
+   * @return the resolved router error code.
+   */
+  private RouterErrorCode resolveRouterErrorCode(List<ServerErrorCode> serverErrorCodes,
+      RouterErrorCode routerErrorCode) {
+    RouterErrorCode resolvedErrorCode = routerErrorCode;
+    if (routerErrorCode == RouterErrorCode.AmbryUnavailable) {
+      int diskDownCount = 0;
+      int notFoundCount = 0;
+      for (ServerErrorCode errorCode : serverErrorCodes) {
+        if (errorCode == ServerErrorCode.Disk_Unavailable) {
+          diskDownCount++;
+        } else if (errorCode == ServerErrorCode.Blob_Not_Found) {
+          notFoundCount++;
+        }
+      }
+      if (diskDownCount + notFoundCount > serverCount - 2) {
+        resolvedErrorCode = RouterErrorCode.BlobDoesNotExist;
+      }
+    }
+    return resolvedErrorCode;
   }
 
   // routerErrorCodeResolutionTest() helpers

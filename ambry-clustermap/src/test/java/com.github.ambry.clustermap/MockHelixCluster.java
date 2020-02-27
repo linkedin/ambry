@@ -226,6 +226,15 @@ public class MockHelixCluster {
     }
   }
 
+  /**
+   * Trigger ideal state change in each dc to refresh in-mem resource-partition mapping
+   */
+  void refreshIdealState() throws Exception {
+    for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
+      helixAdmin.triggerIdealStateChangeNotification();
+    }
+  }
+
   void addNewResource(String resourceName, IdealState idealState, String dcName) throws Exception {
     MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStr());
     helixAdmin.addNewResource(resourceName, idealState);

@@ -92,7 +92,7 @@ public class ServerConfig {
   @Config("server.validate.request.based.on.store.state")
   @Default("false")
   public final boolean serverValidateRequestBasedOnStoreState;
-
+  
   /**
    * True to enable ambry server handling undelete requests.
    */

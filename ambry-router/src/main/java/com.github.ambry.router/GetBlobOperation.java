@@ -103,6 +103,7 @@ class GetBlobOperation extends GetOperation {
   private ListIterator<CompositeBlobInfo.ChunkMetadata> chunkIdIterator;
   // chunk index to retrieved chunk buffer mapping.
   private Map<Integer, ByteBuf> chunkIndexToBuf;
+  private Map<Integer, ByteBuf> chunkIndexToBufWaitingForRelease;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
   // the blob info that is populated on OperationType.BlobInfo or OperationType.All
@@ -366,7 +367,7 @@ class GetBlobOperation extends GetOperation {
           setOperationException(exception);
         }
         int currentNumChunk = numChunksWrittenOut.get();
-        ByteBuf byteBuf = chunkIndexToBuf.remove(currentNumChunk);
+        ByteBuf byteBuf = chunkIndexToBufWaitingForRelease.remove(currentNumChunk);
         if (byteBuf != null) {
           byteBuf.release();
         }
@@ -442,9 +443,12 @@ class GetBlobOperation extends GetOperation {
       // if there are chunks available to be written out, do now.
       if (firstChunk.isComplete() && readCalled) {
         while (operationException.get() == null && chunkIndexToBuf.containsKey(indexOfNextChunkToWriteOut)) {
-          ByteBuf byteBuf = chunkIndexToBuf.get(indexOfNextChunkToWriteOut);
-          asyncWritableChannel.write(byteBuf.nioBuffer(), chunkAsyncWriteCallback);
-          indexOfNextChunkToWriteOut++;
+          ByteBuf byteBuf = chunkIndexToBuf.remove(indexOfNextChunkToWriteOut);
+          if (byteBuf != null) {
+            chunkIndexToBufWaitingForRelease.put(indexOfNextChunkToWriteOut, byteBuf);
+            asyncWritableChannel.write(byteBuf.nioBuffer(), chunkAsyncWriteCallback);
+            indexOfNextChunkToWriteOut++;
+          }
         }
         if (operationException.get() != null || numChunksWrittenOut.get() == numChunksTotal) {
           completeRead();
@@ -938,17 +942,25 @@ class GetBlobOperation extends GetOperation {
           } else {
             // process and set the most relevant exception.
             RouterErrorCode routerErrorCode = processServerError(getError);
-            if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
-                || getError == ServerErrorCode.Blob_Authorization_Failure) {
-              // this is a successful response and one that completes the operation regardless of whether the
-              // success target has been reached or not.
-              chunkCompleted = true;
-              chunkException = buildChunkException("Server returned: " + getError, routerErrorCode);
+            if (getError == ServerErrorCode.Disk_Unavailable) {
+              chunkOperationTracker.onResponse(getRequestInfo.replicaId, TrackedRequestFinalState.DISK_DOWN);
+              setChunkException(buildChunkException("Server returned: " + getError, routerErrorCode));
+              routerMetrics.routerRequestErrorCount.inc();
+              routerMetrics.getDataNodeBasedMetrics(
+                  getRequestInfo.replicaId.getDataNodeId()).getRequestErrorCount.inc();
+            } else {
+              if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
+                  || getError == ServerErrorCode.Blob_Authorization_Failure) {
+                // this is a successful response and one that completes the operation regardless of whether the
+                // success target has been reached or not.
+                chunkCompleted = true;
+                chunkException = buildChunkException("Server returned: " + getError, routerErrorCode);
+              }
+              // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
+              // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
+              onErrorResponse(getRequestInfo.replicaId,
+                  buildChunkException("Server returned: " + getError, routerErrorCode));
             }
-            // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
-            // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
-            onErrorResponse(getRequestInfo.replicaId,
-                buildChunkException("Server returned: " + getError, routerErrorCode));
           }
         }
       } else {
@@ -1216,6 +1228,7 @@ class GetBlobOperation extends GetOperation {
         }
         blobType = blobData.getBlobType();
         chunkIndexToBuf = new ConcurrentHashMap<>();
+        chunkIndexToBufWaitingForRelease = new ConcurrentHashMap<>();
         if (rawMode) {
           if (blobData != null) {
             // RawMode, release blob data.

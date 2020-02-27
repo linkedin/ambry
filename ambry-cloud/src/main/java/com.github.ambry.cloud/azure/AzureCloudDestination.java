@@ -65,10 +65,13 @@ class AzureCloudDestination implements CloudDestination {
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
   static final int ID_QUERY_BATCH_SIZE = 1000;
   private static final int FIND_SINCE_QUERY_LIMIT = 1000;
+  private static final String DEAD_BLOBS_BASE_TEMPLATE =
+      "FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")" + " OR (c."
+          + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")";
   private static final String DEAD_BLOBS_QUERY_TEMPLATE =
-      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND "
-          + THRESHOLD_PARAM + ")" + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND "
-          + THRESHOLD_PARAM + ")" + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
+      "SELECT TOP " + LIMIT_PARAM + " * " + DEAD_BLOBS_BASE_TEMPLATE + " ORDER BY c."
+          + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
+  private static final String DEAD_BLOBS_COUNT_TEMPLATE = "SELECT VALUE COUNT(1) " + DEAD_BLOBS_BASE_TEMPLATE;
   private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
   private final AsyncDocumentClient asyncDocumentClient;
@@ -76,7 +79,6 @@ class AzureCloudDestination implements CloudDestination {
   private final AzureReplicationFeed azureReplicationFeed;
   private final AzureMetrics azureMetrics;
   private final long retentionPeriodMs;
-  private final int deadBlobsQueryLimit;
 
   /**
    * Construct an Azure cloud destination from config properties.
@@ -113,7 +115,6 @@ class AzureCloudDestination implements CloudDestination {
     cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, azureCloudConfig, azureMetrics);
     azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
-    this.deadBlobsQueryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
     logger.info("Created Azure destination");
   }
 
@@ -134,7 +135,6 @@ class AzureCloudDestination implements CloudDestination {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
-    this.deadBlobsQueryLimit = CloudConfig.DEFAULT_COMPACTION_QUERY_LIMIT;
     cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
     azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
   }
@@ -238,16 +238,28 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public List<CloudBlobMetadata> getDeadBlobs(String partitionPath) throws CloudStorageException {
-    long now = System.currentTimeMillis();
-    long retentionThreshold = now - retentionPeriodMs;
+  public List<CloudBlobMetadata> getDeadBlobs(String partitionPath, long cutoffTime, int maxEntries)
+      throws CloudStorageException {
+    long retentionThreshold = cutoffTime - retentionPeriodMs;
     SqlQuerySpec deadBlobsQuery = new SqlQuerySpec(DEAD_BLOBS_QUERY_TEMPLATE,
-        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, deadBlobsQueryLimit),
+        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, maxEntries),
             new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
     try {
       return cosmosDataAccessor.queryMetadata(partitionPath, deadBlobsQuery, azureMetrics.deadBlobsQueryTime);
     } catch (DocumentClientException dex) {
       throw toCloudStorageException("Failed to query dead blobs for partition " + partitionPath, dex);
+    }
+  }
+
+  @Override
+  public int getDeadBlobCount(String partitionPath, long cutoffTime) throws CloudStorageException {
+    long retentionThreshold = cutoffTime - retentionPeriodMs;
+    SqlQuerySpec countQuery = new SqlQuerySpec(DEAD_BLOBS_COUNT_TEMPLATE,
+        new SqlParameterCollection(new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
+    try {
+      return cosmosDataAccessor.countMetadata(partitionPath, countQuery, azureMetrics.deadBlobsQueryTime);
+    } catch (DocumentClientException dex) {
+      throw toCloudStorageException("Failed to query dead blob count for partition " + partitionPath, dex);
     }
   }
 

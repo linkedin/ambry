@@ -68,7 +68,7 @@ public class ServerSSLTest {
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2", SSLFactory.Mode.CLIENT, trustStoreFile, "client3"));
     serverSSLProps = new Properties();
     TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
-    TestSSLUtils.addHttp2Properties(serverSSLProps);
+    TestSSLUtils.addHttp2Properties(serverSSLProps, SSLFactory.Mode.SERVER, true);
     routerProps = new Properties();
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);

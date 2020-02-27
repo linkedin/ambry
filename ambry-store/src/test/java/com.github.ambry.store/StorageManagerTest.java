@@ -1264,7 +1264,7 @@ public class StorageManagerTest {
     boolean controlCompactionReturnVal = false;
 
     MockStorageManager(DataNodeId currentNode, ClusterParticipant clusterParticipant) throws Exception {
-      super(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), new MetricRegistry(), new MockIdFactory(),
+      super(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, new MockIdFactory(),
           clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipant, SystemTime.getInstance(),
           new DummyMessageStoreRecovery());
     }

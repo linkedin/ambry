@@ -16,7 +16,7 @@ package com.github.ambry.frontend;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
-import com.github.ambry.commons.CopyingAsyncWritableChannel;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.Callback;
@@ -73,13 +73,13 @@ class FrontendUtils {
 
   /**
    * Parse a {@link JSONObject} from the data in {@code channel}. This assumes that the data is UTF-8 encoded.
-   * @param channel the {@link CopyingAsyncWritableChannel} that contains the JSON data.
+   * @param channel the {@link RetainingAsyncWritableChannel} that contains the JSON data.
    * @return a {@link JSONObject}.
    * @throws IOException if closing the {@link InputStream} fails.
    * @throws RestServiceException if JSON parsing fails.
    */
-  static JSONObject readJsonFromChannel(CopyingAsyncWritableChannel channel) throws RestServiceException {
-    try (InputStream inputStream = channel.getContentAsInputStream()) {
+  static JSONObject readJsonFromChannel(RetainingAsyncWritableChannel channel) throws RestServiceException {
+    try (InputStream inputStream = channel.consumeContentAsInputStream()) {
       return new JSONObject(new JSONTokener(new InputStreamReader(inputStream, StandardCharsets.UTF_8)));
     } catch (Exception e) {
       throw new RestServiceException("Could not parse json request body", e, RestServiceErrorCode.BadRequest);

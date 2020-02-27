@@ -11,23 +11,24 @@
 buildscript {
     repositories {
         mavenCentral()
+        mavenLocal()
     }
     apply from: file('gradle/buildscript.gradle'), to: buildscript
 }
 
-plugins {
-    id 'org.shipkit.java' version '2.2.5' apply false
-}
-if (!project.hasProperty('disableShipkit')) {
-    apply plugin: 'org.shipkit.java'
-}
+apply plugin: 'org.shipkit.shipkit-auto-version'
+println "Building version $version"
 
 apply from: file('gradle/license.gradle')
 apply from: file('gradle/environment.gradle')
 apply from: file("gradle/dependency-versions.gradle")
+if (!project.hasProperty('disableShipkit')) {
+    apply from: file("gradle/ci-release.gradle")
+}
 
 allprojects {
     group = "com.github.ambry"
+    version = rootProject.version //TODO: fix in https://github.com/shipkit/org.shipkit.shipkit-auto-version
 
     apply plugin: 'eclipse'
     apply plugin: 'idea'
@@ -42,6 +43,20 @@ allprojects {
 
 subprojects {
     apply plugin: 'java'
+    if (project.hasProperty('disableShipkit')) {
+        // internal builds still want the test jar, but not sources/javadoc targets
+        task testJar(type: Jar, dependsOn: testClasses) {
+            from sourceSets.test.output
+            classifier = 'test'
+        }
+
+        artifacts {
+            archives testJar
+        }
+    } else {
+        apply from: "$rootDir/gradle/java-publishing.gradle"
+    }
+
     sourceCompatibility = 1.8
     targetCompatibility = 1.8
 
@@ -62,9 +77,9 @@ subprojects {
     }
 
     dependencies {
-        compile "log4j:log4j:$log4jVersion"
         compile "org.slf4j:slf4j-api:$slf4jVersion"
-        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "log4j:log4j:$log4jVersion"
+        testCompile "org.slf4j:slf4j-log4j12:$slf4jVersion"
         testCompile "junit:junit:$junitVersion"
         testCompile "org.mockito:mockito-core:2.+"
         testRuntime project(':log4j-test-config')
@@ -99,6 +114,8 @@ subprojects {
         classpath = sourceSets.intTest.runtimeClasspath
         testLogging {
             exceptionFormat = 'full'
+            events 'started', 'failed', 'passed', 'skipped'
+            showStandardStreams = false
         }
         maxHeapSize = "3g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
@@ -110,21 +127,6 @@ subprojects {
     }
     allTest.dependsOn test
     allTest.dependsOn intTest
-
-    task testJar(type: Jar, dependsOn: testClasses) {
-        from sourceSets.test.output
-        classifier = 'test'
-    }
-
-    artifacts {
-        archives testJar
-    }
-
-    if (!project.hasProperty('disableShipkit')) {
-        // add test jars to maven publication if using shipkit
-        publishing.publications.javaLibrary.artifact testJar
-    }
-
     javadoc {
         // TODO audit and fix our javadocs so that we don't need this setting
         // This is mainly for cases where param/throws tags don't have descriptions
@@ -148,7 +150,9 @@ project(':ambry-utils') {
 project(':ambry-api') {
     dependencies {
         compile project(':ambry-utils')
-        compile "org.apache.helix:helix-core:$helixVersion"
+        compile ("org.apache.helix:helix-core:$helixVersion") {
+            exclude group: "log4j", module: "log4j"
+        }
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.codehaus.jackson:jackson-core-asl:$jacksonVersion"
         compile "org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion"
@@ -192,6 +196,8 @@ project(':ambry-commons') {
                 project(':ambry-messageformat'),
                 project(':ambry-utils')
         compile "org.conscrypt:conscrypt-openjdk-uber:$conscryptVersion"
+        compile "io.netty:netty-all:$nettyVersion"
+        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
@@ -205,6 +211,8 @@ project(':ambry-network') {
                 project(':ambry-utils'),
                 project(':ambry-commons'),
                 project(':ambry-clustermap')
+        compile "io.netty:netty-all:$nettyVersion"
+        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output
@@ -226,6 +234,8 @@ project(':ambry-server') {
                 project(':ambry-replication')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
+        runtimeOnly "log4j:log4j:$log4jVersion"
+        runtimeOnly "org.slf4j:slf4j-log4j12:$slf4jVersion"
         testCompile project(':ambry-router')
         testCompile project(':ambry-cloud')
         testCompile project(':ambry-cloud').sourceSets.test.output
@@ -328,6 +338,8 @@ project(':ambry-rest') {
         compile "io.netty:netty-all:$nettyVersion"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
         compile "javax.servlet:javax.servlet-api:$javaxVersion"
+        runtimeOnly "log4j:log4j:$log4jVersion"
+        runtimeOnly "org.slf4j:slf4j-log4j12:$slf4jVersion"
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
