@@ -1055,57 +1055,19 @@ class PersistentIndex {
   private BlobReadOptions getDeletedBlobReadOptions(IndexValue value, StoreKey key,
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
     BlobReadOptions readOptions;
-    try {
-      IndexValue putValue =
-          findKey(key, new FileSpan(getStartOffset(indexSegments), value.getOffset()), EnumSet.of(IndexEntryType.PUT),
-              indexSegments);
-      if (value.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
-          && value.getOriginalMessageOffset() != value.getOffset().getOffset()) {
-        // PUT record in the same log segment.
-        String logSegmentName = value.getOffset().getName();
-        // The delete entry in the index might not contain the information about the size of the original blob. So we
-        // use the Message format to read and provide the information. The range in log that we provide starts at the
-        // original message offset and ends at the delete message's start offset (the original message surely cannot go
-        // beyond the start offset of the delete message).
-        MessageInfo deletedBlobInfo =
-            hardDelete.getMessageInfo(log.getSegment(logSegmentName), value.getOriginalMessageOffset(), factory);
-        if (putValue != null && putValue.getOffset().getName().equals(value.getOffset().getName())) {
-          if (putValue.getOffset().getOffset() != value.getOriginalMessageOffset()) {
-            logger.error(
-                "Offset in PUT index entry {} is different from original message offset in delete entry {} for key {}",
-                putValue.getOffset().getOffset(), value.getOriginalMessageOffset(), key);
-            metrics.putEntryDeletedInfoMismatchCount.inc();
-          }
-          if (putValue.getSize() != deletedBlobInfo.getSize()) {
-            logger.error("Size in PUT index entry {} is different from that in the PUT record {} for ID {}",
-                putValue.getSize(), deletedBlobInfo.getSize(), key);
-            metrics.putEntryDeletedInfoMismatchCount.inc();
-          }
-        }
-        Offset offset = new Offset(logSegmentName, value.getOriginalMessageOffset());
-        // use the expiration time from the original value because it may have been updated
-        readOptions = new BlobReadOptions(log, offset,
-            new MessageInfo(deletedBlobInfo.getStoreKey(), deletedBlobInfo.getSize(), true,
-                value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(),
-                deletedBlobInfo.getAccountId(), deletedBlobInfo.getContainerId(),
-                deletedBlobInfo.getOperationTimeMs()));
-      } else if (putValue != null) {
-        // PUT record in a different log segment.
-        // use the expiration time from the original value because it may have been updated
-        readOptions = new BlobReadOptions(log, putValue.getOffset(),
-            new MessageInfo(key, putValue.getSize(), true, value.isFlagSet(IndexValue.Flags.Ttl_Update_Index),
-                value.getExpiresAtMs(), putValue.getAccountId(), putValue.getContainerId(),
-                putValue.getOperationTimeInMs()));
-      } else {
-        // PUT record no longer available.
-        throw new StoreException("Did not find PUT index entry for key [" + key
-            + "] and the the original offset in value of the DELETE entry was [" + value.getOriginalMessageOffset()
-            + "]", StoreErrorCodes.ID_Deleted);
-      }
-    } catch (IOException e) {
-      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
-      throw new StoreException(errorCode.toString() + " when reading delete blob info from the log " + dataDir, e,
-          errorCode);
+    IndexValue putValue =
+        findKey(key, new FileSpan(getStartOffset(indexSegments), value.getOffset()), EnumSet.of(IndexEntryType.PUT),
+            indexSegments);
+    if (putValue != null) {
+      // use the expiration time from the original value because it may have been updated
+      readOptions = new BlobReadOptions(log, putValue.getOffset(),
+          new MessageInfo(key, putValue.getSize(), true, value.isTTLUpdate(), value.getExpiresAtMs(),
+              putValue.getAccountId(), putValue.getContainerId(), putValue.getOperationTimeInMs()));
+    } else {
+      // PUT record no longer available.
+      throw new StoreException("Did not find PUT index entry for key [" + key
+          + "] and the the original offset in value of the DELETE entry was [" + value.getOriginalMessageOffset() + "]",
+          StoreErrorCodes.ID_Deleted);
     }
     return readOptions;
   }

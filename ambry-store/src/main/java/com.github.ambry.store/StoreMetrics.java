@@ -53,7 +53,6 @@ public class StoreMetrics {
   public final Timer indexFlushTime;
   public final Timer cleanupTokenFlushTime;
   public final Timer hardDeleteTime;
-  public final Counter putEntryDeletedInfoMismatchCount;
   public final Counter nonzeroMessageRecovery;
   public final Counter blobFoundInMemSegmentCount;
   public final Counter bloomAccessedCount;
@@ -133,8 +132,6 @@ public class StoreMetrics {
     indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFlushTime"));
     cleanupTokenFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "CleanupTokenFlushTime"));
     hardDeleteTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteTime"));
-    putEntryDeletedInfoMismatchCount =
-        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "PutEntryDeletedInfoMismatchCount"));
     nonzeroMessageRecovery =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "NonZeroMessageRecovery"));
     blobFoundInMemSegmentCount =

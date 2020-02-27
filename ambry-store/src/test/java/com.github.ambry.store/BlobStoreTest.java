@@ -115,21 +115,10 @@ public class BlobStoreTest {
    * particular {@link MockId}.
    */
   private static class MockMessageStoreHardDelete implements MessageStoreHardDelete {
-    private MessageInfo messageInfo = null;
-
     @Override
     public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
         List<byte[]> recoveryInfoList) {
       throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
-      return messageInfo;
-    }
-
-    void setMessageInfo(MessageInfo messageInfo) {
-      this.messageInfo = messageInfo;
     }
   }
 
@@ -508,8 +497,6 @@ public class BlobStoreTest {
 
     MockMessageStoreHardDelete hd = (MockMessageStoreHardDelete) hardDelete;
     for (MockId id : deletedKeys) {
-      hd.setMessageInfo(allKeys.get(id).getFirst());
-
       // cannot get without StoreGetOptions
       verifyGetFailure(id, StoreErrorCodes.ID_Deleted);
 
