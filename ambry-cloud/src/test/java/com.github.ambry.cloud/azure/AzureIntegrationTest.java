@@ -68,6 +68,7 @@ public class AzureIntegrationTest {
   private static final Logger logger = LoggerFactory.getLogger(AzureIntegrationTest.class);
   private final String vcrKmsContext = "backup-default";
   private final String cryptoAgentFactory = CloudConfig.DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS;
+  private VerifiableProperties verifiableProperties;
   private AzureCloudDestination azureDest;
   private int blobSize = 1024;
   private byte dataCenterId = 66;
@@ -95,9 +96,17 @@ public class AzureIntegrationTest {
     testProperties.setProperty("clustermap.datacenter.name", "uswest");
     testProperties.setProperty("clustermap.host.name", "localhost");
     testProperties.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
-    VerifiableProperties verProps = new VerifiableProperties(testProperties);
-    azureDest =
-        (AzureCloudDestination) new AzureCloudDestinationFactory(verProps, new MetricRegistry()).getCloudDestination();
+    verifiableProperties = new VerifiableProperties(testProperties);
+    azureDest = getAzureDestination(verifiableProperties);
+  }
+
+  /**
+   * @return an {@link AzureCloudDestination} instance built from the supplied properties.
+   * @param verProps the {@link VerifiableProperties} to use.
+   */
+  private AzureCloudDestination getAzureDestination(VerifiableProperties verProps) {
+    return (AzureCloudDestination) new AzureCloudDestinationFactory(verProps,
+        new MetricRegistry()).getCloudDestination();
   }
 
   @After
@@ -363,6 +372,49 @@ public class AzureIntegrationTest {
     assertEquals("Wrong byte count", blobCount * chunkSize, findToken.getBytesRead());
 
     cleanup();
+  }
+
+  /**
+   * Test that concurrent updates fail when the precondition does not match.
+   * We don't test retries here since CloudBlobStoreTest covers that.
+   */
+  @Test
+  public void testConcurrentUpdates() throws Exception {
+    PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    BlobId blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+        BlobDataType.DATACHUNK);
+    InputStream inputStream = getBlobInputStream(blobSize);
+    long now = System.currentTimeMillis();
+    CloudBlobMetadata cloudBlobMetadata =
+        new CloudBlobMetadata(blobId, now, now + 60000, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE);
+    azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream);
+    // Different instance to simulate concurrent update in separate session.
+    AzureCloudDestination concurrentUpdater = getAzureDestination(verifiableProperties);
+    String fieldName = CloudBlobMetadata.FIELD_UPLOAD_TIME;
+    long newUploadTime = now++;
+
+    // Case 1: concurrent modification to blob metadata.
+    azureDest.getAzureBlobDataAccessor()
+        .setUpdateCallback(
+            () -> concurrentUpdater.getAzureBlobDataAccessor().updateBlobMetadata(blobId, fieldName, newUploadTime));
+    try {
+      azureDest.updateBlobExpiration(blobId, ++now);
+      fail("Expected 412 error");
+    } catch (CloudStorageException csex) {
+      // TODO: check nested exception is BlobStorageException with status code 412
+      assertEquals("Expected update conflict", 1, azureDest.getAzureMetrics().blobUpdateConflictCount.getCount());
+    }
+    // Case 2: concurrent modification to Cosmos record.
+    azureDest.getCosmosDataAccessor()
+        .setUpdateCallback(
+            () -> concurrentUpdater.getCosmosDataAccessor().updateMetadata(blobId, fieldName, newUploadTime));
+    try {
+      azureDest.updateBlobExpiration(blobId, ++now);
+      fail("Expected 412 error");
+    } catch (CloudStorageException csex) {
+      // TODO: check nested exception is DocClientException with status code 412
+      assertEquals("Expected update conflict", 2, azureDest.getAzureMetrics().blobUpdateConflictCount.getCount());
+    }
   }
 
   private void cleanup() throws Exception {

@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,7 +61,6 @@ import org.slf4j.LoggerFactory;
 public class AzureBlobDataAccessor {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureBlobDataAccessor.class);
-  private static final String SEPARATOR = "-";
   private static final int batchPurgeTimeoutSec = 60;
   private final BlobServiceClient storageClient;
   private final BlobBatchClient blobBatchClient;
@@ -71,6 +71,7 @@ public class AzureBlobDataAccessor {
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
   private ProxyOptions proxyOptions;
   private final int purgeBatchSize;
+  private Callable<?> updateCallback = null;
 
   /**
    * Production constructor
@@ -118,6 +119,11 @@ public class AzureBlobDataAccessor {
     this.azureMetrics = azureMetrics;
     this.blobBatchClient = blobBatchClient;
     this.purgeBatchSize = AzureCloudConfig.DEFAULT_PURGE_BATCH_SIZE;
+  }
+
+  /** Visible for testing */
+  void setUpdateCallback(Callable<?> callback) {
+    this.updateCallback = callback;
   }
 
   /**
@@ -295,7 +301,14 @@ public class AzureBlobDataAccessor {
         String textValue = String.valueOf(value);
         if (!textValue.equals(metadata.get(fieldName))) {
           metadata.put(fieldName, textValue);
-          // Set condition to ensure we don't clobber another update
+          if (updateCallback != null) {
+            try {
+              updateCallback.call();
+            } catch (Exception ex) {
+              logger.error("Error in update callback", ex);
+            }
+          }
+          // Set condition to ensure we don't clobber a concurrent update
           BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(etag);
           blobClient.setMetadataWithResponse(metadata, blobRequestConditions, null, Context.NONE);
         }
@@ -308,7 +321,7 @@ public class AzureBlobDataAccessor {
         return false;
       }
       if (e.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
-        // TODO: blob was updated (race condition), retry the update
+        azureMetrics.blobUpdateConflictCount.inc();
       }
       throw e;
     }
