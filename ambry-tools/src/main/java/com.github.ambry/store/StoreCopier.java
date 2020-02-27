@@ -22,7 +22,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
-import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferChannel;
@@ -246,14 +245,10 @@ public class StoreCopier implements Closeable {
             tgt.put(writeSet);
             MessageInfo tgtMsgInfo = message.getMessageInfo();
             if (tgtMsgInfo.isTtlUpdated()) {
-              TtlUpdateMessageFormatInputStream stream =
-                  new TtlUpdateMessageFormatInputStream(tgtMsgInfo.getStoreKey(), tgtMsgInfo.getAccountId(),
-                      tgtMsgInfo.getContainerId(), tgtMsgInfo.getExpirationTimeInMs(), tgtMsgInfo.getOperationTimeMs());
-              MessageInfo updateMsgInfo = new MessageInfo(tgtMsgInfo.getStoreKey(), stream.getSize(), false, true,
-                  tgtMsgInfo.getExpirationTimeInMs(), tgtMsgInfo.getAccountId(), tgtMsgInfo.getContainerId(),
-                  tgtMsgInfo.getOperationTimeMs());
-              writeSet = new MessageFormatWriteSet(stream, Collections.singletonList(updateMsgInfo), false);
-              tgt.updateTtl(writeSet);
+              MessageInfo updateMsgInfo =
+                  new MessageInfo(tgtMsgInfo.getStoreKey(), 0, false, true, tgtMsgInfo.getExpirationTimeInMs(),
+                      tgtMsgInfo.getAccountId(), tgtMsgInfo.getContainerId(), tgtMsgInfo.getOperationTimeMs());
+              tgt.updateTtl(Collections.singletonList(updateMsgInfo));
             }
             logger.trace("Copied {} as {}", messageInfo.getStoreKey(), tgtMsgInfo.getStoreKey());
           } else if (!messageInfo.isTtlUpdated()) {

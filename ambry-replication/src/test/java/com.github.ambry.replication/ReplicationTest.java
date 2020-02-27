@@ -667,13 +667,13 @@ public class ReplicationTest {
     buffers.add(buffer);
     localStore.put(new MockMessageWriteSet(infos, buffers));
     // delete the blob
-    int deleteRecordSize = 29;
+    int deleteRecordSize = (int) (new DeleteMessageFormatInputStream(id, (short) 0, (short) 0, 0).getSize());
     MessageInfo deleteInfo =
         new MessageInfo(id, deleteRecordSize, id.getAccountId(), id.getContainerId(), time.milliseconds());
-    ByteBuffer deleteBuffer = ByteBuffer.wrap(TestUtils.getRandomBytes(deleteRecordSize));
-    localStore.delete(
-        new MockMessageWriteSet(Collections.singletonList(deleteInfo), Collections.singletonList(deleteBuffer)));
-    // note that end offset of last PUT = 100 + 18 = 118, end offset of the store is 147 (118 + 29)
+    localStore.delete(Collections.singletonList(deleteInfo));
+    int sizeOfPutAndHeader = 100 + 18;
+    int sizeOfWhole = sizeOfPutAndHeader + deleteRecordSize;
+    // note that end offset of last PUT = 100 + 18 = 118, end offset of the store is sizeOfWhole
     // 3. test success case (create a new thread and trigger INACTIVE -> OFFLINE transition)
     ReplicaId localReplica = storageManager.getReplica(existingPartition.toPathString());
     // put a decommission-in-progress file into local store dir
@@ -701,14 +701,14 @@ public class ReplicationTest {
     ReplicaId peerReplica2 = remoteReplicaInfos.get(1).getReplicaId();
     // peer1 catches up with last PUT, peer2 catches up with end offset of local store. In this case, SyncUp is not complete
     replicationManager.updateTotalBytesReadByRemoteReplica(existingPartition,
-        peerReplica1.getDataNodeId().getHostname(), peerReplica1.getReplicaPath(), 118);
+        peerReplica1.getDataNodeId().getHostname(), peerReplica1.getReplicaPath(), sizeOfPutAndHeader);
     replicationManager.updateTotalBytesReadByRemoteReplica(existingPartition,
-        peerReplica2.getDataNodeId().getHostname(), peerReplica2.getReplicaPath(), 147);
+        peerReplica2.getDataNodeId().getHostname(), peerReplica2.getReplicaPath(), sizeOfWhole);
     assertFalse("Only one peer replica has fully caught up with end offset so sync-up should not complete",
         mockHelixParticipant.getReplicaSyncUpManager().isSyncUpComplete(localReplica));
     // make peer1 catch up with end offset
     replicationManager.updateTotalBytesReadByRemoteReplica(existingPartition,
-        peerReplica1.getDataNodeId().getHostname(), peerReplica1.getReplicaPath(), 147);
+        peerReplica1.getDataNodeId().getHostname(), peerReplica1.getReplicaPath(), sizeOfWhole);
     // Now, sync-up should complete and transition should be able to proceed.
     assertTrue("Inactive-To-Offline transition didn't complete within 1 sec",
         participantLatch.await(1, TimeUnit.SECONDS));
@@ -2115,7 +2115,8 @@ public class ReplicationTest {
       // test that the first key has been marked deleted
       List<MessageInfo> messageInfos = localHost.infosByPartition.get(entry.getKey());
       StoreKey deletedId = messageInfos.get(0).getStoreKey();
-      assertNotNull(deletedId + " should have been deleted", getMessageInfo(deletedId, messageInfos, true, false, false));
+      assertNotNull(deletedId + " should have been deleted",
+          getMessageInfo(deletedId, messageInfos, true, false, false));
       Map<StoreKey, Boolean> ignoreState = new HashMap<>();
       for (StoreKey toBeIgnored : idsToBeIgnoredByPartition.get(entry.getKey())) {
         ignoreState.put(toBeIgnored, false);

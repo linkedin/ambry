@@ -129,7 +129,7 @@ class CloudBlobStore implements Store {
   @Override
   public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException {
     checkStarted();
-    checkDuplicates(ids);
+    checkStoreKeyDuplicates(ids);
     List<CloudMessageReadSet.BlobReadInfo> blobReadInfos = new ArrayList<>(ids.size());
     List<MessageInfo> messageInfos = new ArrayList<>(ids.size());
     try {
@@ -247,13 +247,18 @@ class CloudBlobStore implements Store {
     return metadata.getExpirationTime() != Utils.Infinite_Time && metadata.getExpirationTime() < currentTimeStamp;
   }
 
+  /**
+   * Puts a set of messages into the store
+   * @param messageSetToWrite The message set to write to the store
+   * @throws StoreException
+   */
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     checkStarted();
     if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
       throw new IllegalArgumentException("Message write set cannot be empty");
     }
-    checkDuplicates(messageSetToWrite);
+    checkDuplicates(messageSetToWrite.getMessageSetInfo());
 
     // Write the blobs in the message set
     CloudWriteChannel cloudWriter = new CloudWriteChannel(this, messageSetToWrite.getMessageSetInfo());
@@ -343,12 +348,12 @@ class CloudBlobStore implements Store {
   }
 
   @Override
-  public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
+  public void delete(List<MessageInfo> infos) throws StoreException {
     checkStarted();
-    checkDuplicates(messageSetToDelete);
+    checkDuplicates(infos);
 
     try {
-      for (MessageInfo msgInfo : messageSetToDelete.getMessageSetInfo()) {
+      for (MessageInfo msgInfo : infos) {
         BlobId blobId = (BlobId) msgInfo.getStoreKey();
         String blobKey = msgInfo.getStoreKey().getID();
         BlobState blobState = recentBlobCache.get(blobKey);
@@ -370,15 +375,15 @@ class CloudBlobStore implements Store {
   /**
    * {@inheritDoc}
    * Currently, the only supported operation is to set the TTL to infinite (i.e. no arbitrary increase or decrease)
-   * @param messageSetToUpdate The list of messages that need to be updated
-   * @throws StoreException if there is a problem persisting the operation in the store.
+   * @param infos The list of messages that need to be updated
+   * @throws StoreException
    */
   @Override
-  public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
+  public void updateTtl(List<MessageInfo> infos) throws StoreException {
     checkStarted();
     // Note: we skipped uploading the blob on PUT record if the TTL was below threshold.
     try {
-      for (MessageInfo msgInfo : messageSetToUpdate.getMessageSetInfo()) {
+      for (MessageInfo msgInfo : infos) {
         // MessageInfo.expirationTimeInMs is not reliable if ttlUpdate is set. See {@code PersistentIndex#findKey()}
         // and {@code PersistentIndex#markAsPermanent()}. If we change updateTtl to be more flexible, code here will
         // need to be modified.
@@ -543,13 +548,12 @@ class CloudBlobStore implements Store {
 
   /**
    * Detects duplicates in {@code writeSet}
-   * @param writeSet the {@link MessageWriteSet} to detect duplicates in
+   * @param infos the list of {@link MessageInfo} to detect duplicates in
    * @throws IllegalArgumentException if a duplicate is detected
    */
-  private void checkDuplicates(MessageWriteSet writeSet) throws IllegalArgumentException {
-    List<MessageInfo> infos = writeSet.getMessageSetInfo();
+  private void checkDuplicates(List<MessageInfo> infos) throws IllegalArgumentException {
     List<StoreKey> keys = infos.stream().map(info -> info.getStoreKey()).collect(Collectors.toList());
-    checkDuplicates(keys);
+    checkStoreKeyDuplicates(keys);
   }
 
   /**
@@ -557,7 +561,7 @@ class CloudBlobStore implements Store {
    * @param keys list of {@link StoreKey} to detect duplicates in
    * @throws IllegalArgumentException if a duplicate is detected
    */
-  private void checkDuplicates(List<? extends StoreKey> keys) throws IllegalArgumentException {
+  private void checkStoreKeyDuplicates(List<? extends StoreKey> keys) throws IllegalArgumentException {
     if (keys.size() > 1) {
       new HashSet<>();
       Set<StoreKey> seenKeys = new HashSet<>();

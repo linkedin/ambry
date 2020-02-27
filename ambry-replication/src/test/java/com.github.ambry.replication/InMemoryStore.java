@@ -15,6 +15,8 @@ package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
+import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.messageformat.MessageFormatInputStream;
@@ -33,10 +35,13 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreStats;
 import com.github.ambry.store.Write;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
@@ -221,41 +226,57 @@ class InMemoryStore implements Store {
   }
 
   @Override
-  public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
-    for (MessageInfo info : messageSetToDelete.getMessageSetInfo()) {
-      try {
-        messageSetToDelete.writeTo(log);
-      } catch (StoreException e) {
-        throw new IllegalStateException(e);
+  public void delete(List<MessageInfo> infos) throws StoreException {
+    List<MessageInfo> infosToDelete = new ArrayList<>(infos.size());
+    List<InputStream> inputStreams = new ArrayList();
+    try {
+      for (MessageInfo info : infos) {
+        MessageFormatInputStream stream =
+            new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                info.getOperationTimeMs());
+        infosToDelete.add(new MessageInfo(info.getStoreKey(), stream.getSize(), true, info.isTtlUpdated(), false,
+            info.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
+            info.getLifeVersion()));
+        inputStreams.add(stream);
       }
-      messageInfos.add(new MessageInfo(info.getStoreKey(), info.getSize(), true, info.isTtlUpdated(), false,
-          info.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
-          info.getLifeVersion()));
+      MessageFormatWriteSet writeSet =
+          new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), infosToDelete,
+              false);
+      writeSet.writeTo(log);
+      messageInfos.addAll(infosToDelete);
+    } catch (Exception e) {
+      throw (e instanceof StoreException ? (StoreException) e : new StoreException(e, StoreErrorCodes.Unknown_Error));
     }
   }
 
   @Override
-  public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
-    for (MessageInfo info : messageSetToUpdate.getMessageSetInfo()) {
-      if (getMessageInfo(info.getStoreKey(), messageInfos, true, false, false) != null) {
-        throw new StoreException("Deleted", StoreErrorCodes.ID_Deleted);
-      } else if (getMessageInfo(info.getStoreKey(), messageInfos, false, false, true) != null) {
-        throw new StoreException("Updated already", StoreErrorCodes.Already_Updated);
-      } else if (getMessageInfo(info.getStoreKey(), messageInfos, false, false, false) == null) {
-        throw new StoreException("Not Found", StoreErrorCodes.ID_Not_Found);
+  public void updateTtl(List<MessageInfo> infos) throws StoreException {
+    List<MessageInfo> infosToUpdate = new ArrayList<>(infos.size());
+    List<InputStream> inputStreams = new ArrayList();
+    try {
+      for (MessageInfo info : infos) {
+        if (getMessageInfo(info.getStoreKey(), messageInfos, true, false, false) != null) {
+          throw new StoreException("Deleted", StoreErrorCodes.ID_Deleted);
+        } else if (getMessageInfo(info.getStoreKey(), messageInfos, false, false, true) != null) {
+          throw new StoreException("Updated already", StoreErrorCodes.Already_Updated);
+        } else if (getMessageInfo(info.getStoreKey(), messageInfos, false, false, false) == null) {
+          throw new StoreException("Not Found", StoreErrorCodes.ID_Not_Found);
+        }
+        MessageFormatInputStream stream =
+            new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                info.getExpirationTimeInMs(), info.getOperationTimeMs());
+        infosToUpdate.add(
+            new MessageInfo(info.getStoreKey(), stream.getSize(), false, true, info.getExpirationTimeInMs(),
+                info.getAccountId(), info.getContainerId(), info.getOperationTimeMs()));
+        inputStreams.add(stream);
       }
-      short lifeVersion = info.getLifeVersion();
-      if (info.getLifeVersion() == 0) {
-        lifeVersion = getMessageInfo(info.getStoreKey(), messageInfos, false, false, false).getLifeVersion();
-      }
-      try {
-        messageSetToUpdate.writeTo(log);
-      } catch (StoreException e) {
-        throw new IllegalStateException(e);
-      }
-      messageInfos.add(
-          new MessageInfo(info.getStoreKey(), info.getSize(), false, true, false, info.getExpirationTimeInMs(), null,
-              info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(), lifeVersion));
+      MessageFormatWriteSet writeSet =
+          new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), infosToUpdate,
+              false);
+      writeSet.writeTo(log);
+      messageInfos.addAll(infosToUpdate);
+    } catch (Exception e) {
+      throw (e instanceof StoreException ? (StoreException) e : new StoreException(e, StoreErrorCodes.Unknown_Error));
     }
   }
 
@@ -278,9 +299,7 @@ class InMemoryStore implements Store {
       info = new MessageInfo(key, stream.getSize(), false, deleteInfo.isTtlUpdated(), true,
           deleteInfo.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(),
           info.getOperationTimeMs(), lifeVersion);
-      ArrayList<MessageInfo> infoList = new ArrayList<>();
-      infoList.add(info);
-      MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
+      MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, Collections.singletonList(info), false);
       writeSet.writeTo(log);
       return lifeVersion;
     } catch (Exception e) {

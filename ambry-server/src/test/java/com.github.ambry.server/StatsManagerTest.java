@@ -704,7 +704,7 @@ public class StatsManagerTest {
     }
 
     @Override
-    public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
+    public void delete(List<MessageInfo> infos) throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
 
@@ -714,7 +714,7 @@ public class StatsManagerTest {
     }
 
     @Override
-    public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
+    public void updateTtl(List<MessageInfo> infos) throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
 

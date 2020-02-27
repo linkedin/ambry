@@ -19,6 +19,9 @@ import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.ByteBufferOutputStream;
@@ -83,31 +86,39 @@ public class BlobStoreTest {
   private static final MockId randomMockId =
       new MockId(UtilsTest.getRandomString(MOCK_ID_STRING_LENGTH), (short) 0, (short) 0);
   // setupTestState() is coupled to these numbers. Changing them *will* cause setting test state or tests to fail.
-  private static final long LOG_CAPACITY = 50000;
-  private static final long SEGMENT_CAPACITY = 5000;
+  private static final long LOG_CAPACITY = 90000;
+  private static final long SEGMENT_CAPACITY = 9000;
   private static final int MAX_IN_MEM_ELEMENTS = 5;
   // deliberately do not divide the capacities perfectly.
   private static final int PUT_RECORD_SIZE = 53;
-  private static final int DELETE_RECORD_SIZE = 29;
-  private static final int TTL_UPDATE_RECORD_SIZE = 37;
+  private static int DELETE_RECORD_SIZE;
+  private static int TTL_UPDATE_RECORD_SIZE;
   private static int UNDELETE_RECORD_SIZE;
 
   static {
-    // Since undelete record is constructed in BlobStore, we can't set an arbitrary number as its record size.
+    // Since records are constructed in BlobStore, we can't set an arbitrary number as its record size.
     // This static block constructs a UndeleteMessageFormatInputStream and returned its size. We have to make sure
     // that the mock id's size is predefined and can't be changed while testing.
     try {
       UNDELETE_RECORD_SIZE =
           (int) (new UndeleteMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0, (short) 0).getSize());
+      if (MessageFormatRecord.getCurrentMessageHeaderVersion() == MessageFormatRecord.Message_Header_Version_V3) {
+        DELETE_RECORD_SIZE =
+            (int) (new DeleteMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0, (short) 0).getSize());
+        TTL_UPDATE_RECORD_SIZE = (int) (new TtlUpdateMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0, 0,
+            (short) 0).getSize());
+      } else {
+        DELETE_RECORD_SIZE =
+            (int) (new DeleteMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0).getSize());
+        TTL_UPDATE_RECORD_SIZE =
+            (int) (new TtlUpdateMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0, 0).getSize());
+      }
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
   }
 
   static final int deleteRetentionDay = 1;
-  private static final byte[] DELETE_BUF = TestUtils.getRandomBytes(DELETE_RECORD_SIZE);
-  private static final byte[] TTL_UPDATE_BUF = TestUtils.getRandomBytes(TTL_UPDATE_RECORD_SIZE);
-
   private final Random random = new Random();
 
   /**
@@ -299,7 +310,7 @@ public class BlobStoreTest {
    * @throws StoreException
    */
   public BlobStoreTest(boolean isLogSegmented) throws InterruptedException, IOException, StoreException {
-    time.sleep(TimeUnit.DAYS.toMillis(CuratedLogIndexState.deleteRetentionDay));
+    time.sleep(TimeUnit.DAYS.toMillis(deleteRetentionDay));
     this.isLogSegmented = isLogSegmented;
     tempDir = StoreTestUtils.createTempDirectory("storeDir-" + storeId);
     tempDirStr = tempDir.getAbsolutePath();
@@ -724,7 +735,7 @@ public class BlobStoreTest {
   }
 
   /**
-   * Tests error cases for {@link BlobStore#delete(MessageWriteSet)}.
+   * Tests error cases for {@link BlobStore#delete(List)} )}.
    * @throws StoreException
    */
   @Test
@@ -736,10 +747,8 @@ public class BlobStoreTest {
     MockId id = getUniqueId();
     MessageInfo info =
         new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds());
-    MessageWriteSet writeSet = new MockMessageWriteSet(Arrays.asList(info, info),
-        Arrays.asList(ByteBuffer.allocate(1), ByteBuffer.allocate(1)));
     try {
-      store.delete(writeSet);
+      store.delete(Arrays.asList(info, info));
       fail("Store DELETE should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -873,10 +882,8 @@ public class BlobStoreTest {
     id = getUniqueId();
     MessageInfo info = new MessageInfo(id, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, id.getAccountId(),
         id.getContainerId(), time.milliseconds());
-    MessageWriteSet writeSet = new MockMessageWriteSet(Arrays.asList(info, info),
-        Arrays.asList(ByteBuffer.allocate(1), ByteBuffer.allocate(1)));
     try {
-      store.updateTtl(writeSet);
+      store.updateTtl(Arrays.asList(info, info));
       fail("Store TTL UPDATE should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do
@@ -1193,30 +1200,7 @@ public class BlobStoreTest {
     testStore1.start();
     // verify store can keep track of real I/O errors for Delete and TtlUpdate operations and shutdown properly.
     assertEquals("Error count should be reset", 0, testStore1.getErrorCount().get());
-    MessageInfo deleteInfo =
-        new MessageInfo(id1, DELETE_RECORD_SIZE, id1.getAccountId(), id1.getContainerId(), time.milliseconds());
-    MessageWriteSet deleteWriteSet = new MockMessageWriteSet(Collections.singletonList(deleteInfo),
-        Collections.singletonList(ByteBuffer.wrap(DELETE_BUF)),
-        new StoreException(StoreException.IO_ERROR_STR, StoreErrorCodes.IOError));
-    MessageInfo ttlUpdateInfo =
-        new MessageInfo(id1, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, id1.getAccountId(),
-            id1.getContainerId(), time.milliseconds());
-    MessageWriteSet ttlUpdateWriteSet = new MockMessageWriteSet(Collections.singletonList(ttlUpdateInfo),
-        Collections.singletonList(ByteBuffer.wrap(TTL_UPDATE_BUF)),
-        new StoreException(StoreException.IO_ERROR_STR, StoreErrorCodes.IOError));
-    try {
-      testStore1.updateTtl(ttlUpdateWriteSet);
-      fail("should throw exception");
-    } catch (StoreException e) {
-      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
-    }
-    try {
-      testStore1.delete(deleteWriteSet);
-      fail("should throw exception");
-    } catch (StoreException e) {
-      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
-    }
-    assertFalse("Store should shutdown because error count exceeded threshold", testStore1.isStarted());
+    testStore1.shutdown();
 
     // Test2: Simulate StoreErrorCodes.IOError occurred in getStoreKey step even though WriteSet is valid
     // verify that store can capture disk I/O errors in GET method and take proper actions. Put/Delete/TtlUpdates are also tested.
@@ -1300,23 +1284,20 @@ public class BlobStoreTest {
       assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
     }
     // call TtlUpdate method to trigger StoreException
-    ttlUpdateInfo = new MessageInfo(id2, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, id2.getAccountId(),
-        id2.getContainerId(), time.milliseconds());
-    ttlUpdateWriteSet = new MockMessageWriteSet(Collections.singletonList(ttlUpdateInfo),
-        Collections.singletonList(ByteBuffer.wrap(TTL_UPDATE_BUF)), null);
+    MessageInfo ttlUpdateInfo =
+        new MessageInfo(id2, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, id2.getAccountId(),
+            id2.getContainerId(), time.milliseconds());
     try {
-      testStore2.updateTtl(ttlUpdateWriteSet);
+      testStore2.updateTtl(Collections.singletonList(ttlUpdateInfo));
       fail("should throw exception");
     } catch (StoreException e) {
       assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
     }
     // call delete method to trigger StoreException
-    deleteInfo =
+    MessageInfo deleteInfo =
         new MessageInfo(id2, DELETE_RECORD_SIZE, id2.getAccountId(), id2.getContainerId(), time.milliseconds());
-    deleteWriteSet = new MockMessageWriteSet(Collections.singletonList(deleteInfo),
-        Collections.singletonList(ByteBuffer.wrap(DELETE_BUF)), null);
     try {
-      testStore2.delete(deleteWriteSet);
+      testStore2.delete(Collections.singletonList(deleteInfo));
       fail("should throw exception");
     } catch (StoreException e) {
       assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
@@ -1585,8 +1566,7 @@ public class BlobStoreTest {
     MessageInfo info =
         new MessageInfo(idToDelete, DELETE_RECORD_SIZE, putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
             operationTimeMs);
-    ByteBuffer buffer = ByteBuffer.wrap(DELETE_BUF);
-    store.delete(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
+    store.delete(Collections.singletonList(info));
     deletedKeys.add(idToDelete);
     undeletedKeys.remove(idToDelete);
     liveKeys.remove(idToDelete);
@@ -1616,8 +1596,7 @@ public class BlobStoreTest {
     MessageInfo info =
         new MessageInfo(idToUpdate, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, putMsgInfo.getAccountId(),
             putMsgInfo.getContainerId(), time.milliseconds());
-    ByteBuffer buffer = ByteBuffer.wrap(TTL_UPDATE_BUF);
-    store.updateTtl(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
+    store.updateTtl(Collections.singletonList(info));
     ttlUpdatedKeys.add(idToUpdate);
     return info;
   }
@@ -1712,7 +1691,7 @@ public class BlobStoreTest {
 
       // second log segment is filled but has some space at the end (free space has to be less than the lesser of the
       // standard delete and put record sizes so that the next write causes a roll over of log segments).
-      long sizeToWrite = segmentCapacity - (DELETE_RECORD_SIZE - 1);
+      long sizeToWrite = segmentCapacity - (Math.min(PUT_RECORD_SIZE, DELETE_RECORD_SIZE) - 1);
       expectedStoreSize += sizeToWrite;
       addCuratedData(sizeToWrite, addTtlUpdates);
       assertEquals("Store size not as expected", expectedStoreSize, store.getSizeInBytes());
@@ -2303,10 +2282,8 @@ public class BlobStoreTest {
     MessageInfo info =
         new MessageInfo(idToDelete, DELETE_RECORD_SIZE, idToDelete.getAccountId(), idToDelete.getContainerId(),
             time.milliseconds());
-    MessageWriteSet writeSet = new MockMessageWriteSet(Collections.singletonList(info),
-        Collections.singletonList(ByteBuffer.wrap(DELETE_BUF)));
     try {
-      store.delete(writeSet);
+      store.delete(Collections.singletonList(info));
       fail("Store DELETE should have failed");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
@@ -2325,10 +2302,8 @@ public class BlobStoreTest {
     MessageInfo info =
         new MessageInfo(idToUpdate, TTL_UPDATE_RECORD_SIZE, false, true, newExpiryTimeMs, idToUpdate.getAccountId(),
             idToUpdate.getContainerId(), time.milliseconds());
-    MessageWriteSet writeSet = new MockMessageWriteSet(Collections.singletonList(info),
-        Collections.singletonList(ByteBuffer.wrap(TTL_UPDATE_BUF)));
     try {
-      store.updateTtl(writeSet);
+      store.updateTtl(Collections.singletonList(info));
       fail("Store TTL UPDATE should have failed");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
@@ -2374,19 +2349,25 @@ public class BlobStoreTest {
     }
 
     try {
-      blobStore.delete(new MockMessageWriteSet(Collections.EMPTY_LIST, Collections.EMPTY_LIST));
+      blobStore.delete(Collections.EMPTY_LIST);
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
 
     try {
-      blobStore.updateTtl(new MockMessageWriteSet(Collections.EMPTY_LIST, Collections.EMPTY_LIST));
+      blobStore.updateTtl(Collections.EMPTY_LIST);
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
 
+    try {
+      blobStore.undelete(null);
+      fail("Operation should have failed because store is inactive");
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+    }
     try {
       blobStore.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE);
       fail("Operation should have failed because store is inactive");

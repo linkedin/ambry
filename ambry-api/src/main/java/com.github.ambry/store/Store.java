@@ -49,10 +49,10 @@ public interface Store {
 
   /**
    * Deletes all the messages that are part of the message set
-   * @param messageSetToDelete The list of messages that need to be deleted
+   * @param infosToDelete The list of messages that need to be deleted
    * @throws StoreException
    */
-  void delete(MessageWriteSet messageSetToDelete) throws StoreException;
+  void delete(List<MessageInfo> infosToDelete) throws StoreException;
 
   /**
    * Undelete the blob identified by {@code id}.
@@ -63,10 +63,10 @@ public interface Store {
 
   /**
    * Updates the TTL of all the messages that are part of the message set
-   * @param messageSetToUpdate The list of messages that need to be updated
+   * @param infosToUpdate The list of messages that need to be updated
    * @throws StoreException
    */
-  void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException;
+  void updateTtl(List<MessageInfo> infosToUpdate) throws StoreException;
 
   /**
    * Finds all the entries from the store given a find token

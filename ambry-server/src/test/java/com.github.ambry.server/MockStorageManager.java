@@ -24,8 +24,10 @@ import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.FindToken;
@@ -47,6 +49,8 @@ import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -127,21 +131,57 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
-    public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
+    public void delete(List<MessageInfo> infos) throws StoreException {
       operationReceived = RequestOrResponseType.DeleteRequest;
-      messageWriteSetReceived = messageSetToDelete;
+      List<MessageInfo> infosToDelete = new ArrayList<>(infos.size());
+      List<InputStream> inputStreams = new ArrayList();
+      MessageWriteSet writeSet;
+      try {
+        for (MessageInfo info : infos) {
+          MessageFormatInputStream stream =
+              new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs());
+          infosToDelete.add(new MessageInfo(info.getStoreKey(), stream.getSize(), true, info.isTtlUpdated(), false,
+              info.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
+              info.getLifeVersion()));
+          inputStreams.add(stream);
+        }
+        writeSet =
+            new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), infosToDelete,
+                false);
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
+      messageWriteSetReceived = writeSet;
       throwExceptionIfRequired();
-      checkValidityOfIds(
-          messageSetToDelete.getMessageSetInfo().stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()));
+      checkValidityOfIds(infos.stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()));
     }
 
     @Override
-    public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
+    public void updateTtl(List<MessageInfo> infos) throws StoreException {
       operationReceived = RequestOrResponseType.TtlUpdateRequest;
-      messageWriteSetReceived = messageSetToUpdate;
+      List<MessageInfo> infosToUpdate = new ArrayList<>(infos.size());
+      List<InputStream> inputStreams = new ArrayList();
+      MessageFormatWriteSet writeSet;
+      try {
+        for (MessageInfo info : infos) {
+          MessageFormatInputStream stream =
+              new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                  info.getExpirationTimeInMs(), info.getOperationTimeMs());
+          infosToUpdate.add(
+              new MessageInfo(info.getStoreKey(), stream.getSize(), false, true, info.getExpirationTimeInMs(),
+                  info.getAccountId(), info.getContainerId(), info.getOperationTimeMs()));
+          inputStreams.add(stream);
+        }
+        writeSet =
+            new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), infosToUpdate,
+                false);
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
+      messageWriteSetReceived = writeSet;
       throwExceptionIfRequired();
-      checkValidityOfIds(
-          messageSetToUpdate.getMessageSetInfo().stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()));
+      checkValidityOfIds(infos.stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()));
     }
 
     @Override

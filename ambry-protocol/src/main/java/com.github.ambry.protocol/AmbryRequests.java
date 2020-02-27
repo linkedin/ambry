@@ -23,7 +23,6 @@ import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.commons.ServerMetrics;
-import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
@@ -32,7 +31,6 @@ import com.github.ambry.messageformat.MessageFormatMetrics;
 import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
-import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
@@ -398,16 +396,11 @@ public class AmbryRequests implements RequestAPI {
         response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
       } else {
         BlobId convertedBlobId = (BlobId) convertedStoreKey;
-        MessageFormatInputStream stream =
-            new DeleteMessageFormatInputStream(convertedStoreKey, convertedBlobId.getAccountId(),
-                convertedBlobId.getContainerId(), deleteRequest.getDeletionTimeInMs());
-        MessageInfo info = new MessageInfo(convertedStoreKey, stream.getSize(), convertedBlobId.getAccountId(),
-            convertedBlobId.getContainerId(), deleteRequest.getDeletionTimeInMs());
-        ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
-        infoList.add(info);
-        MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
+        MessageInfo info =
+            new MessageInfo(convertedStoreKey, -1, convertedBlobId.getAccountId(), convertedBlobId.getContainerId(),
+                deleteRequest.getDeletionTimeInMs());
         Store storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
-        storeToDelete.delete(writeSet);
+        storeToDelete.delete(Collections.singletonList(info));
         response =
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
         if (notification != null) {
@@ -473,17 +466,10 @@ public class AmbryRequests implements RequestAPI {
       } else {
         BlobId convertedStoreKey =
             (BlobId) getConvertedStoreKeys(Collections.singletonList(updateRequest.getBlobId())).get(0);
-        MessageFormatInputStream stream =
-            new TtlUpdateMessageFormatInputStream(convertedStoreKey, convertedStoreKey.getAccountId(),
-                convertedStoreKey.getContainerId(), updateRequest.getExpiresAtMs(),
-                updateRequest.getOperationTimeInMs());
-        MessageInfo info =
-            new MessageInfo(convertedStoreKey, stream.getSize(), false, true, updateRequest.getExpiresAtMs(),
-                convertedStoreKey.getAccountId(), convertedStoreKey.getContainerId(),
-                updateRequest.getOperationTimeInMs());
-        MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, Collections.singletonList(info), false);
+        MessageInfo info = new MessageInfo(convertedStoreKey, -1, false, true, updateRequest.getExpiresAtMs(),
+            convertedStoreKey.getAccountId(), convertedStoreKey.getContainerId(), updateRequest.getOperationTimeInMs());
         Store store = storeManager.getStore(updateRequest.getBlobId().getPartition());
-        store.updateTtl(writeset);
+        store.updateTtl(Collections.singletonList(info));
         response = new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(),
             ServerErrorCode.No_Error);
         if (notification != null) {
@@ -664,7 +650,7 @@ public class AmbryRequests implements RequestAPI {
       } else {
         BlobId convertedBlobId = (BlobId) convertedStoreKey;
         MessageInfo info =
-            new MessageInfo(convertedBlobId, 0, convertedBlobId.getAccountId(), convertedBlobId.getContainerId(),
+            new MessageInfo(convertedBlobId, -1, convertedBlobId.getAccountId(), convertedBlobId.getContainerId(),
                 undeleteRequest.getOperationTimeMs());
         Store storeToUndelete = storeManager.getStore(undeleteRequest.getBlobId().getPartition());
         short lifeVersion = storeToUndelete.undelete(info);
