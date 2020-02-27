@@ -210,7 +210,8 @@ public class AzureBlobDataAccessorTest {
    */
   @Test
   public void testDownloadNotExists() throws Exception {
-    doThrow(BlobStorageException.class).when(mockBlockBlobClient).download(any());
+    doThrow(BlobStorageException.class).when(mockBlockBlobClient)
+        .downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
     expectBlobStorageException(() -> downloadBlob(blobId));
   }
 
