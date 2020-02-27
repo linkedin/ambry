@@ -71,7 +71,7 @@ public class AzureBlobDataAccessor {
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
   private ProxyOptions proxyOptions;
   private final int purgeBatchSize;
-  private Callable<Void> updateCallback = null;
+  private Callable<?> updateCallback = null;
 
   /**
    * Production constructor
@@ -122,7 +122,7 @@ public class AzureBlobDataAccessor {
   }
 
   /** Visible for testing */
-  void setUpdateCallback(Callable callback) {
+  void setUpdateCallback(Callable<?> callback) {
     this.updateCallback = callback;
   }
 
@@ -305,6 +305,7 @@ public class AzureBlobDataAccessor {
             try {
               updateCallback.call();
             } catch (Exception ex) {
+              logger.error("Error in update callback", ex);
             }
           }
           // Set condition to ensure we don't clobber a concurrent update

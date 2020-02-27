@@ -46,7 +46,7 @@ public class CosmosDataAccessor {
   private final AsyncDocumentClient asyncDocumentClient;
   private final String cosmosCollectionLink;
   private final AzureMetrics azureMetrics;
-  private Callable<Void> updateCallback = null;
+  private Callable<?> updateCallback = null;
 
   /** Production constructor */
   CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, AzureCloudConfig azureCloudConfig,
@@ -62,7 +62,7 @@ public class CosmosDataAccessor {
   }
 
   /** Visible for testing */
-  void setUpdateCallback(Callable callback) {
+  void setUpdateCallback(Callable<?> callback) {
     this.updateCallback = callback;
   }
 
@@ -146,6 +146,7 @@ public class CosmosDataAccessor {
       try {
         updateCallback.call();
       } catch (Exception ex) {
+        logger.error("Error in update callback", ex);
       }
     }
 
