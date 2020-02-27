@@ -56,7 +56,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -106,6 +108,8 @@ class NettyResponseChannel implements RestResponseChannel {
   private volatile ResponseStatus responseStatus = ResponseStatus.Ok;
   // the response metadata that was actually sent.
   private volatile HttpResponse finalResponseMetadata = null;
+  // A CountDownLatch to make sure finalResponseMetadata is ready when access.
+  private final CountDownLatch finalResponseMetadataReadyLatch = new CountDownLatch(1);
   // temp variable to hold the error response status which will be overwritten on responseStatus if the error response
   // was successfully sent
   private ResponseStatus errorResponseStatus = null;
@@ -147,6 +151,11 @@ class NettyResponseChannel implements RestResponseChannel {
     long writeProcessingStartTime = System.currentTimeMillis();
     if (!responseMetadataWriteInitiated.get()) {
       maybeWriteResponseMetadata(responseMetadata, new ResponseMetadataWriteListener());
+    }
+    try {
+      finalResponseMetadataReadyLatch.await(5, TimeUnit.SECONDS);
+    } catch (InterruptedException e) {
+      logger.error("finalResponseMetadataReadyLatch is interrupted.");
     }
     Chunk chunk = new Chunk(src, callback);
     chunksToWrite.add(chunk);
@@ -446,6 +455,7 @@ class NettyResponseChannel implements RestResponseChannel {
       }
       logger.trace("Sending response with status {} on channel {}", responseMetadata.status(), ctx.channel());
       finalResponseMetadata = responseMetadata;
+      finalResponseMetadataReadyLatch.countDown();
       ChannelPromise writePromise = ctx.newPromise().addListener(listener);
       ctx.writeAndFlush(responseMetadata, writePromise);
       writtenThisTime = true;
