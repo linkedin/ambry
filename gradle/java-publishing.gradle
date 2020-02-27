@@ -10,17 +10,17 @@ tasks.withType(Jar) {
 
 task sourcesJar(type: Jar, dependsOn: classes) {
     classifier = 'sources'
-    from sourceSets.main.allSource    
+    from sourceSets.main.allSource
 }
 
 task javadocJar(type: Jar, dependsOn: javadoc) {
     classifier = 'javadoc'
-    from javadoc.destinationDir  
+    from javadoc.destinationDir
 }
 
 task testJar(type: Jar, dependsOn: testClasses) {
-    from sourceSets.test.output
     classifier = 'test'
+    from sourceSets.test.output
 }
 
 artifacts {
@@ -33,10 +33,31 @@ publishing {
     publications {
         maven(MavenPublication) {
             from components.java
-            
+
             artifact javadocJar
             artifact sourcesJar
             artifact testJar
+
+            pom {
+                licenses {
+                    license {
+                        name = 'The Apache License, Version 2.0'
+                        url = 'https://github.com/linkedin/ambry/blob/master/LICENSE'
+                        distribution = 'repo'
+                    }
+                }
+                scm {
+                    url = 'https://github.com/linkedin/ambry.git'
+                }
+                issueManagement {
+                    url = 'https://github.com/linkedin/ambry/issues'
+                    system = 'GitHub issues'
+                }
+                ciManagement {
+                    url='https://travis-ci.org/linkedin/ambry'
+                    system='TravisCI'
+                }
+            }
         }
     }
 }
@@ -46,15 +67,15 @@ bintray { //docs: https://github.com/bintray/gradle-bintray-plugin
     key = System.getenv("BINTRAY_API_KEY")
 
     publish = true
-    dryRun = project.hasProperty("bintray.dryRun")? true : false //useful for testing
+    dryRun = project.hasProperty("bintray.dryRun") //useful for testing
 
-    publications = ['maven'] 
+    publications = ['maven']
 
     pkg {
-        repo = 'test-repo'
+        repo = 'maven'
         userOrg = 'linkedin'
         name = 'ambry'
-        
+
         licenses = ['Apache-2.0']
         labels = ['blob storage']
         version {
@@ -67,7 +88,7 @@ bintray { //docs: https://github.com/bintray/gradle-bintray-plugin
                 sync = false
             }
         }
-    }    
+    }
 }
 
 bintrayUpload {
