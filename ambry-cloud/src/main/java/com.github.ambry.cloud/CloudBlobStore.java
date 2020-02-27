@@ -247,6 +247,11 @@ class CloudBlobStore implements Store {
     return metadata.getExpirationTime() != Utils.Infinite_Time && metadata.getExpirationTime() < currentTimeStamp;
   }
 
+  /**
+   * Puts a set of messages into the store
+   * @param messageSetToWrite The message set to write to the store
+   * @throws StoreException
+   */
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     checkStarted();
@@ -367,6 +372,12 @@ class CloudBlobStore implements Store {
     throw new UnsupportedOperationException("Undelete not supported in cloud store");
   }
 
+  /**
+   * {@inheritDoc}
+   * Currently, the only supported operation is to set the TTL to infinite (i.e. no arbitrary increase or decrease)
+   * @param infos The list of messages that need to be updated
+   * @throws StoreException
+   */
   @Override
   public void updateTtl(List<MessageInfo> infos) throws StoreException {
     checkStarted();
@@ -540,7 +551,7 @@ class CloudBlobStore implements Store {
    * @param infos the list of {@link MessageInfo} to detect duplicates in
    * @throws IllegalArgumentException if a duplicate is detected
    */
-  private void checkDuplicates(List<MessageInfo> infos) throws IllegalArgumentException{
+  private void checkDuplicates(List<MessageInfo> infos) throws IllegalArgumentException {
     List<StoreKey> keys = infos.stream().map(info -> info.getStoreKey()).collect(Collectors.toList());
     checkStoreKeyDuplicates(keys);
   }
