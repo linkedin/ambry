@@ -84,7 +84,6 @@ public class HelixClusterManager implements ClusterMap {
   // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
   // reflects the current value.
   private final AtomicLong currentXid;
-  private final List<ClusterMapChangeListener> clusterMapChangeListeners = new ArrayList<>();
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
 
   /**
@@ -237,8 +236,11 @@ public class HelixClusterManager implements ClusterMap {
     }
     localDatacenterId = dcToDcZkInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
     partitionSelectionHelper =
-        new PartitionSelectionHelper(partitionMap.values(), clusterMapConfig.clusterMapDatacenterName,
+        new PartitionSelectionHelper(helixClusterManagerCallback, clusterMapConfig.clusterMapDatacenterName,
             clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
+    // register partition selection helper as a listener of cluster map changes.
+    dcToDcZkInfo.values()
+        .forEach(info -> info.clusterChangeHandler.registerClusterMapListener(partitionSelectionHelper));
   }
 
   /**
@@ -510,7 +512,9 @@ public class HelixClusterManager implements ClusterMap {
 
   @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
-    clusterMapChangeListeners.add(clusterMapChangeListener);
+    for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+      dcInfo.clusterChangeHandler.registerClusterMapListener(clusterMapChangeListener);
+    }
   }
 
   /**
@@ -698,8 +702,9 @@ public class HelixClusterManager implements ClusterMap {
      * @return the list of {@link AmbryReplica}s associated with the given partition.
      */
     @Override
-    public List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
-      return new ArrayList<>(ambryPartitionToAmbryReplicas.get(partition));
+    public List<AmbryReplica> getReplicaIdsForPartition(PartitionId partition) {
+      AmbryPartition ambryPartition = (AmbryPartition) partition;
+      return new ArrayList<>(ambryPartitionToAmbryReplicas.get(ambryPartition));
     }
 
     /**
@@ -708,7 +713,7 @@ public class HelixClusterManager implements ClusterMap {
      * If no routing table snapshot is found for dc name, or no resource name found for given partition, return empty list.
      */
     @Override
-    public List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName) {
+    public List<AmbryReplica> getReplicaIdsByState(PartitionId partition, ReplicaState state, String dcName) {
       List<AmbryReplica> replicas = new ArrayList<>();
       for (DcInfo dcInfo : dcToDcZkInfo.values()) {
         String dc = dcInfo.dcName;
@@ -770,9 +775,9 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     @Override
-    public Collection<AmbryDisk> getDisks(AmbryDataNode dataNode) {
+    public Collection<AmbryDisk> getDisks(DataNodeId dataNode) {
       if (dataNode != null) {
-        return dcToDcZkInfo.get(dataNode.getDatacenterName()).clusterChangeHandler.getDisks(dataNode);
+        return dcToDcZkInfo.get(dataNode.getDatacenterName()).clusterChangeHandler.getDisks((AmbryDataNode) dataNode);
       }
       List<AmbryDisk> disksToReturn = new ArrayList<>();
       for (DcInfo dcInfo : dcToDcZkInfo.values()) {
@@ -812,7 +817,8 @@ public class HelixClusterManager implements ClusterMap {
     /**
      * @return a collection of partitions in this cluster.
      */
-    Collection<AmbryPartition> getPartitions() {
+    @Override
+    public Collection<AmbryPartition> getPartitions() {
       return new ArrayList<>(partitionMap.values());
     }
 

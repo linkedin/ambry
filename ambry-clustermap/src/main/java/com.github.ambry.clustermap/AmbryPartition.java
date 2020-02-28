@@ -20,6 +20,7 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -46,7 +47,7 @@ public class AmbryPartition implements PartitionId {
    * Instantiate an AmbryPartition instance.
    * @param id the id associated with this partition.
    * @param partitionClass the partition class that this partition belongs to
-   * @param clusterManagerCallback the {@link ClusterManagerCallback} to use to make callbacks
+   * @param clusterManagerCallback the {@link HelixClusterManager.HelixClusterManagerCallback} to use to make callbacks
    *                               to the {@link HelixClusterManager}
    * The initial state defaults to {@link PartitionState#READ_WRITE}.
    */
@@ -64,12 +65,18 @@ public class AmbryPartition implements PartitionId {
 
   @Override
   public List<AmbryReplica> getReplicaIds() {
-    return clusterManagerCallback.getReplicaIdsForPartition(this);
+    return clusterManagerCallback.getReplicaIdsForPartition(this)
+        .stream()
+        .map(r -> (AmbryReplica) r)
+        .collect(Collectors.toList());
   }
 
   @Override
   public List<AmbryReplica> getReplicaIdsByState(ReplicaState state, String dcName) {
-    return clusterManagerCallback.getReplicaIdsByState(this, state, dcName);
+    return clusterManagerCallback.getReplicaIdsByState(this, state, dcName)
+        .stream()
+        .map(r -> (AmbryReplica) r)
+        .collect(Collectors.toList());
   }
 
   @Override
@@ -152,7 +159,7 @@ public class AmbryPartition implements PartitionId {
       try {
         lastUpdatedSealedStateChangeCounter = currentCounterValue;
         boolean isSealed = false;
-        for (AmbryReplica replica : clusterManagerCallback.getReplicaIdsForPartition(this)) {
+        for (ReplicaId replica : clusterManagerCallback.getReplicaIdsForPartition(this)) {
           if (replica.isSealed()) {
             isSealed = true;
             break;

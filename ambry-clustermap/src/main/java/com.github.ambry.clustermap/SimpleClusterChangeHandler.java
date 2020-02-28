@@ -261,6 +261,11 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
     }
   }
 
+  @Override
+  public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
+    // no-op for SimpleClusterChangeHandler because it doesn't supporting adding/removing replicas dynamically
+  }
+
   /**
    * Populate the initial data from the admin connection. Create nodes, disks, partitions and replicas for the entire
    * cluster. An {@link InstanceConfig} will only be looked at if the xid in it is <= currentXid.

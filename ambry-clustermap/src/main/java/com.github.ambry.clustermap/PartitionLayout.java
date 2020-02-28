@@ -17,6 +17,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -71,8 +72,9 @@ class PartitionLayout {
     }
 
     validate();
-    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitionMap.values(), localDatacenterName,
-        clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
+    partitionSelectionHelper =
+        new ClusterMapUtils.PartitionSelectionHelper(new StaticClusterManagerCallback(), localDatacenterName,
+            clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
   }
 
   /**
@@ -91,8 +93,9 @@ class PartitionLayout {
     this.maxPartitionId = MinPartitionId;
     this.partitionMap = new HashMap<>();
     validate();
-    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitionMap.values(), localDatacenterName,
-        clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
+    partitionSelectionHelper =
+        new ClusterMapUtils.PartitionSelectionHelper(new StaticClusterManagerCallback(), localDatacenterName,
+            clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
   }
 
   public HardwareLayout getHardwareLayout() {
@@ -305,5 +308,39 @@ class PartitionLayout {
       return false;
     }
     return hardwareLayout.equals(that.hardwareLayout);
+  }
+
+  /**
+   * An implementation of {@link ClusterManagerCallback} that supports getting resource from static clustermap.
+   */
+  class StaticClusterManagerCallback implements ClusterManagerCallback {
+
+    @Override
+    public List<Replica> getReplicaIdsForPartition(PartitionId partition) {
+      throw new UnsupportedOperationException("Not supported in static cluster map");
+    }
+
+    @Override
+    public List<Replica> getReplicaIdsByState(PartitionId partition, ReplicaState state, String dcName) {
+      throw new UnsupportedOperationException("Not supported in static cluster map");
+    }
+
+    @Override
+    public long getSealedStateChangeCounter() {
+      throw new UnsupportedOperationException("Not supported in static cluster map");
+    }
+
+    @Override
+    public Collection<Disk> getDisks(DataNodeId dataNode) {
+      throw new UnsupportedOperationException("Not supported in static cluster map");
+    }
+
+    /**
+     * @return a collection of partitions in this cluster.
+     */
+    @Override
+    public Collection<Partition> getPartitions() {
+      return partitionMap.values();
+    }
   }
 }

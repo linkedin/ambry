@@ -30,6 +30,11 @@ import org.apache.helix.spectator.RoutingTableSnapshot;
 interface ClusterChangeHandler
     extends InstanceConfigChangeListener, LiveInstanceChangeListener, IdealStateChangeListener,
             RoutingTableChangeListener {
+  /**
+   * Register a listener of cluster map for any changes.
+   * @param clusterMapChangeListener the {@link ClusterMapChangeListener} to add.
+   */
+  void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener);
 
   /**
    * Set the initial snapshot in this {@link ClusterChangeHandler}.
