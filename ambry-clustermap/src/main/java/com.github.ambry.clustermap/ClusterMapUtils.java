@@ -409,7 +409,7 @@ public class ClusterMapUtils {
       partitionIdsByClassAndLocalReplicaCount = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
       partitionIdToLocalReplicas = new HashMap<>();
       populatePartitionAndLocalReplicaMaps(allPartitions, partitionIdsByClassAndLocalReplicaCount,
-          partitionIdToLocalReplicas);
+          partitionIdToLocalReplicas, localDatacenterName);
     }
 
     /**
@@ -583,7 +583,7 @@ public class ClusterMapUtils {
           new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
       Map<PartitionId, List<ReplicaId>> partitionAndLocalReplicas = new HashMap<>();
       populatePartitionAndLocalReplicaMaps(partitionsInCluster, partitionSortedByReplicaCount,
-          partitionAndLocalReplicas);
+          partitionAndLocalReplicas, localDatacenterName);
       rwLock.writeLock().lock();
       // switch references to newly generated maps
       try {
@@ -601,10 +601,11 @@ public class ClusterMapUtils {
      * @param allPartitions all the partitions in cluster.
      * @param partitionIdsByClassAndLocalReplicaCount a map that tracks partitions sorted by local replica count.
      * @param partitionIdToLocalReplicas a map that tracks partition to its local replicas.
+     * @param localDatacenterName the name of local dc. Can be null if dc specific replica counts are not required.
      */
     private void populatePartitionAndLocalReplicaMaps(Collection<? extends PartitionId> allPartitions,
         Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount,
-        Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas) {
+        Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas, String localDatacenterName) {
       for (PartitionId partition : allPartitions) {
         String partitionClass = partition.getPartitionClass();
         int localReplicaCount = 0;
