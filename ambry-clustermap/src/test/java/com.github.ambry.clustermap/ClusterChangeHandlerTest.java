@@ -299,13 +299,14 @@ public class ClusterChangeHandlerTest {
     nodesToHostNewPartition.addAll(Arrays.asList(remoteDcNode1, remoteDcNode2));
     nodesToHostNewPartition.addAll(newAddedNodes);
     testPartitionLayout.addNewPartition(testHardwareLayout, nodesToHostNewPartition, DEFAULT_PARTITION_CLASS);
-
+    System.out.println("======================= cut line 111 =============================");
     // write new HardwareLayout and PartitionLayout into files
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // this triggers a InstanceConfig change notification.
     // In each dc, 2 existing instance configs are updated and 1 new instance is added as well as 1 new partition
     helixCluster.upgradeWithNewHardwareLayout(hardwareLayoutPath);
+    System.out.println("======================= cut line 222 =============================");
 
     // verify after InstanceConfig change, HelixClusterManager contains the one more node per dc.
     assertEquals("Number of data nodes after instance addition is not correct",

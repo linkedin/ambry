@@ -578,6 +578,7 @@ public class ClusterMapUtils {
       // be fine with the overhead of re-populating these two maps.
       // No matter whether this method is called by local dc's or remote dcs' cluster change handler, we need to populate
       // "allPartitions" again because there may be some new partitions with special class added to remote dc only.
+      logger.info("Re-populating partition-selection related maps because replicas are added or removed");
       updatePartitions(clusterManagerCallback.getPartitions(), localDatacenterName);
     }
   }

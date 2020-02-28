@@ -298,7 +298,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
     }
     // if this is not initial InstanceConfig change and any replicas are added or removed, we should invoke callbacks
     // for different clustermap change listeners (i.e replication manager, partition selection helper)
-    if (!instanceConfigInitialized && (!totalAddedReplicas.isEmpty() || !totalRemovedReplicas.isEmpty())) {
+    if (instanceConfigInitialized && (!totalAddedReplicas.isEmpty() || !totalRemovedReplicas.isEmpty())) {
       for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
         listener.onReplicaAddedOrRemoved(totalAddedReplicas, totalRemovedReplicas);
       }
@@ -350,7 +350,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
             updateReplicaStateAndOverrideIfNeeded(existingReplica, sealedReplicas, stoppedReplicas);
           } else {
             // if this is a new replica and doesn't exist on node
-            logger.info("Adding new replica {} to existing node {}", partitionName, instanceName);
+            logger.info("Adding new replica {} to existing node {} in {}", partitionName, instanceName, dcName);
             long replicaCapacity = Long.valueOf(info[1]);
             String partitionClass = info.length > 2 ? info[2] : clusterMapConfig.clusterMapDefaultPartitionClass;
             // this can be a brand new partition that is added to an existing node
@@ -426,7 +426,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
    */
   private Pair<List<ReplicaId>, List<ReplicaId>> createNewInstance(InstanceConfig instanceConfig) throws Exception {
     String instanceName = instanceConfig.getInstanceName();
-    logger.info("Adding node {} and its disks and replicas", instanceName);
+    logger.info("Adding node {} and its disks and replicas in {}", instanceName, dcName);
     AmbryDataNode datanode =
         new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
             Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig), null,
