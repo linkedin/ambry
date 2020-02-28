@@ -828,7 +828,7 @@ class NettyResponseChannel implements RestResponseChannel {
       long bytesWritten = 0;
       if (exception == null) {
         bytesWritten = bytesToBeWritten;
-        buffer.skipBytes((int)bytesWritten);
+        buffer.skipBytes((int) bytesWritten);
       }
       nettyMetrics.bytesWriteRate.mark(bytesWritten);
       future.done(bytesWritten, exception);

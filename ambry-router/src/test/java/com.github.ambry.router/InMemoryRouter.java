@@ -157,7 +157,11 @@ public class InMemoryRouter implements Router {
         } catch (IllegalArgumentException e) {
           throw new RouterException("Invalid range for blob", e, RouterErrorCode.RangeNotSatisfiable);
         }
-        buf = ByteBuffer.wrap(blob.array(), (int) resolvedRange.getStartOffset(), (int) resolvedRange.getRangeSize());
+        byte[] bytes = new byte[(int) resolvedRange.getRangeSize()];
+        ByteBuffer duplicate = blob.duplicate();
+        duplicate.position((int) resolvedRange.getStartOffset());
+        duplicate.get(bytes);
+        buf = ByteBuffer.wrap(bytes);
       }
       return buf;
     }
