@@ -72,7 +72,7 @@ public class GetManagerTest {
   private ReadableStreamChannel putChannel;
   private GetBlobOptions options = new GetBlobOptionsBuilder().build();
   private List<ChunkInfo> chunkInfos;
-  private static final int CHUNK_SIZE = new Random().nextInt(1024 * 1024) + 1;
+  private static final int CHUNK_SIZE = new Random().nextInt(1024 * 1024) + 8191;
   private static final int LARGE_BLOB_SIZE = CHUNK_SIZE * 6 + 11;
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
@@ -203,20 +203,42 @@ public class GetManagerTest {
   @Test
   public void testRangeRequestStitchDifferentSizedBlobsSegments() throws Exception {
     if (metadataContentVersion > MessageFormatRecord.Metadata_Content_Version_V2) {
+      router = getNonBlockingRouter();
+      String blobId = createStitchBlob(LARGE_BLOB_SIZE);
       //Test grabbing every segment with various offset ranges
       for (int i = 0; i < NUM_STITCHED_CHUNKS; i++) {
-        testGetSuccessStitch(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().blobSegment(i)
-            .range(ByteRanges.fromOffsetRange(0, CHUNK_SIZE / NUM_STITCHED_CHUNKS))
-            .build());
-        testGetSuccessStitch(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().blobSegment(i)
-            .range(ByteRanges.fromOffsetRange(CHUNK_SIZE / NUM_STITCHED_CHUNKS / 2, CHUNK_SIZE / NUM_STITCHED_CHUNKS))
-            .build());
-        testGetSuccessStitch(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().blobSegment(i)
-            .range(ByteRanges.fromOffsetRange(5, CHUNK_SIZE / NUM_STITCHED_CHUNKS - 5))
-            .build());
-        testGetSuccessStitch(LARGE_BLOB_SIZE,
-            new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(0, 0)).build());
+        int chunkSize = (int) chunkInfos.get(i).getChunkSizeInBytes();
+        // entire chunk, [0, chunkSize-1]
+        this.options =
+            new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(0, chunkSize - 1)).build();
+        getBlobAndCompareContent(blobId);
+
+        // overflow: [0, chunkSize]
+        this.options =
+            new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(0, chunkSize)).build();
+        getBlobAndCompareContent(blobId);
+
+        // more overflow: [0, chunkSize + 100]
+        this.options =
+            new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(0, chunkSize + 100)).build();
+        getBlobAndCompareContent(blobId);
+
+        // last N bytes: [chunkSize-1-N, chunkSize-1]
+        this.options = new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromLastNBytes(100)).build();
+        getBlobAndCompareContent(blobId);
+
+        // range: [chunkSize/2, chunkSize-100]
+        int end = new Random().nextInt(chunkSize / 2) + chunkSize / 2;
+        this.options =
+            new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(chunkSize / 2, end)).build();
+        getBlobAndCompareContent(blobId);
+
+        this.options = new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(0, 0)).build();
+        getBlobAndCompareContent(blobId);
       }
+      this.options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();
+      getBlobAndCompareContent(blobId);
+      router.close();
     } else {
       router = getNonBlockingRouter();
       router.close();
@@ -240,13 +262,7 @@ public class GetManagerTest {
     router.close();
   }
 
-  /**
-   * Test a get request on a stitched blob.
-   * @param blobSize the size of the blob to put/get.
-   * @param options the {@link GetBlobOptions} for the get request.
-   */
-  private void testGetSuccessStitch(int blobSize, GetBlobOptions options) throws Exception {
-    router = getNonBlockingRouter();
+  private String createStitchBlob(int blobSize) throws Exception {
     ByteBuffer byteBuffer = ByteBuffer.allocate(blobSize);
     //Divide blob into NUM_STITCHED_CHUNKS chunks to be stitched
     int chunkSize = blobSize / NUM_STITCHED_CHUNKS;
@@ -263,9 +279,21 @@ public class GetManagerTest {
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get());
       chunkInfos.add(new ChunkInfo(stitchBlobsIds.get(i), curChunkSize, -1L));
     }
-    setOperationParams(blobSize, options);
+    setOperationParams(blobSize, null);
+    this.options = new GetBlobOptionsBuilder().build();
     putContent = byteBuffer.array();
-    String blobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunkInfos).get();
+    return router.stitchBlob(putBlobProperties, putUserMetadata, chunkInfos).get();
+  }
+
+  /**
+   * Test a get request on a stitched blob.
+   * @param blobSize the size of the blob to put/get.
+   * @param options the {@link GetBlobOptions} for the get request.
+   */
+  private void testGetSuccessStitch(int blobSize, GetBlobOptions options) throws Exception {
+    router = getNonBlockingRouter();
+    String blobId = createStitchBlob(blobSize);
+    this.options = options;
     getBlobAndCompareContent(blobId);
     // Test GetBlobInfoOperation, regardless of options passed in.
     this.options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();
@@ -514,8 +542,8 @@ public class GetManagerTest {
       if (options.getRange() == null) {
         byteRange = ByteRanges.fromOffsetRange(offset, offset + size - 1);
       } else {
-        byteRange = ByteRanges.fromOffsetRange(options.getRange().getStartOffset() + offset,
-            options.getRange().getEndOffset() + offset);
+        byteRange = byteRange.toResolvedByteRange(chunkInfos.get(options.getBlobSegmentIdx()).getChunkSizeInBytes());
+        byteRange = ByteRanges.fromOffsetRange(byteRange.getStartOffset() + offset, byteRange.getEndOffset() + offset);
       }
     }
     RouterTestHelpers.compareContent(putContent, byteRange, readableStreamChannel);
