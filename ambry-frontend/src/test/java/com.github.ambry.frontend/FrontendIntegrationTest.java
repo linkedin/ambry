@@ -267,14 +267,13 @@ public class FrontendIntegrationTest {
     assertFalse("Channel should not be active", HttpUtil.isKeepAlive(response));
   }
 
-  /*
+  /**
    * Tests health check request
    * @throws ExecutionException
    * @throws InterruptedException
-   * @throws IOException
    */
   @Test
-  public void healthCheckRequestTest() throws ExecutionException, InterruptedException, IOException {
+  public void healthCheckRequestTest() throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest =
         new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/healthCheck", Unpooled.buffer(0));
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -513,7 +512,7 @@ public class FrontendIntegrationTest {
       HttpContent content = (HttpContent) object;
       buffer.put(content.content().nioBuffer());
       endMarkerFound = object instanceof LastHttpContent;
-      ReferenceCountUtil.release(content);
+      content.release();
     }
     assertEquals("Content length did not match expected", expectedContentLength, buffer.position());
     assertTrue("End marker was not found", endMarkerFound);

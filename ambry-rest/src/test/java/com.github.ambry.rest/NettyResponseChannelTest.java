@@ -17,11 +17,12 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Callback;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandler;
@@ -64,6 +65,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -79,10 +82,21 @@ import static org.mockito.Mockito.*;
  * {@link MockNettyMessageProcessor#handleContent(HttpContent)}.
  */
 public class NettyResponseChannelTest {
+  private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
 
   /**
    * Tests the common workflow of the {@link NettyResponseChannel} i.e., add some content to response body via
-   * {@link NettyResponseChannel#write(ByteBuffer, Callback)} and then complete the response.
+   * {@link NettyResponseChannel#write(ByteBuf, Callback)} and then complete the response.
    * <p/>
    * These responses have the header Transfer-Encoding set to chunked.
    * @throws Exception
@@ -115,11 +129,15 @@ public class NettyResponseChannelTest {
       assertTrue("Response must say 'Transfer-Encoding : chunked'", HttpUtil.isTransferEncodingChunked(response));
       // content echoed back.
       for (String srcOfTruth : contents) {
-        String returnedContent = RestTestUtils.getContentString((HttpContent) channel.readOutbound());
+        HttpContent responseContent = (HttpContent) channel.readOutbound();
+        String returnedContent = RestTestUtils.getContentString(responseContent);
+        responseContent.release();
         assertEquals("Content does not match with expected content", srcOfTruth, returnedContent);
       }
+      HttpContent responseContent = (HttpContent) channel.readOutbound();
       // last content echoed back.
-      String returnedContent = RestTestUtils.getContentString((HttpContent) channel.readOutbound());
+      String returnedContent = RestTestUtils.getContentString(responseContent);
+      responseContent.release();
       assertEquals("Content does not match with expected content", lastContent, returnedContent);
       assertTrue("Did not receive end marker", channel.readOutbound() instanceof LastHttpContent);
       assertEquals("Unexpected channel state on the server", isKeepAlive, channel.isActive());
@@ -199,7 +217,9 @@ public class NettyResponseChannelTest {
         HttpContent httpContent = null;
         for (int j = 0; j < i; j++) {
           httpContent = (HttpContent) channel.readOutbound();
-          byte[] returnedContent = httpContent.content().array();
+          byte[] returnedContent = new byte[httpContent.content().readableBytes()];
+          httpContent.content().readBytes(returnedContent);
+          httpContent.release();
           assertArrayEquals("Content does not match with expected content", MockNettyMessageProcessor.CHUNK,
               returnedContent);
         }
@@ -362,13 +382,17 @@ public class NettyResponseChannelTest {
     // content echoed back.
     StringBuilder returnedContent = new StringBuilder();
     while (returnedContent.length() < content.length()) {
-      returnedContent.append(RestTestUtils.getContentString((HttpContent) channel.readOutbound()));
+      HttpContent responseContent = (HttpContent) channel.readOutbound();
+      returnedContent.append(RestTestUtils.getContentString(responseContent));
+      responseContent.release();
     }
     assertEquals("Content does not match with expected content", content, returnedContent.toString());
     // last content echoed back.
     StringBuilder returnedLastContent = new StringBuilder();
     while (returnedLastContent.length() < lastContent.length()) {
-      returnedLastContent.append(RestTestUtils.getContentString((HttpContent) channel.readOutbound()));
+      HttpContent responseContent = (HttpContent) channel.readOutbound();
+      returnedLastContent.append(RestTestUtils.getContentString(responseContent));
+      responseContent.release();
     }
     assertEquals("Content does not match with expected content", lastContent, returnedLastContent.toString());
     assertFalse("Channel not closed on the server", channel.isActive());
@@ -493,6 +517,7 @@ public class NettyResponseChannelTest {
         } else {
           HttpContent content = channel.readOutbound();
           assertTrue("End marker should be received", content instanceof LastHttpContent);
+          content.release();
         }
         assertNull("There should be no more data in the channel", channel.readOutbound());
         boolean shouldBeAlive = !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(expectedStatus);
@@ -622,7 +647,8 @@ public class NettyResponseChannelTest {
    * @return a {@link HttpContent} wrapping the {@code content}.
    */
   private HttpContent createContent(String content, boolean isLast) {
-    ByteBuf buf = Unpooled.copiedBuffer(content.getBytes());
+    ByteBuf buf = PooledByteBufAllocator.DEFAULT.heapBuffer(content.getBytes().length);
+    buf.writeBytes(content.getBytes());
     if (isLast) {
       return new DefaultLastHttpContent(buf);
     } else {
@@ -1012,7 +1038,9 @@ public class NettyResponseChannelTest {
     HttpResponse response = channel.readOutbound();
     assertEquals("Unexpected response status", expectedStatus, response.status());
     if (requestContent != null) {
-      String returnedContent = RestTestUtils.getContentString(channel.readOutbound());
+      HttpContent responseContent = channel.readOutbound();
+      String returnedContent = RestTestUtils.getContentString(responseContent);
+      responseContent.release();
       assertEquals("Content does not match with expected content", requestContent, returnedContent);
     }
     if (shouldBeSatisfied) {
@@ -1400,9 +1428,10 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   private void handleContent(HttpContent httpContent) throws Exception {
     if (request != null) {
       boolean isLast = httpContent instanceof LastHttpContent;
-      ByteBuffer content = ByteBuffer.wrap(httpContent.content().array());
-      ChannelWriteCallback callback = new ChannelWriteCallback();
-      callback.setFuture(restResponseChannel.write(content, callback));
+      ChannelWriteCallback callback = new ChannelWriteCallback(httpContent);
+      // Retain it here since SimpleChannelInboundHandler would auto release it after the channelRead0.
+      // And release it in the callback.
+      callback.setFuture(restResponseChannel.write(httpContent.content().retain(), callback));
       writeCallbacksToVerify.add(callback);
       if (isLast) {
         restResponseChannel.onResponseComplete(null);
@@ -1630,9 +1659,21 @@ class ChannelWriteCallback implements Callback<Long> {
   public Exception exception = null;
   private CountDownLatch callbackReceived = new CountDownLatch(1);
   private Future<Long> future;
+  private HttpContent content;
+
+  ChannelWriteCallback() {
+    this(null);
+  }
+
+  ChannelWriteCallback(HttpContent content) {
+    this.content = content;
+  }
 
   @Override
   public void onCompletion(Long result, Exception exception) {
+    if (content != null) {
+      content.release();
+    }
     this.result = result;
     this.exception = exception;
     callbackReceived.countDown();
