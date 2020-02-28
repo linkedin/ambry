@@ -227,7 +227,7 @@ public class GetManagerTest {
         this.options = new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromLastNBytes(100)).build();
         getBlobAndCompareContent(blobId);
 
-        // range: [chunkSize/2, chunkSize-100]
+        // range: [chunkSize/2, chunkSize/2 + Random number]
         int end = new Random().nextInt(chunkSize / 2) + chunkSize / 2;
         this.options =
             new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(chunkSize / 2, end)).build();
