@@ -41,6 +41,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.HelixClusterManagerTest.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 
 
 /**
@@ -48,6 +49,7 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class ClusterChangeHandlerTest {
+  private static final String DEFAULT_PARTITION_CLASS = "defaultPartitionClass";
   private final HashMap<String, com.github.ambry.utils.TestUtils.ZkInfo> dcsToZkInfo = new HashMap<>();
   private final String[] dcs = new String[]{"DC0", "DC1"};
   private final String clusterNameStatic = "ClusterChangeHandlerTest";
@@ -299,14 +301,12 @@ public class ClusterChangeHandlerTest {
     nodesToHostNewPartition.addAll(Arrays.asList(remoteDcNode1, remoteDcNode2));
     nodesToHostNewPartition.addAll(newAddedNodes);
     testPartitionLayout.addNewPartition(testHardwareLayout, nodesToHostNewPartition, DEFAULT_PARTITION_CLASS);
-    System.out.println("======================= cut line 111 =============================");
     // write new HardwareLayout and PartitionLayout into files
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // this triggers a InstanceConfig change notification.
     // In each dc, 2 existing instance configs are updated and 1 new instance is added as well as 1 new partition
     helixCluster.upgradeWithNewHardwareLayout(hardwareLayoutPath);
-    System.out.println("======================= cut line 222 =============================");
 
     // verify after InstanceConfig change, HelixClusterManager contains the one more node per dc.
     assertEquals("Number of data nodes after instance addition is not correct",
@@ -362,6 +362,80 @@ public class ClusterChangeHandlerTest {
   }
 
   /**
+   * Test the case where replica is added or removed and {@link PartitionSelectionHelper} is able to incorporate cluster
+   * map changes.
+   * Test setup: (1) remove one replica of Partition1 from local dc;
+   *             (2) add another replica of Partition2 to local dc;
+   *             (3) add one replica of Partition1 to remote dc;
+   * @throws Exception
+   */
+  @Test
+  public void partitionSelectionOnReplicaAddedOrRemovedTest() throws Exception {
+    assumeTrue(!overrideEnabled);
+    // create a HelixClusterManager with DynamicClusterChangeHandler
+    Properties properties = new Properties();
+    properties.putAll(props);
+    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
+
+    List<PartitionId> partitions = testPartitionLayout.getPartitionLayout().getPartitions(null);
+    // partition1 has a replica to remove in local dc; partition2 has a replica to add in local dc
+    // also add an extra replica from partition1 in remote dc
+    PartitionId partition1 = partitions.get(0);
+    PartitionId partition2 = partitions.get(partitions.size() - 1);
+    int replicaCountForPart1 = partition1.getReplicaIds().size();
+    int replicaCountForPart2 = partition2.getReplicaIds().size();
+    List<DataNodeId> remoteNodesForPartition1 = getPartitionDataNodesFromDc(partition1, remoteDc);
+    List<DataNodeId> localNodesForPartition2 = getPartitionDataNodesFromDc(partition2, localDc);
+    // remove one replica from partition1 in local dc
+    Replica replicaToRemove = (Replica) partition1.getReplicaIds()
+        .stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(localDc))
+        .findFirst()
+        .get();
+    testPartitionLayout.removeReplicaFromPartition(replicaToRemove);
+    // add one replica of partition1 to remote dc
+    Datacenter localDataCenter = null, remoteDataCenter = null;
+    for (Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
+      if (datacenter.getName().equals(localDc)) {
+        localDataCenter = datacenter;
+      } else {
+        remoteDataCenter = datacenter;
+      }
+    }
+    assertNotNull("Remote data center is null", remoteDataCenter);
+    assertNotNull("Local data center is null", localDataCenter);
+    DataNode nodeToAddPartition1 =
+        remoteDataCenter.getDataNodes().stream().filter(n -> !remoteNodesForPartition1.contains(n)).findFirst().get();
+    testPartitionLayout.addReplicaToPartition(nodeToAddPartition1, (Partition) partition1);
+    // add one replica of partition2 to local dc
+    DataNode nodeToAddPartition2 =
+        localDataCenter.getDataNodes().stream().filter(n -> !localNodesForPartition2.contains(n)).findFirst().get();
+    testPartitionLayout.addReplicaToPartition(nodeToAddPartition2, (Partition) partition2);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+
+    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+
+    List<PartitionId> partitionsInManager = helixClusterManager.getAllPartitionIds(null);
+    PartitionId ambryPartition1 =
+        partitionsInManager.stream().filter(p -> p.toPathString().equals(partition1.toPathString())).findFirst().get();
+    PartitionId ambryPartition2 =
+        partitionsInManager.stream().filter(p -> p.toPathString().equals(partition2.toPathString())).findFirst().get();
+    assertEquals("Replica count of partition1 is not expected", replicaCountForPart1,
+        ambryPartition1.getReplicaIds().size());
+    assertEquals("Replica count of partition2 is not expected", replicaCountForPart2 + 1,
+        ambryPartition2.getReplicaIds().size());
+    // Note that there are 3 partitions in total in cluster, partition[0] has 2 replicas, partition[1] has 3 replicas
+    // and partition[2] has 4 replicas in local dc. Also the minimumLocalReplicaCount = 3, so this is to test if partition
+    // selection helper is able to pick right partitions with local replica count >= 3.
+    List<PartitionId> writablePartitions = helixClusterManager.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
+    assertEquals("Number of writable partition is not expected", 2, writablePartitions.size());
+    helixClusterManager.close();
+  }
+
+  /**
    * Test the case where a current replica is moved between existing nodes.
    */
   @Test
@@ -378,12 +452,7 @@ public class ClusterChangeHandlerTest {
         (Partition) testPartitionLayout.getPartitionLayout().getRandomWritablePartition(null, null);
     int previousReplicaCnt = testPartition.getReplicaIds().size();
     // 1. find out nodes in local dc that host this partition
-    Set<DataNode> localDcNodes = new HashSet<>();
-    testPartition.getReplicaIds().forEach(r -> {
-      if (r.getDataNodeId().getDatacenterName().equals(localDc)) {
-        localDcNodes.add((DataNode) r.getDataNodeId());
-      }
-    });
+    List<DataNodeId> localDcNodes = getPartitionDataNodesFromDc(testPartition, localDc);
     // 2. then find a node in local dc that doesn't host this partition (this is the node we will add replica to)
     Datacenter localDatacenter = testHardwareLayout.getHardwareLayout()
         .getDatacenters()
@@ -421,5 +490,19 @@ public class ClusterChangeHandlerTest {
         partitionInManager.getReplicaIds().size());
 
     helixClusterManager.close();
+  }
+
+  /**
+   * Get data nodes that hold given partition in certain datacenter
+   * @param partitionId the partition which the nodes should hold.
+   * @param dcName the data center in which these nodes are.
+   * @return a list of nodes that hold given partition.
+   */
+  private List<DataNodeId> getPartitionDataNodesFromDc(PartitionId partitionId, String dcName) {
+    return partitionId.getReplicaIds()
+        .stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(dcName))
+        .map(ReplicaId::getDataNodeId)
+        .collect(Collectors.toList());
   }
 }
