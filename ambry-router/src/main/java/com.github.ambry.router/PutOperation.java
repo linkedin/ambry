@@ -40,6 +40,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -1346,8 +1347,8 @@ class PutOperation {
      */
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.duplicate(), buf.remaining(),
-          BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
+          chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), Unpooled.wrappedBuffer(buf.duplicate()),
+          buf.remaining(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
     }
 
     /**
@@ -1683,8 +1684,8 @@ class PutOperation {
     @Override
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, finalBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.duplicate(), buf.remaining(),
-          BlobType.MetadataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
+          chunkBlobId, finalBlobProperties, ByteBuffer.wrap(chunkUserMetadata), Unpooled.wrappedBuffer(buf.duplicate()),
+          buf.remaining(), BlobType.MetadataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
     }
   }
 

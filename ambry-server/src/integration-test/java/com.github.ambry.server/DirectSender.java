@@ -23,6 +23,7 @@ import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -104,7 +105,7 @@ class DirectSender implements Runnable {
       for (int i = 0; i < blobIds.size(); i++) {
         PutRequest putRequest =
             new PutRequest(1, "client1", blobIds.get(i), blobProperties, ByteBuffer.wrap(usermetadata),
-                ByteBuffer.wrap(data), blobProperties.getBlobSize(), BlobType.DataBlob,
+                Unpooled.wrappedBuffer(data), blobProperties.getBlobSize(), BlobType.DataBlob,
                 encryptionKey != null ? ByteBuffer.wrap(encryptionKey) : null);
 
         channel.send(putRequest);

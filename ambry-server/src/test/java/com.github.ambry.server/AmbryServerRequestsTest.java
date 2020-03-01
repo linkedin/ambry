@@ -91,6 +91,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
+import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -890,8 +891,8 @@ public class AmbryServerRequestsTest {
     Response response = sendRequestGetResponse(request,
         EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest).contains(requestType)
             ? ServerErrorCode.No_Error : expectedErrorCode);
-    if (expectedErrorCode.equals(ServerErrorCode.No_Error) || (
-        forceCheckOpReceived && !expectedErrorCode.equals(ServerErrorCode.Temporarily_Disabled))) {
+    if (expectedErrorCode.equals(ServerErrorCode.No_Error) || (forceCheckOpReceived && !expectedErrorCode.equals(
+        ServerErrorCode.Temporarily_Disabled))) {
       assertEquals("Operation received at the store not as expected", requestType,
           MockStorageManager.operationReceived);
     }
@@ -1099,7 +1100,7 @@ public class AmbryServerRequestsTest {
           BlobProperties properties =
               new BlobProperties(0, "serviceId", originalBlobId.getAccountId(), originalBlobId.getAccountId(), false);
           request = new PutRequest(correlationId, clientId, originalBlobId, properties, ByteBuffer.allocate(0),
-              ByteBuffer.allocate(0), 0, BlobType.DataBlob, null);
+              Unpooled.wrappedBuffer(ByteBuffer.allocate(0)), 0, BlobType.DataBlob, null);
           break;
         case DeleteRequest:
           request = new DeleteRequest(correlationId, clientId, originalBlobId, SystemTime.getInstance().milliseconds());

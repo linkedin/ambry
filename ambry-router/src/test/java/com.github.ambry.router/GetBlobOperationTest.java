@@ -57,6 +57,7 @@ import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -281,7 +282,7 @@ public class GetBlobOperationTest {
       MockServer server = servers.next();
       PutRequest request =
           new PutRequest(random.nextInt(), "clientId", blobId, blobProperties, userMetadataBuf.duplicate(),
-              blobContent.duplicate(), blobContent.remaining(), blobType,
+              Unpooled.wrappedBuffer(blobContent.duplicate()), blobContent.remaining(), blobType,
               blobEncryptionKey == null ? null : blobEncryptionKey.duplicate());
       // Make sure we release the BoundedNettyByteBufReceive.
       server.send(request).release();
