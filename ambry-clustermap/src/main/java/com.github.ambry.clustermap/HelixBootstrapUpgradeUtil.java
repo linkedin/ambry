@@ -62,7 +62,7 @@ import org.slf4j.LoggerFactory;
  *InstanceConfig: {
  *  "id" : "localhost_17088",                              # id is the instanceName [host_port]
  *  "mapFields" : {
- *    "/tmp/c/0" : {                                       # disk is identified by the [mountpath]. DiskInfo conists of:
+ *    "/tmp/c/0" : {                                       # disk is identified by the [mountpath]. DiskInfo consists of:
  *      "capacityInBytes" : "912680550400",                # [capacity]
  *      "diskState" : "AVAILABLE",                         # [state]
  *      "Replicas" : "10:107374182400:default,"            # comma-separated list of partition ids whose replicas are
@@ -98,7 +98,7 @@ class HelixBootstrapUpgradeUtil {
   private final String zkLayoutPath;
   private final String stateModelDef;
   private final Map<String, HelixAdmin> adminForDc = new HashMap<>();
-  // These two maps should be concurrent map because there are accessed in multi-threaded context (see addUpdateInstances
+  // These two maps should be concurrent map because they are accessed in multi-threaded context (see addUpdateInstances
   // method).
   // For now, the inner map doesn't need to be concurrent map because it is within a certain dc which means there should
   // be only one thread that updates it.
@@ -162,7 +162,7 @@ class HelixBootstrapUpgradeUtil {
    * @param zkLayoutPath the path to the zookeeper layout file.
    * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
    *                          will give the cluster name in Helix to bootstrap or upgrade.
-   * @param dcs the comma-separated list of datacenters that should be updated in this run.
+   * @param dcs the comma-separated list of data centers that should be updated in this run.
    * @param maxPartitionsInOneResource the maximum number of Ambry partitions to group under a single Helix resource.
    * @param dryRun if true, perform a dry run; do not update anything in Helix.
    * @param forceRemove if true, removes any hosts from Helix not present in the json files.
@@ -244,7 +244,7 @@ class HelixBootstrapUpgradeUtil {
    * @param zkLayoutPath the path to the zookeeper layout file.
    * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
    *                          will give the cluster name in Helix to bootstrap or upgrade.
-   * @param dcs the comma-separated list of datacenters that needs to be upgraded/bootstrapped.
+   * @param dcs the comma-separated list of data centers that needs to be upgraded/bootstrapped.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @param stateModelDef the state model definition to use in Ambry cluster.
    * @throws IOException if there is an error reading a file.
@@ -264,7 +264,7 @@ class HelixBootstrapUpgradeUtil {
    * Drop a cluster from Helix.
    * @param zkLayoutPath the path to the zookeeper layout file.
    * @param clusterName the name of the cluster in Helix.
-   * @param dcs the comma-separated list of datacenters that needs to be upgraded/bootstrapped.
+   * @param dcs the comma-separated list of data centers that needs to be upgraded/bootstrapped.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @throws Exception if there is an error reading a file or in parsing json.
    */
@@ -352,7 +352,7 @@ class HelixBootstrapUpgradeUtil {
     info("Associating static Ambry cluster \"" + clusterNameInStaticClusterMap + "\" with cluster\"" + clusterName
         + "\" in Helix");
     for (Datacenter datacenter : staticClusterMap.hardwareLayout.getDatacenters()) {
-      if (dcs.equalsIgnoreCase(ALL) && !dataCenterToZkAddress.keySet().contains(datacenter.getName())) {
+      if (dcs.equalsIgnoreCase(ALL) && !dataCenterToZkAddress.containsKey(datacenter.getName())) {
         throw new IllegalArgumentException(
             "There is no ZK host for datacenter " + datacenter.getName() + " in the static clustermap");
       }
@@ -683,7 +683,7 @@ class HelixBootstrapUpgradeUtil {
         // cluster map. These will be ignored.
         continue;
       }
-      maxResource = Math.max(maxResource, Integer.valueOf(resourceName));
+      maxResource = Math.max(maxResource, Integer.parseInt(resourceName));
       IdealState resourceIs = dcAdmin.getResourceIdealState(clusterName, resourceName);
       for (String partitionName : new HashSet<>(resourceIs.getPartitionSet())) {
         Set<String> instanceSetInHelix = resourceIs.getInstanceSet(partitionName);
@@ -1039,7 +1039,7 @@ class HelixBootstrapUpgradeUtil {
             "[" + dcName.toUpperCase() + "] Disk not present for instance " + instanceName + " disk "
                 + disk.getMountPath());
         ensureOrThrow(
-            disk.getRawCapacityInBytes() == Long.valueOf(diskInfoInHelix.get(ClusterMapUtils.DISK_CAPACITY_STR)),
+            disk.getRawCapacityInBytes() == Long.parseLong(diskInfoInHelix.get(ClusterMapUtils.DISK_CAPACITY_STR)),
             "[" + dcName.toUpperCase() + "] Capacity mismatch for instance " + instanceName + " disk "
                 + disk.getMountPath());
 
@@ -1080,10 +1080,10 @@ class HelixBootstrapUpgradeUtil {
       ensureOrThrow(diskInfos.isEmpty(),
           "[" + dcName.toUpperCase() + "] Instance " + instanceName + " has extra disks in Helix: " + diskInfos);
 
-      ensureOrThrow(!dataNode.hasSSLPort() || (dataNode.getSSLPort() == Integer.valueOf(
+      ensureOrThrow(!dataNode.hasSSLPort() || (dataNode.getSSLPort() == Integer.parseInt(
           instanceConfig.getRecord().getSimpleField(ClusterMapUtils.SSL_PORT_STR))),
           "[" + dcName.toUpperCase() + "] SSL Port mismatch for instance " + instanceName);
-      ensureOrThrow(!dataNode.hasHttp2Port() || (dataNode.getHttp2Port() == Integer.valueOf(
+      ensureOrThrow(!dataNode.hasHttp2Port() || (dataNode.getHttp2Port() == Integer.parseInt(
           instanceConfig.getRecord().getSimpleField(ClusterMapUtils.HTTP2_PORT_STR))),
           "[" + dcName.toUpperCase() + "] HTTP2 Port mismatch for instance " + instanceName);
       ensureOrThrow(dataNode.getDatacenterName()
