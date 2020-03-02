@@ -46,17 +46,13 @@ public class StorageServerNettyFactory implements NioServerFactory {
    * @param verifiableProperties the in-memory {@link VerifiableProperties} to use.
    * @param metricRegistry the {@link MetricRegistry} to use.
    * @param requestHandler the {@link RestRequestHandler} to hand off the requests to.
-   * @param restServerState the {@link RestServerState} that can be used to check the health of the system
-   *                              to respond to health check requests
    * @param sslFactory the {@link SSLFactory} used to construct the {@link javax.net.ssl.SSLEngine} used for
    *                          handling http2 requests.
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public StorageServerNettyFactory(int http2Port, VerifiableProperties verifiableProperties,
-      MetricRegistry metricRegistry, final RestRequestHandler requestHandler, final RestServerState restServerState,
-      SSLFactory sslFactory) {
-    if (verifiableProperties == null || metricRegistry == null || requestHandler == null || restServerState == null
-        || sslFactory == null) {
+      MetricRegistry metricRegistry, final RestRequestHandler requestHandler, SSLFactory sslFactory) {
+    if (verifiableProperties == null || metricRegistry == null || requestHandler == null || sslFactory == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of StorageServerNettyFactory");
     }
     nettyConfig = new NettyConfig(verifiableProperties);

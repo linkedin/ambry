@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.NettyConfig;
@@ -79,6 +80,9 @@ public class RestServerMain {
    * @throws IOException
    */
   private static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties) throws Exception {
+    if (new ClusterMapConfig(verifiableProperties).clusterMapHttp2Enable) {
+      return new NettySslHttp2Factory(new SSLConfig(verifiableProperties));
+    }
     boolean sslRequired = new NettyConfig(verifiableProperties).nettyServerEnableSSL
         || new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
     return sslRequired ? SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)) : null;

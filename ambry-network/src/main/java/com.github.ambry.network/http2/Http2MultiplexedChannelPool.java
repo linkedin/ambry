@@ -70,7 +70,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
   private final Set<MultiplexedChannelRecord> parentConnections;
   private final Long idleConnectionTimeout;
   private final int minParentConnections;
-  private final int maxStreamsPerConnection;
+  private final Long maxStreamsPerConnection;
 
   private AtomicBoolean closed = new AtomicBoolean(false);
 
@@ -84,7 +84,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
    */
   Http2MultiplexedChannelPool(Bootstrap parentBootstrap, Http2ChannelPoolHandler http2ChannelPoolHandler,
       EventLoopGroup eventLoopGroup, Long idleConnectionTimeout, int minParentConnections,
-      int maxStreamsPerConnection) {
+      Long maxStreamsPerConnection) {
     this(new SimpleChannelPool(parentBootstrap, http2ChannelPoolHandler), eventLoopGroup, ConcurrentHashMap.newKeySet(),
         idleConnectionTimeout, minParentConnections, maxStreamsPerConnection);
   }
@@ -97,8 +97,8 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
    * @param maxStreamsPerConnection The maximum streams allowed per parent channel.
    */
   Http2MultiplexedChannelPool(ChannelPool connectionPool, EventLoopGroup eventLoopGroup,
-      Set<MultiplexedChannelRecord> connections, Long idleConnectionTimeout, int maxStreamsPerConnection,
-      int minParentConnections) {
+      Set<MultiplexedChannelRecord> connections, Long idleConnectionTimeout, int minParentConnections,
+      Long maxStreamsPerConnection) {
     this.parentConnectionPool = connectionPool;
     this.eventLoopGroup = eventLoopGroup;
     this.parentConnections = connections;

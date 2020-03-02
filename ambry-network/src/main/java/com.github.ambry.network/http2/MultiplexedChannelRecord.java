@@ -38,7 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,10 +51,10 @@ public class MultiplexedChannelRecord {
   private static final Logger log = LoggerFactory.getLogger(MultiplexedChannelRecord.class);
 
   private final Channel parentChannel;
-  private final int maxStreamsPerParentChannel;
+  private final Long maxStreamsPerParentChannel;
   private final Long allowedIdleTimeInMs;
 
-  private final AtomicInteger numOfAvailableStreams;
+  private final AtomicLong numOfAvailableStreams;
   private volatile long lastReserveAttemptTimeMillis;
 
   // Only read or write in the connection.eventLoop()
@@ -66,14 +66,14 @@ public class MultiplexedChannelRecord {
 
   private volatile int lastStreamId;
 
-  MultiplexedChannelRecord(Channel parentChannel, int maxStreamsPerParentChannel, Long allowedIdleTimeInMs) {
+  MultiplexedChannelRecord(Channel parentChannel, Long maxStreamsPerParentChannel, Long allowedIdleTimeInMs) {
     this.parentChannel = parentChannel;
     this.maxStreamsPerParentChannel = maxStreamsPerParentChannel;
-    this.numOfAvailableStreams = new AtomicInteger(maxStreamsPerParentChannel);
+    this.numOfAvailableStreams = new AtomicLong(maxStreamsPerParentChannel);
     this.allowedIdleTimeInMs = allowedIdleTimeInMs;
   }
 
-  AtomicInteger getNumOfAvailableStreams() {
+  AtomicLong getNumOfAvailableStreams() {
     return numOfAvailableStreams;
   }
 
@@ -123,7 +123,7 @@ public class MultiplexedChannelRecord {
         streamChannels.put(channel.id(), channel);
         promise.setSuccess(channel);
 
-        if (closeIfIdleTask == null && allowedIdleTimeInMs != null) {
+        if (closeIfIdleTask == null && allowedIdleTimeInMs != null && allowedIdleTimeInMs > 0) {
           enableCloseIfIdleTask();
         }
       });
@@ -274,7 +274,7 @@ public class MultiplexedChannelRecord {
         return false;
       }
 
-      int currentlyAvailable = numOfAvailableStreams.get();
+      long currentlyAvailable = numOfAvailableStreams.get();
 
       if (currentlyAvailable <= 0) {
         return false;
