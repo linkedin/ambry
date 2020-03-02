@@ -795,6 +795,8 @@ public class ReplicationTest {
     replicaSyncUpManager.onDisconnectionComplete(localReplica);
     assertTrue("Offline-To-Dropped transition didn't complete within 1 sec",
         participantLatch.await(1, TimeUnit.SECONDS));
+    // verify stats manager listener is called
+    verify(mockHelixParticipant.mockStatsManagerListener).onPartitionBecomeDroppedFromOffline(anyString());
     File storeDir = new File(localReplica.getReplicaPath());
     assertFalse("Store dir should not exist", storeDir.exists());
     storageManager.shutdown();

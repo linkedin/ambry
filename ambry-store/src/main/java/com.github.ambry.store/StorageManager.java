@@ -595,7 +595,6 @@ public class StorageManager implements StoreManager {
       // 2. invoke PartitionStateChangeListener in Replication Manager and Stats Manager to remove replica
       logger.info("Invoking state listeners to remove replica {} from stats and replication manager", partitionName);
       if (statsManagerListener != null) {
-        System.out.println("!!!!!!!!!!!!!!!!!===");
         statsManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
       }
       if (replicationManagerListener != null) {
