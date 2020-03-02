@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Properties;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -60,12 +61,15 @@ public class VcrServerTest {
     Properties props = VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "", 12300, 12400, null);
     props.setProperty(CloudConfig.VCR_ASSIGNED_PARTITIONS, "0,1");
     props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, StaticVcrClusterFactory.class.getName());
+    // Run this one with compaction disabled
+    props.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_ENABLED, "false");
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(new LatchBasedInMemoryCloudDestination(Collections.emptyList()));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     VcrServer vcrServer =
         new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory);
     vcrServer.startup();
+    Assert.assertNull("Expected null compactor", vcrServer.getVcrReplicationManager().getCloudStorageCompactor());
     vcrServer.shutdown();
   }
 
@@ -88,6 +92,7 @@ public class VcrServerTest {
     VcrServer vcrServer =
         new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory);
     vcrServer.startup();
+    Assert.assertNotNull("Expected compactor", vcrServer.getVcrReplicationManager().getCloudStorageCompactor());
     vcrServer.shutdown();
     helixControllerManager.syncStop();
     zkInfo.shutdown();

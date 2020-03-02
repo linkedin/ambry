@@ -41,7 +41,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -52,10 +51,8 @@ import org.apache.helix.InstanceType;
  * {@link VcrReplicationManager} is used to backup partitions to Cloud. Partitions assignment is handled by Helix.
  */
 public class VcrReplicationManager extends ReplicationEngine {
-  private final VerifiableProperties properties;
   private final CloudConfig cloudConfig;
   private final StoreConfig storeConfig;
-  private final CloudDestination cloudDestination;
   private final VcrMetrics vcrMetrics;
   private final VirtualReplicatorCluster virtualReplicatorCluster;
   private final CloudStorageCompactor cloudStorageCompactor;
@@ -72,17 +69,16 @@ public class VcrReplicationManager extends ReplicationEngine {
         virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool,
         vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null,
         storeManager);
-    this.properties = properties;
     this.cloudConfig = cloudConfig;
     this.storeConfig = storeConfig;
     this.virtualReplicatorCluster = virtualReplicatorCluster;
     this.vcrMetrics = vcrMetrics;
-    this.cloudDestination = cloudDestination;
     this.persistor =
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, cloudDestination);
     this.cloudStorageCompactor =
-        new CloudStorageCompactor(cloudDestination, cloudConfig, partitionToPartitionInfo.keySet(), vcrMetrics, false);
+        cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
+            partitionToPartitionInfo.keySet(), vcrMetrics, false) : null;
   }
 
   @Override
@@ -127,14 +123,17 @@ public class VcrReplicationManager extends ReplicationEngine {
     scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
         replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
 
-    // Schedule thread to purge dead blobs for this VCR's partitions
-    // Set random delay (between now and now+2h) to stagger the schedule across VCR's
-    Random random = new Random(System.currentTimeMillis());
-    long delaySec = random.nextInt((int) TimeUnit.HOURS.toSeconds(2));
-    long intervalSec = TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours);
-    scheduler.scheduleAtFixedRate(cloudStorageCompactor, delaySec, intervalSec, TimeUnit.SECONDS);
-    logger.info("Scheduled compaction task to run every {} hours starting in {} seconds.",
-        cloudConfig.cloudBlobCompactionIntervalHours, delaySec);
+    if (cloudConfig.cloudBlobCompactionEnabled) {
+      // Schedule thread to purge dead blobs for this VCR's partitions
+      // after brief delay to allow startup to finish.
+      long delaySec = TimeUnit.MINUTES.toSeconds(1);
+      long intervalSec = TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours);
+      scheduler.scheduleAtFixedRate(cloudStorageCompactor, delaySec, intervalSec, TimeUnit.SECONDS);
+      logger.info("Scheduled compaction task to run every {} hours starting in {} seconds.",
+          cloudConfig.cloudBlobCompactionIntervalHours, delaySec);
+    } else {
+      logger.warn("Running with compaction turned off!");
+    }
   }
 
   /**
@@ -217,6 +216,11 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   public VcrMetrics getVcrMetrics() {
     return vcrMetrics;
+  }
+
+  /** For testing only */
+  CloudStorageCompactor getCloudStorageCompactor() {
+    return cloudStorageCompactor;
   }
 
   @Override
