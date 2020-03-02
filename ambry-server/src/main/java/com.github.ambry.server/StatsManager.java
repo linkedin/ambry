@@ -22,7 +22,6 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.StatsManagerConfig;
-import com.github.ambry.router.Callback;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
@@ -89,7 +88,6 @@ class StatsManager {
     partitionToReplicaMap =
         replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
-    storageManager.registerDecommissionCallback(new ReplicaDecommissionCallback());
     if (clusterParticipant != null) {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener,
           new PartitionStateChangeListenerImpl());
@@ -371,16 +369,6 @@ class StatsManager {
   }
 
   /**
-   * A callback used to complete decommission on given replica that encountered failure last time.
-   */
-  private class ReplicaDecommissionCallback implements Callback<ReplicaId> {
-    @Override
-    public void onCompletion(ReplicaId result, Exception exception) {
-      removeReplica(result);
-    }
-  }
-
-  /**
    * {@link PartitionStateChangeListener} to capture changes in partition state.
    */
   private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
@@ -437,9 +425,14 @@ class StatsManager {
 
     @Override
     public void onPartitionBecomeDroppedFromOffline(String partitionName) {
-      // The actual Dropped-To-Offline action is performed within StorageManager. It invokes ReplicaDecommissionCallback
-      // in this class to complete decommission work if there is any (i.e. remove replica from in-mem data structure).
-      // So, this method can be no-op.
+      // check if partition exists
+      ReplicaId replica = storageManager.getReplica(partitionName);
+      if (replica == null) {
+        throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
+            ReplicaNotFound);
+      }
+      // remove replica from in-mem data structure. If replica doesn't exist, log info but don't fail the transition
+      removeReplica(replica);
     }
   }
 }

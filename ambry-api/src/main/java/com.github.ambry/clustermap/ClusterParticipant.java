@@ -17,6 +17,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -90,6 +91,11 @@ public interface ClusterParticipant extends AutoCloseable {
    */
   default void initializeParticipantMetrics(int localPartitionCount) {
   }
+
+  /**
+   * @return a map of registered state change listeners (if there are any) in this cluster participant.
+   */
+  Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners();
 
   /**
    * Terminate the participant.

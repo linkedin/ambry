@@ -29,7 +29,6 @@ import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.router.Callback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.utils.Time;
@@ -77,7 +76,6 @@ public class StorageManager implements StoreManager {
   private final List<String> stoppedReplicas;
   private final ClusterParticipant clusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
-  private final List<Callback<ReplicaId>> decommissionCallbacks = new ArrayList<>();
   private final Set<String> unexpectedDirs = new HashSet<>();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
 
@@ -378,11 +376,6 @@ public class StorageManager implements StoreManager {
     return failToUpdateStores;
   }
 
-  @Override
-  public void registerDecommissionCallback(Callback<ReplicaId> callback) {
-    decommissionCallbacks.add(callback);
-  }
-
   /**
    * @return the number of compaction threads running.
    */
@@ -394,48 +387,6 @@ public class StorageManager implements StoreManager {
       }
     }
     return count;
-  }
-
-  /**
-   * This method is called by Offline-To-Dropped transition. Any errors/exceptions will be thrown and converted to
-   * {@link StateTransitionException}. The error/exception is also recorded in certain metric for alerting purpose.
-   */
-  private void resumeDecommission(ReplicaId replica) throws Exception {
-    String partitionName = replica.getPartitionId().toPathString();
-    logger.info("Resuming decommission on replica {}", replica);
-    // 1. set store state to INACTIVE and disable compaction on it
-    Store localStore = getStore(replica.getPartitionId());
-    if (localStore == null) {
-      throw new IllegalStateException("Store " + partitionName + " is not started");
-    }
-    localStore.setCurrentState(ReplicaState.INACTIVE);
-    if (!controlCompactionForBlobStore(replica.getPartitionId(), false)) {
-      throw new IllegalStateException("Couldn't disable compaction on replica " + replica.getReplicaPath());
-    }
-    if (replicaSyncUpManager != null) {
-      // 2. initiate deactivation and wait until it completes
-      replicaSyncUpManager.initiateDeactivation(replica);
-      replicaSyncUpManager.waitDeactivationCompleted(partitionName);
-      // 3. initiate disconnection and wait until it completes
-      localStore.setCurrentState(ReplicaState.OFFLINE);
-      replicaSyncUpManager.initiateDisconnection(replica);
-      replicaSyncUpManager.waitDisconnectionCompleted(partitionName);
-    }
-    // 4. stop store
-    if (!shutdownBlobStore(replica.getPartitionId())) {
-      logger.error("Failed to shut down store {} when resuming decommission", replica);
-      throw new IllegalStateException("Failed to shut down store");
-    }
-    // 5. update InstanceConfig (complete INACTIVE -> OFFLINE transition)
-    if (clusterParticipant != null) {
-      if (!clusterParticipant.updateDataNodeInfoInCluster(replica, false)) {
-        logger.error("Failed to remove partition {} from InstanceConfig of current node when resuming decommission",
-            partitionName);
-        throw new IllegalStateException("Failed to update Helix");
-      }
-      logger.info("Partition {} is successfully removed from InstanceConfig when resuming decommission", partitionName);
-    }
-    logger.info("Decommission on replica {} is almost done, dropping it from current node", replica);
   }
 
   /**
@@ -461,6 +412,9 @@ public class StorageManager implements StoreManager {
    * Implementation of {@link PartitionStateChangeListener} to capture state changes and take actions accordingly.
    */
   private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+    PartitionStateChangeListener replicationManagerListener = null;
+    PartitionStateChangeListener statsManagerListener = null;
+
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       // check if partition exists on current node
@@ -616,6 +570,10 @@ public class StorageManager implements StoreManager {
         }
         return;
       }
+      Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners =
+          clusterParticipant == null ? new HashMap<>() : clusterParticipant.getPartitionStateChangeListeners();
+      replicationManagerListener = partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+      statsManagerListener = partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
       // get the store (skip the state check here, because probably the store is stopped in previous transition. Also,
       // the store could be started if it failed on decommission last time. Helix may directly reset it to OFFLINE
       // without stopping it)
@@ -625,7 +583,7 @@ public class StorageManager implements StoreManager {
         // if the store is recovering from previous decommission failure, then resume decommission (this will ensure
         // peer replicas have caught up with local replica and update InstanceConfig in Helix)
         try {
-          resumeDecommission(replica);
+          resumeDecommission(partitionName);
         } catch (Exception e) {
           logger.error("Exception occurs when resuming decommission on replica {} with error msg: {}", replica,
               e.getMessage());
@@ -634,10 +592,14 @@ public class StorageManager implements StoreManager {
               "Exception occurred when resuming decommission on replica " + partitionName, ReplicaOperationFailure);
         }
       }
-      // 2. invoke callbacks in Replication Manager and Stats Manager to remove replica
-      logger.info("Invoking callbacks to remove replica {} from replication and stats manager", partitionName);
-      for (Callback<ReplicaId> callback : decommissionCallbacks) {
-        callback.onCompletion(replica, null);
+      // 2. invoke PartitionStateChangeListener in Replication Manager and Stats Manager to remove replica
+      logger.info("Invoking state listeners to remove replica {} from stats and replication manager", partitionName);
+      if (statsManagerListener != null) {
+        System.out.println("!!!!!!!!!!!!!!!!!===");
+        statsManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+      }
+      if (replicationManagerListener != null) {
+        replicationManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
       }
       // 3. remove store associated with given replica in Storage Manager
       if (removeBlobStore(replica.getPartitionId())) {
@@ -653,6 +615,27 @@ public class StorageManager implements StoreManager {
       }
       partitionNameToReplicaId.remove(partitionName);
       logger.info("Partition {} is successfully dropped on current node", partitionName);
+    }
+
+    /**
+     * This method is called by Offline-To-Dropped transition. Any errors/exceptions will be thrown and converted to
+     * {@link StateTransitionException}. The error/exception is also recorded in certain metric for alerting purpose.
+     */
+    private void resumeDecommission(String partitionName) throws Exception {
+      logger.info("Resuming decommission on replica {}", partitionName);
+      // 1. perform Standby-To-Inactive transition in StorageManager
+      onPartitionBecomeInactiveFromStandby(partitionName);
+      if (replicationManagerListener != null && replicaSyncUpManager != null) {
+        // 2. perform Standby-To-Inactive transition in ReplicationManager
+        replicationManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+        replicaSyncUpManager.waitDeactivationCompleted(partitionName);
+        // 3. perform Inactive-To-Offline transition in ReplicationManager
+        replicationManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
+        replicaSyncUpManager.waitDisconnectionCompleted(partitionName);
+      }
+      // 4. perform Inactive-To-Offline transition in StorageManager
+      onPartitionBecomeOfflineFromInactive(partitionName);
+      logger.info("Decommission on replica {} is almost done, dropping it from current node", partitionName);
     }
   }
 }

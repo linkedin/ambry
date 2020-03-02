@@ -143,10 +143,6 @@ public class CloudStorageManager implements StoreManager {
     return ServerErrorCode.No_Error;
   }
 
-  @Override
-  public void registerDecommissionCallback(Callback<ReplicaId> callback) {
-  }
-
   /**
    * Return the blobstore for the given partition if blob store if it is already present in {@code CloudStorageManager::partitionToStore}
    * Otherwise create a blobstore for the paritition, and start it.

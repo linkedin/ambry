@@ -25,6 +25,7 @@ import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -753,7 +754,7 @@ public class ReplicationTest {
     Utils.newThread(() -> {
       try {
         mockHelixParticipant.onPartitionBecomeDroppedFromOffline(partitionName);
-        fail("shoud fail because updating node info returns false");
+        fail("should fail because updating node info returns false");
       } catch (StateTransitionException e) {
         exceptionOccurred.getAndSet(true);
         assertEquals("Mismatch in error code", ReplicaOperationFailure, e.getErrorCode());
@@ -775,6 +776,10 @@ public class ReplicationTest {
     storageManager.startBlobStore(localReplica.getPartitionId());
 
     // success case
+    mockHelixParticipant.mockStatsManagerListener = Mockito.mock(PartitionStateChangeListener.class);
+    doNothing().when(mockHelixParticipant.mockStatsManagerListener).onPartitionBecomeDroppedFromOffline(anyString());
+    mockHelixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener,
+        mockHelixParticipant.mockStatsManagerListener);
     CountDownLatch participantLatch = new CountDownLatch(1);
     Utils.newThread(() -> {
       mockHelixParticipant.onPartitionBecomeDroppedFromOffline(partitionName);

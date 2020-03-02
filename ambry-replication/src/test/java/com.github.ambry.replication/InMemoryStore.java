@@ -252,7 +252,7 @@ class InMemoryStore implements Store {
   @Override
   public void updateTtl(List<MessageInfo> infos) throws StoreException {
     List<MessageInfo> infosToUpdate = new ArrayList<>(infos.size());
-    List<InputStream> inputStreams = new ArrayList();
+    List<InputStream> inputStreams = new ArrayList<>();
     try {
       for (MessageInfo info : infos) {
         if (getMessageInfo(info.getStoreKey(), messageInfos, true, false, false) != null) {

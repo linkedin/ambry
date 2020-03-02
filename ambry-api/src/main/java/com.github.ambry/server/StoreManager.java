@@ -105,10 +105,4 @@ public interface StoreManager {
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled);
-
-  /**
-   * Register callback against local {@link ReplicaId} that performs cleanup logic for decommission.
-   * @param callback the {@link Callback} that will be called on completion
-   */
-  void registerDecommissionCallback(Callback<ReplicaId> callback);
 }

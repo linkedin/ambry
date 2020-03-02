@@ -18,8 +18,9 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
 import java.util.Collections;
-import java.util.LinkedList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -78,7 +79,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
   public ClusterParticipant getClusterParticipant() throws IOException {
     if (clusterParticipant == null) {
       clusterParticipant = new ClusterParticipant() {
-        private final List<PartitionStateChangeListener> listeners = new LinkedList<>();
+        private final Map<StateModelListenerType, PartitionStateChangeListener> listeners = new HashMap<>();
 
         @Override
         public void participate(List<AmbryHealthReport> ambryHealthReports) {
@@ -88,7 +89,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
               .stream()
               .map(r -> r.getPartitionId().toPathString())
               .collect(Collectors.toSet());
-          for (PartitionStateChangeListener listener : listeners) {
+          for (PartitionStateChangeListener listener : listeners.values()) {
             for (String partitionName : partitionsOnNode) {
               listener.onPartitionBecomeLeaderFromStandby(partitionName);
             }
@@ -123,7 +124,12 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         @Override
         public void registerPartitionStateChangeListener(StateModelListenerType listenerType,
             PartitionStateChangeListener partitionStateChangeListener) {
-          listeners.add(partitionStateChangeListener);
+          listeners.put(listenerType, partitionStateChangeListener);
+        }
+
+        @Override
+        public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
+          return listeners;
         }
 
         @Override

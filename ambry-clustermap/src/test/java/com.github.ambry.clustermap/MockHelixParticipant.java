@@ -17,10 +17,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
@@ -32,6 +30,7 @@ import static org.mockito.Mockito.*;
 
 public class MockHelixParticipant extends HelixParticipant {
   public Boolean updateNodeInfoReturnVal = null;
+  public PartitionStateChangeListener mockStatsManagerListener = null;
   CountDownLatch listenerLatch = null;
   ReplicaState replicaState = ReplicaState.OFFLINE;
   ReplicaId currentReplica = null;
@@ -126,18 +125,14 @@ public class MockHelixParticipant extends HelixParticipant {
   }
 
   /**
-   * @return a snapshot of current state change listeners.
-   */
-  public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
-    return Collections.unmodifiableMap(partitionStateChangeListeners);
-  }
-
-  /**
    * Re-register state change listeners in {@link HelixParticipant} to replace original one with mock state change
    * listener. This is to help with special test cases.
    */
   void registerMockStateChangeListeners() {
     registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
         mockReplicationManagerListener);
+    if (mockStatsManagerListener != null) {
+      registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, mockStatsManagerListener);
+    }
   }
 }
