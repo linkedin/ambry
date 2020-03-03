@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.DefaultMaxBytesRecvByteBufAllocator;
 import io.netty.channel.RecvByteBufAllocator;
@@ -465,10 +466,12 @@ class NettyRequest implements RestRequest {
       // this will not happen (looking at current implementations of ByteBuf in Netty), but if it does, we cannot avoid
       // a copy (or we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel if required).
       nettyMetrics.contentCopyCount.inc();
+      ByteBuf  content = httpContent.content();
       logger.warn("HttpContent had to be copied because ByteBuf did not have a backing ByteBuffer");
-      ByteBuffer contentBuffer = ByteBuffer.allocate(httpContent.content().readableBytes());
-      httpContent.content().readBytes(contentBuffer);
-      contentBuffer.rewind();
+      ByteBuffer contentBuffer = ByteBuffer.allocate(content.readableBytes());
+      // don't change the readerIndex
+      content.getBytes(content.readerIndex(), contentBuffer);
+      contentBuffer.flip();
       contentBuffers = new ByteBuffer[]{contentBuffer};
     }
     if (digest != null) {

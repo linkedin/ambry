@@ -187,8 +187,9 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
         return buffer;
       default:
         ByteBuffer byteBuffer = ByteBuffer.allocate(buf.readableBytes());
+        // This would also update the readerIndex for buf.
         buf.readBytes(byteBuffer);
-        byteBuffer.rewind();
+        byteBuffer.flip();
         return byteBuffer;
     }
   }
