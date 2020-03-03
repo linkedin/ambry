@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.store.Store;
+import java.util.Collection;
 import java.util.List;
 
 
@@ -66,6 +67,12 @@ public interface StoreManager {
    * @return {@link ReplicaId} associated with given partition name. {@code null} if replica is not found in storage manager.
    */
   ReplicaId getReplica(String partitionName);
+
+  /**
+   * Get all partitions that are managed by {@link StoreManager} on local node.
+   * @return a collection of {@link PartitionId} on local node.
+   */
+  Collection<PartitionId> getLocalPartitions();
 
   /**
    * Set BlobStore Stopped state with given {@link PartitionId} {@code id}.

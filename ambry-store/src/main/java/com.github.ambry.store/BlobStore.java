@@ -88,6 +88,7 @@ public class BlobStore implements Store {
   private boolean started;
   private FileLock fileLock;
   private volatile ReplicaState currentState;
+  private volatile boolean recoverFromDecommission;
   protected PersistentIndex index;
 
   /**
@@ -187,6 +188,8 @@ public class BlobStore implements Store {
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold is {} bytes and the low threshold is {} bytes",
         config.storeReplicaStatusDelegateEnable, storeId, this.thresholdBytesHigh, this.thresholdBytesLow);
+    // if there is a decommission file in store dir, that means previous decommission didn't complete successfully.
+    recoverFromDecommission = isDecommissionInProgress();
   }
 
   @Override
@@ -826,6 +829,11 @@ public class BlobStore implements Store {
   @Override
   public ReplicaState getCurrentState() {
     return currentState;
+  }
+
+  @Override
+  public boolean recoverFromDecommission() {
+    return recoverFromDecommission;
   }
 
   /**

@@ -24,6 +24,7 @@ import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.DiskManagerConfig;
@@ -35,10 +36,13 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -53,9 +57,9 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
  * {@link DiskManager}
  */
 public class StorageManager implements StoreManager {
-  private final ConcurrentHashMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<DiskId, DiskManager> diskToDiskManager = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, ReplicaId> partitionNameToReplicaId = new ConcurrentHashMap<>();
+  protected final ConcurrentHashMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
+  protected final ConcurrentHashMap<DiskId, DiskManager> diskToDiskManager = new ConcurrentHashMap<>();
+  protected final ConcurrentHashMap<String, ReplicaId> partitionNameToReplicaId = new ConcurrentHashMap<>();
   private final StorageManagerMetrics metrics;
   private final Time time;
   private final StoreConfig storeConfig;
@@ -71,6 +75,8 @@ public class StorageManager implements StoreManager {
   private final ReplicaStatusDelegate replicaStatusDelegate;
   private final List<String> stoppedReplicas;
   private final ClusterParticipant clusterParticipant;
+  private final ReplicaSyncUpManager replicaSyncUpManager;
+  private final Set<String> unexpectedDirs = new HashSet<>();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
 
   /**
@@ -104,6 +110,7 @@ public class StorageManager implements StoreManager {
     this.clusterParticipant = clusterParticipant;
     currentNode = dataNodeId;
     replicaStatusDelegate = clusterParticipant == null ? null : new ReplicaStatusDelegate(clusterParticipant);
+    replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
     metrics = new StorageManagerMetrics(registry);
     storeMainMetrics = new StoreMetrics(registry);
     storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
@@ -179,6 +186,7 @@ public class StorageManager implements StoreManager {
             new PartitionStateChangeListenerImpl());
         clusterParticipant.initializeParticipantMetrics(partitionNameToReplicaId.size());
       }
+      diskToDiskManager.values().forEach(diskManager -> unexpectedDirs.addAll(diskManager.getUnexpectedDirs()));
       logger.info("Starting storage manager complete");
     } finally {
       metrics.storageManagerStartTimeMs.update(time.milliseconds() - startTimeMs);
@@ -204,6 +212,11 @@ public class StorageManager implements StoreManager {
   @Override
   public ReplicaId getReplica(String partitionName) {
     return partitionNameToReplicaId.get(partitionName);
+  }
+
+  @Override
+  public Collection<PartitionId> getLocalPartitions() {
+    return Collections.unmodifiableCollection(partitionToDiskManager.keySet());
   }
 
   @Override
@@ -377,9 +390,31 @@ public class StorageManager implements StoreManager {
   }
 
   /**
+   * Maybe delete the residual directory associated with removed replica.
+   * @param partitionName name of replica that is already removed
+   */
+  private void maybeDeleteResidualDirectory(String partitionName) throws IOException {
+    for (String unexpectedDir : unexpectedDirs) {
+      String[] segments = unexpectedDir.split(File.separator);
+      if (partitionName.equals(segments[segments.length - 1])) {
+        logger.info("Deleting residual directory associated with store {}", partitionName);
+        File dirToDelete = new File(unexpectedDir);
+        try {
+          Utils.deleteFileOrDirectory(dirToDelete);
+        } catch (Exception e) {
+          throw new IOException("Couldn't delete directory " + unexpectedDir, e);
+        }
+      }
+    }
+  }
+
+  /**
    * Implementation of {@link PartitionStateChangeListener} to capture state changes and take actions accordingly.
    */
   private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+    PartitionStateChangeListener replicationManagerListener = null;
+    PartitionStateChangeListener statsManagerListener = null;
+
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       // check if partition exists on current node
@@ -520,8 +555,52 @@ public class StorageManager implements StoreManager {
     @Override
     public void onPartitionBecomeDroppedFromOffline(String partitionName) {
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
-      // get the store (skip the state check here, because the store should be stopped in previous transition)
+      if (replica == null) {
+        // During decommission, imagine an edge case where the node crashed immediately after removing replica from
+        // InstanceConfig. So next time when this node is restarted, old replica is no longer present in Helix cluster
+        // map. We still need to clean up file/directory on disk that is associated with removed replica.
+        try {
+          maybeDeleteResidualDirectory(partitionName);
+        } catch (IOException e) {
+          logger.error("Exception occurs when deleting residual dir of replica {} with error msg: {}", partitionName,
+              e.getMessage());
+          metrics.resumeDecommissionErrorCount.inc();
+          throw new StateTransitionException("Failed to delete residual dir of store " + partitionName,
+              ReplicaOperationFailure);
+        }
+        return;
+      }
+      Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners =
+          clusterParticipant == null ? new HashMap<>() : clusterParticipant.getPartitionStateChangeListeners();
+      replicationManagerListener = partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+      statsManagerListener = partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
+      // get the store (skip the state check here, because probably the store is stopped in previous transition. Also,
+      // the store could be started if it failed on decommission last time. Helix may directly reset it to OFFLINE
+      // without stopping it)
       BlobStore store = (BlobStore) getStore(replica.getPartitionId(), true);
+      // 1. check is the store is recovering from decommission
+      if (store.recoverFromDecommission()) {
+        // if the store is recovering from previous decommission failure, then resume decommission (this will ensure
+        // peer replicas have caught up with local replica and update InstanceConfig in Helix)
+        try {
+          resumeDecommission(partitionName);
+        } catch (Exception e) {
+          logger.error("Exception occurs when resuming decommission on replica {} with error msg: {}", replica,
+              e.getMessage());
+          metrics.resumeDecommissionErrorCount.inc();
+          throw new StateTransitionException(
+              "Exception occurred when resuming decommission on replica " + partitionName, ReplicaOperationFailure);
+        }
+      }
+      // 2. invoke PartitionStateChangeListener in Replication Manager and Stats Manager to remove replica
+      logger.info("Invoking state listeners to remove replica {} from stats and replication manager", partitionName);
+      if (statsManagerListener != null) {
+        statsManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+      }
+      if (replicationManagerListener != null) {
+        replicationManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+      }
+      // 3. remove store associated with given replica in Storage Manager
       if (removeBlobStore(replica.getPartitionId())) {
         try {
           store.deleteStoreFiles();
@@ -535,6 +614,36 @@ public class StorageManager implements StoreManager {
       }
       partitionNameToReplicaId.remove(partitionName);
       logger.info("Partition {} is successfully dropped on current node", partitionName);
+    }
+
+    /**
+     * This method is called by Offline-To-Dropped transition. Any errors/exceptions will be thrown and converted to
+     * {@link StateTransitionException}. The error/exception is also recorded in certain metric for alerting purpose.
+     * NOTE: there are 4 steps to resume decommission(see comments in method) and the steps should be performed in order.
+     * This method basically repeats the Standby-To-Inactive and Inactive-To-Offline transitions. That's why we see
+     * replication manager listener is called twice for different transitions.
+     */
+    private void resumeDecommission(String partitionName) throws Exception {
+      logger.info("Resuming decommission on replica {}", partitionName);
+      // 1. perform Standby-To-Inactive transition in StorageManager. This is to disable compaction at the very beginning
+      //    to avoid position of last PUT in store changes.
+      onPartitionBecomeInactiveFromStandby(partitionName);
+      if (replicationManagerListener != null && replicaSyncUpManager != null) {
+        // 2. perform Standby-To-Inactive transition in ReplicationManager. This is to initiate deactivation on given
+        //    partition and will be blocked until peer replicas have caught up with last PUT in corresponding store.
+        replicationManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+        replicaSyncUpManager.waitDeactivationCompleted(partitionName);
+        // 3. perform Inactive-To-Offline transition in ReplicationManager. This is to initiate disconnection on given
+        //    partition and will be blocked until peer replicas have caught up with last record(i.e DELETE etc) in store.
+        replicationManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
+        replicaSyncUpManager.waitDisconnectionCompleted(partitionName);
+      }
+      // 4. perform Inactive-To-Offline transition in StorageManager. This comes last because in this step it shuts down
+      //    store and updates InstanceConfig in Helix to remove replica from clustermap. Hence, we have to ensure the
+      //    data in store have been replicated to peer nodes (before store is shut down or removed), which requires
+      //    deactivation and disconnection to complete first.
+      onPartitionBecomeOfflineFromInactive(partitionName);
+      logger.info("Decommission on replica {} is almost done, dropping it from current node", partitionName);
     }
   }
 }

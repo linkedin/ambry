@@ -250,6 +250,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * @return a snapshot of registered state change listeners.
    */
+  @Override
   public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
     return Collections.unmodifiableMap(partitionStateChangeListeners);
   }
@@ -282,10 +283,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       String replicasStr = diskInfo.get(ClusterMapUtils.REPLICAS_STR);
       String[] replicaInfos = replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR);
       StringBuilder replicasStrBuilder = new StringBuilder();
-      long idToAdd = Long.valueOf(partitionName);
+      long idToAdd = Long.parseLong(partitionName);
       for (String replicaInfo : replicaInfos) {
         String[] infos = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
-        long currentId = Long.valueOf(infos[0]);
+        long currentId = Long.parseLong(infos[0]);
         if (currentId == idToAdd) {
           logger.info("Partition {} is already on instance {}, skipping adding it into InstanceConfig in Helix.",
               partitionName, instanceName);
@@ -527,6 +528,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       // after deactivation is initiated in ReplicationManager, transition is blocked here and wait until enough peer
       // replicas have caught up with last PUT in local store.
       try {
+        // TODO considering moving wait deactivation logic into replication manager listener
         replicaSyncUpManager.waitDeactivationCompleted(partitionName);
       } catch (InterruptedException e) {
         logger.error("Deactivation was interrupted on partition {}", partitionName);
@@ -549,6 +551,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       replicationManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
       // 2. wait until peer replicas have caught up with local replica
       try {
+        // TODO considering moving wait disconnection logic into replication manager listener
         replicaSyncUpManager.waitDisconnectionCompleted(partitionName);
       } catch (InterruptedException e) {
         logger.error("Disconnection was interrupted on partition {}", partitionName);
@@ -568,19 +571,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeDroppedFromOffline(String partitionName) {
-    // 1. remove old replica from StatsManager
-    PartitionStateChangeListener statsManagerListener =
-        partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
-    if (statsManagerListener != null) {
-      statsManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
-    }
-    // 2. remove old replica from ReplicationManager
-    PartitionStateChangeListener replicationManagerListener =
-        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
-    if (replicationManagerListener != null) {
-      replicationManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
-    }
-    // 3. remove old replica from StorageManager and delete store directory
+    // remove old replica from StorageManager and delete store directory (this also includes recover from decommission
+    // failure and remove old replica from replication/stats manager)
     PartitionStateChangeListener storageManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
     if (storageManagerListener != null) {

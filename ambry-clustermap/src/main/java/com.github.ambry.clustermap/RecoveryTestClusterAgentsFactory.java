@@ -18,6 +18,7 @@ import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONException;
 import org.slf4j.Logger;
@@ -112,6 +113,11 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
         @Override
         public void registerPartitionStateChangeListener(StateModelListenerType listenerType,
             PartitionStateChangeListener partitionStateChangeListener) {
+        }
+
+        @Override
+        public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
+          return null;
         }
 
         @Override

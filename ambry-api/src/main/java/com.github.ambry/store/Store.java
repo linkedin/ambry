@@ -151,6 +151,11 @@ public interface Store {
   ReplicaState getCurrentState();
 
   /**
+   * @return {@code true} if the store is recovering from previous decommission failure. {@code false} otherwise.
+   */
+  boolean recoverFromDecommission();
+
+  /**
    * Shuts down the store
    */
   void shutdown() throws StoreException;

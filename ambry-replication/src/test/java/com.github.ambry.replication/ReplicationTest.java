@@ -25,6 +25,7 @@ import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -90,6 +91,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -717,6 +719,90 @@ public class ReplicationTest {
   }
 
   /**
+   * Test that resuming decommission on certain replica behaves correctly.
+   * @throws Exception
+   */
+  @Test
+  public void replicaResumeDecommissionTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    // choose a replica on local node and put decommission file into its dir
+    ReplicaId localReplica = clusterMap.getReplicaIds(clusterMap.getDataNodeIds().get(0)).get(0);
+    String partitionName = localReplica.getPartitionId().toPathString();
+    File decommissionFile = new File(localReplica.getReplicaPath(), "decommission_in_progress");
+    assertTrue("Can't create decommission file", decommissionFile.createNewFile());
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    // failure case 1: store is not started when resuming decommission
+    storageManager.shutdownBlobStore(localReplica.getPartitionId());
+    try {
+      mockHelixParticipant.onPartitionBecomeDroppedFromOffline(partitionName);
+      fail("should fail");
+    } catch (StateTransitionException e) {
+      assertEquals("Mismatch in error code", ReplicaOperationFailure, e.getErrorCode());
+    }
+    storageManager.startBlobStore(localReplica.getPartitionId());
+
+    // failure case 2: fail to remove replica from InstanceConfig in Helix
+    AmbryReplicaSyncUpManager replicaSyncUpManager =
+        (AmbryReplicaSyncUpManager) mockHelixParticipant.getReplicaSyncUpManager();
+    mockHelixParticipant.updateNodeInfoReturnVal = false;
+    CountDownLatch executionLatch = new CountDownLatch(1);
+    AtomicBoolean exceptionOccurred = new AtomicBoolean(false);
+    Utils.newThread(() -> {
+      try {
+        mockHelixParticipant.onPartitionBecomeDroppedFromOffline(partitionName);
+        fail("should fail because updating node info returns false");
+      } catch (StateTransitionException e) {
+        exceptionOccurred.getAndSet(true);
+        assertEquals("Mismatch in error code", ReplicaOperationFailure, e.getErrorCode());
+      } finally {
+        executionLatch.countDown();
+      }
+    }, false).start();
+    while (!replicaSyncUpManager.getPartitionToDeactivationLatch().containsKey(partitionName)) {
+      Thread.sleep(100);
+    }
+    replicaSyncUpManager.onDeactivationComplete(localReplica);
+    while (!replicaSyncUpManager.getPartitionToDisconnectionLatch().containsKey(partitionName)) {
+      Thread.sleep(100);
+    }
+    replicaSyncUpManager.onDisconnectionComplete(localReplica);
+    assertTrue("Offline-To-Dropped transition didn't complete within 1 sec", executionLatch.await(1, TimeUnit.SECONDS));
+    assertTrue("State transition exception should be thrown", exceptionOccurred.get());
+    mockHelixParticipant.updateNodeInfoReturnVal = null;
+    storageManager.startBlobStore(localReplica.getPartitionId());
+
+    // success case
+    mockHelixParticipant.mockStatsManagerListener = Mockito.mock(PartitionStateChangeListener.class);
+    doNothing().when(mockHelixParticipant.mockStatsManagerListener).onPartitionBecomeDroppedFromOffline(anyString());
+    mockHelixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener,
+        mockHelixParticipant.mockStatsManagerListener);
+    CountDownLatch participantLatch = new CountDownLatch(1);
+    Utils.newThread(() -> {
+      mockHelixParticipant.onPartitionBecomeDroppedFromOffline(partitionName);
+      participantLatch.countDown();
+    }, false).start();
+    while (!replicaSyncUpManager.getPartitionToDeactivationLatch().containsKey(partitionName)) {
+      Thread.sleep(100);
+    }
+    replicaSyncUpManager.onDeactivationComplete(localReplica);
+    while (!replicaSyncUpManager.getPartitionToDisconnectionLatch().containsKey(partitionName)) {
+      Thread.sleep(100);
+    }
+    replicaSyncUpManager.onDisconnectionComplete(localReplica);
+    assertTrue("Offline-To-Dropped transition didn't complete within 1 sec",
+        participantLatch.await(1, TimeUnit.SECONDS));
+    // verify stats manager listener is called
+    verify(mockHelixParticipant.mockStatsManagerListener).onPartitionBecomeDroppedFromOffline(anyString());
+    File storeDir = new File(localReplica.getReplicaPath());
+    assertFalse("Store dir should not exist", storeDir.exists());
+    storageManager.shutdown();
+  }
+
+  /**
    * Tests pausing all partitions and makes sure that the replica thread pauses. Also tests that it resumes when one
    * eligible partition is reenabled and that replication completes successfully.
    * @throws Exception
@@ -935,9 +1021,7 @@ public class ReplicationTest {
             null, null);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
     ReplicaThread replicaThread = replicasAndThread.getSecond();
-
-
-        /*
+    /*
         STORE KEY CONVERTER MAPPING
         Key     Value
         B0      B0'
@@ -963,8 +1047,7 @@ public class ReplicationTest {
         and B2 is invalid for L
         so it does not count as missing
         Missing Keys: 1
-
-     */
+    */
     Map<PartitionId, List<BlobId>> partitionIdToDeleteBlobId = new HashMap<>();
     Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
     Map<PartitionId, BlobId> expectedPartitionIdToDeleteBlobId = new HashMap<>();
@@ -2267,7 +2350,6 @@ public class ReplicationTest {
   public static void addPutMessagesToReplicasOfPartition(StoreKey id, short accountId, short containerId,
       PartitionId partitionId, List<MockHost> hosts, long operationTime, long expirationTime)
       throws MessageFormatException, IOException {
-    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     // add a PUT message with expiration time less than VCR threshold to remote host.
     boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
     ReplicationTest.PutMsgInfoAndBuffer msgInfoAndBuffer = createPutMessage(id, accountId, containerId, toEncrypt);

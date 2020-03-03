@@ -16,12 +16,12 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
-import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
-import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.router.Callback;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
@@ -252,7 +252,7 @@ class InMemoryStore implements Store {
   @Override
   public void updateTtl(List<MessageInfo> infos) throws StoreException {
     List<MessageInfo> infosToUpdate = new ArrayList<>(infos.size());
-    List<InputStream> inputStreams = new ArrayList();
+    List<InputStream> inputStreams = new ArrayList<>();
     try {
       for (MessageInfo info : infos) {
         if (getMessageInfo(info.getStoreKey(), messageInfos, true, false, false) != null) {
@@ -402,6 +402,11 @@ class InMemoryStore implements Store {
   @Override
   public long getEndPositionOfLastPut() throws StoreException {
     throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public boolean recoverFromDecommission() {
+    return false;
   }
 
   @Override

@@ -279,6 +279,11 @@ class MockStorageManager extends StorageManager {
       throw new UnsupportedOperationException("Method not supported");
     }
 
+    @Override
+    public boolean recoverFromDecommission() {
+      throw new UnsupportedOperationException("Method not supported");
+    }
+
     public void shutdown() throws StoreException {
       throwExceptionIfRequired();
       started = false;
@@ -424,7 +429,6 @@ class MockStorageManager extends StorageManager {
    * The {@link PartitionId} that was provided in the call to {@link #startBlobStore(PartitionId)}
    */
   PartitionId startedPartitionId = null;
-  PartitionId addedPartitionId = null;
   ReplicaId getReplicaReturnVal = null;
   CountDownLatch waitOperationCountdown = new CountDownLatch(0);
   boolean firstCall = true;
@@ -479,7 +483,7 @@ class MockStorageManager extends StorageManager {
 
   @Override
   public ReplicaId getReplica(String partitionName) {
-    return getReplicaReturnVal;
+    return getReplicaReturnVal == null ? super.getReplica(partitionName) : getReplicaReturnVal;
   }
 
   @Override
@@ -521,7 +525,8 @@ class MockStorageManager extends StorageManager {
 
   @Override
   public boolean addBlobStore(ReplicaId id) {
-    addedPartitionId = id.getPartitionId();
+    partitionToDiskManager.put(id.getPartitionId(), diskToDiskManager.get(id.getDiskId()));
+    partitionNameToReplicaId.put(id.getPartitionId().toPathString(), id);
     return returnValueOfAddBlobStore;
   }
 
