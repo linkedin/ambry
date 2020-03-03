@@ -41,8 +41,8 @@ class AmbryDataNode implements DataNodeId {
   private final List<String> sslEnabledDataCenters;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ResourceStatePolicy resourceStatePolicy;
-  private final ClusterManagerCallback clusterManagerCallback;
   private final boolean http2ClientEnabled;
+  private final ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback;
 
   /**
    * Instantiate an AmbryDataNode object.
@@ -58,7 +58,8 @@ class AmbryDataNode implements DataNodeId {
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
   AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, int portNum, String rackId,
-      Integer sslPortNum, Integer http2PortNumber, long xid, ClusterManagerCallback clusterManagerCallback)
+      Integer sslPortNum, Integer http2PortNumber, long xid,
+      ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback)
       throws Exception {
     this.hostName = hostName;
     this.plainTextPort = new Port(portNum, PortType.PLAINTEXT);
