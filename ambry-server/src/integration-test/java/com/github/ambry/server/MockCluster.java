@@ -500,6 +500,16 @@ class EventTracker {
     return deletionHelper.await(10, TimeUnit.SECONDS);
   }
 
+
+  /**
+   * Waits for blob undeletes on all replicas
+   * @return {@code true} if undeletes were received in all replicas within the {@code duration} specified.
+   * @throws InterruptedException
+   */
+  boolean awaitBlobUndeletes() throws InterruptedException {
+    return undeleteHelper.await(10, TimeUnit.SECONDS);
+  }
+
   /**
    * Waits for blob updates of type {@code updateType} on all replicas
    * @param updateType the type of update to wait for
@@ -654,6 +664,20 @@ class MockNotificationSystem implements NotificationSystem {
     try {
       if (!objectTracker.get(blobId).awaitBlobUpdates(updateType)) {
         Assert.fail("Failed awaiting for " + blobId + " updates of type " + updateType);
+      }
+    } catch (InterruptedException e) {
+      // ignore
+    }
+  }
+
+  /**
+   * Waits for blob undeletes on all replicas for {@code blobId}
+   * @param blobId the ID of the blob
+   */
+  void awaitBlobUndeletes(String blobId) {
+    try {
+      if (!objectTracker.get(blobId).awaitBlobUndeletes()) {
+        Assert.fail("Failed awaiting for " + blobId + " undeletes");
       }
     } catch (InterruptedException e) {
       // ignore

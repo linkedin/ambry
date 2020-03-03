@@ -436,12 +436,12 @@ public class ReplicaThread implements Runnable {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
                   replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
-              Set<StoreKey> missingStoreKeys =
-                  getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
-              processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
+              Set<StoreKey> remoteMissingStoreKeys =
+                  getRemoteMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+              processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
                   remoteNode, remoteKeyToLocalKeyMap);
               ExchangeMetadataResponse exchangeMetadataResponse =
-                  new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken(),
+                  new ExchangeMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo.getFindToken(),
                       replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
               // update replication lag in ReplicaSyncUpManager
               if (replicaSyncUpManager != null
@@ -598,7 +598,7 @@ public class ReplicaThread implements Runnable {
    * @return List of store keys that are missing from the local store
    * @throws StoreException if store error (usually IOError) occurs when getting missing keys.
    */
-  private Set<StoreKey> getMissingStoreKeys(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
+  private Set<StoreKey> getRemoteMissingStoreKeys(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
       DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
@@ -661,45 +661,9 @@ public class ReplicaThread implements Runnable {
         missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
         logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote key deprecated locally: {}", remoteNode,
             threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
-      } else if (!missingRemoteStoreKeys.contains(messageInfo.getStoreKey())) {
-        // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
-        // deleted yet locally
-        boolean deletedLocally = remoteReplicaInfo.getLocalStore().isKeyDeleted(localKey);
-        if (messageInfo.isDeleted() && !deletedLocally) {
-          MessageInfo info = new MessageInfo(localKey, 0, true, messageInfo.isTtlUpdated(), localKey.getAccountId(),
-              localKey.getContainerId(), messageInfo.getOperationTimeMs());
-          try {
-            remoteReplicaInfo.getLocalStore().delete(Collections.singletonList(info));
-            logger.trace(
-                "Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {} Local Key: {}",
-                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
-          } catch (StoreException e) {
-            // The blob may get deleted between the time the above check is done and the delete is
-            // attempted. For example, this can happen if the key gets deleted in the context of another replica
-            // thread. This is more likely when replication is already caught up - when similar set of
-            // messages are received from different replicas around the same time.
-            if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-              logger.trace(
-                  "Remote node: {} Thread name: {} Remote replica: {} Remote Key already deleted: {} Local Key: {}",
-                  remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
-            } else {
-              throw e;
-            }
-          }
-          // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
-          // as long as the Delete is guaranteed to have taken effect locally.
-          if (notification != null) {
-            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(), localKey.getID(),
-                BlobReplicaSourceType.REPAIRED);
-          }
-        } else if (!deletedLocally && !messageInfo.isDeleted() && messageInfo.isTtlUpdated()) {
-          MessageInfo infoWithLocalKey =
-              new MessageInfo(localKey, messageInfo.getSize(), false, true, messageInfo.getExpirationTimeInMs(),
-                  messageInfo.getCrc(), localKey.getAccountId(), localKey.getContainerId(),
-                  messageInfo.getOperationTimeMs());
-          applyTtlUpdate(infoWithLocalKey, remoteReplicaInfo);
-        }
-      } else {
+      } else if (missingRemoteStoreKeys.contains(messageInfo.getStoreKey())) {
+        // The key is missing in the local store, we either send get request to fetch the content of this key, or does
+        // nothing if the key is deleted or expired remotely.
         if (messageInfo.isDeleted()) {
           // if the key is not present locally and if the remote replica has the message in deleted state,
           // it is not considered missing locally.
@@ -719,6 +683,69 @@ public class ReplicaThread implements Runnable {
           missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in expired state remotely {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), localKey);
+        }
+      } else {
+        // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
+        // deleted yet locally
+        MessageInfo localMessageInfo = remoteReplicaInfo.getLocalStore().findKey(localKey);
+        boolean deletedLocally = localMessageInfo.isDeleted();
+        boolean ttlUpdatedLocally = localMessageInfo.isTtlUpdated();
+        short localLifeVersion = localMessageInfo.getLifeVersion();
+        short remoteLifeVersion = messageInfo.getLifeVersion();
+        if (localLifeVersion > remoteLifeVersion) {
+          // if the lifeVersion in local store is greater than the remote lifeVersion, then nothing needs to be done.
+          continue;
+        } else if (localLifeVersion == remoteLifeVersion) {
+          // we are operating in the same version, in this case, delete would be the final state.
+          if (!deletedLocally) {
+            // Only adds record when it's not deleted yet. Since delete is the final state for this lifeVersion, if there
+            // is a delete record for the current lifeVersion, then nothing needs to be done.
+            MessageInfo info = new MessageInfo(localKey, 0, localKey.getAccountId(), localKey.getContainerId(),
+                messageInfo.getOperationTimeMs());
+            if (messageInfo.isTtlUpdated() && !ttlUpdatedLocally) {
+              applyTtlUpdate(info, remoteReplicaInfo);
+            }
+            if (messageInfo.isDeleted()) {
+              applyDelete(info, remoteReplicaInfo);
+            }
+          }
+        } else {
+          // if we are here, then the remote lifeVersion is greater than the local lifeVersion.
+          // we need to reconcile the local state with the remote state.
+          //
+          // There are three states we have to reconcile: lifeVersion, ttl_update, is_deleted.
+          // To reconcile lifeVersion and is_deleted, we have to add a Delete or Undelete record, based on what the final state is.
+          // to reconcile ttl_update, if the final state is delete, then, we have to add ttl_update before delete, other, we can add ttl_update after undelete.
+          MessageInfo info = new MessageInfo(localKey, 0, localKey.getAccountId(), localKey.getContainerId(),
+              messageInfo.getOperationTimeMs(), remoteLifeVersion);
+          boolean shouldInsertTtlUpdate = false;
+          if (messageInfo.isTtlUpdated() && !ttlUpdatedLocally) {
+            // make a patch for ttl update
+            // if the remote state is delete, then we can't insert TTL_UPDATE after delete, we have to insert a ttl_update here
+            if (messageInfo.isDeleted()) {
+              // since ttl update can only follow Put or Undelete, make sure it's not locally deleted.
+              // we can reuse the lifeVersion for undelete and ttl update, since the delete would be the final state of
+              // this lifeVersion.
+              if (deletedLocally) {
+                applyUndelete(info, remoteReplicaInfo);
+              }
+              applyTtlUpdate(info, remoteReplicaInfo);
+            } else {
+              // if final state is not delete, then to bump lifeVerion in local store to remote lifeVersion, we have to
+              // add a undelete, and then add a ttl update.
+              shouldInsertTtlUpdate = true;
+            }
+          }
+
+          // if we are here, then the ttl update is matched
+          if (messageInfo.isDeleted()) {
+            applyDelete(info, remoteReplicaInfo);
+          } else {
+            applyUndelete(info, remoteReplicaInfo);
+            if (shouldInsertTtlUpdate) {
+              applyTtlUpdate(info, remoteReplicaInfo);
+            }
+          }
         }
       }
     }
@@ -947,8 +974,6 @@ public class ReplicaThread implements Runnable {
    * @throws StoreException
    */
   private void applyTtlUpdate(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
-    MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), 0, false, true, messageInfo.getExpirationTimeInMs(),
-        messageInfo.getAccountId(), messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
     DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
     try {
       // NOTE: It is possible that the key in question may have expired and this TTL update is being applied after it
@@ -958,7 +983,11 @@ public class ReplicaThread implements Runnable {
       // committed), then we have a bad situation where only a TTL update exists in the store. This problem has to be
       // addressed. This can only happen if replication is far behind (for e.g due to a server being down for a long
       // time). Won't happen if a server is being recreated.
-      remoteReplicaInfo.getLocalStore().updateTtl(Collections.singletonList(info));
+      messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(), messageInfo.isDeleted(), true,
+          messageInfo.isUndeleted(), messageInfo.getExpirationTimeInMs(), messageInfo.getCrc(),
+          messageInfo.getAccountId(), messageInfo.getContainerId(), messageInfo.getOperationTimeMs(),
+          messageInfo.getLifeVersion());
+      remoteReplicaInfo.getLocalStore().updateTtl(Collections.singletonList(messageInfo));
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key ttl updated id: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
     } catch (StoreException e) {
@@ -975,6 +1004,61 @@ public class ReplicaThread implements Runnable {
     if (notification != null) {
       notification.onBlobReplicaUpdated(dataNodeId.getHostname(), dataNodeId.getPort(),
           messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED, UpdateType.TTL_UPDATE, messageInfo);
+    }
+  }
+
+  private void applyUndelete(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
+    DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
+    try {
+      messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(), messageInfo.isDeleted(),
+          messageInfo.isTtlUpdated(), true, messageInfo.getExpirationTimeInMs(), messageInfo.getCrc(),
+          messageInfo.getAccountId(), messageInfo.getContainerId(), messageInfo.getOperationTimeMs(),
+          messageInfo.getLifeVersion());
+      remoteReplicaInfo.getLocalStore().undelete(messageInfo);
+      logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key undelete id: {}", remoteNode, threadName,
+          remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+    } catch (StoreException e) {
+      // The blob may be undeleted, which is alright
+      if (e.getErrorCode() == StoreErrorCodes.Life_Version_Conflict
+          || e.getErrorCode() == StoreErrorCodes.ID_Undeleted) {
+        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key already undeleted: {}", remoteNode,
+            threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+      } else {
+        throw e;
+      }
+    }
+    // A Repair event for an undelete signifies that an undelete message was received from the remote and it is fired
+    // as long as the undelete is guaranteed to have taken effect locally.
+    if (notification != null) {
+      notification.onBlobReplicaUndeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
+          messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
+    }
+  }
+
+  private void applyDelete(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
+    DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
+    try {
+      messageInfo =
+          new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(), false, messageInfo.isTtlUpdated(), false,
+              messageInfo.getExpirationTimeInMs(), messageInfo.getCrc(), messageInfo.getAccountId(),
+              messageInfo.getContainerId(), messageInfo.getOperationTimeMs(), messageInfo.getLifeVersion());
+      remoteReplicaInfo.getLocalStore().delete(Collections.singletonList(messageInfo));
+      logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key delete: {}", remoteNode, threadName,
+          remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+    } catch (StoreException e) {
+      // The blob may be deleted or updated which is alright
+      if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key already deleted: {}", remoteNode,
+            threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+      } else {
+        throw e;
+      }
+    }
+    // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
+    // as long as the Delete is guaranteed to have taken effect locally.
+    if (notification != null) {
+      notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
+          messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
     }
   }
 

@@ -32,7 +32,7 @@ import java.util.ListIterator;
 /**
  * A serde for serializing and deserializing {@link MessageInfo} and {@link MessageMetadata} lists.
  */
-class MessageInfoAndMetadataListSerde {
+public class MessageInfoAndMetadataListSerde {
   private final List<MessageInfo> messageInfoList;
   private final List<MessageMetadata> messageMetadataList;
   static final short DETERMINE_VERSION = -1;

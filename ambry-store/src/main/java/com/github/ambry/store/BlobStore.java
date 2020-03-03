@@ -783,6 +783,29 @@ public class BlobStore implements Store {
   }
 
   @Override
+  public MessageInfo findKey(StoreKey key) throws StoreException {
+    checkStarted();
+    final Timer.Context context = metrics.findKeyResponse.time();
+    try {
+      IndexValue value = index.findKey(key);
+      if (value == null) {
+        throw new StoreException("Key " + key + " not found in store. Cannot check if it is deleted",
+            StoreErrorCodes.ID_Not_Found);
+      }
+      return new MessageInfo(key, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
+          value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs(),
+          value.getLifeVersion());
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
+      throw e;
+    } finally {
+      context.stop();
+    }
+  }
+
+  @Override
   public StoreStats getStoreStats() {
     return blobStoreStats;
   }

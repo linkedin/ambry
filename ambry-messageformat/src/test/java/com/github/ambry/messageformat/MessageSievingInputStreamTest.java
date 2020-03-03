@@ -168,7 +168,8 @@ public class MessageSievingInputStreamTest {
                 blobContentSize, blobType);
 
     MessageInfo msgInfo1 =
-        new MessageInfo(key1, messageFormatStream1.getSize(), accountId1, containerId1, prop1.getCreationTimeInMs());
+        new MessageInfo(key1, messageFormatStream1.getSize(), accountId1, containerId1, prop1.getCreationTimeInMs(),
+            (short) 0);
 
     // create message stream for blob 2
     StoreKey key2 = new MockId("id2");
@@ -195,7 +196,8 @@ public class MessageSievingInputStreamTest {
                 blobContentSize, blobType);
 
     MessageInfo msgInfo2 =
-        new MessageInfo(key2, messageFormatStream2.getSize(), accountId2, containerId2, prop2.getCreationTimeInMs());
+        new MessageInfo(key2, messageFormatStream2.getSize(), accountId2, containerId2, prop2.getCreationTimeInMs(),
+            (short) 0);
 
     // create message stream for blob 3
     StoreKey key3 = new MockId("id3");
@@ -222,7 +224,8 @@ public class MessageSievingInputStreamTest {
                 blobContentSize, blobType);
 
     MessageInfo msgInfo3 =
-        new MessageInfo(key3, messageFormatStream3.getSize(), accountId3, containerId3, prop3.getCreationTimeInMs());
+        new MessageInfo(key3, messageFormatStream3.getSize(), accountId3, containerId3, prop3.getCreationTimeInMs(),
+            (short) 0);
 
     MessageInfo msgInfo4 = null;
     MessageFormatInputStream messageFormatStream4 = null;
@@ -253,7 +256,8 @@ public class MessageSievingInputStreamTest {
               stream4, blobContentSize, blobType);
 
       msgInfo4 =
-          new MessageInfo(key4, messageFormatStream4.getSize(), accountId4, containerId4, prop4.getCreationTimeInMs());
+          new MessageInfo(key4, messageFormatStream4.getSize(), accountId4, containerId4, prop4.getCreationTimeInMs(),
+              (short) 0);
     }
 
     // create message stream for blob 5. Header version 2, without encryption key.
@@ -280,7 +284,8 @@ public class MessageSievingInputStreamTest {
               blobType);
 
       msgInfo5 =
-          new MessageInfo(key5, messageFormatStream5.getSize(), accountId5, containerId5, prop5.getCreationTimeInMs());
+          new MessageInfo(key5, messageFormatStream5.getSize(), accountId5, containerId5, prop5.getCreationTimeInMs(),
+              (short) 0);
     }
 
     //create input stream for all blob messages together
@@ -444,7 +449,8 @@ public class MessageSievingInputStreamTest {
                 blobContentSize, blobType);
 
     MessageInfo msgInfo1 =
-        new MessageInfo(key1, messageFormatStream1.getSize(), accountId1, containerId1, prop1.getCreationTimeInMs());
+        new MessageInfo(key1, messageFormatStream1.getSize(), accountId1, containerId1, prop1.getCreationTimeInMs(),
+            (short) 0);
 
     // create message stream for blob 2
     StoreKey key2 = new MockId("id2");
@@ -472,7 +478,8 @@ public class MessageSievingInputStreamTest {
                 blobContentSize, blobType);
 
     MessageInfo msgInfo2 =
-        new MessageInfo(key2, messageFormatStream2.getSize(), accountId2, containerId2, prop2.getCreationTimeInMs());
+        new MessageInfo(key2, messageFormatStream2.getSize(), accountId2, containerId2, prop2.getCreationTimeInMs(),
+            (short) 0);
 
     // corrupt the message stream
     byte[] corruptMessageStream = new byte[(int) messageFormatStream2.getSize()];
@@ -505,8 +512,8 @@ public class MessageSievingInputStreamTest {
 
     // MessageInfo marks this blob as deleted.
     MessageInfo msgInfo3 =
-        new MessageInfo(key3, messageFormatStream3.getSize(), true, false, Utils.Infinite_Time, accountId3,
-            containerId3, prop3.getCreationTimeInMs());
+        new MessageInfo(key3, messageFormatStream3.getSize(), true, false, false, Utils.Infinite_Time, null, accountId3,
+            containerId3, prop3.getCreationTimeInMs(), (short) 0);
 
     // create message stream for blob 4 that is expired.
     StoreKey key4 = new MockId("id4");
@@ -533,7 +540,8 @@ public class MessageSievingInputStreamTest {
 
     // MessageInfo marks this as already expired (the third field is an absolute expiresAt time).
     MessageInfo msgInfo4 =
-        new MessageInfo(key4, messageFormatStream4.getSize(), 1, accountId4, containerId4, prop4.getCreationTimeInMs());
+        new MessageInfo(key4, messageFormatStream4.getSize(), false, false, false, 1, null, accountId4, containerId4,
+            prop4.getCreationTimeInMs(), (short) 0);
 
     // create message stream for blob 5
     StoreKey key5 = new MockId("id5");
@@ -561,7 +569,8 @@ public class MessageSievingInputStreamTest {
                 blobContentSize, blobType);
 
     MessageInfo msgInfo5 =
-        new MessageInfo(key5, messageFormatStream5.getSize(), accountId5, containerId5, prop5.getCreationTimeInMs());
+        new MessageInfo(key5, messageFormatStream5.getSize(), accountId5, containerId5, prop5.getCreationTimeInMs(),
+            (short) 0);
 
     //create input stream for all blob messages together
     byte[] totalMessageStreamContent =
@@ -815,7 +824,8 @@ public class MessageSievingInputStreamTest {
                 blobContentSize, blobType);
 
     MessageInfo msgInfo1 =
-        new MessageInfo(key1, messageFormatStream1.getSize(), accountId1, containerId1, prop1.getCreationTimeInMs());
+        new MessageInfo(key1, messageFormatStream1.getSize(), accountId1, containerId1, prop1.getCreationTimeInMs(),
+            (short) 0);
 
     // create message stream for blob 2
     StoreKey key2 = new MockId("id2");
@@ -843,7 +853,8 @@ public class MessageSievingInputStreamTest {
                 blobContentSize, blobType);
 
     MessageInfo msgInfo2 =
-        new MessageInfo(key2, messageFormatStream2.getSize(), accountId2, containerId2, prop2.getCreationTimeInMs());
+        new MessageInfo(key2, messageFormatStream2.getSize(), accountId2, containerId2, prop2.getCreationTimeInMs(),
+            (short) 0);
 
     // Add the key for the second message to the discardable ones.
     randomKeyConverter.addInvalids(Collections.singletonList(key2));
@@ -874,7 +885,8 @@ public class MessageSievingInputStreamTest {
                 blobContentSize, blobType);
 
     MessageInfo msgInfo3 =
-        new MessageInfo(key3, messageFormatStream3.getSize(), accountId3, containerId3, prop3.getCreationTimeInMs());
+        new MessageInfo(key3, messageFormatStream3.getSize(), accountId3, containerId3, prop3.getCreationTimeInMs(),
+            (short) 0);
 
     //create input stream for all blob messages together
     byte[] totalMessageStreamContent =

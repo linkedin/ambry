@@ -347,7 +347,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
     undeleteBlob(blobIdList.get(0), channel);
-    // No replication for undelete for now, so don't await for blob undelete to be replicated.
+    notificationSystem.awaitBlobUndeletes(blobIdList.get(0).getID());
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
     // For each future change to this offset, add to this variable and write an explanation of why the number changed.

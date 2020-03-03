@@ -224,6 +224,11 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
+    public MessageInfo findKey(StoreKey key) throws StoreException {
+      throw new UnsupportedOperationException("Find key is not supported");
+    }
+
+    @Override
     public Set<StoreKey> findMissingKeys(List<StoreKey> keys) {
       throw new UnsupportedOperationException();
     }

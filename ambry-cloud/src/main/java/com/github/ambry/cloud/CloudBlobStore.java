@@ -156,10 +156,9 @@ class CloudBlobStore implements Store {
         // is applied by GetOperation.
         boolean ttlUpdated = blobMetadata.getExpirationTime() == Utils.Infinite_Time;
         boolean deleted = blobMetadata.getDeletionTime() != Utils.Infinite_Time;
-        MessageInfo messageInfo =
-            new MessageInfo(blobId, blobMetadata.getSize(), deleted, ttlUpdated, blobMetadata.getExpirationTime(),
-                (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(),
-                getOperationTime(blobMetadata));
+        MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), deleted, ttlUpdated, false,
+            blobMetadata.getExpirationTime(), null, (short) blobMetadata.getAccountId(),
+            (short) blobMetadata.getContainerId(), getOperationTime(blobMetadata), (short) 0);
         messageInfos.add(messageInfo);
         blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
       }
@@ -486,8 +485,8 @@ class CloudBlobStore implements Store {
         : (metadata.getCreationTime() > 0) ? metadata.getCreationTime() : metadata.getUploadTime();
     boolean isDeleted = metadata.getDeletionTime() > 0;
     boolean isTtlUpdated = false;  // No way to know
-    return new MessageInfo(blobId, metadata.getSize(), isDeleted, isTtlUpdated, metadata.getExpirationTime(),
-        (short) metadata.getAccountId(), (short) metadata.getContainerId(), operationTime);
+    return new MessageInfo(blobId, metadata.getSize(), isDeleted, isTtlUpdated, false, metadata.getExpirationTime(),
+        null, (short) metadata.getAccountId(), (short) metadata.getContainerId(), operationTime, (short) 0);
   }
 
   @Override
@@ -514,6 +513,18 @@ class CloudBlobStore implements Store {
     } catch (CloudStorageException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
     }
+  }
+
+  @Override
+  public MessageInfo findKey(StoreKey key) throws StoreException {
+    // This is a walkaround. This is only used in replication where replicaThread need to figure out if the blob
+    // is deleted and if the blob is ttlupdated, and also returns the lifeVersion.
+    // Since we are not supporting lifeVersion in CloudBlobStore yet, for lifVersion, we will return 0 as default value.
+    // For deleted, use return value from isKeyDeleted.
+    // For ttl update, return false to trigger ttl update operation in replication. For an already ttl udpated blob
+    // second ttl update would end up with an error, which replication will be able to silence.
+    return new MessageInfo(key, 0, isKeyDeleted(key), false, false, Utils.Infinite_Time, null,
+        ((BlobId) key).getAccountId(), ((BlobId) key).getContainerId(), (long) 0, (short) 0);
   }
 
   @Override

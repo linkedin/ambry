@@ -403,6 +403,11 @@ class InMemoryStore implements Store {
   }
 
   @Override
+  public MessageInfo findKey(StoreKey key) throws StoreException {
+    return getMergedMessageInfo(key, messageInfos);
+  }
+
+  @Override
   public StoreStats getStoreStats() {
     return null;
   }
