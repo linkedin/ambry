@@ -291,7 +291,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
       if (instanceNameToAmbryDataNode.containsKey(instanceConfig.getInstanceName())) {
         addedAndRemovedReplicas = updateInstanceInfo(instanceConfig);
       } else {
-        addedAndRemovedReplicas = createNewInstance(instanceConfig);
+        addedAndRemovedReplicas = new Pair<>(createNewInstance(instanceConfig), new ArrayList<>());
       }
       totalAddedReplicas.addAll(addedAndRemovedReplicas.getFirst());
       totalRemovedReplicas.addAll(addedAndRemovedReplicas.getSecond());
@@ -421,15 +421,15 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   /**
    * Create a new instance(node) and initialize disks/replicas on it.
    * @param instanceConfig the {@link InstanceConfig} to create new instance
-   * @return a pair of lists: (1) newly added replicas; (2) removed old replicas(in this method, it should be empty)
+   * @return a list of newly added replicas;
    * @throws Exception
    */
-  private Pair<List<ReplicaId>, List<ReplicaId>> createNewInstance(InstanceConfig instanceConfig) throws Exception {
+  private List<ReplicaId> createNewInstance(InstanceConfig instanceConfig) throws Exception {
     String instanceName = instanceConfig.getInstanceName();
     logger.info("Adding node {} and its disks and replicas in {}", instanceName, dcName);
     AmbryDataNode datanode =
         new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
-            Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig), null,
+            Integer.parseInt(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig), null,
             getXid(instanceConfig), helixClusterManagerCallback);
     // for new instance, we first set it to unavailable and rely on its participation to update its liveness
     if (!instanceName.equals(selfInstanceName)) {
@@ -437,7 +437,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
     }
     List<ReplicaId> addedReplicas = initializeDisksAndReplicasOnNode(datanode, instanceConfig);
     instanceNameToAmbryDataNode.put(instanceName, datanode);
-    return new Pair<>(addedReplicas, new ArrayList<>());
+    return addedReplicas;
   }
 
   /**

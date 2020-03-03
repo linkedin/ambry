@@ -252,26 +252,25 @@ public class DynamicClusterManagerComponentsTest {
    * A helper class that mocks the {@link ClusterManagerCallback} and stores partition to replicas mapping internally
    * as told.
    */
-  private class MockClusterManagerCallback implements ClusterManagerCallback {
+  private class MockClusterManagerCallback
+      implements ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> {
     Map<AmbryPartition, List<AmbryReplica>> partitionToReplicas = new HashMap<>();
     Map<AmbryDataNode, Set<AmbryDisk>> dataNodeToDisks = new HashMap<>();
 
     @Override
-    public List<AmbryReplica> getReplicaIdsForPartition(PartitionId partition) {
-      AmbryPartition ambryPartition = (AmbryPartition) partition;
-      return new ArrayList<>(partitionToReplicas.get(ambryPartition));
+    public List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
+      return new ArrayList<>(partitionToReplicas.get(partition));
     }
 
     @Override
-    public List<AmbryReplica> getReplicaIdsByState(PartitionId partition, ReplicaState state, String dcName) {
+    public List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName) {
       throw new UnsupportedOperationException("Temporarily unsupported");
     }
 
     @Override
-    public Collection<AmbryDisk> getDisks(DataNodeId dataNode) {
-      AmbryDataNode ambryDataNode = (AmbryDataNode) dataNode;
-      if (ambryDataNode != null) {
-        return dataNodeToDisks.get(ambryDataNode);
+    public Collection<AmbryDisk> getDisks(AmbryDataNode dataNode) {
+      if (dataNode != null) {
+        return dataNodeToDisks.get(dataNode);
       }
       List<AmbryDisk> disksToReturn = new ArrayList<>();
       for (Set<AmbryDisk> disks : dataNodeToDisks.values()) {

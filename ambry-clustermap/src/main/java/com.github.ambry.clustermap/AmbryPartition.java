@@ -20,7 +20,6 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -33,7 +32,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 public class AmbryPartition implements PartitionId {
   private final Long id;
   private final String partitionClass;
-  private final ClusterManagerCallback clusterManagerCallback;
+  private final ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback;
   private final Lock stateChangeLock = new ReentrantLock();
 
   private volatile PartitionState state;
@@ -51,7 +50,8 @@ public class AmbryPartition implements PartitionId {
    *                               to the {@link HelixClusterManager}
    * The initial state defaults to {@link PartitionState#READ_WRITE}.
    */
-  AmbryPartition(long id, String partitionClass, ClusterManagerCallback clusterManagerCallback) {
+  AmbryPartition(long id, String partitionClass,
+      ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback) {
     this.id = id;
     this.partitionClass = partitionClass;
     this.clusterManagerCallback = clusterManagerCallback;
@@ -65,18 +65,12 @@ public class AmbryPartition implements PartitionId {
 
   @Override
   public List<AmbryReplica> getReplicaIds() {
-    return clusterManagerCallback.getReplicaIdsForPartition(this)
-        .stream()
-        .map(r -> (AmbryReplica) r)
-        .collect(Collectors.toList());
+    return clusterManagerCallback.getReplicaIdsForPartition(this);
   }
 
   @Override
   public List<AmbryReplica> getReplicaIdsByState(ReplicaState state, String dcName) {
-    return clusterManagerCallback.getReplicaIdsByState(this, state, dcName)
-        .stream()
-        .map(r -> (AmbryReplica) r)
-        .collect(Collectors.toList());
+    return clusterManagerCallback.getReplicaIdsByState(this, state, dcName);
   }
 
   @Override
@@ -159,7 +153,7 @@ public class AmbryPartition implements PartitionId {
       try {
         lastUpdatedSealedStateChangeCounter = currentCounterValue;
         boolean isSealed = false;
-        for (ReplicaId replica : clusterManagerCallback.getReplicaIdsForPartition(this)) {
+        for (AmbryReplica replica : clusterManagerCallback.getReplicaIdsForPartition(this)) {
           if (replica.isSealed()) {
             isSealed = true;
             break;

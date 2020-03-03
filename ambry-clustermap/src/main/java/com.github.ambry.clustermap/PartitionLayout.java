@@ -313,15 +313,15 @@ class PartitionLayout {
   /**
    * An implementation of {@link ClusterManagerCallback} that supports getting resource from static clustermap.
    */
-  class StaticClusterManagerCallback implements ClusterManagerCallback {
+  class StaticClusterManagerCallback implements ClusterManagerCallback<Replica, Disk, Partition, DataNode> {
 
     @Override
-    public List<Replica> getReplicaIdsForPartition(PartitionId partition) {
+    public List<Replica> getReplicaIdsForPartition(Partition partition) {
       throw new UnsupportedOperationException("Not supported in static cluster map");
     }
 
     @Override
-    public List<Replica> getReplicaIdsByState(PartitionId partition, ReplicaState state, String dcName) {
+    public List<Replica> getReplicaIdsByState(Partition partition, ReplicaState state, String dcName) {
       throw new UnsupportedOperationException("Not supported in static cluster map");
     }
 
@@ -331,7 +331,7 @@ class PartitionLayout {
     }
 
     @Override
-    public Collection<Disk> getDisks(DataNodeId dataNode) {
+    public Collection<Disk> getDisks(DataNode dataNode) {
       throw new UnsupportedOperationException("Not supported in static cluster map");
     }
 

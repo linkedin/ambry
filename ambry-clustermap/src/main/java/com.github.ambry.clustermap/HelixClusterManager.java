@@ -695,16 +695,16 @@ public class HelixClusterManager implements ClusterMap {
   /**
    * A callback class used to query information from the {@link HelixClusterManager}
    */
-  class HelixClusterManagerCallback implements ClusterManagerCallback {
+  class HelixClusterManagerCallback
+      implements ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> {
     /**
      * Get all replica ids associated with the given {@link AmbryPartition}
      * @param partition the {@link AmbryPartition} for which to get the list of replicas.
      * @return the list of {@link AmbryReplica}s associated with the given partition.
      */
     @Override
-    public List<AmbryReplica> getReplicaIdsForPartition(PartitionId partition) {
-      AmbryPartition ambryPartition = (AmbryPartition) partition;
-      return new ArrayList<>(ambryPartitionToAmbryReplicas.get(ambryPartition));
+    public List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
+      return new ArrayList<>(ambryPartitionToAmbryReplicas.get(partition));
     }
 
     /**
@@ -713,7 +713,7 @@ public class HelixClusterManager implements ClusterMap {
      * If no routing table snapshot is found for dc name, or no resource name found for given partition, return empty list.
      */
     @Override
-    public List<AmbryReplica> getReplicaIdsByState(PartitionId partition, ReplicaState state, String dcName) {
+    public List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName) {
       List<AmbryReplica> replicas = new ArrayList<>();
       for (DcInfo dcInfo : dcToDcZkInfo.values()) {
         String dc = dcInfo.dcName;
@@ -775,9 +775,9 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     @Override
-    public Collection<AmbryDisk> getDisks(DataNodeId dataNode) {
+    public Collection<AmbryDisk> getDisks(AmbryDataNode dataNode) {
       if (dataNode != null) {
-        return dcToDcZkInfo.get(dataNode.getDatacenterName()).clusterChangeHandler.getDisks((AmbryDataNode) dataNode);
+        return dcToDcZkInfo.get(dataNode.getDatacenterName()).clusterChangeHandler.getDisks(dataNode);
       }
       List<AmbryDisk> disksToReturn = new ArrayList<>();
       for (DcInfo dcInfo : dcToDcZkInfo.values()) {
