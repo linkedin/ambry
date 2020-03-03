@@ -619,20 +619,29 @@ public class StorageManager implements StoreManager {
     /**
      * This method is called by Offline-To-Dropped transition. Any errors/exceptions will be thrown and converted to
      * {@link StateTransitionException}. The error/exception is also recorded in certain metric for alerting purpose.
+     * NOTE: there are 4 steps to resume decommission(see comments in method) and the steps should be performed in order.
+     * This method basically repeats the Standby-To-Inactive and Inactive-To-Offline transitions. That's why we see
+     * replication manager listener is called twice for different transitions.
      */
     private void resumeDecommission(String partitionName) throws Exception {
       logger.info("Resuming decommission on replica {}", partitionName);
-      // 1. perform Standby-To-Inactive transition in StorageManager
+      // 1. perform Standby-To-Inactive transition in StorageManager. This is to disable compaction at the very beginning
+      //    to avoid position of last PUT in store changes.
       onPartitionBecomeInactiveFromStandby(partitionName);
       if (replicationManagerListener != null && replicaSyncUpManager != null) {
-        // 2. perform Standby-To-Inactive transition in ReplicationManager
+        // 2. perform Standby-To-Inactive transition in ReplicationManager. This is to initiate deactivation on given
+        //    partition and will be blocked until peer replicas have caught up with last PUT in corresponding store.
         replicationManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
         replicaSyncUpManager.waitDeactivationCompleted(partitionName);
-        // 3. perform Inactive-To-Offline transition in ReplicationManager
+        // 3. perform Inactive-To-Offline transition in ReplicationManager. This is to initiate disconnection on given
+        //    partition and will be blocked until peer replicas have caught up with last record(i.e DELETE etc) in store.
         replicationManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
         replicaSyncUpManager.waitDisconnectionCompleted(partitionName);
       }
-      // 4. perform Inactive-To-Offline transition in StorageManager
+      // 4. perform Inactive-To-Offline transition in StorageManager. This comes last because in this step it shuts down
+      //    store and updates InstanceConfig in Helix to remove replica from clustermap. Hence, we have to ensure the
+      //    data in store have been replicated to peer nodes (before store is shut down or removed), which requires
+      //    deactivation and disconnection to complete first.
       onPartitionBecomeOfflineFromInactive(partitionName);
       logger.info("Decommission on replica {} is almost done, dropping it from current node", partitionName);
     }
