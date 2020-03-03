@@ -152,7 +152,7 @@ public class DynamicClusterManagerComponentsTest {
     assertEquals(HardwareState.UNAVAILABLE, disk1.getState());
     disk1.setState(HardwareState.AVAILABLE);
     assertEquals(HardwareState.AVAILABLE, disk1.getState());
-    assertTrue(disk1.getDataNode().equals(datanode1));
+    assertEquals(disk1.getDataNode(), datanode1);
     datanode1.setState(HardwareState.UNAVAILABLE);
     assertEquals(HardwareState.UNAVAILABLE, disk1.getState());
 

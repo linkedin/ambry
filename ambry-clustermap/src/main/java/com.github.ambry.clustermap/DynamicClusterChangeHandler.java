@@ -351,11 +351,11 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
           } else {
             // if this is a new replica and doesn't exist on node
             logger.info("Adding new replica {} to existing node {} in {}", partitionName, instanceName, dcName);
-            long replicaCapacity = Long.valueOf(info[1]);
+            long replicaCapacity = Long.parseLong(info[1]);
             String partitionClass = info.length > 2 ? info[2] : clusterMapConfig.clusterMapDefaultPartitionClass;
             // this can be a brand new partition that is added to an existing node
             AmbryPartition mappedPartition =
-                new AmbryPartition(Long.valueOf(partitionName), partitionClass, helixClusterManagerCallback);
+                new AmbryPartition(Long.parseLong(partitionName), partitionClass, helixClusterManagerCallback);
             // Ensure only one AmbryPartition instance exists for specific partition.
             mappedPartition = clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaCapacity);
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, dataNode, replicaCapacity);
@@ -462,7 +462,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
       Map<String, String> diskInfo = entry.getValue();
       HardwareState diskState =
           diskInfo.get(DISK_STATE).equals(AVAILABLE_STR) ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE;
-      long capacityBytes = Long.valueOf(diskInfo.get(DISK_CAPACITY_STR));
+      long capacityBytes = Long.parseLong(diskInfo.get(DISK_CAPACITY_STR));
 
       // Create disk
       AmbryDisk disk = new AmbryDisk(clusterMapConfig, datanode, mountPath, diskState, capacityBytes);
@@ -475,11 +475,11 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
           String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
           // partition name and replica name are the same.
           String partitionName = info[0];
-          long replicaCapacity = Long.valueOf(info[1]);
+          long replicaCapacity = Long.parseLong(info[1]);
           String partitionClass = info.length > 2 ? info[2] : clusterMapConfig.clusterMapDefaultPartitionClass;
 
           AmbryPartition mappedPartition =
-              new AmbryPartition(Long.valueOf(partitionName), partitionClass, helixClusterManagerCallback);
+              new AmbryPartition(Long.parseLong(partitionName), partitionClass, helixClusterManagerCallback);
           // Ensure only one AmbryPartition instance exists for specific partition.
           mappedPartition = clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaCapacity);
           ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
