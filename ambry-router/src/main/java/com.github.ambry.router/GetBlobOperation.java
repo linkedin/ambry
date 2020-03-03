@@ -1311,6 +1311,7 @@ class GetBlobOperation extends GetOperation {
         chunkMetadataList = compositeBlobInfo.getChunkMetadataList();
         boolean rangeResolutionFailure = false;
         try {
+          long rangeTotalSize = totalSize;
           if (options.getBlobOptions.hasBlobSegmentIdx()) {
             int requestedSegment = options.getBlobOptions.getBlobSegmentIdx();
             if (requestedSegment < 0 || requestedSegment >= chunkMetadataList.size()) {
@@ -1318,9 +1319,10 @@ class GetBlobOperation extends GetOperation {
                   "Bad segment number: " + requestedSegment + ", num of keys: " + chunkMetadataList.size());
             }
             chunkMetadataList = chunkMetadataList.subList(requestedSegment, requestedSegment + 1);
+            rangeTotalSize = chunkMetadataList.get(0).getSize();
           }
           if (options.getBlobOptions.getRange() != null) {
-            resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
+            resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(rangeTotalSize);
             // Get only the chunks within the range.
             if (!options.getBlobOptions.hasBlobSegmentIdx()) {
               chunkMetadataList = compositeBlobInfo.getStoreKeysInByteRange(resolvedByteRange.getStartOffset(),
