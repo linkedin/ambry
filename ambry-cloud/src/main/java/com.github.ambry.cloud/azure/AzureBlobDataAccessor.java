@@ -99,7 +99,7 @@ public class AzureBlobDataAccessor {
     uploadTimeout = Duration.ofMillis(cloudConfig.cloudUploadRequestTimeout);
     batchTimeout = Duration.ofMillis(cloudConfig.cloudBatchRequestTimeout);
 
-    // Note: retry decisions are made at CloudBlobStore level, not here.
+    // Note: retry decisions are made at CloudBlobStore level.  Configure storageClient with no retries.
     RequestRetryOptions noRetries = new RequestRetryOptions(RetryPolicyType.FIXED, 1, null, null, null, null);
     storageClient = new BlobServiceClientBuilder().connectionString(azureCloudConfig.azureStorageConnectionString)
         .httpClient(client)

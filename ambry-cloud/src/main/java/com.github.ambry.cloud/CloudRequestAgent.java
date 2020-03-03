@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
 class CloudRequestAgent {
 
   private static final Logger logger = LoggerFactory.getLogger(CloudRequestAgent.class);
-  private final long defaultRetryDelay;
+  private final int defaultRetryDelay;
   private final int maxAttempts;
   private final VcrMetrics vcrMetrics;
 
