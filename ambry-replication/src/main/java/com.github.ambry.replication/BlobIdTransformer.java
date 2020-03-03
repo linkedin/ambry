@@ -125,6 +125,14 @@ public class BlobIdTransformer implements Transformer {
         headerBuf.rewind();
         header = new MessageFormatRecord.MessageHeader_Format_V2(headerBuf);
         break;
+      case Message_Header_Version_V3:
+        headerBuf = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V3.getHeaderSize());
+        headerBuf.putShort(headerVersion);
+        inputStream.read(headerBuf.array(), Version_Field_Size_In_Bytes,
+            MessageFormatRecord.MessageHeader_Format_V3.getHeaderSize() - Version_Field_Size_In_Bytes);
+        headerBuf.rewind();
+        header = new MessageFormatRecord.MessageHeader_Format_V3(headerBuf);
+        break;
       default:
         throw new MessageFormatException("Message header version not supported",
             MessageFormatErrorCodes.Unknown_Format_Version);

@@ -79,6 +79,8 @@ public class MessageFormatInputStreamTest {
         MessageFormatRecord.Message_Header_Version_V2);
     messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
         MessageFormatRecord.Message_Header_Version_V2);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
+        MessageFormatRecord.Message_Header_Version_V3);
   }
 
   private void messageFormatPutRecordsTest(short blobVersion, BlobType blobType, short headerVersion)
@@ -95,6 +97,7 @@ public class MessageFormatInputStreamTest {
     int blobContentSize = 2000;
     byte[] data = new byte[blobContentSize];
     new Random().nextBytes(data);
+    short lifeVersion = 1;
     long blobSize = -1;
     MessageFormatRecord.headerVersionToUse = headerVersion;
     if (blobVersion == MessageFormatRecord.Blob_Version_V1) {
@@ -112,7 +115,8 @@ public class MessageFormatInputStreamTest {
 
     MessageFormatInputStream messageFormatStream =
         (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key,
-            ByteBuffer.wrap(encryptionKey), prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize, blobType)
+            ByteBuffer.wrap(encryptionKey), prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize, blobType,
+            lifeVersion)
             : new PutMessageFormatBlobV1InputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize,
                 blobType);
 
@@ -133,6 +137,9 @@ public class MessageFormatInputStreamTest {
     messageFormatStream.read(headerOutput);
     ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
     Assert.assertEquals(headerVersion, headerBuf.getShort());
+    if (headerVersion == MessageFormatRecord.Message_Header_Version_V3) {
+      Assert.assertEquals(lifeVersion, headerBuf.getShort());
+    }
     Assert.assertEquals(blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize + blobSize,
         headerBuf.getLong());
     switch (headerVersion) {
@@ -143,7 +150,7 @@ public class MessageFormatInputStreamTest {
         Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize,
             headerBuf.getInt());
         break;
-      default: //case MessageFormatRecord.Message_Header_Version_V2:
+      default: //case MessageFormatRecord.Message_Header_Version_V2 or V3:
         Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
         Assert.assertEquals(headerSize + key.sizeInBytes() + blobEncryptionKeySize, headerBuf.getInt());
         Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
@@ -152,7 +159,6 @@ public class MessageFormatInputStreamTest {
         Assert.assertEquals(
             headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize,
             headerBuf.getInt());
-        //TODO Add MessageFormatRecord.Message_Header_Version_V3 test code
     }
     Crc32 crc = new Crc32();
     crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
@@ -275,28 +281,30 @@ public class MessageFormatInputStreamTest {
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+      short lifeVersion = 1;
       MessageFormatInputStream messageFormatStream;
-      boolean useV2Header;
+      short messageHeaderVersionInUse;
       int deleteRecordSize;
       if (version == MessageFormatRecord.Update_Version_V1) {
         messageFormatStream = new DeleteMessageFormatV1InputStream(key, accountId, containerId, deletionTimeMs);
         deleteRecordSize = MessageFormatRecord.Update_Format_V1.getRecordSize();
-        useV2Header = false;
+        messageHeaderVersionInUse = MessageFormatRecord.Message_Header_Version_V1;
         // reset account, container ids and time
         accountId = Account.UNKNOWN_ACCOUNT_ID;
         containerId = Container.UNKNOWN_CONTAINER_ID;
         deletionTimeMs = Utils.Infinite_Time;
       } else if (version == MessageFormatRecord.Update_Version_V2) {
-        messageFormatStream = new DeleteMessageFormatV2InputStream(key, accountId, containerId, deletionTimeMs);
+        messageFormatStream =
+            new DeleteMessageFormatV2InputStream(key, accountId, containerId, deletionTimeMs, lifeVersion);
         deleteRecordSize = MessageFormatRecord.Update_Format_V2.getRecordSize();
-        useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
+        messageHeaderVersionInUse = MessageFormatRecord.headerVersionToUse;
       } else {
-        messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
+        messageFormatStream =
+            new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs, lifeVersion);
         deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.DELETE);
-        useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
+        messageHeaderVersionInUse = MessageFormatRecord.headerVersionToUse;
       }
-      int headerSize = MessageFormatRecord.getHeaderSizeForVersion(
-          useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1);
+      int headerSize = MessageFormatRecord.getHeaderSizeForVersion(messageHeaderVersionInUse);
       Assert.assertEquals("Unexpected size for version " + version, headerSize + deleteRecordSize + key.sizeInBytes(),
           messageFormatStream.getSize());
 
@@ -304,12 +312,13 @@ public class MessageFormatInputStreamTest {
       byte[] headerOutput = new byte[headerSize];
       messageFormatStream.read(headerOutput);
       ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
-      Assert.assertEquals(
-          useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1,
-          headerBuf.getShort());
+      Assert.assertEquals(messageHeaderVersionInUse, headerBuf.getShort());
+      if (messageHeaderVersionInUse == MessageFormatRecord.Message_Header_Version_V3) {
+        Assert.assertEquals(lifeVersion, headerBuf.getShort());
+      }
       Assert.assertEquals(deleteRecordSize, headerBuf.getLong());
       // read encryption key relative offset
-      if (useV2Header) {
+      if (messageHeaderVersionInUse >= MessageFormatRecord.Message_Header_Version_V2) {
         Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
       }
       // blob properties relative offset
@@ -378,13 +387,21 @@ public class MessageFormatInputStreamTest {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     long ttlUpdateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     long updatedExpiryMs = ttlUpdateTimeMs + TestUtils.RANDOM.nextInt();
-    MessageFormatInputStream messageFormatStream =
-        new TtlUpdateMessageFormatInputStream(key, accountId, containerId, updatedExpiryMs, ttlUpdateTimeMs);
-    long ttlUpdateRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.TTL_UPDATE);
-    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
-    Assert.assertEquals(headerSize + ttlUpdateRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
-    checkTtlUpdateMessage(messageFormatStream, ttlUpdateRecordSize, key, accountId, containerId, updatedExpiryMs,
-        ttlUpdateTimeMs);
+    short lifeVersion = 1;
+    short oldMessageFormatHeaderVersion = MessageFormatRecord.headerVersionToUse;
+    for (short messageFormatHeaderVersion : new short[]{MessageFormatRecord.Message_Header_Version_V2,
+        MessageFormatRecord.Message_Header_Version_V3}) {
+      MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersion;
+      MessageFormatInputStream messageFormatStream =
+          new TtlUpdateMessageFormatInputStream(key, accountId, containerId, updatedExpiryMs, ttlUpdateTimeMs,
+              lifeVersion);
+      long ttlUpdateRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.TTL_UPDATE);
+      int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
+      Assert.assertEquals(headerSize + ttlUpdateRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
+      checkTtlUpdateMessage(messageFormatStream, ttlUpdateRecordSize, key, accountId, containerId, updatedExpiryMs,
+          ttlUpdateTimeMs, lifeVersion);
+    }
+    MessageFormatRecord.headerVersionToUse = oldMessageFormatHeaderVersion;
   }
 
   /**
@@ -397,12 +414,14 @@ public class MessageFormatInputStreamTest {
    * @param containerId the container id expected
    * @param updatedExpiresAtMs the expected updated expiry time
    * @param updateTimeMs the expected time of update
+   * @param lifeVersion the life version of this update.
    * @throws IOException
    * @throws MessageFormatException
    */
   public static void checkTtlUpdateMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
-      short containerId, long updatedExpiresAtMs, long updateTimeMs) throws IOException, MessageFormatException {
-    checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key, (short) -1);
+      short containerId, long updatedExpiresAtMs, long updateTimeMs, short lifeVersion)
+      throws IOException, MessageFormatException {
+    checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key, lifeVersion);
     checkTtlUpdateSubRecord(stream, accountId, containerId, updatedExpiresAtMs, updateTimeMs);
   }
 
@@ -412,6 +431,7 @@ public class MessageFormatInputStreamTest {
    * @param expectedRecordSize the expected size of the record in the message. Can be {@code null} if unknown (won't be
    *                            checked)
    * @param key the expected {@link StoreKey}
+   * @param lifeVersion the life version of this update.
    * @throws IOException
    * @throws MessageFormatException
    */
@@ -421,9 +441,6 @@ public class MessageFormatInputStreamTest {
     header.verifyHeader();
 
     short messageHeaderVersion = MessageFormatRecord.headerVersionToUse;
-    if (lifeVersion != -1) {
-      messageHeaderVersion = UndeleteMessageFormatInputStream.UNDELETE_MESSAGE_HEADER_VERSION;
-    }
     Assert.assertEquals("Version not as expected", messageHeaderVersion, header.getVersion());
     // update record relative offset. This is the only relative offset with a valid value.
     Assert.assertEquals("Update record relative offset not as expected",
@@ -444,6 +461,8 @@ public class MessageFormatInputStreamTest {
     if (header.getVersion() == MessageFormatRecord.Message_Header_Version_V3) {
       Assert.assertTrue("Header should have lifeVersion", header.hasLifeVersion());
       Assert.assertEquals("LifeVersion mismatch", lifeVersion, header.getLifeVersion());
+    } else {
+      Assert.assertEquals("LifeVersion mismatch", (short) 0, header.getLifeVersion());
     }
 
     // verify StoreKey
