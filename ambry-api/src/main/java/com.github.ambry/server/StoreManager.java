@@ -15,7 +15,6 @@ package com.github.ambry.server;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.router.Callback;
 import com.github.ambry.store.Store;
 import java.util.Collection;
 import java.util.List;

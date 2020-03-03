@@ -29,7 +29,6 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.router.Callback;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
