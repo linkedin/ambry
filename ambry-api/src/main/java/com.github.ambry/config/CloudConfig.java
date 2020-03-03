@@ -31,6 +31,7 @@ public class CloudConfig {
 
   public static final String VCR_MIN_TTL_DAYS = "vcr.min.ttl.days";
   public static final String CLOUD_DELETED_BLOB_RETENTION_DAYS = "cloud.deleted.blob.retention.days";
+  public static final String CLOUD_BLOB_COMPACTION_ENABLED = "cloud.blob.compaction.enabled";
   public static final String CLOUD_BLOB_COMPACTION_INTERVAL_HOURS = "cloud.blob.compaction.interval.hours";
   public static final String CLOUD_BLOB_COMPACTION_QUERY_LIMIT = "cloud.blob.compaction.query.limit";
   public static final String CLOUD_RECENT_BLOB_CACHE_LIMIT = "cloud.recent.blob.cache.limit";
@@ -163,6 +164,13 @@ public class CloudConfig {
   public final int cloudDeletedBlobRetentionDays;
 
   /**
+   * Whether dead blob compaction is enabled.
+   */
+  @Config(CLOUD_BLOB_COMPACTION_ENABLED)
+  @Default("true")
+  public final boolean cloudBlobCompactionEnabled;
+
+  /**
    * The result set limit to set on the dead blobs query used in compaction.
    */
   @Config(CLOUD_BLOB_COMPACTION_QUERY_LIMIT)
@@ -250,6 +258,7 @@ public class CloudConfig {
     vcrMinTtlDays = verifiableProperties.getInt(VCR_MIN_TTL_DAYS, DEFAULT_MIN_TTL_DAYS);
     cloudDeletedBlobRetentionDays =
         verifiableProperties.getInt(CLOUD_DELETED_BLOB_RETENTION_DAYS, DEFAULT_RETENTION_DAYS);
+    cloudBlobCompactionEnabled = verifiableProperties.getBoolean(CLOUD_BLOB_COMPACTION_ENABLED, true);
     cloudBlobCompactionIntervalHours = verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_INTERVAL_HOURS, 24);
     cloudBlobCompactionQueryLimit =
         verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_QUERY_LIMIT, DEFAULT_COMPACTION_QUERY_LIMIT);
