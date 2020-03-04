@@ -18,12 +18,15 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.SocketNetworkClientFactory;
+import com.github.ambry.network.http2.Http2ClientMetrics;
+import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -45,6 +48,8 @@ public class NonBlockingRouterFactory implements RouterFactory {
   private final ClusterMap clusterMap;
   private final NetworkConfig networkConfig;
   private final NetworkMetrics networkMetrics;
+  private final Http2ClientConfig http2ClientConfig;
+  private final Http2ClientMetrics http2ClientMetrics;
   private final NotificationSystem notificationSystem;
   private final AccountService accountService;
   private final Time time;
@@ -86,11 +91,18 @@ public class NonBlockingRouterFactory implements RouterFactory {
     MetricRegistry registry = clusterMap.getMetricRegistry();
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     networkConfig = new NetworkConfig(verifiableProperties);
+    http2ClientConfig = new Http2ClientConfig(verifiableProperties);
     networkMetrics = new NetworkMetrics(registry);
+    http2ClientMetrics = new Http2ClientMetrics(registry);
+
     time = SystemTime.getInstance();
-    networkClientFactory = new SocketNetworkClientFactory(networkMetrics, networkConfig, sslFactory,
-        routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
-        routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);
+    if (new ClusterMapConfig(verifiableProperties).clusterMapHttp2NetworkClientEnabled) {
+      networkClientFactory = new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslFactory, time);
+    } else {
+      networkClientFactory = new SocketNetworkClientFactory(networkMetrics, networkConfig, sslFactory,
+          routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
+          routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);
+    }
     KeyManagementServiceFactory kmsFactory =
         Utils.getObj(routerConfig.routerKeyManagementServiceFactory, verifiableProperties,
             new ClusterMapConfig(verifiableProperties).clusterMapClusterName, registry);

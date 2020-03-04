@@ -38,6 +38,7 @@ public class CloudDataNode implements DataNodeId {
   private final Port http2Port;
   private final String dataCenterName;
   private final boolean isSslEnabled;
+  private final boolean http2ClientEnabled;
   private final List<String> sslEnabledDataCenters;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -55,6 +56,7 @@ public class CloudDataNode implements DataNodeId {
     this.sslPort = (cloudConfig.vcrSslPort != null) ? new Port(cloudConfig.vcrSslPort, PortType.SSL) : null;
     this.http2Port = (cloudConfig.vcrHttp2Port != null) ? new Port(cloudConfig.vcrHttp2Port, PortType.HTTP2) : null;
     this.dataCenterName = clusterMapConfig.clusterMapDatacenterName;
+    this.http2ClientEnabled = clusterMapConfig.clusterMapHttp2NetworkClientEnabled;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.isSslEnabled = sslEnabledDataCenters.contains(dataCenterName);
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
@@ -71,6 +73,7 @@ public class CloudDataNode implements DataNodeId {
     this.sslPort = sslPort;
     this.http2Port = http2Port;
     this.dataCenterName = dataCenterName;
+    this.http2ClientEnabled = clusterMapConfig.clusterMapHttp2NetworkClientEnabled;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.isSslEnabled = sslEnabledDataCenters.contains(dataCenterName);
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
@@ -117,6 +120,9 @@ public class CloudDataNode implements DataNodeId {
 
   @Override
   public Port getPortToConnectTo() {
+    if (http2ClientEnabled) {
+      return http2Port;
+    }
     return isSslEnabled ? sslPort : plainTextPort;
   }
 
@@ -150,6 +156,9 @@ public class CloudDataNode implements DataNodeId {
     portsJson.put(PortType.PLAINTEXT.name(), getPort());
     if (hasSSLPort()) {
       portsJson.put(PortType.SSL.name(), getSSLPort());
+    }
+    if (hasHttp2Port()) {
+      portsJson.put(PortType.HTTP2.name(), getHttp2Port());
     }
     portsJson.put(DATA_NODE_PORT_CONNECT_TO, getPortToConnectTo().getPort());
     snapshot.put(DATA_NODE_PORTS, portsJson);

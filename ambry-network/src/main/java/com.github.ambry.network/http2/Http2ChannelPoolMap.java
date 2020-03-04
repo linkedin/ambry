@@ -15,6 +15,7 @@
 package com.github.ambry.network.http2;
 
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.Http2ClientConfig;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -24,13 +25,20 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import java.net.InetSocketAddress;
 
 
+/**
+ * Implementation of {@link AbstractChannelPoolMap}. Each Host:Port has a ChannelPool.
+ * The ChannelPool is {@link Http2MultiplexedChannelPool}, which leverages http2 multiplexing.
+ */
 public class Http2ChannelPoolMap extends AbstractChannelPoolMap<InetSocketAddress, ChannelPool> {
   private final EventLoopGroup eventLoopGroup;
   private final SSLFactory sslFactory;
+  private final Http2ClientConfig http2ClientConfig;
 
-  public Http2ChannelPoolMap(SSLFactory sslFactory, EventLoopGroup eventLoopGroup) {
+  public Http2ChannelPoolMap(SSLFactory sslFactory, EventLoopGroup eventLoopGroup,
+      Http2ClientConfig http2ClientConfig) {
     this.sslFactory = sslFactory;
     this.eventLoopGroup = eventLoopGroup;
+    this.http2ClientConfig = http2ClientConfig;
   }
 
   @Override
@@ -42,7 +50,8 @@ public class Http2ChannelPoolMap extends AbstractChannelPoolMap<InetSocketAddres
 
     Http2ChannelPoolHandler http2ChannelPoolHandler =
         new Http2ChannelPoolHandler(sslFactory, inetSocketAddress.getHostName(), inetSocketAddress.getPort());
-    // TODO: Make idleConnectionTimeout, minParentConnections, maxStreamsPerConnection configurable.
-    return new Http2MultiplexedChannelPool(bootstrap, http2ChannelPoolHandler, eventLoopGroup, null, 2, 256);
+    return new Http2MultiplexedChannelPool(bootstrap, http2ChannelPoolHandler, eventLoopGroup,
+        http2ClientConfig.idleConnectionTimeoutMs, http2ClientConfig.http2MinConnectionPerPort,
+        http2ClientConfig.http2MaxConcurrentStreamsPerConnection);
   }
 }

@@ -42,6 +42,7 @@ class AmbryDataNode implements DataNodeId {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ResourceStatePolicy resourceStatePolicy;
   private final ClusterManagerCallback clusterManagerCallback;
+  private final boolean http2ClientEnabled;
 
   /**
    * Instantiate an AmbryDataNode object.
@@ -66,6 +67,7 @@ class AmbryDataNode implements DataNodeId {
     this.dataCenterName = dataCenterName;
     this.rackId = rackId;
     this.xid = xid;
+    this.http2ClientEnabled = clusterMapConfig.clusterMapHttp2NetworkClientEnabled;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     ResourceStatePolicyFactory resourceStatePolicyFactory =
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
@@ -118,6 +120,9 @@ class AmbryDataNode implements DataNodeId {
 
   @Override
   public Port getPortToConnectTo() {
+    if (http2ClientEnabled) {
+      return http2Port;
+    }
     return sslEnabledDataCenters.contains(dataCenterName) ? sslPort : plainTextPort;
   }
 
@@ -151,6 +156,9 @@ class AmbryDataNode implements DataNodeId {
     portsJson.put(PortType.PLAINTEXT.name(), getPort());
     if (hasSSLPort()) {
       portsJson.put(PortType.SSL.name(), getSSLPort());
+    }
+    if (hasHttp2Port()) {
+      portsJson.put(PortType.HTTP2.name(), getHttp2Port());
     }
     portsJson.put(DATA_NODE_PORT_CONNECT_TO, getPortToConnectTo().getPort());
     snapshot.put(DATA_NODE_PORTS, portsJson);

@@ -51,7 +51,7 @@ public class MultiplexedChannelRecord {
   private static final Logger log = LoggerFactory.getLogger(MultiplexedChannelRecord.class);
 
   private final Channel parentChannel;
-  private final int maxStreamsPerParentChannel;
+  private final int maxConcurrentStreams;
   private final Long allowedIdleTimeInMs;
 
   private final AtomicInteger numOfAvailableStreams;
@@ -66,10 +66,10 @@ public class MultiplexedChannelRecord {
 
   private volatile int lastStreamId;
 
-  MultiplexedChannelRecord(Channel parentChannel, int maxStreamsPerParentChannel, Long allowedIdleTimeInMs) {
+  MultiplexedChannelRecord(Channel parentChannel, int maxConcurrentStreams, Long allowedIdleTimeInMs) {
     this.parentChannel = parentChannel;
-    this.maxStreamsPerParentChannel = maxStreamsPerParentChannel;
-    this.numOfAvailableStreams = new AtomicInteger(maxStreamsPerParentChannel);
+    this.maxConcurrentStreams = maxConcurrentStreams;
+    this.numOfAvailableStreams = new AtomicInteger(maxConcurrentStreams);
     this.allowedIdleTimeInMs = allowedIdleTimeInMs;
   }
 
@@ -123,7 +123,7 @@ public class MultiplexedChannelRecord {
         streamChannels.put(channel.id(), channel);
         promise.setSuccess(channel);
 
-        if (closeIfIdleTask == null && allowedIdleTimeInMs != null) {
+        if (closeIfIdleTask == null && allowedIdleTimeInMs != null && allowedIdleTimeInMs > 0) {
           enableCloseIfIdleTask();
         }
       });
@@ -155,7 +155,7 @@ public class MultiplexedChannelRecord {
   }
 
   private void releaseClaim() {
-    if (numOfAvailableStreams.incrementAndGet() > maxStreamsPerParentChannel) {
+    if (numOfAvailableStreams.incrementAndGet() > maxConcurrentStreams) {
       assert false;
       log.warn("Child channel count was caught attempting to be increased over max concurrency. "
           + "Please report this issue to the AWS SDK for Java team.");
@@ -243,7 +243,7 @@ public class MultiplexedChannelRecord {
 
     // Cut off new streams from being acquired from this connection by setting the number of available channels to 0.
     // This write may fail if a reservation has happened since we checked the lastReserveAttemptTime.
-    if (!numOfAvailableStreams.compareAndSet(maxStreamsPerParentChannel, 0)) {
+    if (!numOfAvailableStreams.compareAndSet(maxConcurrentStreams, 0)) {
       return;
     }
 
@@ -288,7 +288,7 @@ public class MultiplexedChannelRecord {
   }
 
   boolean canBeClosedAndReleased() {
-    return state != RecordState.OPEN && numOfAvailableStreams.get() == maxStreamsPerParentChannel;
+    return state != RecordState.OPEN && numOfAvailableStreams.get() == maxConcurrentStreams;
   }
 
   private enum RecordState {

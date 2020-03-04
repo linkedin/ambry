@@ -219,7 +219,6 @@ public class AmbryServer {
       if (nodeId.hasHttp2Port()) {
         RestServerConfig restServerConfig = new RestServerConfig(properties);
         SSLFactory sslFactory = new NettySslHttp2Factory(sslConfig);
-        RestServerState restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
         NettyServerRequestResponseChannel requestResponseChannel = new NettyServerRequestResponseChannel(1);
         RestRequestService restRequestService = new StorageRestRequestService(requestResponseChannel);
 
@@ -239,7 +238,7 @@ public class AmbryServer {
 
         NioServerFactory nioServerFactory =
             new StorageServerNettyFactory(nodeId.getHttp2Port(), properties, registry, restRequestHandlerForHttp2,
-                restServerState, sslFactory);
+                sslFactory);
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
       }
