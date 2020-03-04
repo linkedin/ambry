@@ -293,7 +293,6 @@ public class NettyRequestTest {
   }
 
   /**
-   * sed(line('.')) < 0) ? 'zc' : 'zo')<CR></CR>
    * Tests {@link NettyRequest#addContent(HttpContent)} and
    * {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} with different digest algorithms (including a test
    * with no digest algorithm).
