@@ -89,10 +89,10 @@ public class HardDeleter implements Runnable {
    * startTokenBeforeLogFlush: This token is set to the current start token just before log flush and once the log is
    *                           flushed, this is used to set startTokenSafeToPersist.
    */
-  private FindToken startTokenBeforeLogFlush;
+  private volatile FindToken startTokenBeforeLogFlush;
   private volatile FindToken startTokenSafeToPersist;
-  private FindToken startToken;
-  private FindToken endToken;
+  private volatile FindToken startToken;
+  private volatile FindToken endToken;
   private StoreFindToken recoveryEndToken;
   private HardDeletePersistInfo hardDeleteRecoveryRange = new HardDeletePersistInfo();
   private boolean isCaughtUp = false;
@@ -347,6 +347,7 @@ public class HardDeleter implements Runnable {
 
   /**
    * This method will be called before the log is flushed.
+   * In production, this will be called in the PersistentIndex's IndexPersistor thread.
    */
   void preLogFlush() {
     /* Save the current start token before the log gets flushed */
@@ -355,11 +356,11 @@ public class HardDeleter implements Runnable {
 
   /**
    * This method will be called after the log is flushed.
+   * In production, this will be called in the PersistentIndex's IndexPersistor thread.
    */
   void postLogFlush() {
     /* start token saved before the flush is now safe to be persisted */
     startTokenSafeToPersist = startTokenBeforeLogFlush;
-
     hardDeleteLock.lock();
     try {
       // PersistCleanupToken because startTokenSafeToPersist changed.
@@ -680,6 +681,13 @@ public class HardDeleter implements Runnable {
     }
   }
 
+  /**
+   * A class to encapsulates the item to be persisted in the file for recovery.
+   * This class includes three piece of information:
+   * 1. a {@link BlobReadOptions} for blob that is in process of being hard deleted.
+   * 2. a byte array that contains serialized bytes of some extra information for hard delete.
+   * 3. a {@link StoreFindToken} that represents the start token when finding this deleted entry from the index.
+   */
   class HardDeletePersistItem {
     BlobReadOptions blobReadOptions;
     byte[] messagesStoreRecoveryInfo;
@@ -798,6 +806,9 @@ public class HardDeleter implements Runnable {
      * @return 0 means they are equal. negative number means token1 is less than token2. postive number means the opposite.
      */
     int compareTwoTokens(StoreFindToken token1, StoreFindToken token2) {
+      if (token1.getType() != FindTokenType.IndexBased || token2.getType() != FindTokenType.IndexBased) {
+        throw new IllegalStateException("Tokens need to be index based. First: " + token1 + " Second: " + token2);
+      }
       if (token1.equals(token2)) {
         return 0;
       }
