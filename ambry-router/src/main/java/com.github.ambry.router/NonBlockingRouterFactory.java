@@ -96,7 +96,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
     http2ClientMetrics = new Http2ClientMetrics(registry);
 
     time = SystemTime.getInstance();
-    if (new ClusterMapConfig(verifiableProperties).clusterMapHttp2Enable) {
+    if (new ClusterMapConfig(verifiableProperties).clusterMapHttp2NetworkClientEnabled) {
       networkClientFactory = new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslFactory, time);
     } else {
       networkClientFactory = new SocketNetworkClientFactory(networkMetrics, networkConfig, sslFactory,

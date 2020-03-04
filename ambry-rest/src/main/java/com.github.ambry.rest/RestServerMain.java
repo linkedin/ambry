@@ -80,11 +80,12 @@ public class RestServerMain {
    * @throws IOException
    */
   private static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties) throws Exception {
-    if (new ClusterMapConfig(verifiableProperties).clusterMapHttp2Enable) {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    if (clusterMapConfig.clusterMapHttp2NetworkClientEnabled) {
       return new NettySslHttp2Factory(new SSLConfig(verifiableProperties));
     }
     boolean sslRequired = new NettyConfig(verifiableProperties).nettyServerEnableSSL
-        || new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
+        || clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0;
     return sslRequired ? SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)) : null;
   }
 }

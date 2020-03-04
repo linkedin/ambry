@@ -80,9 +80,9 @@ public class ClusterMapConfig {
    * HTTP/2 network client will be enabled if true. HTTP/2 network client send HTTP/2 request to all storage nodes.
    * This config takes precedence over clusterMapSslEnabledDatacenters.
    */
-  @Config("clustermap.http2.enable")
+  @Config("clustermap.http2.network.client.enabled")
   @Default("false")
-  public final boolean clusterMapHttp2Enable;
+  public final boolean clusterMapHttp2NetworkClientEnabled;
 
   /**
    * List of Datacenters to which local node needs SSL encryption to communicate
@@ -280,7 +280,7 @@ public class ClusterMapConfig {
     clusterMapFixedTimeoutReplicaRetryBackoffMs =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.replica.retry.backoff.ms", 10 * 60 * 1000, 1,
             30 * 60 * 1000);
-    clusterMapHttp2Enable = verifiableProperties.getBoolean("cluster.map.http2.enable", false);
+    clusterMapHttp2NetworkClientEnabled = verifiableProperties.getBoolean("clustermap.http2.network.client.enabled", false);
     clusterMapSslEnabledDatacenters = verifiableProperties.getString("clustermap.ssl.enabled.datacenters", "");
     clusterMapClusterAgentsFactory = verifiableProperties.getString("clustermap.clusteragents.factory",
         "com.github.ambry.clustermap.StaticClusterAgentsFactory");

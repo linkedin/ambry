@@ -67,7 +67,7 @@ class AmbryDataNode implements DataNodeId {
     this.dataCenterName = dataCenterName;
     this.rackId = rackId;
     this.xid = xid;
-    this.http2ClientEnabled = clusterMapConfig.clusterMapHttp2Enable;
+    this.http2ClientEnabled = clusterMapConfig.clusterMapHttp2NetworkClientEnabled;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     ResourceStatePolicyFactory resourceStatePolicyFactory =
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
@@ -156,6 +156,9 @@ class AmbryDataNode implements DataNodeId {
     portsJson.put(PortType.PLAINTEXT.name(), getPort());
     if (hasSSLPort()) {
       portsJson.put(PortType.SSL.name(), getSSLPort());
+    }
+    if (hasHttp2Port()) {
+      portsJson.put(PortType.HTTP2.name(), getHttp2Port());
     }
     portsJson.put(DATA_NODE_PORT_CONNECT_TO, getPortToConnectTo().getPort());
     snapshot.put(DATA_NODE_PORTS, portsJson);

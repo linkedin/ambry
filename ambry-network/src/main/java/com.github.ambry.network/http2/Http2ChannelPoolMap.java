@@ -25,10 +25,13 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import java.net.InetSocketAddress;
 
 
+/**
+ * Implementation of {@link AbstractChannelPoolMap}. Each Host:Port has a ChannelPool.
+ * The ChannelPool is {@link Http2MultiplexedChannelPool}, which leverages http2 multiplexing.
+ */
 public class Http2ChannelPoolMap extends AbstractChannelPoolMap<InetSocketAddress, ChannelPool> {
   private final EventLoopGroup eventLoopGroup;
   private final SSLFactory sslFactory;
-
   private final Http2ClientConfig http2ClientConfig;
 
   public Http2ChannelPoolMap(SSLFactory sslFactory, EventLoopGroup eventLoopGroup,
@@ -48,7 +51,7 @@ public class Http2ChannelPoolMap extends AbstractChannelPoolMap<InetSocketAddres
     Http2ChannelPoolHandler http2ChannelPoolHandler =
         new Http2ChannelPoolHandler(sslFactory, inetSocketAddress.getHostName(), inetSocketAddress.getPort());
     return new Http2MultiplexedChannelPool(bootstrap, http2ChannelPoolHandler, eventLoopGroup,
-        http2ClientConfig.idleConnectionTimeout, http2ClientConfig.http2MinConnectionPerPort,
-        http2ClientConfig.http2MaxStreamsPerConnection);
+        http2ClientConfig.idleConnectionTimeoutMs, http2ClientConfig.http2MinConnectionPerPort,
+        http2ClientConfig.http2MaxConcurrentStreamsPerConnection);
   }
 }

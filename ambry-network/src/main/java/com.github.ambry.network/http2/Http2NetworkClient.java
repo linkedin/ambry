@@ -1,5 +1,5 @@
 /**
- * Copyright 2019 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,11 +31,12 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * A HTTP/2 implementation of {@link NetworkClient}. More implementation details will be added in next PR.
+ * A HTTP/2 implementation of {@link NetworkClient}.
+ * TODO: More implementation details will be added in next PR.
  */
 public class Http2NetworkClient implements NetworkClient {
   private static final Logger logger = LoggerFactory.getLogger(Http2NetworkClient.class);
-  private EventLoopGroup eventLoopGroup;
+  private final EventLoopGroup eventLoopGroup;
   private final ChannelPoolMap<InetSocketAddress, ChannelPool> pools;
 
   public Http2NetworkClient(Http2ClientMetrics http2ClientMetrics, Http2ClientConfig http2ClientConfig,

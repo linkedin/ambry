@@ -17,6 +17,9 @@ package com.github.ambry.network.http2;
 import com.codahale.metrics.MetricRegistry;
 
 
+/**
+ * The metrics for HTTP/2 Client
+ */
 public class Http2ClientMetrics {
 
   public Http2ClientMetrics(MetricRegistry registry) {

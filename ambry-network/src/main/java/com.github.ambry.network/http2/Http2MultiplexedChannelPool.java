@@ -68,9 +68,9 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
   private final ChannelPool parentConnectionPool;
   private final EventLoopGroup eventLoopGroup;
   private final Set<MultiplexedChannelRecord> parentConnections;
-  private final Long idleConnectionTimeout;
+  private final Long idleConnectionTimeoutMs;
   private final int minParentConnections;
-  private final Long maxStreamsPerConnection;
+  private final int maxConcurrentStreamsAllowed;
 
   private AtomicBoolean closed = new AtomicBoolean(false);
 
@@ -78,33 +78,33 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
    * @param parentBootstrap {@link Bootstrap} to create {@link ChannelPool}.
    * @param http2ChannelPoolHandler {@link ChannelPoolHandler} to create {@link ChannelPool}.
    * @param eventLoopGroup The event loop group.
-   * @param idleConnectionTimeout the idle time before a channel is closed.
+   * @param idleConnectionTimeoutMs the idle time before a channel is closed.
    * @param minParentConnections Minimum number of parent channel will be created before reuse.
-   * @param maxStreamsPerConnection The maximum streams allowed per parent channel.
+   * @param maxConcurrentStreamsAllowed The maximum streams allowed per parent channel.
    */
   Http2MultiplexedChannelPool(Bootstrap parentBootstrap, Http2ChannelPoolHandler http2ChannelPoolHandler,
-      EventLoopGroup eventLoopGroup, Long idleConnectionTimeout, int minParentConnections,
-      Long maxStreamsPerConnection) {
+      EventLoopGroup eventLoopGroup, Long idleConnectionTimeoutMs, int minParentConnections,
+      int maxConcurrentStreamsAllowed) {
     this(new SimpleChannelPool(parentBootstrap, http2ChannelPoolHandler), eventLoopGroup, ConcurrentHashMap.newKeySet(),
-        idleConnectionTimeout, minParentConnections, maxStreamsPerConnection);
+        idleConnectionTimeoutMs, minParentConnections, maxConcurrentStreamsAllowed);
   }
 
   /**
    * @param connectionPool The {@link ChannelPool} to acquire parent channel.
    * @param eventLoopGroup The event loop group.
-   * @param idleConnectionTimeout the idle time before a channel is closed.
+   * @param idleConnectionTimeoutMs the idle time before a channel is closed.
    * @param minParentConnections Minimum number of parent channel will be created before reuse.
-   * @param maxStreamsPerConnection The maximum streams allowed per parent channel.
+   * @param maxConcurrentStreamsAllowed The maximum streams allowed per parent channel.
    */
   Http2MultiplexedChannelPool(ChannelPool connectionPool, EventLoopGroup eventLoopGroup,
-      Set<MultiplexedChannelRecord> connections, Long idleConnectionTimeout, int minParentConnections,
-      Long maxStreamsPerConnection) {
+      Set<MultiplexedChannelRecord> connections, Long idleConnectionTimeoutMs, int minParentConnections,
+      int maxConcurrentStreamsAllowed) {
     this.parentConnectionPool = connectionPool;
     this.eventLoopGroup = eventLoopGroup;
     this.parentConnections = connections;
-    this.idleConnectionTimeout = idleConnectionTimeout;
+    this.idleConnectionTimeoutMs = idleConnectionTimeoutMs;
     this.minParentConnections = minParentConnections;
-    this.maxStreamsPerConnection = maxStreamsPerConnection;
+    this.maxConcurrentStreamsAllowed = maxConcurrentStreamsAllowed;
   }
 
   @Override
@@ -156,7 +156,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
   private void acquireStreamOnFreshConnection(Promise<Channel> promise, Channel parentChannel) {
     try {
       MultiplexedChannelRecord multiplexedChannel =
-          new MultiplexedChannelRecord(parentChannel, maxStreamsPerConnection, idleConnectionTimeout);
+          new MultiplexedChannelRecord(parentChannel, maxConcurrentStreamsAllowed, idleConnectionTimeoutMs);
       parentChannel.attr(MULTIPLEXED_CHANNEL).set(multiplexedChannel);
 
       Promise<Channel> streamPromise = parentChannel.eventLoop().newPromise();
