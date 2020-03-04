@@ -869,8 +869,7 @@ public class NettyRequestTest {
       HttpContent httpContent = httpContents.get(addedCount);
       bytesToVerify += httpContent.content().readableBytes();
       nettyRequest.addContent(httpContent);
-      int expectedRefCountOnAdd = httpContent.content().nioBufferCount() > 0 ? 2 : 1;
-      assertEquals("Reference count is not as expected", expectedRefCountOnAdd, httpContent.refCnt());
+      assertEquals("Reference count is not as expected", 2, httpContent.refCnt());
     }
     readAndVerify(bytesToVerify, writeChannel, content);
     verifyRefCnts(httpContents);
@@ -1000,8 +999,7 @@ public class NettyRequestTest {
         suspended = bytesToVerify >= NettyRequest.bufferWatermark;
         addedCount++;
         nettyRequest.addContent(httpContent);
-        int expectedRefCountOnAdd = future == null || httpContent.content().nioBufferCount() > 0 ? 2 : 1;
-        assertEquals("Reference count is not as expected", expectedRefCountOnAdd, httpContent.refCnt());
+        assertEquals("Reference count is not as expected", 2, httpContent.refCnt());
       }
     }
 
@@ -1364,6 +1362,7 @@ class ReadIntoCallback implements Callback<Long> {
 class BadAsyncWritableChannel implements AsyncWritableChannel {
   private final Exception exceptionToThrow;
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
+  private Callback<Long> runtimeExceptionCallback = null;
 
   /**
    * Creates an instance of BadAsyncWritableChannel that throws {@code exceptionToThrow} on write.
@@ -1376,6 +1375,7 @@ class BadAsyncWritableChannel implements AsyncWritableChannel {
   @Override
   public Future<Long> write(ByteBuffer src, Callback<Long> callback) {
     if (exceptionToThrow instanceof RuntimeException) {
+      runtimeExceptionCallback = callback;
       throw (RuntimeException) exceptionToThrow;
     } else {
       return markFutureInvokeCallback(callback, 0, exceptionToThrow);
@@ -1390,6 +1390,9 @@ class BadAsyncWritableChannel implements AsyncWritableChannel {
   @Override
   public void close() throws IOException {
     isOpen.set(false);
+    if (runtimeExceptionCallback != null) {
+      runtimeExceptionCallback.onCompletion((long) 0, exceptionToThrow);
+    }
   }
 
   /**
@@ -1421,7 +1424,7 @@ class MockChannel extends EmbeddedChannel {
     /**
      * This is called when {@link Channel#read()} is called. Should contain logic that needs to be executed on read.
      */
-    public void onRead();
+    void onRead();
   }
 
   private final ChannelConfig config = new DefaultChannelConfig(this);

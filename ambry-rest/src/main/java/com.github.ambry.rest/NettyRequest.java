@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.DefaultMaxBytesRecvByteBufAllocator;
 import io.netty.channel.RecvByteBufAllocator;
@@ -420,7 +421,7 @@ class NettyRequest implements RestRequest {
           writeContent(writeChannel, callbackWrapper, httpContent);
           continueReadIfPossible(size);
         } else {
-          requestContents.add(ReferenceCountUtil.retain(httpContent));
+          requestContents.add(httpContent.retain());
           continueReadIfPossible(size);
         }
       } finally {
@@ -453,56 +454,36 @@ class NettyRequest implements RestRequest {
    */
   protected void writeContent(AsyncWritableChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
       HttpContent httpContent) {
-    boolean retained = false;
     ByteBuffer[] contentBuffers;
-    Callback<Long>[] writeCallbacks;
     // LastHttpContent in the end marker in netty http world.
     boolean isLast = httpContent instanceof LastHttpContent;
     if (isLast) {
       setAutoRead(true);
     }
     if (httpContent.content().nioBufferCount() > 0) {
-      // not a copy.
-      httpContent = ReferenceCountUtil.retain(httpContent);
-      retained = true;
       contentBuffers = httpContent.content().nioBuffers();
-      writeCallbacks = new ContentWriteCallback[contentBuffers.length];
-      int i = 0;
-      for (; i < contentBuffers.length - 1; i++) {
-        writeCallbacks[i] = new ContentWriteCallback(null, false, callbackWrapper);
-      }
-      writeCallbacks[i] = new ContentWriteCallback(httpContent, isLast, callbackWrapper);
     } else {
       // this will not happen (looking at current implementations of ByteBuf in Netty), but if it does, we cannot avoid
       // a copy (or we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel if required).
       nettyMetrics.contentCopyCount.inc();
+      ByteBuf content = httpContent.content();
       logger.warn("HttpContent had to be copied because ByteBuf did not have a backing ByteBuffer");
-      ByteBuffer contentBuffer = ByteBuffer.allocate(httpContent.content().readableBytes());
-      httpContent.content().readBytes(contentBuffer);
-      contentBuffer.rewind();
-      // no need to retain httpContent since we have a copy.
-      ContentWriteCallback writeCallback = new ContentWriteCallback(null, isLast, callbackWrapper);
+      ByteBuffer contentBuffer = ByteBuffer.allocate(content.readableBytes());
+      // don't change the readerIndex
+      content.getBytes(content.readerIndex(), contentBuffer);
+      contentBuffer.flip();
       contentBuffers = new ByteBuffer[]{contentBuffer};
-      writeCallbacks = new ContentWriteCallback[]{writeCallback};
     }
-    boolean asyncWritesCalled = false;
-    try {
+    if (digest != null) {
       for (int i = 0; i < contentBuffers.length; i++) {
-        if (digest != null) {
-          long startTime = System.currentTimeMillis();
-          int savedPosition = contentBuffers[i].position();
-          digest.update(contentBuffers[i]);
-          contentBuffers[i].position(savedPosition);
-          digestCalculationTimeInMs += (System.currentTimeMillis() - startTime);
-        }
-        writeChannel.write(contentBuffers[i], writeCallbacks[i]);
-      }
-      asyncWritesCalled = true;
-    } finally {
-      if (retained && !asyncWritesCalled) {
-        ReferenceCountUtil.release(httpContent);
+        long startTime = System.currentTimeMillis();
+        digest.update(contentBuffers[i]);
+        digestCalculationTimeInMs += (System.currentTimeMillis() - startTime);
       }
     }
+    // Retain this httpContent so it won't be garbage collected right away. Release it in the callback.
+    httpContent.retain();
+    writeChannel.write(httpContent.content(), new ContentWriteCallback(httpContent, isLast, callbackWrapper));
     allContentReceived = isLast;
   }
 
@@ -622,7 +603,7 @@ class NettyRequest implements RestRequest {
     @Override
     public void onCompletion(Long result, Exception exception) {
       if (httpContent != null) {
-        ReferenceCountUtil.release(httpContent);
+        httpContent.release();
       }
       callbackWrapper.updateBytesRead(result);
       continueReadIfPossible(-result);

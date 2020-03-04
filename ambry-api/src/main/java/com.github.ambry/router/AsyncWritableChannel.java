@@ -70,7 +70,7 @@ public interface AsyncWritableChannel extends Channel {
       if (result != 0) {
         src.readerIndex(src.readerIndex() + (int) result.longValue());
       }
-      futureResult.done(result.longValue(), exception);
+      futureResult.done(result, exception);
       if (callback != null) {
         callback.onCompletion(result, exception);
       }
