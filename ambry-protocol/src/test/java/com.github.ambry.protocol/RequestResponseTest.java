@@ -37,6 +37,10 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -140,7 +144,7 @@ class InvalidVersionPutRequest extends PutRequest {
   static final short Put_Request_Invalid_version = 0;
 
   public InvalidVersionPutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, ByteBuffer blob, long blobSize, BlobType blobType) {
+      ByteBuffer usermetadata, ByteBuf blob, long blobSize, BlobType blobType) {
     super(correlationId, clientId, blobId, properties, usermetadata, blob, blobSize, blobType, null);
     versionId = Put_Request_Invalid_version;
   }
@@ -209,7 +213,8 @@ public class RequestResponseTest {
     // This PutRequest is created just to get the size.
     int sizeInBytes =
         (int) new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-            ByteBuffer.wrap(blob), blobSize, blobType, blobKey == null ? null : ByteBuffer.wrap(blobKey)).sizeInBytes();
+            Unpooled.wrappedBuffer(blob), blobSize, blobType,
+            blobKey == null ? null : ByteBuffer.wrap(blobKey)).sizeInBytes();
     // Initialize channel write limits in such a way that writeTo() may or may not be able to write out all the
     // data at once.
     int channelWriteLimits[] =
@@ -217,39 +222,57 @@ public class RequestResponseTest {
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
     DataInputStream requestStream;
     for (int allocationSize : channelWriteLimits) {
-      PutRequest request = null;
-      switch (testVersion) {
-        case InvalidVersionPutRequest.Put_Request_Invalid_version:
-          request = new InvalidVersionPutRequest(correlationId, clientId, blobId, blobProperties,
-              ByteBuffer.wrap(userMetadata), ByteBuffer.wrap(blob), sizeInBlobProperties, BlobType.DataBlob);
-          requestStream = serAndPrepForRead(request, -1, true);
-          try {
-            PutRequest.readFrom(requestStream, clusterMap);
-            Assert.fail("Deserialization of PutRequest with invalid version should have thrown an exception.");
-          } catch (IllegalStateException e) {
-          }
-          break;
-        default:
-          if (request == null) {
-            request = new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-                ByteBuffer.wrap(blob), blobSize, blobType, blobKey == null ? null : ByteBuffer.wrap(blobKey));
-          }
-          requestStream = serAndPrepForRead(request, allocationSize, true);
-          PutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
-          Assert.assertEquals(blobId, deserializedPutRequest.getBlobId());
-          Assert.assertEquals(sizeInBlobProperties, deserializedPutRequest.getBlobProperties().getBlobSize());
-          Assert.assertArrayEquals(userMetadata, deserializedPutRequest.getUsermetadata().array());
-          Assert.assertEquals(blobSize, deserializedPutRequest.getBlobSize());
-          Assert.assertEquals(blobType, deserializedPutRequest.getBlobType());
-          if (expectedKey == null) {
-            Assert.assertNull(deserializedPutRequest.getBlobEncryptionKey());
-          } else {
-            Assert.assertArrayEquals(expectedKey, deserializedPutRequest.getBlobEncryptionKey().array());
-          }
-          byte[] blobRead = new byte[blobSize];
-          deserializedPutRequest.getBlobStream().read(blobRead);
-          Assert.assertArrayEquals(blob, blobRead);
-          break;
+      for (boolean useCompositeBlob : new boolean[]{true, false}) {
+        PutRequest request = null;
+        switch (testVersion) {
+          case InvalidVersionPutRequest.Put_Request_Invalid_version:
+            request = new InvalidVersionPutRequest(correlationId, clientId, blobId, blobProperties,
+                ByteBuffer.wrap(userMetadata), Unpooled.wrappedBuffer(blob), sizeInBlobProperties, BlobType.DataBlob);
+            requestStream = serAndPrepForRead(request, -1, true);
+            try {
+              PutRequest.readFrom(requestStream, clusterMap);
+              Assert.fail("Deserialization of PutRequest with invalid version should have thrown an exception.");
+            } catch (IllegalStateException e) {
+            }
+            break;
+          default:
+            if (request == null) {
+              ByteBuf blobBuf = Unpooled.wrappedBuffer(blob);
+              if (useCompositeBlob) {
+                // break this into three ByteBuf and make a composite blob;
+                int start = 0, end = blob.length / 3;
+                ByteBuf blob1 = PooledByteBufAllocator.DEFAULT.heapBuffer(end - start);
+                blob1.writeBytes(blob, start, end - start);
+                start = end;
+                end += blob.length / 3;
+                ByteBuf blob2 = PooledByteBufAllocator.DEFAULT.heapBuffer(end - start);
+                blob2.writeBytes(blob, start, end - start);
+                start = end;
+                end = blob.length;
+                ByteBuf blob3 = PooledByteBufAllocator.DEFAULT.heapBuffer(end - start);
+                blob3.writeBytes(blob, start, end - start);
+                blobBuf = new CompositeByteBuf(PooledByteBufAllocator.DEFAULT, false, 3, blob1, blob2, blob3);
+              }
+              request = new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
+                  blobBuf, blobSize, blobType, blobKey == null ? null : ByteBuffer.wrap(blobKey));
+            }
+            requestStream = serAndPrepForRead(request, allocationSize, true);
+            PutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
+            Assert.assertEquals(blobId, deserializedPutRequest.getBlobId());
+            Assert.assertEquals(sizeInBlobProperties, deserializedPutRequest.getBlobProperties().getBlobSize());
+            Assert.assertArrayEquals(userMetadata, deserializedPutRequest.getUsermetadata().array());
+            Assert.assertEquals(blobSize, deserializedPutRequest.getBlobSize());
+            Assert.assertEquals(blobType, deserializedPutRequest.getBlobType());
+            if (expectedKey == null) {
+              Assert.assertNull(deserializedPutRequest.getBlobEncryptionKey());
+            } else {
+              Assert.assertArrayEquals(expectedKey, deserializedPutRequest.getBlobEncryptionKey().array());
+            }
+            byte[] blobRead = new byte[blobSize];
+            deserializedPutRequest.getBlobStream().read(blobRead);
+            Assert.assertArrayEquals(blob, blobRead);
+            break;
+        }
       }
     }
   }

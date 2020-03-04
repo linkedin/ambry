@@ -39,6 +39,7 @@ import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileWriter;
@@ -352,7 +353,7 @@ public class ServerWritePerformance {
             BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
                 props.getAccountId(), props.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
             PutRequest putRequest =
-                new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(blob),
+                new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(blob),
                     props.getBlobSize(), BlobType.DataBlob, null);
             ReplicaId replicaId = partitionId.getReplicaIds().get(0);
             Port port = replicaId.getDataNodeId().getPortToConnectTo();

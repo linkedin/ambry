@@ -98,6 +98,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -177,7 +178,7 @@ final class ServerTestUtil {
           BlobId.BlobDataType.DATACHUNK);
       // put blob 1
       PutRequest putRequest =
-          new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+          new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       ConnectedChannel channel =
           getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory, clientSSLConfig);
@@ -194,7 +195,7 @@ final class ServerTestUtil {
       long ttlUpdateBlobExpiryTimeMs = getExpiryTimeMs(propertiesForTtlUpdate);
       PutRequest putRequest2 =
           new PutRequest(1, "client1", blobId2, propertiesForTtlUpdate, ByteBuffer.wrap(usermetadata),
-              ByteBuffer.wrap(data), properties.getBlobSize(), BlobType.DataBlob,
+              Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
               testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest2);
       putResponseStream = channel.receive().getInputStream();
@@ -203,7 +204,7 @@ final class ServerTestUtil {
 
       // put blob 3
       PutRequest putRequest3 =
-          new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+          new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest3);
       putResponseStream = channel.receive().getInputStream();
@@ -214,9 +215,9 @@ final class ServerTestUtil {
       BlobProperties propertiesExpired =
           new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId, testEncryption,
               null);
-      PutRequest putRequest4 =
-          new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      PutRequest putRequest4 = new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(usermetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest4);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response4 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -425,7 +426,7 @@ final class ServerTestUtil {
 
       // put a blob on a stopped store, which should fail
       putRequest =
-          new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+          new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest);
       putResponseStream = channel.receive().getInputStream();
@@ -473,7 +474,7 @@ final class ServerTestUtil {
 
       // put a blob on a restarted store , which should succeed
       PutRequest putRequest5 =
-          new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+          new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest5);
       putResponseStream = channel.receive().getInputStream();
@@ -575,13 +576,13 @@ final class ServerTestUtil {
       ConnectedChannel channelToDatanode3, ServerErrorCode expectedErrorCode) throws IOException {
     // Send put requests for an existing blobId for the exact blob to simulate a request arriving late.
     PutRequest latePutRequest1 =
-        new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+        new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
             properties.getBlobSize(), BlobType.DataBlob, encryptionKey != null ? ByteBuffer.wrap(encryptionKey) : null);
     PutRequest latePutRequest2 =
-        new PutRequest(1, "client2", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+        new PutRequest(1, "client2", blobId, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
             properties.getBlobSize(), BlobType.DataBlob, encryptionKey != null ? ByteBuffer.wrap(encryptionKey) : null);
     PutRequest latePutRequest3 =
-        new PutRequest(1, "client3", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+        new PutRequest(1, "client3", blobId, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
             properties.getBlobSize(), BlobType.DataBlob, encryptionKey != null ? ByteBuffer.wrap(encryptionKey) : null);
     channelToDatanode1.send(latePutRequest1);
     InputStream putResponseStream = channelToDatanode1.receive().getInputStream();
@@ -1373,7 +1374,7 @@ final class ServerTestUtil {
     BlobId blobId2 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         clusterMap.getLocalDatacenterId(), accountId, containerId, partitionId, false, BlobId.BlobDataType.DATACHUNK);
     PutRequest putRequest2 =
-        new PutRequest(1, "clientId2", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+        new PutRequest(1, "clientId2", blobId2, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
             properties.getBlobSize(), BlobType.DataBlob, null);
     channel.send(putRequest2);
     InputStream putResponseStream = channel.receive().getInputStream();
@@ -1420,7 +1421,7 @@ final class ServerTestUtil {
 
     // put a blob on a restarted store , which should succeed
     putRequest2 =
-        new PutRequest(1, "clientId2", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+        new PutRequest(1, "clientId2", blobId2, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
             properties.getBlobSize(), BlobType.DataBlob, null);
     channel.send(putRequest2);
     putResponseStream = channel.receive().getInputStream();
@@ -1493,7 +1494,7 @@ final class ServerTestUtil {
       // put blob 1
       PutRequest putRequest =
           new PutRequest(1, "client1", blobIdList.get(0), propertyList.get(0), ByteBuffer.wrap(usermetadata),
-              ByteBuffer.wrap(dataList.get(0)), propertyList.get(0).getBlobSize(), BlobType.DataBlob,
+              Unpooled.wrappedBuffer(dataList.get(0)), propertyList.get(0).getBlobSize(), BlobType.DataBlob,
               encryptionKeyList.get(0) != null ? ByteBuffer.wrap(encryptionKeyList.get(0)) : null);
       expectedTokenSize += getPutRecordSize(propertyList.get(0), blobIdList.get(0),
           encryptionKeyList.get(0) != null ? ByteBuffer.wrap(encryptionKeyList.get(0)) : null,
@@ -1516,7 +1517,7 @@ final class ServerTestUtil {
       // put blob 2
       PutRequest putRequest2 =
           new PutRequest(1, "client1", blobIdList.get(1), propertyList.get(1), ByteBuffer.wrap(usermetadata),
-              ByteBuffer.wrap(dataList.get(1)), propertyList.get(1).getBlobSize(), BlobType.DataBlob,
+              Unpooled.wrappedBuffer(dataList.get(1)), propertyList.get(1).getBlobSize(), BlobType.DataBlob,
               encryptionKeyList.get(1) != null ? ByteBuffer.wrap(encryptionKeyList.get(1)) : null);
       expectedTokenSize += getPutRecordSize(propertyList.get(1), blobIdList.get(1),
           encryptionKeyList.get(1) != null ? ByteBuffer.wrap(encryptionKeyList.get(1)) : null,
@@ -1528,7 +1529,7 @@ final class ServerTestUtil {
       // put blob 3
       PutRequest putRequest3 =
           new PutRequest(1, "client1", blobIdList.get(2), propertyList.get(2), ByteBuffer.wrap(usermetadata),
-              ByteBuffer.wrap(dataList.get(2)), propertyList.get(2).getBlobSize(), BlobType.DataBlob,
+              Unpooled.wrappedBuffer(dataList.get(2)), propertyList.get(2).getBlobSize(), BlobType.DataBlob,
               encryptionKeyList.get(2) != null ? ByteBuffer.wrap(encryptionKeyList.get(2)) : null);
       expectedTokenSize += getPutRecordSize(propertyList.get(2), blobIdList.get(2),
           encryptionKeyList.get(2) != null ? ByteBuffer.wrap(encryptionKeyList.get(2)) : null,
@@ -1540,7 +1541,7 @@ final class ServerTestUtil {
 
       // put blob 4
       putRequest = new PutRequest(1, "client1", blobIdList.get(3), propertyList.get(3), ByteBuffer.wrap(usermetadata),
-          ByteBuffer.wrap(dataList.get(3)), propertyList.get(3).getBlobSize(), BlobType.DataBlob,
+          Unpooled.wrappedBuffer(dataList.get(3)), propertyList.get(3).getBlobSize(), BlobType.DataBlob,
           encryptionKeyList.get(3) != null ? ByteBuffer.wrap(encryptionKeyList.get(3)) : null);
       expectedTokenSize += getPutRecordSize(propertyList.get(3), blobIdList.get(3),
           encryptionKeyList.get(3) != null ? ByteBuffer.wrap(encryptionKeyList.get(3)) : null,
@@ -1552,7 +1553,7 @@ final class ServerTestUtil {
 
       // put blob 5
       putRequest2 = new PutRequest(1, "client1", blobIdList.get(4), propertyList.get(4), ByteBuffer.wrap(usermetadata),
-          ByteBuffer.wrap(dataList.get(4)), propertyList.get(4).getBlobSize(), BlobType.DataBlob,
+          Unpooled.wrappedBuffer(dataList.get(4)), propertyList.get(4).getBlobSize(), BlobType.DataBlob,
           encryptionKeyList.get(4) != null ? ByteBuffer.wrap(encryptionKeyList.get(4)) : null);
       expectedTokenSize += getPutRecordSize(propertyList.get(4), blobIdList.get(4),
           encryptionKeyList.get(4) != null ? ByteBuffer.wrap(encryptionKeyList.get(4)) : null,
@@ -1564,7 +1565,7 @@ final class ServerTestUtil {
 
       // put blob 6
       putRequest3 = new PutRequest(1, "client1", blobIdList.get(5), propertyList.get(5), ByteBuffer.wrap(usermetadata),
-          ByteBuffer.wrap(dataList.get(5)), propertyList.get(5).getBlobSize(), BlobType.DataBlob,
+          Unpooled.wrappedBuffer(dataList.get(5)), propertyList.get(5).getBlobSize(), BlobType.DataBlob,
           encryptionKeyList.get(5) != null ? ByteBuffer.wrap(encryptionKeyList.get(5)) : null);
       expectedTokenSize += getPutRecordSize(propertyList.get(5), blobIdList.get(5),
           encryptionKeyList.get(5) != null ? ByteBuffer.wrap(encryptionKeyList.get(5)) : null,
@@ -1757,7 +1758,7 @@ final class ServerTestUtil {
       // Add more data to server 2 and server 3. Recover server 1 and ensure it is completely replicated
       // put blob 7
       putRequest2 = new PutRequest(1, "client1", blobIdList.get(6), propertyList.get(6), ByteBuffer.wrap(usermetadata),
-          ByteBuffer.wrap(dataList.get(6)), propertyList.get(6).getBlobSize(), BlobType.DataBlob,
+          Unpooled.wrappedBuffer(dataList.get(6)), propertyList.get(6).getBlobSize(), BlobType.DataBlob,
           encryptionKeyList.get(6) != null ? ByteBuffer.wrap(encryptionKeyList.get(6)) : null);
       expectedTokenSize += getPutRecordSize(propertyList.get(6), blobIdList.get(6),
           encryptionKeyList.get(6) != null ? ByteBuffer.wrap(encryptionKeyList.get(6)) : null,
@@ -1769,7 +1770,7 @@ final class ServerTestUtil {
 
       // put blob 8
       putRequest3 = new PutRequest(1, "client1", blobIdList.get(7), propertyList.get(7), ByteBuffer.wrap(usermetadata),
-          ByteBuffer.wrap(dataList.get(7)), propertyList.get(7).getBlobSize(), BlobType.DataBlob,
+          Unpooled.wrappedBuffer(dataList.get(7)), propertyList.get(7).getBlobSize(), BlobType.DataBlob,
           encryptionKeyList.get(7) != null ? ByteBuffer.wrap(encryptionKeyList.get(7)) : null);
       expectedTokenSize += getPutRecordSize(propertyList.get(7), blobIdList.get(7),
           encryptionKeyList.get(7) != null ? ByteBuffer.wrap(encryptionKeyList.get(7)) : null,
@@ -1781,7 +1782,7 @@ final class ServerTestUtil {
 
       // put blob 9
       putRequest2 = new PutRequest(1, "client1", blobIdList.get(8), propertyList.get(8), ByteBuffer.wrap(usermetadata),
-          ByteBuffer.wrap(dataList.get(8)), propertyList.get(8).getBlobSize(), BlobType.DataBlob,
+          Unpooled.wrappedBuffer(dataList.get(8)), propertyList.get(8).getBlobSize(), BlobType.DataBlob,
           encryptionKeyList.get(8) != null ? ByteBuffer.wrap(encryptionKeyList.get(8)) : null);
       expectedTokenSize += getPutRecordSize(propertyList.get(8), blobIdList.get(8),
           encryptionKeyList.get(8) != null ? ByteBuffer.wrap(encryptionKeyList.get(8)) : null,
@@ -1793,7 +1794,7 @@ final class ServerTestUtil {
 
       // put blob 10
       putRequest3 = new PutRequest(1, "client1", blobIdList.get(9), propertyList.get(9), ByteBuffer.wrap(usermetadata),
-          ByteBuffer.wrap(dataList.get(9)), propertyList.get(9).getBlobSize(), BlobType.DataBlob,
+          Unpooled.wrappedBuffer(dataList.get(9)), propertyList.get(9).getBlobSize(), BlobType.DataBlob,
           encryptionKeyList.get(9) != null ? ByteBuffer.wrap(encryptionKeyList.get(9)) : null);
       expectedTokenSize += getPutRecordSize(propertyList.get(9), blobIdList.get(9),
           encryptionKeyList.get(9) != null ? ByteBuffer.wrap(encryptionKeyList.get(9)) : null,
@@ -1806,7 +1807,7 @@ final class ServerTestUtil {
       // put blob 11
       putRequest2 =
           new PutRequest(1, "client1", blobIdList.get(10), propertyList.get(10), ByteBuffer.wrap(usermetadata),
-              ByteBuffer.wrap(dataList.get(10)), propertyList.get(10).getBlobSize(), BlobType.DataBlob,
+              Unpooled.wrappedBuffer(dataList.get(10)), propertyList.get(10).getBlobSize(), BlobType.DataBlob,
               encryptionKeyList.get(10) != null ? ByteBuffer.wrap(encryptionKeyList.get(10)) : null);
       expectedTokenSize += getPutRecordSize(propertyList.get(10), blobIdList.get(10),
           encryptionKeyList.get(10) != null ? ByteBuffer.wrap(encryptionKeyList.get(10)) : null,

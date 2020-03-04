@@ -51,6 +51,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -363,7 +364,7 @@ public class ServerHardDeleteTest {
   void putBlob(BlobId blobId, BlobProperties properties, byte[] encryptionKey, byte[] usermetadata, byte[] data,
       ConnectedChannel channel) throws IOException {
     PutRequest putRequest0 =
-        new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+        new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
             properties.getBlobSize(), BlobType.DataBlob, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey));
     channel.send(putRequest0);
     InputStream putResponseStream = channel.receive().getInputStream();

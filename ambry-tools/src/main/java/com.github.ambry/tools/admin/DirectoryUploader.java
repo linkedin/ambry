@@ -40,6 +40,7 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -235,7 +236,7 @@ public class DirectoryUploader {
       ByteBufferInputStream blobStream = new ByteBufferInputStream(stream, size);
       PutRequest putRequest =
           new PutRequest(correlationId.incrementAndGet(), "consumerThread", blobId, blobProperties, userMetaData,
-              blobStream.getByteBuffer(), size, BlobType.DataBlob, null);
+              Unpooled.wrappedBuffer(blobStream.getByteBuffer()), size, BlobType.DataBlob, null);
 
       if (enableVerboseLogging) {
         System.out.println("Put Request to a replica : " + putRequest + " for blobId " + blobId);

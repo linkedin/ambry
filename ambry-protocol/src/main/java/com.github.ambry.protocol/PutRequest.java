@@ -22,6 +22,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,7 +43,8 @@ public class PutRequest extends RequestOrResponse {
   protected final ByteBuffer blobEncryptionKey;
 
   // Used to carry blob content in ambry-frontend when creating this PutRequest.
-  protected final ByteBuffer blob;
+  protected ByteBuf blob;
+  protected ByteBuffer[] nioBuffersFromBlob;
   // crc will cover all the fields associated with the blob, namely:
   // blob type
   // BlobId
@@ -55,6 +57,7 @@ public class PutRequest extends RequestOrResponse {
   private final ByteBuffer crcBuf;
   private boolean okayToWriteCrc = false;
   private int sizeExcludingBlobAndCrc = -1;
+  private int bufferIndex = 0;
 
   // Used to carry blob content in ambry-server when receiving this PutRequest.
   protected final InputStream blobStream;
@@ -84,7 +87,7 @@ public class PutRequest extends RequestOrResponse {
    * @param blobEncryptionKey the encryption key for the blob.
    */
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, ByteBuffer materializedBlob, long blobSize, BlobType blobType,
+      ByteBuffer usermetadata, ByteBuf materializedBlob, long blobSize, BlobType blobType,
       ByteBuffer blobEncryptionKey) {
     super(RequestOrResponseType.PutRequest, currentVersion, correlationId, clientId);
     this.blobId = blobId;
@@ -115,7 +118,7 @@ public class PutRequest extends RequestOrResponse {
    */
   private PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties blobProperties,
       ByteBuffer userMetadata, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey, InputStream blobStream,
-      Long crc) throws IOException {
+      Long crc) {
     super(RequestOrResponseType.PutRequest, currentVersion, correlationId, clientId);
     this.blobId = blobId;
     this.properties = blobProperties;
@@ -168,51 +171,84 @@ public class PutRequest extends RequestOrResponse {
     return sizeExcludingBlobAndCrc;
   }
 
+  /**
+   * Construct the bufferToSend to serialize request metadata and other blob related information. The newly constructed
+   * bufferToSend will not include the blob content as it's carried by the {@code blob} field in this class.
+   */
+  private void prepareBuffer() {
+    bufferToSend = ByteBuffer.allocate(sizeExcludingBlobAndCrcSize());
+    writeHeader();
+    int crcStart = bufferToSend.position();
+    bufferToSend.put(blobId.toBytes());
+    BlobPropertiesSerDe.serializeBlobProperties(bufferToSend, properties);
+    bufferToSend.putInt(usermetadata.capacity());
+    bufferToSend.put(usermetadata);
+    bufferToSend.putShort((short) blobType.ordinal());
+    short keyLength = blobEncryptionKey == null ? 0 : (short) blobEncryptionKey.remaining();
+    bufferToSend.putShort(keyLength);
+    if (keyLength > 0) {
+      bufferToSend.put(blobEncryptionKey);
+    }
+    bufferToSend.putLong(blobSize);
+    crc.update(bufferToSend.array(), bufferToSend.arrayOffset() + crcStart, bufferToSend.position() - crcStart);
+    nioBuffersFromBlob = blob.nioBuffers();
+    for (ByteBuffer bb : nioBuffersFromBlob) {
+      crc.update(bb);
+      // change it back to 0 since we are going to write it to the channel later.
+      bb.position(0);
+    }
+    crcBuf.putLong(crc.getValue());
+    crcBuf.flip();
+    bufferToSend.flip();
+  }
+
   @Override
   public long writeTo(WritableByteChannel channel) throws IOException {
     long written = 0;
-    if (sentBytes < sizeInBytes()) {
-      if (bufferToSend == null) {
-        // this is the first time this method was called, prepare the buffer to send the header and other metadata
-        // (everything except the blob content).
-        bufferToSend = ByteBuffer.allocate(sizeExcludingBlobAndCrcSize());
-        writeHeader();
-        int crcStart = bufferToSend.position();
-        bufferToSend.put(blobId.toBytes());
-        BlobPropertiesSerDe.serializeBlobProperties(bufferToSend, properties);
-        bufferToSend.putInt(usermetadata.capacity());
-        bufferToSend.put(usermetadata);
-        bufferToSend.putShort((short) blobType.ordinal());
-        short keyLength = blobEncryptionKey == null ? 0 : (short) blobEncryptionKey.remaining();
-        bufferToSend.putShort(keyLength);
-        if (keyLength > 0) {
-          bufferToSend.put(blobEncryptionKey);
+    try {
+      if (sentBytes < sizeInBytes()) {
+        if (bufferToSend == null) {
+          // this is the first time this method was called, prepare the buffer to send the header and other metadata
+          // (everything except the blob content).
+          prepareBuffer();
         }
-        bufferToSend.putLong(blobSize);
-        crc.update(bufferToSend.array(), bufferToSend.arrayOffset() + crcStart, bufferToSend.position() - crcStart);
-        crc.update(blob.array(), blob.arrayOffset(), blob.remaining());
-        crcBuf.putLong(crc.getValue());
-        crcBuf.flip();
-        bufferToSend.flip();
-      }
+        // If the header and metadata are not yet written out completely, try and write out as much of it now.
+        if (bufferToSend.hasRemaining()) {
+          written = channel.write(bufferToSend);
+        }
 
-      // If the header and metadata are not yet written out completely, try and write out as much of it now.
-      if (bufferToSend.hasRemaining()) {
-        written = channel.write(bufferToSend);
-      }
+        // If the header and metadata were written out completely (in this call or a previous call),
+        // try and write out as much of the blob now.
+        if (!bufferToSend.hasRemaining() && blob != null) {
+          int totalWrittenBytesForBlob = 0, currentWritten = -1;
+          while (bufferIndex < nioBuffersFromBlob.length && currentWritten != 0) {
+            ByteBuffer byteBuffer = nioBuffersFromBlob[bufferIndex];
+            currentWritten = channel.write(byteBuffer);
+            totalWrittenBytesForBlob += currentWritten;
+            if (!byteBuffer.hasRemaining()) {
+              bufferIndex++;
+            }
+          }
+          blob.skipBytes(totalWrittenBytesForBlob);
+          written += totalWrittenBytesForBlob;
+          okayToWriteCrc = !blob.isReadable();
+        }
 
-      // If the header and metadata were written out completely (in this call or a previous call),
-      // try and write out as much of the blob now.
-      if (!bufferToSend.hasRemaining()) {
-        written += channel.write(blob);
-        okayToWriteCrc = !blob.hasRemaining();
-      }
+        if (okayToWriteCrc && crcBuf.hasRemaining()) {
+          if (blob != null) {
+            blob.release();
+            blob = null;
+          }
+          written += channel.write(crcBuf);
+        }
 
-      if (okayToWriteCrc && crcBuf.hasRemaining()) {
-        written += channel.write(crcBuf);
+        sentBytes += written;
       }
-
-      sentBytes += written;
+    } catch (Exception e) {
+      if (blob != null) {
+        blob.release();
+        blob = null;
+      }
     }
     return written;
   }
