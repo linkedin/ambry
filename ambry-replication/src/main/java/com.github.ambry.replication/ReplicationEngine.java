@@ -256,8 +256,10 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       // For CloudBackUpManager with HelixVcrCluster, Helix requires acknowledgement before next message for the same
       // resource, which means methods in HelixVcrStateModel will be executed sequentially for same partition.
       // So do listener actions in addPartition() and removePartition().
-      remoteReplicaInfo.getReplicaThread().removeRemoteReplicaInfo(remoteReplicaInfo);
-      remoteReplicaInfo.setReplicaThread(null);
+      if (remoteReplicaInfo.getReplicaThread() != null) {
+        remoteReplicaInfo.getReplicaThread().removeRemoteReplicaInfo(remoteReplicaInfo);
+        remoteReplicaInfo.setReplicaThread(null);
+      }
     }
   }
 

@@ -62,11 +62,10 @@ public class CloudReplica implements ReplicaId {
 
   @Override
   public List<ReplicaId> getPeerReplicaIds() {
-    List<ReplicaId> replicasOfPartition = partitionId.getReplicaIds()
+    return partitionId.getReplicaIds()
         .stream()
         .filter(replica -> replica.getDataNodeId().compareTo(dataNodeId) != 0)
         .collect(Collectors.toList());
-    return replicasOfPartition;
   }
 
   @Override
