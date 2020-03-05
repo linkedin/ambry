@@ -17,6 +17,7 @@ import com.azure.core.http.rest.Response;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatch;
 import com.azure.storage.blob.batch.BlobBatchClient;
+import com.azure.storage.blob.models.BlobDownloadResponse;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.specialized.BlockBlobClient;
@@ -273,7 +274,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testDownloadNotFound() throws Exception {
     BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
-    doThrow(ex).when(mockBlockBlobClient).download(any());
+    doThrow(ex).when(mockBlockBlobClient).downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
     expectCloudStorageException(() -> downloadBlob(blobId), BlobStorageException.class);
     verifyDownloadErrorMetrics();
   }
@@ -282,7 +283,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testDownloadBlobException() throws Exception {
     BlobStorageException ex = mockStorageException(BlobErrorCode.INTERNAL_ERROR);
-    doThrow(ex).when(mockBlockBlobClient).download(any());
+    doThrow(ex).when(mockBlockBlobClient).downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
     expectCloudStorageException(() -> downloadBlob(blobId), BlobStorageException.class);
     verifyDownloadErrorMetrics();
   }
@@ -624,11 +625,14 @@ public class AzureCloudDestinationTest {
   private void mockBlobExistence(boolean exists) {
     when(mockBlockBlobClient.exists()).thenReturn(exists);
     if (exists) {
-      doNothing().when(mockBlockBlobClient).download(any());
+      BlobDownloadResponse mockResponse = mock(BlobDownloadResponse.class);
+      doReturn(mockResponse).when(mockBlockBlobClient)
+          .downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
     } else {
       BlobStorageException ex = mock(BlobStorageException.class);
       when(ex.getErrorCode()).thenReturn(BlobErrorCode.BLOB_NOT_FOUND);
-      doThrow(ex).when(mockBlockBlobClient).download(any());
+      doThrow(ex).when(mockBlockBlobClient)
+          .downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
     }
   }
 

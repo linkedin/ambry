@@ -84,11 +84,13 @@ public class AzureBlobDataAccessorTest {
     BlobClient mockBlobClient = mock(BlobClient.class);
     BlockBlobClient mockBlockBlobClient = mock(BlockBlobClient.class);
     BlobProperties mockBlobProperties = mock(BlobProperties.class);
+    Response<BlobProperties> mockPropertiesResponse = mock(Response.class);
+    when(mockPropertiesResponse.getValue()).thenReturn(mockBlobProperties);
     when(mockServiceClient.getBlobContainerClient(anyString())).thenReturn(mockContainerClient);
     when(mockContainerClient.getBlobClient(anyString())).thenReturn(mockBlobClient);
     when(mockContainerClient.exists()).thenReturn(false);
     when(mockBlobClient.getBlockBlobClient()).thenReturn(mockBlockBlobClient);
-    when(mockBlockBlobClient.getProperties()).thenReturn(mockBlobProperties);
+    when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenReturn(mockPropertiesResponse);
     Map<String, String> metadataMap = new HashMap<>();
     when(mockBlobProperties.getMetadata()).thenReturn(metadataMap);
     return mockBlockBlobClient;
@@ -208,7 +210,8 @@ public class AzureBlobDataAccessorTest {
    */
   @Test
   public void testDownloadNotExists() throws Exception {
-    doThrow(BlobStorageException.class).when(mockBlockBlobClient).download(any());
+    doThrow(BlobStorageException.class).when(mockBlockBlobClient)
+        .downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
     expectBlobStorageException(() -> downloadBlob(blobId));
   }
 

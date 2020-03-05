@@ -38,6 +38,9 @@ public class CloudConfig {
   public static final String CLOUD_MAX_ATTEMPTS = "cloud.max.attempts";
   public static final String CLOUD_DEFAULT_RETRY_DELAY = "cloud.default.retry.delay";
   public static final String CLOUD_REQUEST_TIMEOUT = "cloud.request.timeout";
+  public static final String CLOUD_UPLOAD_REQUEST_TIMEOUT = "cloud.upload.request.timeout";
+  public static final String CLOUD_QUERY_REQUEST_TIMEOUT = "cloud.query.request.timeout";
+  public static final String CLOUD_BATCH_REQUEST_TIMEOUT = "cloud.batch.request.timeout";
   public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
   public static final String VCR_PROXY_HOST = "vcr.proxy.host";
   public static final String VCR_PROXY_PORT = "vcr.proxy.port";
@@ -59,8 +62,11 @@ public class CloudConfig {
   public static final int DEFAULT_COMPACTION_QUERY_LIMIT = 1000;
   public static final int DEFAULT_RECENT_BLOB_CACHE_LIMIT = 10000;
   public static final int DEFAULT_MAX_ATTEMPTS = 3;
-  public static final long DEFAULT_RETRY_DELAY_VALUE = 50;
-  public static final long DEFAULT_CLOUD_REQUEST_TIMEOUT = 500;
+  public static final int DEFAULT_RETRY_DELAY_VALUE = 50;
+  public static final int DEFAULT_CLOUD_REQUEST_TIMEOUT = 500;
+  public static final int DEFAULT_UPLOAD_TIMEOUT = 5000;
+  public static final int DEFAULT_QUERY_TIMEOUT = 60000;
+  public static final int DEFAULT_BATCH_TIMEOUT = 60000;
   public static final int DEFAULT_VCR_PROXY_PORT = 3128;
   public static final String DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS =
       "com.github.ambry.clustermap.HelixClusterSpectatorFactory";
@@ -223,10 +229,31 @@ public class CloudConfig {
    * The default delay in ms between retries of cloud operations.
    */
   @Config(CLOUD_DEFAULT_RETRY_DELAY)
-  public final long cloudDefaultRetryDelay;
+  public final int cloudDefaultRetryDelay;
 
+  /**
+   * The request timeout in msec for single-blob cloud operations.
+   */
   @Config(CLOUD_REQUEST_TIMEOUT)
-  public final long cloudRequestTimeout;
+  public final int cloudRequestTimeout;
+
+  /**
+   * The request timeout in msec for single-blob cloud uploads.
+   */
+  @Config(CLOUD_UPLOAD_REQUEST_TIMEOUT)
+  public final int cloudUploadRequestTimeout;
+
+  /**
+   * The request timeout in msec for metadata queries.
+   */
+  @Config(CLOUD_QUERY_REQUEST_TIMEOUT)
+  public final int cloudQueryRequestTimeout;
+
+  /**
+   * The request timeout in msec for cloud batch operations.
+   */
+  @Config (CLOUD_BATCH_REQUEST_TIMEOUT)
+  public final int cloudBatchRequestTimeout;
 
   /**
    * The class used to instantiate {@link com.github.ambry.clustermap.ClusterSpectatorFactory}
@@ -264,8 +291,11 @@ public class CloudConfig {
         verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_QUERY_LIMIT, DEFAULT_COMPACTION_QUERY_LIMIT);
     recentBlobCacheLimit = verifiableProperties.getInt(CLOUD_RECENT_BLOB_CACHE_LIMIT, DEFAULT_RECENT_BLOB_CACHE_LIMIT);
     cloudMaxAttempts = verifiableProperties.getInt(CLOUD_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS);
-    cloudDefaultRetryDelay = verifiableProperties.getLong(CLOUD_DEFAULT_RETRY_DELAY, DEFAULT_RETRY_DELAY_VALUE);
-    cloudRequestTimeout = verifiableProperties.getLong(CLOUD_REQUEST_TIMEOUT, DEFAULT_CLOUD_REQUEST_TIMEOUT);
+    cloudDefaultRetryDelay = verifiableProperties.getInt(CLOUD_DEFAULT_RETRY_DELAY, DEFAULT_RETRY_DELAY_VALUE);
+    cloudRequestTimeout = verifiableProperties.getInt(CLOUD_REQUEST_TIMEOUT, DEFAULT_CLOUD_REQUEST_TIMEOUT);
+    cloudUploadRequestTimeout = verifiableProperties.getInt(CLOUD_UPLOAD_REQUEST_TIMEOUT, DEFAULT_UPLOAD_TIMEOUT);
+    cloudQueryRequestTimeout = verifiableProperties.getInt(CLOUD_QUERY_REQUEST_TIMEOUT, DEFAULT_QUERY_TIMEOUT);
+    cloudBatchRequestTimeout = verifiableProperties.getInt(CLOUD_REQUEST_TIMEOUT, DEFAULT_BATCH_TIMEOUT);
     // Proxy settings
     vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);
     vcrProxyPort = verifiableProperties.getInt(VCR_PROXY_PORT, DEFAULT_VCR_PROXY_PORT);
