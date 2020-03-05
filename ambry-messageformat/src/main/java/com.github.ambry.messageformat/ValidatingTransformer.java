@@ -73,9 +73,9 @@ public class ValidatingTransformer implements Transformer {
         throw new IllegalStateException("Message cannot be a deleted record ");
       }
       if (msgInfo.getStoreKey().equals(keyInStream)) {
-        // ValidatingTransformer only exists on ambry-server and we don't enable netty on ambry server yet. So And blobData.getAndRelease
-        // will return an Unpooled ByteBuf, it's not not to release it.
-        // @todo, when enabling netty in ambry-server, release this ByteBuf.
+        // BlobIDTransformer only exists on ambry-server and replication between servers is relying on blocking channel
+        // which is still using java ByteBuffer. So, no need to consider releasing stuff.
+        // @todo, when netty Bytebuf is adopted for blocking channel on ambry-server, remember to release this ByteBuf.
         PutMessageFormatInputStream transformedStream =
             new PutMessageFormatInputStream(keyInStream, encryptionKey, props, metadata,
                 new ByteBufInputStream(blobData.content(), true), blobData.getSize(), blobData.getBlobType());

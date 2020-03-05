@@ -29,10 +29,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
+import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONException;
@@ -184,7 +186,7 @@ public class HelixBootstrapUpgradeToolTest {
     // bootstrap a cluster
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.OLD_STATE_MODEL_DEF);
+        ClusterMapConfig.OLD_STATE_MODEL_DEF, false);
     // add new state model def
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
@@ -225,7 +227,7 @@ public class HelixBootstrapUpgradeToolTest {
       try {
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
-            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, false);
         fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
       } catch (IllegalArgumentException e) {
         // OK
@@ -248,7 +250,7 @@ public class HelixBootstrapUpgradeToolTest {
     dataNode = new DataNode(dataNode.getDatacenter(), jsonObject, clusterMapConfig);
     InstanceConfig referenceInstanceConfig =
         HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
-            Collections.emptyMap(), null);
+            new ConcurrentHashMap<>(), null);
     // Assert that xid field does not get set in InstanceConfig when it is the default.
     assertNull(referenceInstanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR));
 
@@ -257,7 +259,7 @@ public class HelixBootstrapUpgradeToolTest {
     dataNode = new DataNode(dataNode.getDatacenter(), jsonObject, clusterMapConfig);
     InstanceConfig instanceConfig =
         HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
-            Collections.emptyMap(), null);
+            new ConcurrentHashMap<>(), null);
     assertEquals("10", instanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR));
     assertThat(referenceInstanceConfig.getRecord(), not(equalTo(instanceConfig.getRecord())));
 
@@ -269,7 +271,7 @@ public class HelixBootstrapUpgradeToolTest {
     // set the field to null. The created InstanceConfig should not have null fields.
     referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, null);
     instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
-        Collections.emptyMap(), referenceInstanceConfig);
+        new ConcurrentHashMap<>(), referenceInstanceConfig);
     // Stopped replicas should be an empty list and not null, so set that in referenceInstanceConfig for comparison.
     referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, Collections.emptyList());
     assertEquals(instanceConfig.getRecord(), referenceInstanceConfig.getRecord());
@@ -278,7 +280,7 @@ public class HelixBootstrapUpgradeToolTest {
     List<String> stoppedReplicas = Arrays.asList("11", "15");
     referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicas);
     instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
-        Collections.emptyMap(), referenceInstanceConfig);
+        new ConcurrentHashMap<>(), referenceInstanceConfig);
     assertEquals(instanceConfig.getRecord(), referenceInstanceConfig.getRecord());
   }
 
@@ -473,6 +475,117 @@ public class HelixBootstrapUpgradeToolTest {
   }
 
   /**
+   * Test that when resourceChangeOnly is specified, Helix bootstrap tool updates resource(IdealState) only without
+   * changing InstanceConfig.
+   */
+  @Test
+  public void testResourceChangeOnlyOption() throws Exception {
+    String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+    // Test regular bootstrap. This is to ensure InstanceConfig and IdealState are there before testing changing
+    // IdealState (to trigger replica movement)
+    long expectedResourceCount =
+        (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
+
+    // Now, change the replica count for two partitions.
+    int totalPartitionCount = testPartitionLayout.getPartitionCount();
+    int firstPartitionIndex = RANDOM.nextInt(totalPartitionCount);
+    int secondPartitionIndex = (firstPartitionIndex + 1) % totalPartitionCount;
+    List<PartitionId> allPartitions = testPartitionLayout.getPartitionLayout().getPartitions(null);
+    Partition partition1 = (Partition) allPartitions.get(firstPartitionIndex);
+    Partition partition2 = (Partition) allPartitions.get(secondPartitionIndex);
+
+    // Add a new replica for partition1. Find a disk on a data node that does not already have a replica for partition1.
+    HashSet<DataNodeId> partition1Nodes = new HashSet<>();
+    for (ReplicaId replica : partition1.getReplicas()) {
+      partition1Nodes.add(replica.getDataNodeId());
+    }
+    Disk diskForNewReplica;
+    do {
+      diskForNewReplica = testHardwareLayout.getRandomDisk();
+    } while (partition1Nodes.contains(diskForNewReplica.getDataNode()) || !diskForNewReplica.getDataNode()
+        .getDatacenterName()
+        .equals("DC1"));
+    // Add new replica into partition1
+    ReplicaId replicaToAdd = new Replica(partition1, diskForNewReplica, testHardwareLayout.clusterMapConfig);
+    partition1.addReplica(replicaToAdd);
+    // Remove a replica from partition2.
+    ReplicaId removedReplica = partition2.getReplicas().remove(0);
+
+    String dcName = replicaToAdd.getDataNodeId().getDatacenterName();
+    ZkInfo zkInfo = dcsToZkInfo.get(dcName);
+    ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+    InstanceConfig instanceConfig =
+        admin.getInstanceConfig(clusterName, HelixBootstrapUpgradeUtil.getInstanceName(replicaToAdd.getDataNodeId()));
+    // deep copy for subsequent verification
+    InstanceConfig previousInstanceConfig = new InstanceConfig(instanceConfig.getRecord());
+    Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    // upgrade Helix by updating IdealState only (resourceChangeOnly = true)
+    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, true);
+    verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
+
+    // verify IdealState has been updated
+    // 1. new added replica is indeed present in the IdealState
+    verifyIdealStateForPartition(replicaToAdd, true, 4, expectedResourceCount);
+    // 2. removed old replica is no longer present in the IdealState
+    verifyIdealStateForPartition(removedReplica, false, 2, expectedResourceCount);
+
+    // verify the InstanceConfig stays unchanged
+    InstanceConfig currentInstanceConfig =
+        admin.getInstanceConfig(clusterName, HelixBootstrapUpgradeUtil.getInstanceName(replicaToAdd.getDataNodeId()));
+    assertEquals("InstanceConfig should stay unchanged", previousInstanceConfig.getRecord(),
+        currentInstanceConfig.getRecord());
+  }
+
+  /***
+   * A helper method to verify IdealState for given replica's partition. It checks number of replicas (represented by
+   * instances) under certain partition and verifies new added replica exists or removed old replica is no longer present.
+   * @param replica the replica to check if it exists (could be either added replica or removed replica)
+   * @param shouldExist if {@code true}, it means the given replica is newly added and should exist in IdealState.
+   *                    {@code false} otherwise.
+   * @param expectedReplicaCountForPartition expected number of replicas under certain partition
+   * @param expectedResourceCount expected total number resource count in this cluster.
+   */
+  private void verifyIdealStateForPartition(ReplicaId replica, boolean shouldExist,
+      int expectedReplicaCountForPartition, long expectedResourceCount) {
+    String dcName = replica.getDataNodeId().getDatacenterName();
+    ZkInfo zkInfo = dcsToZkInfo.get(dcName);
+    String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+    ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+    if (!activeDcSet.contains(dcName)) {
+      Assert.assertFalse("Cluster should not be present, as dc " + dcName + " is not enabled",
+          admin.getClusters().contains(clusterName));
+    } else {
+      List<String> resources = admin.getResourcesInCluster(clusterName);
+      assertEquals("Resource count mismatch", expectedResourceCount, resources.size());
+      String partitionName = replica.getPartitionId().toPathString();
+      boolean resourceFound = false;
+      for (String resource : resources) {
+        IdealState idealState = admin.getResourceIdealState(clusterName, resource);
+        if (idealState.getPartitionSet().contains(partitionName)) {
+          resourceFound = true;
+          Set<String> instances = idealState.getInstanceSet(partitionName);
+          assertEquals("Replica number is not expected", expectedReplicaCountForPartition, instances.size());
+          String instanceNameOfNewReplica = HelixBootstrapUpgradeUtil.getInstanceName(replica.getDataNodeId());
+          if (shouldExist) {
+            assertTrue("Instance set doesn't include new instance that holds added replica",
+                instances.contains(instanceNameOfNewReplica));
+          } else {
+            assertFalse("Instance that holds deleted replica should not exist in the set",
+                instances.contains(instanceNameOfNewReplica));
+          }
+          break;
+        }
+      }
+      assertTrue("No corresponding resource found for partition " + partitionName, resourceFound);
+    }
+  }
+
+  /**
    * Write the layout files out from the constructed in-memory hardware and partition layouts; use the bootstrap tool
    * to update the contents in Helix; verify that the information is consistent between the two.
    * @param expectedResourceCount number of resources expected in Helix for this cluster in each datacenter.
@@ -487,7 +600,7 @@ public class HelixBootstrapUpgradeToolTest {
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, new HelixAdminFactory(),
-        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, false);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 

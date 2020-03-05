@@ -16,6 +16,8 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.tools.util.ToolUtils;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -165,8 +167,8 @@ public class HelixBootstrapUpgradeTool {
     ArgumentAcceptingOptionSpec<String> adminConfigsOpt = parser.accepts("adminConfigs",
         "(Optional argument) Upload cluster admin configs to HelixPropertyStore based on json files. Currently, "
             + "the tool supports (1) partition override config, (2) replica addition config. The config names are "
-            + "comma-separated and case-sensitive, for example: '--clusterConfigs PartitionOverride,ReplicaAddition'. "
-            + "This option will not touch instanceConfig")
+            + "comma-separated and case-sensitive, for example: '--adminConfigs PartitionOverride,ReplicaAddition'. "
+            + "This option will not modify instanceConfig and IdealState")
         .withRequiredArg()
         .describedAs("admin_configs")
         .ofType(String.class);
@@ -176,6 +178,10 @@ public class HelixBootstrapUpgradeTool {
 
     OptionSpecBuilder disableValidatingClusterManager = parser.accepts("disableVCM",
         "(Optional argument) whether to disable validating cluster manager(VCM) in Helix bootstrap tool.");
+
+    OptionSpecBuilder resourceChangeOnly = parser.accepts("resourceChangeOnly",
+        "(Optional argument) if specified, Helix bootstrap tool updates resource(IdealState) only without "
+            + "changing InstanceConfig. This is usually used for moving replicas.");
 
     OptionSet options = parser.parse(args);
     String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
@@ -197,32 +203,20 @@ public class HelixBootstrapUpgradeTool {
     listOpt.add(clusterNamePrefixOpt);
     listOpt.add(dcsNameOpt);
     if (options.has(dropClusterOpt)) {
-      ArrayList<OptionSpec<?>> expectedOpts = new ArrayList<>();
-      expectedOpts.add(dropClusterOpt);
-      expectedOpts.add(clusterNameOpt);
-      expectedOpts.add(zkLayoutPathOpt);
-      expectedOpts.add(dcsNameOpt);
+      List<OptionSpec<?>> expectedOpts = Arrays.asList(dropClusterOpt, clusterNameOpt, zkLayoutPathOpt, dcsNameOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       HelixBootstrapUpgradeUtil.dropCluster(zkLayoutPath, clusterName, dcs, new HelixAdminFactory());
     } else if (options.has(validateOnly)) {
-      ArrayList<OptionSpec<?>> expectedOpts = new ArrayList<>();
-      expectedOpts.add(validateOnly);
-      expectedOpts.add(clusterNamePrefixOpt);
-      expectedOpts.add(zkLayoutPathOpt);
-      expectedOpts.add(hardwareLayoutPathOpt);
-      expectedOpts.add(partitionLayoutPathOpt);
-      expectedOpts.add(dcsNameOpt);
+      List<OptionSpec<?>> expectedOpts =
+          Arrays.asList(validateOnly, clusterNamePrefixOpt, zkLayoutPathOpt, hardwareLayoutPathOpt,
+              partitionLayoutPathOpt, dcsNameOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
           new HelixAdminFactory(), stateModelDef);
     } else if (adminConfigStr != null) {
-      ArrayList<OptionSpec<?>> expectedOpts = new ArrayList<>();
-      expectedOpts.add(adminConfigsOpt);
-      expectedOpts.add(zkLayoutPathOpt);
-      expectedOpts.add(hardwareLayoutPathOpt);
-      expectedOpts.add(partitionLayoutPathOpt);
-      expectedOpts.add(clusterNamePrefixOpt);
-      expectedOpts.add(dcsNameOpt);
+      List<OptionSpec<?>> expectedOpts =
+          Arrays.asList(adminConfigsOpt, zkLayoutPathOpt, hardwareLayoutPathOpt, partitionLayoutPathOpt,
+              clusterNamePrefixOpt, dcsNameOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       String[] adminTypes = adminConfigStr.replaceAll("\\p{Space}", "").split(",");
       HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
@@ -236,7 +230,8 @@ public class HelixBootstrapUpgradeTool {
       ToolUtils.ensureOrExit(listOpt, options, parser);
       HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
           clusterNamePrefix, dcs, maxPartitionsInOneResource, options.has(dryRun), options.has(forceRemove),
-          new HelixAdminFactory(), !options.has(disableValidatingClusterManager), stateModelDef);
+          new HelixAdminFactory(), !options.has(disableValidatingClusterManager), stateModelDef,
+          options.has(resourceChangeOnly));
     }
     System.out.println("======== HelixBootstrapUpgradeTool completed successfully! ========");
     System.out.println("( If program doesn't exit, please use Ctrl-c to terminate. )");
