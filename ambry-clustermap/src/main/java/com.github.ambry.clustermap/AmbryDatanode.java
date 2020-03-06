@@ -39,10 +39,10 @@ class AmbryDataNode implements DataNodeId {
   private final String rackId;
   private final long xid;
   private final List<String> sslEnabledDataCenters;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ResourceStatePolicy resourceStatePolicy;
   private final boolean http2ClientEnabled;
   private final ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback;
+  private static final Logger logger = LoggerFactory.getLogger(AmbryDataNode.class);
 
   /**
    * Instantiate an AmbryDataNode object.
