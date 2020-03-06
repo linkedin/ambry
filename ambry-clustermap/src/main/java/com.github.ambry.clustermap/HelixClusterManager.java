@@ -84,7 +84,6 @@ public class HelixClusterManager implements ClusterMap {
   // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
   // reflects the current value.
   private final AtomicLong currentXid;
-  private final List<ClusterMapChangeListener> clusterMapChangeListeners = new ArrayList<>();
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
 
   /**
@@ -237,8 +236,11 @@ public class HelixClusterManager implements ClusterMap {
     }
     localDatacenterId = dcToDcZkInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
     partitionSelectionHelper =
-        new PartitionSelectionHelper(partitionMap.values(), clusterMapConfig.clusterMapDatacenterName,
+        new PartitionSelectionHelper(helixClusterManagerCallback, clusterMapConfig.clusterMapDatacenterName,
             clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
+    // register partition selection helper as a listener of cluster map changes.
+    dcToDcZkInfo.values()
+        .forEach(info -> info.clusterChangeHandler.registerClusterMapListener(partitionSelectionHelper));
   }
 
   /**
@@ -510,7 +512,9 @@ public class HelixClusterManager implements ClusterMap {
 
   @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
-    clusterMapChangeListeners.add(clusterMapChangeListener);
+    for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+      dcInfo.clusterChangeHandler.registerClusterMapListener(clusterMapChangeListener);
+    }
   }
 
   /**
@@ -691,7 +695,8 @@ public class HelixClusterManager implements ClusterMap {
   /**
    * A callback class used to query information from the {@link HelixClusterManager}
    */
-  class HelixClusterManagerCallback implements ClusterManagerCallback {
+  class HelixClusterManagerCallback
+      implements ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> {
     /**
      * Get all replica ids associated with the given {@link AmbryPartition}
      * @param partition the {@link AmbryPartition} for which to get the list of replicas.
@@ -812,7 +817,8 @@ public class HelixClusterManager implements ClusterMap {
     /**
      * @return a collection of partitions in this cluster.
      */
-    Collection<AmbryPartition> getPartitions() {
+    @Override
+    public Collection<AmbryPartition> getPartitions() {
       return new ArrayList<>(partitionMap.values());
     }
 

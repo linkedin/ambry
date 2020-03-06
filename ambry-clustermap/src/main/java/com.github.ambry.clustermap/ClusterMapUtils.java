@@ -28,6 +28,8 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -282,7 +284,7 @@ public class ClusterMapUtils {
       throw new IllegalArgumentException(
           "PlainText Port " + plainTextPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
     }
-    if (sslRequired == false) {
+    if (!sslRequired) {
       return;
     }
     // check ports duplication
@@ -373,24 +375,26 @@ public class ClusterMapUtils {
    * <p/>
    * Not thread safe.
    */
-  static class PartitionSelectionHelper {
+  static class PartitionSelectionHelper implements ClusterMapChangeListener {
     private final int minimumLocalReplicaCount;
+    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final ClusterManagerCallback clusterManagerCallback;
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
     private Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas;
     private String localDatacenterName;
 
     /**
-     * @param allPartitions the list of all {@link PartitionId}s
+     * @param clusterManagerCallback the {@link ClusterManagerCallback} to query current cluster info
      * @param localDatacenterName the name of the local datacenter. Can be null if datacenter specific replica counts
      * @param minimumLocalReplicaCount the minimum number of replicas in local datacenter. This is used when selecting
-     *                                 writable partitions.
      */
-    PartitionSelectionHelper(Collection<? extends PartitionId> allPartitions, String localDatacenterName,
+    PartitionSelectionHelper(ClusterManagerCallback clusterManagerCallback, String localDatacenterName,
         int minimumLocalReplicaCount) {
       this.localDatacenterName = localDatacenterName;
       this.minimumLocalReplicaCount = minimumLocalReplicaCount;
-      updatePartitions(allPartitions, localDatacenterName);
+      this.clusterManagerCallback = clusterManagerCallback;
+      updatePartitions(clusterManagerCallback.getPartitions(), localDatacenterName);
     }
 
     /**
@@ -400,25 +404,12 @@ public class ClusterMapUtils {
      *                            are not required.
      */
     void updatePartitions(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
+      // since this method is called during initialization only, we don't really need read-write lock here.
       this.allPartitions = allPartitions;
-      // todo when new partitions added into clustermap, dynamically update these two maps.
       partitionIdsByClassAndLocalReplicaCount = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
       partitionIdToLocalReplicas = new HashMap<>();
-      for (PartitionId partition : allPartitions) {
-        String partitionClass = partition.getPartitionClass();
-        int localReplicaCount = 0;
-        for (ReplicaId replicaId : partition.getReplicaIds()) {
-          if (localDatacenterName != null && !localDatacenterName.isEmpty() && replicaId.getDataNodeId()
-              .getDatacenterName()
-              .equals(localDatacenterName)) {
-            partitionIdToLocalReplicas.computeIfAbsent(partition, key -> new LinkedList<>()).add(replicaId);
-            localReplicaCount++;
-          }
-        }
-        SortedMap<Integer, List<PartitionId>> replicaCountToPartitionIds =
-            partitionIdsByClassAndLocalReplicaCount.computeIfAbsent(partitionClass, key -> new TreeMap<>());
-        replicaCountToPartitionIds.computeIfAbsent(localReplicaCount, key -> new ArrayList<>()).add(partition);
-      }
+      populatePartitionAndLocalReplicaMaps(allPartitions, partitionIdsByClassAndLocalReplicaCount,
+          partitionIdToLocalReplicas, localDatacenterName);
     }
 
     /**
@@ -469,26 +460,32 @@ public class ClusterMapUtils {
      */
     PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
       PartitionId anyWritablePartition = null;
-      List<PartitionId> partitionsInClass = getPartitionsInClass(partitionClass, true);
-      int workingSize = partitionsInClass.size();
-      while (workingSize > 0) {
-        int randomIndex = ThreadLocalRandom.current().nextInt(workingSize);
-        PartitionId selected = partitionsInClass.get(randomIndex);
-        if (partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(selected)) {
-          if (selected.getPartitionState() == PartitionState.READ_WRITE) {
-            anyWritablePartition = selected;
-            if (areEnoughReplicasForPartitionUp(selected)) {
-              return selected;
+      rwLock.readLock().lock();
+      try {
+        List<PartitionId> partitionsInClass = getPartitionsInClass(partitionClass, true);
+        int workingSize = partitionsInClass.size();
+        while (workingSize > 0) {
+          int randomIndex = ThreadLocalRandom.current().nextInt(workingSize);
+          PartitionId selected = partitionsInClass.get(randomIndex);
+          if (partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(
+              selected)) {
+            if (selected.getPartitionState() == PartitionState.READ_WRITE) {
+              anyWritablePartition = selected;
+              if (areEnoughReplicasForPartitionUp(selected)) {
+                return selected;
+              }
             }
           }
+          if (randomIndex != workingSize - 1) {
+            partitionsInClass.set(randomIndex, partitionsInClass.get(workingSize - 1));
+          }
+          workingSize--;
         }
-        if (randomIndex != workingSize - 1) {
-          partitionsInClass.set(randomIndex, partitionsInClass.get(workingSize - 1));
-        }
-        workingSize--;
+        //if we are here then that means we couldn't find any partition with all local replicas up
+        return anyWritablePartition;
+      } finally {
+        rwLock.readLock().unlock();
       }
-      //if we are here then that means we couldn't find any partition with all local replicas up
-      return anyWritablePartition;
     }
 
     /**
@@ -531,25 +528,99 @@ public class ClusterMapUtils {
      */
     private List<PartitionId> getPartitionsInClass(String partitionClass, boolean minimumReplicaCountRequired) {
       List<PartitionId> toReturn = new ArrayList<>();
-      if (partitionClass == null) {
-        toReturn.addAll(allPartitions);
-      } else if (partitionIdsByClassAndLocalReplicaCount.containsKey(partitionClass)) {
-        SortedMap<Integer, List<PartitionId>> partitionsByReplicaCount =
-            partitionIdsByClassAndLocalReplicaCount.get(partitionClass);
-        if (minimumReplicaCountRequired) {
-          // get partitions with replica count >= min replica count specified in ClusterMapConfig
-          for (List<PartitionId> partitionIds : partitionsByReplicaCount.tailMap(minimumLocalReplicaCount).values()) {
-            toReturn.addAll(partitionIds);
+      rwLock.readLock().lock();
+      try {
+        if (partitionClass == null) {
+          toReturn.addAll(allPartitions);
+        } else if (partitionIdsByClassAndLocalReplicaCount.containsKey(partitionClass)) {
+          SortedMap<Integer, List<PartitionId>> partitionsByReplicaCount =
+              partitionIdsByClassAndLocalReplicaCount.get(partitionClass);
+          if (minimumReplicaCountRequired) {
+            // get partitions with replica count >= min replica count specified in ClusterMapConfig
+            for (List<PartitionId> partitionIds : partitionsByReplicaCount.tailMap(minimumLocalReplicaCount).values()) {
+              toReturn.addAll(partitionIds);
+            }
+          } else {
+            for (List<PartitionId> partitionIds : partitionIdsByClassAndLocalReplicaCount.get(partitionClass)
+                .values()) {
+              toReturn.addAll(partitionIds);
+            }
           }
         } else {
-          for (List<PartitionId> partitionIds : partitionIdsByClassAndLocalReplicaCount.get(partitionClass).values()) {
-            toReturn.addAll(partitionIds);
-          }
+          throw new IllegalArgumentException("Unrecognized partition class " + partitionClass);
         }
-      } else {
-        throw new IllegalArgumentException("Unrecognized partition class " + partitionClass);
+      } finally {
+        rwLock.readLock().unlock();
       }
       return toReturn;
+    }
+
+    @Override
+    public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
+      // For now, the simplest and safest way is to re-populate "partitionIdsByClassAndLocalReplicaCount" and
+      // "partitionIdToLocalReplicas" maps. Since cluster expansion and replica movement should be infrequent, we should
+      // be fine with the overhead of re-populating these two maps.
+      // No matter whether this method is called by local dc's or remote dcs' cluster change handler, we need to populate
+      // "allPartitions" again because there may be some new partitions with special class added to remote dc only.
+      generatePartitionMapsAndSwitch(addedReplicas, removedReplicas);
+    }
+
+    /**
+     * Generate new partition-selection related maps and switch current maps to new ones. This method should be synchronized
+     * because it can be invoked by cluster change handlers in different dcs concurrently. We need to ensure one dc has
+     * completely updated in-mem data structures and then move on to the next.
+     * @param addedReplicas a list of replicas are newly added in cluster
+     * @param removedReplicas a list of replicas have been removed from cluster.
+     */
+    private synchronized void generatePartitionMapsAndSwitch(List<ReplicaId> addedReplicas,
+        List<ReplicaId> removedReplicas) {
+      String dcName = addedReplicas.isEmpty() ? removedReplicas.get(0).getDataNodeId().getDatacenterName()
+          : addedReplicas.get(0).getDataNodeId().getDatacenterName();
+      logger.info("Re-populating partition-selection related maps because replicas are added or removed in {}", dcName);
+      // condition here, remember this method can be invoked by multiple threads (synchronize this method?)
+      Collection<? extends PartitionId> partitionsInCluster = clusterManagerCallback.getPartitions();
+      Map<String, SortedMap<Integer, List<PartitionId>>> partitionSortedByReplicaCount =
+          new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+      Map<PartitionId, List<ReplicaId>> partitionAndLocalReplicas = new HashMap<>();
+      populatePartitionAndLocalReplicaMaps(partitionsInCluster, partitionSortedByReplicaCount,
+          partitionAndLocalReplicas, localDatacenterName);
+      rwLock.writeLock().lock();
+      // switch references to newly generated maps
+      try {
+        allPartitions = partitionsInCluster;
+        partitionIdsByClassAndLocalReplicaCount = partitionSortedByReplicaCount;
+        partitionIdToLocalReplicas = partitionAndLocalReplicas;
+      } finally {
+        rwLock.writeLock().unlock();
+      }
+      logger.info("Partition-selection related maps updated after replica changes in {}", dcName);
+    }
+
+    /**
+     * Populate partition-selection related maps that track partition and its replicas in local dc.
+     * @param allPartitions all the partitions in cluster.
+     * @param partitionIdsByClassAndLocalReplicaCount a map that tracks partitions sorted by local replica count.
+     * @param partitionIdToLocalReplicas a map that tracks partition to its local replicas.
+     * @param localDatacenterName the name of local dc. Can be null if dc specific replica counts are not required.
+     */
+    private void populatePartitionAndLocalReplicaMaps(Collection<? extends PartitionId> allPartitions,
+        Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount,
+        Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas, String localDatacenterName) {
+      for (PartitionId partition : allPartitions) {
+        String partitionClass = partition.getPartitionClass();
+        int localReplicaCount = 0;
+        for (ReplicaId replicaId : partition.getReplicaIds()) {
+          if (localDatacenterName != null && !localDatacenterName.isEmpty() && replicaId.getDataNodeId()
+              .getDatacenterName()
+              .equals(localDatacenterName)) {
+            partitionIdToLocalReplicas.computeIfAbsent(partition, key -> new LinkedList<>()).add(replicaId);
+            localReplicaCount++;
+          }
+        }
+        SortedMap<Integer, List<PartitionId>> replicaCountToPartitionIds =
+            partitionIdsByClassAndLocalReplicaCount.computeIfAbsent(partitionClass, key -> new TreeMap<>());
+        replicaCountToPartitionIds.computeIfAbsent(localReplicaCount, key -> new ArrayList<>()).add(partition);
+      }
     }
   }
 }

@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Pair;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -59,6 +60,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   private final ConcurrentHashMap<AmbryDataNode, ConcurrentHashMap<String, AmbryReplica>> ambryDataNodeToAmbryReplicas =
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<AmbryDataNode, Set<AmbryDisk>> ambryDataNodeToAmbryDisks = new ConcurrentHashMap<>();
+  private final List<ClusterMapChangeListener> clusterMapChangeListeners = new ArrayList<>();
   private final AtomicLong errorCount = new AtomicLong(0);
 
   private volatile boolean instanceConfigInitialized = false;
@@ -265,22 +267,40 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
     }
   }
 
+  @Override
+  public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
+    clusterMapChangeListeners.add(clusterMapChangeListener);
+  }
+
   /**
-   * Add new instance or update existing instance based on {@link InstanceConfig}(s).
+   * Add new instance or update existing instance based on {@link InstanceConfig}(s). This may also invoke callbacks in
+   * some clustermap change listeners (i.e. {@link PartitionSelectionHelper}, ReplicationManager)
    * @param instanceConfigs the {@link InstanceConfig}(s) used to update in-mem cluster map.
    * @throws Exception
    */
   private void addOrUpdateInstanceInfos(List<InstanceConfig> instanceConfigs) throws Exception {
+    List<ReplicaId> totalAddedReplicas = new ArrayList<>();
+    List<ReplicaId> totalRemovedReplicas = new ArrayList<>();
     for (InstanceConfig instanceConfig : instanceConfigs) {
       int schemaVersion = getSchemaVersion(instanceConfig);
       if (schemaVersion != 0) {
         logger.error("Unknown InstanceConfig schema version: {}, ignoring.", schemaVersion);
         continue;
       }
+      Pair<List<ReplicaId>, List<ReplicaId>> addedAndRemovedReplicas;
       if (instanceNameToAmbryDataNode.containsKey(instanceConfig.getInstanceName())) {
-        updateInstanceInfo(instanceConfig);
+        addedAndRemovedReplicas = updateInstanceInfo(instanceConfig);
       } else {
-        createNewInstance(instanceConfig);
+        addedAndRemovedReplicas = new Pair<>(createNewInstance(instanceConfig), new ArrayList<>());
+      }
+      totalAddedReplicas.addAll(addedAndRemovedReplicas.getFirst());
+      totalRemovedReplicas.addAll(addedAndRemovedReplicas.getSecond());
+    }
+    // if this is not initial InstanceConfig change and any replicas are added or removed, we should invoke callbacks
+    // for different clustermap change listeners (i.e replication manager, partition selection helper)
+    if (instanceConfigInitialized && (!totalAddedReplicas.isEmpty() || !totalRemovedReplicas.isEmpty())) {
+      for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
+        listener.onReplicaAddedOrRemoved(totalAddedReplicas, totalRemovedReplicas);
       }
     }
   }
@@ -289,15 +309,18 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
    * Update info of an existing instance. This may happen in following cases: (1) new replica is added; (2) old replica
    * is removed; (3) replica's state has changed (i.e. becomes seal/unseal).
    * @param instanceConfig the {@link InstanceConfig} used to update info of instance.
+   * @return a pair of lists: (1) new added replicas; (2) removed old replicas, during this update.
    */
-  private void updateInstanceInfo(InstanceConfig instanceConfig) throws Exception {
+  private Pair<List<ReplicaId>, List<ReplicaId>> updateInstanceInfo(InstanceConfig instanceConfig) throws Exception {
+    final List<ReplicaId> addedReplicas = new ArrayList<>();
+    final List<ReplicaId> removedReplicas = new ArrayList<>();
     String instanceName = instanceConfig.getInstanceName();
     logger.info("Updating replicas info for existing node {}", instanceName);
     List<String> sealedReplicas = getSealedReplicas(instanceConfig);
     List<String> stoppedReplicas = getStoppedReplicas(instanceConfig);
     AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
     ConcurrentHashMap<String, AmbryReplica> currentReplicasOnNode = ambryDataNodeToAmbryReplicas.get(dataNode);
-    ConcurrentHashMap<String, AmbryReplica> replicasFromConfig = new ConcurrentHashMap<>();
+    ConcurrentHashMap<String, AmbryReplica> replicasFromInstanceConfig = new ConcurrentHashMap<>();
     Map<String, Map<String, String>> diskInfos = instanceConfig.getRecord().getMapFields();
     Map<String, AmbryDisk> mountPathToDisk = ambryDataNodeToAmbryDisks.get(dataNode)
         .stream()
@@ -321,18 +344,18 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
           if (currentReplicasOnNode.containsKey(partitionName)) {
             // if replica is already present
             AmbryReplica existingReplica = currentReplicasOnNode.get(partitionName);
-            // 1. directly add it into "replicasFromConfig" map
-            replicasFromConfig.put(partitionName, existingReplica);
+            // 1. directly add it into "replicasFromInstanceConfig" map
+            replicasFromInstanceConfig.put(partitionName, existingReplica);
             // 2. update replica seal/stop state
             updateReplicaStateAndOverrideIfNeeded(existingReplica, sealedReplicas, stoppedReplicas);
           } else {
             // if this is a new replica and doesn't exist on node
-            logger.info("Adding new replica {} to existing node {}", partitionName, instanceName);
-            long replicaCapacity = Long.valueOf(info[1]);
+            logger.info("Adding new replica {} to existing node {} in {}", partitionName, instanceName, dcName);
+            long replicaCapacity = Long.parseLong(info[1]);
             String partitionClass = info.length > 2 ? info[2] : clusterMapConfig.clusterMapDefaultPartitionClass;
             // this can be a brand new partition that is added to an existing node
             AmbryPartition mappedPartition =
-                new AmbryPartition(Long.valueOf(partitionName), partitionClass, helixClusterManagerCallback);
+                new AmbryPartition(Long.parseLong(partitionName), partitionClass, helixClusterManagerCallback);
             // Ensure only one AmbryPartition instance exists for specific partition.
             mappedPartition = clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaCapacity);
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, dataNode, replicaCapacity);
@@ -341,8 +364,8 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
                 new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
                     replicaCapacity, sealedReplicas.contains(partitionName));
             updateReplicaStateAndOverrideIfNeeded(replica, sealedReplicas, stoppedReplicas);
-            // add new created replica to "replicasFromConfig" map
-            replicasFromConfig.put(partitionName, replica);
+            // add new created replica to "replicasFromInstanceConfig" map
+            replicasFromInstanceConfig.put(partitionName, replica);
             // Put new replica into partition-to-replica map temporarily (this is to avoid any exception thrown within the
             // loop before updating "ambryDataNodeToAmbryReplicas" map. If we update call addReplicasToPartition here
             // immediately, the exception may cause inconsistency between "ambryPartitionToAmbryReplicas" and
@@ -352,20 +375,25 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
         }
       }
     }
-    // update ambryDataNodeToAmbryReplicas map
-    replicaToAddByPartition.forEach(clusterChangeHandlerCallback::addReplicasToPartition);
-    // update ambryDataNodeToAmbryReplicas map by adding "replicasFromConfig"
-    ambryDataNodeToAmbryReplicas.put(instanceNameToAmbryDataNode.get(instanceName), replicasFromConfig);
+    // update "ambryDataNodeToAmbryReplicas" map and "addedReplicas" list
+    replicaToAddByPartition.forEach((k, v) -> {
+      clusterChangeHandlerCallback.addReplicasToPartition(k, v);
+      addedReplicas.addAll(v);
+    });
+    // update ambryDataNodeToAmbryReplicas map by adding "replicasFromInstanceConfig"
+    ambryDataNodeToAmbryReplicas.put(instanceNameToAmbryDataNode.get(instanceName), replicasFromInstanceConfig);
     // Derive old replicas that are removed and delete them from partition
     currentReplicasOnNode.keySet()
         .stream()
-        .filter(partitionName -> !replicasFromConfig.containsKey(partitionName))
+        .filter(partitionName -> !replicasFromInstanceConfig.containsKey(partitionName))
         .forEach(pName -> {
           logger.info("Removing replica {} from existing node {}", pName, instanceName);
           AmbryReplica ambryReplica = currentReplicasOnNode.get(pName);
           clusterChangeHandlerCallback.removeReplicasFromPartition(ambryReplica.getPartitionId(),
               Collections.singletonList(ambryReplica));
+          removedReplicas.add(ambryReplica);
         });
+    return new Pair<>(addedReplicas, removedReplicas);
   }
 
   /**
@@ -393,21 +421,23 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   /**
    * Create a new instance(node) and initialize disks/replicas on it.
    * @param instanceConfig the {@link InstanceConfig} to create new instance
+   * @return a list of newly added replicas;
    * @throws Exception
    */
-  private void createNewInstance(InstanceConfig instanceConfig) throws Exception {
+  private List<ReplicaId> createNewInstance(InstanceConfig instanceConfig) throws Exception {
     String instanceName = instanceConfig.getInstanceName();
-    logger.info("Adding node {} and its disks and replicas", instanceName);
+    logger.info("Adding node {} and its disks and replicas in {}", instanceName, dcName);
     AmbryDataNode datanode =
         new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
-            Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig), null,
+            Integer.parseInt(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig), null,
             getXid(instanceConfig), helixClusterManagerCallback);
     // for new instance, we first set it to unavailable and rely on its participation to update its liveness
     if (!instanceName.equals(selfInstanceName)) {
       datanode.setState(HardwareState.UNAVAILABLE);
     }
-    initializeDisksAndReplicasOnNode(datanode, instanceConfig);
+    List<ReplicaId> addedReplicas = initializeDisksAndReplicasOnNode(datanode, instanceConfig);
     instanceNameToAmbryDataNode.put(instanceName, datanode);
+    return addedReplicas;
   }
 
   /**
@@ -416,10 +446,12 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
    * partition info in HelixPropertyStore, if disabled, the seal state is determined by instanceConfig.
    * @param datanode the {@link AmbryDataNode} that is being initialized.
    * @param instanceConfig the {@link InstanceConfig} associated with this datanode.
+   * @return a list of newly added replicas on this node.
    * @throws Exception if creation of {@link AmbryDisk} throws an Exception.
    */
-  private void initializeDisksAndReplicasOnNode(AmbryDataNode datanode, InstanceConfig instanceConfig)
+  private List<ReplicaId> initializeDisksAndReplicasOnNode(AmbryDataNode datanode, InstanceConfig instanceConfig)
       throws Exception {
+    List<ReplicaId> addedReplicas = new ArrayList<>();
     List<String> sealedReplicas = getSealedReplicas(instanceConfig);
     List<String> stoppedReplicas = getStoppedReplicas(instanceConfig);
     ambryDataNodeToAmbryReplicas.put(datanode, new ConcurrentHashMap<>());
@@ -430,7 +462,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
       Map<String, String> diskInfo = entry.getValue();
       HardwareState diskState =
           diskInfo.get(DISK_STATE).equals(AVAILABLE_STR) ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE;
-      long capacityBytes = Long.valueOf(diskInfo.get(DISK_CAPACITY_STR));
+      long capacityBytes = Long.parseLong(diskInfo.get(DISK_CAPACITY_STR));
 
       // Create disk
       AmbryDisk disk = new AmbryDisk(clusterMapConfig, datanode, mountPath, diskState, capacityBytes);
@@ -443,11 +475,11 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
           String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
           // partition name and replica name are the same.
           String partitionName = info[0];
-          long replicaCapacity = Long.valueOf(info[1]);
+          long replicaCapacity = Long.parseLong(info[1]);
           String partitionClass = info.length > 2 ? info[2] : clusterMapConfig.clusterMapDefaultPartitionClass;
 
           AmbryPartition mappedPartition =
-              new AmbryPartition(Long.valueOf(partitionName), partitionClass, helixClusterManagerCallback);
+              new AmbryPartition(Long.parseLong(partitionName), partitionClass, helixClusterManagerCallback);
           // Ensure only one AmbryPartition instance exists for specific partition.
           mappedPartition = clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaCapacity);
           ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
@@ -465,9 +497,11 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
                   replicaCapacity, isSealed);
           ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);
           clusterChangeHandlerCallback.addReplicasToPartition(mappedPartition, Collections.singletonList(replica));
+          addedReplicas.add(replica);
         }
       }
     }
+    return addedReplicas;
   }
 
   /**

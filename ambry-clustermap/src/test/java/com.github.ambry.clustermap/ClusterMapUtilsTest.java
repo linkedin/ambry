@@ -24,8 +24,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 public class ClusterMapUtilsTest {
@@ -87,8 +89,10 @@ public class ClusterMapUtilsTest {
 
     Collection<MockPartitionId> allPartitionIdsMain = Collections.unmodifiableSet(
         new HashSet<>(Arrays.asList(everywhere1, everywhere2, majorDc11, majorDc12, majorDc21, majorDc22)));
+    ClusterManagerCallback mockClusterManagerCallback = Mockito.mock(ClusterManagerCallback.class);
+    doReturn(allPartitionIdsMain).when(mockClusterManagerCallback).getPartitions();
     ClusterMapUtils.PartitionSelectionHelper psh =
-        new ClusterMapUtils.PartitionSelectionHelper(allPartitionIdsMain, null, minimumLocalReplicaCount);
+        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, null, minimumLocalReplicaCount);
 
     String[] dcsToTry = {null, "", dc1, dc2};
     for (String dc : dcsToTry) {
@@ -170,9 +174,11 @@ public class ClusterMapUtilsTest {
     MockPartitionId partition2 = new MockPartitionId(2, partitionClass, dataNodeIdList.subList(0, 3), 0);
     MockPartitionId partition3 = new MockPartitionId(3, partitionClass, dataNodeIdList.subList(0, 4), 0);
     List<MockPartitionId> allPartitions = Arrays.asList(partition1, partition2, partition3);
+    ClusterManagerCallback mockClusterManagerCallback = Mockito.mock(ClusterManagerCallback.class);
+    doReturn(allPartitions).when(mockClusterManagerCallback).getPartitions();
     int minimumLocalReplicaCount = 3;
     ClusterMapUtils.PartitionSelectionHelper psh =
-        new ClusterMapUtils.PartitionSelectionHelper(allPartitions, dc1, minimumLocalReplicaCount);
+        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, dc1, minimumLocalReplicaCount);
     // verify get all partitions return correct result
     assertEquals("Returned partitions are not expected", allPartitions, psh.getPartitions(null));
     // verify get writable partitions return partition2 and partition3 only
@@ -183,7 +189,7 @@ public class ClusterMapUtilsTest {
 
     // create another partition selection helper with minimumLocalReplicaCount = 4
     minimumLocalReplicaCount = 4;
-    psh = new ClusterMapUtils.PartitionSelectionHelper(allPartitions, dc1, minimumLocalReplicaCount);
+    psh = new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, dc1, minimumLocalReplicaCount);
     assertEquals("Returned writable partitions are not expected", Arrays.asList(partition3),
         psh.getWritablePartitions(partitionClass));
     assertEquals("Get random writable partition should return partition3 only", partition3,

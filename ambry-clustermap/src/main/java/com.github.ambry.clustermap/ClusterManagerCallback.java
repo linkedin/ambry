@@ -18,26 +18,25 @@ import java.util.List;
 
 
 /**
- * A callback that needs to be implemented by dynamic implementations of the cluster manager which can be
- * used by dynamic cluster manager components such as {@link AmbryDataNode}, {@link AmbryDisk},
- * {@link AmbryPartition}, and {@link AmbryReplica}
+ * A callback that needs to be implemented by different implementations of the cluster manager. External components may
+ * get resources (i.e. {@link ReplicaId}, {@link PartitionId}, {@link DiskId}, {@link DataNodeId}) via this callback.
  */
-interface ClusterManagerCallback {
+interface ClusterManagerCallback<R extends ReplicaId, D extends DiskId, P extends PartitionId, N extends DataNodeId> {
   /**
    * Get all replica ids associated with the given {@link AmbryPartition}
-   * @param partition the {@link AmbryPartition} for which to get the list of replicas.
-   * @return the list of {@link AmbryReplica}s associated with the given partition.
+   * @param partition the {@link PartitionId} for which to get the list of replicas.
+   * @return the list of {@link ReplicaId}s associated with the given partition.
    */
-  List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition);
+  List<R> getReplicaIdsForPartition(P partition);
 
   /**
    * Get replicas of given partition from specified datacenter that are in required state
-   * @param partition the {@link AmbryPartition} for which to get the list of replicas.
+   * @param partition the {@link PartitionId} for which to get the list of replicas.
    * @param state {@link ReplicaState} associated with replica
    * @param dcName name of datacenter from which the replicas should come
-   * @return the list of {@link AmbryReplica}s satisfying requirements.
+   * @return the list of {@link ReplicaId}s satisfying requirements.
    */
-  List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName);
+  List<R> getReplicaIdsByState(P partition, ReplicaState state, String dcName);
 
   /**
    * Get the counter for the sealed state change for partitions.
@@ -46,9 +45,14 @@ interface ClusterManagerCallback {
   long getSealedStateChangeCounter();
 
   /**
-   * Get the list of {@link AmbryDisk}s (all or assoicated with a particular {@link AmbryDataNode}.
+   * Get the list of {@link DiskId}s (all or associated with a particular {@link DataNodeId}.
    * @param dataNode if disks of a particular data node is required, {@code null} for all disks.
    * @return a collection of all the disks in this datacenter.
    */
-  Collection<AmbryDisk> getDisks(AmbryDataNode dataNode);
+  Collection<D> getDisks(N dataNode);
+
+  /**
+   * @return a collection of partitions in this cluster.
+   */
+  Collection<P> getPartitions();
 }

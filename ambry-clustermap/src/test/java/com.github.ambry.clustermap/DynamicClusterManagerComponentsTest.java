@@ -69,7 +69,8 @@ public class DynamicClusterManagerComponentsTest {
     MockClusterManagerCallback mockClusterManagerCallback = new MockClusterManagerCallback();
     // AmbryDataNode test
     try {
-      new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM1, RACK_ID, null, null, XID, mockClusterManagerCallback);
+      new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM1, RACK_ID, null, null, XID,
+          mockClusterManagerCallback);
       fail("Datanode construction should have failed when SSL is enabled and SSL port is null");
     } catch (IllegalArgumentException e) {
       // OK
@@ -151,7 +152,7 @@ public class DynamicClusterManagerComponentsTest {
     assertEquals(HardwareState.UNAVAILABLE, disk1.getState());
     disk1.setState(HardwareState.AVAILABLE);
     assertEquals(HardwareState.AVAILABLE, disk1.getState());
-    assertTrue(disk1.getDataNode().equals(datanode1));
+    assertEquals(disk1.getDataNode(), datanode1);
     datanode1.setState(HardwareState.UNAVAILABLE);
     assertEquals(HardwareState.UNAVAILABLE, disk1.getState());
 
@@ -251,13 +252,14 @@ public class DynamicClusterManagerComponentsTest {
    * A helper class that mocks the {@link ClusterManagerCallback} and stores partition to replicas mapping internally
    * as told.
    */
-  private class MockClusterManagerCallback implements ClusterManagerCallback {
+  private class MockClusterManagerCallback
+      implements ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> {
     Map<AmbryPartition, List<AmbryReplica>> partitionToReplicas = new HashMap<>();
     Map<AmbryDataNode, Set<AmbryDisk>> dataNodeToDisks = new HashMap<>();
 
     @Override
     public List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
-      return new ArrayList<AmbryReplica>(partitionToReplicas.get(partition));
+      return new ArrayList<>(partitionToReplicas.get(partition));
     }
 
     @Override
@@ -282,6 +284,11 @@ public class DynamicClusterManagerComponentsTest {
       return sealedStateChangeCounter.get();
     }
 
+    @Override
+    public Collection<AmbryPartition> getPartitions() {
+      return partitionToReplicas.keySet();
+    }
+
     /**
      * Associate the replica with the given partition.
      * @param partition the {@link AmbryPartition}.
@@ -289,7 +296,7 @@ public class DynamicClusterManagerComponentsTest {
      */
     void addReplicaToPartition(AmbryPartition partition, AmbryReplica replica) {
       if (!partitionToReplicas.containsKey(partition)) {
-        partitionToReplicas.put(partition, new ArrayList<AmbryReplica>());
+        partitionToReplicas.put(partition, new ArrayList<>());
       }
       partitionToReplicas.get(partition).add(replica);
     }

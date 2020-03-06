@@ -32,7 +32,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 public class AmbryPartition implements PartitionId {
   private final Long id;
   private final String partitionClass;
-  private final ClusterManagerCallback clusterManagerCallback;
+  private final ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback;
   private final Lock stateChangeLock = new ReentrantLock();
 
   private volatile PartitionState state;
@@ -46,11 +46,12 @@ public class AmbryPartition implements PartitionId {
    * Instantiate an AmbryPartition instance.
    * @param id the id associated with this partition.
    * @param partitionClass the partition class that this partition belongs to
-   * @param clusterManagerCallback the {@link ClusterManagerCallback} to use to make callbacks
+   * @param clusterManagerCallback the {@link HelixClusterManager.HelixClusterManagerCallback} to use to make callbacks
    *                               to the {@link HelixClusterManager}
    * The initial state defaults to {@link PartitionState#READ_WRITE}.
    */
-  AmbryPartition(long id, String partitionClass, ClusterManagerCallback clusterManagerCallback) {
+  AmbryPartition(long id, String partitionClass,
+      ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback) {
     this.id = id;
     this.partitionClass = partitionClass;
     this.clusterManagerCallback = clusterManagerCallback;
