@@ -280,19 +280,21 @@ public class AzureIntegrationTest {
 
     // run getDeadBlobs query, should return 2 * bucketCount
     String partitionPath = String.valueOf(testPartition);
-    assertEquals("Unexpected number of dead blobs", expectedDeadBlobs, azureDest.getDeadBlobCount(partitionPath, now));
-    logger.info("First call to getDeadBlobs");
-    List<CloudBlobMetadata> deadBlobs = azureDest.getDeadBlobs(partitionPath, now, bucketCount);
+    logger.info("First call to getDeletedBlobs");
+    List<CloudBlobMetadata> deadBlobs = azureDest.getDeletedBlobs(partitionPath, now, bucketCount);
     assertEquals("Unexpected number returned", bucketCount, deadBlobs.size());
     logger.info("First call to purge");
     assertEquals("Not all blobs were purged", bucketCount, azureDest.purgeBlobs(deadBlobs));
-    logger.info("Second call to getDeadBlobs");
-    deadBlobs = azureDest.getDeadBlobs(partitionPath, now, bucketCount);
+    logger.info("Second call to getDeletedBlobs");
+    deadBlobs = azureDest.getDeletedBlobs(partitionPath, now, bucketCount);
+    assertEquals("Expected zero", 0, deadBlobs.size());
+    logger.info("First call to getExpiredBlobs");
+    deadBlobs = azureDest.getExpiredBlobs(partitionPath, now, bucketCount);
     assertEquals("Unexpected number returned", bucketCount, deadBlobs.size());
-    logger.info("Second call to purge");
+    logger.info("First call to purge");
     assertEquals("Not all blobs were purged", bucketCount, azureDest.purgeBlobs(deadBlobs));
-    logger.info("Final call to getDeadBlobs");
-    deadBlobs = azureDest.getDeadBlobs(partitionPath, now, bucketCount);
+    logger.info("Second call to getExpiredBlobs");
+    deadBlobs = azureDest.getExpiredBlobs(partitionPath, now, bucketCount);
     assertEquals("Expected zero", 0, deadBlobs.size());
     cleanup();
   }
@@ -421,7 +423,7 @@ public class AzureIntegrationTest {
     String partitionPath = String.valueOf(testPartition);
     Timer dummyTimer = new Timer();
     List<CloudBlobMetadata> allBlobsInPartition =
-        azureDest.getCosmosDataAccessor().queryMetadata(partitionPath, new SqlQuerySpec("SELECT * FROM c"), dummyTimer);
+        azureDest.getCosmosDataAccessor().queryMetadata(partitionPath, "SELECT * FROM c", dummyTimer);
     int numPurged = azureDest.purgeBlobs(allBlobsInPartition);
     logger.info("Cleaned up {} blobs", numPurged);
   }

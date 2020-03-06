@@ -135,7 +135,8 @@ class CloudBlobStore implements Store {
     try {
       List<BlobId> blobIdList = ids.stream().map(key -> (BlobId) key).collect(Collectors.toList());
       Map<String, CloudBlobMetadata> cloudBlobMetadataListMap =
-          requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(blobIdList), "GetBlobMetadata");
+          requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(blobIdList), "GetBlobMetadata",
+              partitionId.toPathString());
       if (cloudBlobMetadataListMap.size() < blobIdList.size()) {
         Set<BlobId> missingBlobs = blobIdList.stream()
             .filter(blobId -> !cloudBlobMetadataListMap.containsKey(blobId))
@@ -184,14 +185,14 @@ class CloudBlobStore implements Store {
         requestAgent.doWithRetries(() -> {
           cloudDestination.downloadBlob(blobId, new ByteBufferOutputStream(encryptedBlob));
           return null;
-        }, "Download");
+        }, "Download", cloudBlobMetadata.getPartitionId());
         ByteBuffer decryptedBlob = cryptoAgent.decrypt(encryptedBlob);
         outputStream.write(decryptedBlob.array());
       } else {
         requestAgent.doWithRetries(() -> {
           cloudDestination.downloadBlob(blobId, outputStream);
           return null;
-        }, "Download");
+        }, "Download", cloudBlobMetadata.getPartitionId());
       }
     } catch (CloudStorageException | GeneralSecurityException | IOException e) {
       throw new StoreException("Error occured in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
@@ -316,7 +317,7 @@ class CloudBlobStore implements Store {
   private void uploadBlobInternal(BlobId blobId, long bufferlen, CloudBlobMetadata blobMetadata,
       InputStream inputStream) throws CloudStorageException {
     requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, bufferlen, blobMetadata, inputStream),
-        "Upload");
+        "Upload", partitionId.toPathString());
   }
 
   /**
@@ -358,7 +359,8 @@ class CloudBlobStore implements Store {
         String blobKey = msgInfo.getStoreKey().getID();
         BlobState blobState = recentBlobCache.get(blobKey);
         if (blobState != BlobState.DELETED) {
-          requestAgent.doWithRetries(() -> cloudDestination.deleteBlob(blobId, msgInfo.getOperationTimeMs()), "Delete");
+          requestAgent.doWithRetries(() -> cloudDestination.deleteBlob(blobId, msgInfo.getOperationTimeMs()), "Delete",
+              partitionId.toPathString());
           addToCache(blobKey, BlobState.DELETED);
         }
       }
@@ -392,7 +394,7 @@ class CloudBlobStore implements Store {
           BlobState blobState = recentBlobCache.get(blobId.getID());
           if (blobState == null || blobState == BlobState.CREATED) {
             requestAgent.doWithRetries(() -> cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time),
-                "UpdateTtl");
+                "UpdateTtl", partitionId.toPathString());
             addToCache(blobId.getID(), BlobState.TTL_UPDATED);
           }
         } else {
@@ -420,8 +422,9 @@ class CloudBlobStore implements Store {
   @Override
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     try {
-      FindResult findResult =
-          cloudDestination.findEntriesSince(partitionId.toPathString(), token, maxTotalSizeOfEntries);
+      FindResult findResult = requestAgent.doWithRetries(
+          () -> cloudDestination.findEntriesSince(partitionId.toPathString(), token, maxTotalSizeOfEntries),
+          "FindEntriesSince", partitionId.toPathString());
       if (findResult.getMetadataList().isEmpty()) {
         return new FindInfo(Collections.emptyList(), findResult.getUpdatedFindToken());
       }
@@ -464,7 +467,10 @@ class CloudBlobStore implements Store {
       return Collections.emptySet();
     }
     try {
-      Set<String> foundSet = cloudDestination.getBlobMetadata(blobIdQueryList).keySet();
+
+      Set<String> foundSet =
+          requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(blobIdQueryList), "FindMissingKeys",
+              partitionId.toPathString()).keySet();
       // return input keys - cached keys - keys returned by query
       return keys.stream()
           .filter(key -> !foundSet.contains(key.getID()))

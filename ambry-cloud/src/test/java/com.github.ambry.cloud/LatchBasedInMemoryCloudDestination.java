@@ -224,13 +224,13 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public List<CloudBlobMetadata> getDeadBlobs(String partitionPath, long cutoffTime, int maxEntries) {
+  public List<CloudBlobMetadata> getExpiredBlobs(String partitionPath, long cutoffTime, int maxEntries) {
     return Collections.emptyList();
   }
 
   @Override
-  public int getDeadBlobCount(String partitionPath, long cutoffTime) {
-    return 0;
+  public List<CloudBlobMetadata> getDeletedBlobs(String partitionPath, long cutoffTime, int maxEntries) {
+    return Collections.emptyList();
   }
 
   @Override

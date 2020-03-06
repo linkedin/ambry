@@ -26,16 +26,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.ConnectionMode;
-import com.microsoft.azure.cosmosdb.ConnectionPolicy;
-import com.microsoft.azure.cosmosdb.ConsistencyLevel;
-import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
-import com.microsoft.azure.cosmosdb.ResourceResponse;
-import com.microsoft.azure.cosmosdb.RetryOptions;
-import com.microsoft.azure.cosmosdb.SqlParameter;
-import com.microsoft.azure.cosmosdb.SqlParameterCollection;
-import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import com.microsoft.azure.cosmosdb.internal.HttpConstants;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
@@ -60,25 +51,15 @@ import org.slf4j.LoggerFactory;
 class AzureCloudDestination implements CloudDestination {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestination.class);
-  private static final String THRESHOLD_PARAM = "@threshold";
-  private static final String LIMIT_PARAM = "@limit";
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
-  static final int ID_QUERY_BATCH_SIZE = 1000;
   private static final int FIND_SINCE_QUERY_LIMIT = 1000;
-  private static final String DEAD_BLOBS_BASE_TEMPLATE =
-      "FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")" + " OR (c."
-          + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")";
-  private static final String DEAD_BLOBS_QUERY_TEMPLATE =
-      "SELECT TOP " + LIMIT_PARAM + " * " + DEAD_BLOBS_BASE_TEMPLATE + " ORDER BY c."
-          + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
-  private static final String DEAD_BLOBS_COUNT_TEMPLATE = "SELECT VALUE COUNT(1) " + DEAD_BLOBS_BASE_TEMPLATE;
   private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
-  private final AsyncDocumentClient asyncDocumentClient;
   private final CosmosDataAccessor cosmosDataAccessor;
   private final AzureReplicationFeed azureReplicationFeed;
   private final AzureMetrics azureMetrics;
   private final long retentionPeriodMs;
+  private final int queryBatchSize;
 
   /**
    * Construct an Azure cloud destination from config properties.
@@ -94,30 +75,10 @@ class AzureCloudDestination implements CloudDestination {
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =
         new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
-    // Set up CosmosDB connection, including retry options and any proxy setting
-    ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-    // TODO: would like to use different timeouts for queries and single-doc reads/writes
-    connectionPolicy.setRequestTimeoutInMillis(cloudConfig.cloudQueryRequestTimeout);
-    // Note: retry decisions are made at CloudBlobStore level.  Configure Cosmos with no retries.
-    RetryOptions noRetries = new RetryOptions();
-    noRetries.setMaxRetryAttemptsOnThrottledRequests(0);
-    connectionPolicy.setRetryOptions(noRetries);
-    if (azureCloudConfig.cosmosDirectHttps) {
-      logger.info("Using CosmosDB DirectHttps connection mode");
-      connectionPolicy.setConnectionMode(ConnectionMode.Direct);
-    }
-    if (cloudConfig.vcrProxyHost != null) {
-      connectionPolicy.setProxy(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
-    }
-    // TODO: test option to set connectionPolicy.setEnableEndpointDiscovery(false);
-    asyncDocumentClient = new AsyncDocumentClient.Builder().withServiceEndpoint(azureCloudConfig.cosmosEndpoint)
-        .withMasterKeyOrResourceToken(azureCloudConfig.cosmosKey)
-        .withConnectionPolicy(connectionPolicy)
-        .withConsistencyLevel(ConsistencyLevel.Session)
-        .build();
-    cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, azureCloudConfig, azureMetrics);
-    azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
+    this.queryBatchSize = azureCloudConfig.cosmosQueryBatchSize;
+    this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, azureMetrics);
+    this.azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
     logger.info("Created Azure destination");
   }
 
@@ -133,13 +94,13 @@ class AzureCloudDestination implements CloudDestination {
   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
       AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String clusterName,
       AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType) {
-    this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
-    this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
+    this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
-    cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
-    azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
+    this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
+    this.cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
+    this.azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
   }
 
   /**
@@ -207,7 +168,7 @@ class AzureCloudDestination implements CloudDestination {
     // CosmosDB has query size limit of 256k chars.
     // Break list into chunks if necessary to avoid overflow.
     List<CloudBlobMetadata> metadataList = new ArrayList<>();
-    List<List<BlobId>> chunkedBlobIdList = Utils.partitionList(blobIds, ID_QUERY_BATCH_SIZE);
+    List<List<BlobId>> chunkedBlobIdList = Utils.partitionList(blobIds, queryBatchSize);
     for (List<BlobId> batchOfBlobs : chunkedBlobIdList) {
       metadataList.addAll(getBlobMetadataChunked(batchOfBlobs));
     }
@@ -226,43 +187,39 @@ class AzureCloudDestination implements CloudDestination {
    * @throws CloudStorageException
    */
   private List<CloudBlobMetadata> getBlobMetadataChunked(List<BlobId> blobIds) throws CloudStorageException {
-    if (blobIds.isEmpty() || blobIds.size() > ID_QUERY_BATCH_SIZE) {
+    if (blobIds.isEmpty() || blobIds.size() > queryBatchSize) {
       throw new IllegalArgumentException("Invalid input list size: " + blobIds.size());
     }
     String quotedBlobIds = blobIds.stream().map(s -> '"' + s.getID() + '"').collect(Collectors.joining(","));
     String query = String.format(BATCH_ID_QUERY_TEMPLATE, quotedBlobIds);
     String partitionPath = blobIds.get(0).getPartition().toPathString();
     try {
-      return cosmosDataAccessor.queryMetadata(partitionPath, new SqlQuerySpec(query),
-          azureMetrics.missingKeysQueryTime);
+      return cosmosDataAccessor.queryMetadata(partitionPath, query, azureMetrics.missingKeysQueryTime);
     } catch (DocumentClientException dex) {
-      throw toCloudStorageException("Failed to query blob metadata for partition " + partitionPath, dex);
+      throw toCloudStorageException(
+          "Failed to query metadata for " + blobIds.size() + " blobs in partition " + partitionPath, dex);
     }
   }
 
   @Override
-  public List<CloudBlobMetadata> getDeadBlobs(String partitionPath, long cutoffTime, int maxEntries)
+  public List<CloudBlobMetadata> getDeletedBlobs(String partitionPath, long cutoffTime, int maxEntries)
+      throws CloudStorageException {
+    return getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, cutoffTime, maxEntries);
+  }
+
+  @Override
+  public List<CloudBlobMetadata> getExpiredBlobs(String partitionPath, long cutoffTime, int maxEntries)
+      throws CloudStorageException {
+    return getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, cutoffTime, maxEntries);
+  }
+
+  private List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long cutoffTime, int maxEntries)
       throws CloudStorageException {
     long retentionThreshold = cutoffTime - retentionPeriodMs;
-    SqlQuerySpec deadBlobsQuery = new SqlQuerySpec(DEAD_BLOBS_QUERY_TEMPLATE,
-        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, maxEntries),
-            new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
     try {
-      return cosmosDataAccessor.queryMetadata(partitionPath, deadBlobsQuery, azureMetrics.deadBlobsQueryTime);
+      return cosmosDataAccessor.getDeadBlobs(partitionPath, fieldName, retentionThreshold, maxEntries);
     } catch (DocumentClientException dex) {
       throw toCloudStorageException("Failed to query dead blobs for partition " + partitionPath, dex);
-    }
-  }
-
-  @Override
-  public int getDeadBlobCount(String partitionPath, long cutoffTime) throws CloudStorageException {
-    long retentionThreshold = cutoffTime - retentionPeriodMs;
-    SqlQuerySpec countQuery = new SqlQuerySpec(DEAD_BLOBS_COUNT_TEMPLATE,
-        new SqlParameterCollection(new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
-    try {
-      return cosmosDataAccessor.countMetadata(partitionPath, countQuery, azureMetrics.deadBlobsQueryTime);
-    } catch (DocumentClientException dex) {
-      throw toCloudStorageException("Failed to query dead blob count for partition " + partitionPath, dex);
     }
   }
 
@@ -274,14 +231,6 @@ class AzureCloudDestination implements CloudDestination {
     } catch (DocumentClientException dex) {
       throw toCloudStorageException("Failed to query blobs for partition " + partitionPath, dex);
     }
-  }
-
-  /**
-   * Getter for {@link AsyncDocumentClient} object.
-   * @return {@link AsyncDocumentClient} object.
-   */
-  AsyncDocumentClient getAsyncDocumentClient() {
-    return asyncDocumentClient;
   }
 
   /**

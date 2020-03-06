@@ -346,7 +346,7 @@ public class AzureCloudDestinationTest {
   /** Test querying metadata. */
   @Test
   public void testQueryMetadata() throws Exception {
-    int batchSize = AzureCloudDestination.ID_QUERY_BATCH_SIZE;
+    int batchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
     testQueryMetadata(0, 0);
     testQueryMetadata(batchSize, 1);
     testQueryMetadata(batchSize + 1, 2);
@@ -401,18 +401,15 @@ public class AzureCloudDestinationTest {
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
         mockResponse);
     long now = System.currentTimeMillis();
-    List<CloudBlobMetadata> metadataList = azureDest.getDeadBlobs(blobId.getPartition().toPathString(), now, 10);
-    assertEquals("Expected no dead blobs", 0, metadataList.size());
+    List<CloudBlobMetadata> metadataList = azureDest.getDeletedBlobs(blobId.getPartition().toPathString(), now, 10);
+    assertEquals("Expected no deleted blobs", 0, metadataList.size());
     assertEquals(1, azureMetrics.documentQueryCount.getCount());
     assertEquals(1, azureMetrics.deadBlobsQueryTime.getCount());
 
-    mockResponse = mock(Observable.class);
-    Document countDoc = new Document();
-    countDoc.set("_aggregate", Long.valueOf(0));
-    mockObservableForQuery(Collections.singletonList(countDoc), mockResponse);
-    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        mockResponse);
-    assertEquals("Expected no dead blobs", 0, azureDest.getDeadBlobCount(blobId.getPartition().toPathString(), now));
+    metadataList = azureDest.getExpiredBlobs(blobId.getPartition().toPathString(), now, 10);
+    assertEquals("Expected no expired blobs", 0, metadataList.size());
+    assertEquals(2, azureMetrics.documentQueryCount.getCount());
+    assertEquals(2, azureMetrics.deadBlobsQueryTime.getCount());
   }
 
   /** Test findEntriesSince when cloud destination uses change feed based token. */
@@ -692,7 +689,8 @@ public class AzureCloudDestinationTest {
       dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics,
           defaultAzureReplicationFeedType);
       assertNull("Expected null proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
-      assertNull("Expected null proxy for Cosmos", dest.getAsyncDocumentClient().getConnectionPolicy().getProxy());
+      assertNull("Expected null proxy for Cosmos",
+          dest.getCosmosDataAccessor().getAsyncDocumentClient().getConnectionPolicy().getProxy());
     } finally {
       if (dest != null) {
         dest.close();
@@ -709,7 +707,7 @@ public class AzureCloudDestinationTest {
       dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics,
           defaultAzureReplicationFeedType);
       assertNotNull("Expected proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
-      InetSocketAddress proxy = dest.getAsyncDocumentClient().getConnectionPolicy().getProxy();
+      InetSocketAddress proxy = dest.getCosmosDataAccessor().getAsyncDocumentClient().getConnectionPolicy().getProxy();
       assertNotNull("Expected proxy for Cosmos", proxy);
       assertEquals("Wrong host", proxyHost, proxy.getHostName());
       assertEquals("Wrong port", proxyPort, proxy.getPort());

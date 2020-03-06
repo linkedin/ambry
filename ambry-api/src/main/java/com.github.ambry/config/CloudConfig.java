@@ -59,7 +59,7 @@ public class CloudConfig {
   public static final String DEFAULT_VCR_CLUSTER_NAME = "VCRCluster";
   public static final int DEFAULT_MIN_TTL_DAYS = 14;
   public static final int DEFAULT_RETENTION_DAYS = 7;
-  public static final int DEFAULT_COMPACTION_QUERY_LIMIT = 1000;
+  public static final int DEFAULT_COMPACTION_QUERY_LIMIT = 500;
   public static final int DEFAULT_RECENT_BLOB_CACHE_LIMIT = 10000;
   public static final int DEFAULT_MAX_ATTEMPTS = 3;
   public static final int DEFAULT_RETRY_DELAY_VALUE = 50;

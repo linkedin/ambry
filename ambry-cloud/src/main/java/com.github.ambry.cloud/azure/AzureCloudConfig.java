@@ -16,7 +16,6 @@ package com.github.ambry.cloud.azure;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobContainerStrategy;
 
 
 /**
@@ -29,12 +28,20 @@ public class AzureCloudConfig {
   public static final String COSMOS_COLLECTION_LINK = "cosmos.collection.link";
   public static final String COSMOS_KEY = "cosmos.key";
   public static final String COSMOS_DIRECT_HTTPS = "cosmos.direct.https";
+  public static final String COSMOS_QUERY_BATCH_SIZE = "cosmos.query.batch.size";
+  public static final String COSMOS_REQUEST_CHARGE_THRESHOLD = "cosmos.request.charge.threshold";
+  public static final String COSMOS_CONTINUATION_TOKEN_LIMIT = "cosmos.continuation.token.limit";
   public static final String AZURE_PURGE_BATCH_SIZE = "azure.purge.batch.size";
   public static final String AZURE_NAME_SCHEME_VERSION = "azure.name.scheme.version";
   public static final String AZURE_BLOB_CONTAINER_STRATEGY = "azure.blob.container.strategy";
   // Per docs.microsoft.com/en-us/rest/api/storageservices/blob-batch
   public static final int MAX_PURGE_BATCH_SIZE = 256;
   public static final int DEFAULT_PURGE_BATCH_SIZE = 100;
+  public static final int DEFAULT_QUERY_BATCH_SIZE = 100;
+  public static final int DEFAULT_COSMOS_MAX_RETRIES = 5;
+  public static final int DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT = 4;
+  public static final int DEFAULT_COSMOS_REQUEST_CHARGE_THRESHOLD = 100;
+
   public static final int DEFAULT_NAME_SCHEME_VERSION = 0;
   public static final String DEFAULT_CONTAINER_STRATEGY = "Partition";
 
@@ -75,6 +82,24 @@ public class AzureCloudConfig {
   public final String azureBlobContainerStrategy;
 
   /**
+   * Max number of metadata records to fetch in a single Cosmos query.
+   */
+  @Config(COSMOS_QUERY_BATCH_SIZE)
+  public final int cosmosQueryBatchSize;
+
+  /**
+   * The size limit in KB on Cosmos continuation token.
+   */
+  @Config(COSMOS_CONTINUATION_TOKEN_LIMIT)
+  public final int cosmosContinuationTokenLimit;
+
+  /**
+   * The Cosmos request charge threshold to log.
+   */
+  @Config(COSMOS_REQUEST_CHARGE_THRESHOLD)
+  public final int cosmosRequestChargeThreshold;
+
+  /**
    * Flag indicating whether to use DirectHttps CosmosDB connection mode.
    * Provides better performance but may not work with all firewall settings.
    */
@@ -87,10 +112,16 @@ public class AzureCloudConfig {
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
     cosmosCollectionLink = verifiableProperties.getString(COSMOS_COLLECTION_LINK);
     cosmosKey = verifiableProperties.getString(COSMOS_KEY);
+    cosmosQueryBatchSize = verifiableProperties.getInt(COSMOS_QUERY_BATCH_SIZE, DEFAULT_QUERY_BATCH_SIZE);
+    cosmosContinuationTokenLimit =
+        verifiableProperties.getInt(COSMOS_CONTINUATION_TOKEN_LIMIT, DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT);
+    cosmosRequestChargeThreshold =
+        verifiableProperties.getInt(COSMOS_REQUEST_CHARGE_THRESHOLD, DEFAULT_COSMOS_REQUEST_CHARGE_THRESHOLD);
     azurePurgeBatchSize =
         verifiableProperties.getIntInRange(AZURE_PURGE_BATCH_SIZE, DEFAULT_PURGE_BATCH_SIZE, 1, MAX_PURGE_BATCH_SIZE);
     cosmosDirectHttps = verifiableProperties.getBoolean(COSMOS_DIRECT_HTTPS, false);
-    azureBlobContainerStrategy = verifiableProperties.getString(AZURE_BLOB_CONTAINER_STRATEGY, DEFAULT_CONTAINER_STRATEGY);
+    azureBlobContainerStrategy =
+        verifiableProperties.getString(AZURE_BLOB_CONTAINER_STRATEGY, DEFAULT_CONTAINER_STRATEGY);
     azureNameSchemeVersion = verifiableProperties.getInt(AZURE_NAME_SCHEME_VERSION, DEFAULT_NAME_SCHEME_VERSION);
   }
 }
