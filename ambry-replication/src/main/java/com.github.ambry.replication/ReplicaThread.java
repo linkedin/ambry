@@ -272,7 +272,7 @@ public class ReplicaThread implements Runnable {
     try {
       return replicasToReplicateGroupedByNode.entrySet()
           .stream()
-          .collect(Collectors.toMap(e -> e.getKey(), e -> new ArrayList<>(e.getValue())));
+          .collect(Collectors.toMap(Map.Entry::getKey, e -> new ArrayList<>(e.getValue())));
     } finally {
       lock.unlock();
     }

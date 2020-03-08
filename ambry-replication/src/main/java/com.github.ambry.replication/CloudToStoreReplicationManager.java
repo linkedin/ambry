@@ -215,12 +215,20 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   }
 
   /**
+   * @return a map of thread pools grouped by data center.
+   */
+  Map<String, List<ReplicaThread>> getReplicaThreadPoolByDc() {
+    return Collections.unmodifiableMap(replicaThreadPoolByDc);
+  }
+
+  /**
    * Remove a replica of given partition and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionName the partition of the replica to be removed.
    */
   private void removeCloudReplica(String partitionName) {
-    // Removing cloud replica occurs when replica from LEADER to STANDBY (this may be triggered by "Move Replica"). No
-    // what triggers such transition, the local replica should be present in storage manager at this point of time.
+    // Removing cloud replica occurs when replica from LEADER to STANDBY (this may be triggered by "Move Replica" or
+    // regular leadership hand-off due to server deployment). No matter what triggers this transition, the local replica
+    // should be present in storage manager at this point of time.
     ReplicaId localReplica = storeManager.getReplica(partitionName);
     if (localReplica == null) {
       logger.warn("Attempting to remove cloud partition {} that is not present on the node", partitionName);

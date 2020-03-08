@@ -94,7 +94,6 @@ public class CloudAndStoreReplicationTest {
    * @param vcrRecoveryPartitionConfig vcrRecoveryPartitionConfig value.
    */
   public CloudAndStoreReplicationTest(String vcrRecoveryPartitionConfig) {
-    super();
     this.vcrRecoveryPartitionConfig = vcrRecoveryPartitionConfig;
   }
 

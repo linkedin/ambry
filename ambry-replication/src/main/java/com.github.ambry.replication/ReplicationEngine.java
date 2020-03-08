@@ -489,7 +489,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected void stopPartitionReplication(PartitionId partitionId) {
     PartitionInfo partitionInfo = partitionToPartitionInfo.remove(partitionId);
     if (partitionInfo == null) {
-      logger.warn("Partition {} not exist when remove from {}. ", partitionId, dataNodeId);
+      logger.warn("Partition {} doesn't exist when removing it from {}. ", partitionId, dataNodeId);
       return;
     }
     removeRemoteReplicaInfoFromReplicaThread(partitionInfo.getRemoteReplicaInfos());
