@@ -39,6 +39,8 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.protocol.UndeleteRequest;
+import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.store.HardDeleter;
 import com.github.ambry.store.Offset;
@@ -93,6 +95,7 @@ public class ServerHardDeleteTest {
     props.setProperty("store.data.flush.interval.seconds", "1");
     props.setProperty("store.enable.hard.delete", "true");
     props.setProperty("store.deleted.message.retention.days", "1");
+    props.setProperty("server.handle.undelete.request.enabled", "true");
     props.setProperty("clustermap.cluster.name", "test");
     props.setProperty("clustermap.datacenter.name", "DC1");
     props.setProperty("clustermap.host.name", "localhost");
@@ -330,9 +333,8 @@ public class ServerHardDeleteTest {
     deleteBlob(blobIdList.get(3), channel);
     zeroOutBlobContent(3);
 
-    // delete blob 0
+    // delete blob 0, will undelete it later, so don't zero out the content
     deleteBlob(blobIdList.get(0), channel);
-    zeroOutBlobContent(0);
 
     // delete blob 6.
     deleteBlob(blobIdList.get(6), channel);
@@ -341,11 +343,17 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(0).getID());
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
+    undeleteBlob(blobIdList.get(0), channel);
+    // No replication for undelete for now, so don't await for blob undelete to be replicated.
+
     time.sleep(TimeUnit.DAYS.toMillis(1));
     // For each future change to this offset, add to this variable and write an explanation of why the number changed.
-    int expectedTokenValueT2 = 298416;
+    int expectedTokenValueT2 = 298416 + 98;
     // old value: 298400. Increased by 16 (4 * 4) to 298416 because the format for delete record went from 2 to 3 which
     // adds 4 bytes (two shorts) extra. The last record is a delete record so its extra 4 bytes are not added
+    // old value 2981416. Increased by 98. The end offset is now a journal-based offset, so the offset is not inclusive.
+    // It points to the last record in the journal. Before adding an undelete record, the last record in journal is the
+    // delete record for blob 6, now it's undelete for blob 0. Since a delete record is 98 bytes, so increase 98 bytes.
     ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap,
         expectedTokenValueT2);
 
@@ -384,6 +392,20 @@ public class ServerHardDeleteTest {
     InputStream deleteResponseStream = channel.receive().getInputStream();
     DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
     Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
+  }
+
+  /**
+   * Undeletes a single blob from ambry server node
+   * @param blobId the {@link BlobId} that needs to be undeleted
+   * @param channel the {@link ConnectedChannel} to use to send and receive data
+   * @throws IOException
+   */
+  void undeleteBlob(BlobId blobId, ConnectedChannel channel) throws IOException {
+    UndeleteRequest deleteRequest = new UndeleteRequest(1, "client1", blobId, time.milliseconds());
+    channel.send(deleteRequest);
+    InputStream undeleteResponseStream = channel.receive().getInputStream();
+    UndeleteResponse undeleteResponse = UndeleteResponse.readFrom(new DataInputStream(undeleteResponseStream));
+    Assert.assertEquals(undeleteResponse.getError(), ServerErrorCode.No_Error);
   }
 
   /**

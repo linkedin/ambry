@@ -89,10 +89,10 @@ public class HardDeleter implements Runnable {
    * startTokenBeforeLogFlush: This token is set to the current start token just before log flush and once the log is
    *                           flushed, this is used to set startTokenSafeToPersist.
    */
-  private FindToken startToken;
-  private FindToken startTokenBeforeLogFlush;
-  private FindToken startTokenSafeToPersist;
-  private FindToken endToken;
+  private volatile FindToken startTokenBeforeLogFlush;
+  private volatile FindToken startTokenSafeToPersist;
+  private volatile FindToken startToken;
+  private volatile FindToken endToken;
   private StoreFindToken recoveryEndToken;
   private HardDeletePersistInfo hardDeleteRecoveryRange = new HardDeletePersistInfo();
   private boolean isCaughtUp = false;
@@ -211,13 +211,18 @@ public class HardDeleter implements Runnable {
       }
 
       /* First create the readOptionsList */
-      List<BlobReadOptions> readOptionsList = hardDeleteRecoveryRange.getBlobReadOptionsList();
+      List<BlobReadOptions> readOptionsList = new ArrayList<>();
+      List<byte[]> messageStoreRecoveryInfoList = new ArrayList<>();
+      for (HardDeletePersistItem item : hardDeleteRecoveryRange.getHardDeletePersistItemList()) {
+        readOptionsList.add(item.blobReadOptions);
+        messageStoreRecoveryInfoList.add(item.messagesStoreRecoveryInfo);
+      }
 
         /* Next, perform the log write. The token file does not have to be persisted again as only entries that are
            currently in it are being hard deleted as part of recovery. */
       StoreMessageReadSet readSet = new StoreMessageReadSet(readOptionsList);
       Iterator<HardDeleteInfo> hardDeleteIterator =
-          hardDelete.getHardDeleteMessages(readSet, factory, hardDeleteRecoveryRange.getMessageStoreRecoveryInfoList());
+          hardDelete.getHardDeleteMessages(readSet, factory, messageStoreRecoveryInfoList);
 
       Iterator<BlobReadOptions> readOptionsIterator = readOptionsList.iterator();
       while (hardDeleteIterator.hasNext()) {
@@ -269,9 +274,21 @@ public class HardDeleter implements Runnable {
              correctness issue. Additionally, since this token is journal based, it is highly likely that this token
              will soon become equal to endtoken, in which case we will prune everything (in the "if case" above).
              If the token is index based, safely prune off entries that have already been flushed in the log */
-        hardDeleteRecoveryRange.pruneTill(logFlushedTillToken.getStoreKey());
+        hardDeleteRecoveryRange.pruneTill(logFlushedTillToken);
       }
     }
+    if (hardDeleteRecoveryRange.getSize() > 0) {
+      logger.trace("Pruned Hard delete recovery range : {} to {} with size {} for {}",
+          hardDeleteRecoveryRange.items.get(0).blobReadOptions,
+          hardDeleteRecoveryRange.items.get(hardDeleteRecoveryRange.getSize() - 1).blobReadOptions,
+          hardDeleteRecoveryRange.getSize(), dataDir);
+    } else {
+      logger.trace("Hard delete recovery range is empty for {}", dataDir);
+    }
+  }
+
+  HardDeletePersistInfo getHardDeleteRecoveryRange() {
+    return hardDeleteRecoveryRange;
   }
 
   /**
@@ -309,16 +326,6 @@ public class HardDeleter implements Runnable {
         endToken = info.getFindToken();
         logger.trace("New range for hard deletes : startToken {}, endToken {} for {}", startToken, info.getFindToken(),
             dataDir);
-        pruneHardDeleteRecoveryRange();
-        if (hardDeleteRecoveryRange.getSize() > 0) {
-          logger.trace("Pruned Hard delete recovery range : {} to {} with size {} for {}",
-              hardDeleteRecoveryRange.blobReadOptionsList.get(0),
-              hardDeleteRecoveryRange.getSize() > 1 ? hardDeleteRecoveryRange.getBlobReadOptionsList()
-                  .get(hardDeleteRecoveryRange.getSize() - 1) : hardDeleteRecoveryRange.getBlobReadOptionsList().get(0),
-              hardDeleteRecoveryRange.getSize(), dataDir);
-        } else {
-          logger.trace("Hard delete recovery range is empty for {}", dataDir);
-        }
         if (!endToken.equals(startToken)) {
           if (!info.getMessageEntries().isEmpty()) {
             performHardDeletes(info.getMessageEntries());
@@ -340,6 +347,7 @@ public class HardDeleter implements Runnable {
 
   /**
    * This method will be called before the log is flushed.
+   * In production, this will be called in the PersistentIndex's IndexPersistor thread.
    */
   void preLogFlush() {
     /* Save the current start token before the log gets flushed */
@@ -348,10 +356,28 @@ public class HardDeleter implements Runnable {
 
   /**
    * This method will be called after the log is flushed.
+   * In production, this will be called in the PersistentIndex's IndexPersistor thread.
    */
   void postLogFlush() {
     /* start token saved before the flush is now safe to be persisted */
     startTokenSafeToPersist = startTokenBeforeLogFlush;
+    hardDeleteLock.lock();
+    try {
+      // PersistCleanupToken because startTokenSafeToPersist changed.
+      pruneHardDeleteRecoveryRange();
+      persistCleanupToken();
+    } catch (Exception e) {
+      logger.error("Failed to persist cleanup token", e);
+    } finally {
+      hardDeleteLock.unlock();
+    }
+  }
+
+  /**
+   * @return the {@link #startTokenSafeToPersist}
+   */
+  FindToken getStartTokenSafeToPersistTo() {
+    return startTokenSafeToPersist;
   }
 
   /**
@@ -604,7 +630,8 @@ public class HardDeleter implements Runnable {
         if (hardDeleteInfo == null) {
           metrics.hardDeleteFailedCount.inc(1);
         } else {
-          hardDeleteRecoveryRange.addMessageInfo(readOptions, hardDeleteInfo.getRecoveryInfo());
+          hardDeleteRecoveryRange.addMessageInfo(readOptions, hardDeleteInfo.getRecoveryInfo(),
+              (StoreFindToken) startToken);
           LogSegment logSegment = log.getSegment(readOptions.getLogSegmentName());
           logWriteInfoList.add(new LogWriteInfo(logSegment, hardDeleteInfo.getHardDeleteChannel(),
               readOptions.getOffset() + hardDeleteInfo.getStartOffsetInMessage(),
@@ -617,6 +644,7 @@ public class HardDeleter implements Runnable {
         throw new IllegalStateException("More number of blobReadOptions than hardDeleteMessages");
       }
 
+      // PersistCleanupToken because EndToken and the RecoveryRange changed.
       persistCleanupToken();
 
       /* Finally, write the hard delete stream into the Log */
@@ -625,9 +653,9 @@ public class HardDeleter implements Runnable {
           throw new StoreException("Aborting hard deletes as store is shutting down",
               StoreErrorCodes.Store_Shutting_Down);
         }
+        diskIOScheduler.getSlice(HARD_DELETE_CLEANUP_JOB_NAME, HARD_DELETE_CLEANUP_JOB_NAME, logWriteInfo.size);
         logWriteInfo.logSegment.writeFrom(logWriteInfo.channel, logWriteInfo.offset, logWriteInfo.size);
         metrics.hardDeleteDoneCount.inc(1);
-        diskIOScheduler.getSlice(HARD_DELETE_CLEANUP_JOB_NAME, HARD_DELETE_CLEANUP_JOB_NAME, logWriteInfo.size);
       }
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
@@ -654,21 +682,45 @@ public class HardDeleter implements Runnable {
   }
 
   /**
+   * A class to encapsulates the item to be persisted in the file for recovery.
+   * This class includes three piece of information:
+   * 1. a {@link BlobReadOptions} for blob that is in process of being hard deleted.
+   * 2. a byte array that contains serialized bytes of some extra information for hard delete.
+   * 3. a {@link StoreFindToken} that represents the start token when finding this deleted entry from the index.
+   */
+  class HardDeletePersistItem {
+    BlobReadOptions blobReadOptions;
+    byte[] messagesStoreRecoveryInfo;
+    // The startToken when this blob is fetched from index.
+    StoreFindToken startTokenForBlobReadOptions;
+
+    HardDeletePersistItem(BlobReadOptions blobReadOptions, byte[] messagesStoreRecoveryInfo, StoreFindToken token) {
+      this.blobReadOptions = blobReadOptions;
+      this.messagesStoreRecoveryInfo = messagesStoreRecoveryInfo;
+      this.startTokenForBlobReadOptions = token;
+    }
+
+    HardDeletePersistItem(BlobReadOptions blobReadOptions, byte[] messagesStoreRecoveryInfo) {
+      this(blobReadOptions, messagesStoreRecoveryInfo, null);
+    }
+  }
+
+  /**
    * An object of this class contains all the information required for performing the hard delete recovery for the
    * associated blob. This is the information that is persisted from time to time.
    */
-  private class HardDeletePersistInfo {
-    private List<BlobReadOptions> blobReadOptionsList;
-    private List<byte[]> messageStoreRecoveryInfoList;
+  class HardDeletePersistInfo {
+    private List<HardDeletePersistItem> items;
 
     HardDeletePersistInfo() {
-      this.blobReadOptionsList = new ArrayList<BlobReadOptions>();
-      this.messageStoreRecoveryInfoList = new ArrayList<byte[]>();
+      this.items = new ArrayList<>();
     }
 
     HardDeletePersistInfo(DataInputStream stream, StoreKeyFactory storeKeyFactory) throws IOException {
       this();
       int numBlobsToRecover = stream.readInt();
+      List<BlobReadOptions> blobReadOptionsList = new ArrayList<>();
+      List<byte[]> messageStoreRecoveryInfoList = new ArrayList<>();
       for (int i = 0; i < numBlobsToRecover; i++) {
         blobReadOptionsList.add(BlobReadOptions.fromBytes(stream, storeKeyFactory, log));
       }
@@ -681,20 +733,22 @@ public class HardDeleter implements Runnable {
         }
         messageStoreRecoveryInfoList.add(messageStoreRecoveryInfo);
       }
+
+      for (int i = 0; i < numBlobsToRecover; i++) {
+        items.add(new HardDeletePersistItem(blobReadOptionsList.get(i), messageStoreRecoveryInfoList.get(i)));
+      }
     }
 
-    void addMessageInfo(BlobReadOptions blobReadOptions, byte[] messageStoreRecoveryInfo) {
-      this.blobReadOptionsList.add(blobReadOptions);
-      this.messageStoreRecoveryInfoList.add(messageStoreRecoveryInfo);
+    void addMessageInfo(BlobReadOptions blobReadOptions, byte[] messageStoreRecoveryInfo, StoreFindToken token) {
+      items.add(new HardDeletePersistItem(blobReadOptions, messageStoreRecoveryInfo, token));
     }
 
     void clear() {
-      blobReadOptionsList.clear();
-      messageStoreRecoveryInfoList.clear();
+      items.clear();
     }
 
     int getSize() {
-      return blobReadOptionsList.size();
+      return items.size();
     }
 
     /**
@@ -705,52 +759,67 @@ public class HardDeleter implements Runnable {
       DataOutputStream dataOutputStream = new DataOutputStream(outStream);
 
       /* Write the number of entries */
-      dataOutputStream.writeInt(blobReadOptionsList.size());
+      dataOutputStream.writeInt(items.size());
 
       /* Write all the blobReadOptions */
-      for (BlobReadOptions blobReadOptions : blobReadOptionsList) {
-        dataOutputStream.write(blobReadOptions.toBytes());
+      for (HardDeletePersistItem item : items) {
+        dataOutputStream.write(item.blobReadOptions.toBytes());
       }
 
       /* Write all the messageStoreRecoveryInfos */
-      for (byte[] recoveryInfo : messageStoreRecoveryInfoList) {
+      for (HardDeletePersistItem item : items) {
         /* First write the size of the recoveryInfo */
-        dataOutputStream.writeInt(recoveryInfo.length);
+        dataOutputStream.writeInt(item.messagesStoreRecoveryInfo.length);
 
         /* Now, write the recoveryInfo */
-        dataOutputStream.write(recoveryInfo);
+        dataOutputStream.write(item.messagesStoreRecoveryInfo);
       }
 
       return outStream.toByteArray();
     }
 
     /**
-     * Prunes entries in the range from the start up to, but excluding, the entry with the passed in key.
+     * Prunes entries in the range from the start up to, but excluding, the entry with the passed in token.
+     * Token passed to this method has to be a indexed based one.
      */
-    void pruneTill(StoreKey storeKey) {
-      Iterator<BlobReadOptions> blobReadOptionsListIterator = blobReadOptionsList.iterator();
-      Iterator<byte[]> messageStoreRecoveryListIterator = messageStoreRecoveryInfoList.iterator();
-      while (blobReadOptionsListIterator.hasNext()) {
-      /* Note: In the off chance that there are multiple presence of the same key in this range due to prior software
-         bugs, note that this method prunes only till the first occurrence of the key. If it so happens that a
-         later occurrence is the one really associated with this token, it does not affect the safety.
-         Persisting more than what is required is okay as hard deleting a blob is an idempotent operation. */
-        messageStoreRecoveryListIterator.next();
-        if (blobReadOptionsListIterator.next().getMessageInfo().getStoreKey().equals(storeKey)) {
-          break;
+    void pruneTill(StoreFindToken token) {
+      Iterator<HardDeletePersistItem> itemsIterator = items.iterator();
+      while (itemsIterator.hasNext()) {
+        HardDeletePersistItem item = itemsIterator.next();
+        if (item.startTokenForBlobReadOptions.getType() == FindTokenType.Uninitialized) {
+          itemsIterator.remove();
         } else {
-          blobReadOptionsListIterator.remove();
-          messageStoreRecoveryListIterator.remove();
+          if (compareTwoTokens(item.startTokenForBlobReadOptions, token) >= 0) {
+            break;
+          } else {
+            itemsIterator.remove();
+          }
         }
       }
     }
 
-    private List<BlobReadOptions> getBlobReadOptionsList() {
-      return blobReadOptionsList;
+    /**
+     * Compare two StoreFindTokens and return the result as an integer like compareTo interface.
+     * These two tokens have to be IndexBased tokens.
+     * @param token1 The first token to compare.
+     * @param token2 The second tokent to compare.
+     * @return 0 means they are equal. negative number means token1 is less than token2. postive number means the opposite.
+     */
+    int compareTwoTokens(StoreFindToken token1, StoreFindToken token2) {
+      if (token1.getType() != FindTokenType.IndexBased || token2.getType() != FindTokenType.IndexBased) {
+        throw new IllegalStateException("Tokens need to be index based. First: " + token1 + " Second: " + token2);
+      }
+      if (token1.equals(token2)) {
+        return 0;
+      }
+      if (!token1.getOffset().equals(token2.getOffset())) {
+        return token1.getOffset().compareTo(token2.getOffset());
+      }
+      return token1.getStoreKey().compareTo(token2.getStoreKey());
     }
 
-    private List<byte[]> getMessageStoreRecoveryInfoList() {
-      return messageStoreRecoveryInfoList;
+    private List<HardDeletePersistItem> getHardDeletePersistItemList() {
+      return items;
     }
   }
 

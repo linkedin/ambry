@@ -59,7 +59,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
       throws IOException {
     this.readSet = readSet;
     this.storeKeyFactory = storeKeyFactory;
-    this.recoveryInfoMap = new HashMap<StoreKey, HardDeleteRecoveryMetadata>();
+    this.recoveryInfoMap = new HashMap<>();
     if (recoveryInfoList != null) {
       for (byte[] recoveryInfo : recoveryInfoList) {
         HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata =
@@ -130,15 +130,6 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
         throw new MessageFormatException("Cleanup operation for a non-PUT record is unsupported",
             MessageFormatErrorCodes.IO_Error);
       } else {
-        if (headerFormat.hasEncryptionKeyRecord()) {
-          ByteBuffer blobEncryptionKey =
-              getBlobEncryptionKeyRecord(readSet, readSetIndex, headerFormat.getBlobEncryptionKeyRecordRelativeOffset(),
-                  headerFormat.getBlobEncryptionKeyRecordSize());
-        }
-        BlobProperties blobProperties =
-            getBlobPropertiesRecord(readSet, readSetIndex, headerFormat.getBlobPropertiesRecordRelativeOffset(),
-                headerFormat.getBlobPropertiesRecordSize());
-
         HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata = recoveryInfoMap.get(storeKey);
 
         int userMetadataRelativeOffset = headerFormat.getUserMetadataRecordRelativeOffset();
@@ -185,40 +176,6 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
       logger.error("Exception when reading blob: ", e);
     }
     return hardDeleteInfo;
-  }
-
-  /**
-   * Get the Blob Encryption Key Record from the given readSet
-   * @param readSet the {@link MessageReadSet} from which to read.
-   * @param readSetIndex the index of the message in the readSet.
-   * @param relativeOffset the relative offset in the message from which to read.
-   * @param blobEncryptionKeySize the size of the record to read (in this case the encryption key record).
-   * @return returns the read encryption key.
-   * @throws MessageFormatException
-   * @throws IOException
-   */
-  private ByteBuffer getBlobEncryptionKeyRecord(MessageReadSet readSet, int readSetIndex, long relativeOffset,
-      long blobEncryptionKeySize) throws MessageFormatException, IOException {
-
-    /* Read the field from the channel */
-    ByteBuffer blobEncryptionKey = ByteBuffer.allocate((int) blobEncryptionKeySize);
-    readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(blobEncryptionKey)), relativeOffset,
-        blobEncryptionKeySize);
-    blobEncryptionKey.flip();
-
-    return deserializeBlobEncryptionKey(new ByteBufferInputStream(blobEncryptionKey));
-  }
-
-  private BlobProperties getBlobPropertiesRecord(MessageReadSet readSet, int readSetIndex, long relativeOffset,
-      long blobPropertiesSize) throws MessageFormatException, IOException {
-
-    /* Read the field from the channel */
-    ByteBuffer blobProperties = ByteBuffer.allocate((int) blobPropertiesSize);
-    readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(blobProperties)), relativeOffset,
-        blobPropertiesSize);
-    blobProperties.flip();
-
-    return deserializeBlobProperties(new ByteBufferInputStream(blobProperties));
   }
 
   private DeserializedUserMetadata getUserMetadataInfo(MessageReadSet readSet, int readSetIndex, int relativeOffset,

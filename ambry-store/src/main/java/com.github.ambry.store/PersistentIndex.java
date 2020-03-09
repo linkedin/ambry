@@ -1944,13 +1944,11 @@ class PersistentIndex {
 
           if (hardDeleter != null) {
             hardDeleter.preLogFlush();
-          }
-
-          // flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
-          log.flush();
-
-          if (hardDeleter != null) {
+            // flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
+            log.flush();
             hardDeleter.postLogFlush();
+          } else {
+            log.flush();
           }
 
           Map.Entry<Offset, IndexSegment> prevEntry = indexSegments.lowerEntry(lastEntry.getKey());

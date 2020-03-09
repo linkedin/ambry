@@ -51,8 +51,8 @@ public class StoreFindToken implements FindToken {
   private final FindTokenType type;
   // refers to the offset in the log. Could be either of Journal or Index based token
   private final Offset offset;
-  // refers to the store key incase of Index based token
-  // incase of journal based token, represents if the blob at the offset(of the token)
+  // refers to the store key in case of Index based token
+  // in case of journal based token, represents if the blob at the offset(of the token)
   private final StoreKey storeKey;
   // is inclusive or not
   private final byte inclusive;
