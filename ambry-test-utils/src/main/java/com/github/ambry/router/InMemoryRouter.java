@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,7 +43,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.github.ambry.router.RouterUtils.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -177,7 +176,7 @@ public class InMemoryRouter implements Router {
     BlobInfo blobInfo = null;
     Exception exception = null;
     try {
-      getBlobIdFromString(blobId, clusterMap);
+      checkBlobId(blobId);
       if (deletedBlobs.contains(blobId) && !ALLOW_DELETED_BLOB_GET.contains(options.getGetOption())) {
         exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
       } else if (!blobs.containsKey(blobId)) {
@@ -251,7 +250,7 @@ public class InMemoryRouter implements Router {
     }
     Exception exception = null;
     try {
-      getBlobIdFromString(blobId, clusterMap);
+      checkBlobId(blobId);
       if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
         deletedBlobs.add(blobId);
         if (notificationSystem != null) {
@@ -279,7 +278,7 @@ public class InMemoryRouter implements Router {
     Exception exception = null;
     try {
       // to make sure Blob ID is ok
-      getBlobIdFromString(blobId, clusterMap);
+      checkBlobId(blobId);
       if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
         InMemoryBlob blob = blobs.get(blobId);
         BlobProperties currentProps = blob.blobProperties;
@@ -376,6 +375,14 @@ public class InMemoryRouter implements Router {
     return continueOp;
   }
 
+  private void checkBlobId(String blobId) throws RouterException {
+    try {
+      new BlobId(blobId, clusterMap);
+    } catch (Exception e) {
+      throw new RouterException("BlobId is invalid " + blobId, RouterErrorCode.InvalidBlobId);
+    }
+  }
+
   /**
    * Completes a router operation by invoking the {@code callback} and setting the {@code futureResult} with
    * {@code operationResult} (if any) and {@code exception} (if any).
@@ -391,195 +398,175 @@ public class InMemoryRouter implements Router {
       callback.onCompletion(operationResult, exception);
     }
   }
-}
-
-/**
- * Thread to read the post data async and store it.
- */
-class InMemoryBlobPoster implements Runnable {
-  private final PostData postData;
-  private final ConcurrentHashMap<String, InMemoryRouter.InMemoryBlob> blobs;
-  private final NotificationSystem notificationSystem;
-  private final ClusterMap clusterMap;
-  private final short blobIdVersion;
 
   /**
-   * Create a new instance.
-   * @param postData the data that came with the POST request as {@link PostData}.
-   * @param blobs the list of blobs in memory.
-   * @param notificationSystem the notification system to use to notify creation/deletion of blobs.
-   * @param clusterMap the cluster map for the cluster.
-   * @param blobIdVersion the blob ID version to use.
+   * Thread to read the post data async and store it.
    */
-  public InMemoryBlobPoster(PostData postData, ConcurrentHashMap<String, InMemoryRouter.InMemoryBlob> blobs,
-      NotificationSystem notificationSystem, ClusterMap clusterMap, short blobIdVersion) {
-    this.postData = postData;
-    this.blobs = blobs;
-    this.notificationSystem = notificationSystem;
-    this.clusterMap = clusterMap;
-    this.blobIdVersion = blobIdVersion;
-  }
+  private static class InMemoryBlobPoster implements Runnable {
+    private final PostData postData;
+    private final ConcurrentHashMap<String, InMemoryBlob> blobs;
+    private final NotificationSystem notificationSystem;
+    private final ClusterMap clusterMap;
+    private final short blobIdVersion;
 
-  @Override
-  public void run() {
-    String operationResult = null;
-    Exception exception = null;
-    try {
-      String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
-          postData.getBlobProperties().getAccountId(), postData.getBlobProperties().getContainerId(),
-          getPartitionForPut(), false, BlobId.BlobDataType.DATACHUNK).getID();
-      if (blobs.containsKey(blobId)) {
-        exception = new RouterException("Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
-      }
-      ByteBuffer blobData;
-      if (postData.getChunksToStitch() != null) {
-        ByteArrayOutputStream stitchedContentStream = new ByteArrayOutputStream();
-        for (ChunkInfo chunkInfo : postData.getChunksToStitch()) {
-          stitchedContentStream.write(blobs.get(chunkInfo.getBlobId()).getBlob().array());
+    /**
+     * Create a new instance.
+     * @param postData the data that came with the POST request as {@link PostData}.
+     * @param blobs the list of blobs in memory.
+     * @param notificationSystem the notification system to use to notify creation/deletion of blobs.
+     * @param clusterMap the cluster map for the cluster.
+     * @param blobIdVersion the blob ID version to use.
+     */
+    public InMemoryBlobPoster(PostData postData, ConcurrentHashMap<String, InMemoryBlob> blobs,
+        NotificationSystem notificationSystem, ClusterMap clusterMap, short blobIdVersion) {
+      this.postData = postData;
+      this.blobs = blobs;
+      this.notificationSystem = notificationSystem;
+      this.clusterMap = clusterMap;
+      this.blobIdVersion = blobIdVersion;
+    }
+
+    @Override
+    public void run() {
+      String operationResult = null;
+      Exception exception = null;
+      try {
+        String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+            postData.getBlobProperties().getAccountId(), postData.getBlobProperties().getContainerId(),
+            getPartitionForPut(), false, BlobId.BlobDataType.DATACHUNK).getID();
+        if (blobs.containsKey(blobId)) {
+          exception = new RouterException("Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
         }
-        blobData = ByteBuffer.wrap(stitchedContentStream.toByteArray());
-      } else {
-        blobData = readBlob(postData.getReadableStreamChannel(), postData.getOptions().getMaxUploadSize());
-      }
-      InMemoryRouter.InMemoryBlob blob =
-          new InMemoryRouter.InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData,
-              postData.getChunksToStitch());
-      blobs.put(blobId, blob);
-      if (notificationSystem != null) {
-        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), null, null,
-            postData.getOptions().isChunkUpload() ? NotificationBlobType.DataChunk : NotificationBlobType.Simple);
-      }
-      operationResult = blobId;
-    } catch (RouterException e) {
-      exception = e;
-    } catch (Exception e) {
-      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
-    } finally {
-      InMemoryRouter.completeOperation(postData.getFuture(), postData.getCallback(), operationResult, exception);
-    }
-  }
-
-  /**
-   * Reads blob data and returns the content as a {@link ByteBuffer}.
-   * @param postContent the blob data.
-   * @param maxBlobSize the max blob size to be enforced, or null for no restriction.
-   * @return the blob data in a {@link ByteBuffer}.
-   * @throws RouterException
-   * @throws InterruptedException
-   */
-  private ByteBuffer readBlob(ReadableStreamChannel postContent, Long maxBlobSize)
-      throws RouterException, InterruptedException {
-    ByteArrayOutputStream blobDataStream = new ByteArrayOutputStream();
-    ByteBufferAWC channel = new ByteBufferAWC();
-    postContent.readInto(channel, new CloseWriteChannelCallback(channel));
-    ByteBuffer chunk = channel.getNextChunk();
-    IllegalStateException exception = null;
-    while (chunk != null) {
-      byte[] chunkData = new byte[chunk.remaining()];
-      chunk.get(chunkData);
-      blobDataStream.write(chunkData, 0, chunkData.length);
-      channel.resolveOldestChunk(exception);
-      if (exception != null) {
-        channel.close();
-        throw exception;
-      } else {
-        chunk = channel.getNextChunk();
+        ByteBuffer blobData;
+        if (postData.getChunksToStitch() != null) {
+          ByteArrayOutputStream stitchedContentStream = new ByteArrayOutputStream();
+          for (ChunkInfo chunkInfo : postData.getChunksToStitch()) {
+            stitchedContentStream.write(blobs.get(chunkInfo.getBlobId()).getBlob().array());
+          }
+          blobData = ByteBuffer.wrap(stitchedContentStream.toByteArray());
+        } else {
+          blobData = readBlob(postData.getReadableStreamChannel(), postData.getOptions().getMaxUploadSize());
+        }
+        InMemoryBlob blob =
+            new InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData,
+                postData.getChunksToStitch());
+        blobs.put(blobId, blob);
+        if (notificationSystem != null) {
+          notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), null, null,
+              postData.getOptions().isChunkUpload() ? NotificationBlobType.DataChunk : NotificationBlobType.Simple);
+        }
+        operationResult = blobId;
+      } catch (RouterException e) {
+        exception = e;
+      } catch (Exception e) {
+        exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+      } finally {
+        completeOperation(postData.getFuture(), postData.getCallback(), operationResult, exception);
       }
     }
-    if (maxBlobSize != null && blobDataStream.size() > maxBlobSize) {
-      throw new RouterException("Blob exceeded max allowed size: " + maxBlobSize, RouterErrorCode.BlobTooLarge);
+
+    /**
+     * Reads blob data and returns the content as a {@link ByteBuffer}.
+     * @param postContent the blob data.
+     * @param maxBlobSize the max blob size to be enforced, or null for no restriction.
+     * @return the blob data in a {@link ByteBuffer}.
+     * @throws RouterException
+     * @throws InterruptedException
+     */
+    private ByteBuffer readBlob(ReadableStreamChannel postContent, Long maxBlobSize)
+        throws RouterException, InterruptedException {
+      ByteArrayOutputStream blobDataStream = new ByteArrayOutputStream();
+      ByteBufferAWC channel = new ByteBufferAWC();
+      postContent.readInto(channel, (result, exception) -> channel.close());
+      ByteBuffer chunk = channel.getNextChunk();
+      IllegalStateException exception = null;
+      while (chunk != null) {
+        byte[] chunkData = new byte[chunk.remaining()];
+        chunk.get(chunkData);
+        blobDataStream.write(chunkData, 0, chunkData.length);
+        channel.resolveOldestChunk(exception);
+        if (exception != null) {
+          channel.close();
+          throw exception;
+        } else {
+          chunk = channel.getNextChunk();
+        }
+      }
+      if (maxBlobSize != null && blobDataStream.size() > maxBlobSize) {
+        throw new RouterException("Blob exceeded max allowed size: " + maxBlobSize, RouterErrorCode.BlobTooLarge);
+      }
+      return ByteBuffer.wrap(blobDataStream.toByteArray());
     }
-    return ByteBuffer.wrap(blobDataStream.toByteArray());
-  }
 
-  /**
-   * Choose a random {@link PartitionId} and return it. This code is partially copied from
-   * {@code PutOperation#getPartitionForPut}.
-   * @return the chosen {@link PartitionId}
-   * @throws RouterException
-   */
-  private PartitionId getPartitionForPut() throws RouterException {
-    List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds(null);
-    if (partitions.isEmpty()) {
-      throw new RouterException("No writable partitions available.", RouterErrorCode.AmbryUnavailable);
+    /**
+     * Choose a random {@link PartitionId} and return it. This code is partially copied from
+     * {@code PutOperation#getPartitionForPut}.
+     * @return the chosen {@link PartitionId}
+     * @throws RouterException
+     */
+    private PartitionId getPartitionForPut() throws RouterException {
+      List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds(null);
+      if (partitions.isEmpty()) {
+        throw new RouterException("No writable partitions available.", RouterErrorCode.AmbryUnavailable);
+      }
+      return partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
     }
-    return partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
-  }
-}
-
-/**
- * Data that comes with the POST request. Contains blob properties, user metadata and blob data. Also has the
- * future and callback that need to be invoked on operation completion.
- */
-class PostData {
-  private final BlobProperties blobProperties;
-  private final byte[] usermetadata;
-  private final ReadableStreamChannel readableStreamChannel;
-  private final List<ChunkInfo> chunksToStitch;
-  private final PutBlobOptions options;
-  private final FutureResult<String> future;
-  private final Callback<String> callback;
-
-  public BlobProperties getBlobProperties() {
-    return blobProperties;
-  }
-
-  public byte[] getUsermetadata() {
-    return usermetadata;
-  }
-
-  public ReadableStreamChannel getReadableStreamChannel() {
-    return readableStreamChannel;
   }
 
   /**
-   * @return the list of chunks to stitch, or null if this is a direct upload request.
+   * Data that comes with the POST request. Contains blob properties, user metadata and blob data. Also has the
+   * future and callback that need to be invoked on operation completion.
    */
-  public List<ChunkInfo> getChunksToStitch() {
-    return chunksToStitch;
-  }
+  private static class PostData {
+    private final BlobProperties blobProperties;
+    private final byte[] usermetadata;
+    private final ReadableStreamChannel readableStreamChannel;
+    private final List<ChunkInfo> chunksToStitch;
+    private final PutBlobOptions options;
+    private final FutureResult<String> future;
+    private final Callback<String> callback;
 
-  public PutBlobOptions getOptions() {
-    return options;
-  }
+    public BlobProperties getBlobProperties() {
+      return blobProperties;
+    }
 
-  public FutureResult<String> getFuture() {
-    return future;
-  }
+    public byte[] getUsermetadata() {
+      return usermetadata;
+    }
 
-  public Callback<String> getCallback() {
-    return callback;
-  }
+    public ReadableStreamChannel getReadableStreamChannel() {
+      return readableStreamChannel;
+    }
 
-  PostData(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel readableStreamChannel,
-      List<ChunkInfo> chunksToStitch, PutBlobOptions options, Callback<String> callback, FutureResult<String> future) {
-    this.blobProperties = blobProperties;
-    this.usermetadata = usermetadata;
-    this.readableStreamChannel = readableStreamChannel;
-    this.chunksToStitch = chunksToStitch;
-    this.options = options;
-    this.future = future;
-    this.callback = callback;
-  }
-}
+    /**
+     * @return the list of chunks to stitch, or null if this is a direct upload request.
+     */
+    public List<ChunkInfo> getChunksToStitch() {
+      return chunksToStitch;
+    }
 
-/**
- * Callback for {@link ByteBufferAWC} that closes the channel on {@link #onCompletion(Long, Exception)}.
- */
-class CloseWriteChannelCallback implements Callback<Long> {
-  private final ByteBufferAWC channel;
+    public PutBlobOptions getOptions() {
+      return options;
+    }
 
-  /**
-   * Creates a callback to close {@code channel} on {@link #onCompletion(Long, Exception)}.
-   * @param channel the {@link ByteBufferAWC} that needs to be closed.
-   */
-  public CloseWriteChannelCallback(ByteBufferAWC channel) {
-    this.channel = channel;
-  }
+    public FutureResult<String> getFuture() {
+      return future;
+    }
 
-  @Override
-  public void onCompletion(Long result, Exception exception) {
-    channel.close();
+    public Callback<String> getCallback() {
+      return callback;
+    }
+
+    PostData(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel readableStreamChannel,
+        List<ChunkInfo> chunksToStitch, PutBlobOptions options, Callback<String> callback, FutureResult<String> future) {
+      this.blobProperties = blobProperties;
+      this.usermetadata = usermetadata;
+      this.readableStreamChannel = readableStreamChannel;
+      this.chunksToStitch = chunksToStitch;
+      this.options = options;
+      this.future = future;
+      this.callback = callback;
+    }
   }
 }
 

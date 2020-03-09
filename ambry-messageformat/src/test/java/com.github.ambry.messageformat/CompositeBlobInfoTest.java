@@ -17,7 +17,7 @@ package com.github.ambry.messageformat;
 import com.github.ambry.store.MockId;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.UtilsTest;
+import com.github.ambry.utils.TestUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -91,7 +91,7 @@ public class CompositeBlobInfoTest {
     invalidV3CompositeBlobInfoCtor(keysAndContentSizes);
     //tests attempt creation of compositeBlobInfo with 0 length blob
     keysAndContentSizes = createKeysAndContentSizes(60, 1, 1000000, 100);
-    keysAndContentSizes.add(new Pair<>(new MockId(UtilsTest.getRandomString(60)), 0L));
+    keysAndContentSizes.add(new Pair<>(new MockId(TestUtils.getRandomString(60)), 0L));
     invalidV3CompositeBlobInfoCtor(keysAndContentSizes);
   }
 
@@ -102,7 +102,7 @@ public class CompositeBlobInfoTest {
   public void testV2CompositeBlobInfoCtor() {
     List<StoreKey> keys = new ArrayList<>();
     for (int i = 0; i < 10; i++) {
-      keys.add(new MockId(UtilsTest.getRandomString(60)));
+      keys.add(new MockId(TestUtils.getRandomString(60)));
     }
     //creates 1 10 byte blob, so not enough keys
     invalidV2CompositeBlobInfoCtor(100, 10, keys);
@@ -160,7 +160,7 @@ public class CompositeBlobInfoTest {
     List<Pair<StoreKey, Long>> keysAndContentSizes = new ArrayList<>();
     Random rand = new Random();
     for (int i = 0; i < numKeys; i++) {
-      keysAndContentSizes.add(new Pair<>(new MockId(UtilsTest.getRandomString(keySize)),
+      keysAndContentSizes.add(new Pair<>(new MockId(TestUtils.getRandomString(keySize)),
           (long) rand.nextInt(higherBound - lowerBound) + lowerBound));
     }
     return keysAndContentSizes;

@@ -13,7 +13,6 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONArray;
@@ -21,6 +20,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -31,7 +31,7 @@ public class PartitionTest {
 
   @Test
   public void basics() throws JSONException {
-    String partitionClass = UtilsTest.getRandomString(10);
+    String partitionClass = getRandomString(10);
     int replicaCount = 3;
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 

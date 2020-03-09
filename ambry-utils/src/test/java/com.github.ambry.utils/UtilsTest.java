@@ -84,7 +84,7 @@ public class UtilsTest {
     // good case
     ByteBuffer buffer = ByteBuffer.allocate(10);
     buffer.putShort((short) 8);
-    String s = getRandomString(8);
+    String s = TestUtils.getRandomString(8);
     buffer.put(s.getBytes());
     buffer.flip();
     String outputString = Utils.readShortString(new DataInputStream(new ByteBufferInputStream(buffer)));
@@ -117,7 +117,7 @@ public class UtilsTest {
     // good case
     buffer = ByteBuffer.allocate(40004);
     buffer.putInt(40000);
-    s = getRandomString(40000);
+    s = TestUtils.getRandomString(40000);
     buffer.put(s.getBytes());
     buffer.flip();
     outputString = Utils.readIntString(new DataInputStream(new ByteBufferInputStream(buffer)), StandardCharsets.UTF_8);
@@ -334,7 +334,7 @@ public class UtilsTest {
   @Test
   public void testGetIntStringLength() {
     for (int i = 0; i < 10; i++) {
-      String value = getRandomString(1000 + TestUtils.RANDOM.nextInt(10000));
+      String value = TestUtils.getRandomString(1000 + TestUtils.RANDOM.nextInt(10000));
       assertEquals("Size mismatch ", Integer.BYTES + value.length(), Utils.getIntStringLength(value));
     }
     assertEquals("Size mismatch for empty string ", Integer.BYTES, Utils.getIntStringLength(""));
@@ -343,7 +343,7 @@ public class UtilsTest {
 
   @Test
   public void testSerializeNullableString() {
-    String randomString = getRandomString(10);
+    String randomString = TestUtils.getRandomString(10);
     ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeNullableString(outputBuffer, randomString);
     outputBuffer.flip();
@@ -372,7 +372,7 @@ public class UtilsTest {
 
   @Test
   public void testSerializeString() {
-    String randomString = getRandomString(10);
+    String randomString = TestUtils.getRandomString(10);
     ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
     outputBuffer.flip();
@@ -385,7 +385,7 @@ public class UtilsTest {
     String outputString = new String(output);
     assertEquals("Input and output strings don't match", randomString, outputString);
 
-    randomString = getRandomString(10) + "Ò";
+    randomString = TestUtils.getRandomString(10) + "Ò";
     outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
     outputBuffer.flip();
@@ -412,7 +412,7 @@ public class UtilsTest {
     outputString = new String(output);
     assertEquals("Output string \"" + outputString + "\" expected to be empty", outputString, "");
 
-    randomString = getRandomString(10);
+    randomString = TestUtils.getRandomString(10);
     outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length - 1);
     try {
       Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
@@ -423,14 +423,14 @@ public class UtilsTest {
 
   @Test
   public void testDeserializeString() {
-    String randomString = getRandomString(10);
+    String randomString = TestUtils.getRandomString(10);
     ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
     outputBuffer.flip();
     String outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
     assertEquals("Input and output strings don't match", randomString, outputString);
 
-    randomString = getRandomString(10) + "Ò";
+    randomString = TestUtils.getRandomString(10) + "Ò";
     outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
     outputBuffer.flip();
@@ -445,7 +445,7 @@ public class UtilsTest {
     outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
     assertEquals("Output string \"" + outputString + "\" expected to be empty", outputString, "");
 
-    randomString = getRandomString(10);
+    randomString = TestUtils.getRandomString(10);
     outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     outputBuffer.putInt(12);
     outputBuffer.put(randomString.getBytes());
@@ -608,7 +608,7 @@ public class UtilsTest {
     assertTrue("String should be declared empty", Utils.isNullOrEmpty(""));
     assertFalse("String should not be declared empty", Utils.isNullOrEmpty(" "));
     assertFalse("String should not be declared empty", Utils.isNullOrEmpty("a"));
-    assertFalse("String should not be declared empty", Utils.isNullOrEmpty(getRandomString(10)));
+    assertFalse("String should not be declared empty", Utils.isNullOrEmpty(TestUtils.getRandomString(10)));
   }
 
   /**
@@ -651,17 +651,6 @@ public class UtilsTest {
         Utils.splitString("", ",", ArrayList::new));
     assertEquals("Empty segments should be ignored", new ArrayList<>(Arrays.asList("a", "b-extra", "c")),
         Utils.splitString(",a,,b-extra,c,,", ",", ArrayList::new));
-  }
-
-  private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  static Random random = new Random();
-
-  public static String getRandomString(int length) {
-    StringBuilder sb = new StringBuilder(length);
-    for (int i = 0; i < length; i++) {
-      sb.append(CHARACTERS.charAt(random.nextInt(CHARACTERS.length())));
-    }
-    return sb.toString();
   }
 }
 

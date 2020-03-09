@@ -43,7 +43,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -841,7 +840,7 @@ public class PutManagerTest {
     }
 
     // exception if there is no partition class that conforms to the replication policy
-    String nonExistentClass = UtilsTest.getRandomString(3);
+    String nonExistentClass = TestUtils.getRandomString(3);
     accountService.addReplicationPolicyToContainer(container, nonExistentClass);
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize, container, PutBlobOptions.DEFAULT, null));
@@ -1118,14 +1117,16 @@ public class PutManagerTest {
         ByteBuffer userMetadata = request.getUsermetadata();
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
-        new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), Unpooled.wrappedBuffer(content), userMetadata,
-            cryptoService, kms, new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
-          assertNull("Exception should not be thrown", exception);
-          assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
-          assertArrayEquals("Content mismatch", requestAndResult.putContent, result.getDecryptedBlobContent().array());
-          assertArrayEquals("UserMetadata mismatch", requestAndResult.putUserMetadata,
-              result.getDecryptedUserMetadata().array());
-        }).run();
+        new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), Unpooled.wrappedBuffer(content),
+            userMetadata, cryptoService, kms, new CryptoJobMetricsTracker(metrics.decryptJobMetrics),
+            (result, exception) -> {
+              assertNull("Exception should not be thrown", exception);
+              assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
+              assertArrayEquals("Content mismatch", requestAndResult.putContent,
+                  result.getDecryptedBlobContent().array());
+              assertArrayEquals("UserMetadata mismatch", requestAndResult.putUserMetadata,
+                  result.getDecryptedUserMetadata().array());
+            }).run();
       }
     }
     notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties());
@@ -1159,8 +1160,8 @@ public class PutManagerTest {
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(dataBlobPutRequest.getBlobId(), dataBlobPutRequest.getBlobEncryptionKey().duplicate(),
-            Unpooled.wrappedBuffer(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService, kms,
-            new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
+            Unpooled.wrappedBuffer(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService,
+            kms, new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
           Assert.assertNull("Exception should not be thrown", exception);
           assertEquals("BlobId mismatch", dataBlobPutRequest.getBlobId(), result.getBlobId());
           Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,

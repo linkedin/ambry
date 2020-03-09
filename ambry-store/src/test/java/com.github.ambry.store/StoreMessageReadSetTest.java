@@ -21,7 +21,6 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -76,7 +75,7 @@ public class StoreMessageReadSetTest {
    * @throws IOException
    */
   public StoreMessageReadSetTest(boolean doDataPrefetch, boolean setFilePermissionEnabled) throws IOException {
-    tempDir = StoreTestUtils.createTempDirectory("storeMessageReadSetDir-" + UtilsTest.getRandomString(10));
+    tempDir = StoreTestUtils.createTempDirectory("storeMessageReadSetDir-" + TestUtils.getRandomString(10));
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
     this.doDataPrefetch = doDataPrefetch;

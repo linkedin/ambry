@@ -40,7 +40,6 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
@@ -100,12 +99,12 @@ public class AmbrySecurityServiceTest {
       ACCOUNT_SERVICE.clear();
       REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
       REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
-      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + UtilsTest.getRandomString(9),
-          UtilsTest.getRandomString(9));
-      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + UtilsTest.getRandomString(10),
-          UtilsTest.getRandomString(10));
-      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + UtilsTest.getRandomString(11),
-          UtilsTest.getRandomString(11));
+      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(9),
+          TestUtils.getRandomString(9));
+      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(10),
+          TestUtils.getRandomString(10));
+      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(11),
+          TestUtils.getRandomString(11));
       DEFAULT_INFO = new BlobInfo(
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
               false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null),

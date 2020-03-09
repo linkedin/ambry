@@ -67,7 +67,6 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -346,7 +345,7 @@ public class FrontendRestRequestServiceTest {
    */
   @Test
   public void submitResponseTest() throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    String exceptionMsg = UtilsTest.getRandomString(10);
+    String exceptionMsg = TestUtils.getRandomString(10);
     responseHandler.shutdown();
     // handleResponse of FrontendTestResponseHandler throws exception because it has been shutdown.
     try {
@@ -683,7 +682,7 @@ public class FrontendRestRequestServiceTest {
   @Test
   public void misbehavingIdConverterTest() throws InstantiationException, JSONException {
     FrontendTestIdConverterFactory converterFactory = new FrontendTestIdConverterFactory();
-    String exceptionMsg = UtilsTest.getRandomString(10);
+    String exceptionMsg = TestUtils.getRandomString(10);
     converterFactory.exceptionToThrow = new IllegalStateException(exceptionMsg);
     doIdConverterExceptionTest(converterFactory, exceptionMsg);
   }
@@ -696,7 +695,7 @@ public class FrontendRestRequestServiceTest {
   @Test
   public void idConverterExceptionPipelineTest() throws InstantiationException, JSONException {
     FrontendTestIdConverterFactory converterFactory = new FrontendTestIdConverterFactory();
-    String exceptionMsg = UtilsTest.getRandomString(10);
+    String exceptionMsg = TestUtils.getRandomString(10);
     converterFactory.exceptionToReturn = new IllegalStateException(exceptionMsg);
     doIdConverterExceptionTest(converterFactory, exceptionMsg);
   }
@@ -709,7 +708,7 @@ public class FrontendRestRequestServiceTest {
   @Test
   public void misbehavingSecurityServiceTest() throws InstantiationException, JSONException {
     FrontendTestSecurityServiceFactory securityFactory = new FrontendTestSecurityServiceFactory();
-    String exceptionMsg = UtilsTest.getRandomString(10);
+    String exceptionMsg = TestUtils.getRandomString(10);
     securityFactory.exceptionToThrow = new IllegalStateException(exceptionMsg);
     doSecurityServiceExceptionTest(securityFactory, exceptionMsg);
   }
@@ -722,7 +721,7 @@ public class FrontendRestRequestServiceTest {
   @Test
   public void securityServiceExceptionPipelineTest() throws InstantiationException, JSONException {
     FrontendTestSecurityServiceFactory securityFactory = new FrontendTestSecurityServiceFactory();
-    String exceptionMsg = UtilsTest.getRandomString(10);
+    String exceptionMsg = TestUtils.getRandomString(10);
     securityFactory.exceptionToReturn = new IllegalStateException(exceptionMsg);
     doSecurityServiceExceptionTest(securityFactory, exceptionMsg);
   }
@@ -734,7 +733,7 @@ public class FrontendRestRequestServiceTest {
   @Test
   public void misbehavingRouterTest() throws Exception {
     FrontendTestRouter testRouter = new FrontendTestRouter();
-    String exceptionMsg = UtilsTest.getRandomString(10);
+    String exceptionMsg = TestUtils.getRandomString(10);
     testRouter.exceptionToThrow = new IllegalStateException(exceptionMsg);
     doRouterExceptionPipelineTest(testRouter, exceptionMsg);
   }
@@ -747,7 +746,7 @@ public class FrontendRestRequestServiceTest {
   @Test
   public void routerExceptionPipelineTest() throws Exception {
     FrontendTestRouter testRouter = new FrontendTestRouter();
-    String exceptionMsg = UtilsTest.getRandomString(10);
+    String exceptionMsg = TestUtils.getRandomString(10);
     testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError);
     doRouterExceptionPipelineTest(testRouter, exceptionMsg + " Error: " + RouterErrorCode.UnexpectedInternalError);
   }
@@ -874,7 +873,7 @@ public class FrontendRestRequestServiceTest {
     assertEquals("Snapshot does not match expected", expected.toString(), actual.toString());
 
     // test a failure to ensure that it goes through the exception path
-    String msg = UtilsTest.getRandomString(10);
+    String msg = TestUtils.getRandomString(10);
     clusterMap.setExceptionOnSnapshot(new RuntimeException(msg));
     restRequest = createRestRequest(RestMethod.GET, Operations.GET_CLUSTER_MAP_SNAPSHOT, null, null);
     try {
@@ -1064,7 +1063,7 @@ public class FrontendRestRequestServiceTest {
   @Test
   public void updateTtlRejectedTest() throws Exception {
     FrontendTestRouter testRouter = new FrontendTestRouter();
-    String exceptionMsg = UtilsTest.getRandomString(10);
+    String exceptionMsg = TestUtils.getRandomString(10);
     testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.BlobUpdateNotAllowed);
     testRouter.exceptionOpType = FrontendTestRouter.OpType.UpdateBlobTtl;
     frontendRestRequestService =
@@ -1137,7 +1136,7 @@ public class FrontendRestRequestServiceTest {
   @Test
   public void validateSecurePathTest() throws Exception {
     short refAccountId = Utils.getRandomShort(TestUtils.RANDOM);
-    String refAccountName = UtilsTest.getRandomString(10);
+    String refAccountName = TestUtils.getRandomString(10);
     short[] refContainerIds = new short[]{2, 3};
     String[] refContainerNames = new String[]{"SecurePathValidation", "NoValidation"};
     Container signedPathRequiredContainer =
@@ -2839,7 +2838,11 @@ class FrontendTestRouter implements Router {
    * Enumerates the different operation types in the router.
    */
   enum OpType {
-    DeleteBlob, GetBlob, PutBlob, StitchBlob, UpdateBlobTtl
+    DeleteBlob,
+    GetBlob,
+    PutBlob,
+    StitchBlob,
+    UpdateBlobTtl
   }
 
   OpType exceptionOpType = null;
@@ -2872,13 +2875,13 @@ class FrontendTestRouter implements Router {
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback) {
-    return completeOperation(UtilsTest.getRandomString(10), callback, OpType.PutBlob);
+    return completeOperation(TestUtils.getRandomString(10), callback, OpType.PutBlob);
   }
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       Callback<String> callback) {
-    return completeOperation(UtilsTest.getRandomString(10), callback, OpType.StitchBlob);
+    return completeOperation(TestUtils.getRandomString(10), callback, OpType.StitchBlob);
   }
 
   @Override

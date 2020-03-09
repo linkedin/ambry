@@ -15,7 +15,6 @@ package com.github.ambry.account;
 
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -977,7 +976,7 @@ public class AccountContainerTest {
       refContainerBackupEnabledValues.add(random.nextBoolean());
       refContainerMediaScanDisabledValues.add(random.nextBoolean());
       if (refContainerReplicationPolicyValues.contains(null)) {
-        refContainerReplicationPolicyValues.add(UtilsTest.getRandomString(10));
+        refContainerReplicationPolicyValues.add(TestUtils.getRandomString(10));
       } else {
         refContainerReplicationPolicyValues.add(null);
       }
@@ -1007,7 +1006,7 @@ public class AccountContainerTest {
    */
   private Set<String> getRandomContentTypeWhitelistForFilenamesOnDownload() {
     Set<String> toRet = new HashSet<>();
-    IntStream.range(0, random.nextInt(10) + 1).boxed().forEach(i -> toRet.add(UtilsTest.getRandomString(10)));
+    IntStream.range(0, random.nextInt(10) + 1).boxed().forEach(i -> toRet.add(TestUtils.getRandomString(10)));
     return toRet;
   }
 

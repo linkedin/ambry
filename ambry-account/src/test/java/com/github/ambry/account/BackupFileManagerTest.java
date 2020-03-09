@@ -18,7 +18,6 @@ import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -396,7 +395,7 @@ public class BackupFileManagerTest {
     boolean containerEncryption = random.nextBoolean();
     boolean containerPreviousEncryption = containerEncryption || random.nextBoolean();
     boolean containerMediaScanDisabled = random.nextBoolean();
-    String replicationPolicy = UtilsTest.getRandomString(10);
+    String replicationPolicy = TestUtils.getRandomString(10);
     boolean containerTtlRequired = random.nextBoolean();
     Container container =
         new ContainerBuilder(containerID, containerName, Container.ContainerStatus.ACTIVE, containerDescription,

@@ -29,7 +29,6 @@ import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -43,7 +42,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+// TODO see if this can be removed/replaced with InMemoryRouter
 public class MockRouter implements Router {
   private final static Logger logger = LoggerFactory.getLogger(MockRouter.class);
   private static final Random random = TestUtils.RANDOM;
@@ -107,13 +106,10 @@ public class MockRouter implements Router {
         InputStream input = new ReadableStreamChannelInputStream(channel);
         byte[] bytes = Utils.readBytesFromStream(input, (int) size);
         BlobInfoAndData blob = new BlobInfoAndData(new BlobInfo(blobProperties, userMetadata), bytes);
-        String id = null;
-        while (true) {
-          id = UtilsTest.getRandomString(10);
-          if (allBlobs.putIfAbsent(id, blob) == null) {
-            break;
-          }
-        }
+        String id;
+        do {
+          id = TestUtils.getRandomString(10);
+        } while (allBlobs.putIfAbsent(id, blob) != null);
         future.done(id, null);
         if (callback != null) {
           callback.onCompletion(id, null);

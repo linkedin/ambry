@@ -36,7 +36,6 @@ import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -761,7 +760,7 @@ public class RequestResponseTest {
     int numOrigins = TestUtils.RANDOM.nextInt(8) + 2;
     List<String> origins = new ArrayList<>();
     for (int i = 0; i < numOrigins; i++) {
-      origins.add(UtilsTest.getRandomString(TestUtils.RANDOM.nextInt(8) + 2));
+      origins.add(TestUtils.getRandomString(TestUtils.RANDOM.nextInt(8) + 2));
     }
     doReplicationControlAdminRequestTest(origins, true);
     doReplicationControlAdminRequestTest(origins, false);

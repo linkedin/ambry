@@ -22,7 +22,6 @@ import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -52,7 +51,7 @@ public class CryptoJobHandlerTest {
   private static final int RANDOM_KEY_SIZE_IN_BITS = 256;
   private static final String ENCRYPT_JOB_TYPE = "encrypt";
   private static final String DECRYPT_JOB_TYPE = "decrypt";
-  private static final String CLUSTER_NAME = UtilsTest.getRandomString(10);
+  private static final String CLUSTER_NAME = TestUtils.getRandomString(10);
   private static final MetricRegistry REGISTRY = new MetricRegistry();
   private final CryptoService<SecretKeySpec> cryptoService;
   private final KeyManagementService<SecretKeySpec> kms;
@@ -245,8 +244,9 @@ public class CryptoJobHandlerTest {
                 assertNotNull("Encrypted content should not be null", encryptJobResult.getEncryptedBlobContent());
                 assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
                 decryptJobs.add(new DecryptJob(testData.blobId, encryptJobResult.getEncryptedKey(),
-                    Unpooled.wrappedBuffer(encryptJobResult.getEncryptedBlobContent()), encryptJobResult.getEncryptedUserMetadata(),
-                    cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
+                    Unpooled.wrappedBuffer(encryptJobResult.getEncryptedBlobContent()),
+                    encryptJobResult.getEncryptedUserMetadata(), cryptoService, kms,
+                    new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
                     (DecryptJob.DecryptJobResult decryptJobResult, Exception e) -> {
                       if (e == null) {
                         assertEquals("BlobId mismatch ", testData.blobId, decryptJobResult.getBlobId());
@@ -308,8 +308,8 @@ public class CryptoJobHandlerTest {
             }));
 
     cryptoJobHandler.submitJob(
-        new DecryptJob(randomData.blobId, randomData.blobContent, Unpooled.wrappedBuffer(randomData.blobContent), randomData.userMetadata,
-            cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
+        new DecryptJob(randomData.blobId, randomData.blobContent, Unpooled.wrappedBuffer(randomData.blobContent),
+            randomData.userMetadata, cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
             (DecryptJob.DecryptJobResult result, Exception exception) -> {
               fail("Callback should not have been called since CryptoWorker is closed");
             }));
@@ -398,8 +398,9 @@ public class CryptoJobHandlerTest {
                     new GeneralSecurityException("Exception to test", new IllegalStateException()));
               }
               cryptoJobHandler.submitJob(new DecryptJob(testData.blobId, encryptJobResult.getEncryptedKey(),
-                  Unpooled.wrappedBuffer(encryptJobResult.getEncryptedBlobContent()), encryptJobResult.getEncryptedUserMetadata(),
-                  cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
+                  Unpooled.wrappedBuffer(encryptJobResult.getEncryptedBlobContent()),
+                  encryptJobResult.getEncryptedUserMetadata(), cryptoService, kms,
+                  new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
                   (DecryptJob.DecryptJobResult result, Exception e) -> {
                     decryptCallBackCount.countDown();
                     assertNotNull("Exception should have been thrown to decrypt contents for " + testData.blobId, e);
@@ -446,10 +447,10 @@ public class CryptoJobHandlerTest {
         }
         assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
         ByteBuffer encryptedBlobContent = encryptJobResult.getEncryptedBlobContent();
-        cryptoJobHandler.submitJob(
-            new DecryptJob(blobId, encryptJobResult.getEncryptedKey(), encryptedBlobContent == null? null: Unpooled.wrappedBuffer(encryptedBlobContent),
-                encryptJobResult.getEncryptedUserMetadata(), cryptoService, kms,
-                new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), decryptCallBackVerifier));
+        cryptoJobHandler.submitJob(new DecryptJob(blobId, encryptJobResult.getEncryptedKey(),
+            encryptedBlobContent == null ? null : Unpooled.wrappedBuffer(encryptedBlobContent),
+            encryptJobResult.getEncryptedUserMetadata(), cryptoService, kms,
+            new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), decryptCallBackVerifier));
       } else {
         assertNotNull("Exception should have been thrown to encrypt contents for " + blobId, exception);
         assertTrue("Exception cause should have been GeneralSecurityException",
@@ -552,7 +553,9 @@ public class CryptoJobHandlerTest {
    * Mode to represent the entity that needs to be tested for encryption and decryption
    */
   enum Mode {
-    Data, UserMetadata, Both
+    Data,
+    UserMetadata,
+    Both
   }
 
   /**

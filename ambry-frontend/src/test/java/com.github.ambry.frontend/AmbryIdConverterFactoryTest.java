@@ -23,7 +23,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.UtilsTest;
+import com.github.ambry.utils.TestUtils;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
@@ -56,7 +56,7 @@ public class AmbryIdConverterFactoryTest {
     IdConverter idConverter = ambryIdConverterFactory.getIdConverter();
     assertNotNull("No IdConverter returned", idConverter);
 
-    String input = UtilsTest.getRandomString(10);
+    String input = TestUtils.getRandomString(10);
     String inputWithLeadingSlash = "/" + input;
     // GET
     // without leading slash

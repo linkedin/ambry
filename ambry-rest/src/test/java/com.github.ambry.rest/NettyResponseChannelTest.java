@@ -20,7 +20,6 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -299,7 +298,7 @@ public class NettyResponseChannelTest {
     onResponseCompleteUnderWriteFailureTest(TestingUri.OnResponseCompleteWithNonRestException);
 
     // writing to channel with a outbound handler that generates an Exception
-    String message = UtilsTest.getRandomString(10);
+    String message = TestUtils.getRandomString(10);
     try {
       String content = "@@randomContent@@@";
       MockNettyMessageProcessor processor = new MockNettyMessageProcessor();

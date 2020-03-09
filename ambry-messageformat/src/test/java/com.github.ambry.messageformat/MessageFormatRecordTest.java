@@ -26,7 +26,6 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -622,7 +621,7 @@ public class MessageFormatRecordTest {
   private List<StoreKey> getKeys(int keySize, int numberOfKeys) {
     List<StoreKey> keys = new ArrayList<StoreKey>();
     for (int i = 0; i < numberOfKeys; i++) {
-      MockId mockId = new MockId(UtilsTest.getRandomString(keySize));
+      MockId mockId = new MockId(TestUtils.getRandomString(keySize));
       keys.add(mockId);
     }
     return keys;

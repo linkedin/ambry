@@ -21,7 +21,6 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -58,7 +57,7 @@ public class BlobStoreCompactorTest {
 
   private static final String STORE_ID = "compactor_example_store";
   private static final DiskIOScheduler DISK_IO_SCHEDULER = new DiskIOScheduler(null);
-  private static final String EXCEPTION_MSG = UtilsTest.getRandomString(10);
+  private static final String EXCEPTION_MSG = TestUtils.getRandomString(10);
 
   private final File tempDir;
   private final String tempDirStr;
@@ -94,7 +93,7 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   public BlobStoreCompactorTest(boolean doDirectIO) throws Exception {
-    tempDir = StoreTestUtils.createTempDirectory("compactorDir-" + UtilsTest.getRandomString(10));
+    tempDir = StoreTestUtils.createTempDirectory("compactorDir-" + TestUtils.getRandomString(10));
     tempDirStr = tempDir.getAbsolutePath();
     config = new StoreConfig(new VerifiableProperties(new Properties()));
     this.doDirectIO = doDirectIO;

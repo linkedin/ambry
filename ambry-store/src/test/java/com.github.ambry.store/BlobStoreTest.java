@@ -30,7 +30,6 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -84,7 +83,7 @@ public class BlobStoreTest {
 
   private static final int MOCK_ID_STRING_LENGTH = 10;
   private static final MockId randomMockId =
-      new MockId(UtilsTest.getRandomString(MOCK_ID_STRING_LENGTH), (short) 0, (short) 0);
+      new MockId(TestUtils.getRandomString(MOCK_ID_STRING_LENGTH), (short) 0, (short) 0);
   // setupTestState() is coupled to these numbers. Changing them *will* cause setting test state or tests to fail.
   private static final long LOG_CAPACITY = 90000;
   private static final long SEGMENT_CAPACITY = 9000;
@@ -278,7 +277,7 @@ public class BlobStoreTest {
   // the time instance that will be used in the index
   private final Time time = new MockTime();
 
-  private final String storeId = UtilsTest.getRandomString(10);
+  private final String storeId = TestUtils.getRandomString(10);
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
   private final DiskSpaceAllocator diskSpaceAllocator = StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR;
   private final Properties properties = new Properties();
@@ -445,10 +444,10 @@ public class BlobStoreTest {
     // attempt to start when store is already started fails
     verifyStartupFailure(store, StoreErrorCodes.Store_Already_Started);
 
-    String nonExistentDir = new File(tempDir, UtilsTest.getRandomString(10)).getAbsolutePath();
+    String nonExistentDir = new File(tempDir, TestUtils.getRandomString(10)).getAbsolutePath();
 
     // fail if attempt to create directory fails
-    String badPath = new File(nonExistentDir, UtilsTest.getRandomString(10)).getAbsolutePath();
+    String badPath = new File(nonExistentDir, TestUtils.getRandomString(10)).getAbsolutePath();
 
     BlobStore blobStore = createBlobStore(getMockReplicaId(badPath));
 
@@ -477,7 +476,7 @@ public class BlobStoreTest {
     assertTrue("Directory could not be deleted", StoreTestUtils.cleanDirectory(createdDir, true));
 
     // fail if provided path is not a directory
-    File file = new File(tempDir, UtilsTest.getRandomString(10));
+    File file = new File(tempDir, TestUtils.getRandomString(10));
     assertTrue("Test file could not be created", file.createNewFile());
     file.deleteOnExit();
     blobStore = createBlobStore(getMockReplicaId(file.getAbsolutePath()));
@@ -1486,7 +1485,7 @@ public class BlobStoreTest {
   private MockId getUniqueId(short accountId, short containerId) {
     MockId id;
     do {
-      id = new MockId(UtilsTest.getRandomString(MOCK_ID_STRING_LENGTH), accountId, containerId);
+      id = new MockId(TestUtils.getRandomString(MOCK_ID_STRING_LENGTH), accountId, containerId);
     } while (generatedKeys.contains(id));
     generatedKeys.add(id);
     return id;

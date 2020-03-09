@@ -71,7 +71,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -530,7 +529,7 @@ public class ReplicationTest {
 
     // write a blob with size = 100 into local store (end offset of last PUT = 100 + 18 = 118)
     Store localStore = storageManager.getStore(existingPartition);
-    MockId id = new MockId(UtilsTest.getRandomString(10), Utils.getRandomShort(TestUtils.RANDOM),
+    MockId id = new MockId(TestUtils.getRandomString(10), Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM));
     long crc = (new Random()).nextLong();
     long blobSize = 100;
@@ -655,7 +654,7 @@ public class ReplicationTest {
     storageManager.startBlobStore(existingPartition);
     // before testing success case, let's write a blob (size = 100) into local store and add a delete record for new blob
     Store localStore = storageManager.getStore(existingPartition);
-    MockId id = new MockId(UtilsTest.getRandomString(10), Utils.getRandomShort(TestUtils.RANDOM),
+    MockId id = new MockId(TestUtils.getRandomString(10), Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM));
     long crc = (new Random()).nextLong();
     long blobSize = 100;

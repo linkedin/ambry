@@ -90,7 +90,6 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.io.InputStream;
@@ -751,7 +750,7 @@ public class AmbryServerRequestsTest {
   public void ttlUpdateTest() throws InterruptedException, IOException, MessageFormatException, StoreException {
     MockPartitionId id = (MockPartitionId) clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
+    String clientId = TestUtils.getRandomString(10);
     BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
@@ -804,7 +803,7 @@ public class AmbryServerRequestsTest {
     try {
       MockPartitionId id = (MockPartitionId) clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
       int correlationId = TestUtils.RANDOM.nextInt();
-      String clientId = UtilsTest.getRandomString(10);
+      String clientId = TestUtils.getRandomString(10);
       BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
           Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
@@ -822,7 +821,7 @@ public class AmbryServerRequestsTest {
   public void undeleteTest() throws Exception {
     MockPartitionId id = (MockPartitionId) clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
+    String clientId = TestUtils.getRandomString(10);
     BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
@@ -923,7 +922,7 @@ public class AmbryServerRequestsTest {
       short numReplicasCaughtUpPerPartition, ServerErrorCode expectedServerErrorCode)
       throws InterruptedException, IOException {
     int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
+    String clientId = TestUtils.getRandomString(10);
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, correlationId, clientId);
     BlobStoreControlAdminRequest blobStoreControlAdminRequest =
@@ -990,7 +989,7 @@ public class AmbryServerRequestsTest {
   private void doScheduleCompactionTest(PartitionId id, ServerErrorCode expectedServerErrorCode)
       throws InterruptedException, IOException {
     int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
+    String clientId = TestUtils.getRandomString(10);
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.TriggerCompaction, id, correlationId, clientId);
     Response response = sendRequestGetResponse(adminRequest, expectedServerErrorCode);
@@ -1048,7 +1047,7 @@ public class AmbryServerRequestsTest {
       throws InterruptedException, IOException {
     PartitionId partitionId = blobIds.get(0).getPartition();
     int correlationId = blobIds.get(0).getContainerId();
-    String clientId = UtilsTest.getRandomString(10);
+    String clientId = TestUtils.getRandomString(10);
 
     PartitionRequestInfo pRequestInfo = new PartitionRequestInfo(partitionId, blobIds);
     RequestOrResponse request =
@@ -1085,7 +1084,7 @@ public class AmbryServerRequestsTest {
       ServerErrorCode expectedErrorCode, Boolean forceCheckOpReceived) throws InterruptedException, IOException {
     for (PartitionId id : ids) {
       int correlationId = TestUtils.RANDOM.nextInt();
-      String clientId = UtilsTest.getRandomString(10);
+      String clientId = TestUtils.getRandomString(10);
       BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
           Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
@@ -1146,7 +1145,7 @@ public class AmbryServerRequestsTest {
   private void sendAndVerifyRequestControlRequest(RequestOrResponseType toControl, boolean enable, PartitionId id,
       ServerErrorCode expectedServerErrorCode) throws InterruptedException, IOException {
     int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
+    String clientId = TestUtils.getRandomString(10);
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.RequestControl, id, correlationId, clientId);
     RequestControlAdminRequest controlRequest = new RequestControlAdminRequest(toControl, enable, adminRequest);
@@ -1170,7 +1169,7 @@ public class AmbryServerRequestsTest {
     int numOrigins = TestUtils.RANDOM.nextInt(8) + 2;
     List<String> origins = new ArrayList<>();
     for (int i = 0; i < numOrigins; i++) {
-      origins.add(UtilsTest.getRandomString(TestUtils.RANDOM.nextInt(8) + 2));
+      origins.add(TestUtils.getRandomString(TestUtils.RANDOM.nextInt(8) + 2));
     }
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
@@ -1196,7 +1195,7 @@ public class AmbryServerRequestsTest {
   private void sendAndVerifyReplicationControlRequest(List<String> origins, boolean enable, PartitionId id,
       ServerErrorCode expectedServerErrorCode) throws InterruptedException, IOException {
     int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
+    String clientId = TestUtils.getRandomString(10);
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.ReplicationControl, id, correlationId, clientId);
     ReplicationControlAdminRequest controlRequest = new ReplicationControlAdminRequest(origins, enable, adminRequest);
@@ -1272,7 +1271,7 @@ public class AmbryServerRequestsTest {
   private void doCatchupStatusTest(PartitionId id, long acceptableLagInBytes, short numReplicasCaughtUpPerPartition,
       ServerErrorCode expectedServerErrorCode, boolean expectedIsCaughtUp) throws InterruptedException, IOException {
     int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
+    String clientId = TestUtils.getRandomString(10);
     AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.CatchupStatus, id, correlationId, clientId);
     CatchupStatusAdminRequest catchupStatusRequest =
         new CatchupStatusAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);

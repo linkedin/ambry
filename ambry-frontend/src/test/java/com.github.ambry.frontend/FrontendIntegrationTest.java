@@ -28,6 +28,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.commons.NettySslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.FrontendConfig;
@@ -38,7 +39,6 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
-import com.github.ambry.commons.NettySslFactory;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServiceException;
@@ -49,7 +49,6 @@ import com.github.ambry.router.ByteRanges;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
@@ -335,7 +334,7 @@ public class FrontendIntegrationTest {
     assertEquals("Snapshot does not match expected", expected.toString(), actual.toString());
 
     // test a failure to ensure that it goes through the exception path
-    String msg = UtilsTest.getRandomString(10);
+    String msg = TestUtils.getRandomString(10);
     CLUSTER_MAP.setExceptionOnSnapshot(new RuntimeException(msg));
     httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, Operations.GET_CLUSTER_MAP_SNAPSHOT,
         Unpooled.buffer(0));
@@ -598,7 +597,7 @@ public class FrontendIntegrationTest {
     String blobId;
     byte[] usermetadata = null;
     if (multipartPost) {
-      usermetadata = UtilsTest.getRandomString(32).getBytes();
+      usermetadata = TestUtils.getRandomString(32).getBytes();
       blobId = multipartPostBlobAndVerify(headers, content, ByteBuffer.wrap(usermetadata));
     } else {
       headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");

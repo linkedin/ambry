@@ -21,7 +21,6 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -62,10 +61,10 @@ import static org.mockito.Mockito.*;
 @RunWith(Parameterized.class)
 public class IndexSegmentTest {
   private static final int CUSTOM_ID_SIZE = 10;
-  private static final int KEY_SIZE = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE)).sizeInBytes();
-  private static final int SMALLER_KEY_SIZE = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE / 2)).sizeInBytes();
+  private static final int KEY_SIZE = new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE)).sizeInBytes();
+  private static final int SMALLER_KEY_SIZE = new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE / 2)).sizeInBytes();
   private static final int LARGER_KEY_SIZE =
-      new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE + CUSTOM_ID_SIZE / 2)).sizeInBytes();
+      new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE + CUSTOM_ID_SIZE / 2)).sizeInBytes();
   private static final MockTime time = new MockTime();
   private static final long DELETE_FILE_SPAN_SIZE = 10;
   private static final long TTL_UPDATE_FILE_SPAN_SIZE = 7;
@@ -109,7 +108,7 @@ public class IndexSegmentTest {
    * @throws IOException
    */
   public IndexSegmentTest(short formatVersion, IndexMemState indexMemState) throws IOException {
-    tempDir = StoreTestUtils.createTempDirectory("indexSegmentDir-" + UtilsTest.getRandomString(10));
+    tempDir = StoreTestUtils.createTempDirectory("indexSegmentDir-" + TestUtils.getRandomString(10));
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
     this.formatVersion = formatVersion;
@@ -152,9 +151,9 @@ public class IndexSegmentTest {
     String prevLogSegmentName = LogSegmentNameHelper.getName(0, 0);
     String logSegmentName = LogSegmentNameHelper.getNextPositionName(prevLogSegmentName);
     Offset startOffset = new Offset(logSegmentName, 0);
-    MockId id1 = new MockId("0" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
-    MockId id2 = new MockId("1" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
-    MockId id3 = new MockId("2" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id1 = new MockId("0" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id2 = new MockId("1" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id3 = new MockId("2" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     short updateVersion = 0;
@@ -251,9 +250,9 @@ public class IndexSegmentTest {
   @Test
   public void getIndexEntriesCornerCasesTest() throws IOException, StoreException {
     String logSegmentName = LogSegmentNameHelper.getName(0, 0);
-    MockId id1 = new MockId("0" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
-    MockId id2 = new MockId("1" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
-    MockId id3 = new MockId("2" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id1 = new MockId("0" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id2 = new MockId("1" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id3 = new MockId("2" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     short updateVersion = (short) 0;
@@ -380,7 +379,7 @@ public class IndexSegmentTest {
     }
     // verify that StoreErrorCodes.IOError can be captured when performing memory map
     indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), mockStoreKeyFactory);
-    MockId id1 = new MockId("0" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id1 = new MockId("0" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
     IndexValue value1 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.milliseconds(),
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), (short) 0, formatVersion);
@@ -415,7 +414,7 @@ public class IndexSegmentTest {
     StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
     Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
     IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), mockStoreKeyFactory);
-    MockId id1 = new MockId("0" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id1 = new MockId("0" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
     IndexValue value1 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.milliseconds(),
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), (short) 0, formatVersion);
@@ -455,7 +454,7 @@ public class IndexSegmentTest {
     do {
       containerId2 = getRandomShort(random);
     } while (containerId2 == containerId1);
-    String idStr = UtilsTest.getRandomString(CUSTOM_ID_SIZE);
+    String idStr = TestUtils.getRandomString(CUSTOM_ID_SIZE);
     // generate two ids with same id string but different account/container.
     MockId id1 = new MockId(idStr, accountId1, containerId1);
     MockId id2 = new MockId(idStr, accountId2, containerId2);
@@ -763,11 +762,11 @@ public class IndexSegmentTest {
       MockId id;
       do {
         if (includeSmallKeys && i % 3 == 1) {
-          id = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE / 2));
+          id = new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE / 2));
         } else if (includeLargeKeys && i % 3 == 2) {
-          id = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE + CUSTOM_ID_SIZE / 2));
+          id = new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE + CUSTOM_ID_SIZE / 2));
         } else {
-          id = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE));
+          id = new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE));
         }
       } while (referenceIndex.containsKey(id));
       long offset = offsets.get(i);
@@ -894,7 +893,7 @@ public class IndexSegmentTest {
       getEntriesSinceTest(referenceIndex, segment, entry.getKey(), sizeLeftInSegment);
     }
     // try to getEntriesSince a key that does not exist.
-    MockId id = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE));
+    MockId id = new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE));
     doGetEntriesSinceTest(referenceIndex, segment, id, Long.MAX_VALUE, 0, null);
   }
 
@@ -1073,7 +1072,7 @@ public class IndexSegmentTest {
     for (int i = 0; i < count; i++) {
       MockId id;
       do {
-        id = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE));
+        id = new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE));
       } while (referenceIndex.containsKey(id) || generatedIds.contains(id));
       generatedIds.add(id);
     }
@@ -1096,7 +1095,7 @@ public class IndexSegmentTest {
       IndexValue value;
       if (values == null) {
         // create an index value with a random log segment name
-        value = IndexValueTest.getIndexValue(1, new Offset(UtilsTest.getRandomString(1), 0), Utils.Infinite_Time,
+        value = IndexValueTest.getIndexValue(1, new Offset(TestUtils.getRandomString(1), 0), Utils.Infinite_Time,
             time.milliseconds(), id.getAccountId(), id.getContainerId(), (short) 1, formatVersion);
       } else if (values.last().isFlagSet(IndexValue.Flags.Delete_Index)) {
         throw new IllegalArgumentException(id + " is deleted");
@@ -1132,7 +1131,7 @@ public class IndexSegmentTest {
       IndexValue value;
       if (values == null) {
         // create an index value with a random log segment name
-        value = IndexValueTest.getIndexValue(1, new Offset(UtilsTest.getRandomString(1), 0), Utils.Infinite_Time,
+        value = IndexValueTest.getIndexValue(1, new Offset(TestUtils.getRandomString(1), 0), Utils.Infinite_Time,
             time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
             (short) 0, formatVersion);
       } else if (values.last().isFlagSet(IndexValue.Flags.Delete_Index)) {

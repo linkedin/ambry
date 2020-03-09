@@ -20,7 +20,6 @@ import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.security.GeneralSecurityException;
 import java.util.Properties;
 import javax.crypto.spec.SecretKeySpec;
@@ -38,7 +37,7 @@ public class SingleKeyManagementServiceTest {
 
   static final int DEFAULT_KEY_SIZE_CHARS = 64;
   private static final int DEFAULT_RANDOM_KEY_SIZE_BITS = 256;
-  private static final String CLUSTER_NAME = UtilsTest.getRandomString(10);
+  private static final String CLUSTER_NAME = TestUtils.getRandomString(10);
   private static final MetricRegistry REGISTRY = new MetricRegistry();
 
   /**
