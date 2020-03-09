@@ -454,9 +454,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
 
       while (netReadBuffer.position() > 0) {
         netReadBuffer.flip();
-        long startTimeMs = SystemTime.getInstance().milliseconds();
+        long startTimeMs = System.currentTimeMillis();
         SSLEngineResult unwrapResult = sslEngine.unwrap(netReadBuffer, appReadBuffer);
-        long decryptionTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
+        long decryptionTimeMs = System.currentTimeMillis() - startTimeMs;
         logger.trace("SSL decryption time: {} ms for {} bytes", decryptionTimeMs, unwrapResult.bytesProduced());
         if (unwrapResult.bytesProduced() > 0) {
           metrics.sslDecryptionTimeInUsPerKB.mark(

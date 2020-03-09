@@ -23,9 +23,12 @@ import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.account.HelixAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.NettyInternalMetrics;
+import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.RestServerConfig;
+import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.Router;
@@ -170,9 +173,16 @@ public class RestServer {
             clusterMap.getMetricRegistry());
     accountService = accountServiceFactory.getAccountService();
 
+    SSLFactory routerSslFactory;
+    if (new RouterConfig(verifiableProperties).routerEnableHttp2NetworkClient) {
+      routerSslFactory = new NettySslHttp2Factory(new SSLConfig(verifiableProperties));
+    } else {
+      routerSslFactory = sslFactory;
+    }
+
     RouterFactory routerFactory =
         Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem,
-            sslFactory, accountService);
+            routerSslFactory, accountService);
     router = routerFactory.getRouter();
 
     // setup the router for the account service

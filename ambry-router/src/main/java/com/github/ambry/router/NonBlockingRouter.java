@@ -26,6 +26,7 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.network.http2.Http2NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
@@ -841,6 +842,10 @@ class NonBlockingRouter implements Router {
       for (ResponseInfo responseInfo : responseInfoList) {
         try {
           RequestInfo requestInfo = responseInfo.getRequestInfo();
+          long responseReceiveTime = requestInfo.getStreamReceiveTime();
+          if (responseReceiveTime != -1) {
+            routerMetrics.responseReceiveToHandleLatencyMs.update(System.currentTimeMillis() - responseReceiveTime);
+          }
           if (requestInfo == null) {
             // If requestInfo is null, it means request has been failed previously due to long wait in pending requests
             // queue. The failed request was already handled by one of the managers(PutManager, GetManager, etc). Current

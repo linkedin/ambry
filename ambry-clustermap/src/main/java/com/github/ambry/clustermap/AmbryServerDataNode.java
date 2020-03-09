@@ -35,7 +35,6 @@ class AmbryServerDataNode extends AmbryDataNode {
   private final String rackId;
   private final long xid;
   private final List<String> sslEnabledDataCenters;
-  private final boolean http2ClientEnabled;
   private final ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback;
 
   /**
@@ -58,7 +57,6 @@ class AmbryServerDataNode extends AmbryDataNode {
     super(dataCenterName, clusterMapConfig, hostName, portNum, sslPortNum, http2PortNumber);
     this.rackId = rackId;
     this.xid = xid;
-    this.http2ClientEnabled = clusterMapConfig.clusterMapHttp2NetworkClientEnabled;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.clusterManagerCallback = clusterManagerCallback;
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
@@ -67,9 +65,6 @@ class AmbryServerDataNode extends AmbryDataNode {
 
   @Override
   public Port getPortToConnectTo() {
-    if (http2ClientEnabled) {
-      return http2Port;
-    }
     return sslEnabledDataCenters.contains(getDatacenterName()) ? sslPort : plainTextPort;
   }
 

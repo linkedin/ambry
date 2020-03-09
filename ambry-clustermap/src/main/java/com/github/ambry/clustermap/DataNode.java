@@ -159,9 +159,6 @@ class DataNode implements DataNodeId {
    */
   @Override
   public Port getPortToConnectTo() {
-    if (clusterMapConfig.clusterMapHttp2NetworkClientEnabled) {
-      return ports.get(PortType.HTTP2);
-    }
     if (sslEnabledDataCenters.contains(datacenter.getName())) {
       if (ports.containsKey(PortType.SSL)) {
         return ports.get(PortType.SSL);

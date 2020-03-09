@@ -17,7 +17,6 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
-import com.github.ambry.utils.SystemTime;
 import io.netty.buffer.ByteBuf;
 import java.io.InputStream;
 
@@ -37,7 +36,7 @@ public class NettyServerRequest extends AbstractByteBufHolder<NettyServerRequest
     this.restResponseChannel = restResponseChannel;
     this.content = content;
     this.inputStream = new NettyByteBufDataInputStream(content);
-    this.startTimeInMs = SystemTime.getInstance().milliseconds();
+    this.startTimeInMs = System.currentTimeMillis();
   }
 
   @Override

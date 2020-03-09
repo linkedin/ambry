@@ -134,6 +134,8 @@ public class RestServerTest {
     properties.setProperty("rest.server.request.response.handler.factory",
         MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "dc1");
   }
 
   // serverCreationWithBadInputTest() helpers

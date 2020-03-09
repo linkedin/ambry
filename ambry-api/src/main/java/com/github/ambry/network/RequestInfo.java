@@ -25,6 +25,8 @@ public class RequestInfo {
   private final Port port;
   private final SendWithCorrelationId request;
   private final ReplicaId replicaId;
+  private long streamSendTime = -1;
+  private long streamReceiveTime = -1;
 
   /**
    * Construct a RequestInfo with the given parameters
@@ -66,6 +68,22 @@ public class RequestInfo {
    */
   public ReplicaId getReplicaId() {
     return replicaId;
+  }
+
+  public long getStreamReceiveTime() {
+    return streamReceiveTime;
+  }
+
+  public long getStreamSendTime() {
+    return streamSendTime;
+  }
+
+  public void setStreamReceiveTime(long streamReceiveTime) {
+    this.streamReceiveTime = streamReceiveTime;
+  }
+
+  public void setStreamSendTime(long streamSendTime) {
+    this.streamSendTime = streamSendTime;
   }
 
   @Override

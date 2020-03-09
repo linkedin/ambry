@@ -194,6 +194,7 @@ public class TestSSLUtils {
           "com.github.ambry.server.StorageRestRequestService");
       properties.setProperty("rest.server.nio.server.factory", "com.github.ambry.rest.StorageServerNettyFactory");
       properties.setProperty("ssl.client.authentication", "required");
+      properties.setProperty("server.enable.store.data.prefetch", "true");
     }
     properties.setProperty("ssl.http2.self.sign", Boolean.toString(sslHttp2SelfSign));
   }

@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -58,10 +59,11 @@ public class StorageServerNettyFactory implements NioServerFactory {
     nettyConfig = new NettyConfig(verifiableProperties);
     performanceConfig = new PerformanceConfig(verifiableProperties);
     nettyMetrics = new NettyMetrics(metricRegistry);
+    Http2ClientConfig http2ClientConfig = new Http2ClientConfig(verifiableProperties);
     ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
 
     Map<Integer, ChannelInitializer<SocketChannel>> initializers = Collections.singletonMap(http2Port,
-        new StorageServerNettyChannelInitializer(nettyConfig, performanceConfig, nettyMetrics, connectionStatsHandler,
+        new StorageServerNettyChannelInitializer(nettyConfig, http2ClientConfig, performanceConfig, nettyMetrics, connectionStatsHandler,
             requestHandler, sslFactory, metricRegistry));
     channelInitializers = Collections.unmodifiableMap(initializers);
   }

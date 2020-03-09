@@ -15,16 +15,19 @@ package com.github.ambry.network;
 
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.router.Callback;
+import com.github.ambry.server.EmptyRequest;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * RequestResponseChannel for Netty based server
  */
 public class NettyServerRequestResponseChannel implements RequestResponseChannel {
+  private static final Logger logger = LoggerFactory.getLogger(NettyServerRequestResponseChannel.class);
   private final ArrayBlockingQueue<NetworkRequest> requestQueue;
 
   public NettyServerRequestResponseChannel(int queueSize) {
@@ -34,14 +37,6 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
-    DataInputStream stream = new DataInputStream(request.getInputStream());
-    try {
-      // The first 8 bytes is size of the request. TCP implementation uses this size to allocate buffer. See {@link BoundedReceive}
-      // Here we just need to consume it.
-      stream.readLong();
-    } catch (IOException e) {
-      throw new IllegalStateException("stream read error." + e);
-    }
     requestQueue.put(request);
   }
 
@@ -56,6 +51,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
 
     RestResponseChannel restResponseChannel = ((NettyServerRequest) originalRequest).getRestResponseChannel();
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, payloadToSend.sizeInBytes());
+    // TODO: add metrics
     payloadToSend.writeTo(restResponseChannel, (result, exception) -> {
     });// an extra copy
   }
@@ -65,13 +61,27 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
    */
   @Override
   public void closeConnection(NetworkRequest originalRequest) throws InterruptedException {
-    throw new UnsupportedOperationException();
+    //TODO: close connection
   }
 
   /** Get the next request or block until there is one */
   @Override
   public NetworkRequest receiveRequest() throws InterruptedException {
-    return requestQueue.take();
+
+    NetworkRequest request = requestQueue.take();
+    if (request.equals(EmptyRequest.getInstance())) {
+      logger.debug("Request handler {} received shut down command ", request);
+    } else {
+      DataInputStream stream = new DataInputStream(request.getInputStream());
+      try {
+        // The first 8 bytes is size of the request. TCP implementation uses this size to allocate buffer. See {@link BoundedReceive}
+        // Here we just need to consume it.
+        stream.readLong();
+      } catch (IOException e) {
+        throw new IllegalStateException("stream read error." + e);
+      }
+    }
+    return request;
   }
 
   /**

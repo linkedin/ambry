@@ -23,6 +23,8 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.NetworkClientErrorCode;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.server.ServerErrorCode;
@@ -204,6 +206,21 @@ class RouterUtils {
       responseHandler.onEvent(replicaId, networkClientErrorCode);
     }
     return response;
+  }
+
+  /**
+   * A temporary method to get port before http2 based replication is implemented.
+   * TODO: remove this once http2 based replication is implemented.
+   * @param replicaId The {@link ReplicaId} to connect to.
+   * @param routerEnableHttp2NetworkClient  if http2 network client should be enabled.
+   * @return the port to connect.
+   */
+  static Port getPortToConnectTo(ReplicaId replicaId, boolean routerEnableHttp2NetworkClient) {
+    if (routerEnableHttp2NetworkClient) {
+      return new Port(replicaId.getDataNodeId().getHttp2Port(), PortType.HTTP2);
+    } else {
+      return replicaId.getDataNodeId().getPortToConnectTo();
+    }
   }
 
   /**

@@ -116,7 +116,7 @@ public class NettySslHttp2Factory implements SSLFactory {
    * @throws IOException
    */
   public static SslContext getClientSslContext(SSLConfig config) throws GeneralSecurityException, IOException {
-    logger.info("Using {} provider for client SslContext", SslContext.defaultClientProvider());
+    logger.info("Using {} provider for client ", SslContext.defaultClientProvider());
     SslContextBuilder sslContextBuilder;
     if (config.sslHttp2SelfSign) {
       sslContextBuilder = SslContextBuilder.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE);

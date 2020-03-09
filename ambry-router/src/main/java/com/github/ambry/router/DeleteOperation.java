@@ -123,7 +123,7 @@ class DeleteOperation {
     while (replicaIterator.hasNext()) {
       ReplicaId replica = replicaIterator.next();
       String hostname = replica.getDataNodeId().getHostname();
-      Port port = replica.getDataNodeId().getPortToConnectTo();
+      Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       DeleteRequest deleteRequest = createDeleteRequest();
       deleteRequestInfos.put(deleteRequest.getCorrelationId(), new DeleteRequestInfo(time.milliseconds(), replica));
       RequestInfo requestInfo = new RequestInfo(hostname, port, deleteRequest, replica);

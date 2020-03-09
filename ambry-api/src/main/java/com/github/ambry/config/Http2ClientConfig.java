@@ -23,6 +23,9 @@ public class Http2ClientConfig {
       "http2.max.concurrent.streams.per.connection";
   public static final String HTTP2_NETTY_EVENT_LOOP_GROUP_THREADS = "http2.netty.event.loop.group.threads";
   public static final String HTTP2_IDLE_CONNECTION_TIMEOUT_MS = "http2.idle.connection.timeout.ms";
+  public static final String HTTP2_MAX_CONTENT_LENGTH = "http2.max.content.length";
+  public static final String NETTY_RECEIVE_BUFFER_SIZE = "netty.receive.buffer.size";
+  public static final String NETTY_SEND_BUFFER_SIZE = "netty.send.buffer.size";
 
   /**
    * HTTP/2 connection idle time before we close it. -1 means no idle close.
@@ -33,9 +36,11 @@ public class Http2ClientConfig {
 
   /**
    * Minimum number of http2 connection per port we want to keep.
+   * Based on initial perf test, number of HTTP/2 connection is not a significant performance factor.
+   * 2 is used by default, in case of one connection died.
    */
   @Config(HTTP2_MIN_CONNECTION_PER_PORT)
-  @Default("4")
+  @Default("2")
   public final int http2MinConnectionPerPort;
 
   /**
@@ -52,12 +57,40 @@ public class Http2ClientConfig {
   @Default("0")
   public final int http2NettyEventLoopGroupThreads;
 
+  /**
+   * Maximum content length for a full HTTP/2 content. Used in HttpObjectAggregator.
+   * In HttpObjectAggregator, maxContentLength is not used to preallocate buffer,
+   * but it throws exception if content length great than maxContentLength
+   * TODO: Link this with blob chunk size.
+   */
+  @Config(HTTP2_MAX_CONTENT_LENGTH)
+  @Default("25 * 1024 * 1024")
+  public final int http2MaxContentLength;
+
+  /**
+   * The socket receive buffer size for netty http2 channel.
+   */
+  @Config(NETTY_RECEIVE_BUFFER_SIZE)
+  @Default("1024 * 1024")
+  public final int nettyReceiveBufferSize;
+
+  /**
+   * The socket send buffer size for netty http2 channel.
+   */
+  @Config(NETTY_SEND_BUFFER_SIZE)
+  @Default("1024 * 1024")
+  public final int nettySendBufferSize;
+
   public Http2ClientConfig(VerifiableProperties verifiableProperties) {
     idleConnectionTimeoutMs = verifiableProperties.getLong(HTTP2_IDLE_CONNECTION_TIMEOUT_MS, -1);
-    http2MinConnectionPerPort = verifiableProperties.getInt(HTTP2_MIN_CONNECTION_PER_PORT, 4);
+    http2MinConnectionPerPort = verifiableProperties.getInt(HTTP2_MIN_CONNECTION_PER_PORT, 2);
     http2MaxConcurrentStreamsPerConnection =
         verifiableProperties.getIntInRange(HTTP2_MAX_CONCURRENT_STREAMS_PER_CONNECTION, Integer.MAX_VALUE, 1,
             Integer.MAX_VALUE);
     http2NettyEventLoopGroupThreads = verifiableProperties.getInt(HTTP2_NETTY_EVENT_LOOP_GROUP_THREADS, 0);
+    http2MaxContentLength = verifiableProperties.getInt(HTTP2_MAX_CONTENT_LENGTH, 25 * 1024 * 1024);
+
+    nettyReceiveBufferSize = verifiableProperties.getInt(NETTY_RECEIVE_BUFFER_SIZE, 1024 * 1024);
+    nettySendBufferSize = verifiableProperties.getInt(NETTY_SEND_BUFFER_SIZE, 1024 * 1024);
   }
 }
