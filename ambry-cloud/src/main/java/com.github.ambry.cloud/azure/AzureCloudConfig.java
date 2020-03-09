@@ -38,7 +38,6 @@ public class AzureCloudConfig {
   public static final int MAX_PURGE_BATCH_SIZE = 256;
   public static final int DEFAULT_PURGE_BATCH_SIZE = 100;
   public static final int DEFAULT_QUERY_BATCH_SIZE = 100;
-  public static final int DEFAULT_COSMOS_MAX_RETRIES = 5;
   public static final int DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT = 4;
   public static final int DEFAULT_COSMOS_REQUEST_CHARGE_THRESHOLD = 100;
 

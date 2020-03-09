@@ -79,7 +79,7 @@ public interface CloudDestination extends Closeable {
    * @param partitionPath the partition to query.
    * @param cutoffTime the cutoff time for the query time range.
    * @param maxEntries the max number of metadata records to return.
-   * @return a List of {@link CloudBlobMetadata} referencing the dead blobs found.
+   * @return a List of {@link CloudBlobMetadata} referencing the deleted blobs found.
    * @throws CloudStorageException
    */
   List<CloudBlobMetadata> getDeletedBlobs(String partitionPath, long cutoffTime, int maxEntries)
@@ -91,7 +91,7 @@ public interface CloudDestination extends Closeable {
    * @param partitionPath the partition to query.
    * @param cutoffTime the cutoff time for the query time range.
    * @param maxEntries the max number of metadata records to return.
-   * @return a List of {@link CloudBlobMetadata} referencing the dead blobs found.
+   * @return a List of {@link CloudBlobMetadata} referencing the expired blobs found.
    * @throws CloudStorageException
    */
   List<CloudBlobMetadata> getExpiredBlobs(String partitionPath, long cutoffTime, int maxEntries)

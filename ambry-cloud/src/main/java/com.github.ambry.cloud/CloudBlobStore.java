@@ -104,8 +104,11 @@ class CloudBlobStore implements Store {
     requireEncryption = cloudConfig.vcrRequireEncryption;
     isVcr = cloudConfig.cloudIsVcr;
     if (isVcr) {
+      logger.info("Creating cloud blob store for partition {} with cache size {}", partitionId.toPathString(),
+          cloudConfig.recentBlobCacheLimit);
       recentBlobCache = Collections.synchronizedMap(new RecentBlobCache(cloudConfig.recentBlobCacheLimit));
     } else {
+      logger.info("Creating cloud blob store for partition {} with no cache", partitionId.toPathString());
       recentBlobCache = Collections.emptyMap();
     }
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
@@ -123,7 +126,7 @@ class CloudBlobStore implements Store {
   @Override
   public void start() {
     started = true;
-    logger.info("Started store: {}", this.toString());
+    logger.debug("Started store: {}", this.toString());
   }
 
   @Override
@@ -195,7 +198,7 @@ class CloudBlobStore implements Store {
         }, "Download", cloudBlobMetadata.getPartitionId());
       }
     } catch (CloudStorageException | GeneralSecurityException | IOException e) {
-      throw new StoreException("Error occured in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
+      throw new StoreException("Error occurred in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
     }
   }
 
@@ -298,26 +301,24 @@ class CloudBlobStore implements Store {
                 messageInfo.getSize(), EncryptionOrigin.VCR, cryptoAgent.getEncryptionContext(),
                 cryptoAgentFactory.getClass().getName(), encryptedSize);
         // If buffer was encrypted, we no longer know its size
-        long bufferlen = (encryptedSize == -1) ? size : encryptedSize;
-        uploadBlobInternal(blobId, bufferlen, blobMetadata, new ByteBufferInputStream(messageBuf));
+        long bufferLen = (encryptedSize == -1) ? size : encryptedSize;
+        InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
+        requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, bufferLen, blobMetadata, uploadInputStream),
+            "Upload", partitionId.toPathString());
       } else {
         // Upload blob as is
         CloudBlobMetadata blobMetadata =
             new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
                 messageInfo.getSize(), encryptionOrigin);
-        uploadBlobInternal(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
+        InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
+        requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, size, blobMetadata, uploadInputStream),
+            "Upload", partitionId.toPathString());
       }
       addToCache(blobId.getID(), BlobState.CREATED);
     } else {
       logger.trace("Blob is skipped: {}", messageInfo);
       vcrMetrics.blobUploadSkippedCount.inc();
     }
-  }
-
-  private void uploadBlobInternal(BlobId blobId, long bufferlen, CloudBlobMetadata blobMetadata,
-      InputStream inputStream) throws CloudStorageException {
-    requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, bufferlen, blobMetadata, inputStream),
-        "Upload", partitionId.toPathString());
   }
 
   /**

@@ -99,6 +99,12 @@ public class CloudStorageCompactor implements Runnable {
     return totalBlobsPurged;
   }
 
+  /**
+   * Returns the expired blob in the specified partition with the earliest expiration time.
+   * @param partitionPath the partition to check.
+   * @return the {@link CloudBlobMetadata} for the expired blob, or NULL if none was found.
+   * @throws CloudStorageException
+   */
   public CloudBlobMetadata getOldestExpiredBlob(String partitionPath) throws CloudStorageException {
     List<CloudBlobMetadata> deadBlobs = requestAgent.doWithRetries(
         () -> cloudDestination.getExpiredBlobs(partitionPath, System.currentTimeMillis(), queryLimit), "GetDeadBlobs",
@@ -106,6 +112,12 @@ public class CloudStorageCompactor implements Runnable {
     return deadBlobs.isEmpty() ? null : deadBlobs.get(0);
   }
 
+  /**
+   * Returns the deleted blob in the specified partition with the earliest deletion time.
+   * @param partitionPath the partition to check.
+   * @return the {@link CloudBlobMetadata} for the deleted blob, or NULL if none was found.
+   * @throws CloudStorageException
+   */
   public CloudBlobMetadata getOldestDeletedBlob(String partitionPath) throws CloudStorageException {
     List<CloudBlobMetadata> deadBlobs = requestAgent.doWithRetries(
         () -> cloudDestination.getDeletedBlobs(partitionPath, System.currentTimeMillis(), queryLimit), "GetDeadBlobs",

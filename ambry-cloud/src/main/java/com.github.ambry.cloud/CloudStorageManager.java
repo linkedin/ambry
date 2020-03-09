@@ -157,7 +157,6 @@ public class CloudStorageManager implements StoreManager {
       CloudBlobStore store = new CloudBlobStore(properties, partitionId, cloudDestination, clusterMap, vcrMetrics);
       partitionToStore.put(partitionId, store);
       store.start();
-      logger.info("Cloudblobstore started for partition {}", partitionId);
       return store;
     } finally {
       lock.writeLock().unlock();
