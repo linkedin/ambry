@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -79,6 +80,21 @@ public class TestUtils {
       }
     }
     return thread;
+  }
+
+  /**
+   * Return all the threads with a name that contains the given name.
+   * @param pattern the pattern to compare
+   * @return all the threads with a name that contains the given pattern.
+   */
+  public static List<Thread> getAllThreadsByThisName(String pattern) {
+    List<Thread> threads = new ArrayList<>();
+    for (Thread t : Thread.getAllStackTraces().keySet()) {
+      if (t.getName().contains(pattern)) {
+        threads.add(t);
+      }
+    }
+    return threads;
   }
 
   /**

@@ -201,7 +201,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * @param replicaPath replica path on the remote peer replica
    * @return RemoteReplicaInfo
    */
-  private RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
+  protected RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
     RemoteReplicaInfo foundRemoteReplicaInfo = null;
 
     PartitionInfo partitionInfo = partitionToPartitionInfo.get(partitionId);

@@ -215,13 +215,6 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   }
 
   /**
-   * @return a map of thread pools grouped by data center.
-   */
-  Map<String, List<ReplicaThread>> getReplicaThreadPoolByDc() {
-    return Collections.unmodifiableMap(replicaThreadPoolByDc);
-  }
-
-  /**
    * Remove a replica of given partition and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionName the partition of the replica to be removed.
    */
