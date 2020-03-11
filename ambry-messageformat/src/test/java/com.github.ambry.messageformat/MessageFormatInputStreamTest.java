@@ -79,6 +79,8 @@ public class MessageFormatInputStreamTest {
         MessageFormatRecord.Message_Header_Version_V2);
     messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
         MessageFormatRecord.Message_Header_Version_V2);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob,
+        MessageFormatRecord.Message_Header_Version_V3);
     messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
         MessageFormatRecord.Message_Header_Version_V3);
   }

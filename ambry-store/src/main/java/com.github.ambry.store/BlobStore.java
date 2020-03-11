@@ -507,14 +507,9 @@ public class BlobStore implements Store {
         List<MessageInfo> updatedInfos = new ArrayList<>(infosToDelete.size());
         int ind = 0;
         for (MessageInfo info : infosToDelete) {
-          MessageFormatInputStream stream = null;
-          if (MessageFormatRecord.getCurrentMessageHeaderVersion() == MessageFormatRecord.Message_Header_Version_V3) {
-            stream = new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                info.getOperationTimeMs(), lifeVersions.get(ind));
-          } else {
-            stream = new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                info.getOperationTimeMs());
-          }
+          MessageFormatInputStream stream =
+              new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs(), lifeVersions.get(ind));
           updatedInfos.add(
               new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
                   info.getOperationTimeMs()));
@@ -619,16 +614,9 @@ public class BlobStore implements Store {
         List<MessageInfo> updatedInfos = new ArrayList<>(infosToUpdate.size());
         int ind = 0;
         for (MessageInfo info : infosToUpdate) {
-          MessageFormatInputStream stream = null;
-          if (MessageFormatRecord.getCurrentMessageHeaderVersion() == MessageFormatRecord.Message_Header_Version_V3) {
-            stream =
-                new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                    info.getExpirationTimeInMs(), info.getOperationTimeMs(), lifeVersions.get(ind));
-          } else {
-            stream =
-                new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                    info.getExpirationTimeInMs(), info.getOperationTimeMs());
-          }
+          MessageFormatInputStream stream =
+              new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                  info.getExpirationTimeInMs(), info.getOperationTimeMs(), lifeVersions.get(ind));
           updatedInfos.add(
               new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
                   info.getOperationTimeMs()));

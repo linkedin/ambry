@@ -127,6 +127,8 @@ public class MessageSievingInputStreamTest {
     testValidBlobs(Blob_Version_V1, BlobType.DataBlob, Message_Header_Version_V2);
     testValidBlobs(Blob_Version_V2, BlobType.DataBlob, Message_Header_Version_V2);
     testValidBlobs(Blob_Version_V2, BlobType.MetadataBlob, Message_Header_Version_V2);
+    testValidBlobs(Blob_Version_V2, BlobType.DataBlob, Message_Header_Version_V3);
+    testValidBlobs(Blob_Version_V2, BlobType.MetadataBlob, Message_Header_Version_V3);
   }
 
   private void testValidBlobs(short blobVersion, BlobType blobType, short headerVersionToUse) throws Exception {
@@ -398,6 +400,10 @@ public class MessageSievingInputStreamTest {
         MessageFormatRecord.Message_Header_Version_V2);
     testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.MetadataBlob,
         MessageFormatRecord.Message_Header_Version_V2);
+    testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.DataBlob,
+        MessageFormatRecord.Message_Header_Version_V3);
+    testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.MetadataBlob,
+        MessageFormatRecord.Message_Header_Version_V3);
   }
 
   private void testInValidDeletedAndExpiredBlobs(short blobVersion, BlobType blobType, short headerVersionToUse)
@@ -590,9 +596,7 @@ public class MessageSievingInputStreamTest {
 
     Map<StoreKey, StoreKey> convertedMap = randomKeyConverter.convert(Arrays.asList(key1, key2, key3, key4, key5));
 
-    int headerSize =
-        headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1 ? MessageHeader_Format_V1.getHeaderSize()
-            : MessageHeader_Format_V2.getHeaderSize();
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(headerVersionToUse);
     int blobPropertiesRecordSize = BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
     int userMetadataSize = UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata1));
 
@@ -659,6 +663,7 @@ public class MessageSievingInputStreamTest {
     versions.add(Message_Header_Version_V1);
     if (blobVersion != Blob_Version_V1) {
       versions.add(Message_Header_Version_V2);
+      versions.add(Message_Header_Version_V3);
     }
 
     try {
@@ -770,6 +775,8 @@ public class MessageSievingInputStreamTest {
     testDeprecatedMsg(Blob_Version_V1, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1);
     testDeprecatedMsg(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
     testDeprecatedMsg(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
+    testDeprecatedMsg(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
+    testDeprecatedMsg(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
   }
 
   private void testDeprecatedMsg(short blobVersion, BlobType blobType, short headerVersionToUse) throws Exception {
@@ -892,9 +899,7 @@ public class MessageSievingInputStreamTest {
 
     Map<StoreKey, StoreKey> convertedMap = randomKeyConverter.convert(Arrays.asList(key1, key2, key3));
 
-    int headerSize =
-        headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1 ? MessageHeader_Format_V1.getHeaderSize()
-            : MessageHeader_Format_V2.getHeaderSize();
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(headerVersionToUse);
     int blobPropertiesRecordSize = BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
     int userMetadataSize = UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata1));
 
