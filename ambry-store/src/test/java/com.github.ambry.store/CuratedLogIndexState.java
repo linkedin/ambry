@@ -116,6 +116,7 @@ class CuratedLogIndexState {
   final Properties properties = new Properties();
   // the time instance that will be used in the index
   final MockTime time = new MockTime();
+  final boolean isLogSegmented;
 
   // the scheduler used in the index
   ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
@@ -179,6 +180,7 @@ class CuratedLogIndexState {
    */
   CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean hardDeleteEnabled, boolean initState,
       boolean addTtlUpdates, boolean addUndeletes) throws IOException, StoreException {
+    this.isLogSegmented = isLogSegmented;
     // advance time here so when we set delete's operation time to 0, it will fall within retention day.
     advanceTime(TimeUnit.DAYS.toMillis(CuratedLogIndexState.deleteRetentionDay));
     this.tempDir = tempDir;
@@ -975,6 +977,11 @@ class CuratedLogIndexState {
     initIndex(null);
   }
 
+  void reloadIndexAndVerifyState(boolean closeBeforeReload, boolean deleteCleanShutdownFile) throws StoreException {
+    reloadIndex(closeBeforeReload, deleteCleanShutdownFile);
+    verifyState(isLogSegmented);
+  }
+
   /**
    * Reloads the log and index by closing and recreating the class variables.
    * @param initIndex creates the index instance if {@code true}, if not, sets {@link #index} to {@code null} and it
@@ -1468,6 +1475,10 @@ class CuratedLogIndexState {
     Offset indexSegmentStartOffset = lastEntry.getKey();
     if (!indexSegmentStartOffset.getName().equals(recordOffset.getName())
         || lastEntry.getValue().size() == getMaxInMemElements()) {
+      indexSegmentStartOffset = recordOffset;
+    } else if (lastEntry.getValue().entrySet().iterator().next().getValue().iterator().next().getFormatVersion()
+        != PersistentIndex.CURRENT_VERSION) {
+      // the persistent index version changed.
       indexSegmentStartOffset = recordOffset;
     } else {
       final AtomicInteger numElements = new AtomicInteger(0);

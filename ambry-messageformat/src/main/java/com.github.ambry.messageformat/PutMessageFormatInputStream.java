@@ -13,7 +13,6 @@
  */
 package com.github.ambry.messageformat;
 
-import com.github.ambry.store.Message;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
@@ -49,7 +48,7 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
 
   public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
       ByteBuffer userMetadata, InputStream blobStream, long streamSize) throws MessageFormatException {
-    this(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize, BlobType.DataBlob);
+    this(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize, BlobType.DataBlob, (short) 0);
   }
 
   public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
