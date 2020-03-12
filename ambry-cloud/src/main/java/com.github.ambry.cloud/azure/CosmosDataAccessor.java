@@ -15,7 +15,6 @@ package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.utils.Utils;
@@ -51,7 +50,8 @@ public class CosmosDataAccessor {
   private static final Logger logger = LoggerFactory.getLogger(CosmosDataAccessor.class);
   private static final String DOCS = "/docs/";
   public static final String COSMOS_LAST_UPDATED_COLUMN = "_ts";
-  private static final String THRESHOLD_PARAM = "@threshold";
+  private static final String START_TIME_PARAM = "@startTime";
+  private static final String END_TIME_PARAM = "@endTime";
   private static final String LIMIT_PARAM = "@limit";
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
@@ -59,8 +59,9 @@ public class CosmosDataAccessor {
   private final String cosmosCollectionLink;
   private final AzureMetrics azureMetrics;
   private Callable<?> updateCallback = null;
-  private final int continuationTokenLimit;
+  private final int continuationTokenLimitKb;
   private final int requestChargeThreshold;
+  private final int queryBatchSize;
 
   /** Production constructor */
   CosmosDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics) {
@@ -87,7 +88,8 @@ public class CosmosDataAccessor {
         .build();
 
     this.cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
-    this.continuationTokenLimit = azureCloudConfig.cosmosContinuationTokenLimit;
+    this.queryBatchSize = azureCloudConfig.cosmosQueryBatchSize;
+    this.continuationTokenLimitKb = azureCloudConfig.cosmosContinuationTokenLimitKb;
     this.requestChargeThreshold = azureCloudConfig.cosmosRequestChargeThreshold;
     this.azureMetrics = azureMetrics;
   }
@@ -96,7 +98,8 @@ public class CosmosDataAccessor {
   CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, AzureMetrics azureMetrics) {
     this.asyncDocumentClient = asyncDocumentClient;
     this.cosmosCollectionLink = cosmosCollectionLink;
-    this.continuationTokenLimit = AzureCloudConfig.DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT;
+    this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
+    this.continuationTokenLimitKb = AzureCloudConfig.DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT;
     this.requestChargeThreshold = AzureCloudConfig.DEFAULT_COSMOS_REQUEST_CHARGE_THRESHOLD;
     this.azureMetrics = azureMetrics;
   }
@@ -213,14 +216,14 @@ public class CosmosDataAccessor {
    * @param partitionPath the partition to query.
    * @param fieldName the field name to query on. Allowed values are {@link CloudBlobMetadata#FIELD_DELETION_TIME} and
    *                  {@link CloudBlobMetadata#FIELD_EXPIRATION_TIME}.
-   * @param retentionThreshold the latest time where blobs are considered dead if they were expired
-   *                           or deleted before that point.
+   * @param startTime the start of the query time range.
+   * @param endTime the end of the query time range.
    * @param maxEntries the max number of metadata records to return.
    * @return a List of {@link CloudBlobMetadata} referencing the dead blobs found.
-   * @throws CloudStorageException
+   * @throws DocumentClientException
    */
-  List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long retentionThreshold, int maxEntries)
-      throws DocumentClientException {
+  List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long startTime, long endTime,
+      int maxEntries) throws DocumentClientException {
 
     String deadBlobsQuery;
     if (fieldName.equals(CloudBlobMetadata.FIELD_DELETION_TIME)) {
@@ -232,11 +235,11 @@ public class CosmosDataAccessor {
     }
     SqlQuerySpec querySpec = new SqlQuerySpec(deadBlobsQuery,
         new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, maxEntries),
-            new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
+            new SqlParameter(START_TIME_PARAM, startTime), new SqlParameter(END_TIME_PARAM, endTime)));
 
     FeedOptions feedOptions = new FeedOptions();
     feedOptions.setMaxItemCount(maxEntries);
-    feedOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimit);
+    feedOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);
     feedOptions.setPartitionKey(new PartitionKey(partitionPath));
     try {
       Iterator<FeedResponse<Document>> iterator =
@@ -269,7 +272,7 @@ public class CosmosDataAccessor {
    */
   private static String constructDeadBlobsQuery(String fieldName) {
     StringBuilder builder = new StringBuilder("SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c.").append(fieldName)
-        .append(" BETWEEN 1 AND " + THRESHOLD_PARAM)
+        .append(" BETWEEN " + START_TIME_PARAM + " AND " + END_TIME_PARAM)
         .append(" ORDER BY c.")
         .append(fieldName)
         .append(" ASC");
@@ -299,11 +302,12 @@ public class CosmosDataAccessor {
       throws DocumentClientException {
     FeedOptions feedOptions = new FeedOptions();
     // TODO: set maxItemCount
-    feedOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimit);
+    feedOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);
     feedOptions.setPartitionKey(new PartitionKey(partitionPath));
     // TODO: consolidate error count here
     try {
-      Iterator<FeedResponse<Document>> iterator = executeCosmosQuery(partitionPath, querySpec, feedOptions, timer).getIterator();
+      Iterator<FeedResponse<Document>> iterator =
+          executeCosmosQuery(partitionPath, querySpec, feedOptions, timer).getIterator();
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
       // TODO: Tally request charge per partition and log on 429
       double requestCharge = 0.0;

@@ -30,7 +30,7 @@ public class AzureCloudConfig {
   public static final String COSMOS_DIRECT_HTTPS = "cosmos.direct.https";
   public static final String COSMOS_QUERY_BATCH_SIZE = "cosmos.query.batch.size";
   public static final String COSMOS_REQUEST_CHARGE_THRESHOLD = "cosmos.request.charge.threshold";
-  public static final String COSMOS_CONTINUATION_TOKEN_LIMIT = "cosmos.continuation.token.limit";
+  public static final String COSMOS_CONTINUATION_TOKEN_LIMIT_KB = "cosmos.continuation.token.limit.kb";
   public static final String AZURE_PURGE_BATCH_SIZE = "azure.purge.batch.size";
   public static final String AZURE_NAME_SCHEME_VERSION = "azure.name.scheme.version";
   public static final String AZURE_BLOB_CONTAINER_STRATEGY = "azure.blob.container.strategy";
@@ -89,8 +89,8 @@ public class AzureCloudConfig {
   /**
    * The size limit in KB on Cosmos continuation token.
    */
-  @Config(COSMOS_CONTINUATION_TOKEN_LIMIT)
-  public final int cosmosContinuationTokenLimit;
+  @Config(COSMOS_CONTINUATION_TOKEN_LIMIT_KB)
+  public final int cosmosContinuationTokenLimitKb;
 
   /**
    * The Cosmos request charge threshold to log.
@@ -112,8 +112,8 @@ public class AzureCloudConfig {
     cosmosCollectionLink = verifiableProperties.getString(COSMOS_COLLECTION_LINK);
     cosmosKey = verifiableProperties.getString(COSMOS_KEY);
     cosmosQueryBatchSize = verifiableProperties.getInt(COSMOS_QUERY_BATCH_SIZE, DEFAULT_QUERY_BATCH_SIZE);
-    cosmosContinuationTokenLimit =
-        verifiableProperties.getInt(COSMOS_CONTINUATION_TOKEN_LIMIT, DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT);
+    cosmosContinuationTokenLimitKb =
+        verifiableProperties.getInt(COSMOS_CONTINUATION_TOKEN_LIMIT_KB, DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT);
     cosmosRequestChargeThreshold =
         verifiableProperties.getInt(COSMOS_REQUEST_CHARGE_THRESHOLD, DEFAULT_COSMOS_REQUEST_CHARGE_THRESHOLD);
     azurePurgeBatchSize =

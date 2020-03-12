@@ -21,16 +21,13 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.PartitionInfo;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import static org.junit.Assert.*;
@@ -60,8 +57,8 @@ public class CloudStorageCompactorTest {
   public void testCompactPartitions() throws Exception {
     // start with empty map
     assertEquals(0, compactor.compactPartitions());
-    verify(mockDest, times(0)).getDeletedBlobs(anyString(), anyLong(), anyInt());
-    verify(mockDest, times(0)).getExpiredBlobs(anyString(), anyLong(), anyInt());
+    verify(mockDest, times(0)).getDeletedBlobs(anyString(), anyLong(), anyLong(), anyInt());
+    verify(mockDest, times(0)).getExpiredBlobs(anyString(), anyLong(), anyLong(), anyInt());
     verify(mockDest, times(0)).purgeBlobs(any());
 
     // add 2 partitions to map
@@ -72,25 +69,24 @@ public class CloudStorageCompactorTest {
     partitionMap.put(new MockPartitionId(partition2, defaultClass), null);
     List<CloudBlobMetadata> noBlobs = Collections.emptyList();
     List<CloudBlobMetadata> deadBlobsPartition1 = getMetadataList(partitionPath1, pageSize);
-    when(mockDest.getDeletedBlobs(eq(partitionPath1), anyLong(), anyInt())).thenReturn(deadBlobsPartition1)
+    when(mockDest.getDeletedBlobs(eq(partitionPath1), anyLong(), anyLong(), anyInt())).thenReturn(deadBlobsPartition1)
         .thenReturn(noBlobs);
-    when(mockDest.getExpiredBlobs(eq(partitionPath1), anyLong(), anyInt())).thenReturn(noBlobs);
+    when(mockDest.getExpiredBlobs(eq(partitionPath1), anyLong(), anyLong(), anyInt())).thenReturn(noBlobs);
     when(mockDest.purgeBlobs(eq(deadBlobsPartition1))).thenReturn(pageSize);
     List<CloudBlobMetadata> deadBlobsPartition2 = getMetadataList(partitionPath2, pageSize * 2);
     List<CloudBlobMetadata> deadBlobsPartition2Page1 = deadBlobsPartition2.subList(0, pageSize);
     List<CloudBlobMetadata> deadBlobsPartition2Page2 = deadBlobsPartition2.subList(pageSize, pageSize * 2);
-    when(mockDest.getExpiredBlobs(eq(partitionPath2), anyLong(), anyInt())).thenReturn(deadBlobsPartition2Page1)
-        .thenReturn(deadBlobsPartition2Page2)
-        .thenReturn(noBlobs);
-    when(mockDest.getDeletedBlobs(eq(partitionPath2), anyLong(), anyInt())).thenReturn(noBlobs);
+    when(mockDest.getExpiredBlobs(eq(partitionPath2), anyLong(), anyLong(), anyInt())).thenReturn(
+        deadBlobsPartition2Page1).thenReturn(deadBlobsPartition2Page2).thenReturn(noBlobs);
+    when(mockDest.getDeletedBlobs(eq(partitionPath2), anyLong(), anyLong(), anyInt())).thenReturn(noBlobs);
     when(mockDest.purgeBlobs(eq(deadBlobsPartition2Page1))).thenReturn(pageSize);
     when(mockDest.purgeBlobs(eq(deadBlobsPartition2Page2))).thenReturn(pageSize);
     assertEquals(deadBlobsPartition1.size() + deadBlobsPartition2.size(), compactor.compactPartitions());
     // Expect number of calls to be N / page size + 1 to include final empty page
-    verify(mockDest, times(2)).getDeletedBlobs(eq(partitionPath1), anyLong(), anyInt());
-    verify(mockDest, times(1)).getExpiredBlobs(eq(partitionPath1), anyLong(), anyInt());
-    verify(mockDest, times(3)).getExpiredBlobs(eq(partitionPath2), anyLong(), anyInt());
-    verify(mockDest, times(1)).getDeletedBlobs(eq(partitionPath2), anyLong(), anyInt());
+    verify(mockDest, times(2)).getDeletedBlobs(eq(partitionPath1), anyLong(), anyLong(), anyInt());
+    verify(mockDest, times(1)).getExpiredBlobs(eq(partitionPath1), anyLong(), anyLong(), anyInt());
+    verify(mockDest, times(3)).getExpiredBlobs(eq(partitionPath2), anyLong(), anyLong(), anyInt());
+    verify(mockDest, times(1)).getDeletedBlobs(eq(partitionPath2), anyLong(), anyLong(), anyInt());
     verify(mockDest, times(1)).purgeBlobs(eq(deadBlobsPartition1));
     verify(mockDest, times(1)).purgeBlobs(eq(deadBlobsPartition2Page1));
     verify(mockDest, times(1)).purgeBlobs(eq(deadBlobsPartition2Page2));
@@ -98,15 +94,15 @@ public class CloudStorageCompactorTest {
     // remove partition2 from map
     partitionMap.remove(new MockPartitionId(partition2, defaultClass));
     deadBlobsPartition1 = getMetadataList(partitionPath1, pageSize / 2);
-    when(mockDest.getDeletedBlobs(eq(partitionPath1), anyLong(), anyInt())).thenReturn(deadBlobsPartition1)
+    when(mockDest.getDeletedBlobs(eq(partitionPath1), anyLong(), anyLong(), anyInt())).thenReturn(deadBlobsPartition1)
         .thenReturn(noBlobs);
     when(mockDest.purgeBlobs(eq(deadBlobsPartition1))).thenReturn(deadBlobsPartition1.size());
     assertEquals(deadBlobsPartition1.size(), compactor.compactPartitions());
     // Expect one more call for partition1, no more for partition2
-    verify(mockDest, times(3)).getDeletedBlobs(eq(partitionPath1), anyLong(), anyInt());
-    verify(mockDest, times(2)).getExpiredBlobs(eq(partitionPath1), anyLong(), anyInt());
-    verify(mockDest, times(3)).getExpiredBlobs(eq(partitionPath2), anyLong(), anyInt());
-    verify(mockDest, times(1)).getDeletedBlobs(eq(partitionPath2), anyLong(), anyInt());
+    verify(mockDest, times(3)).getDeletedBlobs(eq(partitionPath1), anyLong(), anyLong(), anyInt());
+    verify(mockDest, times(2)).getExpiredBlobs(eq(partitionPath1), anyLong(), anyLong(), anyInt());
+    verify(mockDest, times(3)).getExpiredBlobs(eq(partitionPath2), anyLong(), anyLong(), anyInt());
+    verify(mockDest, times(1)).getDeletedBlobs(eq(partitionPath2), anyLong(), anyLong(), anyInt());
     assertNull(compactor.getOldestExpiredBlob(partitionPath1));
     assertNull(compactor.getOldestDeletedBlob(partitionPath2));
   }

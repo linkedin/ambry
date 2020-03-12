@@ -58,7 +58,6 @@ class AzureCloudDestination implements CloudDestination {
   private final CosmosDataAccessor cosmosDataAccessor;
   private final AzureReplicationFeed azureReplicationFeed;
   private final AzureMetrics azureMetrics;
-  private final long retentionPeriodMs;
   private final int queryBatchSize;
 
   /**
@@ -75,7 +74,6 @@ class AzureCloudDestination implements CloudDestination {
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =
         new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
-    this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
     this.queryBatchSize = azureCloudConfig.cosmosQueryBatchSize;
     this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, azureMetrics);
     this.azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
@@ -97,7 +95,6 @@ class AzureCloudDestination implements CloudDestination {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
-    this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
     this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
     this.cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
     this.azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
@@ -202,22 +199,21 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public List<CloudBlobMetadata> getDeletedBlobs(String partitionPath, long cutoffTime, int maxEntries)
+  public List<CloudBlobMetadata> getDeletedBlobs(String partitionPath, long startTime, long endTime, int maxEntries)
       throws CloudStorageException {
-    return getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, cutoffTime, maxEntries);
+    return getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, startTime, endTime, maxEntries);
   }
 
   @Override
-  public List<CloudBlobMetadata> getExpiredBlobs(String partitionPath, long cutoffTime, int maxEntries)
+  public List<CloudBlobMetadata> getExpiredBlobs(String partitionPath, long startTime, long endTime, int maxEntries)
       throws CloudStorageException {
-    return getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, cutoffTime, maxEntries);
+    return getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, startTime, endTime, maxEntries);
   }
 
-  private List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long cutoffTime, int maxEntries)
-      throws CloudStorageException {
-    long retentionThreshold = cutoffTime - retentionPeriodMs;
+  private List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long startTime, long endTime,
+      int maxEntries) throws CloudStorageException {
     try {
-      return cosmosDataAccessor.getDeadBlobs(partitionPath, fieldName, retentionThreshold, maxEntries);
+      return cosmosDataAccessor.getDeadBlobs(partitionPath, fieldName, startTime, endTime, maxEntries);
     } catch (DocumentClientException dex) {
       throw toCloudStorageException("Failed to query dead blobs for partition " + partitionPath, dex);
     }

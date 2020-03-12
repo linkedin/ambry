@@ -96,9 +96,16 @@ public class AzureCompactionTool {
         }
         System.exit(0);
       }
-      int result = compactor.compactPartition(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, now);
+
+      long queryStartTime = 1;
+      long queryEndTime = now - TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
+      long timeToQuit = now + TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours);
+      int result =
+          compactor.compactPartition(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, queryStartTime, queryEndTime,
+              timeToQuit);
       logger.info("In partition {}: {} deleted blobs purged", partitionPath, result);
-      result = compactor.compactPartition(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, now);
+      result = compactor.compactPartition(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, queryStartTime,
+          queryEndTime, timeToQuit);
       logger.info("In partition {}: {} expired blobs purged", partitionPath, result);
       System.exit(0);
     } catch (Exception ex) {

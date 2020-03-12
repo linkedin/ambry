@@ -280,21 +280,23 @@ public class AzureIntegrationTest {
 
     // run getDeadBlobs query, should return 2 * bucketCount
     String partitionPath = String.valueOf(testPartition);
+    long queryStartTime = 1;
+    long queryEndTime = now - TimeUnit.DAYS.toMillis(retentionPeriodDays);
     logger.info("First call to getDeletedBlobs");
-    List<CloudBlobMetadata> deadBlobs = azureDest.getDeletedBlobs(partitionPath, now, bucketCount);
+    List<CloudBlobMetadata> deadBlobs = azureDest.getDeletedBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount);
     assertEquals("Unexpected number returned", bucketCount, deadBlobs.size());
     logger.info("First call to purge");
     assertEquals("Not all blobs were purged", bucketCount, azureDest.purgeBlobs(deadBlobs));
     logger.info("Second call to getDeletedBlobs");
-    deadBlobs = azureDest.getDeletedBlobs(partitionPath, now, bucketCount);
+    deadBlobs = azureDest.getDeletedBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount);
     assertEquals("Expected zero", 0, deadBlobs.size());
     logger.info("First call to getExpiredBlobs");
-    deadBlobs = azureDest.getExpiredBlobs(partitionPath, now, bucketCount);
+    deadBlobs = azureDest.getExpiredBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount);
     assertEquals("Unexpected number returned", bucketCount, deadBlobs.size());
     logger.info("First call to purge");
     assertEquals("Not all blobs were purged", bucketCount, azureDest.purgeBlobs(deadBlobs));
     logger.info("Second call to getExpiredBlobs");
-    deadBlobs = azureDest.getExpiredBlobs(partitionPath, now, bucketCount);
+    deadBlobs = azureDest.getExpiredBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount);
     assertEquals("Expected zero", 0, deadBlobs.size());
     cleanup();
   }
@@ -310,7 +312,7 @@ public class AzureIntegrationTest {
   /**
    * Test findEntriesSince with CosmosChangeFeedFindTokenFactory.
    */
-  @Ignore // Fails with wrong number of queries.
+  //@Ignore // Fails with wrong number of queries.
   @Test
   public void testFindEntriesSinceByChangeFeed() throws Exception {
     testFindEntriesSince("com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory");

@@ -401,12 +401,12 @@ public class AzureCloudDestinationTest {
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
         mockResponse);
     long now = System.currentTimeMillis();
-    List<CloudBlobMetadata> metadataList = azureDest.getDeletedBlobs(blobId.getPartition().toPathString(), now, 10);
+    List<CloudBlobMetadata> metadataList = azureDest.getDeletedBlobs(blobId.getPartition().toPathString(), 1, now, 10);
     assertEquals("Expected no deleted blobs", 0, metadataList.size());
     assertEquals(1, azureMetrics.documentQueryCount.getCount());
     assertEquals(1, azureMetrics.deadBlobsQueryTime.getCount());
 
-    metadataList = azureDest.getExpiredBlobs(blobId.getPartition().toPathString(), now, 10);
+    metadataList = azureDest.getExpiredBlobs(blobId.getPartition().toPathString(), 1, now, 10);
     assertEquals("Expected no expired blobs", 0, metadataList.size());
     assertEquals(2, azureMetrics.documentQueryCount.getCount());
     assertEquals(2, azureMetrics.deadBlobsQueryTime.getCount());
