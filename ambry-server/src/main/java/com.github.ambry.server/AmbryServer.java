@@ -217,6 +217,7 @@ public class AmbryServer {
 
       // Start netty http2 server
       if (nodeId.hasHttp2Port()) {
+        logger.info("Http2 port is enabled: " + nodeId.getHttp2Port());
         RestServerConfig restServerConfig = new RestServerConfig(properties);
         SSLFactory sslFactory = new NettySslHttp2Factory(sslConfig);
         NettyServerRequestResponseChannel requestResponseChannel = new NettyServerRequestResponseChannel(1);

@@ -18,6 +18,7 @@ import com.github.ambry.config.PerformanceConfig;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
@@ -44,6 +45,8 @@ public class Http2StreamHandler extends ChannelInboundHandlerAdapter {
   @Override
   public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
     ctx.pipeline().addLast(new Http2StreamFrameToHttpObjectCodec(true));
+    // TODO: this is known issue in PR 1421. Since it may take time to merge 1421, just add it to be a quick fix.
+    ctx.pipeline().addLast(new HttpObjectAggregator(10 * 1024 * 1024));
     // NettyMessageProcessor depends on ChunkedWriteHandler.
     // TODO: add deployment health check handler.
     ctx.pipeline().addLast(new ChunkedWriteHandler());
