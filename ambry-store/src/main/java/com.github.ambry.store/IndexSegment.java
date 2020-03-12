@@ -611,7 +611,7 @@ class IndexSegment {
   /**
    * Writes the index to a persistent file.
    *
-   * Those that are written in version 2 and 1 have the following format:
+   * Those that are written in version 2 and 3 have the following format:
    *
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * | version | entrysize | valuesize | fileendpointer |  last modified time(in secs) | Reset key | Reset key type  ...
