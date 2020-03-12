@@ -78,7 +78,7 @@ public class VcrReplicationManager extends ReplicationEngine {
             tokenHelper, cloudDestination);
     this.cloudStorageCompactor =
         cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
-            partitionToPartitionInfo.keySet(), vcrMetrics, false) : null;
+            partitionToPartitionInfo.keySet(), vcrMetrics) : null;
   }
 
   @Override

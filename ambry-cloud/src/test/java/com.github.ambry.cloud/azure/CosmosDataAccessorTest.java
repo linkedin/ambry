@@ -163,7 +163,7 @@ public class CosmosDataAccessorTest {
 
   /** Utility method to run metadata query with default parameters. */
   private List<CloudBlobMetadata> doQueryMetadata() throws Exception {
-    return cosmosAccessor.queryMetadata(blobId.getPartition().toPathString(), new SqlQuerySpec("select * from c"),
+    return cosmosAccessor.queryMetadata(blobId.getPartition().toPathString(), "select * from c",
         azureMetrics.missingKeysQueryTime);
   }
 

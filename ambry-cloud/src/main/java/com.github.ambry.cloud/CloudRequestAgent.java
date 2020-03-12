@@ -39,36 +39,38 @@ class CloudRequestAgent {
    * Execute an action up to the configured number of attempts.
    * @param action the {@link Callable} to call.
    * @param actionName the name of the action.
+   * @param partitionPath the partition acted on.
    * @return the return value of the action.
    * @throws CloudStorageException
    */
-  <T> T doWithRetries(Callable<T> action, String actionName) throws CloudStorageException {
+  <T> T doWithRetries(Callable<T> action, String actionName, String partitionPath) throws CloudStorageException {
     int attempts = 0;
     while (attempts < maxAttempts) {
       try {
         return action.call();
       } catch (Exception e) {
         attempts++;
-        throwOrDelay(e, actionName, attempts);
+        throwOrDelay(e, actionName, partitionPath, attempts);
       }
     }
     // Line should never be reached
-    throw new CloudStorageException(actionName + " failed " + attempts + " attempts");
+    throw new CloudStorageException(actionName + " failed partition " + partitionPath + " made " + attempts + " attempts");
   }
 
   /**
    * Utility to either throw the input exception or sleep for a specified retry delay.
    * @param e the input exception to check.
    * @param actionName the name of the action that threw the exception.
+   * @param partitionPath the partition acted on.
    * @param attempts the number of attempts made so far.
    * @throws CloudStorageException
    */
-  private void throwOrDelay(Throwable e, String actionName, int attempts) throws CloudStorageException {
+  private void throwOrDelay(Throwable e, String actionName, String partitionPath, int attempts) throws CloudStorageException {
     if (e instanceof CloudStorageException) {
       CloudStorageException cse = (CloudStorageException) e;
       if (cse.isRetryable() && attempts < maxAttempts) {
         long delay = (cse.getRetryDelayMs() > 0) ? cse.getRetryDelayMs() : defaultRetryDelay;
-        logger.error("{} failed attempt {}, retrying after {} ms.", actionName, attempts, delay);
+        logger.warn("{} failed partition {} attempt {}, retrying after {} ms.", actionName, partitionPath, attempts, delay);
         try {
           Thread.sleep(delay);
         } catch (InterruptedException iex) {
@@ -77,11 +79,12 @@ class CloudRequestAgent {
         vcrMetrics.retryWaitTimeMsec.inc(delay);
       } else {
         // Either not retryable or exhausted attempts.
+        logger.error("{} failed partition {} made {} attempts.", actionName, partitionPath, attempts);
         throw cse;
       }
     } else {
       // Unexpected exception
-      throw new CloudStorageException(actionName + " failed", e);
+      throw new CloudStorageException(actionName + " failed partition " + partitionPath, e);
     }
   }
 }

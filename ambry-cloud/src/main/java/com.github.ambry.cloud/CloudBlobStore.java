@@ -104,8 +104,11 @@ class CloudBlobStore implements Store {
     requireEncryption = cloudConfig.vcrRequireEncryption;
     isVcr = cloudConfig.cloudIsVcr;
     if (isVcr) {
+      logger.info("Creating cloud blob store for partition {} with cache size {}", partitionId.toPathString(),
+          cloudConfig.recentBlobCacheLimit);
       recentBlobCache = Collections.synchronizedMap(new RecentBlobCache(cloudConfig.recentBlobCacheLimit));
     } else {
+      logger.info("Creating cloud blob store for partition {} with no cache", partitionId.toPathString());
       recentBlobCache = Collections.emptyMap();
     }
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
@@ -123,7 +126,7 @@ class CloudBlobStore implements Store {
   @Override
   public void start() {
     started = true;
-    logger.info("Started store: {}", this.toString());
+    logger.debug("Started store: {}", this.toString());
   }
 
   @Override
@@ -135,7 +138,8 @@ class CloudBlobStore implements Store {
     try {
       List<BlobId> blobIdList = ids.stream().map(key -> (BlobId) key).collect(Collectors.toList());
       Map<String, CloudBlobMetadata> cloudBlobMetadataListMap =
-          requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(blobIdList), "GetBlobMetadata");
+          requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(blobIdList), "GetBlobMetadata",
+              partitionId.toPathString());
       if (cloudBlobMetadataListMap.size() < blobIdList.size()) {
         Set<BlobId> missingBlobs = blobIdList.stream()
             .filter(blobId -> !cloudBlobMetadataListMap.containsKey(blobId))
@@ -184,17 +188,17 @@ class CloudBlobStore implements Store {
         requestAgent.doWithRetries(() -> {
           cloudDestination.downloadBlob(blobId, new ByteBufferOutputStream(encryptedBlob));
           return null;
-        }, "Download");
+        }, "Download", cloudBlobMetadata.getPartitionId());
         ByteBuffer decryptedBlob = cryptoAgent.decrypt(encryptedBlob);
         outputStream.write(decryptedBlob.array());
       } else {
         requestAgent.doWithRetries(() -> {
           cloudDestination.downloadBlob(blobId, outputStream);
           return null;
-        }, "Download");
+        }, "Download", cloudBlobMetadata.getPartitionId());
       }
     } catch (CloudStorageException | GeneralSecurityException | IOException e) {
-      throw new StoreException("Error occured in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
+      throw new StoreException("Error occurred in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
     }
   }
 
@@ -297,26 +301,24 @@ class CloudBlobStore implements Store {
                 messageInfo.getSize(), EncryptionOrigin.VCR, cryptoAgent.getEncryptionContext(),
                 cryptoAgentFactory.getClass().getName(), encryptedSize);
         // If buffer was encrypted, we no longer know its size
-        long bufferlen = (encryptedSize == -1) ? size : encryptedSize;
-        uploadBlobInternal(blobId, bufferlen, blobMetadata, new ByteBufferInputStream(messageBuf));
+        long bufferLen = (encryptedSize == -1) ? size : encryptedSize;
+        InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
+        requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, bufferLen, blobMetadata, uploadInputStream),
+            "Upload", partitionId.toPathString());
       } else {
         // Upload blob as is
         CloudBlobMetadata blobMetadata =
             new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
                 messageInfo.getSize(), encryptionOrigin);
-        uploadBlobInternal(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
+        InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
+        requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, size, blobMetadata, uploadInputStream),
+            "Upload", partitionId.toPathString());
       }
       addToCache(blobId.getID(), BlobState.CREATED);
     } else {
       logger.trace("Blob is skipped: {}", messageInfo);
       vcrMetrics.blobUploadSkippedCount.inc();
     }
-  }
-
-  private void uploadBlobInternal(BlobId blobId, long bufferlen, CloudBlobMetadata blobMetadata,
-      InputStream inputStream) throws CloudStorageException {
-    requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, bufferlen, blobMetadata, inputStream),
-        "Upload");
   }
 
   /**
@@ -358,7 +360,8 @@ class CloudBlobStore implements Store {
         String blobKey = msgInfo.getStoreKey().getID();
         BlobState blobState = recentBlobCache.get(blobKey);
         if (blobState != BlobState.DELETED) {
-          requestAgent.doWithRetries(() -> cloudDestination.deleteBlob(blobId, msgInfo.getOperationTimeMs()), "Delete");
+          requestAgent.doWithRetries(() -> cloudDestination.deleteBlob(blobId, msgInfo.getOperationTimeMs()), "Delete",
+              partitionId.toPathString());
           addToCache(blobKey, BlobState.DELETED);
         }
       }
@@ -392,7 +395,7 @@ class CloudBlobStore implements Store {
           BlobState blobState = recentBlobCache.get(blobId.getID());
           if (blobState == null || blobState == BlobState.CREATED) {
             requestAgent.doWithRetries(() -> cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time),
-                "UpdateTtl");
+                "UpdateTtl", partitionId.toPathString());
             addToCache(blobId.getID(), BlobState.TTL_UPDATED);
           }
         } else {
@@ -420,8 +423,9 @@ class CloudBlobStore implements Store {
   @Override
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     try {
-      FindResult findResult =
-          cloudDestination.findEntriesSince(partitionId.toPathString(), token, maxTotalSizeOfEntries);
+      FindResult findResult = requestAgent.doWithRetries(
+          () -> cloudDestination.findEntriesSince(partitionId.toPathString(), token, maxTotalSizeOfEntries),
+          "FindEntriesSince", partitionId.toPathString());
       if (findResult.getMetadataList().isEmpty()) {
         return new FindInfo(Collections.emptyList(), findResult.getUpdatedFindToken());
       }
@@ -464,7 +468,10 @@ class CloudBlobStore implements Store {
       return Collections.emptySet();
     }
     try {
-      Set<String> foundSet = cloudDestination.getBlobMetadata(blobIdQueryList).keySet();
+
+      Set<String> foundSet =
+          requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(blobIdQueryList), "FindMissingKeys",
+              partitionId.toPathString()).keySet();
       // return input keys - cached keys - keys returned by query
       return keys.stream()
           .filter(key -> !foundSet.contains(key.getID()))
