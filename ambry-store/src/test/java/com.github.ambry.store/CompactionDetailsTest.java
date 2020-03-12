@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -43,7 +42,7 @@ public class CompactionDetailsTest {
     List<String> segmentsUnderCompaction = new ArrayList<>();
     for (int i = 0; i < segmentCount; i++) {
       int stringSize = TestUtils.RANDOM.nextInt(10) + 1;
-      segmentsUnderCompaction.add(UtilsTest.getRandomString(stringSize));
+      segmentsUnderCompaction.add(TestUtils.getRandomString(stringSize));
     }
     long referenceTime = SystemTime.getInstance().milliseconds();
     CompactionDetails details = new CompactionDetails(referenceTime, segmentsUnderCompaction);
@@ -57,7 +56,7 @@ public class CompactionDetailsTest {
    */
   @Test
   public void badInputTest() throws Exception {
-    List<String> segmentsUnderCompaction = Collections.singletonList(UtilsTest.getRandomString(10));
+    List<String> segmentsUnderCompaction = Collections.singletonList(TestUtils.getRandomString(10));
 
     // details contains no segments
     try {

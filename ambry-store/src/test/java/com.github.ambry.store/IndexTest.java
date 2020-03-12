@@ -24,7 +24,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
@@ -59,7 +58,7 @@ import org.mockito.Mockito;
 
 import static com.github.ambry.store.CuratedLogIndexState.*;
 import static org.junit.Assert.*;
-import static org.junit.Assume.assumeTrue;
+import static org.junit.Assume.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -92,7 +91,7 @@ public class IndexTest {
    */
   public IndexTest(boolean isLogSegmented) throws IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
-    tempDir = StoreTestUtils.createTempDirectory("indexDir-" + UtilsTest.getRandomString(10));
+    tempDir = StoreTestUtils.createTempDirectory("indexDir-" + TestUtils.getRandomString(10));
     state = new CuratedLogIndexState(isLogSegmented, tempDir, true, true);
   }
 
@@ -694,7 +693,7 @@ public class IndexTest {
    */
   @Test
   public void getAbsoluteEndPositionOfLastPutTest() throws Exception {
-    File testDir = StoreTestUtils.createTempDirectory("indexDirTest-" + UtilsTest.getRandomString(10));
+    File testDir = StoreTestUtils.createTempDirectory("indexDirTest-" + TestUtils.getRandomString(10));
     CuratedLogIndexState indexState = new CuratedLogIndexState(isLogSegmented, testDir, false, false, true, true);
     assertEquals("There should be no PUT record since index is empty", -1,
         indexState.index.getAbsoluteEndPositionOfLastPut());

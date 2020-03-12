@@ -14,7 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.frontend.Operations;
-import com.github.ambry.utils.UtilsTest;
+import com.github.ambry.utils.TestUtils;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -48,7 +48,7 @@ public class RequestPathTest {
     String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
     String securePath = "secure-path";
     List<String> prefixesToRemove = Arrays.asList("media", "toRemove/multipart", securePath);
-    String blobId = UtilsTest.getRandomString(10);
+    String blobId = TestUtils.getRandomString(10);
     String blobIdQuery = RestUtils.Headers.BLOB_ID + "=" + blobId;
 
     Map<String, String> prefixesToTest = new HashMap<>();
@@ -158,7 +158,7 @@ public class RequestPathTest {
   public void testBlobIdInRequestHeader() {
     String prefixToRemove = "media";
     JSONObject headers = new JSONObject();
-    String blobId = UtilsTest.getRandomString(10);
+    String blobId = TestUtils.getRandomString(10);
     // we purposely add prefix and sub resource into blob id string in request header
     headers.putOpt(RestUtils.Headers.BLOB_ID,
         prefixToRemove + "/" + CLUSTER_NAME + "/" + blobId + "/" + RestUtils.SubResource.Segment);

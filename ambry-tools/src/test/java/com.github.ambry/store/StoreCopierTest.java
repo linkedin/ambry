@@ -27,7 +27,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -89,8 +88,8 @@ public class StoreCopierTest {
    * @throws Exception
    */
   public StoreCopierTest() throws Exception {
-    srcDir = StoreTestUtils.createTempDirectory("srcDir-" + UtilsTest.getRandomString(10));
-    tgtDir = StoreTestUtils.createTempDirectory("tgtDir-" + UtilsTest.getRandomString(10));
+    srcDir = StoreTestUtils.createTempDirectory("srcDir-" + TestUtils.getRandomString(10));
+    tgtDir = StoreTestUtils.createTempDirectory("tgtDir-" + TestUtils.getRandomString(10));
     Properties properties = new Properties();
     properties.setProperty("store.key.factory", MockIdFactory.class.getCanonicalName());
     properties.setProperty("src.store.dir", srcDir.getAbsolutePath());

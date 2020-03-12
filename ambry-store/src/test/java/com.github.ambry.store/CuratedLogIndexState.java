@@ -22,7 +22,6 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
@@ -550,7 +549,7 @@ class CuratedLogIndexState {
   MockId getUniqueId(int length) {
     MockId id;
     do {
-      id = new MockId(UtilsTest.getRandomString(length));
+      id = new MockId(TestUtils.getRandomString(length));
     } while (generatedKeys.contains(id));
     generatedKeys.add(id);
     return id;

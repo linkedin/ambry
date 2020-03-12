@@ -19,7 +19,6 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -84,7 +83,7 @@ public class LogTest {
    * @throws IOException
    */
   public LogTest(boolean setFilePermissionEnabled) throws IOException {
-    tempDir = Files.createTempDirectory("logDir-" + UtilsTest.getRandomString(10)).toFile();
+    tempDir = Files.createTempDirectory("logDir-" + TestUtils.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);

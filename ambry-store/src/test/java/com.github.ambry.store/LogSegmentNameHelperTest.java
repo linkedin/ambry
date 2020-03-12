@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -43,11 +42,11 @@ public class LogSegmentNameHelperTest {
     assertEquals("Empty names should be equal", 0, comparator.compare("", ""));
     // create sample names
     String[] names =
-        {LogSegmentNameHelper.getName(0, 0), LogSegmentNameHelper.getName(0, 1), LogSegmentNameHelper.getName(1,
-            0), LogSegmentNameHelper.getName(1, 1)};
+        {LogSegmentNameHelper.getName(0, 0), LogSegmentNameHelper.getName(0, 1), LogSegmentNameHelper.getName(1, 0),
+            LogSegmentNameHelper.getName(1, 1)};
     for (int i = 0; i < names.length; i++) {
       for (int j = 0; j < names.length; j++) {
-        int expectCompare = i == j ? 0 : i > j ? 1 : -1;
+        int expectCompare = Integer.compare(i, j);
         assertEquals("Unexpected value on compare", expectCompare, comparator.compare(names[i], names[j]));
         assertEquals("Unexpected value on compare", -1 * expectCompare, comparator.compare(names[j], names[i]));
       }
@@ -78,7 +77,7 @@ public class LogSegmentNameHelperTest {
     int validFileCount = 10;
     int invalidFileCount = 5;
     Set<File> validFiles = new HashSet<>(validFileCount);
-    File tempDir = Files.createTempDirectory("nameHelper-" + UtilsTest.getRandomString(10)).toFile();
+    File tempDir = Files.createTempDirectory("nameHelper-" + TestUtils.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     try {
       String filename = LogSegmentNameHelper.nameToFilename("");
@@ -92,7 +91,7 @@ public class LogSegmentNameHelperTest {
         validFiles.add(file);
       }
       for (int i = 0; i < invalidFileCount; i++) {
-        filename = UtilsTest.getRandomString(10);
+        filename = TestUtils.getRandomString(10);
         switch (i) {
           case 0:
             filename = filename + "_index";
@@ -123,7 +122,7 @@ public class LogSegmentNameHelperTest {
    */
   @Test
   public void hashCodeTest() {
-    String name = UtilsTest.getRandomString(10);
+    String name = TestUtils.getRandomString(10);
     assertEquals("Hashcode is not as expected", name.hashCode(), LogSegmentNameHelper.hashcode(name));
   }
 
@@ -214,9 +213,9 @@ public class LogSegmentNameHelperTest {
     assertEquals("Did not get expected name", name, LogSegmentNameHelper.nameFromFilename(filename));
 
     // bad file names
-    String badNameBase = UtilsTest.getRandomString(10);
-    String[] badNames = {badNameBase,
-        badNameBase + LogSegmentNameHelper.SUFFIX, name + BlobStore.SEPARATOR + "123" + LogSegmentNameHelper.SUFFIX};
+    String badNameBase = TestUtils.getRandomString(10);
+    String[] badNames = {badNameBase, badNameBase + LogSegmentNameHelper.SUFFIX,
+        name + BlobStore.SEPARATOR + "123" + LogSegmentNameHelper.SUFFIX};
     for (String badName : badNames) {
       try {
         LogSegmentNameHelper.nameFromFilename(badName);
@@ -233,7 +232,7 @@ public class LogSegmentNameHelperTest {
   @Test
   public void nameToFilenameTest() {
     assertEquals("Did not get expected file name", "log_current", LogSegmentNameHelper.nameToFilename(""));
-    String name = UtilsTest.getRandomString(10);
+    String name = TestUtils.getRandomString(10);
     assertEquals("Did not get expected file name", name + LogSegmentNameHelper.SUFFIX,
         LogSegmentNameHelper.nameToFilename(name));
   }

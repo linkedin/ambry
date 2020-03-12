@@ -20,7 +20,6 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -60,7 +59,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   public LogSegmentTest() throws IOException {
-    tempDir = Files.createTempDirectory("logSegmentDir-" + UtilsTest.getRandomString(10)).toFile();
+    tempDir = Files.createTempDirectory("logSegmentDir-" + TestUtils.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     Properties props = new Properties();
     props.setProperty("store.set.file.permission.enabled", Boolean.toString(true));

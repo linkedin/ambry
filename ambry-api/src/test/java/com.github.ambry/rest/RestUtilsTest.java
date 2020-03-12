@@ -25,7 +25,6 @@ import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
@@ -36,7 +35,6 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
@@ -214,9 +212,9 @@ public class RestUtilsTest {
     JSONObject headers = new JSONObject();
     Set<String> requiredHeaders = new HashSet<>(Arrays.asList("required_a", "required_b", "required_c"));
     for (String requiredHeader : requiredHeaders) {
-      headers.put(requiredHeader, UtilsTest.getRandomString(10));
+      headers.put(requiredHeader, TestUtils.getRandomString(10));
     }
-    headers.put(UtilsTest.getRandomString(10), UtilsTest.getRandomString(10));
+    headers.put(TestUtils.getRandomString(10), TestUtils.getRandomString(10));
 
     // success test
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
@@ -553,8 +551,7 @@ public class RestUtilsTest {
 
   /**
    * This tests the construction of {@link GetBlobOptions} objects with various range and sub-resource settings using
-   * {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource, GetOption)} and
-   * {@link RestUtils#buildByteRange(String)}.
+   * {@link RestUtils#buildGetBlobOptions}.
    * @throws RestServiceException
    */
   @Test

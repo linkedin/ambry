@@ -27,7 +27,6 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
@@ -208,7 +207,7 @@ public class AmbryUrlSigningServiceTest {
    */
   private void doSignAndVerifyTest(AmbryUrlSigningService signer, RestMethod restMethod, Time time) throws Exception {
     long urlTtl = Math.min(Utils.getRandomLong(TestUtils.RANDOM, 2000) + 2000, MAX_URL_TTL_SECS);
-    String randomHeaderVal = UtilsTest.getRandomString(10);
+    String randomHeaderVal = TestUtils.getRandomString(10);
     long maxUploadSize = Utils.getRandomLong(TestUtils.RANDOM, 4001) + 2000;
 
     // all defaults overridden

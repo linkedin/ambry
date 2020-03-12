@@ -20,7 +20,6 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -65,7 +64,7 @@ public class CompactionLogTest {
    * @throws IOException
    */
   public CompactionLogTest() throws IOException {
-    tempDir = StoreTestUtils.createTempDirectory("storeDir-" + UtilsTest.getRandomString(10));
+    tempDir = StoreTestUtils.createTempDirectory("storeDir-" + TestUtils.getRandomString(10));
     tempDirStr = tempDir.getAbsolutePath();
     config = new StoreConfig(new VerifiableProperties(new Properties()));
   }
@@ -331,7 +330,7 @@ public class CompactionLogTest {
     for (int j = 0; j < segmentCount; j++) {
       String segmentName;
       do {
-        segmentName = UtilsTest.getRandomString(10);
+        segmentName = TestUtils.getRandomString(10);
       } while (generatedSegmentNames.contains(segmentName));
       generatedSegmentNames.add(segmentName);
       segmentsUnderCompaction.add(segmentName);

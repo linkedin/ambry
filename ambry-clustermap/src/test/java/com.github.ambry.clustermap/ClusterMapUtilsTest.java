@@ -15,7 +15,6 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -26,6 +25,7 @@ import java.util.Set;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -111,7 +111,7 @@ public class ClusterMapUtilsTest {
       checkCaseInsensitivityForPartitionSelectionHelper(psh, true, maxLocalOneRemote,
           Arrays.asList(majorDc11, majorDc12, majorDc21, majorDc22));
       try {
-        psh.getPartitions(UtilsTest.getRandomString(3));
+        psh.getPartitions(getRandomString(3));
         fail("partition class is invalid, should have thrown");
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.
@@ -137,13 +137,13 @@ public class ClusterMapUtilsTest {
       }
       // invalid class
       try {
-        psh.getWritablePartitions(UtilsTest.getRandomString(3));
+        psh.getWritablePartitions(getRandomString(3));
         fail("partition class is invalid, should have thrown");
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.
       }
       try {
-        psh.getRandomWritablePartition(UtilsTest.getRandomString(3), null);
+        psh.getRandomWritablePartition(getRandomString(3), null);
         fail("partition class is invalid, should have thrown");
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.

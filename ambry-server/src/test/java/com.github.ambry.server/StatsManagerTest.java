@@ -51,8 +51,8 @@ import com.github.ambry.store.TimeRange;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -116,7 +116,7 @@ public class StatsManagerTest {
   }
 
   public StatsManagerTest() throws Exception {
-    tempDir = Files.createTempDirectory("nodeStatsDir-" + UtilsTest.getRandomString(10)).toFile();
+    tempDir = Files.createTempDirectory("nodeStatsDir-" + TestUtils.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     outputFileString = (new File(tempDir.getAbsolutePath(), "stats_output.json")).getAbsolutePath();
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();

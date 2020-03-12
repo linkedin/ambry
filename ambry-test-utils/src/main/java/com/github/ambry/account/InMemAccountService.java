@@ -16,7 +16,6 @@ package com.github.ambry.account;
 
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -147,7 +146,7 @@ public class InMemAccountService implements AccountService {
     String refAccountName;
     do {
       refAccountId = Utils.getRandomShort(TestUtils.RANDOM);
-      refAccountName = UtilsTest.getRandomString(10);
+      refAccountName = TestUtils.getRandomString(10);
     } while (idToAccountMap.containsKey(refAccountId) || nameToAccountMap.containsKey(refAccountName));
     Account.AccountStatus refAccountStatus = Account.AccountStatus.ACTIVE;
     Container randomContainer = getRandomContainer(refAccountId);
@@ -191,9 +190,9 @@ public class InMemAccountService implements AccountService {
   private Container getRandomContainer(short accountId) {
     // adding +2 so that the ID is not 0 or 1
     short refContainerId = (short) (TestUtils.RANDOM.nextInt(Short.MAX_VALUE - 1) + 2);
-    String refContainerName = UtilsTest.getRandomString(10);
+    String refContainerName = TestUtils.getRandomString(10);
     Container.ContainerStatus refContainerStatus = Container.ContainerStatus.ACTIVE;
-    String refContainerDescription = UtilsTest.getRandomString(10);
+    String refContainerDescription = TestUtils.getRandomString(10);
     boolean refContainerEncryption = TestUtils.RANDOM.nextBoolean();
     boolean refContainerPreviousEncryption = refContainerEncryption || TestUtils.RANDOM.nextBoolean();
     boolean refContainerCaching = TestUtils.RANDOM.nextBoolean();

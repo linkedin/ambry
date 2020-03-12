@@ -14,8 +14,8 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -38,10 +38,10 @@ public class MessageInfoTest {
     boolean[] isUndeletedVals = {true, false};
     short[] lifeVersionVals = {(short) 0, (short) 1, (short) 2, (short) 3};
     Long[] crcs = {null, 100L, Long.MIN_VALUE, Long.MAX_VALUE};
-    StoreKey[] keys = {new MockId(UtilsTest.getRandomString(10), accountIds[0], containerIds[0]),
-        new MockId(UtilsTest.getRandomString(10), accountIds[1], containerIds[1]),
-        new MockId(UtilsTest.getRandomString(10), accountIds[2], containerIds[2]),
-        new MockId(UtilsTest.getRandomString(10), accountIds[3], containerIds[3])};
+    StoreKey[] keys = {new MockId(TestUtils.getRandomString(10), accountIds[0], containerIds[0]),
+        new MockId(TestUtils.getRandomString(10), accountIds[1], containerIds[1]),
+        new MockId(TestUtils.getRandomString(10), accountIds[2], containerIds[2]),
+        new MockId(TestUtils.getRandomString(10), accountIds[3], containerIds[3])};
     long[] blobSizes = {1024, 2048, 4096, 8192};
     long[] times = {SystemTime.getInstance().milliseconds() + 100, SystemTime.getInstance().milliseconds() - 1,
         SystemTime.getInstance().milliseconds() + 300, Utils.Infinite_Time};

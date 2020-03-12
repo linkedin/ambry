@@ -16,7 +16,6 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.PortType;
-import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -28,6 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Test;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -159,8 +159,8 @@ public class DynamicClusterManagerComponentsTest {
     // AmbryPartition tests
     // All partitions are READ_WRITE initially.
     sealedStateChangeCounter = new AtomicLong(0);
-    String partition1Class = UtilsTest.getRandomString(10);
-    String partition2Class = UtilsTest.getRandomString(10);
+    String partition1Class = getRandomString(10);
+    String partition2Class = getRandomString(10);
     AmbryPartition partition1 = new AmbryPartition(1, partition1Class, mockClusterManagerCallback);
     AmbryPartition partition2 = new AmbryPartition(2, partition2Class, mockClusterManagerCallback);
     assertTrue(partition1.isEqual(partition1.toPathString()));

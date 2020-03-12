@@ -33,7 +33,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.utils.UtilsTest;
+import com.github.ambry.utils.TestUtils;
 import java.io.IOException;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
@@ -91,7 +91,7 @@ public class GetSignedUrlHandlerTest {
    */
   @Test
   public void handleGoodCaseTest() throws Exception {
-    urlSigningServiceFactory.signedUrlToReturn = UtilsTest.getRandomString(10);
+    urlSigningServiceFactory.signedUrlToReturn = TestUtils.getRandomString(10);
     // POST
     RestRequest restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
     restRequest.setArg(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
@@ -104,7 +104,7 @@ public class GetSignedUrlHandlerTest {
     restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
     restRequest.setArg(RestUtils.Headers.URL_TYPE, RestMethod.GET.name());
     // add a random string. IDConverter will convert it
-    restRequest.setArg(RestUtils.Headers.BLOB_ID, UtilsTest.getRandomString(10));
+    restRequest.setArg(RestUtils.Headers.BLOB_ID, TestUtils.getRandomString(10));
     verifySigningUrl(restRequest, urlSigningServiceFactory.signedUrlToReturn, REF_ACCOUNT, REF_CONTAINER);
   }
 

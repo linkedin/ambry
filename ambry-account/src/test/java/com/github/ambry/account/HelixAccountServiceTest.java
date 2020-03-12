@@ -21,7 +21,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -64,13 +63,8 @@ import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.HelixAccountService.*;
 import static com.github.ambry.utils.TestUtils.*;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assume.assumeTrue;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 
 
 /**
@@ -1178,7 +1172,7 @@ public class HelixAccountServiceTest {
     refContainerEncryption = random.nextBoolean();
     refContainerPreviousEncryption = refContainerEncryption || random.nextBoolean();
     refContainerMediaScanDisabled = random.nextBoolean();
-    refReplicationPolicy = UtilsTest.getRandomString(10);
+    refReplicationPolicy = TestUtils.getRandomString(10);
     refContainerTtlRequired = random.nextBoolean();
     refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
         refParentAccountId).setEncrypted(refContainerEncryption)

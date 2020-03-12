@@ -16,8 +16,8 @@ package com.github.ambry.store;
 import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -72,8 +72,8 @@ public class StoreFindTokenTest {
     String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
     Offset offset = new Offset(logSegmentName, 0);
     Offset otherOffset = new Offset(logSegmentName, 1);
-    MockId key = new MockId(UtilsTest.getRandomString(10));
-    MockId otherKey = new MockId(UtilsTest.getRandomString(10));
+    MockId key = new MockId(TestUtils.getRandomString(10));
+    MockId otherKey = new MockId(TestUtils.getRandomString(10));
 
     StoreFindToken initToken = new StoreFindToken();
     StoreFindToken otherInitToken = new StoreFindToken();
@@ -134,7 +134,7 @@ public class StoreFindTokenTest {
     UUID incarnationId = UUID.randomUUID();
     String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
     Offset offset = new Offset(logSegmentName, 0);
-    MockId key = new MockId(UtilsTest.getRandomString(10));
+    MockId key = new MockId(TestUtils.getRandomString(10));
 
     if (!isLogSegmented) {
       // UnInitialized
@@ -174,7 +174,7 @@ public class StoreFindTokenTest {
     UUID incarnationId = UUID.randomUUID();
     String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
     Offset offset = new Offset(logSegmentName, 0);
-    MockId key = new MockId(UtilsTest.getRandomString(10));
+    MockId key = new MockId(TestUtils.getRandomString(10));
 
     // no offset
     testConstructionFailure(key, sessionId, incarnationId, null);

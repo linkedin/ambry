@@ -15,7 +15,7 @@ ext {
     jsonVersion = "20170516"
     metricsVersion = "4.0.7"
     commonsVersion = "1.9"
-    bouncycastleVersion = "1.52"
+    bouncycastleVersion = "1.64"
     javaxVersion = "3.0.1"
     nettyVersion = "4.1.42.Final"
     nettyTcnativeVersion = "2.0.26.Final"

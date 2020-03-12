@@ -13,8 +13,8 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -51,7 +51,7 @@ public class InMemoryUnknownAccountServiceTest {
     assertEquals("Wrong account", InMemoryUnknownAccountService.UNKNOWN_ACCOUNT,
         accountService.getAccountById((short) -1));
     assertEquals("Wrong account", InMemoryUnknownAccountService.UNKNOWN_ACCOUNT,
-        accountService.getAccountByName(UtilsTest.getRandomString(10)));
+        accountService.getAccountByName(TestUtils.getRandomString(10)));
     assertEquals("Wrong size of account collection", 1, accountService.getAllAccounts().size());
     // updating the InMemoryUnknownAccountService should fail.
     Account account = new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build();

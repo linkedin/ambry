@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,6 +47,7 @@ public class TestUtils {
   public static final Random RANDOM = new Random();
   public static final List<Boolean> BOOLEAN_VALUES = Collections.unmodifiableList(Arrays.asList(true, false));
   private static final int CHECK_INTERVAL_IN_MS = 100;
+  private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
   /**
    * Return the number of threads currently running with a name containing the given pattern.
@@ -229,6 +230,14 @@ public class TestUtils {
       sb.append(Integer.toHexString(TestUtils.RANDOM.nextInt()));
     }
     sb.setLength(size);
+    return sb.toString();
+  }
+
+  public static String getRandomString(int length) {
+    StringBuilder sb = new StringBuilder(length);
+    for (int i = 0; i < length; i++) {
+      sb.append(CHARACTERS.charAt(RANDOM.nextInt(CHARACTERS.length())));
+    }
     return sb.toString();
   }
 
