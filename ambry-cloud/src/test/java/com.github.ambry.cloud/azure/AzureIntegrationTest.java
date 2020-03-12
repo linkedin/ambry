@@ -312,7 +312,7 @@ public class AzureIntegrationTest {
   /**
    * Test findEntriesSince with CosmosChangeFeedFindTokenFactory.
    */
-  //@Ignore // Fails with wrong number of queries.
+  @Ignore // Fails with wrong number of queries.
   @Test
   public void testFindEntriesSinceByChangeFeed() throws Exception {
     testFindEntriesSince("com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory");

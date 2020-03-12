@@ -201,21 +201,20 @@ class AzureCloudDestination implements CloudDestination {
   @Override
   public List<CloudBlobMetadata> getDeletedBlobs(String partitionPath, long startTime, long endTime, int maxEntries)
       throws CloudStorageException {
-    return getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, startTime, endTime, maxEntries);
+    try {
+      return cosmosDataAccessor.getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, startTime, endTime, maxEntries);
+    } catch (DocumentClientException dex) {
+      throw toCloudStorageException("Failed to query deleted blobs for partition " + partitionPath, dex);
+    }
   }
 
   @Override
   public List<CloudBlobMetadata> getExpiredBlobs(String partitionPath, long startTime, long endTime, int maxEntries)
       throws CloudStorageException {
-    return getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, startTime, endTime, maxEntries);
-  }
-
-  private List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long startTime, long endTime,
-      int maxEntries) throws CloudStorageException {
     try {
-      return cosmosDataAccessor.getDeadBlobs(partitionPath, fieldName, startTime, endTime, maxEntries);
+      return cosmosDataAccessor.getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, startTime, endTime, maxEntries);
     } catch (DocumentClientException dex) {
-      throw toCloudStorageException("Failed to query dead blobs for partition " + partitionPath, dex);
+      throw toCloudStorageException("Failed to query expired blobs for partition " + partitionPath, dex);
     }
   }
 
