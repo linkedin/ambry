@@ -18,15 +18,9 @@ task javadocJar(type: Jar, dependsOn: javadoc) {
     from javadoc.destinationDir
 }
 
-task testJar(type: Jar, dependsOn: testClasses) {
-    classifier = 'test'
-    from sourceSets.test.output
-}
-
 artifacts {
     archives sourcesJar
     archives javadocJar
-    archives testJar
 }
 
 publishing {
@@ -36,7 +30,6 @@ publishing {
 
             artifact javadocJar
             artifact sourcesJar
-            artifact testJar
 
             pom {
                 licenses {
