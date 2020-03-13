@@ -390,7 +390,7 @@ public class ClusterMapUtils {
   static class PartitionSelectionHelper implements ClusterMapChangeListener {
     private final int minimumLocalReplicaCount;
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-    private final ClusterManagerCallback clusterManagerCallback;
+    private final ClusterManagerCallback<?, ?, ?, ?> clusterManagerCallback;
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
     private Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas;
@@ -401,7 +401,7 @@ public class ClusterMapUtils {
      * @param localDatacenterName the name of the local datacenter. Can be null if datacenter specific replica counts
      * @param minimumLocalReplicaCount the minimum number of replicas in local datacenter. This is used when selecting
      */
-    PartitionSelectionHelper(ClusterManagerCallback clusterManagerCallback, String localDatacenterName,
+    PartitionSelectionHelper(ClusterManagerCallback<?, ?, ?, ?> clusterManagerCallback, String localDatacenterName,
         int minimumLocalReplicaCount) {
       this.localDatacenterName = localDatacenterName;
       this.minimumLocalReplicaCount = minimumLocalReplicaCount;

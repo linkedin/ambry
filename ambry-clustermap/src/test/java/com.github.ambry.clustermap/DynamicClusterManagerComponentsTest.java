@@ -69,24 +69,24 @@ public class DynamicClusterManagerComponentsTest {
     MockClusterManagerCallback mockClusterManagerCallback = new MockClusterManagerCallback();
     // AmbryDataNode test
     try {
-      new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM1, RACK_ID, null, null, XID,
+      new AmbryServerDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM1, RACK_ID, null, null, XID,
           mockClusterManagerCallback);
       fail("Datanode construction should have failed when SSL is enabled and SSL port is null");
     } catch (IllegalArgumentException e) {
       // OK
     }
     try {
-      new AmbryDataNode("DC1", clusterMapConfig1, HOST_NAME, MAX_PORT + 1, RACK_ID, null, null, XID,
+      new AmbryServerDataNode("DC1", clusterMapConfig1, HOST_NAME, MAX_PORT + 1, RACK_ID, null, null, XID,
           mockClusterManagerCallback);
       fail("Datanode construction should have failed when port num is outside the valid range");
     } catch (IllegalArgumentException e) {
       // OK
     }
     AmbryDataNode datanode1 =
-        new AmbryDataNode("DC0", clusterMapConfig1, HOST_NAME, PORT_NUM1, RACK_ID, SSL_PORT_NUM, null, XID,
+        new AmbryServerDataNode("DC0", clusterMapConfig1, HOST_NAME, PORT_NUM1, RACK_ID, SSL_PORT_NUM, null, XID,
             mockClusterManagerCallback);
     AmbryDataNode datanode2 =
-        new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM2, RACK_ID, SSL_PORT_NUM, null, XID,
+        new AmbryServerDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM2, RACK_ID, SSL_PORT_NUM, null, XID,
             mockClusterManagerCallback);
     assertEquals(datanode1.getDatacenterName(), "DC0");
     assertEquals(datanode1.getHostname(), HOST_NAME);
@@ -172,21 +172,21 @@ public class DynamicClusterManagerComponentsTest {
 
     // AmbryReplica tests
     try {
-      new DiskAmbryReplica(clusterMapConfig1, null, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+      new AmbryServerReplica(clusterMapConfig1, null, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES, false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (NullPointerException e) {
       // OK
     }
 
     try {
-      new DiskAmbryReplica(clusterMapConfig1, partition1, null, false, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+      new AmbryServerReplica(clusterMapConfig1, partition1, null, false, MAX_REPLICA_CAPACITY_IN_BYTES, false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (NullPointerException e) {
       // OK
     }
 
     try {
-      new DiskAmbryReplica(clusterMapConfig1, partition1, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES + 1, false);
+      new AmbryServerReplica(clusterMapConfig1, partition1, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES + 1, false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
@@ -194,19 +194,19 @@ public class DynamicClusterManagerComponentsTest {
 
     // Create a few replicas and make the mockClusterManagerCallback aware of the association.
     AmbryReplica replica1 =
-        new DiskAmbryReplica(clusterMapConfig1, partition1, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+        new AmbryServerReplica(clusterMapConfig1, partition1, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica1);
     AmbryReplica replica2 =
-        new DiskAmbryReplica(clusterMapConfig1, partition2, disk1, false, MIN_REPLICA_CAPACITY_IN_BYTES, false);
+        new AmbryServerReplica(clusterMapConfig1, partition2, disk1, false, MIN_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition2, replica2);
     AmbryReplica replica3 =
-        new DiskAmbryReplica(clusterMapConfig2, partition1, disk2, false, MIN_REPLICA_CAPACITY_IN_BYTES, false);
+        new AmbryServerReplica(clusterMapConfig2, partition1, disk2, false, MIN_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica3);
     AmbryReplica replica4 =
-        new DiskAmbryReplica(clusterMapConfig2, partition2, disk2, false, MIN_REPLICA_CAPACITY_IN_BYTES, true);
+        new AmbryServerReplica(clusterMapConfig2, partition2, disk2, false, MIN_REPLICA_CAPACITY_IN_BYTES, true);
     mockClusterManagerCallback.addReplicaToPartition(partition2, replica4);
     AmbryReplica replica5 =
-        new DiskAmbryReplica(clusterMapConfig1, partition1, disk1, true, MIN_REPLICA_CAPACITY_IN_BYTES, false);
+        new AmbryServerReplica(clusterMapConfig1, partition1, disk1, true, MIN_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica5);
 
     sealedStateChangeCounter.incrementAndGet();

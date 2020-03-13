@@ -1071,6 +1071,7 @@ public class TestUtils {
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("clustermap.cluster.name", "cluster");
     props.setProperty("clustermap.datacenter.name", "");
+    props.setProperty("clustermap.resolve.hostnames", "false");
     return new ClusterMapConfig(new VerifiableProperties(props));
   }
 }

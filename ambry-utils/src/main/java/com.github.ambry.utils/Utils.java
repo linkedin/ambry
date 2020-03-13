@@ -48,6 +48,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -302,6 +303,22 @@ public class Utils {
       output = Unpooled.wrappedBuffer(buffer);
     }
     return output;
+  }
+
+  /**
+   * Extracts the cause of an {@link ExecutionException}. This is used to get the relevent domain-specific exception
+   * after unboxing a future.
+   * @param e the {@link Exception}
+   * @return if the cause is {@code null}, return {@code e} itself. If the cause is not an instance
+   *         of exception, return the {@link Throwable} wrapped in an exception. If not {@link ExecutionException},
+   *         retun the exception itself. Otherwise, return the cause {@link Exception}.
+   */
+  public static Exception extractExecutionExceptionCause(Exception e) {
+    if (!(e instanceof ExecutionException)) {
+      return e;
+    }
+    Throwable cause = e.getCause();
+    return cause == null ? e : (cause instanceof Exception ? (Exception) cause : new Exception(cause));
   }
 
   /**

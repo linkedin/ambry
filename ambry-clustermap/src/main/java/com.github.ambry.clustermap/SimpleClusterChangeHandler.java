@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
@@ -39,10 +40,10 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
- * An implementation of {@link ClusterChangeHandler} to register as listener for Helix related changes in each datacenter.
- * This class is also responsible for handling events received.
+ * An implementation of {@link HelixAwareClusterChangeHandler} to register as listener for Helix related changes in each
+ * datacenter. This class is also responsible for handling events received.
  */
-public class SimpleClusterChangeHandler implements ClusterChangeHandler {
+public class SimpleClusterChangeHandler implements HelixAwareClusterChangeHandler {
   private final String dcName;
   private final Object notificationLock = new Object();
   private final AtomicBoolean instanceConfigInitialized = new AtomicBoolean(false);
@@ -50,7 +51,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
   private final AtomicBoolean idealStateInitialized = new AtomicBoolean(false);
   private final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final AtomicLong sealedStateChangeCounter;
-  private final ConcurrentHashMap<String, Exception> initializationFailureMap;
+  private final Consumer<Exception> onInitializationFailure;
   private final ClusterMapConfig clusterMapConfig;
   private final String selfInstanceName;
   private final AtomicLong currentXid;
@@ -76,7 +77,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
   /**
    * Initialize a ClusterChangeHandler in the given datacenter.
    * @param clusterMapConfig {@link ClusterMapConfig} to help some admin operations
-   * @param dcName the name of dc this {@link ClusterChangeHandler} associates with
+   * @param dcName the name of dc this {@link HelixAwareClusterChangeHandler} associates with
    * @param selfInstanceName the name of instance on which {@link HelixClusterManager} resides.
    * @param partitionOverrideInfoMap a map specifying partitions whose state should be overridden.
    * @param partitionMap a map from serialized bytes to corresponding partition.
@@ -84,7 +85,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
    * @param ambryPartitionToAmbryReplicas a map from {@link AmbryPartition} to its replicas.
    * @param helixClusterManagerCallback a help class to get cluster state from all DCs.
    * @param helixClusterManagerMetrics metrics that help track of cluster changes and infos.
-   * @param initializationFailureMap a map that records failure in each DC during initialization.
+   * @param onInitializationFailure callback to be called if initialization fails in a listener call.
    * @param sealedStateChangeCounter a counter that records event when replica is sealed or unsealed
    */
   SimpleClusterChangeHandler(ClusterMapConfig clusterMapConfig, String dcName, String selfInstanceName,
@@ -93,8 +94,8 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
       ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition,
       ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas,
       HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback,
-      HelixClusterManagerMetrics helixClusterManagerMetrics,
-      ConcurrentHashMap<String, Exception> initializationFailureMap, AtomicLong sealedStateChangeCounter) {
+      HelixClusterManagerMetrics helixClusterManagerMetrics, Consumer<Exception> onInitializationFailure,
+      AtomicLong sealedStateChangeCounter) {
     this.clusterMapConfig = clusterMapConfig;
     this.dcName = dcName;
     this.selfInstanceName = selfInstanceName;
@@ -104,7 +105,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
     this.ambryPartitionToAmbryReplicas = ambryPartitionToAmbryReplicas;
     this.helixClusterManagerCallback = helixClusterManagerCallback;
     this.helixClusterManagerMetrics = helixClusterManagerMetrics;
-    this.initializationFailureMap = initializationFailureMap;
+    this.onInitializationFailure = onInitializationFailure;
     this.sealedStateChangeCounter = sealedStateChangeCounter;
     currentXid = new AtomicLong(clusterMapConfig.clustermapCurrentXid);
   }
@@ -120,7 +121,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
             initializeInstances(configs);
           } catch (Exception e) {
             logger.error("Exception occurred when initializing instances in {}: ", dcName, e);
-            initializationFailureMap.putIfAbsent(dcName, e);
+            onInitializationFailure.accept(e);
           }
           instanceConfigInitialized.set(true);
         } else {
@@ -284,9 +285,10 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
             logger.info("Adding node {} and its disks and replicas", instanceName);
             // HTTP2 port null for now, until it's populated to Helix
             AmbryDataNode datanode =
-                new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
-                    Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig),
-                    getHttp2PortStr(instanceConfig), instanceXid, helixClusterManagerCallback);
+                new AmbryServerDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
+                    Integer.parseInt(instanceConfig.getPort()), getRackId(instanceConfig),
+                    getSslPortStr(instanceConfig), getHttp2PortStr(instanceConfig), instanceXid,
+                    helixClusterManagerCallback);
             initializeDisksAndReplicasOnNode(datanode, instanceConfig);
             instanceNameToAmbryDataNode.put(instanceName, datanode);
           } else {
@@ -438,7 +440,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
             isSealed = sealedReplicas.contains(partitionName);
           }
           AmbryReplica replica =
-              new DiskAmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
+              new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
                   replicaCapacity, isSealed);
           ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
           ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);

@@ -1067,7 +1067,7 @@ public class HelixClusterManagerTest {
     assumeTrue(!useComposite);
     HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
     Counter instanceTriggerCounter = helixClusterManager.helixClusterManagerMetrics.instanceConfigChangeTriggerCount;
-    Map<String, HelixClusterManager.DcInfo> dcInfosMap = helixClusterManager.getDcInfosMap();
+    Map<String, DcInfo> dcInfosMap = helixClusterManager.getDcInfosMap();
     Map<String, HelixManager> helixManagerMap =
         dcInfosMap.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().helixManager));
     for (Map.Entry<String, HelixManager> entry : helixManagerMap.entrySet()) {

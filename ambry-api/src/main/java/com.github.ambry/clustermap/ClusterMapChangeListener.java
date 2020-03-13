@@ -13,7 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
-import java.util.Collection;
+import java.util.List;
 
 
 /**
@@ -25,6 +25,5 @@ public interface ClusterMapChangeListener {
    * @param addedReplicas {@link ReplicaId}(s) that have been added.
    * @param removedReplicas {@link ReplicaId}(s) that have been removed.
    */
-  void onReplicaAddedOrRemoved(Collection<? extends ReplicaId> addedReplicas,
-      Collection<? extends ReplicaId> removedReplicas);
+  void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas);
 }

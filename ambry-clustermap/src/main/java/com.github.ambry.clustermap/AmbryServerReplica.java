@@ -14,41 +14,53 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import java.io.File;
+import java.util.Objects;
 import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 
 
-class CloudAmbryReplica extends AmbryReplica {
+/**
+ * {@link AmbryServerReplica} represents a standard ambry replica, one with physical disks hosted by an ambry-server
+ * node.
+ */
+class AmbryServerReplica extends AmbryReplica {
+  private final AmbryDisk disk;
+
   /**
-   * Instantiate an AmbryReplica instance for a virtual cloud replica. This does no
+   * Instantiate a disk-backed AmbryReplica instance.
    * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    * @param partition the {@link AmbryPartition} of which this is a replica.
+   * @param disk the {@link AmbryDisk} on which this replica resides.
+   * @param isReplicaStopped whether this replica is stopped or not.
    * @param capacityBytes the capacity in bytes for this replica.
+   * @param isSealed whether this replica is in sealed state.
    */
-  CloudAmbryReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, long capacityBytes) throws Exception {
-    super(clusterMapConfig, partition, false, capacityBytes, false);
+  AmbryServerReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, AmbryDisk disk,
+      boolean isReplicaStopped, long capacityBytes, boolean isSealed) throws Exception {
+    super(clusterMapConfig, partition, isReplicaStopped, capacityBytes, isSealed);
+    this.disk = Objects.requireNonNull(disk, "null disk");
   }
 
   @Override
   public AmbryDisk getDiskId() {
-    throw new UnsupportedOperationException("No disk for cloud replica");
+    return disk;
   }
 
   @Override
   public AmbryDataNode getDataNodeId() {
-    // TODO figure out callers, if too many change this behavior
-    throw new UnsupportedOperationException("No datanode for cloud replica");
+    return disk.getDataNode();
   }
 
   @Override
   public String getMountPath() {
-    throw new UnsupportedOperationException("No mount path for cloud replica");
+    return disk.getMountPath();
   }
 
   @Override
   public String getReplicaPath() {
-    throw new UnsupportedOperationException("No replica path for cloud replica");
+    return disk.getMountPath() + File.separator + getPartitionId().toPathString();
   }
 
   @Override
@@ -59,12 +71,20 @@ class CloudAmbryReplica extends AmbryReplica {
   @Override
   public JSONObject getSnapshot() {
     JSONObject snapshot = new JSONObject();
+    DataNodeId dataNodeId = getDataNodeId();
+    snapshot.put(REPLICA_NODE, dataNodeId.getHostname() + ":" + dataNodeId.getPort());
     snapshot.put(REPLICA_PARTITION, getPartitionId().toPathString());
     snapshot.put(REPLICA_TYPE, getReplicaType());
+    snapshot.put(REPLICA_DISK, getDiskId().getMountPath());
+    snapshot.put(REPLICA_PATH, getReplicaPath());
     snapshot.put(CAPACITY_BYTES, getCapacityInBytes());
     snapshot.put(REPLICA_WRITE_STATE, isSealed() ? PartitionState.READ_ONLY.name() : PartitionState.READ_WRITE.name());
     String replicaLiveness = UP;
-    if (isStopped) {
+    if (dataNodeId.getState() == HardwareState.UNAVAILABLE) {
+      replicaLiveness = NODE_DOWN;
+    } else if (disk.getState() == HardwareState.UNAVAILABLE) {
+      replicaLiveness = DISK_DOWN;
+    } else if (isStopped) {
       replicaLiveness = REPLICA_STOPPED;
     } else if (resourceStatePolicy.isHardDown()) {
       replicaLiveness = DOWN;
@@ -77,14 +97,21 @@ class CloudAmbryReplica extends AmbryReplica {
 
   @Override
   public String toString() {
-    return "Replica[cloud:" + getPartitionId().toPathString() + "]";
+    return "Replica[" + getDataNodeId().getHostname() + ":" + getDataNodeId().getPort() + ":" + getReplicaPath() + "]";
+  }
+
+  @Override
+  public boolean isDown() {
+    return disk.getState() == HardwareState.UNAVAILABLE || super.isDown();
   }
 
   @Override
   public void markDiskDown() {
+    disk.onDiskError();
   }
 
   @Override
   public void markDiskUp() {
+    disk.onDiskOk();
   }
 }

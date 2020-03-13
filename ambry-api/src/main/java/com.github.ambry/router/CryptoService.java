@@ -15,8 +15,6 @@ package com.github.ambry.router;
 
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 

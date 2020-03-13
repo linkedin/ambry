@@ -15,13 +15,10 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
-import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import org.json.JSONObject;
+import java.util.stream.Collectors;
 
-import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
@@ -69,9 +66,7 @@ abstract class AmbryReplica implements ReplicaId {
 
   @Override
   public List<AmbryReplica> getPeerReplicaIds() {
-    List<AmbryReplica> replicasOfPartition = new ArrayList<>(partition.getReplicaIds());
-    replicasOfPartition.remove(this);
-    return replicasOfPartition;
+    return partition.getReplicaIds().stream().filter(replica -> !this.equals(replica)).collect(Collectors.toList());
   }
 
   @Override
@@ -84,7 +79,6 @@ abstract class AmbryReplica implements ReplicaId {
     return isSealed;
   }
 
-
   void setSealedState(boolean isSealed) {
     this.isSealed = isSealed;
   }
@@ -93,10 +87,9 @@ abstract class AmbryReplica implements ReplicaId {
     this.isStopped = isStopped;
   }
 
-
   @Override
   public boolean isDown() {
-    return  resourceStatePolicy.isDown() || isStopped;
+    return resourceStatePolicy.isDown() || isStopped;
   }
 
   /**
