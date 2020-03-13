@@ -181,14 +181,14 @@ public class RequestResponseTest {
   private void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
       BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize, byte[] blobKey)
       throws IOException {
-    doTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blobType, blob,
-        blobSize, blobKey, blobKey);
-    doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
-        blobType, blob, blobSize, null, null);
-    doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
-        blobType, blob, blobSize, new byte[0], null);
-    doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
-        blobType, blob, blobSize, blobKey, blobKey);
+    doPutRequestTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blobType,
+        blob, blobSize, blobKey, blobKey);
+    doPutRequestTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties,
+        userMetadata, blobType, blob, blobSize, null, null);
+    doPutRequestTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties,
+        userMetadata, blobType, blob, blobSize, new byte[0], null);
+    doPutRequestTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties,
+        userMetadata, blobType, blob, blobSize, blobKey, blobKey);
   }
 
   /**
@@ -206,9 +206,9 @@ public class RequestResponseTest {
    * @param blobKey the encryption key of the blob.
    * @param expectedKey the expected encryption key from the deserialized Put request.
    */
-  private void doTest(short testVersion, MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
-      BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize, byte[] blobKey,
-      byte[] expectedKey) throws IOException {
+  private void doPutRequestTest(short testVersion, MockClusterMap clusterMap, int correlationId, String clientId,
+      BlobId blobId, BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize,
+      byte[] blobKey, byte[] expectedKey) throws IOException {
     // This PutRequest is created just to get the size.
     int sizeInBytes =
         (int) new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
@@ -302,7 +302,7 @@ public class RequestResponseTest {
             TestUtils.RANDOM.nextBoolean(), null);
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
         blobSize, blobKey);
-    doTest(InvalidVersionPutRequest.Put_Request_Invalid_version, clusterMap, correlationId, clientId, blobId,
+    doPutRequestTest(InvalidVersionPutRequest.Put_Request_Invalid_version, clusterMap, correlationId, clientId, blobId,
         blobProperties, userMetadata, BlobType.DataBlob, blob, blobSize, blobKey, null);
 
     // Put Request with size in blob properties different from the data size and blob type: Data blob.
@@ -339,14 +339,21 @@ public class RequestResponseTest {
 
   @Test
   public void getRequestResponseTest() throws IOException {
-    testGetRequestResponse(GetResponse.CURRENT_VERSION);
-    testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_5);
-    testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_4);
-    testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_3);
+    short oldGetResponseVersion = GetResponse.CURRENT_VERSION;
+    short oldMessageInfoVersion = MessageInfoAndMetadataListSerde.AUTO_VERSION;
+    testGetRequestResponse(GetResponse.CURRENT_VERSION, MessageInfoAndMetadataListSerde.VERSION_6);
+    testGetRequestResponse(GetResponse.CURRENT_VERSION, MessageInfoAndMetadataListSerde.VERSION_5);
+    testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_5, MessageInfoAndMetadataListSerde.VERSION_6);
+    testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_5, MessageInfoAndMetadataListSerde.VERSION_5);
+    testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_4, MessageInfoAndMetadataListSerde.VERSION_5);
+    testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_3, MessageInfoAndMetadataListSerde.VERSION_5);
+    GetResponse.CURRENT_VERSION = oldGetResponseVersion;
+    MessageInfoAndMetadataListSerde.AUTO_VERSION = oldMessageInfoVersion;
   }
 
-  private void testGetRequestResponse(short getVersionToUse) throws IOException {
+  private void testGetRequestResponse(short getVersionToUse, short messageInfoAutoVersion) throws IOException {
     GetResponse.CURRENT_VERSION = getVersionToUse;
+    MessageInfoAndMetadataListSerde.AUTO_VERSION = messageInfoAutoVersion;
     MockClusterMap clusterMap = new MockClusterMap();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -370,7 +377,8 @@ public class RequestResponseTest {
 
     long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     byte[] encryptionKey = TestUtils.getRandomBytes(256);
-    MessageInfo messageInfo = new MessageInfo(id1, 1000, 1000, accountId, containerId, operationTimeMs);
+    MessageInfo messageInfo =
+        new MessageInfo(id1, 1000, false, false, true, 1000, null, accountId, containerId, operationTimeMs, (short) 1);
     MessageMetadata messageMetadata = new MessageMetadata(ByteBuffer.wrap(encryptionKey));
     ArrayList<MessageInfo> messageInfoList = new ArrayList<>();
     ArrayList<MessageMetadata> messageMetadataList = new ArrayList<>();
@@ -412,6 +420,13 @@ public class RequestResponseTest {
       Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, msgInfo.getAccountId());
       Assert.assertEquals("ConatinerId mismatch ", UNKNOWN_CONTAINER_ID, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
+    }
+    if (messageInfoAutoVersion >= MessageInfoAndMetadataListSerde.VERSION_6) {
+      Assert.assertTrue(msgInfo.isUndeleted());
+      Assert.assertEquals("LifeVersion mismatch", (short) 1, msgInfo.getLifeVersion());
+    } else {
+      Assert.assertFalse(msgInfo.isUndeleted());
+      Assert.assertEquals("LifeVersion mismatch", (short) 0, msgInfo.getLifeVersion());
     }
   }
 
@@ -510,18 +525,30 @@ public class RequestResponseTest {
 
   @Test
   public void replicaMetadataRequestTest() throws IOException {
+    short oldMessageInfoVersion = MessageInfoAndMetadataListSerde.AUTO_VERSION;
     for (ReplicaType replicaType : ReplicaType.values()) {
       doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6,
-          ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, replicaType);
+          ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, MessageInfoAndMetadataListSerde.VERSION_5,
+          replicaType);
+      doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6,
+          ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, MessageInfoAndMetadataListSerde.VERSION_6,
+          replicaType);
       doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_4,
-          ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, replicaType);
+          ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, MessageInfoAndMetadataListSerde.VERSION_5,
+          replicaType);
       doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5,
-          ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, replicaType);
+          ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, MessageInfoAndMetadataListSerde.VERSION_5,
+          replicaType);
+      doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5,
+          ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, MessageInfoAndMetadataListSerde.VERSION_6,
+          replicaType);
     }
+    MessageInfoAndMetadataListSerde.AUTO_VERSION = oldMessageInfoVersion;
   }
 
   private void doReplicaMetadataRequestTest(short responseVersionToUse, short requestVersionToUse,
-      ReplicaType replicaType) throws IOException {
+      short messageInfoToUse, ReplicaType replicaType) throws IOException {
+    MessageInfoAndMetadataListSerde.AUTO_VERSION = messageInfoToUse;
     MockClusterMap clusterMap = new MockClusterMap();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
@@ -565,7 +592,9 @@ public class RequestResponseTest {
             ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
             clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
             BlobId.BlobDataType.DATACHUNK);
-        MessageInfo messageInfo = new MessageInfo(id, msgSize, accountId, containerId, operationTimeMs);
+        MessageInfo messageInfo =
+            new MessageInfo(id, msgSize, false, false, true, Utils.Infinite_Time, null, accountId, containerId, operationTimeMs,
+                (short) 1);
         messageInfoList.add(messageInfo);
         totalSizeOfAllMessages += msgSize;
       }
@@ -610,6 +639,13 @@ public class RequestResponseTest {
           Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, msgInfo.getAccountId());
           Assert.assertEquals("ContainerId mismatch ", UNKNOWN_CONTAINER_ID, msgInfo.getContainerId());
           Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
+        }
+        if (messageInfoToUse >= MessageInfoAndMetadataListSerde.VERSION_6) {
+          Assert.assertTrue(msgInfo.isUndeleted());
+          Assert.assertEquals("LifeVersion mismatch", (short) 1, msgInfo.getLifeVersion());
+        } else {
+          Assert.assertFalse(msgInfo.isUndeleted());
+          Assert.assertEquals("LifeVersion mismatch", (short) 0, msgInfo.getLifeVersion());
         }
       }
     }
