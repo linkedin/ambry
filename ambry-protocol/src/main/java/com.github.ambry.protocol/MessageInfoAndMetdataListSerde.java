@@ -94,21 +94,21 @@ class MessageInfoAndMetadataListSerde {
       // expiration time
       size += Long.BYTES;
       // whether deleted
-      size += 1;
+      size += Byte.BYTES;
       if (version < VERSION_1 || version > VERSION_MAX) {
         throw new IllegalArgumentException("Unknown version in MessageInfoList " + version);
       }
       if (version >= VERSION_5) {
         // whether ttl updated
-        size += 1;
+        size += Byte.BYTES;
       }
       if (version >= VERSION_6) {
         // whether undelete
-        size += 1;
+        size += Byte.BYTES;
       }
       if (version > VERSION_1) {
         // whether crc is present
-        size += 1;
+        size += Byte.BYTES;
         if (messageInfo.getCrc() != null) {
           // crc
           size += Long.BYTES;
@@ -124,7 +124,7 @@ class MessageInfoAndMetadataListSerde {
       }
       if (version >= VERSION_6) {
         // lifeVersion
-        size += 2;
+        size += Short.BYTES;
       }
       if (version > VERSION_3) {
         // whether message metadata is present.
