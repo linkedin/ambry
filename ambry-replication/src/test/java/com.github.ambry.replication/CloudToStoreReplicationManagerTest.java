@@ -141,8 +141,6 @@ public class CloudToStoreReplicationManagerTest {
     // 1. test adding cloud replica that is not present locally
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(NEW_PARTITION_NAME);
     assertNull("Cloud replica thread should not be created", TestUtils.getThreadByThisName(VCR_REPLICA_THREAD_PREFIX));
-    //assertNull("Thread pool for DC1 should be null",
-    //cloudToStoreReplicationManager.getReplicaThreadPoolByDc().get("DC1"));
     // create a new partition and add corresponding store in storage manager
     PartitionId newPartition =
         new MockPartitionId(Long.parseLong(NEW_PARTITION_NAME), MockClusterMap.DEFAULT_PARTITION_CLASS,
