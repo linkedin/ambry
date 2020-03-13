@@ -112,13 +112,7 @@ public class IndexSegmentTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
     this.formatVersion = formatVersion;
-    if (formatVersion < PersistentIndex.VERSION_3) {
-      // Adding this statement to keep test consistent. Before changing PersistentIndex.CURRENT_VERSION from 2
-      // to 3, test cases always save index segments in version 2 format.
-      PersistentIndex.CURRENT_VERSION = PersistentIndex.VERSION_2;
-    } else {
-      PersistentIndex.CURRENT_VERSION = formatVersion;
-    }
+    PersistentIndex.CURRENT_VERSION = formatVersion;
     setIndexMemState(indexMemState);
   }
 
@@ -444,7 +438,7 @@ public class IndexSegmentTest {
    */
   @Test
   public void populateBloomFilterWithUuidTest() throws Exception {
-    assumeTrue(formatVersion > PersistentIndex.VERSION_0);
+    assumeTrue(formatVersion > PersistentIndex.VERSION_1);
     // with default config, bloom filter will be populated by whole blob id bytes array
     String logSegmentName1 = LogSegmentNameHelper.getName(0, 0);
     int indexValueSize =
