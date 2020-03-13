@@ -43,27 +43,33 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
   public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
       ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType)
       throws MessageFormatException {
-    if (MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2) {
-      createStreamWithMessageHeaderV2(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize,
-          blobType);
-    } else {
-      createStreamWithMessageHeaderV1(key, blobProperties, userMetadata, blobStream, streamSize, blobType);
-    }
+    this(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize, blobType, (short) 0);
   }
 
   public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
       ByteBuffer userMetadata, InputStream blobStream, long streamSize) throws MessageFormatException {
-    this(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize, BlobType.DataBlob);
+    this(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize, BlobType.DataBlob, (short) 0);
+  }
+
+  public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
+      ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType, short lifeVersion)
+      throws MessageFormatException {
+    if (MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1) {
+      createStreamWithMessageHeaderV1(key, blobProperties, userMetadata, blobStream, streamSize, blobType);
+    } else {
+      createStreamWithMessageHeader(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize,
+          blobType, lifeVersion);
+    }
   }
 
   /**
    * Helper method to create a stream with encryption key record. This will be the standard once all nodes in a cluster
    * understand reading messages with encryption key record.
    */
-  private void createStreamWithMessageHeaderV2(StoreKey key, ByteBuffer blobEncryptionKey,
-      BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blobStream, long streamSize,
-      BlobType blobType) throws MessageFormatException {
-    int headerSize = MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize();
+  private void createStreamWithMessageHeader(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
+      ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType, short lifeVersion)
+      throws MessageFormatException {
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
     int blobEncryptionKeySize = blobEncryptionKey == null ? 0
         : MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(blobEncryptionKey);
     int blobPropertiesRecordSize =
@@ -84,9 +90,15 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     int updateRecordRelativeOffset = MessageFormatRecord.Message_Header_Invalid_Relative_Offset;
     int userMetadataRecordRelativeOffset = blobPropertiesRecordRelativeOffset + blobPropertiesRecordSize;
     int blobRecordRelativeOffset = userMetadataRecordRelativeOffset + userMetadataSize;
-    MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(buffer, totalSize,
-        blobEncryptionKeyRecordRelativeOffset, blobPropertiesRecordRelativeOffset, updateRecordRelativeOffset,
-        userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
+    if (MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2) {
+      MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(buffer, totalSize,
+          blobEncryptionKeyRecordRelativeOffset, blobPropertiesRecordRelativeOffset, updateRecordRelativeOffset,
+          userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
+    } else {
+      MessageFormatRecord.MessageHeader_Format_V3.serializeHeader(buffer, lifeVersion, totalSize,
+          blobEncryptionKeyRecordRelativeOffset, blobPropertiesRecordRelativeOffset, updateRecordRelativeOffset,
+          userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
+    }
     buffer.put(key.toBytes());
     if (blobEncryptionKey != null) {
       MessageFormatRecord.BlobEncryptionKey_Format_V1.serializeBlobEncryptionKeyRecord(buffer, blobEncryptionKey);

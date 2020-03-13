@@ -351,15 +351,20 @@ public class IndexValueTest {
         indexValue = new IndexValue(offset.getName(), value, PersistentIndex.VERSION_0);
         break;
       case PersistentIndex.VERSION_1:
-        IndexValue interim =
-            new IndexValue(size, offset, flags, expiresAtMs, operationTimeMs, accountId, containerId, lifeVersion);
-        indexValue = new IndexValue(offset.getName(), interim.getBytes(), PersistentIndex.VERSION_1);
-        break;
       case PersistentIndex.VERSION_2:
-        indexValue =
-            new IndexValue(size, offset, flags, expiresAtMs, operationTimeMs, accountId, containerId, lifeVersion);
+        value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2);
+        value.putLong(size);
+        value.putLong(offset.getOffset());
+        value.put(flags);
+        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / Time.MsPerSec) : (int) expiresAtMs);
+        value.putLong(originalMessageOffset);
+        value.putInt(
+            operationTimeMs != Utils.Infinite_Time ? (int) (operationTimeMs / Time.MsPerSec) : (int) operationTimeMs);
+        value.putShort(accountId);
+        value.putShort(containerId);
+        value.position(0);
+        indexValue = new IndexValue(offset.getName(), value, persistentIndexVersion);
         break;
-
       case PersistentIndex.VERSION_3:
         value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3);
         value.putLong(size);

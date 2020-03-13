@@ -72,6 +72,7 @@ public class IndexTest {
   private final boolean isLogSegmented;
   private final File tempDir;
   private final CuratedLogIndexState state;
+  private final short persistentIndexVersion;
 
   // TODO: test that verifies that files with "_index" are not picked up if the corresponding log segment is not in log
 
@@ -81,7 +82,8 @@ public class IndexTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
+    return Arrays.asList(new Object[][]{{false, PersistentIndex.VERSION_2}, {true, PersistentIndex.VERSION_2},
+        {true, PersistentIndex.VERSION_3}});
   }
 
   /**
@@ -89,10 +91,13 @@ public class IndexTest {
    * @throws IOException
    * @throws StoreException
    */
-  public IndexTest(boolean isLogSegmented) throws IOException, StoreException {
+  public IndexTest(boolean isLogSegmented, short persistentIndexVersion) throws IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
     tempDir = StoreTestUtils.createTempDirectory("indexDir-" + TestUtils.getRandomString(10));
-    state = new CuratedLogIndexState(isLogSegmented, tempDir, true, true);
+    this.persistentIndexVersion = persistentIndexVersion;
+    PersistentIndex.CURRENT_VERSION = persistentIndexVersion;
+    boolean addUndeletes = PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3;
+    state = new CuratedLogIndexState(isLogSegmented, tempDir, true, addUndeletes);
   }
 
   /**
@@ -105,7 +110,60 @@ public class IndexTest {
       state.destroy();
     }
     assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, true));
+    PersistentIndex.CURRENT_VERSION = this.persistentIndexVersion;
+  }
+
+  /**
+   * Test forward and backward compatibility when the version is 2 and then we bump the version to 3 and add some index entries.
+   * make sure those entries can still be read at version 2.
+   */
+  @Test
+  public void compatibilityTest() throws StoreException {
+    assumeTrue(PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_2);
+    // change the version to 3 and reload the index.
+    PersistentIndex.CURRENT_VERSION = PersistentIndex.VERSION_3;
+    // reloading the index at version 3 to test backward compatibility
+    state.reloadIndexAndVerifyState(true, false);
+
+    // get some values out to make sure we can read from the old version
+    IndexValue value = state.index.findKey(state.liveKeys.iterator().next());
+    assertNotNull("Version 3 should be able to read version 2 live key", value);
+    assertEquals("Version doesn't match", PersistentIndex.VERSION_2, value.getFormatVersion());
+    assertFalse("Not deleted", value.isDelete());
+
+    value = state.index.findKey(state.expiredKeys.iterator().next());
+    assertNotNull("Version 3 should be able to read version 2 expired key", value);
+    assertEquals("Version doesn't match", PersistentIndex.VERSION_2, value.getFormatVersion());
+    assertFalse("Not deleted", value.isDelete());
+    assertFalse("Not ttlupdated", value.isTTLUpdate());
+
+    value = state.index.findKey(state.deletedKeys.iterator().next());
+    assertNotNull("Version 3 should be able to read version 2 deleted key", value);
+    assertEquals("Version doesn't match", PersistentIndex.VERSION_2, value.getFormatVersion());
+    assertTrue("Not deleted", value.isDelete());
+
+    // If we are here, then at version 3 we can read all the index entries in version 2.
+    // Now add some index entries at version 3.
+    IndexEntry entry =
+        state.addPutEntries(1, PUT_RECORD_SIZE, state.time.milliseconds() + TimeUnit.DAYS.toMillis(2)).get(0);
+    MockId key = (MockId) entry.getKey();
+    state.makePermanent(key, false);
+    state.addDeleteEntry(key);
+
+    value = state.index.findKey(key);
+    assertNotNull("Version 3 should be able to read version 3 expired key", value);
+    assertEquals("Version doesn't match", PersistentIndex.VERSION_3, value.getFormatVersion());
+    assertTrue("Not deleted", value.isDelete());
+
+    // change the version back to 2, so we can test forward compatibility
     PersistentIndex.CURRENT_VERSION = PersistentIndex.VERSION_2;
+    state.reloadIndexAndVerifyState(true, false);
+
+    // get records written in version 3 make sure we can read it out.
+    value = state.index.findKey(key);
+    assertNotNull("Version 2 should be able to read version 3 expired key", value);
+    assertEquals("Version doesn't match", PersistentIndex.VERSION_3, value.getFormatVersion());
+    assertTrue("Not deleted", value.isDelete());
   }
 
   /**
@@ -371,8 +429,8 @@ public class IndexTest {
   @Test
   public void undeleteBasicTest() throws StoreException {
     assumeTrue(isLogSegmented);
+    assumeTrue(PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3);
     //Get deleted key that hasn't been TTLUpdated
-    PersistentIndex.CURRENT_VERSION = PersistentIndex.VERSION_3;
     StoreKey targetKey = null;
     for (StoreKey key : state.deletedKeys) {
       if (state.deletedAndShouldBeCompactedKeys.contains(key)) {
@@ -419,7 +477,7 @@ public class IndexTest {
   @Test
   public void markAsUndeletedBadInputTest() throws StoreException {
     assumeTrue(isLogSegmented);
-    PersistentIndex.CURRENT_VERSION = PersistentIndex.VERSION_3;
+    assumeTrue(PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3);
     // FileSpan end offset < currentIndexEndOffset
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
     try {
@@ -1259,8 +1317,10 @@ public class IndexTest {
 
     int latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
     // add first entry with size under storeIndexPersistedEntryMinBytes.
-    int keySize =
-        config.storeIndexPersistedEntryMinBytes / 2 - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
+    int indexValueSize =
+        PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3
+            : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
+    int keySize = config.storeIndexPersistedEntryMinBytes / 2 - indexValueSize - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
 
     // Now, the active segment consists of one element. Add 2nd element of a smaller key size; and entry size still under
@@ -1274,17 +1334,16 @@ public class IndexTest {
 
     // 4th element with key size increase, and entry size at exactly storeIndexPersistedEntryMinBytes.
     // This should also not cause a rollover.
-    keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
+    keySize = config.storeIndexPersistedEntryMinBytes - indexValueSize - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 1, indexCount, latestSegmentExpectedEntrySize, false);
 
     // 5th element key size increase, and above storeIndexPersistedEntryMinBytes. This continues to be supported via
     // a rollover.
-    keySize =
-        config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes + 1;
+    keySize = config.storeIndexPersistedEntryMinBytes - indexValueSize - serOverheadBytes + 1;
     addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, ++latestSegmentExpectedEntrySize, false);
 
     // 2nd and 3rd element in the next segment of original size. This should be accommodated in the same segment.
-    keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
+    keySize = config.storeIndexPersistedEntryMinBytes - indexValueSize - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 2, indexCount, latestSegmentExpectedEntrySize, false);
 
     // verify index values
@@ -1294,14 +1353,14 @@ public class IndexTest {
     // Now close and reload index with a change in the minPersistedBytes.
     state.properties.put("store.index.persisted.entry.min.bytes", Long.toString(persistedEntryMinBytes / 2));
     state.reloadIndex(true, false);
-    keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
+    keySize = latestSegmentExpectedEntrySize - indexValueSize - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 7, indexCount, latestSegmentExpectedEntrySize, false);
 
     // At this point, index will rollover due to max number of entries being reached. Verify that the new segment that is
     // created honors the new config value.
     config = new StoreConfig(new VerifiableProperties(state.properties));
     latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
-    keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
+    keySize = config.storeIndexPersistedEntryMinBytes - indexValueSize - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
 
     // verify index values
@@ -1312,13 +1371,13 @@ public class IndexTest {
     state.properties.put("store.index.persisted.entry.min.bytes", Long.toString(persistedEntryMinBytes * 2));
     state.reloadIndex(true, false);
     // Make sure we add entries that can fit in the latest segment.
-    keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
+    keySize = latestSegmentExpectedEntrySize - indexValueSize - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 9, indexCount, latestSegmentExpectedEntrySize, false);
 
     // At this point, index will rollover due to max number of entries being reached. Verify that the new segment that is
     // created has the new entry size.
     config = new StoreConfig(new VerifiableProperties(state.properties));
-    keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
+    keySize = latestSegmentExpectedEntrySize - indexValueSize - serOverheadBytes;
     latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
     addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
 

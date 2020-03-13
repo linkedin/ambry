@@ -58,8 +58,9 @@ public class BlobStoreHardDeleteTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{MessageFormatRecord.Message_Header_Version_V1},
-        {MessageFormatRecord.Message_Header_Version_V2}});
+    return Arrays.asList(
+        new Object[][]{{MessageFormatRecord.Message_Header_Version_V1}, {MessageFormatRecord.Message_Header_Version_V2},
+            {MessageFormatRecord.Message_Header_Version_V3},});
   }
 
   public BlobStoreHardDeleteTest(short headerVersionToUse) {
@@ -220,9 +221,9 @@ public class BlobStoreHardDeleteTest {
     private void writeToBuffer(MessageFormatInputStream stream, int sizeToWrite) throws IOException {
       long sizeWritten = 0;
       while (sizeWritten < sizeToWrite) {
-        int read = stream.read(buffer.array(), buffer.position(), (int) sizeToWrite);
+        int read = stream.read(buffer.array(), buffer.position(), sizeToWrite - (int) sizeWritten);
         sizeWritten += read;
-        buffer.position(buffer.position() + (int) sizeWritten);
+        buffer.position(buffer.position() + read);
       }
     }
 

@@ -1419,7 +1419,7 @@ public class AmbryServerRequestsTest {
 
     // verify stream
     MessageFormatInputStreamTest.checkTtlUpdateMessage(stream, null, key, key.getAccountId(), key.getContainerId(),
-        expiresAtMs, opTimeMs);
+        expiresAtMs, opTimeMs, (short) 0);
 
     // verify MessageInfo
     // since the record has been verified, the buffer size before verification is a good indicator of size

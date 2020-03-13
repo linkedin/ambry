@@ -101,17 +101,10 @@ public class BlobStoreTest {
     try {
       UNDELETE_RECORD_SIZE =
           (int) (new UndeleteMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0, (short) 0).getSize());
-      if (MessageFormatRecord.getCurrentMessageHeaderVersion() == MessageFormatRecord.Message_Header_Version_V3) {
-        DELETE_RECORD_SIZE =
-            (int) (new DeleteMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0, (short) 0).getSize());
-        TTL_UPDATE_RECORD_SIZE = (int) (new TtlUpdateMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0, 0,
-            (short) 0).getSize());
-      } else {
-        DELETE_RECORD_SIZE =
-            (int) (new DeleteMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0).getSize());
-        TTL_UPDATE_RECORD_SIZE =
-            (int) (new TtlUpdateMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0, 0).getSize());
-      }
+      DELETE_RECORD_SIZE =
+          (int) (new DeleteMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0, (short) 0).getSize());
+      TTL_UPDATE_RECORD_SIZE =
+          (int) (new TtlUpdateMessageFormatInputStream(randomMockId, (short) 0, (short) 0, 0, 0, (short) 0).getSize());
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }

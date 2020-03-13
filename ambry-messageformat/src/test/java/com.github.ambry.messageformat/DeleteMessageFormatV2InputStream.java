@@ -31,8 +31,8 @@ import java.nio.ByteBuffer;
  *
  */
 public class DeleteMessageFormatV2InputStream extends MessageFormatInputStream {
-  public DeleteMessageFormatV2InputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs)
-      throws MessageFormatException {
+  public DeleteMessageFormatV2InputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs,
+      short lifeVersion) throws MessageFormatException {
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
     int deleteRecordSize = MessageFormatRecord.Update_Format_V2.getRecordSize();
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + deleteRecordSize);
@@ -41,8 +41,14 @@ public class DeleteMessageFormatV2InputStream extends MessageFormatInputStream {
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
-    } else {
+    } else if (MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2) {
       MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(buffer, deleteRecordSize,
+          MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+          MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
+          MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+          MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
+    } else {
+      MessageFormatRecord.MessageHeader_Format_V3.serializeHeader(buffer, lifeVersion, deleteRecordSize,
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset,

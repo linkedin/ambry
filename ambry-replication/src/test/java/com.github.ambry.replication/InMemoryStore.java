@@ -233,7 +233,7 @@ class InMemoryStore implements Store {
       for (MessageInfo info : infos) {
         MessageFormatInputStream stream =
             new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                info.getOperationTimeMs());
+                info.getOperationTimeMs(), info.getLifeVersion());
         infosToDelete.add(new MessageInfo(info.getStoreKey(), stream.getSize(), true, info.isTtlUpdated(), false,
             info.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
             info.getLifeVersion()));
@@ -264,7 +264,7 @@ class InMemoryStore implements Store {
         }
         MessageFormatInputStream stream =
             new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                info.getExpirationTimeInMs(), info.getOperationTimeMs());
+                info.getExpirationTimeInMs(), info.getOperationTimeMs(), info.getLifeVersion());
         infosToUpdate.add(
             new MessageInfo(info.getStoreKey(), stream.getSize(), false, true, info.getExpirationTimeInMs(),
                 info.getAccountId(), info.getContainerId(), info.getOperationTimeMs()));

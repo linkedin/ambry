@@ -51,8 +51,9 @@ public class BlobStoreRecoveryTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{MessageFormatRecord.Message_Header_Version_V1},
-        {MessageFormatRecord.Message_Header_Version_V2}});
+    return Arrays.asList(
+        new Object[][]{{MessageFormatRecord.Message_Header_Version_V1}, {MessageFormatRecord.Message_Header_Version_V2},
+            {MessageFormatRecord.Message_Header_Version_V3}});
   }
 
   public BlobStoreRecoveryTest(short headerVersionToUse) {

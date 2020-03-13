@@ -92,6 +92,20 @@ class DumpDataHelper {
                 + header.getUserMetadataRecordRelativeOffset() + " dataRelativeOffset "
                 + header.getBlobRecordRelativeOffset() + " crc " + header.getCrc();
         totalRecordSize += header.getMessageSize() + buffer.capacity();
+      } else if (version == MessageFormatRecord.Message_Header_Version_V3) {
+        ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V3.getHeaderSize());
+        buffer.putShort(version);
+        randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
+        buffer.clear();
+        header = new MessageFormatRecord.MessageHeader_Format_V3(buffer);
+        messageheader =
+            " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() + " currentOffset "
+                + currentOffset + " blobEncryptionKeyRelativeOffset "
+                + header.getBlobEncryptionKeyRecordRelativeOffset() + " blobPropertiesRelativeOffset "
+                + header.getBlobPropertiesRecordRelativeOffset() + " userMetadataRelativeOffset "
+                + header.getUserMetadataRecordRelativeOffset() + " dataRelativeOffset "
+                + header.getBlobRecordRelativeOffset() + " crc " + header.getCrc();
+        totalRecordSize += header.getMessageSize() + buffer.capacity();
       } else {
         throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
       }
@@ -131,9 +145,7 @@ class DumpDataHelper {
       }
       return new LogBlobRecordInfo(messageheader, blobId, encryptionKey, blobProperty, usermetadata, blobDataOutput,
           deleteMsg, isDeleted, isExpired, expiresAtMs, totalRecordSize);
-    } finally
-
-    {
+    } finally {
       context.stop();
     }
   }

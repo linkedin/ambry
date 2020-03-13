@@ -112,6 +112,7 @@ public class IndexSegmentTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
     this.formatVersion = formatVersion;
+    PersistentIndex.CURRENT_VERSION = formatVersion;
     setIndexMemState(indexMemState);
   }
 
@@ -437,12 +438,15 @@ public class IndexSegmentTest {
    */
   @Test
   public void populateBloomFilterWithUuidTest() throws Exception {
-    assumeTrue(formatVersion > PersistentIndex.VERSION_0);
+    assumeTrue(formatVersion > PersistentIndex.VERSION_1);
     // with default config, bloom filter will be populated by whole blob id bytes array
     String logSegmentName1 = LogSegmentNameHelper.getName(0, 0);
+    int indexValueSize =
+        PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3
+            : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
     IndexSegment indexSegment1 =
         new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName1, 0), STORE_KEY_FACTORY,
-            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, config,
+            KEY_SIZE + indexValueSize, indexValueSize, config,
             metrics, time);
     Random random = new Random();
     short accountId1 = getRandomShort(random);
@@ -480,7 +484,7 @@ public class IndexSegmentTest {
     String logSegmentName2 = LogSegmentNameHelper.getName(1, 0);
     IndexSegment indexSegment2 =
         new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName2, 0), STORE_KEY_FACTORY,
-            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2,
+            KEY_SIZE + indexValueSize, indexValueSize,
             storeConfig, metrics, time);
     indexSegment2.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName2, 1000));
     indexSegment2.writeIndexSegmentToFile(new Offset(logSegmentName2, 1000));

@@ -505,21 +505,16 @@ public class BlobStore implements Store {
         }
         List<InputStream> inputStreams = new ArrayList<>(infosToDelete.size());
         List<MessageInfo> updatedInfos = new ArrayList<>(infosToDelete.size());
-        int ind = 0;
+        int i = 0;
         for (MessageInfo info : infosToDelete) {
-          MessageFormatInputStream stream = null;
-          if (MessageFormatRecord.getCurrentMessageHeaderVersion() == MessageFormatRecord.Message_Header_Version_V3) {
-            stream = new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                info.getOperationTimeMs(), lifeVersions.get(ind));
-          } else {
-            stream = new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                info.getOperationTimeMs());
-          }
+          MessageFormatInputStream stream =
+              new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs(), lifeVersions.get(i));
           updatedInfos.add(
               new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
                   info.getOperationTimeMs()));
           inputStreams.add(stream);
-          ind++;
+          i++;
         }
         Offset endOffsetOfLastMessage = log.getEndOffset();
         MessageFormatWriteSet writeSet =
@@ -617,23 +612,16 @@ public class BlobStore implements Store {
         }
         List<InputStream> inputStreams = new ArrayList<>(infosToUpdate.size());
         List<MessageInfo> updatedInfos = new ArrayList<>(infosToUpdate.size());
-        int ind = 0;
+        int i = 0;
         for (MessageInfo info : infosToUpdate) {
-          MessageFormatInputStream stream = null;
-          if (MessageFormatRecord.getCurrentMessageHeaderVersion() == MessageFormatRecord.Message_Header_Version_V3) {
-            stream =
-                new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                    info.getExpirationTimeInMs(), info.getOperationTimeMs(), lifeVersions.get(ind));
-          } else {
-            stream =
-                new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                    info.getExpirationTimeInMs(), info.getOperationTimeMs());
-          }
+          MessageFormatInputStream stream =
+              new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                  info.getExpirationTimeInMs(), info.getOperationTimeMs(), lifeVersions.get(i));
           updatedInfos.add(
               new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
                   info.getOperationTimeMs()));
           inputStreams.add(stream);
-          ind++;
+          i++;
         }
         Offset endOffsetOfLastMessage = log.getEndOffset();
         MessageFormatWriteSet writeSet =

@@ -154,6 +154,11 @@ public class MessageFormatSendTest {
       doSendWriteSingleMessageTest(null, null, false);
       doSendWriteSingleMessageTest(ByteBuffer.allocate(0), ByteBuffer.allocate(0), false);
       doSendWriteSingleMessageTest(encryptionKey.duplicate(), encryptionKey.duplicate(), false);
+
+      MessageFormatRecord.headerVersionToUse = MessageFormatRecord.Message_Header_Version_V3;
+      doSendWriteSingleMessageTest(null, null, false);
+      doSendWriteSingleMessageTest(ByteBuffer.allocate(0), ByteBuffer.allocate(0), false);
+      doSendWriteSingleMessageTest(encryptionKey.duplicate(), encryptionKey.duplicate(), false);
       // with store data prefetch
       doSendWriteSingleMessageTest(null, null, true);
       doSendWriteSingleMessageTest(ByteBuffer.allocate(0), ByteBuffer.allocate(0), true);
@@ -358,6 +363,7 @@ public class MessageFormatSendTest {
     String putFormat2 = PutMessageFormatInputStream.class.getSimpleName();
     short headerFormatV1 = MessageFormatRecord.Message_Header_Version_V1;
     short headerFormatV2 = MessageFormatRecord.Message_Header_Version_V2;
+    short headerFormatV3 = MessageFormatRecord.Message_Header_Version_V3;
 
     byte[][] blob = {TestUtils.getRandomBytes(1000), TestUtils.getRandomBytes(2000), TestUtils.getRandomBytes(10000),
         TestUtils.getRandomBytes(20000), TestUtils.getRandomBytes(40000)};
@@ -376,16 +382,21 @@ public class MessageFormatSendTest {
 
     short headerFormat1s[] = {headerFormatV1, headerFormatV1, headerFormatV1, headerFormatV1, headerFormatV1};
     short headerFormat2s[] = {headerFormatV2, headerFormatV2, headerFormatV2, headerFormatV2, headerFormatV2};
+    short headerFormat3s[] = {headerFormatV3, headerFormatV3, headerFormatV3, headerFormatV3, headerFormatV3};
     short headerFormatComposite1[] = {headerFormatV1, headerFormatV2, headerFormatV2, headerFormatV1, headerFormatV1};
     short headerFormatComposite2[] = {headerFormatV2, headerFormatV1, headerFormatV1, headerFormatV2, headerFormatV2};
+    short headerFormatComposite3[] = {headerFormatV3, headerFormatV2, headerFormatV2, headerFormatV3, headerFormatV3};
 
     doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat1s, headerFormat1s);
     doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat2s, headerFormat1s);
     doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat2s, headerFormat2s);
+    doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat2s, headerFormat3s);
     doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat2s,
         headerFormatComposite1);
     doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat2s,
         headerFormatComposite2);
+    doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat2s,
+        headerFormatComposite3);
     doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormatComposite1,
         headerFormatComposite1);
     doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormatComposite2,

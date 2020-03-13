@@ -1948,11 +1948,17 @@ final class ServerTestUtil {
    */
   private static long getPutRecordSize(BlobProperties properties, BlobId blobId, ByteBuffer blobEncryptionKey,
       ByteBuffer usermetadata, byte[] data) {
-    return MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize() + blobId.sizeInBytes() + (
-        blobEncryptionKey != null ? MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(
-            blobEncryptionKey) : 0) + +MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(
-        properties) + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata)
-        + MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(data.length);
+    try {
+      return MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.getCurrentMessageHeaderVersion())
+          + blobId.sizeInBytes() + (blobEncryptionKey != null
+          ? MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(blobEncryptionKey) : 0)
+          + +MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties)
+          + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata)
+          + MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(data.length);
+    } catch (Exception e) {
+      fail("Unexpected exception" + e);
+    }
+    return 0;
   }
 
   /**
@@ -1961,8 +1967,13 @@ final class ServerTestUtil {
    * @return the size of the update record in the log
    */
   private static long getUpdateRecordSize(BlobId blobId, SubRecord.Type updateType) {
-    return MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize() + blobId.sizeInBytes()
-        + MessageFormatRecord.Update_Format_V3.getRecordSize(updateType);
+    try {
+      return MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.getCurrentMessageHeaderVersion())
+          + blobId.sizeInBytes() + MessageFormatRecord.Update_Format_V3.getRecordSize(updateType);
+    } catch (Exception e) {
+      fail("Unexpected exception" + e);
+    }
+    return 0;
   }
 
   /**
