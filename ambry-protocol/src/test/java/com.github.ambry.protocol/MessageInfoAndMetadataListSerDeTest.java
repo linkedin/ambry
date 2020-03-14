@@ -49,7 +49,10 @@ public class MessageInfoAndMetadataListSerDeTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{MessageInfoAndMetadataListSerde.DETERMINE_VERSION}, {MessageInfoAndMetadataListSerde.VERSION_1}, {MessageInfoAndMetadataListSerde.VERSION_2}, {MessageInfoAndMetadataListSerde.VERSION_3}, {MessageInfoAndMetadataListSerde.VERSION_4}, {MessageInfoAndMetadataListSerde.VERSION_5}});
+        new Object[][]{{MessageInfoAndMetadataListSerde.DETERMINE_VERSION}, {MessageInfoAndMetadataListSerde.VERSION_1},
+            {MessageInfoAndMetadataListSerde.VERSION_2}, {MessageInfoAndMetadataListSerde.VERSION_3},
+            {MessageInfoAndMetadataListSerde.VERSION_4}, {MessageInfoAndMetadataListSerde.VERSION_5},
+            {MessageInfoAndMetadataListSerde.VERSION_6}});
   }
 
   public MessageInfoAndMetadataListSerDeTest(short serDeVersion) {
@@ -64,19 +67,20 @@ public class MessageInfoAndMetadataListSerDeTest {
     short[] containerIds = {10, 11, 12, 13};
     boolean[] isDeletedVals = {false, true, false, true};
     boolean[] isTtlUpdatedVals = {true, false, false, true};
+    boolean[] isUndeletedVals = {true, false, false, true};
+    short[] lifeVersionVals = {1, 2, 3, 4};
     Long[] crcs = {null, 100L, Long.MIN_VALUE, Long.MAX_VALUE};
     StoreKey[] keys =
         {new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0,
-            accountIds[0], containerIds[0], partitionId, false, BlobId.BlobDataType.DATACHUNK), new BlobId(
-            TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[1],
-            containerIds[1], partitionId, false, BlobId.BlobDataType.DATACHUNK), new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()),
-            BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[2], containerIds[2], partitionId, false,
-            BlobId.BlobDataType.DATACHUNK), new BlobId(
-            TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[3],
-            containerIds[3], partitionId, false, BlobId.BlobDataType.DATACHUNK)};
+            accountIds[0], containerIds[0], partitionId, false, BlobId.BlobDataType.DATACHUNK),
+            new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0,
+                accountIds[1], containerIds[1], partitionId, false, BlobId.BlobDataType.DATACHUNK),
+            new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0,
+                accountIds[2], containerIds[2], partitionId, false, BlobId.BlobDataType.DATACHUNK),
+            new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0,
+                accountIds[3], containerIds[3], partitionId, false, BlobId.BlobDataType.DATACHUNK)};
     long[] blobSizes = {1024, 2048, 4096, 8192};
-    long[] times = {SystemTime.getInstance().milliseconds(),
-        SystemTime.getInstance().milliseconds() - 1,
+    long[] times = {SystemTime.getInstance().milliseconds(), SystemTime.getInstance().milliseconds() - 1,
         SystemTime.getInstance().milliseconds() + TimeUnit.SECONDS.toMillis(5), Utils.Infinite_Time};
     MessageMetadata[] messageMetadata = new MessageMetadata[4];
     messageMetadata[0] = new MessageMetadata(ByteBuffer.wrap(getRandomBytes(100)));
@@ -88,8 +92,8 @@ public class MessageInfoAndMetadataListSerDeTest {
     List<MessageMetadata> messageMetadataList = new ArrayList<>(4);
     for (int i = 0; i < 4; i++) {
       messageInfoList.add(
-          new MessageInfo(keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], times[i], crcs[i],
-              accountIds[i], containerIds[i], times[i]));
+          new MessageInfo(keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], isUndeletedVals[i], times[i],
+              crcs[i], accountIds[i], containerIds[i], times[i], lifeVersionVals[i]));
       messageMetadataList.add(messageMetadata[i]);
     }
 
@@ -152,6 +156,13 @@ public class MessageInfoAndMetadataListSerDeTest {
       Assert.assertEquals("TtlUpdated not as expected", exp.isTtlUpdated(), act.isTtlUpdated());
     } else {
       Assert.assertFalse("TtlUpdated should be false for version < 5", act.isTtlUpdated());
+    }
+    if (version >= MessageInfoAndMetadataListSerde.VERSION_6) {
+      Assert.assertEquals("Undelete not as expected", exp.isUndeleted(), act.isUndeleted());
+      Assert.assertEquals("LifeVersion not as expected", exp.getLifeVersion(), act.getLifeVersion());
+    } else {
+      Assert.assertEquals("Undelete not as expected", false, act.isUndeleted());
+      Assert.assertEquals("LifeVersion not as expected", (short) 0, act.getLifeVersion());
     }
   }
 

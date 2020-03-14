@@ -41,8 +41,10 @@ class MessageInfoAndMetadataListSerde {
   static final short VERSION_3 = 3;
   static final short VERSION_4 = 4;
   static final short VERSION_5 = 5;
+  static final short VERSION_6 = 6;
+  static final short VERSION_MAX = VERSION_6;
 
-  static final short AUTO_VERSION = VERSION_5;
+  static short AUTO_VERSION = VERSION_5;
 
   private final short version;
 
@@ -92,17 +94,21 @@ class MessageInfoAndMetadataListSerde {
       // expiration time
       size += Long.BYTES;
       // whether deleted
-      size += 1;
-      if (version < VERSION_1 || version > VERSION_5) {
+      size += Byte.BYTES;
+      if (version < VERSION_1 || version > VERSION_MAX) {
         throw new IllegalArgumentException("Unknown version in MessageInfoList " + version);
       }
       if (version >= VERSION_5) {
         // whether ttl updated
-        size += 1;
+        size += Byte.BYTES;
+      }
+      if (version >= VERSION_6) {
+        // whether undelete
+        size += Byte.BYTES;
       }
       if (version > VERSION_1) {
         // whether crc is present
-        size += 1;
+        size += Byte.BYTES;
         if (messageInfo.getCrc() != null) {
           // crc
           size += Long.BYTES;
@@ -115,6 +121,10 @@ class MessageInfoAndMetadataListSerde {
         size += Short.BYTES;
         // operationTime
         size += Long.BYTES;
+      }
+      if (version >= VERSION_6) {
+        // lifeVersion
+        size += Short.BYTES;
       }
       if (version > VERSION_3) {
         // whether message metadata is present.
@@ -146,11 +156,14 @@ class MessageInfoAndMetadataListSerde {
         outputBuffer.putLong(messageInfo.getSize());
         outputBuffer.putLong(messageInfo.getExpirationTimeInMs());
         outputBuffer.put(messageInfo.isDeleted() ? UPDATED : (byte) ~UPDATED);
-        if (version < VERSION_1 || version > VERSION_5) {
+        if (version < VERSION_1 || version > VERSION_MAX) {
           throw new IllegalArgumentException("Unknown version in MessageInfoList " + version);
         }
         if (version >= VERSION_5) {
           outputBuffer.put(messageInfo.isTtlUpdated() ? UPDATED : (byte) ~UPDATED);
+        }
+        if (version >= VERSION_6) {
+          outputBuffer.put(messageInfo.isUndeleted() ? UPDATED : (byte) ~UPDATED);
         }
         if (version > VERSION_1) {
           Long crc = messageInfo.getCrc();
@@ -165,6 +178,9 @@ class MessageInfoAndMetadataListSerde {
           outputBuffer.putShort(messageInfo.getAccountId());
           outputBuffer.putShort(messageInfo.getContainerId());
           outputBuffer.putLong(messageInfo.getOperationTimeMs());
+        }
+        if (version >= VERSION_6) {
+          outputBuffer.putShort(messageInfo.getLifeVersion());
         }
         if (version > VERSION_3) {
           if (messageMetadata != null) {
@@ -208,15 +224,20 @@ class MessageInfoAndMetadataListSerde {
       long ttl = stream.readLong();
       boolean isDeleted = stream.readByte() == UPDATED;
       boolean isTtlUpdated = false;
+      boolean isUndeleted = false;
+      short lifeVersion = 0;
       Long crc = null;
       short accountId = Account.UNKNOWN_ACCOUNT_ID;
       short containerId = Container.UNKNOWN_CONTAINER_ID;
       long operationTime = Utils.Infinite_Time;
-      if (versionToDeserializeIn < VERSION_1 || versionToDeserializeIn > VERSION_5) {
+      if (versionToDeserializeIn < VERSION_1 || versionToDeserializeIn > VERSION_MAX) {
         throw new IllegalArgumentException("Unknown version to deserialize MessageInfoList " + versionToDeserializeIn);
       }
       if (versionToDeserializeIn >= VERSION_5) {
         isTtlUpdated = stream.readByte() == UPDATED;
+      }
+      if (versionToDeserializeIn >= VERSION_6) {
+        isUndeleted = stream.readByte() == UPDATED;
       }
       if (versionToDeserializeIn > VERSION_1) {
         crc = stream.readByte() == FIELD_PRESENT ? stream.readLong() : null;
@@ -226,9 +247,13 @@ class MessageInfoAndMetadataListSerde {
         containerId = stream.readShort();
         operationTime = stream.readLong();
       }
+      if (versionToDeserializeIn >= VERSION_6) {
+        lifeVersion = stream.readShort();
+      }
 
       messageInfoList.add(
-          new MessageInfo(id, size, isDeleted, isTtlUpdated, ttl, crc, accountId, containerId, operationTime));
+          new MessageInfo(id, size, isDeleted, isTtlUpdated, isUndeleted, ttl, crc, accountId, containerId,
+              operationTime, lifeVersion));
 
       if (versionToDeserializeIn > VERSION_3) {
         MessageMetadata messageMetadata =
