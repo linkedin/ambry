@@ -70,7 +70,6 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   private static final String cloudReplicaTokenFileName = "cloudReplicaTokens";
   private AtomicReference<ConcurrentHashMap<String, CloudDataNode>> instanceNameToCloudDataNode;
   private AtomicReference<ConcurrentSkipListSet<CloudDataNode>> vcrNodes;
-  private final ConcurrentHashMap<String, PartitionId> localPartitionNameToPartition;
   private final Object notificationLock = new Object();
 
   /**
@@ -110,22 +109,6 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     this.persistor =
         new DiskTokenPersistor(cloudReplicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, storeManager);
-    this.localPartitionNameToPartition = mapPartitionNameToPartition(clusterMap, currentNode);
-  }
-
-  /**
-   * Create a {@link Map} of partition name to {@link PartitionId} for local replicas on specified node from
-   * specified cluster map.
-   * @param clusterMap specified {@link ClusterMap} object.
-   * @param localNode specified {@link DataNodeId} object.
-   * @return
-   */
-  private ConcurrentHashMap<String, PartitionId> mapPartitionNameToPartition(ClusterMap clusterMap,
-      DataNodeId localNode) {
-    return clusterMap.getReplicaIds(localNode)
-        .stream()
-        .collect(Collectors.toMap(replicaId -> replicaId.getPartitionId().toPathString(), ReplicaId::getPartitionId,
-            (e1, e2) -> e2, ConcurrentHashMap::new));
   }
 
   @Override
@@ -172,39 +155,39 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    * @throws ReplicationException if replicas initialization failed.
    */
   private void addCloudReplica(String partitionName) throws ReplicationException {
-    if (!localPartitionNameToPartition.containsKey(partitionName)) {
+    // Adding cloud replica occurs when replica becomes leader from standby. Hence, if this a new added replica, it
+    // should be present in storage manager already.
+    ReplicaId localReplica = storeManager.getReplica(partitionName);
+    if (localReplica == null) {
       logger.warn("Got partition leader notification for partition {} that is not present on the node", partitionName);
       return;
     }
-    PartitionId partitionId = localPartitionNameToPartition.get(partitionName);
+    PartitionId partitionId = localReplica.getPartitionId();
     Store store = storeManager.getStore(partitionId);
     if (store == null) {
-      logger.warn("Unable to add cloud replica for partition {} as store for the partition doesn't exist.",
+      logger.warn("Unable to add cloud replica for partition {} as store for the partition is not present or started.",
           partitionName);
       return;
     }
-    ReplicaId localReplicaId = (ReplicaId) partitionId.getReplicaIds()
-        .stream()
-        .filter(r -> (r.getDataNodeId().getHostname().equals(dataNodeId.getHostname())))
-        .toArray()[0];
-    CloudReplica peerReplica = new CloudReplica(partitionId, getCloudDataNode());
-    FindTokenFactory findTokenFactory = tokenHelper.getFindTokenFactoryFromReplicaType(peerReplica.getReplicaType());
+    CloudReplica peerCloudReplica = new CloudReplica(partitionId, getCloudDataNode());
+    FindTokenFactory findTokenFactory =
+        tokenHelper.getFindTokenFactoryFromReplicaType(peerCloudReplica.getReplicaType());
     RemoteReplicaInfo remoteReplicaInfo =
-        new RemoteReplicaInfo(peerReplica, localReplicaId, store, findTokenFactory.getNewFindToken(),
+        new RemoteReplicaInfo(peerCloudReplica, localReplica, store, findTokenFactory.getNewFindToken(),
             storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
-            SystemTime.getInstance(), peerReplica.getDataNodeId().getPortToConnectTo());
+            SystemTime.getInstance(), peerCloudReplica.getDataNodeId().getPortToConnectTo());
     replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
 
     // Note that for each replica on a Ambry server node, there is only one cloud replica that it will be replicating from.
     List<RemoteReplicaInfo> remoteReplicaInfos = Collections.singletonList(remoteReplicaInfo);
-    PartitionInfo partitionInfo = new PartitionInfo(remoteReplicaInfos, partitionId, store, localReplicaId);
+    PartitionInfo partitionInfo = new PartitionInfo(remoteReplicaInfos, partitionId, store, localReplica);
     partitionToPartitionInfo.put(partitionId, partitionInfo);
-    mountPathToPartitionInfos.computeIfAbsent(localReplicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
+    mountPathToPartitionInfos.computeIfAbsent(localReplica.getMountPath(), key -> ConcurrentHashMap.newKeySet())
         .add(partitionInfo);
     logger.info("Cloud Partition {} added to {}", partitionName, dataNodeId);
 
     // Reload replication token if exist.
-    reloadReplicationTokenIfExists(localReplicaId, remoteReplicaInfos);
+    reloadReplicationTokenIfExists(localReplica, remoteReplicaInfos);
 
     // Add remoteReplicaInfos to {@link ReplicaThread}.
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
@@ -233,14 +216,18 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
 
   /**
    * Remove a replica of given partition and its {@link RemoteReplicaInfo}s from the backup list.
-   * @param partitionName the partition of the replica to removed.
+   * @param partitionName the partition of the replica to be removed.
    */
   private void removeCloudReplica(String partitionName) {
-    if (!localPartitionNameToPartition.containsKey(partitionName)) {
-      logger.warn("Got partition standby notification for partition {} that is not present on the node", partitionName);
+    // Removing cloud replica occurs when replica from LEADER to STANDBY (this may be triggered by "Move Replica" or
+    // regular leadership hand-off due to server deployment). No matter what triggers this transition, the local replica
+    // should be present in storage manager at this point of time.
+    ReplicaId localReplica = storeManager.getReplica(partitionName);
+    if (localReplica == null) {
+      logger.warn("Attempting to remove cloud partition {} that is not present on the node", partitionName);
       return;
     }
-    PartitionId partitionId = localPartitionNameToPartition.get(partitionName);
+    PartitionId partitionId = localReplica.getPartitionId();
     stopPartitionReplication(partitionId);
     logger.info("Cloud Partition {} removed from {}", partitionId, dataNodeId);
   }
@@ -264,9 +251,9 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     Set<CloudDataNode> removedNodes = new HashSet<>(vcrNodes.get());
     removedNodes.removeAll(newVcrNodes);
     vcrNodes.set(newVcrNodes);
+    logger.info("Handling VCR nodes change. The removed vcr nodes: {}", removedNodes);
     List<PartitionId> partitionsOnRemovedNodes = getPartitionsOnNodes(removedNodes);
     for (PartitionId partitionId : partitionsOnRemovedNodes) {
-      boolean removed = false;
       try {
         // We first remove replica to stop replication from removed node, and then add replica so that it can pick a
         // new cloud node to start replicating from.
@@ -297,7 +284,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         Port http2Port =
             getHttp2PortStr(instanceConfig) == null ? null : new Port(getHttp2PortStr(instanceConfig), PortType.HTTP2);
         CloudDataNode cloudDataNode = new CloudDataNode(instanceConfig.getHostName(),
-            new Port(Integer.valueOf(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort, http2Port,
+            new Port(Integer.parseInt(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort, http2Port,
             clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
         newInstanceNameToCloudDataNode.put(instanceName, cloudDataNode);
         newVcrNodes.add(cloudDataNode);

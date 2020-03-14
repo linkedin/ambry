@@ -201,7 +201,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * @param replicaPath replica path on the remote peer replica
    * @return RemoteReplicaInfo
    */
-  private RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
+  protected RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
     RemoteReplicaInfo foundRemoteReplicaInfo = null;
 
     PartitionInfo partitionInfo = partitionToPartitionInfo.get(partitionId);
@@ -256,8 +256,10 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       // For CloudBackUpManager with HelixVcrCluster, Helix requires acknowledgement before next message for the same
       // resource, which means methods in HelixVcrStateModel will be executed sequentially for same partition.
       // So do listener actions in addPartition() and removePartition().
-      remoteReplicaInfo.getReplicaThread().removeRemoteReplicaInfo(remoteReplicaInfo);
-      remoteReplicaInfo.setReplicaThread(null);
+      if (remoteReplicaInfo.getReplicaThread() != null) {
+        remoteReplicaInfo.getReplicaThread().removeRemoteReplicaInfo(remoteReplicaInfo);
+        remoteReplicaInfo.setReplicaThread(null);
+      }
     }
   }
 
@@ -487,7 +489,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected void stopPartitionReplication(PartitionId partitionId) {
     PartitionInfo partitionInfo = partitionToPartitionInfo.remove(partitionId);
     if (partitionInfo == null) {
-      logger.warn("Partition {} not exist when remove from {}. ", partitionId, dataNodeId);
+      logger.warn("Partition {} doesn't exist when removing it from {}. ", partitionId, dataNodeId);
       return;
     }
     removeRemoteReplicaInfoFromReplicaThread(partitionInfo.getRemoteReplicaInfos());
