@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +57,9 @@ public class HardDeleter implements Runnable {
   final AtomicBoolean enabled = new AtomicBoolean(true);
   private volatile boolean awaitingAfterCaughtUp = false;
 
+  // The method to call before hard deleter thread performs hard delete if this is not null.
+  // This is only for test.
+  private volatile Supplier<Void> injectedBeforeHardDeleteSupplier;
   private final StoreConfig config;
   private final StoreMetrics metrics;
   private final String dataDir;
@@ -217,7 +221,7 @@ public class HardDeleter implements Runnable {
         readOptionsList.add(item.blobReadOptions);
         messageStoreRecoveryInfoList.add(item.messagesStoreRecoveryInfo);
       }
-      //hardDeleteRecoveryRange.clear();
+      hardDeleteRecoveryRange.clear();
 
         /* Next, perform the log write. The token file does not have to be persisted again as only entries that are
            currently in it are being hard deleted as part of recovery. */
@@ -329,6 +333,9 @@ public class HardDeleter implements Runnable {
             dataDir);
         if (!endToken.equals(startToken)) {
           if (!info.getMessageEntries().isEmpty()) {
+            if (injectedBeforeHardDeleteSupplier != null) {
+              injectedBeforeHardDeleteSupplier.get();
+            }
             performHardDeletes(info.getMessageEntries());
           }
           startToken = endToken;
@@ -379,6 +386,28 @@ public class HardDeleter implements Runnable {
    */
   FindToken getStartTokenSafeToPersistTo() {
     return startTokenSafeToPersist;
+  }
+
+  /**
+   * @return the {@link #startToken}
+   */
+  FindToken getStartToken() {
+    return startToken;
+  }
+
+  /**
+   * @return the {@link #endToken}
+   */
+  FindToken getEndToken() {
+    return endToken;
+  }
+
+  /**
+   * Set the {@link #injectedBeforeHardDeleteSupplier}.
+   * @param supplier
+   */
+  void setInjectedBeforeHardDeleteSupplier(Supplier<Void> supplier) {
+    this.injectedBeforeHardDeleteSupplier = supplier;
   }
 
   /**
