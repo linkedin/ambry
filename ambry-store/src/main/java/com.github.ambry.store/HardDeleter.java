@@ -217,6 +217,7 @@ public class HardDeleter implements Runnable {
         readOptionsList.add(item.blobReadOptions);
         messageStoreRecoveryInfoList.add(item.messagesStoreRecoveryInfo);
       }
+      //hardDeleteRecoveryRange.clear();
 
         /* Next, perform the log write. The token file does not have to be persisted again as only entries that are
            currently in it are being hard deleted as part of recovery. */

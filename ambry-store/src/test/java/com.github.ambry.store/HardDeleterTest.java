@@ -481,6 +481,23 @@ public class HardDeleterTest {
     hardDeletedKeys.add(keys.get(5)); // blobId06
     index.performHardDeleteRecovery();
     checkRecordHardDeleted(keys, hardDeletedKeys);
+
+    // Now make sure we can move on with hard deleter.
+    // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d*] [8 9] [1d 10] [8d 10d] [1u 3u]
+    // journal:                                                     [10d 8d 3u 1u]
+    index.hardDelete();
+
+    // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9*] [1d 10] [8d 10d] [1u 3u]
+    // journal:                                                     [10d 8d 3u 1u]
+    index.persistAndAdvanceStartTokenSafeToPersist();
+    index.hardDelete();
+
+    // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10*] [8d 10d] [1u 3u]
+    // journal:                                                     [10d 8d 3u 1u]
+    index.hardDelete();
+    hardDeletedKeys.add(keys.get(9)); // blobId10
+    hardDeletedKeys.add(keys.get(7)); // blobId08
+    checkRecordHardDeleted(keys, hardDeletedKeys);
   }
 
   /**
