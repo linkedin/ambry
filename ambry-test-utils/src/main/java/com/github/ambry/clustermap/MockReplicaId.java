@@ -33,8 +33,8 @@ public class MockReplicaId implements ReplicaId {
   private ReplicaType replicaType;
   private volatile boolean isSealed;
 
-  public MockReplicaId() {
-    replicaType = ReplicaType.DISK_BACKED;
+  public MockReplicaId(ReplicaType replicaType) {
+    this.replicaType = replicaType;
   }
 
   public MockReplicaId(int port, MockPartitionId partitionId, MockDataNodeId dataNodeId, int indexOfMountPathToUse) {

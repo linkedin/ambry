@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.router.RouterErrorCode;
@@ -186,7 +187,7 @@ public class ResponseHandlerTest {
 
     for (Map.Entry<Object, ReplicaEventType[]> entry : expectedEventTypes.entrySet()) {
       mockClusterMap.reset();
-      handler.onEvent(new MockReplicaId(), entry.getKey());
+      handler.onEvent(new MockReplicaId(ReplicaType.DISK_BACKED), entry.getKey());
       Set<ReplicaEventType> expectedEvents = new HashSet<>(Arrays.asList(entry.getValue()));
       Set<ReplicaEventType> generatedEvents = mockClusterMap.getLastReplicaEvents();
       Assert.assertEquals(
