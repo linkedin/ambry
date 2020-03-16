@@ -295,7 +295,7 @@ public class CloudConfig {
     cloudRequestTimeout = verifiableProperties.getInt(CLOUD_REQUEST_TIMEOUT, DEFAULT_CLOUD_REQUEST_TIMEOUT);
     cloudUploadRequestTimeout = verifiableProperties.getInt(CLOUD_UPLOAD_REQUEST_TIMEOUT, DEFAULT_UPLOAD_TIMEOUT);
     cloudQueryRequestTimeout = verifiableProperties.getInt(CLOUD_QUERY_REQUEST_TIMEOUT, DEFAULT_QUERY_TIMEOUT);
-    cloudBatchRequestTimeout = verifiableProperties.getInt(CLOUD_REQUEST_TIMEOUT, DEFAULT_BATCH_TIMEOUT);
+    cloudBatchRequestTimeout = verifiableProperties.getInt(CLOUD_BATCH_REQUEST_TIMEOUT, DEFAULT_BATCH_TIMEOUT);
     // Proxy settings
     vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);
     vcrProxyPort = verifiableProperties.getInt(VCR_PROXY_PORT, DEFAULT_VCR_PROXY_PORT);
