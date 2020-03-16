@@ -59,7 +59,7 @@ public class MessageFormatRecord {
   public static final short Metadata_Content_Version_V3 = 3;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
-  static short headerVersionToUse = Message_Header_Version_V3;
+  static short headerVersionToUse = Message_Header_Version_V2;
 
   private static final short Delete_Subrecord_Version_V1 = 1;
   private static final short Undelete_Subrecord_Version_V1 = 1;
