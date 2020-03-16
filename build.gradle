@@ -43,18 +43,9 @@ allprojects {
 
 subprojects {
     apply plugin: 'java'
-    if (project.hasProperty('disableShipkit')) {
-        // internal builds still want the test jar, but not sources/javadoc targets
-        task testJar(type: Jar, dependsOn: testClasses) {
-            from sourceSets.test.output
-            classifier = 'test'
-        }
 
-        artifacts {
-            archives testJar
-        }
-    } else {
-        apply from: "$rootDir/gradle/java-publishing.gradle"
+    if (!project.hasProperty('disableShipkit')) {
+      apply from: "$rootDir/gradle/java-publishing.gradle"
     }
 
     sourceCompatibility = 1.8
@@ -79,6 +70,13 @@ subprojects {
         // Integration tests should be able to get the same dependencies as the corresponding unit tests.
         intTestCompile.extendsFrom testCompile
         intTestRuntime.extendsFrom testRuntime
+    }
+
+    // this test jar is used to represent a test dependency for a subproject, since depending directly on a source set
+    // does not guarantee that the source set was actually built.
+    task testJar(type: Jar, dependsOn: testClasses) {
+        classifier = 'test'
+        from sourceSets.test.output
     }
 
     artifacts {
@@ -408,6 +406,18 @@ project(':ambry-cloud') {
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
         testCompile project(path: ':ambry-store', configuration: 'testArchives')
         testCompile project(path: ':ambry-replication', configuration: 'testArchives')
+    }
+}
+
+project(':ambry-all') {
+    dependencies {
+        // this is a meta project that depends on all of the "entry-point" subprojects to make it easier to pull in the
+        // entire dependency tree.
+        compile project(':ambry-frontend')
+        compile project(':ambry-server')
+        compile project(':ambry-tools')
+        compile project(':ambry-cloud')
+        compile project(':ambry-test-utils')
     }
 }
 
