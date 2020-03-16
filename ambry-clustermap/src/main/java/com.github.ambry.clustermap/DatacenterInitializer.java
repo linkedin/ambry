@@ -74,7 +74,7 @@ class DatacenterInitializer {
    * @param partitionNameToAmbryPartition a map from partition name to {@link AmbryPartition} object.
    * @param ambryPartitionToAmbryReplicas a map from {@link AmbryPartition} to its replicas.
    */
-  public DatacenterInitializer(ClusterMapConfig clusterMapConfig, HelixManager localManager, HelixFactory helixFactory,
+  DatacenterInitializer(ClusterMapConfig clusterMapConfig, HelixManager localManager, HelixFactory helixFactory,
       ClusterMapUtils.DcZkInfo dcZkInfo, String selfInstanceName,
       Map<String, Map<String, String>> partitionOverrideInfoMap,
       HelixClusterManager.ClusterChangeHandlerCallback clusterChangeHandlerCallback,
