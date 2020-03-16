@@ -54,7 +54,6 @@ abstract class AmbryDataNode implements DataNodeId {
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
             clusterMapConfig);
     this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
-    validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
   }
 
   @Override

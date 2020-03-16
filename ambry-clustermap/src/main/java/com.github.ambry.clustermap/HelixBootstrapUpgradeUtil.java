@@ -136,6 +136,8 @@ class HelixBootstrapUpgradeUtil {
       throws IOException {
     Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress =
         ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
+    // nothing to do for cloud datacenters in the tool.
+    dataCenterToZkAddress.values().removeIf(dcZkInfo -> dcZkInfo.getReplicaType() == ReplicaType.CLOUD_BACKED);
     Set<String> parsedDcSet;
     if (Utils.isNullOrEmpty(dcs)) {
       throw new IllegalArgumentException("dcs string cannot be null or empty.");

@@ -39,14 +39,20 @@ public class TestUtils {
   static final int DEFAULT_XID = 64;
 
   enum ReplicaStateType {
-    SealedState, StoppedState
+    SealedState,
+    StoppedState
   }
 
   /**
    * Resource state associated with datanode, disk and replica.
    */
   enum ResourceState {
-    Node_Up, Node_Down, Disk_Up, Disk_Down, Replica_Up, Replica_Down
+    Node_Up,
+    Node_Down,
+    Disk_Up,
+    Disk_Down,
+    Replica_Up,
+    Replica_Down
   }
 
   public static String getLocalHost() {
@@ -466,7 +472,14 @@ public class TestUtils {
   static void mockServerEventsAndVerify(ClusterMap clusterManager, ClusterMapConfig clusterMapConfig,
       ResourceState[] initialStates, ServerErrorCode serverErrorCode, ResourceState[] expectedStates) {
     ResponseHandler handler = new ResponseHandler(clusterManager);
-    ReplicaId replica = clusterManager.getWritablePartitionIds(null).get(0).getReplicaIds().get(0);
+    // choose a disk backed replica
+    ReplicaId replica = clusterManager.getWritablePartitionIds(null)
+        .get(0)
+        .getReplicaIds()
+        .stream()
+        .filter(replicaId -> replicaId.getReplicaType() != ReplicaType.CLOUD_BACKED)
+        .findFirst()
+        .get();
     DataNodeId dataNode = replica.getDataNodeId();
     assertTrue(clusterManager.getReplicaIds(dataNode).contains(replica));
     DiskId disk = replica.getDiskId();

@@ -134,6 +134,7 @@ public class HelixClusterManager implements ClusterMap {
       }
 
       for (DcInfo dcInfo : dcToDcInfo.values()) {
+        System.out.println("AKAKAKA" + dcInfo.clusterChangeHandler);
         if (dcInfo.clusterChangeHandler instanceof ClusterMapChangeListener) {
           ClusterMapChangeListener listener = (ClusterMapChangeListener) dcInfo.clusterChangeHandler;
           registerClusterMapListener(listener);
@@ -467,7 +468,7 @@ public class HelixClusterManager implements ClusterMap {
   @Override
   public void close() {
     for (DcInfo dcInfo : dcToDcInfo.values()) {
-      if (dcInfo.helixManager.isConnected()) {
+      if (dcInfo.helixManager != null && dcInfo.helixManager.isConnected()) {
         dcInfo.helixManager.disconnect();
       }
     }
