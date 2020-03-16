@@ -612,11 +612,7 @@ public class HardDeleterTest {
     }
 
     public void setException(Exception e) {
-      if (e == null) {
-        this.e = null;
-      } else {
-        this.e = new RuntimeException(e);
-      }
+      this.e = e == null ? null : new RuntimeException(e);
     }
   }
 
