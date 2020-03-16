@@ -22,7 +22,6 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -37,7 +36,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Properties;
 import java.util.Set;
@@ -481,6 +479,39 @@ public class HardDeleterTest {
     hardDeletedKeys.add(keys.get(5)); // blobId06
     index.performHardDeleteRecovery();
     checkRecordHardDeleted(keys, hardDeletedKeys);
+
+    StoreFindToken startToken = (StoreFindToken) index.hardDeleter.getStartToken();
+    StoreFindToken endToken = (StoreFindToken) index.hardDeleter.getEndToken();
+    Assert.assertEquals("StartToken should match EndToken", startToken, endToken);
+    assertEquals("Token type mismatch", startToken.getType(), FindTokenType.IndexBased);
+    assertEquals("Token key mismatch", startToken.getStoreKey(), keys.get(5)); // blobId06
+    assertEquals("Token offset mismatch", startToken.getOffset().getOffset(), 4 * 2 * helper.sizeOfEntry);
+
+    // Now make sure we can move on with hard deleter.
+    // After perform recovery, the start token is now equal to end token.
+    // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d**] [8 9] [1d 10] [8d 10d] [1u 3u]
+    // journal:                                                     [10d 8d 3u 1u]
+    index.hardDelete();
+
+    // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d*] [8 9*] [1d 10] [8d 10d] [1u 3u]
+    // journal:                                                     [10d 8d 3u 1u]
+    index.hardDelete();
+
+    // inject this supplier to mimic the persistor thread to persist recovery range.
+    // The reason to set it here and not above is the hardDelete method below would actually trigger a
+    // change of recovery range.
+    index.hardDeleter.setInjectedBeforeHardDeleteSupplier(() -> {
+      index.persistAndAdvanceStartTokenSafeToPersist();
+      return null;
+    });
+    // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d*] [8 9] [1d 10*] [8d 10d] [1u 3u]
+    // journal:                                                     [10d 8d 3u 1u]
+    index.hardDelete();
+    index.hardDeleter.setInjectedBeforeHardDeleteSupplier(null);
+
+    hardDeletedKeys.add(keys.get(9)); // blobId10
+    hardDeletedKeys.add(keys.get(7)); // blobId08
+    checkRecordHardDeleted(keys, hardDeletedKeys);
   }
 
   /**
@@ -581,7 +612,7 @@ public class HardDeleterTest {
     }
 
     public void setException(Exception e) {
-      this.e = new RuntimeException(e);
+      this.e = e == null ? null : new RuntimeException(e);
     }
   }
 
