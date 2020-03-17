@@ -98,6 +98,8 @@ public class HardDeleter implements Runnable {
   private volatile FindToken startToken;
   private volatile FindToken endToken;
   private StoreFindToken recoveryEndToken;
+  // used to protect hardDeleteRecoveryRange and persistCleanupToken
+  private final ReentrantLock persistFileLock = new ReentrantLock();
   private HardDeletePersistInfo hardDeleteRecoveryRange = new HardDeletePersistInfo();
   private boolean isCaughtUp = false;
   private final AtomicBoolean paused = new AtomicBoolean(false);
@@ -172,8 +174,6 @@ public class HardDeleter implements Runnable {
       if (paused.compareAndSet(false, true)) {
         logger.info("HardDelete thread has been paused ");
         index.persistIndex();
-        pruneHardDeleteRecoveryRange();
-        persistCleanupToken();
       }
     } finally {
       hardDeleteLock.unlock();
@@ -368,8 +368,8 @@ public class HardDeleter implements Runnable {
    */
   void postLogFlush() {
     /* start token saved before the flush is now safe to be persisted */
+    persistFileLock.lock();
     startTokenSafeToPersist = startTokenBeforeLogFlush;
-    hardDeleteLock.lock();
     try {
       // PersistCleanupToken because startTokenSafeToPersist changed.
       pruneHardDeleteRecoveryRange();
@@ -377,7 +377,7 @@ public class HardDeleter implements Runnable {
     } catch (Exception e) {
       logger.error("Failed to persist cleanup token", e);
     } finally {
-      hardDeleteLock.unlock();
+      persistFileLock.unlock();
     }
   }
 
@@ -464,8 +464,6 @@ public class HardDeleter implements Runnable {
         }
         shutdownLatch.await();
         logger.info("Hard delete shutdown complete for store {} ", dataDir);
-        pruneHardDeleteRecoveryRange();
-        persistCleanupToken();
       }
     } finally {
       metrics.hardDeleteShutdownTimeInMs.update(time.milliseconds() - startTimeInMs);
@@ -648,34 +646,35 @@ public class HardDeleter implements Runnable {
       Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory, null);
       Iterator<BlobReadOptions> readOptionsIterator = readOptionsList.iterator();
 
-      /* Next, get the information to persist hard delete recovery info. Get all the information and save it, as only
-       * after the whole range is persisted can we start with the actual log write */
-      while (hardDeleteIterator.hasNext()) {
-        if (!enabled.get()) {
-          throw new StoreException("Aborting hard deletes as store is shutting down",
-              StoreErrorCodes.Store_Shutting_Down);
+      persistFileLock.lock();
+      try {
+        /* Next, get the information to persist hard delete recovery info. Get all the information and save it, as only
+         * after the whole range is persisted can we start with the actual log write */
+        while (hardDeleteIterator.hasNext()) {
+          HardDeleteInfo hardDeleteInfo = hardDeleteIterator.next();
+          BlobReadOptions readOptions = readOptionsIterator.next();
+          if (hardDeleteInfo == null) {
+            metrics.hardDeleteFailedCount.inc(1);
+          } else {
+            hardDeleteRecoveryRange.addMessageInfo(readOptions, hardDeleteInfo.getRecoveryInfo(),
+                (StoreFindToken) startToken);
+            LogSegment logSegment = log.getSegment(readOptions.getLogSegmentName());
+            logWriteInfoList.add(new LogWriteInfo(logSegment, hardDeleteInfo.getHardDeleteChannel(),
+                readOptions.getOffset() + hardDeleteInfo.getStartOffsetInMessage(),
+                hardDeleteInfo.getHardDeletedMessageSize()));
+          }
         }
-        HardDeleteInfo hardDeleteInfo = hardDeleteIterator.next();
-        BlobReadOptions readOptions = readOptionsIterator.next();
-        if (hardDeleteInfo == null) {
-          metrics.hardDeleteFailedCount.inc(1);
-        } else {
-          hardDeleteRecoveryRange.addMessageInfo(readOptions, hardDeleteInfo.getRecoveryInfo(),
-              (StoreFindToken) startToken);
-          LogSegment logSegment = log.getSegment(readOptions.getLogSegmentName());
-          logWriteInfoList.add(new LogWriteInfo(logSegment, hardDeleteInfo.getHardDeleteChannel(),
-              readOptions.getOffset() + hardDeleteInfo.getStartOffsetInMessage(),
-              hardDeleteInfo.getHardDeletedMessageSize()));
+
+        if (readOptionsIterator.hasNext()) {
+          metrics.hardDeleteExceptionsCount.inc(1);
+          throw new IllegalStateException("More number of blobReadOptions than hardDeleteMessages");
         }
-      }
 
-      if (readOptionsIterator.hasNext()) {
-        metrics.hardDeleteExceptionsCount.inc(1);
-        throw new IllegalStateException("More number of blobReadOptions than hardDeleteMessages");
+        // PersistCleanupToken because EndToken and the RecoveryRange changed.
+        persistCleanupToken();
+      } finally {
+        persistFileLock.unlock();
       }
-
-      // PersistCleanupToken because EndToken and the RecoveryRange changed.
-      persistCleanupToken();
 
       /* Finally, write the hard delete stream into the Log */
       for (LogWriteInfo logWriteInfo : logWriteInfoList) {
