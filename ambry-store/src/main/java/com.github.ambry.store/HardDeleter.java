@@ -168,12 +168,20 @@ public class HardDeleter implements Runnable {
    * the hard delete tokens are persisted before returning from pause. Hard delete will be in a paused state until
    * {@link #resume()} is called.
    */
-  void pause() throws StoreException {
+  void pause() throws StoreException, IOException {
     hardDeleteLock.lock();
     try {
       if (paused.compareAndSet(false, true)) {
         logger.info("HardDelete thread has been paused ");
         index.persistIndex();
+        persistFileLock.lock();
+        try {
+          // PersistCleanupToken because paused changed.
+          pruneHardDeleteRecoveryRange();
+          persistCleanupToken();
+        } finally {
+          persistFileLock.unlock();
+        }
       }
     } finally {
       hardDeleteLock.unlock();
@@ -367,9 +375,7 @@ public class HardDeleter implements Runnable {
    * In production, this will be called in the PersistentIndex's IndexPersistor thread.
    */
   void postLogFlush() {
-    // Only check if hard deleter is enabled or not, even when it's paused, we still persist to disk
-    // since the "is paused" is one of the information that gets persisted.
-    if (enabled.get()) {
+    if (enabled.get() && !isPaused()) {
       /* start token saved before the flush is now safe to be persisted */
       persistFileLock.lock();
       startTokenSafeToPersist = startTokenBeforeLogFlush;
