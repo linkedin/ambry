@@ -371,9 +371,11 @@ public class HardDeleter implements Runnable {
     persistFileLock.lock();
     startTokenSafeToPersist = startTokenBeforeLogFlush;
     try {
-      // PersistCleanupToken because startTokenSafeToPersist changed.
-      pruneHardDeleteRecoveryRange();
-      persistCleanupToken();
+      if (!isPaused()) {
+        // PersistCleanupToken because startTokenSafeToPersist changed.
+        pruneHardDeleteRecoveryRange();
+        persistCleanupToken();
+      }
     } catch (Exception e) {
       logger.error("Failed to persist cleanup token", e);
     } finally {
