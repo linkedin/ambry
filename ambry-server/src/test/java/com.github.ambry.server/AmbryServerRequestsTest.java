@@ -38,6 +38,7 @@ import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStreamTest;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.Send;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
@@ -106,6 +107,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -789,6 +791,7 @@ public class AmbryServerRequestsTest {
    */
   @Test
   public void undeleteEnableDisableTest() throws Exception {
+    Assume.assumeTrue(MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
     Properties properties = createProperties(validateRequestOnStoreState, false);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     ServerConfig serverConfig = new ServerConfig(verifiableProperties);
@@ -819,6 +822,7 @@ public class AmbryServerRequestsTest {
    */
   @Test
   public void undeleteTest() throws Exception {
+    Assume.assumeTrue(MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
     MockPartitionId id = (MockPartitionId) clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
