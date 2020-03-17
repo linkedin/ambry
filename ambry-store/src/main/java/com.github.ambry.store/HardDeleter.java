@@ -653,6 +653,10 @@ public class HardDeleter implements Runnable {
         /* Next, get the information to persist hard delete recovery info. Get all the information and save it, as only
          * after the whole range is persisted can we start with the actual log write */
         while (hardDeleteIterator.hasNext()) {
+          if (!enabled.get()) {
+            throw new StoreException("Aborting hard deletes as store is shutting down",
+                StoreErrorCodes.Store_Shutting_Down);
+          }
           HardDeleteInfo hardDeleteInfo = hardDeleteIterator.next();
           BlobReadOptions readOptions = readOptionsIterator.next();
           if (hardDeleteInfo == null) {
