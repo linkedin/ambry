@@ -168,7 +168,7 @@ public class HardDeleter implements Runnable {
    * the hard delete tokens are persisted before returning from pause. Hard delete will be in a paused state until
    * {@link #resume()} is called.
    */
-  void pause() throws StoreException, IOException {
+  void pause() throws StoreException {
     hardDeleteLock.lock();
     try {
       if (paused.compareAndSet(false, true)) {
@@ -445,7 +445,7 @@ public class HardDeleter implements Runnable {
     return isCaughtUp;
   }
 
-  void shutdown() throws InterruptedException, StoreException, IOException {
+  void shutdown() throws InterruptedException {
     long startTimeInMs = time.milliseconds();
     try {
       if (enabled.get()) {

@@ -311,9 +311,10 @@ public class ServerHardDeleteTest {
     // For each future change to this offset, add to this variable and write an explanation of why the number changed.
     // old value: 198728. Increased by 4 to 198732 because the format for delete record went from 2 to 3 which adds
     // 4 bytes (two shorts) extra. The last record is a delete record so its extra 4 bytes are not (yet) added
-    // Add 14 here for version 3, since the message header version went from 2 to 3 and adds a short to every record, which include 6
-    // puts and 1 delete. (last delete is not included).
-    int expectedTokenValueT1 = 198732;// + 14
+    //
+    // Add 14 here when changing message header version to 3, since the message header version went from 2 to 3 and adds
+    // a short to every record, which include 6 puts and 1 delete. (last delete is not included).
+    int expectedTokenValueT1 = 198732;
     ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap,
         expectedTokenValueT1);
 
@@ -350,13 +351,15 @@ public class ServerHardDeleteTest {
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
     // For each future change to this offset, add to this variable and write an explanation of why the number changed.
-    int expectedTokenValueT2 = 298416 + 98;// + 14 * 2
+    int expectedTokenValueT2 = 298416 + 98;
     // old value: 298400. Increased by 16 (4 * 4) to 298416 because the format for delete record went from 2 to 3 which
     // adds 4 bytes (two shorts) extra. The last record is a delete record so its extra 4 bytes are not added
+    //
     // old value 298416. Increased by 98. The end offset is now a journal-based offset, so the offset is not inclusive.
     // It points to the last record in the journal. Before adding an undelete record, the last record in journal is the
     // delete record for blob 6, now it's undelete for blob 0. Since a delete record is 98 bytes, so increase 98 bytes.
-    // old value is 298416 + 98. Increased by 28 since the message header version went from 2 to 3, which adds a short
+    //
+    // old value is 298416 + 98. Increased by 28 when changing the message header version from 2 to 3, which adds a short
     // to all the records, which includes 9 puts and 5 deletes and 1 undelete. Undelete is not include since it's the last
     // record.
     ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap,

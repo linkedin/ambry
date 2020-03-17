@@ -791,7 +791,8 @@ public class AmbryServerRequestsTest {
    */
   @Test
   public void undeleteEnableDisableTest() throws Exception {
-    Assume.assumeTrue(MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
+    Assume.assumeTrue(
+        MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
     Properties properties = createProperties(validateRequestOnStoreState, false);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     ServerConfig serverConfig = new ServerConfig(verifiableProperties);
@@ -822,7 +823,8 @@ public class AmbryServerRequestsTest {
    */
   @Test
   public void undeleteTest() throws Exception {
-    Assume.assumeTrue(MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
+    Assume.assumeTrue(
+        MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
     MockPartitionId id = (MockPartitionId) clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
