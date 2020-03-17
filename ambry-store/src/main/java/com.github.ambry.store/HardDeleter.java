@@ -367,19 +367,21 @@ public class HardDeleter implements Runnable {
    * In production, this will be called in the PersistentIndex's IndexPersistor thread.
    */
   void postLogFlush() {
-    /* start token saved before the flush is now safe to be persisted */
-    persistFileLock.lock();
-    startTokenSafeToPersist = startTokenBeforeLogFlush;
-    try {
-      if (!isPaused()) {
+    // Only check if hard deleter is enabled or not, even when it's paused, we still persist to disk
+    // since the "is paused" is one of the information that gets persisted.
+    if (enabled.get()) {
+      /* start token saved before the flush is now safe to be persisted */
+      persistFileLock.lock();
+      startTokenSafeToPersist = startTokenBeforeLogFlush;
+      try {
         // PersistCleanupToken because startTokenSafeToPersist changed.
         pruneHardDeleteRecoveryRange();
         persistCleanupToken();
+      } catch (Exception e) {
+        logger.error("Failed to persist cleanup token", e);
+      } finally {
+        persistFileLock.unlock();
       }
-    } catch (Exception e) {
-      logger.error("Failed to persist cleanup token", e);
-    } finally {
-      persistFileLock.unlock();
     }
   }
 
