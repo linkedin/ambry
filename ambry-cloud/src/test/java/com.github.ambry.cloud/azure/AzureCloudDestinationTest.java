@@ -435,7 +435,8 @@ public class AzureCloudDestinationTest {
     MockChangeFeedQuery mockChangeFeedQuery = new MockChangeFeedQuery();
     AzureReplicationFeed azureReplicationFeed = null;
     try {
-      azureReplicationFeed = new CosmosChangeFeedBasedReplicationFeed(mockChangeFeedQuery, azureMetrics);
+      azureReplicationFeed =
+          new CosmosChangeFeedBasedReplicationFeed(mockChangeFeedQuery, azureMetrics, azureDest.getQueryBatchSize());
       FieldSetter.setField(azureDest, azureDest.getClass().getDeclaredField("azureReplicationFeed"),
           azureReplicationFeed);
       cloudBlobMetadataList.stream().forEach(doc -> mockChangeFeedQuery.add(doc));
@@ -448,7 +449,7 @@ public class AzureCloudDestinationTest {
 
       assertEquals("Find token has wrong end continuation token", (findToken).getIndex(), firstResult.size());
       assertEquals("Find token has wrong totalItems count", (findToken).getTotalItems(),
-          Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
+          Math.min(blobIdList.size(), azureDest.getQueryBatchSize()));
       cloudBlobMetadataList = cloudBlobMetadataList.subList(firstResult.size(), cloudBlobMetadataList.size());
 
       findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
@@ -459,7 +460,7 @@ public class AzureCloudDestinationTest {
       assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
 
       assertEquals("Find token has wrong totalItems count", (findToken).getTotalItems(),
-          Math.min(blobIdList.size(), AzureCloudDestination.getFindSinceQueryLimit()));
+          Math.min(blobIdList.size(), azureDest.getQueryBatchSize()));
 
       // Rerun with max size below blob size, and make sure it returns one result
       findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize - 1);

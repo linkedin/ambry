@@ -140,9 +140,11 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
    * Constructor to create a {@link CosmosChangeFeedBasedReplicationFeed} object.
    * @param cosmosDataAccessor {@link CosmosDataAccessor} object.
    * @param azureMetrics{@link {@link AzureMetrics} object.
+   * @param changeFeedBatchSize batch size for each change feed request.
    */
-  public CosmosChangeFeedBasedReplicationFeed(CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics) {
-    this.defaultCacheSize = AzureCloudDestination.getFindSinceQueryLimit();
+  public CosmosChangeFeedBasedReplicationFeed(CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics,
+      int changeFeedBatchSize) {
+    this.defaultCacheSize = changeFeedBatchSize;
     changeFeedCache = new ConcurrentHashMap<>();
     this.cosmosDataAccessor = cosmosDataAccessor;
     this.azureMetrics = azureMetrics;
