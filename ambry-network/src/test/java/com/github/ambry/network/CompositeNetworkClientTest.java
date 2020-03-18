@@ -18,7 +18,6 @@ package com.github.ambry.network;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
-import com.github.ambry.utils.Pair;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.util.Arrays;
@@ -27,6 +26,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import org.junit.After;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -37,62 +39,145 @@ import static org.mockito.Mockito.*;
  * Test {@link CompositeNetworkClient} and {@link CompositeNetworkClientFactory}.
  */
 public class CompositeNetworkClientTest {
-  int nextCorrelationId = 0;
+  private final Mocks mockOne = new Mocks();
+  private final Mocks mockTwo = new Mocks();
+  private final CompositeNetworkClientFactory factory;
+  private int nextCorrelationId = 0;
 
-  @Test
-  public void testDelegation() throws IOException {
+  public CompositeNetworkClientTest() {
     Map<ReplicaType, NetworkClientFactory> childFactories = new HashMap<>();
-    Pair<NetworkClientFactory, NetworkClient> mockOne = getMocks();
-    childFactories.put(ReplicaType.DISK_BACKED, mockOne.getFirst());
-    Pair<NetworkClientFactory, NetworkClient> mockTwo = getMocks();
-    childFactories.put(ReplicaType.CLOUD_BACKED, mockTwo.getFirst());
+    childFactories.put(ReplicaType.DISK_BACKED, mockOne.factory);
+    childFactories.put(ReplicaType.CLOUD_BACKED, mockTwo.factory);
+    factory = new CompositeNetworkClientFactory(childFactories);
+  }
 
-    CompositeNetworkClientFactory factory = new CompositeNetworkClientFactory(childFactories);
-    factory.getNetworkClient();
-    // the second call should call the underlying factories again
+  /**
+   * Test {@link CompositeNetworkClientFactory}
+   */
+  @Test
+  public void testFactory() throws IOException {
+    CompositeNetworkClient compositeClientOne = (CompositeNetworkClient) factory.getNetworkClient();
+    CompositeNetworkClient compositeClientTwo = (CompositeNetworkClient) factory.getNetworkClient();
+    assertNotNull("Client is null", compositeClientOne);
+    assertNotNull("Client is null", compositeClientTwo);
+    verify(mockOne.factory, times(2)).getNetworkClient();
+    verify(mockTwo.factory, times(2)).getNetworkClient();
+  }
+
+  /**
+   * Test {@link CompositeNetworkClient#warmUpConnections}
+   */
+  @Test
+  public void testWarmUp() throws IOException {
     NetworkClient compositeClient = factory.getNetworkClient();
-    verify(mockOne.getFirst(), times(2)).getNetworkClient();
-    verify(mockTwo.getFirst(), times(2)).getNetworkClient();
-
-    // warmUpConnections
-//    reset(mockOne.getSecond());
-//    when(mockOne.getSecond().warmUpConnections(any(), any(), any(), any())).thenReturn(25);
-//    List<DataNodeId> nodesToWarmUp = Collections.nCopies(3, mock(DataNodeId.class));
-//    assertEquals(0, compositeClient.warmUpConnections(nodesToWarmUp, 100, 1000, Collections.emptyList()));
-//    verify(mockOne.getSecond()).warmUpConnections(nodesToWarmUp, 100, 1000, Collections.emptyList());
-
-    // sendAndPoll
-//    List<RequestInfo> requestsToSend =
-//        Arrays.asList(getRequestInfo(ReplicaType.DISK_BACKED), getRequestInfo(ReplicaType.CLOUD_BACKED),
-//            getRequestInfo(ReplicaType.DISK_BACKED));
-//    // unknown correlation ID
-//    Set<Integer> requestsToDrop = Collections.singleton(77);
-//    int pollTimeoutMs = 1000;
-//    List<ResponseInfo> responsesOne =
-//        Collections.singletonList(new ResponseInfo(requestsToSend.get(0), null, Unpooled.EMPTY_BUFFER));
-//    when(mockOne.getSecond().sendAndPoll(any(), any(), any())).thenReturn(responsesOne);
-//    when(mockTwo.getSecond().sendAndPoll(any(), any(), any())).thenReturn(Collections.emptyList());
-//    List<ResponseInfo> responses = compositeClient.sendAndPoll(requestsToSend, requestsToDrop, pollTimeoutMs);
-//    verify(mockOne.getSecond()).sendAndPoll(Arrays.asList(requestsToSend.get(0), requestsToSend.get(2)),
-//        Collections.emptySet(), pollTimeoutMs);
+    when(mockOne.client.warmUpConnections(any(), anyInt(), anyLong(), any())).thenReturn(25);
+    List<DataNodeId> nodesToWarmUp = Collections.nCopies(3, mock(DataNodeId.class));
+    assertEquals("Unexpected number of connections warmed up", 25,
+        compositeClient.warmUpConnections(nodesToWarmUp, 100, 1000, Collections.emptyList()));
+    verify(mockOne.client).warmUpConnections(nodesToWarmUp, 100, 1000, Collections.emptyList());
+    verifyZeroInteractions(mockTwo.client);
   }
 
-  private Pair<NetworkClientFactory, NetworkClient> getMocks() throws IOException {
-    NetworkClientFactory factory = mock(NetworkClientFactory.class);
-    NetworkClient client = mock(NetworkClient.class);
-    Pair<NetworkClientFactory, NetworkClient> mocks = new Pair<>(factory, client);
-    when(factory.getNetworkClient()).thenReturn(client);
-    return mocks;
+  /**
+   * Test {@link CompositeNetworkClient#sendAndPoll}
+   */
+  @Test
+  public void testSendAndPoll() throws IOException {
+    NetworkClient compositeClient = factory.getNetworkClient();
+
+    // a couple for the first client and one request for the second client
+    List<RequestInfo> requestsToSendOne =
+        Arrays.asList(getRequestInfo(ReplicaType.DISK_BACKED), getRequestInfo(ReplicaType.CLOUD_BACKED),
+            getRequestInfo(ReplicaType.DISK_BACKED));
+    // try dropping unknown correlation ID, this should not cause issues
+    Set<Integer> requestsToDrop = Collections.singleton(77);
+    int pollTimeoutMs = 1000;
+    List<ResponseInfo> responsesOne =
+        Collections.singletonList(new ResponseInfo(requestsToSendOne.get(0), null, Unpooled.EMPTY_BUFFER));
+    List<ResponseInfo> responsesTwo = Collections.emptyList();
+    when(mockOne.client.sendAndPoll(any(), any(), anyInt())).thenReturn(responsesOne);
+    when(mockTwo.client.sendAndPoll(any(), any(), anyInt())).thenReturn(responsesTwo);
+    List<ResponseInfo> responses = compositeClient.sendAndPoll(requestsToSendOne, requestsToDrop, pollTimeoutMs);
+    assertEquals("Unexpected response list", responsesOne, responses);
+    verify(mockOne.client).sendAndPoll(Arrays.asList(requestsToSendOne.get(0), requestsToSendOne.get(2)),
+        Collections.emptySet(), pollTimeoutMs);
+    verify(mockTwo.client).sendAndPoll(Collections.singletonList(requestsToSendOne.get(1)), Collections.emptySet(),
+        pollTimeoutMs);
+    verifyNoMoreInteractions(mockOne.client);
+    verifyNoMoreInteractions(mockTwo.client);
+
+    mockOne.resetMocks();
+    mockTwo.resetMocks();
+    // two requests for the second client
+    List<RequestInfo> requestsToSendTwo =
+        Arrays.asList(getRequestInfo(ReplicaType.CLOUD_BACKED), getRequestInfo(ReplicaType.CLOUD_BACKED));
+    // drop one request from the current iteration and one from the last
+    requestsToDrop = Stream.of(requestsToSendOne.get(2), requestsToSendTwo.get(0))
+        .map(r -> r.getRequest().getCorrelationId())
+        .collect(Collectors.toSet());
+    responsesOne = Collections.singletonList(new ResponseInfo(requestsToSendOne.get(2), null, Unpooled.EMPTY_BUFFER));
+    responsesTwo = Collections.singletonList(new ResponseInfo(requestsToSendTwo.get(1), null, Unpooled.EMPTY_BUFFER));
+    when(mockOne.client.sendAndPoll(any(), any(), anyInt())).thenReturn(responsesOne);
+    when(mockTwo.client.sendAndPoll(any(), any(), anyInt())).thenReturn(responsesTwo);
+    responses = compositeClient.sendAndPoll(requestsToSendTwo, requestsToDrop, pollTimeoutMs);
+    assertEquals("Unexpected response list",
+        Stream.of(responsesOne, responsesTwo).flatMap(List::stream).collect(Collectors.toList()), responses);
+    verify(mockOne.client).sendAndPoll(Collections.emptyList(),
+        Collections.singleton(requestsToSendOne.get(2).getRequest().getCorrelationId()), pollTimeoutMs);
+    verify(mockTwo.client).sendAndPoll(requestsToSendTwo,
+        Collections.singleton(requestsToSendTwo.get(0).getRequest().getCorrelationId()), pollTimeoutMs);
+    verifyNoMoreInteractions(mockOne.client);
+    verifyNoMoreInteractions(mockTwo.client);
   }
 
-  private void resetMocks(Pair<NetworkClientFactory, NetworkClient> mocks) throws IOException {
-    NetworkClientFactory factory = mocks.getFirst();
-    NetworkClient client = mocks.getSecond();
-    reset(factory, client);
+  /**
+   * Test {@link CompositeNetworkClient#wakeup}
+   */
+  @Test
+  public void testWakeup() throws IOException {
+    NetworkClient compositeClient = factory.getNetworkClient();
+    compositeClient.wakeup();
+    verify(mockOne.client).wakeup();
+    verify(mockTwo.client).wakeup();
   }
 
+  /**
+   * Test {@link CompositeNetworkClient#close}
+   */
+  @Test
+  public void testClose() throws IOException {
+    NetworkClient compositeClient = factory.getNetworkClient();
+    compositeClient.close();
+    verify(mockOne.client).close();
+    verify(mockTwo.client).close();
+  }
+
+  /**
+   * @param replicaType the {@link ReplicaType} for the request.
+   * @return a new {@link RequestInfo} with a new correlation ID.
+   */
   private RequestInfo getRequestInfo(ReplicaType replicaType) {
     return new RequestInfo("a", new Port(1, PortType.SSL), new MockSend(nextCorrelationId++),
         new MockReplicaId(replicaType));
+  }
+
+  private static class Mocks {
+    private final NetworkClientFactory factory;
+    private final NetworkClient client;
+
+    Mocks() {
+      factory = mock(NetworkClientFactory.class);
+      client = mock(NetworkClient.class);
+      resetMocks();
+    }
+
+    private void resetMocks() {
+      try {
+        reset(factory, client);
+        when(factory.getNetworkClient()).thenReturn(client);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
   }
 }
