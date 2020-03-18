@@ -314,7 +314,7 @@ public class ServerHardDeleteTest {
     //
     // Add 14 here when changing message header version to 3, since the message header version went from 2 to 3 and adds
     // a short to every record, which include 6 puts and 1 delete. (last delete is not included).
-    int expectedTokenValueT1 = 198732;
+    int expectedTokenValueT1 = 198732 + 14;
     ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap,
         expectedTokenValueT1);
 
@@ -351,7 +351,7 @@ public class ServerHardDeleteTest {
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
     // For each future change to this offset, add to this variable and write an explanation of why the number changed.
-    int expectedTokenValueT2 = 298416 + 98;
+    int expectedTokenValueT2 = 298416 + 98 + 28;
     // old value: 298400. Increased by 16 (4 * 4) to 298416 because the format for delete record went from 2 to 3 which
     // adds 4 bytes (two shorts) extra. The last record is a delete record so its extra 4 bytes are not added
     //
