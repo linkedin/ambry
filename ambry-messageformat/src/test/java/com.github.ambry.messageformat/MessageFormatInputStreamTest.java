@@ -500,6 +500,7 @@ public class MessageFormatInputStreamTest {
    */
   @Test
   public void messageFormatUndeleteUpdateRecordTest() throws Exception {
+    MessageFormatRecord.headerVersionToUse = MessageFormatRecord.Message_Header_Version_V3;
     StoreKey key = new MockId("id1");
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);

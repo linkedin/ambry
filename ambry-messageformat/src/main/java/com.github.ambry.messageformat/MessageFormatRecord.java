@@ -59,7 +59,14 @@ public class MessageFormatRecord {
   public static final short Metadata_Content_Version_V3 = 3;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
-  static short headerVersionToUse = Message_Header_Version_V3;
+  // Bumping version to a high number requires several things
+  // 1. Change transformers to support newer version, in open source and closed source
+  // 2. Release a newer version to all ambry-frontend and ambry-server
+  // 3. Change the version to a high value.
+  //
+  // We have to do first two steps, then can we bump the version, otherwise, other ambry-server would
+  // fail to replicate blobs through GetRequest/GetResponse, they don't know how to decode the bytes.
+  static short headerVersionToUse = Message_Header_Version_V2;
 
   private static final short Delete_Subrecord_Version_V1 = 1;
   private static final short Undelete_Subrecord_Version_V1 = 1;
