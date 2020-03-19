@@ -21,9 +21,17 @@ import java.util.EnumMap;
 import java.util.Map;
 
 
+/**
+ * An implementation of {@link NetworkClient} that returns a {@link CompositeNetworkClient}, which routes requests to
+ * child clients based on the {@link ReplicaType} in the provided requests.
+ */
 public class CompositeNetworkClientFactory implements NetworkClientFactory {
   EnumMap<ReplicaType, NetworkClientFactory> childNetworkClientFactories;
 
+  /**
+   * @param childNetworkClientFactories a map from {@link ReplicaType} to the {@link NetworkClientFactory} to use for
+   *                                    that type.
+   */
   public CompositeNetworkClientFactory(Map<ReplicaType, NetworkClientFactory> childNetworkClientFactories) {
     this.childNetworkClientFactories = new EnumMap<>(childNetworkClientFactories);
   }

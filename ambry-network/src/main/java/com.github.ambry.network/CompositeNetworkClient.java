@@ -28,6 +28,10 @@ import java.util.Set;
 import java.util.function.Function;
 
 
+/**
+ * An implementation of {@link NetworkClient} that routes requests to child clients based on the {@link ReplicaType}
+ * in the provided requests.
+ */
 public class CompositeNetworkClient implements NetworkClient {
   /**
    * Used to properly route requests to drop.
@@ -35,6 +39,9 @@ public class CompositeNetworkClient implements NetworkClient {
   private final Map<Integer, ReplicaType> correlationIdToReplicaType = new HashMap<>();
   private final EnumMap<ReplicaType, NetworkClient> childNetworkClients;
 
+  /**
+   * @param childNetworkClients a map from {@link ReplicaType} to {@link NetworkClient} to use for that type.
+   */
   CompositeNetworkClient(EnumMap<ReplicaType, NetworkClient> childNetworkClients) {
     this.childNetworkClients = childNetworkClients;
   }
@@ -43,8 +50,12 @@ public class CompositeNetworkClient implements NetworkClient {
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> allRequestsToSend, Set<Integer> allRequestsToDrop,
       int pollTimeoutMs) {
     // the first item of the pair is requests to send, the second is correlation IDs to drop
-    Function<ReplicaType, Pair<List<RequestInfo>, Set<Integer>>> pairBuilder =
-        replicaType -> new Pair<>(new ArrayList<>(), new HashSet<>());
+    Function<ReplicaType, Pair<List<RequestInfo>, Set<Integer>>> pairBuilder = replicaType -> {
+      if (!childNetworkClients.containsKey(replicaType)) {
+        throw new IllegalStateException("No NetworkClient configured for replica type: " + replicaType);
+      }
+      return new Pair<>(new ArrayList<>(), new HashSet<>());
+    };
     EnumMap<ReplicaType, Pair<List<RequestInfo>, Set<Integer>>> requestsToSendAndDropByType =
         new EnumMap<>(ReplicaType.class);
     for (RequestInfo requestInfo : allRequestsToSend) {
@@ -61,9 +72,6 @@ public class CompositeNetworkClient implements NetworkClient {
     List<ResponseInfo> responses = new ArrayList<>();
     requestsToSendAndDropByType.forEach((replicaType, requestsToSendAndDrop) -> {
       NetworkClient client = childNetworkClients.get(replicaType);
-      if (client == null) {
-        throw new IllegalStateException("No NetworkClient configured for replica type: " + replicaType);
-      }
       responses.addAll(
           client.sendAndPoll(requestsToSendAndDrop.getFirst(), requestsToSendAndDrop.getSecond(), pollTimeoutMs));
     });
@@ -76,14 +84,11 @@ public class CompositeNetworkClient implements NetworkClient {
   @Override
   public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionWarmUpPercentagePerDataNode,
       long timeForWarmUp, List<ResponseInfo> responseInfoList) {
-    // currently warm-up is only supported for connections to ambry-server.
-    NetworkClient client = childNetworkClients.get(ReplicaType.DISK_BACKED);
-    if (client != null) {
-      return client.warmUpConnections(dataNodeIds, connectionWarmUpPercentagePerDataNode, timeForWarmUp,
-          responseInfoList);
-    } else {
-      return 0;
-    }
+    return childNetworkClients.values()
+        .stream()
+        .mapToInt(client -> client.warmUpConnections(dataNodeIds, connectionWarmUpPercentagePerDataNode, timeForWarmUp,
+            responseInfoList))
+        .sum();
   }
 
   @Override

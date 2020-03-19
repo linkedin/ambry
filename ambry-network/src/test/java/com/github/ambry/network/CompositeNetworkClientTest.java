@@ -28,7 +28,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.junit.After;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -39,15 +38,15 @@ import static org.mockito.Mockito.*;
  * Test {@link CompositeNetworkClient} and {@link CompositeNetworkClientFactory}.
  */
 public class CompositeNetworkClientTest {
-  private final Mocks mockOne = new Mocks();
-  private final Mocks mockTwo = new Mocks();
+  private final Mocks diskMocks = new Mocks();
+  private final Mocks cloudMocks = new Mocks();
   private final CompositeNetworkClientFactory factory;
   private int nextCorrelationId = 0;
 
   public CompositeNetworkClientTest() {
     Map<ReplicaType, NetworkClientFactory> childFactories = new HashMap<>();
-    childFactories.put(ReplicaType.DISK_BACKED, mockOne.factory);
-    childFactories.put(ReplicaType.CLOUD_BACKED, mockTwo.factory);
+    childFactories.put(ReplicaType.DISK_BACKED, diskMocks.factory);
+    childFactories.put(ReplicaType.CLOUD_BACKED, cloudMocks.factory);
     factory = new CompositeNetworkClientFactory(childFactories);
   }
 
@@ -60,8 +59,8 @@ public class CompositeNetworkClientTest {
     CompositeNetworkClient compositeClientTwo = (CompositeNetworkClient) factory.getNetworkClient();
     assertNotNull("Client is null", compositeClientOne);
     assertNotNull("Client is null", compositeClientTwo);
-    verify(mockOne.factory, times(2)).getNetworkClient();
-    verify(mockTwo.factory, times(2)).getNetworkClient();
+    verify(diskMocks.factory, times(2)).getNetworkClient();
+    verify(cloudMocks.factory, times(2)).getNetworkClient();
   }
 
   /**
@@ -70,12 +69,15 @@ public class CompositeNetworkClientTest {
   @Test
   public void testWarmUp() throws IOException {
     NetworkClient compositeClient = factory.getNetworkClient();
-    when(mockOne.client.warmUpConnections(any(), anyInt(), anyLong(), any())).thenReturn(25);
+    int numDiskNodesWarmedUp = 25;
+    int numCloudNodesWarmedUp = 17;
+    when(diskMocks.client.warmUpConnections(any(), anyInt(), anyLong(), any())).thenReturn(numDiskNodesWarmedUp);
+    when(cloudMocks.client.warmUpConnections(any(), anyInt(), anyLong(), any())).thenReturn(numCloudNodesWarmedUp);
     List<DataNodeId> nodesToWarmUp = Collections.nCopies(3, mock(DataNodeId.class));
-    assertEquals("Unexpected number of connections warmed up", 25,
+    assertEquals("Unexpected number of connections warmed up", numDiskNodesWarmedUp + numCloudNodesWarmedUp,
         compositeClient.warmUpConnections(nodesToWarmUp, 100, 1000, Collections.emptyList()));
-    verify(mockOne.client).warmUpConnections(nodesToWarmUp, 100, 1000, Collections.emptyList());
-    verifyZeroInteractions(mockTwo.client);
+    verify(diskMocks.client).warmUpConnections(nodesToWarmUp, 100, 1000, Collections.emptyList());
+    verify(cloudMocks.client).warmUpConnections(nodesToWarmUp, 100, 1000, Collections.emptyList());
   }
 
   /**
@@ -92,22 +94,22 @@ public class CompositeNetworkClientTest {
     // try dropping unknown correlation ID, this should not cause issues
     Set<Integer> requestsToDrop = Collections.singleton(77);
     int pollTimeoutMs = 1000;
-    List<ResponseInfo> responsesOne =
+    List<ResponseInfo> diskResponses =
         Collections.singletonList(new ResponseInfo(requestsToSendOne.get(0), null, Unpooled.EMPTY_BUFFER));
-    List<ResponseInfo> responsesTwo = Collections.emptyList();
-    when(mockOne.client.sendAndPoll(any(), any(), anyInt())).thenReturn(responsesOne);
-    when(mockTwo.client.sendAndPoll(any(), any(), anyInt())).thenReturn(responsesTwo);
+    List<ResponseInfo> cloudResponses = Collections.emptyList();
+    when(diskMocks.client.sendAndPoll(any(), any(), anyInt())).thenReturn(diskResponses);
+    when(cloudMocks.client.sendAndPoll(any(), any(), anyInt())).thenReturn(cloudResponses);
     List<ResponseInfo> responses = compositeClient.sendAndPoll(requestsToSendOne, requestsToDrop, pollTimeoutMs);
-    assertEquals("Unexpected response list", responsesOne, responses);
-    verify(mockOne.client).sendAndPoll(Arrays.asList(requestsToSendOne.get(0), requestsToSendOne.get(2)),
+    assertEquals("Unexpected response list", diskResponses, responses);
+    verify(diskMocks.client).sendAndPoll(Arrays.asList(requestsToSendOne.get(0), requestsToSendOne.get(2)),
         Collections.emptySet(), pollTimeoutMs);
-    verify(mockTwo.client).sendAndPoll(Collections.singletonList(requestsToSendOne.get(1)), Collections.emptySet(),
+    verify(cloudMocks.client).sendAndPoll(Collections.singletonList(requestsToSendOne.get(1)), Collections.emptySet(),
         pollTimeoutMs);
-    verifyNoMoreInteractions(mockOne.client);
-    verifyNoMoreInteractions(mockTwo.client);
+    verifyNoMoreInteractions(diskMocks.client);
+    verifyNoMoreInteractions(cloudMocks.client);
 
-    mockOne.resetMocks();
-    mockTwo.resetMocks();
+    diskMocks.resetMocks();
+    cloudMocks.resetMocks();
     // two requests for the second client
     List<RequestInfo> requestsToSendTwo =
         Arrays.asList(getRequestInfo(ReplicaType.CLOUD_BACKED), getRequestInfo(ReplicaType.CLOUD_BACKED));
@@ -115,19 +117,19 @@ public class CompositeNetworkClientTest {
     requestsToDrop = Stream.of(requestsToSendOne.get(2), requestsToSendTwo.get(0))
         .map(r -> r.getRequest().getCorrelationId())
         .collect(Collectors.toSet());
-    responsesOne = Collections.singletonList(new ResponseInfo(requestsToSendOne.get(2), null, Unpooled.EMPTY_BUFFER));
-    responsesTwo = Collections.singletonList(new ResponseInfo(requestsToSendTwo.get(1), null, Unpooled.EMPTY_BUFFER));
-    when(mockOne.client.sendAndPoll(any(), any(), anyInt())).thenReturn(responsesOne);
-    when(mockTwo.client.sendAndPoll(any(), any(), anyInt())).thenReturn(responsesTwo);
+    diskResponses = Collections.singletonList(new ResponseInfo(requestsToSendOne.get(2), null, Unpooled.EMPTY_BUFFER));
+    cloudResponses = Collections.singletonList(new ResponseInfo(requestsToSendTwo.get(1), null, Unpooled.EMPTY_BUFFER));
+    when(diskMocks.client.sendAndPoll(any(), any(), anyInt())).thenReturn(diskResponses);
+    when(cloudMocks.client.sendAndPoll(any(), any(), anyInt())).thenReturn(cloudResponses);
     responses = compositeClient.sendAndPoll(requestsToSendTwo, requestsToDrop, pollTimeoutMs);
     assertEquals("Unexpected response list",
-        Stream.of(responsesOne, responsesTwo).flatMap(List::stream).collect(Collectors.toList()), responses);
-    verify(mockOne.client).sendAndPoll(Collections.emptyList(),
+        Stream.of(diskResponses, cloudResponses).flatMap(List::stream).collect(Collectors.toList()), responses);
+    verify(diskMocks.client).sendAndPoll(Collections.emptyList(),
         Collections.singleton(requestsToSendOne.get(2).getRequest().getCorrelationId()), pollTimeoutMs);
-    verify(mockTwo.client).sendAndPoll(requestsToSendTwo,
+    verify(cloudMocks.client).sendAndPoll(requestsToSendTwo,
         Collections.singleton(requestsToSendTwo.get(0).getRequest().getCorrelationId()), pollTimeoutMs);
-    verifyNoMoreInteractions(mockOne.client);
-    verifyNoMoreInteractions(mockTwo.client);
+    verifyNoMoreInteractions(diskMocks.client);
+    verifyNoMoreInteractions(cloudMocks.client);
   }
 
   /**
@@ -137,8 +139,8 @@ public class CompositeNetworkClientTest {
   public void testWakeup() throws IOException {
     NetworkClient compositeClient = factory.getNetworkClient();
     compositeClient.wakeup();
-    verify(mockOne.client).wakeup();
-    verify(mockTwo.client).wakeup();
+    verify(diskMocks.client).wakeup();
+    verify(cloudMocks.client).wakeup();
   }
 
   /**
@@ -148,8 +150,8 @@ public class CompositeNetworkClientTest {
   public void testClose() throws IOException {
     NetworkClient compositeClient = factory.getNetworkClient();
     compositeClient.close();
-    verify(mockOne.client).close();
-    verify(mockTwo.client).close();
+    verify(diskMocks.client).close();
+    verify(cloudMocks.client).close();
   }
 
   /**
