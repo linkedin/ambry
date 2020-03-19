@@ -29,9 +29,9 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 abstract class AmbryDataNode implements DataNodeId {
   private final String hostName;
   // exposed for subclass access
-  final Port plainTextPort;
-  final Port sslPort;
-  final Port http2Port;
+  protected final Port plainTextPort;
+  protected final Port sslPort;
+  protected final Port http2Port;
   private final String dataCenterName;
   private final ResourceStatePolicy resourceStatePolicy;
   private static final Logger logger = LoggerFactory.getLogger(AmbryDataNode.class);
@@ -142,12 +142,6 @@ abstract class AmbryDataNode implements DataNodeId {
    * @return the status of the node according to its {@link ResourceStatePolicy}
    */
   String getLiveness() {
-    String liveness = UP;
-    if (resourceStatePolicy.isHardDown()) {
-      liveness = NODE_DOWN;
-    } else if (resourceStatePolicy.isDown()) {
-      liveness = SOFT_DOWN;
-    }
-    return liveness;
+    return resourceStatePolicy.isHardDown() ? NODE_DOWN : resourceStatePolicy.isDown() ? SOFT_DOWN : UP;
   }
 }

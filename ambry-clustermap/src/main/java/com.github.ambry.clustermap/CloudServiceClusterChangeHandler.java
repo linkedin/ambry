@@ -66,7 +66,7 @@ class CloudServiceClusterChangeHandler implements ClusterMapChangeListener, Clus
       // Only add one replica object for each partition
       if (knownPartitions.add(partitionName)) {
         try {
-          logger.debug("Adding cloud replica: dc={}, partition={}", dcName, partitionName);
+          logger.info("Adding cloud replica: dc={}, partition={}", dcName, partitionName);
           // Copy the capacity from an existing replica
           CloudServiceReplica cloudServiceReplica =
               new CloudServiceReplica(clusterMapConfig, cloudServiceDataNode, partition, replica.getCapacityInBytes());
@@ -84,7 +84,8 @@ class CloudServiceClusterChangeHandler implements ClusterMapChangeListener, Clus
 
   @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
-    // Ignoring since this class implements ClusterMapChangeListener
+    // Only register change listeners other than this instance so that CloudServiceClusterChangeHandler does not notify
+    // itself twice.
     if (clusterMapChangeListener != this) {
       listeners.add(clusterMapChangeListener);
     }

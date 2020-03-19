@@ -72,6 +72,7 @@ public class HelixClusterManagerTest {
   private final String[] helixDcs = new String[]{"DC0", "DC1"};
   private final TestHardwareLayout testHardwareLayout;
   private final TestPartitionLayout testPartitionLayout;
+  private final JSONObject zkJson;
   private final String clusterNameStatic = "HelixClusterManagerTestCluster";
   private final ClusterMapConfig clusterMapConfig;
   private final MockHelixCluster helixCluster;
@@ -148,11 +149,9 @@ public class HelixClusterManagerTest {
     hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
     partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
     String zkLayoutPath = tempDirPath + File.separator + "zkLayoutPath.json";
-    JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
+    zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
     if (!useComposite) {
-      zkJson.append(ZKINFO_STR, new JSONObject().put(DATACENTER_STR, cloudDc)
-          .put(DATACENTER_ID_STR, dcId)
-          .put(REPLICA_TYPE_STR, ReplicaType.CLOUD_BACKED));
+      addCloudDc(zkJson, dcId, cloudDc);
     }
     // initial partition count = 3
     testHardwareLayout = constructInitialHardwareLayoutJSON(clusterNameStatic);
@@ -342,6 +341,9 @@ public class HelixClusterManagerTest {
     dcsToZkInfo.get(remoteDc).setPort(0);
     Set<com.github.ambry.utils.TestUtils.ZkInfo> zkInfos = new HashSet<>(dcsToZkInfo.values());
     JSONObject invalidZkJson = constructZkLayoutJSON(zkInfos);
+    if (cloudDc != null) {
+      addCloudDc(invalidZkJson, (byte) zkInfos.size(), cloudDc);
+    }
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);
     props.setProperty("clustermap.port", Integer.toString(portNum));
@@ -389,6 +391,33 @@ public class HelixClusterManagerTest {
           metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
       assertEquals("beBad", e.getCause().getMessage());
     }
+  }
+
+  /**
+   * Test startup when setting the cloud datacenter as the local datacenter.
+   * @throws Exception
+   */
+  @Test
+  public void testCloudDcAsLocal() throws Exception {
+    assumeTrue(cloudDc != null);
+    assumeTrue(!overrideEnabled);
+
+    String hostname = "localhost";
+    String selfInstanceName = getInstanceName(hostname, null);
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", hostname);
+    props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
+    props.setProperty("clustermap.datacenter.name", cloudDc);
+    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
+    props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
+    props.setProperty("clustermap.listen.cross.colo", Boolean.toString(listenCrossColo));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, new HashMap<>(), null);
+    metricRegistry = new MetricRegistry();
+    clusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, metricRegistry);
+
+    verifyInitialClusterChanges((HelixClusterManager) clusterManager, helixCluster, helixDcs);
   }
 
   /**
@@ -1260,6 +1289,20 @@ public class HelixClusterManagerTest {
         }
       }
     }
+    if (cloudDc != null) {
+      // If one cloud DC is present, there should be exactly one virtual replica for every partition.
+      for (PartitionId partitionId : clusterManager.getAllPartitionIds(null)) {
+        List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
+        int count = 0;
+        for (ReplicaId replicaId : replicaIds) {
+          if (replicaId instanceof CloudServiceReplica) {
+            count++;
+          }
+        }
+        assertEquals("Unexpected number of CloudServiceReplicas in partition: " + replicaIds, 1, count);
+
+      }
+    }
   }
 
   /**
@@ -1411,6 +1454,17 @@ public class HelixClusterManagerTest {
     Pair<Set<String>, Set<String>> writablePartitionsInTwoPlaces = getWritablePartitions();
     assertEquals(writablePartitionsInTwoPlaces.getFirst(), writablePartitionsInTwoPlaces.getSecond());
     testAllPartitions();
+  }
+
+  /**
+   * @param zkJson the JSON to add the datacenter info to.
+   * @param dcId the datacenter ID.
+   * @param cloudDc the dc name
+   */
+  private static void addCloudDc(JSONObject zkJson, byte dcId, String cloudDc) {
+    zkJson.append(ZKINFO_STR, new JSONObject().put(DATACENTER_STR, cloudDc)
+        .put(DATACENTER_ID_STR, dcId)
+        .put(REPLICA_TYPE_STR, ReplicaType.CLOUD_BACKED));
   }
 
   /**

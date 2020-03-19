@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
  * datacenter to either succeed or fail.
  */
 class DatacenterInitializer {
-  private static final Logger logger = LoggerFactory.getLogger(HelixClusterManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(DatacenterInitializer.class);
   private final CompletableFuture<DcInfo> initializationFuture = new CompletableFuture<>();
   private final ClusterMapConfig clusterMapConfig;
   private final HelixManager localManager;
@@ -238,11 +238,6 @@ class DatacenterInitializer {
   private DcInfo initializeCloudDatacenter() throws Exception {
     CloudServiceClusterChangeHandler clusterChangeHandler =
         new CloudServiceClusterChangeHandler(dcName, clusterMapConfig, clusterChangeHandlerCallback);
-//    registerClusterMapListener(listener);
-    // seed existing replicas.
-//    for (Set<AmbryReplica> replicas : ambryPartitionToAmbryReplicas.values()) {
-//      listener.onReplicaAddedOrRemoved(replicas, Collections.emptyList());
-//    }
     return new DcInfo(dcName, dcZkInfo, null, clusterChangeHandler);
   }
 }

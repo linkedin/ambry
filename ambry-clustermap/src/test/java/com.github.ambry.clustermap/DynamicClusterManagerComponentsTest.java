@@ -18,6 +18,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.PortType;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -105,6 +106,9 @@ public class DynamicClusterManagerComponentsTest {
     assertEquals(HardwareState.AVAILABLE, datanode1.getState());
     assertTrue(datanode1.compareTo(datanode1) == 0);
     assertTrue(datanode1.compareTo(datanode2) != 0);
+    // the snapshot is for debug info, but just check that it works without throwing exceptions.
+    assertNotNull(datanode1.getSnapshot());
+    assertNotNull(datanode1.toString());
 
     // AmbryDisk tests
     String mountPath1 = "/mnt/1";
@@ -246,6 +250,38 @@ public class DynamicClusterManagerComponentsTest {
     replica4.setSealedState(false);
     sealedStateChangeCounter.incrementAndGet();
     assertEquals(partition2.getPartitionState(), PartitionState.READ_WRITE);
+
+    // the snapshot is for debug info, but just check that it works without throwing exceptions.
+    assertNotNull(replica1.getSnapshot());
+  }
+
+  @Test
+  public void cloudServiceClusterManagerComponentsTest() throws Exception {
+    MockClusterManagerCallback mockClusterManagerCallback = new MockClusterManagerCallback();
+    AmbryPartition partition = new AmbryPartition(1, "abc", mockClusterManagerCallback);
+
+    String dcName = "cloud-dc";
+    CloudServiceDataNode node = new CloudServiceDataNode(dcName, clusterMapConfig1);
+    assertEquals(dcName, node.getHostname());
+    assertEquals(dcName, node.getDatacenterName());
+    assertException(UnsupportedOperationException.class, node::getPortToConnectTo, null);
+    assertNull(node.getRackId());
+    assertEquals(DEFAULT_XID, node.getXid());
+    // the snapshot is for debug info, but just check that it works without throwing exceptions.
+    assertNotNull(node.getSnapshot());
+
+    CloudServiceReplica replica =
+        new CloudServiceReplica(clusterMapConfig1, node, partition, MAX_REPLICA_CAPACITY_IN_BYTES);
+
+    assertException(UnsupportedOperationException.class, replica::getDiskId, null);
+    assertEquals(node, replica.getDataNodeId());
+    assertException(UnsupportedOperationException.class, replica::getMountPath, null);
+    assertException(UnsupportedOperationException.class, replica::getReplicaPath, null);
+    assertEquals(ReplicaType.CLOUD_BACKED, replica.getReplicaType());
+    assertNotNull(replica.getSnapshot());
+    assertNotNull(replica.toString());
+    assertException(UnsupportedOperationException.class, replica::markDiskDown, null);
+    assertException(UnsupportedOperationException.class, replica::markDiskUp, null);
   }
 
   /**
@@ -270,7 +306,7 @@ public class DynamicClusterManagerComponentsTest {
     @Override
     public Collection<AmbryDisk> getDisks(AmbryDataNode dataNode) {
       if (dataNode != null) {
-        return dataNodeToDisks.get(dataNode);
+        return dataNodeToDisks.getOrDefault(dataNode, Collections.emptySet());
       }
       List<AmbryDisk> disksToReturn = new ArrayList<>();
       for (Set<AmbryDisk> disks : dataNodeToDisks.values()) {

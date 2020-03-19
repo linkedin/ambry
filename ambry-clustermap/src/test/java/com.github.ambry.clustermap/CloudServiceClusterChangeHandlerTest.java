@@ -85,7 +85,6 @@ public class CloudServiceClusterChangeHandlerTest {
     doThrow(new RuntimeException()).when(clusterChangeHandlerCallback).addReplicasToPartition(any(), any());
     handler.onReplicaAddedOrRemoved(makeReplicas(p5), makeReplicas());
     assertEquals(1, handler.getErrorCount());
-
   }
 
   private List<ReplicaId> makeReplicas(AmbryPartition... partitionIds) throws Exception {
