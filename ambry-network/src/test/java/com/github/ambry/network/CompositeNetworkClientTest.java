@@ -18,10 +18,12 @@ package com.github.ambry.network;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
+import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -152,6 +154,17 @@ public class CompositeNetworkClientTest {
     compositeClient.close();
     verify(diskMocks.client).close();
     verify(cloudMocks.client).close();
+  }
+
+  /**
+   * Test when a child client is not configured for a type of replica
+   */
+  @Test
+  public void testReplicaTypeNotFound() throws Exception {
+    NetworkClient compositeClient = new CompositeNetworkClient(new EnumMap<>(ReplicaType.class));
+    TestUtils.assertException(IllegalStateException.class,
+        () -> compositeClient.sendAndPoll(Collections.singletonList(getRequestInfo(ReplicaType.CLOUD_BACKED)),
+            Collections.emptySet(), 1000), null);
   }
 
   /**
