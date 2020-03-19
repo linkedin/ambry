@@ -38,7 +38,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -52,7 +51,6 @@ class AzureCloudDestination implements CloudDestination {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestination.class);
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
-  private static final int FIND_SINCE_QUERY_LIMIT = 1000;
   private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
   private final CosmosDataAccessor cosmosDataAccessor;
@@ -76,7 +74,8 @@ class AzureCloudDestination implements CloudDestination {
         new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
     this.queryBatchSize = azureCloudConfig.cosmosQueryBatchSize;
     this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, azureMetrics);
-    this.azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
+    this.azureReplicationFeed =
+        getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     logger.info("Created Azure destination");
   }
 
@@ -97,7 +96,8 @@ class AzureCloudDestination implements CloudDestination {
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
     this.cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
-    this.azureReplicationFeed = getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics);
+    this.azureReplicationFeed =
+        getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
   }
 
   /**
@@ -202,7 +202,8 @@ class AzureCloudDestination implements CloudDestination {
   public List<CloudBlobMetadata> getDeletedBlobs(String partitionPath, long startTime, long endTime, int maxEntries)
       throws CloudStorageException {
     try {
-      return cosmosDataAccessor.getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, startTime, endTime, maxEntries);
+      return cosmosDataAccessor.getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, startTime, endTime,
+          maxEntries);
     } catch (DocumentClientException dex) {
       throw toCloudStorageException("Failed to query deleted blobs for partition " + partitionPath, dex);
     }
@@ -212,7 +213,8 @@ class AzureCloudDestination implements CloudDestination {
   public List<CloudBlobMetadata> getExpiredBlobs(String partitionPath, long startTime, long endTime, int maxEntries)
       throws CloudStorageException {
     try {
-      return cosmosDataAccessor.getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, startTime, endTime, maxEntries);
+      return cosmosDataAccessor.getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, startTime, endTime,
+          maxEntries);
     } catch (DocumentClientException dex) {
       throw toCloudStorageException("Failed to query expired blobs for partition " + partitionPath, dex);
     }
@@ -332,11 +334,11 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   /**
-   * Return {@code findSinceQueryLimit}
-   * @return value of {@code findSinceQueryLimit}
+   * Return {@code queryBatchSize}
+   * @return value of {@code queryBatchSize}
    */
-  static int getFindSinceQueryLimit() {
-    return FIND_SINCE_QUERY_LIMIT;
+  public int getQueryBatchSize() {
+    return queryBatchSize;
   }
 
   /**
@@ -388,15 +390,16 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureReplicationFeedType replication feed type.
    * @param cosmosDataAccessor {@link CosmosDataAccessor} object.
    * @param azureMetrics {@link AzureMetrics} object.
+   * @param queryBatchSize batch size of query for replication feed.
    * @return {@link AzureReplicationFeed} object.
    */
   private static AzureReplicationFeed getReplicationFeedObj(AzureReplicationFeed.FeedType azureReplicationFeedType,
-      CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics) {
+      CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics, int queryBatchSize) {
     switch (azureReplicationFeedType) {
       case COSMOS_CHANGE_FEED:
-        return new CosmosChangeFeedBasedReplicationFeed(cosmosDataAccessor, azureMetrics);
+        return new CosmosChangeFeedBasedReplicationFeed(cosmosDataAccessor, azureMetrics, queryBatchSize);
       case COSMOS_UPDATE_TIME:
-        return new CosmosUpdateTimeBasedReplicationFeed(cosmosDataAccessor, azureMetrics);
+        return new CosmosUpdateTimeBasedReplicationFeed(cosmosDataAccessor, azureMetrics, queryBatchSize);
       default:
         throw new IllegalArgumentException(
             String.format("Unknown cloud replication feed type: %s", azureReplicationFeedType));

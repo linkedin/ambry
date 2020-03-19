@@ -43,15 +43,19 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
           + TIME_SINCE_PARAM + " ORDER BY c." + CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN + " ASC";
   private final CosmosDataAccessor cosmosDataAccessor;
   private final AzureMetrics azureMetrics;
+  private final int queryBatchSize;
 
   /**
    * Constructor for {@link CosmosUpdateTimeBasedReplicationFeed} object.
    * @param cosmosDataAccessor {@link CosmosDataAccessor} object to run Cosmos change feed queries.
    * @param azureMetrics {@link AzureMetrics} object.
+   * @param queryBatchSize batch size for each find since query.
    */
-  public CosmosUpdateTimeBasedReplicationFeed(CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics) {
+  public CosmosUpdateTimeBasedReplicationFeed(CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics,
+      int queryBatchSize) {
     this.cosmosDataAccessor = cosmosDataAccessor;
     this.azureMetrics = azureMetrics;
+    this.queryBatchSize = queryBatchSize;
   }
 
   @Override
@@ -59,7 +63,7 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
       String partitionPath) throws DocumentClientException {
     CosmosUpdateTimeFindToken findToken = (CosmosUpdateTimeFindToken) curfindToken;
     SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
-        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, AzureCloudDestination.getFindSinceQueryLimit()),
+        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, queryBatchSize),
             new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime())));
     List<CloudBlobMetadata> queryResults =
         cosmosDataAccessor.queryMetadata(partitionPath, entriesSinceQuery, azureMetrics.findSinceQueryTime);
