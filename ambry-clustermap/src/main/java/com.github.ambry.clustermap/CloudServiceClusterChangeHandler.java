@@ -31,8 +31,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Currently, this just adds a single {@link ReplicaType#CLOUD_BACKED} replica every time a partition is added to allow
  * for requests to be routed to cloud services. Currently it is only registered as a {@link ClusterMapChangeListener},
- * but once the clustermap natively supports VCR clusters, this class can implement {@link HelixAwareClusterChangeHandler} and
- * listen for changes in the VCR cluster.
+ * but once the clustermap natively supports VCR clusters, this class can implement {@link HelixClusterChangeHandler}
+ * and listen for changes in the VCR cluster.
  */
 class CloudServiceClusterChangeHandler implements ClusterMapChangeListener, ClusterChangeHandler {
   private static final Logger logger = LoggerFactory.getLogger(CloudServiceClusterChangeHandler.class);
@@ -44,7 +44,6 @@ class CloudServiceClusterChangeHandler implements ClusterMapChangeListener, Clus
   private final ClusterMapConfig clusterMapConfig;
   private final ClusterChangeHandlerCallback changeHandlerCallback;
   private final CloudServiceDataNode cloudServiceDataNode;
-  private final String cloudServiceInstanceName;
 
   public CloudServiceClusterChangeHandler(String dcName, ClusterMapConfig clusterMapConfig,
       ClusterChangeHandlerCallback changeHandlerCallback) throws Exception {
@@ -52,8 +51,6 @@ class CloudServiceClusterChangeHandler implements ClusterMapChangeListener, Clus
     this.clusterMapConfig = clusterMapConfig;
     this.changeHandlerCallback = changeHandlerCallback;
     cloudServiceDataNode = new CloudServiceDataNode(dcName, clusterMapConfig);
-    cloudServiceInstanceName =
-        ClusterMapUtils.getInstanceName(cloudServiceDataNode.getDatacenterName(), cloudServiceDataNode.getPort());
   }
 
   @Override
@@ -104,7 +101,8 @@ class CloudServiceClusterChangeHandler implements ClusterMapChangeListener, Clus
 
   @Override
   public AmbryDataNode getDataNode(String instanceName) {
-    return cloudServiceInstanceName.equals(instanceName) ? cloudServiceDataNode : null;
+    // unsupported since a CloudServiceDataNode is not really an addressable instance.
+    return null;
   }
 
   @Override

@@ -40,10 +40,10 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
- * An implementation of {@link HelixAwareClusterChangeHandler} to register as listener for Helix related changes in each
+ * An implementation of {@link HelixClusterChangeHandler} to register as listener for Helix related changes in each
  * datacenter. This class is also responsible for handling events received.
  */
-public class SimpleClusterChangeHandler implements HelixAwareClusterChangeHandler {
+public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
   private final String dcName;
   private final Object notificationLock = new Object();
   private final AtomicBoolean instanceConfigInitialized = new AtomicBoolean(false);
@@ -77,7 +77,7 @@ public class SimpleClusterChangeHandler implements HelixAwareClusterChangeHandle
   /**
    * Initialize a ClusterChangeHandler in the given datacenter.
    * @param clusterMapConfig {@link ClusterMapConfig} to help some admin operations
-   * @param dcName the name of dc this {@link HelixAwareClusterChangeHandler} associates with
+   * @param dcName the name of dc this {@link HelixClusterChangeHandler} associates with
    * @param selfInstanceName the name of instance on which {@link HelixClusterManager} resides.
    * @param partitionOverrideInfoMap a map specifying partitions whose state should be overridden.
    * @param partitionMap a map from serialized bytes to corresponding partition.

@@ -730,7 +730,9 @@ public class HelixClusterManagerTest {
   public void clientInitiatedLivenessChangeTest() {
     assumeTrue(!overrideEnabled);
 
-    ReplicaId replica = clusterManager.getWritablePartitionIds(null).get(0).getReplicaIds().get(0);
+    List<? extends ReplicaId> replicas = clusterManager.getWritablePartitionIds(null).get(0).getReplicaIds();
+    ReplicaId replica =
+        replicas.stream().filter(replicaId -> replicaId.getReplicaType() == ReplicaType.DISK_BACKED).findFirst().get();
     DataNodeId dataNode = replica.getDataNodeId();
     assertTrue(clusterManager.getReplicaIds(dataNode).contains(replica));
     DiskId disk = replica.getDiskId();
@@ -1115,8 +1117,8 @@ public class HelixClusterManagerTest {
     Map<String, DcInfo> dcInfosMap = helixClusterManager.getDcInfosMap();
     Map<String, HelixManager> helixManagerMap = dcInfosMap.entrySet()
         .stream()
-        .filter(e -> e.getValue().helixManager != null)
-        .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().helixManager));
+        .filter(e -> e.getValue() instanceof HelixDcInfo)
+        .collect(Collectors.toMap(Map.Entry::getKey, e -> ((HelixDcInfo) e.getValue()).helixManager));
     for (Map.Entry<String, HelixManager> entry : helixManagerMap.entrySet()) {
       if (entry.getKey().equals(localDc)) {
         assertTrue("Helix cluster manager should always be connected to the local Helix manager",
@@ -1300,7 +1302,6 @@ public class HelixClusterManagerTest {
           }
         }
         assertEquals("Unexpected number of CloudServiceReplicas in partition: " + replicaIds, 1, count);
-
       }
     }
   }

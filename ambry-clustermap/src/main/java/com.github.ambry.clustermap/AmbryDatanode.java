@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,15 +42,20 @@ abstract class AmbryDataNode implements DataNodeId {
    * @param dataCenterName the name of the dataCenter associated with this data node.
    * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    * @param hostName the hostName identifying this data node.
+   * @param plaintextPortNum the plaintext port identifying this data node. This can be
+   *        {@link ClusterMapUtils#UNKNOWN_PORT} if this object represents an in-process entity without a real TCP
+   *        port.
+   * @param sslPortNum the ssl port associated with this data node (may be null).
+   * @param http2PortNum the http2 ssl port associated with this data node (may be null).
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
-  AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, Port plainTextPort,
-      Port sslPort, Port http2Port) throws Exception {
+  AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, int plaintextPortNum,
+      Integer sslPortNum, Integer http2PortNum) throws Exception {
     this.hostName = hostName;
     this.dataCenterName = dataCenterName;
-    this.plainTextPort = plainTextPort;
-    this.sslPort = sslPort;
-    this.http2Port = http2Port;
+    this.plainTextPort = new Port(plaintextPortNum, PortType.PLAINTEXT);
+    this.sslPort = sslPortNum != null ? new Port(sslPortNum, PortType.SSL) : null;
+    this.http2Port = http2PortNum != null ? new Port(http2PortNum, PortType.HTTP2) : null;
     ResourceStatePolicyFactory resourceStatePolicyFactory =
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
             clusterMapConfig);
@@ -72,7 +78,7 @@ abstract class AmbryDataNode implements DataNodeId {
       return sslPort.getPort();
     } else {
       throw new IllegalStateException(
-          "No HTTP2 port exists for the Data Node " + getHostname() + ":" + plainTextPort.getPort());
+          "No HTTP2 port exists for the Data Node " + hostName + ":" + plainTextPort.getPort());
     }
   }
 
@@ -87,7 +93,7 @@ abstract class AmbryDataNode implements DataNodeId {
       return http2Port.getPort();
     } else {
       throw new IllegalStateException(
-          "No HTTP2 port exists for the Data Node " + getHostname() + ":" + plainTextPort.getPort());
+          "No HTTP2 port exists for the Data Node " + hostName + ":" + plainTextPort.getPort());
     }
   }
 

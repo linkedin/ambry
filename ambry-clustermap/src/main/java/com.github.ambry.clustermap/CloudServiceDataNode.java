@@ -17,7 +17,6 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
 import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
@@ -39,7 +38,7 @@ class CloudServiceDataNode extends AmbryDataNode {
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
   CloudServiceDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig) throws Exception {
-    super(dataCenterName, clusterMapConfig, dataCenterName, new Port(-1, PortType.PLAINTEXT), null, null);
+    super(dataCenterName, clusterMapConfig, dataCenterName, UNKNOWN_PORT, null, null);
   }
 
   @Override

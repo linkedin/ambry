@@ -25,18 +25,18 @@ import org.apache.helix.spectator.RoutingTableSnapshot;
  * An extension of {@link ClusterChangeHandler} for data centers that use helix for cluster management. This interface
  * implements various helix listeners and provides facilities for using routing tables.
  */
-interface HelixAwareClusterChangeHandler
+interface HelixClusterChangeHandler
     extends ClusterChangeHandler, InstanceConfigChangeListener, LiveInstanceChangeListener, IdealStateChangeListener,
             RoutingTableChangeListener {
 
   /**
-   * Set the initial snapshot in this {@link HelixAwareClusterChangeHandler}.
+   * Set the initial snapshot in this {@link HelixClusterChangeHandler}.
    * @param routingTableSnapshot the snapshot to set
    */
   void setRoutingTableSnapshot(RoutingTableSnapshot routingTableSnapshot);
 
   /**
-   * @return current snapshot held by this {@link HelixAwareClusterChangeHandler}.
+   * @return current snapshot held by this {@link HelixClusterChangeHandler}.
    */
   RoutingTableSnapshot getRoutingTableSnapshot();
 

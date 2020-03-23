@@ -264,6 +264,7 @@ public class DynamicClusterManagerComponentsTest {
     CloudServiceDataNode node = new CloudServiceDataNode(dcName, clusterMapConfig1);
     assertEquals(dcName, node.getHostname());
     assertEquals(dcName, node.getDatacenterName());
+    assertEquals(UNKNOWN_PORT, node.getPort());
     assertException(UnsupportedOperationException.class, node::getPortToConnectTo, null);
     assertNull(node.getRackId());
     assertEquals(DEFAULT_XID, node.getXid());

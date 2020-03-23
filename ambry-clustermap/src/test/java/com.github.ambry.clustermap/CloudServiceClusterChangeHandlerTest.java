@@ -40,10 +40,10 @@ public class CloudServiceClusterChangeHandlerTest {
     CloudServiceClusterChangeHandler handler =
         new CloudServiceClusterChangeHandler("dc1", TestUtils.getDummyConfig(), clusterChangeHandlerCallback);
 
-    CloudServiceDataNode cloudServiceDataNode =
-        (CloudServiceDataNode) handler.getDataNode(ClusterMapUtils.getInstanceName("dc1", -1));
-    assertEquals("Only CloudServiceDataNode should be present", Collections.singletonList(cloudServiceDataNode),
-        handler.getAllDataNodes());
+    assertNull("getDataNode should return null", handler.getDataNode("dc1"));
+    List<AmbryDataNode> dataNodes = handler.getAllDataNodes();
+    assertEquals("Only one node should be present", 1, handler.getAllDataNodes().size());
+    CloudServiceDataNode cloudServiceDataNode = (CloudServiceDataNode) dataNodes.get(0);
 
     AmbryPartition p1 = new AmbryPartition(1, "class", mock(ClusterManagerCallback.class));
     AmbryPartition p2 = new AmbryPartition(2, "class", mock(ClusterManagerCallback.class));

@@ -55,9 +55,7 @@ class AmbryServerDataNode extends AmbryDataNode {
       String rackId, Integer sslPortNum, Integer http2PortNumber, long xid,
       ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback)
       throws Exception {
-    super(dataCenterName, clusterMapConfig, hostName, new Port(portNum, PortType.PLAINTEXT),
-        sslPortNum != null ? new Port(sslPortNum, PortType.SSL) : null,
-        http2PortNumber != null ? new Port(http2PortNumber, PortType.HTTP2) : null);
+    super(dataCenterName, clusterMapConfig, hostName, portNum, sslPortNum, http2PortNumber);
     this.rackId = rackId;
     this.xid = xid;
     this.http2ClientEnabled = clusterMapConfig.clusterMapHttp2NetworkClientEnabled;

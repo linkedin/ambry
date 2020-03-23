@@ -29,7 +29,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
@@ -42,10 +41,10 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
- * A more dynamic implementation of {@link HelixAwareClusterChangeHandler} which supports adding new nodes/partitions at
+ * A more dynamic implementation of {@link HelixClusterChangeHandler} which supports adding new nodes/partitions at
  * runtime. It is also able to absorb replica location changes in cluster.
  */
-public class DynamicClusterChangeHandler implements HelixAwareClusterChangeHandler {
+public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
   private final String dcName;
   private final Object notificationLock = new Object();
   private final HelixClusterManagerMetrics helixClusterManagerMetrics;

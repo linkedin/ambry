@@ -169,7 +169,7 @@ class DatacenterInitializer {
       manager.connect();
       logger.info("Established connection to Helix manager at {}", zkConnectStr);
     }
-    HelixAwareClusterChangeHandler clusterChangeHandler;
+    HelixClusterChangeHandler clusterChangeHandler;
     String clusterChangeHandlerType = clusterMapConfig.clusterMapClusterChangeHandlerType;
     if (clusterChangeHandlerType.equals(SimpleClusterChangeHandler.class.getSimpleName())) {
       clusterChangeHandler =
@@ -224,7 +224,7 @@ class DatacenterInitializer {
       logger.info("Stopped listening to cross colo ZK server {}", zkConnectStr);
     }
 
-    return new DcInfo(dcName, dcZkInfo, manager, clusterChangeHandler);
+    return new HelixDcInfo(dcName, dcZkInfo, manager, clusterChangeHandler);
   }
 
   /**
@@ -238,6 +238,6 @@ class DatacenterInitializer {
   private DcInfo initializeCloudDatacenter() throws Exception {
     CloudServiceClusterChangeHandler clusterChangeHandler =
         new CloudServiceClusterChangeHandler(dcName, clusterMapConfig, clusterChangeHandlerCallback);
-    return new DcInfo(dcName, dcZkInfo, null, clusterChangeHandler);
+    return new DcInfo(dcName, dcZkInfo, clusterChangeHandler);
   }
 }

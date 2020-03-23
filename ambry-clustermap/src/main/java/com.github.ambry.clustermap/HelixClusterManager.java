@@ -31,7 +31,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
@@ -137,11 +136,13 @@ public class HelixClusterManager implements ClusterMap {
         if (dcInfo.clusterChangeHandler instanceof ClusterMapChangeListener) {
           ClusterMapChangeListener listener = (ClusterMapChangeListener) dcInfo.clusterChangeHandler;
           registerClusterMapListener(listener);
-          List<ReplicaId> allReplicas = new ArrayList<>();
+          // WARNING: currently this code is tailored to the CloudServiceClusterChangeHandler, which only needs to be
+          // provided one replica per partition. If this assumption is no longer valid, modify this logic.
+          List<ReplicaId> oneReplicaPerPartition = new ArrayList<>(ambryPartitionToAmbryReplicas.size());
           for (Set<AmbryReplica> replicas : ambryPartitionToAmbryReplicas.values()) {
-            allReplicas.addAll(replicas);
+            replicas.stream().findFirst().ifPresent(oneReplicaPerPartition::add);
           }
-          listener.onReplicaAddedOrRemoved(allReplicas, Collections.emptyList());
+          listener.onReplicaAddedOrRemoved(oneReplicaPerPartition, Collections.emptyList());
         }
       }
     }
@@ -467,9 +468,7 @@ public class HelixClusterManager implements ClusterMap {
   @Override
   public void close() {
     for (DcInfo dcInfo : dcToDcInfo.values()) {
-      if (dcInfo.helixManager != null && dcInfo.helixManager.isConnected()) {
-        dcInfo.helixManager.disconnect();
-      }
+      dcInfo.close();
     }
     dcToDcInfo.clear();
   }
@@ -537,9 +536,9 @@ public class HelixClusterManager implements ClusterMap {
     Map<String, RoutingTableSnapshot> dcToRoutingTableSnapshot = new HashMap<>();
     for (DcInfo dcInfo : dcToDcInfo.values()) {
       ClusterChangeHandler handler = dcInfo.clusterChangeHandler;
-      if (handler instanceof HelixAwareClusterChangeHandler) {
+      if (handler instanceof HelixClusterChangeHandler) {
         dcToRoutingTableSnapshot.put(dcInfo.dcName,
-            ((HelixAwareClusterChangeHandler) handler).getRoutingTableSnapshot());
+            ((HelixClusterChangeHandler) handler).getRoutingTableSnapshot());
       }
     }
     return Collections.unmodifiableMap(dcToRoutingTableSnapshot);
@@ -553,7 +552,7 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * A callback class for {@link HelixAwareClusterChangeHandler} in each dc to update cluster-wide info (i.e partition-to-replica
+   * A callback class for {@link HelixClusterChangeHandler} in each dc to update cluster-wide info (i.e partition-to-replica
    * mapping, cluster-wide capacity)
    */
   class ClusterChangeHandlerCallback {

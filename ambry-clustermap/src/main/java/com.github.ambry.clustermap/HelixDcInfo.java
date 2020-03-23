@@ -15,30 +15,34 @@
 
 package com.github.ambry.clustermap;
 
-import java.io.Closeable;
+import org.apache.helix.HelixManager;
 
 
 /**
- * Class that stores all the information associated with a datacenter.
+ * Extension of {@link DcInfo} to include a reference the {@link HelixManager} of the datacenter for orderly shutdown
+ * and testing.
  */
-class DcInfo implements Closeable {
-  final String dcName;
-  final ClusterMapUtils.DcZkInfo dcZkInfo;
-  final ClusterChangeHandler clusterChangeHandler;
+class HelixDcInfo extends DcInfo {
+  final HelixManager helixManager;
 
   /**
-   * Construct a DcInfo object with the given parameters.
+   * Construct a HelixDcInfo object with the given parameters.
    * @param dcName the associated datacenter name.
    * @param dcZkInfo the {@link ClusterMapUtils.DcZkInfo} associated with the DC.
+   * @param helixManager the associated {@link HelixManager} for this datacenter. This can be null if the datacenter is
+   *                     not managed by helix.
    * @param clusterChangeHandler the associated {@link ClusterChangeHandler} for this datacenter.
    */
-  DcInfo(String dcName, ClusterMapUtils.DcZkInfo dcZkInfo, ClusterChangeHandler clusterChangeHandler) {
-    this.dcName = dcName;
-    this.dcZkInfo = dcZkInfo;
-    this.clusterChangeHandler = clusterChangeHandler;
+  HelixDcInfo(String dcName, ClusterMapUtils.DcZkInfo dcZkInfo, HelixManager helixManager,
+      ClusterChangeHandler clusterChangeHandler) {
+    super(dcName, dcZkInfo, clusterChangeHandler);
+    this.helixManager = helixManager;
   }
 
   @Override
   public void close() {
+    if (helixManager.isConnected()) {
+      helixManager.disconnect();
+    }
   }
 }
