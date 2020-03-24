@@ -29,6 +29,7 @@ import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.commons.BlobId;
@@ -1944,9 +1945,10 @@ public class ReplicationTest {
     final long tokenPersistInterval = 100;
     Time time = new MockTime();
     MockFindToken token1 = new MockFindToken(0, 0);
-    RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(new MockReplicaId(), new MockReplicaId(),
-        new InMemoryStore(null, Collections.emptyList(), Collections.emptyList(), null), token1, tokenPersistInterval,
-        time, new Port(5000, PortType.PLAINTEXT));
+    RemoteReplicaInfo remoteReplicaInfo =
+        new RemoteReplicaInfo(new MockReplicaId(ReplicaType.DISK_BACKED), new MockReplicaId(ReplicaType.DISK_BACKED),
+            new InMemoryStore(null, Collections.emptyList(), Collections.emptyList(), null), token1,
+            tokenPersistInterval, time, new Port(5000, PortType.PLAINTEXT));
 
     // The equality check is for the reference, which is fine.
     // Initially, the current token and the token to persist are the same.

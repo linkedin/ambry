@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.Store;
@@ -154,14 +155,16 @@ public class CloudStorageManagerTest {
     PartitionId partitionId = mockReplicaId.getPartitionId();
 
     //try checkLocalPartitionStatus for a partition that doesn't exist
-    Assert.assertEquals(cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId()),
+    Assert.assertEquals(
+        cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId(ReplicaType.DISK_BACKED)),
         ServerErrorCode.No_Error);
 
     //add and start a replica to the store
     Assert.assertTrue(cloudStorageManager.addBlobStore(mockReplicaId));
 
     //try checkLocalPartitionStatus for an added replica
-    Assert.assertEquals(cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId()),
+    Assert.assertEquals(
+        cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId(ReplicaType.DISK_BACKED)),
         ServerErrorCode.No_Error);
 
     //stop a replica on the store
@@ -173,7 +176,8 @@ public class CloudStorageManagerTest {
 
     //try checkLocalPartitionStatus for a removed replica
     Assert.assertTrue(cloudStorageManager.removeBlobStore(partitionId));
-    Assert.assertEquals(cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId()),
+    Assert.assertEquals(
+        cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId(ReplicaType.DISK_BACKED)),
         ServerErrorCode.No_Error);
   }
 
