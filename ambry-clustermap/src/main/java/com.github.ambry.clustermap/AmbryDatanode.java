@@ -17,9 +17,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
-import java.util.List;
-import org.json.JSONArray;
-import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,18 +27,14 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 /**
  * {@link DataNodeId} implementation to use within dynamic cluster managers.
  */
-class AmbryDataNode implements DataNodeId {
+abstract class AmbryDataNode implements DataNodeId {
   private final String hostName;
-  private final Port plainTextPort;
-  private final Port sslPort;
-  private final Port http2Port;
+  // exposed for subclass access
+  protected final Port plainTextPort;
+  protected final Port sslPort;
+  protected final Port http2Port;
   private final String dataCenterName;
-  private final String rackId;
-  private final long xid;
-  private final List<String> sslEnabledDataCenters;
   private final ResourceStatePolicy resourceStatePolicy;
-  private final boolean http2ClientEnabled;
-  private final ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback;
   private static final Logger logger = LoggerFactory.getLogger(AmbryDataNode.class);
 
   /**
@@ -49,34 +42,24 @@ class AmbryDataNode implements DataNodeId {
    * @param dataCenterName the name of the dataCenter associated with this data node.
    * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    * @param hostName the hostName identifying this data node.
-   * @param portNum the port identifying this data node.
-   * @param rackId the rack Id associated with this data node (may be null).
+   * @param plaintextPortNum the plaintext port identifying this data node. This can be
+   *        {@link ClusterMapUtils#UNKNOWN_PORT} if this object represents an in-process entity without a real TCP
+   *        port.
    * @param sslPortNum the ssl port associated with this data node (may be null).
-   * @param http2PortNumber the http2 ssl port associated with this data node (may be null).
-   * @param xid the xid associated with this data node.
-   * @param clusterManagerCallback the {@link ClusterManagerCallback} to use
+   * @param http2PortNum the http2 ssl port associated with this data node (may be null).
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
-  AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, int portNum, String rackId,
-      Integer sslPortNum, Integer http2PortNumber, long xid,
-      ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback)
-      throws Exception {
+  AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, int plaintextPortNum,
+      Integer sslPortNum, Integer http2PortNum) throws Exception {
     this.hostName = hostName;
-    this.plainTextPort = new Port(portNum, PortType.PLAINTEXT);
-    this.sslPort = sslPortNum != null ? new Port(sslPortNum, PortType.SSL) : null;
-    this.http2Port = http2PortNumber != null ? new Port(http2PortNumber, PortType.HTTP2) : null;
     this.dataCenterName = dataCenterName;
-    this.rackId = rackId;
-    this.xid = xid;
-    this.http2ClientEnabled = clusterMapConfig.clusterMapHttp2NetworkClientEnabled;
-    this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
+    this.plainTextPort = new Port(plaintextPortNum, PortType.PLAINTEXT);
+    this.sslPort = sslPortNum != null ? new Port(sslPortNum, PortType.SSL) : null;
+    this.http2Port = http2PortNum != null ? new Port(http2PortNum, PortType.HTTP2) : null;
     ResourceStatePolicyFactory resourceStatePolicyFactory =
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
             clusterMapConfig);
     this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
-    this.clusterManagerCallback = clusterManagerCallback;
-    validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
-    validatePorts(plainTextPort, sslPort, http2Port, sslEnabledDataCenters.contains(dataCenterName));
   }
 
   @Override
@@ -120,14 +103,6 @@ class AmbryDataNode implements DataNodeId {
   }
 
   @Override
-  public Port getPortToConnectTo() {
-    if (http2ClientEnabled) {
-      return http2Port;
-    }
-    return sslEnabledDataCenters.contains(dataCenterName) ? sslPort : plainTextPort;
-  }
-
-  @Override
   public HardwareState getState() {
     return resourceStatePolicy.isDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }
@@ -135,47 +110,6 @@ class AmbryDataNode implements DataNodeId {
   @Override
   public String getDatacenterName() {
     return dataCenterName;
-  }
-
-  @Override
-  public String getRackId() {
-    return rackId;
-  }
-
-  @Override
-  public long getXid() {
-    return xid;
-  }
-
-  @Override
-  public JSONObject getSnapshot() {
-    JSONObject snapshot = new JSONObject();
-    snapshot.put(DATA_NODE_HOSTNAME, getHostname());
-    snapshot.put(DATA_NODE_DATACENTER, getDatacenterName());
-    snapshot.put(DATA_NODE_SSL_ENABLED_DATACENTERS, new JSONArray(sslEnabledDataCenters));
-    JSONObject portsJson = new JSONObject();
-    portsJson.put(PortType.PLAINTEXT.name(), getPort());
-    if (hasSSLPort()) {
-      portsJson.put(PortType.SSL.name(), getSSLPort());
-    }
-    if (hasHttp2Port()) {
-      portsJson.put(PortType.HTTP2.name(), getHttp2Port());
-    }
-    portsJson.put(DATA_NODE_PORT_CONNECT_TO, getPortToConnectTo().getPort());
-    snapshot.put(DATA_NODE_PORTS, portsJson);
-    snapshot.put(DATA_NODE_RACK_ID, getRackId());
-    snapshot.put(DATA_NODE_XID, getXid());
-    String liveness = UP;
-    if (resourceStatePolicy.isHardDown()) {
-      liveness = NODE_DOWN;
-    } else if (resourceStatePolicy.isDown()) {
-      liveness = SOFT_DOWN;
-    }
-    snapshot.put(LIVENESS, liveness);
-    JSONArray disksJson = new JSONArray();
-    clusterManagerCallback.getDisks(this).forEach(disk -> disksJson.put(disk.getSnapshot()));
-    snapshot.put(DATA_NODE_DISKS, disksJson);
-    return snapshot;
   }
 
   @Override
@@ -188,7 +122,7 @@ class AmbryDataNode implements DataNodeId {
    * @param newState the updated {@link HardwareState}
    */
   void setState(HardwareState newState) {
-    logger.trace("Setting state of instance " + getInstanceName(hostName, plainTextPort.getPort()) + " to " + newState);
+    logger.trace("Setting state of instance " + getInstanceName(hostName, getPort()) + " to " + newState);
     if (newState == HardwareState.AVAILABLE) {
       resourceStatePolicy.onHardUp();
     } else {
@@ -208,5 +142,12 @@ class AmbryDataNode implements DataNodeId {
    */
   void onNodeResponse() {
     resourceStatePolicy.onSuccess();
+  }
+
+  /**
+   * @return the status of the node according to its {@link ResourceStatePolicy}
+   */
+  String getLiveness() {
+    return resourceStatePolicy.isHardDown() ? NODE_DOWN : resourceStatePolicy.isDown() ? SOFT_DOWN : UP;
   }
 }

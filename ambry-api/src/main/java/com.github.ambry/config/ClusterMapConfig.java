@@ -108,7 +108,7 @@ public class ClusterMapConfig {
   /**
    * Serialized json containing the information about all the zk hosts that the Helix based cluster manager should
    * be aware of. This information should be of the following form:
-   *
+   * <pre>
    * {
    *   "zkInfo" : [
    *     {
@@ -120,10 +120,15 @@ public class ClusterMapConfig {
    *       "datacenter":"dc2",
    *       "id" : "2",
    *       "zkConnectStr":"def.example.com:2300",
+   *     },
+   *     {
+   *       "datacenter":"cloud-dc",
+   *       "id" : "3",
+   *       "replicaType": "CLOUD_BACKED"
    *     }
    *   ]
    * }
-   *
+   * </pre>
    */
   @Config("clustermap.dcs.zk.connect.strings")
   @Default("")

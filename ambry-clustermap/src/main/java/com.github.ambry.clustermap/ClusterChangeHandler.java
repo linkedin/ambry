@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -10,26 +10,23 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *
  */
+
 package com.github.ambry.clustermap;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.helix.api.listeners.IdealStateChangeListener;
-import org.apache.helix.api.listeners.InstanceConfigChangeListener;
-import org.apache.helix.api.listeners.LiveInstanceChangeListener;
-import org.apache.helix.api.listeners.RoutingTableChangeListener;
-import org.apache.helix.spectator.RoutingTableSnapshot;
+import java.util.stream.Stream;
 
 
 /**
  * General handler that handles any resource or state changes in cluster. It exposes API(s) for cluster manager to
- * access up-to-date cluster info. Each data center has its own {@link ClusterChangeHandler}.
+ * access up-to-date cluster info for a data center. Each data center has its own
+ * {@link ClusterChangeHandler}.
  */
-interface ClusterChangeHandler
-    extends InstanceConfigChangeListener, LiveInstanceChangeListener, IdealStateChangeListener,
-            RoutingTableChangeListener {
+public interface ClusterChangeHandler {
   /**
    * Register a listener of cluster map for any changes.
    * @param clusterMapChangeListener the {@link ClusterMapChangeListener} to add.
@@ -37,15 +34,12 @@ interface ClusterChangeHandler
   void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener);
 
   /**
-   * Set the initial snapshot in this {@link ClusterChangeHandler}.
-   * @param routingTableSnapshot the snapshot to set
+   * Get replicas of given partition from this datacenter that are in required state
+   * @param partition the {@link PartitionId} for which to get the list of replicas.
+   * @param state {@link ReplicaState} associated with replica
+   * @return the {@link ReplicaId}s satisfying requirements.
    */
-  void setRoutingTableSnapshot(RoutingTableSnapshot routingTableSnapshot);
-
-  /**
-   * @return current snapshot held by this {@link ClusterChangeHandler}.
-   */
-  RoutingTableSnapshot getRoutingTableSnapshot();
+  Stream<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state);
 
   /**
    * @return a map from ambry data node to its disks.
@@ -95,10 +89,4 @@ interface ClusterChangeHandler
    * @return number of errors occurred during handling cluster changes.
    */
   long getErrorCount();
-
-  /**
-   * Wait for initial notification during startup.
-   * @throws InterruptedException
-   */
-  void waitForInitNotification() throws InterruptedException;
 }

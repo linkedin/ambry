@@ -48,6 +48,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -305,12 +306,28 @@ public class Utils {
   }
 
   /**
+   * Extracts the cause of an {@link ExecutionException}. This is used to get the relevant domain-specific exception
+   * after unboxing a future.
+   * @param e the {@link Exception}
+   * @return if the cause is {@code null}, return {@code e} itself. If the cause is not an instance
+   *         of exception, return the {@link Throwable} wrapped in an exception. If not {@link ExecutionException},
+   *         return the exception itself. Otherwise, return the cause {@link Exception}.
+   */
+  public static Exception extractExecutionExceptionCause(Exception e) {
+    Throwable cause = e.getCause();
+    if (!(e instanceof ExecutionException) || cause == null) {
+      return e;
+    }
+    return cause instanceof Exception ? (Exception) cause : new Exception(cause);
+  }
+
+  /**
    * Represent an operation that accepts a {@link ByteBuffer} and returns another {@link ByteBuffer}. Side effect should
    * be expected to the input {@link ByteBuffer} and the returned {@link ByteBuffer} should be ready for read.
    * @param <T> The exception to throw in this operation.
    */
   @FunctionalInterface
-  public static interface ByteBufferFunction<T extends Throwable> {
+  public interface ByteBufferFunction<T extends Throwable> {
     ByteBuffer apply(ByteBuffer buffer) throws T;
   }
 

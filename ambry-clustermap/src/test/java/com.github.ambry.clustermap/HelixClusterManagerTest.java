@@ -69,9 +69,10 @@ public class HelixClusterManagerTest {
   static final long CURRENT_XID = 64;
   static final String clusterNamePrefixInHelix = "Ambry-";
   private final HashMap<String, com.github.ambry.utils.TestUtils.ZkInfo> dcsToZkInfo = new HashMap<>();
-  private final String[] dcs = new String[]{"DC0", "DC1"};
+  private final String[] helixDcs = new String[]{"DC0", "DC1"};
   private final TestHardwareLayout testHardwareLayout;
   private final TestPartitionLayout testPartitionLayout;
+  private final JSONObject zkJson;
   private final String clusterNameStatic = "HelixClusterManagerTestCluster";
   private final ClusterMapConfig clusterMapConfig;
   private final MockHelixCluster helixCluster;
@@ -80,6 +81,8 @@ public class HelixClusterManagerTest {
   private final String selfInstanceName;
   private final String localDc;
   private final String remoteDc;
+  private final String cloudDc;
+  private final int numCloudDcs;
   private ClusterMap clusterManager;
   private MetricRegistry metricRegistry;
   private Map<String, Gauge> gauges;
@@ -124,21 +127,32 @@ public class HelixClusterManagerTest {
     this.overrideEnabled = overrideEnabled;
     this.listenCrossColo = listenCrossColo;
     MockitoAnnotations.initMocks(this);
-    localDc = dcs[0];
-    remoteDc = dcs[1];
+    localDc = helixDcs[0];
+    remoteDc = helixDcs[1];
+    if (!useComposite) {
+      // cloud DCs only supported in HelixClusterManager
+      cloudDc = "cloud-dc";
+      numCloudDcs = 1;
+    } else {
+      cloudDc = null;
+      numCloudDcs = 0;
+    }
     Random random = new Random();
     File tempDir = Files.createTempDirectory("helixClusterManager-" + random.nextInt(1000)).toFile();
     String tempDirPath = tempDir.getAbsolutePath();
     tempDir.deleteOnExit();
     int port = 2200;
     byte dcId = (byte) 0;
-    for (String dcName : dcs) {
+    for (String dcName : helixDcs) {
       dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port++, true));
     }
     hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
     partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
     String zkLayoutPath = tempDirPath + File.separator + "zkLayoutPath.json";
-    JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
+    zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
+    if (!useComposite) {
+      addCloudDc(zkJson, dcId, cloudDc);
+    }
     // initial partition count = 3
     testHardwareLayout = constructInitialHardwareLayoutJSON(clusterNameStatic);
     testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, 3, localDc);
@@ -319,7 +333,7 @@ public class HelixClusterManagerTest {
     assertEquals(0L,
         metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
     if (clusterManager instanceof HelixClusterManager) {
-      verifyInitialClusterChanges((HelixClusterManager) clusterManager, helixCluster, dcs);
+      verifyInitialClusterChanges((HelixClusterManager) clusterManager, helixCluster, helixDcs);
     }
 
     int savedport = dcsToZkInfo.get(remoteDc).getPort();
@@ -327,6 +341,9 @@ public class HelixClusterManagerTest {
     dcsToZkInfo.get(remoteDc).setPort(0);
     Set<com.github.ambry.utils.TestUtils.ZkInfo> zkInfos = new HashSet<>(dcsToZkInfo.values());
     JSONObject invalidZkJson = constructZkLayoutJSON(zkInfos);
+    if (cloudDc != null) {
+      addCloudDc(invalidZkJson, (byte) zkInfos.size(), cloudDc);
+    }
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);
     props.setProperty("clustermap.port", Integer.toString(portNum));
@@ -374,6 +391,33 @@ public class HelixClusterManagerTest {
           metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
       assertEquals("beBad", e.getCause().getMessage());
     }
+  }
+
+  /**
+   * Test startup when setting the cloud datacenter as the local datacenter.
+   * @throws Exception
+   */
+  @Test
+  public void testCloudDcAsLocal() throws Exception {
+    assumeTrue(cloudDc != null);
+    assumeTrue(!overrideEnabled);
+
+    String hostname = "localhost";
+    String selfInstanceName = getInstanceName(hostname, null);
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", hostname);
+    props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
+    props.setProperty("clustermap.datacenter.name", cloudDc);
+    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
+    props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
+    props.setProperty("clustermap.listen.cross.colo", Boolean.toString(listenCrossColo));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, new HashMap<>(), null);
+    metricRegistry = new MetricRegistry();
+    clusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, metricRegistry);
+
+    verifyInitialClusterChanges((HelixClusterManager) clusterManager, helixCluster, helixDcs);
   }
 
   /**
@@ -580,7 +624,7 @@ public class HelixClusterManagerTest {
   public void helixInitiatedIdealStateChangeTest() throws Exception {
     assumeTrue(!useComposite && !overrideEnabled);
     HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
-    verifyInitialClusterChanges(helixClusterManager, helixCluster, dcs);
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
     String resourceName = "newResource";
     String partitionName = String.valueOf(helixCluster.getAllPartitions().size());
     IdealState idealState = new IdealState(resourceName);
@@ -686,7 +730,9 @@ public class HelixClusterManagerTest {
   public void clientInitiatedLivenessChangeTest() {
     assumeTrue(!overrideEnabled);
 
-    ReplicaId replica = clusterManager.getWritablePartitionIds(null).get(0).getReplicaIds().get(0);
+    List<? extends ReplicaId> replicas = clusterManager.getWritablePartitionIds(null).get(0).getReplicaIds();
+    ReplicaId replica =
+        replicas.stream().filter(replicaId -> replicaId.getReplicaType() == ReplicaType.DISK_BACKED).findFirst().get();
     DataNodeId dataNode = replica.getDataNodeId();
     assertTrue(clusterManager.getReplicaIds(dataNode).contains(replica));
     DiskId disk = replica.getDiskId();
@@ -886,7 +932,7 @@ public class HelixClusterManagerTest {
 
       // Verify the partition state could be changed if this partition is not in partition override map.
       // Following test re-initializes clusterManager with new partitionLayout and then triggers instanceConfig change on new added partition
-      testPartitionLayout.addNewPartitions(1, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, dcs[0]);
+      testPartitionLayout.addNewPartitions(1, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, helixDcs[0]);
       Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
       helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
       clusterManager.close();
@@ -962,7 +1008,7 @@ public class HelixClusterManagerTest {
         aliveCount++;
       }
     }
-    assertEquals("Mismatch in number of alive replicas", instances.size() - 1, aliveCount);
+    assertEquals("Mismatch in number of alive replicas", instances.size() + numCloudDcs - 1, aliveCount);
     // unmark the stopped replica and no replica is in stopped state
     helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.StoppedState, false, false);
     aliveCount = 0;
@@ -971,7 +1017,8 @@ public class HelixClusterManagerTest {
         aliveCount++;
       }
     }
-    assertEquals("Mismatch in number of alive replicas, all replicas should be up", instances.size(), aliveCount);
+    assertEquals("Mismatch in number of alive replicas, all replicas should be up", instances.size() + numCloudDcs,
+        aliveCount);
   }
 
   /**
@@ -1003,7 +1050,7 @@ public class HelixClusterManagerTest {
 
     // Initialization path:
     MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null, null);
-    List<InstanceConfig> instanceConfigs = helixCluster.getInstanceConfigsFromDcs(dcs);
+    List<InstanceConfig> instanceConfigs = helixCluster.getInstanceConfigsFromDcs(helixDcs);
     int instanceCount = instanceConfigs.size();
     // find the self instance config and put it at the end of list. This is to ensure subsequent test won't choose self instance config.
     for (int i = 0; i < instanceCount; ++i) {
@@ -1018,7 +1065,7 @@ public class HelixClusterManagerTest {
     aheadInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 1));
     clusterManager =
         new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
-    assertEquals(instanceCount - 1, clusterManager.getDataNodeIds().size());
+    assertEquals(instanceCount + numCloudDcs - 1, clusterManager.getDataNodeIds().size());
     for (DataNodeId dataNode : clusterManager.getDataNodeIds()) {
       String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
       assertFalse(instanceName.equals(aheadInstanceConfig.getInstanceName()));
@@ -1027,7 +1074,7 @@ public class HelixClusterManagerTest {
     // Ahead instance should be honored if the cluster manager is of the aheadInstance.
     try (HelixClusterManager aheadInstanceClusterManager = new HelixClusterManager(clusterMapConfig,
         aheadInstanceConfig.getInstanceName(), helixManagerFactory, new MetricRegistry())) {
-      assertEquals(instanceCount, aheadInstanceClusterManager.getDataNodeIds().size());
+      assertEquals(instanceCount + numCloudDcs, aheadInstanceClusterManager.getDataNodeIds().size());
     }
 
     // Post-initialization InstanceConfig change: pick an instance that is neither previous instance nor self instance
@@ -1067,9 +1114,11 @@ public class HelixClusterManagerTest {
     assumeTrue(!useComposite);
     HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
     Counter instanceTriggerCounter = helixClusterManager.helixClusterManagerMetrics.instanceConfigChangeTriggerCount;
-    Map<String, HelixClusterManager.DcInfo> dcInfosMap = helixClusterManager.getDcInfosMap();
-    Map<String, HelixManager> helixManagerMap =
-        dcInfosMap.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().helixManager));
+    Map<String, DcInfo> dcInfosMap = helixClusterManager.getDcInfosMap();
+    Map<String, HelixManager> helixManagerMap = dcInfosMap.entrySet()
+        .stream()
+        .filter(e -> e.getValue() instanceof HelixDcInfo)
+        .collect(Collectors.toMap(Map.Entry::getKey, e -> ((HelixDcInfo) e.getValue()).helixManager));
     for (Map.Entry<String, HelixManager> entry : helixManagerMap.entrySet()) {
       if (entry.getKey().equals(localDc)) {
         assertTrue("Helix cluster manager should always be connected to the local Helix manager",
@@ -1083,9 +1132,9 @@ public class HelixClusterManagerTest {
     long instanceConfigChangeTriggerCount = instanceTriggerCounter.getCount();
     helixCluster.triggerInstanceConfigChangeNotification();
     assertEquals("Number of trigger count should be in accordance to listenCrossColo value",
-        instanceConfigChangeTriggerCount + (listenCrossColo ? dcs.length : 1), instanceTriggerCounter.getCount());
+        instanceConfigChangeTriggerCount + (listenCrossColo ? helixDcs.length : 1), instanceTriggerCounter.getCount());
 
-    InstanceConfig remoteInstanceConfig = helixCluster.getInstanceConfigsFromDcs(dcs)
+    InstanceConfig remoteInstanceConfig = helixCluster.getInstanceConfigsFromDcs(helixDcs)
         .stream()
         .filter(e -> ClusterMapUtils.getDcName(e).equals(remoteDc))
         .findAny()
@@ -1119,7 +1168,7 @@ public class HelixClusterManagerTest {
     gauges = clusterManager.getMetricRegistry().getGauges();
 
     // live instance trigger happens once initially.
-    long instanceTriggerCount = dcs.length;
+    long instanceTriggerCount = helixDcs.length;
 
     // Bring one instance (not current instance) down in each dc in order to test the metrics more generally.
     for (String zkAddr : helixCluster.getZkAddrs()) {
@@ -1132,8 +1181,8 @@ public class HelixClusterManagerTest {
     // trigger for live instance change event should have come in twice per dc - the initial one, and the one due to a
     // node brought up in each DC.
     assertEquals(instanceTriggerCount, getCounterValue("liveInstanceChangeTriggerCount"));
-    assertEquals(dcs.length, getCounterValue("instanceConfigChangeTriggerCount"));
-    assertEquals(helixCluster.getDataCenterCount(), getGaugeValue("datacenterCount"));
+    assertEquals(helixDcs.length, getCounterValue("instanceConfigChangeTriggerCount"));
+    assertEquals(helixCluster.getDataCenterCount() + numCloudDcs, getGaugeValue("datacenterCount"));
     assertEquals(helixCluster.getDownInstances().size() + helixCluster.getUpInstances().size(),
         getGaugeValue("dataNodeCount"));
     assertEquals(helixCluster.getDownInstances().size(), getGaugeValue("dataNodeDownCount"));
@@ -1171,7 +1220,7 @@ public class HelixClusterManagerTest {
       assertEquals(0L, getCounterValue("getWritablePartitionIdsMismatchCount"));
 
       clusterManager.hasDatacenter("invalid");
-      clusterManager.hasDatacenter(dcs[0]);
+      clusterManager.hasDatacenter(helixDcs[0]);
       assertEquals(0L, getCounterValue("hasDatacenterMismatchCount"));
 
       DataNodeId dataNodeId = clusterManager.getDataNodeIds().get(0);
@@ -1240,6 +1289,19 @@ public class HelixClusterManagerTest {
         for (String partitionStr : partitionSet) {
           assertEquals("Mismatch in resource name", resourceName, partitionToResourceMap.get(partitionStr));
         }
+      }
+    }
+    if (cloudDc != null) {
+      // If one cloud DC is present, there should be exactly one virtual replica for every partition.
+      for (PartitionId partitionId : clusterManager.getAllPartitionIds(null)) {
+        List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
+        int count = 0;
+        for (ReplicaId replicaId : replicaIds) {
+          if (replicaId instanceof CloudServiceReplica) {
+            count++;
+          }
+        }
+        assertEquals("Unexpected number of CloudServiceReplicas in partition: " + replicaIds, 1, count);
       }
     }
   }
@@ -1319,7 +1381,7 @@ public class HelixClusterManagerTest {
    */
   private void testPartitionReplicaConsistency() throws Exception {
     for (PartitionId partition : clusterManager.getWritablePartitionIds(null)) {
-      assertEquals(testPartitionLayout.getTotalReplicaCount(), partition.getReplicaIds().size());
+      assertEquals(testPartitionLayout.getTotalReplicaCount() + numCloudDcs, partition.getReplicaIds().size());
       InputStream partitionStream = new ByteBufferInputStream(ByteBuffer.wrap(partition.getBytes()));
       PartitionId fetchedPartition = clusterManager.getPartitionIdFromStream(partitionStream);
       assertEquals(partition, fetchedPartition);
@@ -1393,6 +1455,17 @@ public class HelixClusterManagerTest {
     Pair<Set<String>, Set<String>> writablePartitionsInTwoPlaces = getWritablePartitions();
     assertEquals(writablePartitionsInTwoPlaces.getFirst(), writablePartitionsInTwoPlaces.getSecond());
     testAllPartitions();
+  }
+
+  /**
+   * @param zkJson the JSON to add the datacenter info to.
+   * @param dcId the datacenter ID.
+   * @param cloudDc the dc name
+   */
+  private static void addCloudDc(JSONObject zkJson, byte dcId, String cloudDc) {
+    zkJson.append(ZKINFO_STR, new JSONObject().put(DATACENTER_STR, cloudDc)
+        .put(DATACENTER_ID_STR, dcId)
+        .put(REPLICA_TYPE_STR, ReplicaType.CLOUD_BACKED));
   }
 
   /**

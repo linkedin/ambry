@@ -42,10 +42,10 @@ import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.ThrowingConsumer;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
-import java.util.concurrent.ExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -321,7 +321,7 @@ class FrontendRestRequestService implements RestRequestService {
       frontendMetrics.optionsSecurityResponseTimeInMs.update(
           securityResponseProcessingEndTime - securityRequestProcessingEndTime);
     } catch (Exception e) {
-      exception = extractExecutionExceptionCause(e);
+      exception = Utils.extractExecutionExceptionCause(e);
     }
     submitResponse(restRequest, restResponseChannel, null, exception);
   }
@@ -448,23 +448,6 @@ class FrontendRestRequestService implements RestRequestService {
     if (!isUp) {
       throw new RestServiceException("FrontendRestRequestService unavailable", RestServiceErrorCode.ServiceUnavailable);
     }
-  }
-
-  /**
-   * Extracts the cause of an {@link ExecutionException}. This is used to ensure that the correct
-   * {@link RestServiceErrorCode} is set when using a {@link java.util.concurrent.Future} to wait for a task to
-   * complete.
-   * @param e the {@link Exception}
-   * @return if the cause is {@code null}, return {@code e} itself. If the cause is not an instance
-   *         of exception, return the {@link Throwable} wrapped in an exception. If not {@link ExecutionException},
-   *         retun the exception itself. Otherwise, return the cause {@link Exception}.
-   */
-  private static Exception extractExecutionExceptionCause(Exception e) {
-    if (!(e instanceof ExecutionException)) {
-      return e;
-    }
-    Throwable cause = e.getCause();
-    return cause == null ? e : (cause instanceof Exception ? (Exception) cause : new Exception(cause));
   }
 
   /**
@@ -640,7 +623,7 @@ class FrontendRestRequestService implements RestRequestService {
               exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
           }
         } catch (Exception e) {
-          exception = extractExecutionExceptionCause(e);
+          exception = Utils.extractExecutionExceptionCause(e);
         }
       }
 

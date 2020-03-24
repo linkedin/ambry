@@ -27,6 +27,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.IdealState;
@@ -40,15 +41,15 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
- * A more dynamic implementation of {@link ClusterChangeHandler} which supports adding new nodes/partitions at runtime.
- * It is also able to absorb replica location changes in cluster.
+ * A more dynamic implementation of {@link HelixClusterChangeHandler} which supports adding new nodes/partitions at
+ * runtime. It is also able to absorb replica location changes in cluster.
  */
-public class DynamicClusterChangeHandler implements ClusterChangeHandler {
+public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
   private final String dcName;
   private final Object notificationLock = new Object();
   private final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final AtomicLong sealedStateChangeCounter;
-  private final ConcurrentHashMap<String, Exception> initializationFailureMap;
+  private final Consumer<Exception> onInitializationFailure;
   private final ClusterMapConfig clusterMapConfig;
   private final String selfInstanceName;
   private final Map<String, Map<String, String>> partitionOverrideInfoMap;
@@ -80,15 +81,15 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
    * @param helixClusterManagerCallback a call back used to query cluster-wide info.
    * @param clusterChangeHandlerCallback a call back that allows current handler to update cluster-wide info.
    * @param helixClusterManagerMetrics metrics to keep track of changes and status of {@link HelixClusterManager}.
-   * @param initializationFailureMap a map recording failure associate with each dc during initialization.
+   * @param onInitializationFailure callback to be called if initialization fails in a listener call.
    * @param sealedStateChangeCounter a counter indicating if sealed state of any partition has changed.
    */
   DynamicClusterChangeHandler(ClusterMapConfig clusterMapConfig, String dcName, String selfInstanceName,
       Map<String, Map<String, String>> partitionOverrideInfoMap,
       HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback,
       HelixClusterManager.ClusterChangeHandlerCallback clusterChangeHandlerCallback,
-      HelixClusterManagerMetrics helixClusterManagerMetrics,
-      ConcurrentHashMap<String, Exception> initializationFailureMap, AtomicLong sealedStateChangeCounter) {
+      HelixClusterManagerMetrics helixClusterManagerMetrics, Consumer<Exception> onInitializationFailure,
+      AtomicLong sealedStateChangeCounter) {
     this.clusterMapConfig = clusterMapConfig;
     this.dcName = dcName;
     this.selfInstanceName = selfInstanceName;
@@ -96,7 +97,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
     this.helixClusterManagerCallback = helixClusterManagerCallback;
     this.clusterChangeHandlerCallback = clusterChangeHandlerCallback;
     this.helixClusterManagerMetrics = helixClusterManagerMetrics;
-    this.initializationFailureMap = initializationFailureMap;
+    this.onInitializationFailure = onInitializationFailure;
     this.sealedStateChangeCounter = sealedStateChangeCounter;
   }
 
@@ -125,7 +126,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
         } catch (Exception e) {
           if (!instanceConfigInitialized) {
             logger.error("Exception occurred when initializing instances in {}: ", dcName, e);
-            initializationFailureMap.putIfAbsent(dcName, e);
+            onInitializationFailure.accept(e);
           } else {
             logger.error("Exception occurred at runtime when handling instance config changes in {}: ", dcName, e);
           }
@@ -361,7 +362,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, dataNode, replicaCapacity);
             // create new replica belonging to this partition
             AmbryReplica replica =
-                new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
+                new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
                     replicaCapacity, sealedReplicas.contains(partitionName));
             updateReplicaStateAndOverrideIfNeeded(replica, sealedReplicas, stoppedReplicas);
             // add new created replica to "replicasFromInstanceConfig" map
@@ -428,7 +429,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
     String instanceName = instanceConfig.getInstanceName();
     logger.info("Adding node {} and its disks and replicas in {}", instanceName, dcName);
     AmbryDataNode datanode =
-        new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
+        new AmbryServerDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
             Integer.parseInt(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig),
             getHttp2PortStr(instanceConfig), getXid(instanceConfig), helixClusterManagerCallback);
     // for new instance, we first set it to unavailable and rely on its participation to update its liveness
@@ -493,7 +494,7 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
                 .equals(ClusterMapUtils.READ_ONLY_STR);
           }
           AmbryReplica replica =
-              new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
+              new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
                   replicaCapacity, isSealed);
           ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);
           clusterChangeHandlerCallback.addReplicasToPartition(mappedPartition, Collections.singletonList(replica));

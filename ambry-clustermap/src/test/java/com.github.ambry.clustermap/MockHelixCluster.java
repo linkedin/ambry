@@ -158,6 +158,11 @@ public class MockHelixCluster {
     for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
       upInstances.addAll(helixAdmin.getUpInstances());
     }
+    // add cloud datanodes
+    dataCenterToZkAddress.values()
+        .stream()
+        .filter(info -> info.getReplicaType() == ReplicaType.CLOUD_BACKED)
+        .forEach(info -> upInstances.add(ClusterMapUtils.getInstanceName(info.getDcName(), UNKNOWN_PORT)));
     return upInstances;
   }
 
