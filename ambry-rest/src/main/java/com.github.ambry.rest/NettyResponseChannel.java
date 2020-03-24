@@ -289,7 +289,9 @@ class NettyResponseChannel implements RestResponseChannel {
       responseMetadata.headers().set(headerName, headerValue);
       if (responseMetadataWriteInitiated.get()) {
         nettyMetrics.deadResponseAccessError.inc();
-        throw new IllegalStateException("Response metadata changed after it has already been written to the channel");
+        throw new IllegalStateException(
+            "Response metadata changed after it has already been written to the channel. Channel Active: "
+                + ctx.channel().isActive());
       } else {
         logger.trace("Header {} set to {} for channel {}", headerName, responseMetadata.headers().get(headerName),
             ctx.channel());
