@@ -53,6 +53,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
   private final ClusterMapConfig clusterMapConfig;
   private final String selfInstanceName;
   private final Map<String, Map<String, String>> partitionOverrideInfoMap;
+  private final ConcurrentHashMap<String, ReplicaId> bootstrapReplicas;
   private final HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback;
   private final HelixClusterManager.ClusterChangeHandlerCallback clusterChangeHandlerCallback;
   private final CountDownLatch routingTableInitLatch = new CountDownLatch(1);
@@ -83,13 +84,14 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
    * @param helixClusterManagerMetrics metrics to keep track of changes and status of {@link HelixClusterManager}.
    * @param onInitializationFailure callback to be called if initialization fails in a listener call.
    * @param sealedStateChangeCounter a counter indicating if sealed state of any partition has changed.
+   * @param bootstrapReplicas a map recording bootstrap replicas created on current node (only applicable to server)
    */
   DynamicClusterChangeHandler(ClusterMapConfig clusterMapConfig, String dcName, String selfInstanceName,
       Map<String, Map<String, String>> partitionOverrideInfoMap,
       HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback,
       HelixClusterManager.ClusterChangeHandlerCallback clusterChangeHandlerCallback,
       HelixClusterManagerMetrics helixClusterManagerMetrics, Consumer<Exception> onInitializationFailure,
-      AtomicLong sealedStateChangeCounter) {
+      AtomicLong sealedStateChangeCounter, ConcurrentHashMap<String, ReplicaId> bootstrapReplicas) {
     this.clusterMapConfig = clusterMapConfig;
     this.dcName = dcName;
     this.selfInstanceName = selfInstanceName;
@@ -99,6 +101,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
     this.helixClusterManagerMetrics = helixClusterManagerMetrics;
     this.onInitializationFailure = onInitializationFailure;
     this.sealedStateChangeCounter = sealedStateChangeCounter;
+    this.bootstrapReplicas = bootstrapReplicas;
   }
 
   /**
@@ -360,10 +363,20 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
             // Ensure only one AmbryPartition instance exists for specific partition.
             mappedPartition = clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaCapacity);
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, dataNode, replicaCapacity);
-            // create new replica belonging to this partition
-            AmbryReplica replica =
-                new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
-                    replicaCapacity, sealedReplicas.contains(partitionName));
+            // create new replica belonging to this partition or find the existing replica from bootstrapReplicas map.
+            AmbryReplica replica;
+            if (selfInstanceName.equals(instanceName)) {
+              // if this is a newly added replica on current instance, it should be present in bootstrapReplicas map.
+              replica = (AmbryReplica) bootstrapReplicas.remove(mappedPartition.toPathString());
+              if (replica == null) {
+                logger.warn("Replica {} is not present in bootstrap replica set, skip adding it to clustermap",
+                    mappedPartition.toPathString());
+                continue;
+              }
+            } else {
+              replica = new AmbryServerReplica(clusterMapConfig, mappedPartition, disk,
+                  stoppedReplicas.contains(partitionName), replicaCapacity, sealedReplicas.contains(partitionName));
+            }
             updateReplicaStateAndOverrideIfNeeded(replica, sealedReplicas, stoppedReplicas);
             // add new created replica to "replicasFromInstanceConfig" map
             replicasFromInstanceConfig.put(partitionName, replica);

@@ -73,6 +73,7 @@ public class HelixClusterManager implements ClusterMap {
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   private final PartitionSelectionHelper partitionSelectionHelper;
   private final Map<String, Map<String, String>> partitionOverrideInfoMap = new HashMap<>();
+  private final ConcurrentHashMap<String, ReplicaId> bootstrapReplicas = new ConcurrentHashMap<>();
   private ZkHelixPropertyStore<ZNRecord> helixPropertyStoreInLocalDc = null;
   // The current xid currently does not change after instantiation. This can change in the future, allowing the cluster
   // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
@@ -118,7 +119,7 @@ public class HelixClusterManager implements ClusterMap {
             new DatacenterInitializer(clusterMapConfig, localManager, helixFactory, dcZkInfo, selfInstanceName,
                 partitionOverrideInfoMap, clusterChangeHandlerCallback, helixClusterManagerCallback,
                 helixClusterManagerMetrics, sealedStateChangeCounter, partitionMap, partitionNameToAmbryPartition,
-                ambryPartitionToAmbryReplicas);
+                ambryPartitionToAmbryReplicas, bootstrapReplicas);
         initializer.start();
         initializers.add(initializer);
       }
@@ -424,10 +425,13 @@ public class HelixClusterManager implements ClusterMap {
     }
     long replicaCapacity = Long.parseLong(replicaInfos.get(REPLICAS_CAPACITY_STR));
     String partitionClass = replicaInfos.get(PARTITION_CLASS_STR);
-    AmbryPartition mappedPartition = partitionNameToAmbryPartition.get(partitionIdStr);
-    if (mappedPartition == null) {
-      logger.info("Partition {} is currently not present in cluster map, creating a new partition.", partitionIdStr);
-      mappedPartition = new AmbryPartition(Long.parseLong(partitionIdStr), partitionClass, helixClusterManagerCallback);
+    AmbryPartition mappedPartition = new AmbryPartition(Long.parseLong(partitionIdStr), partitionClass,
+        helixClusterManagerCallback);
+    AmbryPartition currentPartition =
+        partitionNameToAmbryPartition.putIfAbsent(mappedPartition.toPathString(), mappedPartition);
+    if (currentPartition == null) {
+      logger.info("Partition {} is currently not present in cluster map, a new partition is created", partitionIdStr);
+      currentPartition = mappedPartition;
     }
     // Check if data node or disk is in current cluster map, if not, set bootstrapReplica to null.
     ClusterChangeHandler localClusterChangeHandler =
@@ -441,7 +445,7 @@ public class HelixClusterManager implements ClusterMap {
     if (potentialDisk.isPresent()) {
       try {
         bootstrapReplica =
-            new AmbryServerReplica(clusterMapConfig, mappedPartition, potentialDisk.get(), true, replicaCapacity,
+            new AmbryServerReplica(clusterMapConfig, currentPartition, potentialDisk.get(), true, replicaCapacity,
                 false);
       } catch (Exception e) {
         logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
@@ -451,6 +455,15 @@ public class HelixClusterManager implements ClusterMap {
     } else {
       logger.error(
           "Either datanode or disk that associated with bootstrap replica is not found in cluster map. Cannot create the replica.");
+    }
+    // For now this method is only called by server to which new replica will be added. So if datanode equals to current
+    // node, we temporarily add this into a map (because we don't know if the new replica can be added into storage
+    // manager successfully). After replica addition succeeds, current node will update InstanceConfig and will receive
+    // notification from Helix. At that time, we move replica from this map to clustermap related data structures that
+    // can be queried by other components.
+    if (bootstrapReplica != null && instanceName.equals(selfInstanceName)) {
+      // Note that this method might be called by several state transition threads concurrently.
+      bootstrapReplicas.put(currentPartition.toPathString(), bootstrapReplica);
     }
     return bootstrapReplica;
   }
@@ -537,8 +550,7 @@ public class HelixClusterManager implements ClusterMap {
     for (DcInfo dcInfo : dcToDcInfo.values()) {
       ClusterChangeHandler handler = dcInfo.clusterChangeHandler;
       if (handler instanceof HelixClusterChangeHandler) {
-        dcToRoutingTableSnapshot.put(dcInfo.dcName,
-            ((HelixClusterChangeHandler) handler).getRoutingTableSnapshot());
+        dcToRoutingTableSnapshot.put(dcInfo.dcName, ((HelixClusterChangeHandler) handler).getRoutingTableSnapshot());
       }
     }
     return Collections.unmodifiableMap(dcToRoutingTableSnapshot);
