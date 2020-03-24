@@ -664,6 +664,7 @@ public class NettyResponseChannelTest {
     Future<Long> future = nettyResponseChannel.write(Unpooled.buffer(1), null);
     try {
       future.get();
+      fail("Future.get() should throw exception.");
     } catch (InterruptedException | ExecutionException e) {
       assertTrue("Should be ClosedChannelException", e.getCause() instanceof ClosedChannelException);
     }
@@ -1748,7 +1749,7 @@ class ChannelWriteCallback implements Callback<Long> {
 }
 
 /**
- * Mock class for ChannelHandlerContext used in .
+ * Mock class for ChannelHandlerContext used in channelInactiveTest.
  */
 class MockChannelHandlerContext implements ChannelHandlerContext {
   private final EmbeddedChannel embeddedChannel;
