@@ -148,6 +148,22 @@ class NettyResponseChannel implements RestResponseChannel {
     if (!responseMetadataWriteInitiated.get()) {
       maybeWriteResponseMetadata(responseMetadata, new ResponseMetadataWriteListener());
     }
+    if (finalResponseMetadata == null) {
+      // If finalResponseMetadata is still null, it indicates channel becomes inactive.
+      if (ctx.channel().isActive()) {
+        logger.warn("Channel should be inactive status. {}", ctx.channel());
+        nettyMetrics.channelStatusInconsistentCount.inc();
+      } else {
+        logger.debug("Scheduling a chunk cleanup on channel {} because response channel is closed.", ctx.channel());
+        writeFuture.addListener(new CleanupCallback(new ClosedChannelException()));
+      }
+      FutureResult<Long> future = new FutureResult<Long>();
+      future.done(0L, new ClosedChannelException());
+      if (callback != null) {
+        callback.onCompletion(0L, new ClosedChannelException());
+      }
+      return future;
+    }
     Chunk chunk = new Chunk(src, callback);
     chunksToWrite.add(chunk);
     if (HttpUtil.isContentLengthSet(finalResponseMetadata) && totalBytesReceived.get() > HttpUtil.getContentLength(
@@ -273,7 +289,9 @@ class NettyResponseChannel implements RestResponseChannel {
       responseMetadata.headers().set(headerName, headerValue);
       if (responseMetadataWriteInitiated.get()) {
         nettyMetrics.deadResponseAccessError.inc();
-        throw new IllegalStateException("Response metadata changed after it has already been written to the channel");
+        throw new IllegalStateException(
+            "Response metadata changed after it has already been written to the channel. Channel Active: "
+                + ctx.channel().isActive());
       } else {
         logger.trace("Header {} set to {} for channel {}", headerName, responseMetadata.headers().get(headerName),
             ctx.channel());
@@ -427,7 +445,7 @@ class NettyResponseChannel implements RestResponseChannel {
       GenericFutureListener<ChannelFuture> listener) {
     long writeProcessingStartTime = System.currentTimeMillis();
     boolean writtenThisTime = false;
-    if (responseMetadataWriteInitiated.compareAndSet(false, true) && ctx.channel().isActive()) {
+    if (ctx.channel().isActive() && responseMetadataWriteInitiated.compareAndSet(false, true)) {
       // we do some manipulation here for chunking. According to the HTTP spec, we can have either a Content-Length
       // or Transfer-Encoding:chunked, never both. So we check for Content-Length - if it is not there, we add
       // Transfer-Encoding:chunked on 200 response. Note that sending HttpContent chunks data anyway - we are just
@@ -800,8 +818,8 @@ class NettyResponseChannel implements RestResponseChannel {
       writeCompleteThreshold = totalBytesReceived.addAndGet(bytesToBeWritten);
       chunksToWriteCount.incrementAndGet();
 
-      // if we are here, it means that finalResponseMetadata has been set and there is no danger of it being null
-      long contentLength = HttpUtil.getContentLength(finalResponseMetadata, -1);
+      // if channel becomes inactive, no one set finalResponseMetadata. It's possible finalResponseMetadata is null.
+      long contentLength = finalResponseMetadata == null ? -1 : HttpUtil.getContentLength(finalResponseMetadata, -1);
       isLast = contentLength != -1 && writeCompleteThreshold >= contentLength;
     }
 

@@ -21,12 +21,19 @@ import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandler;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.ChannelProgressivePromise;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.DefaultChannelProgressivePromise;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.embedded.EmbeddedChannel;
@@ -47,7 +54,11 @@ import io.netty.handler.codec.http.HttpStatusClass;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.Attribute;
+import io.netty.util.AttributeKey;
+import io.netty.util.concurrent.EventExecutor;
 import java.io.IOException;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.text.ParseException;
@@ -634,6 +645,29 @@ public class NettyResponseChannelTest {
     while (channel.readOutbound() != null) {
     }
     assertFalse("Channel should be closed", channel.isOpen());
+  }
+
+  /**
+   * ClosedChannelException is expected when write to a NettyResponseChannel and channel is inactive.
+   */
+  @Test
+  public void channelInactiveTest() {
+    // request is keep-alive by default.
+    HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.Close.toString());
+    ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
+    EmbeddedChannel channel = new EmbeddedChannel(chunkedWriteHandler);
+    NettyResponseChannel nettyResponseChannel =
+        new NettyResponseChannel(new MockChannelHandlerContext(channel), new NettyMetrics(new MetricRegistry()),
+            new PerformanceConfig(new VerifiableProperties(new Properties())));
+    channel.disconnect().awaitUninterruptibly();
+    assertFalse("Channel should be closed", channel.isOpen());
+    Future<Long> future = nettyResponseChannel.write(Unpooled.buffer(1), null);
+    try {
+      future.get();
+      fail("Future.get() should throw exception.");
+    } catch (InterruptedException | ExecutionException e) {
+      assertTrue("Should be ClosedChannelException", e.getCause() instanceof ClosedChannelException);
+    }
   }
 
   // helpers
@@ -1713,3 +1747,221 @@ class ChannelWriteCallback implements Callback<Long> {
     }
   }
 }
+
+/**
+ * Mock class for ChannelHandlerContext used in channelInactiveTest.
+ */
+class MockChannelHandlerContext implements ChannelHandlerContext {
+  private final EmbeddedChannel embeddedChannel;
+
+  MockChannelHandlerContext(EmbeddedChannel embeddedChannel) {
+    this.embeddedChannel = embeddedChannel;
+  }
+
+  @Override
+  public Channel channel() {
+    return embeddedChannel;
+  }
+
+  @Override
+  public EventExecutor executor() {
+    return null;
+  }
+
+  @Override
+  public String name() {
+    return null;
+  }
+
+  @Override
+  public ChannelHandler handler() {
+    return null;
+  }
+
+  @Override
+  public boolean isRemoved() {
+    return false;
+  }
+
+  @Override
+  public ChannelHandlerContext fireChannelRegistered() {
+    return null;
+  }
+
+  @Override
+  public ChannelHandlerContext fireChannelUnregistered() {
+    return null;
+  }
+
+  @Override
+  public ChannelHandlerContext fireChannelActive() {
+    return null;
+  }
+
+  @Override
+  public ChannelHandlerContext fireChannelInactive() {
+    return null;
+  }
+
+  @Override
+  public ChannelHandlerContext fireExceptionCaught(Throwable cause) {
+    return null;
+  }
+
+  @Override
+  public ChannelHandlerContext fireUserEventTriggered(Object evt) {
+    return null;
+  }
+
+  @Override
+  public ChannelHandlerContext fireChannelRead(Object msg) {
+    return null;
+  }
+
+  @Override
+  public ChannelHandlerContext fireChannelReadComplete() {
+    return null;
+  }
+
+  @Override
+  public ChannelHandlerContext fireChannelWritabilityChanged() {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture bind(SocketAddress localAddress) {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture connect(SocketAddress remoteAddress) {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture connect(SocketAddress remoteAddress, SocketAddress localAddress) {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture disconnect() {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture close() {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture deregister() {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture connect(SocketAddress remoteAddress, ChannelPromise promise) {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture connect(SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture disconnect(ChannelPromise promise) {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture close(ChannelPromise promise) {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture deregister(ChannelPromise promise) {
+    return null;
+  }
+
+  @Override
+  public ChannelHandlerContext read() {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture write(Object msg) {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture write(Object msg, ChannelPromise promise) {
+    return null;
+  }
+
+  @Override
+  public ChannelHandlerContext flush() {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture writeAndFlush(Object msg, ChannelPromise promise) {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture writeAndFlush(Object msg) {
+    return null;
+  }
+
+  @Override
+  public ChannelPromise newPromise() {
+    return null;
+  }
+
+  @Override
+  public ChannelProgressivePromise newProgressivePromise() {
+    return new DefaultChannelProgressivePromise(embeddedChannel);
+  }
+
+  @Override
+  public ChannelFuture newSucceededFuture() {
+    return null;
+  }
+
+  @Override
+  public ChannelFuture newFailedFuture(Throwable cause) {
+    return null;
+  }
+
+  @Override
+  public ChannelPromise voidPromise() {
+    return null;
+  }
+
+  @Override
+  public ChannelPipeline pipeline() {
+    return embeddedChannel.pipeline();
+  }
+
+  @Override
+  public ByteBufAllocator alloc() {
+    return null;
+  }
+
+  @Override
+  public <T> Attribute<T> attr(AttributeKey<T> key) {
+    return null;
+  }
+
+  @Override
+  public <T> boolean hasAttr(AttributeKey<T> key) {
+    return false;
+  }
+}
+
+

@@ -134,6 +134,7 @@ public class NettyMetrics {
   public final Counter requestTooLargeCount;
   public final Counter throwableCount;
   public final Counter unknownResponseStatusCount;
+  public final Counter channelStatusInconsistentCount;
   // NettyServer
   public final Histogram nettyServerShutdownTimeInMs;
   public final Histogram nettyServerStartTimeInMs;
@@ -318,6 +319,8 @@ public class NettyMetrics {
     throwableCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ThrowableCount"));
     unknownResponseStatusCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "UnknownResponseStatusCount"));
+    channelStatusInconsistentCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ChannelStatusInconsistentCount"));
     // NettyServer
     nettyServerShutdownTimeInMs = metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "ShutdownTimeInMs"));
     nettyServerStartTimeInMs = metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "StartTimeInMs"));
