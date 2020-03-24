@@ -443,7 +443,7 @@ class NettyResponseChannel implements RestResponseChannel {
       GenericFutureListener<ChannelFuture> listener) {
     long writeProcessingStartTime = System.currentTimeMillis();
     boolean writtenThisTime = false;
-    if (responseMetadataWriteInitiated.compareAndSet(false, true) && ctx.channel().isActive()) {
+    if (ctx.channel().isActive() && responseMetadataWriteInitiated.compareAndSet(false, true)) {
       // we do some manipulation here for chunking. According to the HTTP spec, we can have either a Content-Length
       // or Transfer-Encoding:chunked, never both. So we check for Content-Length - if it is not there, we add
       // Transfer-Encoding:chunked on 200 response. Note that sending HttpContent chunks data anyway - we are just
