@@ -55,6 +55,7 @@ public class ClusterChangeHandlerTest {
   private final String clusterNameStatic = "ClusterChangeHandlerTest";
   private final MockHelixCluster helixCluster;
   private final String selfInstanceName;
+  private final DataNode currentNode;
   private final String localDc;
   private final String remoteDc;
   private final boolean overrideEnabled;
@@ -63,7 +64,7 @@ public class ClusterChangeHandlerTest {
   private final TestHardwareLayout testHardwareLayout;
   private final TestPartitionLayout testPartitionLayout;
   private final Map<String, Map<String, String>> partitionOverrideMap = new HashMap<>();
-  private final ZNRecord znRecord = new ZNRecord(PARTITION_OVERRIDE_STR);
+  private final Map<String, ZNRecord> znRecordMap = new HashMap<>();
   private final HelixClusterManagerTest.MockHelixManagerFactory helixManagerFactory;
   private final Properties props = new Properties();
 
@@ -101,11 +102,11 @@ public class ClusterChangeHandlerTest {
     int partitionIndexToOverride = random.nextInt(testPartitionLayout.getPartitionCount());
     partitionOverrideMap.computeIfAbsent(String.valueOf(partitionIndexToOverride), k -> new HashMap<>())
         .put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_ONLY_STR);
+    ZNRecord znRecord = new ZNRecord(PARTITION_OVERRIDE_STR);
     znRecord.setMapFields(partitionOverrideMap);
-    Map<String, ZNRecord> znRecordMap = new HashMap<>();
     znRecordMap.put(PARTITION_OVERRIDE_ZNODE_PATH, znRecord);
 
-    DataNode currentNode = testHardwareLayout.getRandomDataNodeFromDc(localDc);
+    currentNode = testHardwareLayout.getRandomDataNodeFromDc(localDc);
     String hostname = currentNode.getHostname();
     int portNum = currentNode.getPort();
     selfInstanceName = getInstanceName(hostname, portNum);
@@ -277,18 +278,15 @@ public class ClusterChangeHandlerTest {
     assertEquals("Number of data nodes is not expected", dataNodesInLayout.size(),
         helixClusterManager.getDataNodeIds().size());
 
-    // pick up 2 existing nodes from each dc
+    // pick up 2 existing nodes from each dc (also the nodes from local dc should be different from currentNode)
     List<DataNode> nodesToHostNewPartition = new ArrayList<>();
-    DataNode localDcNode1 = testHardwareLayout.getRandomDataNodeFromDc(localDc);
-    DataNode localDcNode2;
-    do {
-      localDcNode2 = testHardwareLayout.getRandomDataNodeFromDc(localDc);
-    } while (localDcNode1 == localDcNode2);
-    DataNode remoteDcNode1 = testHardwareLayout.getRandomDataNodeFromDc(remoteDc);
-    DataNode remoteDcNode2;
-    do {
-      remoteDcNode2 = testHardwareLayout.getRandomDataNodeFromDc(remoteDc);
-    } while (remoteDcNode1 == remoteDcNode2);
+    List<DataNode> localDcNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
+    localDcNodes.remove(currentNode);
+    DataNode localDcNode1 = localDcNodes.get(0);
+    DataNode localDcNode2 = localDcNodes.get(localDcNodes.size() - 1);
+    List<DataNode> remoteDcNodes = testHardwareLayout.getAllDataNodesFromDc(remoteDc);
+    DataNode remoteDcNode1 = remoteDcNodes.get(0);
+    DataNode remoteDcNode2 = remoteDcNodes.get(remoteDcNodes.size() - 1);
 
     // add a new node into static layout
     testHardwareLayout.addNewDataNodes(1);
@@ -296,7 +294,7 @@ public class ClusterChangeHandlerTest {
     List<DataNode> newAddedNodes = new ArrayList<>();
     testHardwareLayout.getHardwareLayout().getDatacenters().forEach(dc -> newAddedNodes.addAll(dc.getDataNodes()));
     newAddedNodes.removeAll(dataNodesInLayout);
-    // pick 2 existing nodes and 1 new node from each dc to place replica of new partition
+    // pick 2 existing nodes and 1 new node from each dc to add a replica from new partition
     nodesToHostNewPartition.addAll(Arrays.asList(localDcNode1, localDcNode2));
     nodesToHostNewPartition.addAll(Arrays.asList(remoteDcNode1, remoteDcNode2));
     nodesToHostNewPartition.addAll(newAddedNodes);
@@ -410,9 +408,13 @@ public class ClusterChangeHandlerTest {
     DataNode nodeToAddPartition1 =
         remoteDataCenter.getDataNodes().stream().filter(n -> !remoteNodesForPartition1.contains(n)).findFirst().get();
     testPartitionLayout.addReplicaToPartition(nodeToAddPartition1, (Partition) partition1);
-    // add one replica of partition2 to local dc
-    DataNode nodeToAddPartition2 =
-        localDataCenter.getDataNodes().stream().filter(n -> !localNodesForPartition2.contains(n)).findFirst().get();
+    // add one replica of partition2 to node in local dc (the node should be different to currentNode as we didn't
+    // populate bootstrap replica map for this test)
+    DataNode nodeToAddPartition2 = localDataCenter.getDataNodes()
+        .stream()
+        .filter(n -> !localNodesForPartition2.contains(n) && n != currentNode)
+        .findFirst()
+        .get();
     testPartitionLayout.addReplicaToPartition(nodeToAddPartition2, (Partition) partition2);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
 
@@ -460,8 +462,12 @@ public class ClusterChangeHandlerTest {
         .filter(dc -> dc.getName().equals(localDc))
         .findFirst()
         .get();
-    DataNode nodeToAddReplica =
-        localDatacenter.getDataNodes().stream().filter(node -> !localDcNodes.contains(node)).findFirst().get();
+    // since we didn't populate bootstrap replica map, we have to avoid adding replica to currentNode
+    DataNode nodeToAddReplica = localDatacenter.getDataNodes()
+        .stream()
+        .filter(node -> !localDcNodes.contains(node) && node != currentNode)
+        .findFirst()
+        .get();
     testPartitionLayout.addReplicaToPartition(nodeToAddReplica, testPartition);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // 3. We upgrade helix by adding new replica to the chosen node in local dc. This is to mock "replica addition" on
@@ -489,6 +495,103 @@ public class ClusterChangeHandlerTest {
     assertEquals("Replica count of testing partition is not correct", previousReplicaCnt,
         partitionInManager.getReplicaIds().size());
 
+    helixClusterManager.close();
+  }
+
+  /**
+   * Test the case where current node receives InstanceConfig change triggered by itself due to replica addition. We need
+   * to verify {@link DynamicClusterChangeHandler} will check if new replica from InstanceConfig exists in bootstrap
+   * replica map. The intention here is to avoid creating a second instance of replica on current node.
+   */
+  @Test
+  public void replicaAdditionOnCurrentNodeTest() throws Exception {
+    // create a HelixClusterManager with DynamicClusterChangeHandler
+    Properties properties = new Properties();
+    properties.putAll(props);
+    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
+    // test setup: create 2 new partitions and place its replicas onto nodes that exclude currentNode. This is to avoid
+    // edge case where currentNode already has all partitions in cluster
+    Set<PartitionId> initialPartitionSet = new HashSet<>(testPartitionLayout.getPartitionLayout().getPartitions(null));
+    List<DataNode> nodesToHostNewPartition = new ArrayList<>();
+    List<DataNode> localDcNodes = testHardwareLayout.getAllDataNodesFromDc(localDc)
+        .stream()
+        .filter(node -> node != currentNode)
+        .collect(Collectors.toList());
+    List<DataNode> remoteDcNodes = testHardwareLayout.getAllDataNodesFromDc(remoteDc);
+    nodesToHostNewPartition.addAll(localDcNodes.subList(0, 3));
+    nodesToHostNewPartition.addAll(remoteDcNodes.subList(0, 3));
+    testPartitionLayout.addNewPartition(testHardwareLayout, nodesToHostNewPartition, DEFAULT_PARTITION_CLASS);
+    // add one more new partition
+    testPartitionLayout.addNewPartition(testHardwareLayout, nodesToHostNewPartition, DEFAULT_PARTITION_CLASS);
+    // write new HardwareLayout and PartitionLayout into files
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    // this triggers a InstanceConfig change notification.
+    helixCluster.upgradeWithNewHardwareLayout(hardwareLayoutPath);
+    Set<PartitionId> updatedPartitionSet = new HashSet<>(testPartitionLayout.getPartitionLayout().getPartitions(null));
+    updatedPartitionSet.removeAll(initialPartitionSet);
+    List<PartitionId> addedPartitions = new ArrayList<>(updatedPartitionSet);
+    assertEquals("There should be 2 added partitions", 2, addedPartitions.size());
+    Partition addedPartition1 = (Partition) addedPartitions.get(0);
+    Partition addedPartition2 = (Partition) addedPartitions.get(1);
+    // add one replica of this newly added partition1 to currentNode
+    testPartitionLayout.addReplicaToPartition(currentNode, addedPartition1);
+    // before upgrading Helix, let's save the replica count of test partition to a variable
+    PartitionId partitionInManager = helixClusterManager.getAllPartitionIds(null)
+        .stream()
+        .filter(p -> p.toPathString().equals(addedPartition1.toPathString()))
+        .findFirst()
+        .get();
+    int previousReplicaCnt = partitionInManager.getReplicaIds().size();
+    // test case 1: without populating bootstrap replica, new replica would be skipped on current node (this shouldn't
+    // happen in practice but we still mock this situation to perform exhaustive testing)
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+    assertEquals("Replica count of testing partition shouldn't change", previousReplicaCnt,
+        partitionInManager.getReplicaIds().size());
+    helixClusterManager.close();
+    // test case 2: call getBootstrapReplica in HelixClusterManager to populate bootstrap replica map and then upgrade
+    // Helix again.
+    Map<String, Map<String, String>> partitionToReplicaInfosMap = new HashMap<>();
+    Map<String, String> newReplicaInfos = new HashMap<>();
+    newReplicaInfos.put(PARTITION_CLASS_STR, DEFAULT_PARTITION_CLASS);
+    newReplicaInfos.put(REPLICAS_CAPACITY_STR, String.valueOf(TestPartitionLayout.defaultReplicaCapacityInBytes));
+    newReplicaInfos.put(currentNode.getHostname() + "_" + currentNode.getPort(),
+        currentNode.getDisks().get(0).getMountPath());
+    partitionToReplicaInfosMap.put(addedPartition2.toPathString(), newReplicaInfos);
+    // set ZNRecord
+    ZNRecord replicaInfosZNRecord = new ZNRecord(REPLICA_ADDITION_STR);
+    replicaInfosZNRecord.setMapFields(partitionToReplicaInfosMap);
+    znRecordMap.put(REPLICA_ADDITION_ZNODE_PATH, replicaInfosZNRecord);
+    // create a new HelixClusterManager with replica addition info in Helix
+    helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
+        new HelixClusterManagerTest.MockHelixManagerFactory(helixCluster, znRecordMap, null), new MetricRegistry());
+    ReplicaId bootstrapReplica = helixClusterManager.getBootstrapReplica(addedPartition2.toPathString(), currentNode);
+    assertNotNull("Getting bootstrap replica should succeed", bootstrapReplica);
+    // add replica of new partition2 to currentNode
+    testPartitionLayout.addReplicaToPartition(currentNode, addedPartition2);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+
+    partitionInManager = helixClusterManager.getAllPartitionIds(null)
+        .stream()
+        .filter(p -> p.toPathString().equals(addedPartition2.toPathString()))
+        .findFirst()
+        .get();
+    // this time the new replica should be present in bootstrap replica map and therefore replica count should increase
+    assertEquals("Replica count of testing partition shouldn't change", previousReplicaCnt + 1,
+        partitionInManager.getReplicaIds().size());
+    // verify that the replica instance in HelixClusterManager is same with bootstrap replica instance
+    ReplicaId replicaInManager = helixClusterManager.getReplicaIds(
+        helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort()))
+        .stream()
+        .filter(r -> r.getPartitionId().toPathString().equals(addedPartition2.toPathString()))
+        .findFirst()
+        .get();
+    assertSame("There should be exactly one instance for added replica", replicaInManager, bootstrapReplica);
     helixClusterManager.close();
   }
 

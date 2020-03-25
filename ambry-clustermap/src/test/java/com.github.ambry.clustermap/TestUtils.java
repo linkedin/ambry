@@ -39,20 +39,14 @@ public class TestUtils {
   static final int DEFAULT_XID = 64;
 
   enum ReplicaStateType {
-    SealedState,
-    StoppedState
+    SealedState, StoppedState
   }
 
   /**
    * Resource state associated with datanode, disk and replica.
    */
   enum ResourceState {
-    Node_Up,
-    Node_Down,
-    Disk_Up,
-    Disk_Down,
-    Replica_Up,
-    Replica_Down
+    Node_Up, Node_Down, Disk_Up, Disk_Down, Replica_Up, Replica_Down
   }
 
   public static String getLocalHost() {
@@ -726,6 +720,22 @@ public class TestUtils {
         return null;
       }
       return datacenter.getDataNodes().get(new Random().nextInt(datacenter.getDataNodes().size()));
+    }
+
+    /**
+     * Get all data nodes that are from given data center.
+     * @param dc the data center to get nodes from.
+     * @return a list of nodes from given data center.
+     */
+    public List<DataNode> getAllDataNodesFromDc(String dc) {
+      List<DataNode> dataNodes = new ArrayList<>();
+      for (Datacenter dcObj : hardwareLayout.getDatacenters()) {
+        if (dcObj.getName().equals(dc)) {
+          dataNodes.addAll(dcObj.getDataNodes());
+          break;
+        }
+      }
+      return dataNodes;
     }
 
     public DataNode getRandomDataNode() {

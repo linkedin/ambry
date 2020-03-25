@@ -425,8 +425,8 @@ public class HelixClusterManager implements ClusterMap {
     }
     long replicaCapacity = Long.parseLong(replicaInfos.get(REPLICAS_CAPACITY_STR));
     String partitionClass = replicaInfos.get(PARTITION_CLASS_STR);
-    AmbryPartition mappedPartition = new AmbryPartition(Long.parseLong(partitionIdStr), partitionClass,
-        helixClusterManagerCallback);
+    AmbryPartition mappedPartition =
+        new AmbryPartition(Long.parseLong(partitionIdStr), partitionClass, helixClusterManagerCallback);
     AmbryPartition currentPartition =
         partitionNameToAmbryPartition.putIfAbsent(mappedPartition.toPathString(), mappedPartition);
     if (currentPartition == null) {
@@ -554,6 +554,14 @@ public class HelixClusterManager implements ClusterMap {
       }
     }
     return Collections.unmodifiableMap(dcToRoutingTableSnapshot);
+  }
+
+  /**
+   * Exposed for testing
+   * @return a snapshot of current bootstrap replicas
+   */
+  Map<String, ReplicaId> getBootstrapReplicas() {
+    return Collections.unmodifiableMap(bootstrapReplicas);
   }
 
   /**

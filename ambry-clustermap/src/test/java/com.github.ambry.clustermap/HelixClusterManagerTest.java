@@ -76,6 +76,7 @@ public class HelixClusterManagerTest {
   private final String clusterNameStatic = "HelixClusterManagerTestCluster";
   private final ClusterMapConfig clusterMapConfig;
   private final MockHelixCluster helixCluster;
+  private final DataNode currentNode;
   private final String hostname;
   private final int portNum;
   private final String selfInstanceName;
@@ -204,7 +205,7 @@ public class HelixClusterManagerTest {
       }
     }
 
-    DataNode currentNode = testHardwareLayout.getRandomDataNodeFromDc(localDc);
+    currentNode = testHardwareLayout.getRandomDataNodeFromDc(localDc);
     hostname = currentNode.getHostname();
     portNum = currentNode.getPort();
     selfInstanceName = getInstanceName(hostname, portNum);
@@ -458,18 +459,17 @@ public class HelixClusterManagerTest {
     clusterManager.close();
     metricRegistry = new MetricRegistry();
     // 1. test the case where ZNRecord is NULL in Helix PropertyStore
-    HelixClusterManager helixClusterManager =
-        new HelixClusterManager(clusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
-            metricRegistry);
+    HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
+        new MockHelixManagerFactory(helixCluster, null, null), metricRegistry);
     PartitionId partitionOfNewReplica = helixClusterManager.getAllPartitionIds(null).get(0);
-    DataNode dataNodeOfNewReplica = testHardwareLayout.getAllExistingDataNodes().get(0);
+    DataNode dataNodeOfNewReplica = currentNode;
     assertNull("New replica should be null because no replica infos ZNRecord in Helix",
         helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), dataNodeOfNewReplica));
     helixClusterManager.close();
 
-    // Prepare new replica info map in Helix property store. We use the first partition and first data node in HardwareLayout
-    // and PartitionLayout to build the replica info map of an existing partition. Also, we place a new partition on last
-    // data node in HardwareLayout. The format should be as follows.
+    // Prepare new replica info map in Helix property store. We use the first partition in PartitionLayout and current
+    // node from constructor to build the replica info map of an existing partition. Also, we place a new partition on
+    // last data node in HardwareLayout. The format should be as follows.
     // {
     //   "0":{
     //       "partitionClass" : "defaultPartitionClass"
@@ -496,8 +496,12 @@ public class HelixClusterManagerTest {
     Map<String, String> newReplicaInfos2 = new HashMap<>();
     newReplicaInfos2.put(PARTITION_CLASS_STR, DEFAULT_PARTITION_CLASS);
     newReplicaInfos2.put(REPLICAS_CAPACITY_STR, String.valueOf(TestPartitionLayout.defaultReplicaCapacityInBytes));
-    DataNode dataNodeOfNewPartition =
-        testHardwareLayout.getAllExistingDataNodes().get(testHardwareLayout.getDataNodeCount() - 1);
+    // find a node that is different from currentNode
+    DataNode dataNodeOfNewPartition = testHardwareLayout.getAllExistingDataNodes()
+        .stream()
+        .filter(node -> node.getPort() != currentNode.getPort())
+        .findFirst()
+        .get();
     int diskNum = dataNodeOfNewPartition.getDisks().size();
     newReplicaInfos2.put(dataNodeOfNewPartition.getHostname() + "_" + dataNodeOfNewPartition.getPort(),
         dataNodeOfNewPartition.getDisks().get(diskNum - 1).getMountPath());
@@ -517,7 +521,7 @@ public class HelixClusterManagerTest {
     znRecordMap.put(REPLICA_ADDITION_ZNODE_PATH, replicaInfosZNRecord);
     // create a new cluster manager
     metricRegistry = new MetricRegistry();
-    helixClusterManager = new HelixClusterManager(clusterMapConfig, hostname,
+    helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
         new MockHelixManagerFactory(helixCluster, znRecordMap, null), metricRegistry);
 
     // 2. test that cases: 1) partition is not found  2) host is not found in helix property store that associates with new replica
@@ -549,11 +553,13 @@ public class HelixClusterManagerTest {
     //    3.3 test replica is created for new partition
     assertNotNull("New replica should be created successfully",
         helixClusterManager.getBootstrapReplica(NEW_PARTITION_ID_STR, dataNodeOfNewPartition));
-
+    // verify that boostrap replica map is empty because recently added replica is not on current node
+    assertTrue("Bootstrap replica map should be empty", helixClusterManager.getBootstrapReplicas().isEmpty());
     // 4. test that new replica of existing partition is successfully created based on infos from Helix property store.
     assertNotNull("New replica should be created successfully",
         helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), dataNodeOfNewReplica));
-
+    assertEquals("There should be exactly one entry in bootstrap replica map", 1,
+        helixClusterManager.getBootstrapReplicas().size());
     helixClusterManager.close();
   }
 
@@ -702,7 +708,7 @@ public class HelixClusterManagerTest {
     List<? extends PartitionId> defaultPartitionIds = helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS);
     PartitionId partitionToChange = defaultPartitionIds.get((new Random()).nextInt(defaultPartitionIds.size()));
     String currentLeaderInstance = mockHelixAdmin.getPartitionToLeaderReplica().get(partitionToChange.toPathString());
-    int currentLeaderPort = Integer.valueOf(currentLeaderInstance.split("_")[1]);
+    int currentLeaderPort = Integer.parseInt(currentLeaderInstance.split("_")[1]);
     String newLeaderInstance = mockHelixAdmin.getInstancesForPartition(partitionToChange.toPathString())
         .stream()
         .filter(k -> !k.equals(currentLeaderInstance))
