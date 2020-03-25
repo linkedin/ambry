@@ -159,7 +159,9 @@ class NettyResponseChannel implements RestResponseChannel {
       }
       FutureResult<Long> future = new FutureResult<Long>();
       future.done(0L, new ClosedChannelException());
-      callback.onCompletion(0L, new ClosedChannelException());
+      if (callback != null) {
+        callback.onCompletion(0L, new ClosedChannelException());
+      }
       return future;
     }
     Chunk chunk = new Chunk(src, callback);
