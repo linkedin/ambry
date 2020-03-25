@@ -152,12 +152,14 @@ class NettyResponseChannel implements RestResponseChannel {
       // If finalResponseMetadata is still null, it indicates channel becomes inactive.
       if (ctx.channel().isActive()) {
         logger.warn("Channel should be inactive status. {}", ctx.channel());
+        nettyMetrics.channelStatusInconsistent.mark();
       } else {
         logger.debug("Scheduling a chunk cleanup on channel {} because response channel is closed.", ctx.channel());
         writeFuture.addListener(new CleanupCallback(new ClosedChannelException()));
       }
       FutureResult<Long> future = new FutureResult<Long>();
-      future.done(-1L, null);
+      future.done(0L, new ClosedChannelException());
+      callback.onCompletion(0L, new ClosedChannelException());
       return future;
     }
     Chunk chunk = new Chunk(src, callback);

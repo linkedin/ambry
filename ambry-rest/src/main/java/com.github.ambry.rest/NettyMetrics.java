@@ -37,6 +37,7 @@ public class NettyMetrics {
   public final Meter channelDestructionRate;
   public final Meter requestArrivalRate;
   public final Meter multipartPostRequestRate;
+  public final Meter channelStatusInconsistent;
   // NettyResponseChannel
   public final Meter bytesWriteRate;
   public final Meter requestCompletionRate;
@@ -170,6 +171,8 @@ public class NettyMetrics {
     publicAccessLogRequestRate =
         metricRegistry.meter(MetricRegistry.name(PublicAccessLogHandler.class, "RequestArrivalRate"));
     healthCheckRequestRate = metricRegistry.meter(MetricRegistry.name(HealthCheckHandler.class, "RequestArrivalRate"));
+    channelStatusInconsistent =
+        metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "ChannelStatusInconsistent"));
 
     // Latencies
     // NettyMessageProcessor
