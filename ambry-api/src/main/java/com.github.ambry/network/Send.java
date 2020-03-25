@@ -52,7 +52,7 @@ public interface Send {
   long sizeInBytes();
 
   /**
-   * Release all the resource this object holds.
+   * Release all the resource this object holds. Make this a default method so subclasses don't have to override it.
    */
   default void release() {}
 }
