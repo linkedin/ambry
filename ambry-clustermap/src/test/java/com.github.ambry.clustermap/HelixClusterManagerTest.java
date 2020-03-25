@@ -554,12 +554,12 @@ public class HelixClusterManagerTest {
     assertNotNull("New replica should be created successfully",
         helixClusterManager.getBootstrapReplica(NEW_PARTITION_ID_STR, dataNodeOfNewPartition));
     // verify that boostrap replica map is empty because recently added replica is not on current node
-    assertTrue("Bootstrap replica map should be empty", helixClusterManager.getBootstrapReplicas().isEmpty());
+    assertTrue("Bootstrap replica map should be empty", helixClusterManager.getBootstrapReplicaMap().isEmpty());
     // 4. test that new replica of existing partition is successfully created based on infos from Helix property store.
     assertNotNull("New replica should be created successfully",
         helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), dataNodeOfNewReplica));
     assertEquals("There should be exactly one entry in bootstrap replica map", 1,
-        helixClusterManager.getBootstrapReplicas().size());
+        helixClusterManager.getBootstrapReplicaMap().size());
     helixClusterManager.close();
   }
 

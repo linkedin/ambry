@@ -278,7 +278,7 @@ public class ClusterChangeHandlerTest {
     assertEquals("Number of data nodes is not expected", dataNodesInLayout.size(),
         helixClusterManager.getDataNodeIds().size());
 
-    // pick up 2 existing nodes from each dc (also the nodes from local dc should be different from currentNode)
+    // pick 2 existing nodes from each dc (also the nodes from local dc should be different from currentNode)
     List<DataNode> nodesToHostNewPartition = new ArrayList<>();
     List<DataNode> localDcNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
     localDcNodes.remove(currentNode);

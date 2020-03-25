@@ -39,14 +39,24 @@ public class TestUtils {
   static final int DEFAULT_XID = 64;
 
   enum ReplicaStateType {
-    SealedState, StoppedState
+    // @formatter:off
+    SealedState,
+    StoppedState
+    // @formatter:om
   }
 
   /**
    * Resource state associated with datanode, disk and replica.
    */
   enum ResourceState {
-    Node_Up, Node_Down, Disk_Up, Disk_Down, Replica_Up, Replica_Down
+    // @formatter:off
+    Node_Up,
+    Node_Down,
+    Disk_Up,
+    Disk_Down,
+    Replica_Up,
+    Replica_Down
+    // @formatter:on
   }
 
   public static String getLocalHost() {

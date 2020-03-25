@@ -456,11 +456,11 @@ public class HelixClusterManager implements ClusterMap {
       logger.error(
           "Either datanode or disk that associated with bootstrap replica is not found in cluster map. Cannot create the replica.");
     }
-    // For now this method is only called by server to which new replica will be added. So if datanode equals to current
-    // node, we temporarily add this into a map (because we don't know if the new replica can be added into storage
-    // manager successfully). After replica addition succeeds, current node will update InstanceConfig and will receive
-    // notification from Helix. At that time, we move replica from this map to clustermap related data structures that
-    // can be queried by other components.
+    // For now this method is only called by server which new replica will be added to. So if datanode equals to current
+    // node, we temporarily add this into a map (because we don't know whether store addition in storage manager
+    // succeeds or not). After store addition succeeds, current node is supposed to update InstanceConfig and will
+    // receive notification from Helix afterwards. At that time, dynamic cluster change handler will move replica from
+    // this map to clustermap related data structures that can be queried by other components.
     if (bootstrapReplica != null && instanceName.equals(selfInstanceName)) {
       // Note that this method might be called by several state transition threads concurrently.
       bootstrapReplicas.put(currentPartition.toPathString(), bootstrapReplica);
@@ -558,9 +558,9 @@ public class HelixClusterManager implements ClusterMap {
 
   /**
    * Exposed for testing
-   * @return a snapshot of current bootstrap replicas
+   * @return a snapshot of current bootstrap replica map
    */
-  Map<String, ReplicaId> getBootstrapReplicas() {
+  Map<String, ReplicaId> getBootstrapReplicaMap() {
     return Collections.unmodifiableMap(bootstrapReplicas);
   }
 
