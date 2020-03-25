@@ -303,8 +303,9 @@ class CloudBlobStore implements Store {
         // If buffer was encrypted, we no longer know its size
         long bufferLen = (encryptedSize == -1) ? size : encryptedSize;
         InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
-        requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, bufferLen, blobMetadata, uploadInputStream),
-            "Upload", partitionId.toPathString());
+        requestAgent.doWithRetries(
+            () -> cloudDestination.uploadBlob(blobId, bufferLen, blobMetadata, uploadInputStream), "Upload",
+            partitionId.toPathString());
       } else {
         // Upload blob as is
         CloudBlobMetadata blobMetadata =
@@ -341,12 +342,20 @@ class CloudBlobStore implements Store {
       return false;
     }
     if (recentBlobCache.containsKey(messageInfo.getStoreKey().getID())) {
+      vcrMetrics.blobCacheHitCount.inc();
       return false;
     }
-    // expiration time above threshold. Expired blobs are blocked by ReplicaThread.
-    // FIXME: for !isVcr, ignore expiration time
-    return (messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time
-        || messageInfo.getExpirationTimeInMs() - messageInfo.getOperationTimeMs() >= minTtlMillis);
+    if (isVcr) {
+      // VCR only backs up blobs with expiration time above threshold.
+      // Expired blobs are blocked by ReplicaThread.
+      // TODO: VCR for non-backup also needs to replicate everything
+      // We can change default cloudConfig.vcrMinTtlDays to 0 and override in config
+      return (messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time
+          || messageInfo.getExpirationTimeInMs() - messageInfo.getOperationTimeMs() >= minTtlMillis);
+    } else {
+      // Upload all live blobs
+      return true;
+    }
   }
 
   @Override
@@ -363,6 +372,8 @@ class CloudBlobStore implements Store {
           requestAgent.doWithRetries(() -> cloudDestination.deleteBlob(blobId, msgInfo.getOperationTimeMs()), "Delete",
               partitionId.toPathString());
           addToCache(blobKey, BlobState.DELETED);
+        } else {
+          vcrMetrics.blobCacheHitCount.inc();
         }
       }
     } catch (CloudStorageException ex) {
@@ -397,6 +408,8 @@ class CloudBlobStore implements Store {
             requestAgent.doWithRetries(() -> cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time),
                 "UpdateTtl", partitionId.toPathString());
             addToCache(blobId.getID(), BlobState.TTL_UPDATED);
+          } else {
+            vcrMetrics.blobCacheHitCount.inc();
           }
         } else {
           logger.error("updateTtl() is called but msgInfo.isTtlUpdated is not set. msgInfo: {}", msgInfo);
@@ -463,12 +476,12 @@ class CloudBlobStore implements Store {
         .filter(key -> !recentBlobCache.containsKey(key.getID()))
         .map(key -> (BlobId) key)
         .collect(Collectors.toList());
+    vcrMetrics.blobCacheHitCount.inc(keys.size() - blobIdQueryList.size());
     if (blobIdQueryList.isEmpty()) {
       // Cool, the cache did its job and eliminated a Cosmos query!
       return Collections.emptySet();
     }
     try {
-
       Set<String> foundSet =
           requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(blobIdQueryList), "FindMissingKeys",
               partitionId.toPathString()).keySet();

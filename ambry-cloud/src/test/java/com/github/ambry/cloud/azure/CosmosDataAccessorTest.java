@@ -88,8 +88,6 @@ public class CosmosDataAccessorTest {
         mockResponse);
     cosmosAccessor.upsertMetadata(blobMetadata);
     assertEquals(1, azureMetrics.documentCreateTime.getCount());
-    assertEquals(0, azureMetrics.retryCount.getCount());
-    assertEquals(0, azureMetrics.retryWaitTime.getCount());
   }
 
   /** Test read. */
@@ -103,8 +101,6 @@ public class CosmosDataAccessorTest {
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
     cosmosAccessor.readMetadata(blobId);
     assertEquals(1, azureMetrics.documentReadTime.getCount());
-    assertEquals(0, azureMetrics.retryCount.getCount());
-    assertEquals(0, azureMetrics.retryWaitTime.getCount());
   }
 
   /** Test query metadata. */
@@ -122,8 +118,6 @@ public class CosmosDataAccessorTest {
     assertEquals("Returned metadata does not match original", blobMetadata, outputMetadata);
     assertEquals(1, azureMetrics.documentQueryCount.getCount());
     assertEquals(1, azureMetrics.missingKeysQueryTime.getCount());
-    assertEquals(0, azureMetrics.retryCount.getCount());
-    assertEquals(0, azureMetrics.retryWaitTime.getCount());
   }
 
   /** Test change feed query. */

@@ -27,7 +27,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
-import com.microsoft.azure.cosmosdb.internal.HttpConstants;
+import com.microsoft.azure.cosmosdb.internal.HttpConstants.StatusCodes;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
 import java.io.InputStream;
@@ -127,7 +127,7 @@ class AzureCloudDestination implements CloudDestination {
         azureMetrics.backupSuccessByteRate.mark(inputLength);
       }
       return uploaded;
-    } catch (BlobStorageException | DocumentClientException | IOException e) {
+    } catch (Exception e) {
       azureMetrics.backupErrorCount.inc();
       updateErrorMetrics(e);
       throw toCloudStorageException("Error uploading blob " + blobId, e);
@@ -138,7 +138,7 @@ class AzureCloudDestination implements CloudDestination {
   public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
     try {
       azureBlobDataAccessor.downloadBlob(blobId, outputStream);
-    } catch (BlobStorageException e) {
+    } catch (Exception e) {
       updateErrorMetrics(e);
       throw toCloudStorageException("Error downloading blob " + blobId, e);
     }
@@ -161,7 +161,12 @@ class AzureCloudDestination implements CloudDestination {
       return Collections.emptyMap();
     }
 
-    // TODO: For single blob GET request, get metadata from ABS
+    // For single blob GET request, get metadata from ABS instead of Cosmos
+    if (blobIds.size() == 1) {
+      CloudBlobMetadata metadata = azureBlobDataAccessor.getBlobMetadata(blobIds.get(0));
+      return metadata == null ? Collections.emptyMap() : Collections.singletonMap(metadata.getId(), metadata);
+    }
+
     // CosmosDB has query size limit of 256k chars.
     // Break list into chunks if necessary to avoid overflow.
     List<CloudBlobMetadata> metadataList = new ArrayList<>();
@@ -256,7 +261,7 @@ class AzureCloudDestination implements CloudDestination {
       logger.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
       azureMetrics.blobUpdatedCount.inc();
       return true;
-    } catch (BlobStorageException | DocumentClientException e) {
+    } catch (Exception e) {
       azureMetrics.blobUpdateErrorCount.inc();
       updateErrorMetrics(e);
       throw toCloudStorageException("Error updating blob metadata: " + blobId, e);
@@ -379,9 +384,13 @@ class AzureCloudDestination implements CloudDestination {
     } else if (e instanceof DocumentClientException) {
       statusCode = ((DocumentClientException) e).getStatusCode();
       retryDelayMs = ((DocumentClientException) e).getRetryAfterInMilliseconds();
+    } else if (e instanceof RuntimeException) {
+      // Note: handling this separately since ABS timeouts are thrown as IllegalStateException
+      statusCode = StatusCodes.INTERNAL_SERVER_ERROR;
     }
+    logger.info("{} status {}, {}", message, statusCode, e.toString());
     // Everything is retryable except NOT_FOUND
-    boolean isRetryable = (statusCode != HttpConstants.StatusCodes.NOTFOUND);
+    boolean isRetryable = (statusCode != StatusCodes.NOTFOUND);
     return new CloudStorageException(message, e, isRetryable, retryDelayMs);
   }
 

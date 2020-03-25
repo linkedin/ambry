@@ -85,6 +85,24 @@ public class AmbryPartition implements PartitionId {
   }
 
   @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    AmbryPartition partition = (AmbryPartition) o;
+    return id.equals(partition.id);
+  }
+
+  @Override
+  public int hashCode() {
+    return id.hashCode();
+  }
+
+  @Override
   public String toString() {
     return "Partition[" + id + "]";
   }

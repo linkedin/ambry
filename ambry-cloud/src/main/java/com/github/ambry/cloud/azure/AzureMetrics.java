@@ -55,8 +55,6 @@ public class AzureMetrics {
   public static final String BACKUP_SUCCESS_LATENCY = "BackupSuccessLatency";
   public static final String BACKUP_SUCCESS_BYTE_RATE = "BackupSuccessByteRate";
   public static final String BACKUP_ERROR_COUNT = "BackupErrorCount";
-  public static final String RETRY_COUNT = "RetryCount";
-  public static final String RETRY_WAIT_TIME = "RetryWaitTime";
 
   // Metrics
   public final Counter blobUploadRequestCount;
@@ -93,8 +91,6 @@ public class AzureMetrics {
   public final Timer backupSuccessLatency;
   public final Meter backupSuccessByteRate;
   public final Counter backupErrorCount;
-  public final Counter retryCount;
-  public final Timer retryWaitTime;
 
   public AzureMetrics(MetricRegistry registry) {
     blobUploadRequestCount =
@@ -139,7 +135,5 @@ public class AzureMetrics {
     backupSuccessByteRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BACKUP_SUCCESS_BYTE_RATE));
     backupSuccessLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BACKUP_SUCCESS_LATENCY));
     backupErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BACKUP_ERROR_COUNT));
-    retryCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, RETRY_COUNT));
-    retryWaitTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, RETRY_WAIT_TIME));
   }
 }
