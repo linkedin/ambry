@@ -267,10 +267,7 @@ public class NettyPerfClient {
             || postBlobChunkSize <= 0) {
           throw new IllegalArgumentException(
               "Total size to be posted and size of each chunk need to be specified with POST and have to be > 0");
-        } else if (targetAccountName == null || targetAccountName.isEmpty() || targetContainerName == null
-            || targetContainerName.isEmpty()) {
-          throw new IllegalArgumentException("TargetAccountName and TargetContainerName cannot be empty with POST");
-        }
+        } 
       }
       if (serviceId == null || serviceId.isEmpty()) {
         throw new IllegalArgumentException("serviceId cannot be empty");
