@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
@@ -579,6 +580,8 @@ class NonBlockingRouter implements Router {
       String localDatacenter = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
       Map<Boolean, List<DataNodeId>> localAndRemoteNodes = clusterMap.getDataNodeIds()
           .stream()
+          // ignore any in-process "data nodes" without TCP ports
+          .filter(dataNodeId -> dataNodeId.getPort() != ClusterMapUtils.UNKNOWN_PORT)
           .collect(Collectors.partitioningBy(dataNodeId -> localDatacenter.equals(dataNodeId.getDatacenterName())));
       logger.info("Warming up local datacenter connections to {} nodes", localAndRemoteNodes.get(true).size());
       networkClient.warmUpConnections(localAndRemoteNodes.get(true),
@@ -888,8 +891,6 @@ class NonBlockingRouter implements Router {
           List<RequestInfo> requestsToSend = new ArrayList<>();
           Set<Integer> requestsToDrop = new HashSet<>();
           pollForRequests(requestsToSend, requestsToDrop);
-
-
 
           List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestsToSend,
               routerConfig.routerDropRequestOnTimeout ? requestsToDrop : Collections.emptySet(),

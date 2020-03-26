@@ -89,7 +89,7 @@ public class StorageManagerTest {
    */
   @Before
   public void initializeCluster() throws IOException {
-    clusterMap = new MockClusterMap(false, 1, 3, 3, false);
+    clusterMap = new MockClusterMap(false, 1, 3, 3, false, false);
     metricRegistry = clusterMap.getMetricRegistry();
     generateConfigs(false, false);
   }

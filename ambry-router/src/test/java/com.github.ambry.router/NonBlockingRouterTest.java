@@ -86,9 +86,9 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class NonBlockingRouterTest {
-  private static final int MAX_PORTS_PLAIN_TEXT = 3;
-  private static final int MAX_PORTS_SSL = 3;
-  private static final int CHECKOUT_TIMEOUT_MS = 1000;
+  protected static final int MAX_PORTS_PLAIN_TEXT = 3;
+  protected static final int MAX_PORTS_SSL = 3;
+  protected static final int CHECKOUT_TIMEOUT_MS = 1000;
   private static final int REQUEST_TIMEOUT_MS = 1000;
   private static final int PUT_REQUEST_PARALLELISM = 3;
   private static final int PUT_SUCCESS_TARGET = 2;
@@ -105,7 +105,7 @@ public class NonBlockingRouterTest {
   private PutManager putManager;
   private GetManager getManager;
   private DeleteManager deleteManager;
-  private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>(MockSelectorState.Good);
+  protected final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>(MockSelectorState.Good);
   protected final MockTime mockTime;
   protected final KeyManagementService kms;
   protected final String singleKeyForKMS;
@@ -139,13 +139,26 @@ public class NonBlockingRouterTest {
   /**
    * Initialize parameters common to all tests.
    * @param testEncryption {@code true} to test with encryption enabled. {@code false} otherwise
-   * @throws Exception
+   * @param metadataContentVersion the metadata content version to test with.
+   * @throws Exception if initialization fails
    */
   public NonBlockingRouterTest(boolean testEncryption, int metadataContentVersion) throws Exception {
+    this(testEncryption, metadataContentVersion, false);
+  }
+
+  /**
+   * Initialize parameters common to all tests. This constructor is exposed for use by {@link CloudRouterTest}.
+   * @param testEncryption {@code true} to test with encryption enabled. {@code false} otherwise
+   * @param metadataContentVersion the metadata content version to test with.
+   * @param includeCloudDc {@code true} to make the local datacenter a cloud DC.
+   * @throws Exception if initialization fails
+   */
+  protected NonBlockingRouterTest(boolean testEncryption, int metadataContentVersion, boolean includeCloudDc)
+      throws Exception {
     this.testEncryption = testEncryption;
     this.metadataContentVersion = metadataContentVersion;
     mockTime = new MockTime();
-    mockClusterMap = new MockClusterMap();
+    mockClusterMap = new MockClusterMap(false, 9, 3, 3, false, includeCloudDc);
     NonBlockingRouter.currentOperationsCount.set(0);
     VerifiableProperties vProps = new VerifiableProperties(new Properties());
     singleKeyForKMS = TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS);
@@ -1207,7 +1220,11 @@ public class NonBlockingRouterTest {
   /**
    * Enum for the three operation types.
    */
-  private enum OperationType {PUT, GET, DELETE,}
+  private enum OperationType {
+    PUT,
+    GET,
+    DELETE,
+  }
 
   /**
    * A helper class to abstract away the details about specific operation manager.

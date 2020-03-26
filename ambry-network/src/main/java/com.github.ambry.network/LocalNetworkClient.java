@@ -15,11 +15,9 @@ package com.github.ambry.network;
 
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.network.LocalRequestResponseChannel.LocalChannelRequest;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -112,6 +110,6 @@ public class LocalNetworkClient implements NetworkClient {
 
   @Override
   public void wakeup() {
-    // TODO: need to do anything here?
+    channel.wakeup(processorId);
   }
 }

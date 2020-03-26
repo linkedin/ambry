@@ -17,22 +17,25 @@ import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.network.CompositeNetworkClientFactory;
 import com.github.ambry.network.LocalNetworkClientFactory;
 import com.github.ambry.network.LocalRequestResponseChannel;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import org.junit.After;
 import org.junit.Assert;
@@ -71,7 +74,7 @@ public class CloudRouterTest extends NonBlockingRouterTest {
    * @throws Exception
    */
   public CloudRouterTest(boolean testEncryption, int metadataContentVersion) throws Exception {
-    super(testEncryption, metadataContentVersion);
+    super(testEncryption, metadataContentVersion, true);
   }
 
   @After
@@ -115,7 +118,8 @@ public class CloudRouterTest extends NonBlockingRouterTest {
    */
   @Override
   protected void setRouter() throws Exception {
-    setRouter(getNonBlockingRouterProperties("DC1"), null, new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterProperties("DC1"), new MockServerLayout(mockClusterMap),
+        new LoggingNotificationSystem());
   }
 
   /**
@@ -135,12 +139,17 @@ public class CloudRouterTest extends NonBlockingRouterTest {
             mockClusterMap.getMetricRegistry());
     CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
     RequestHandlerPool requestHandlerPool =
-        CloudRouterFactory.getRequestHandlerPool(verifiableProperties, mockClusterMap, notificationSystem,
-            cloudDestination, cloudConfig);
-    NetworkClientFactory networkClientFactory =
+        CloudRouterFactory.getRequestHandlerPool(verifiableProperties, mockClusterMap, cloudDestination, cloudConfig);
+
+    Map<ReplicaType, NetworkClientFactory> childFactories = new EnumMap<>(ReplicaType.class);
+    childFactories.put(ReplicaType.CLOUD_BACKED,
         new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(),
-            new NetworkConfig(verifiableProperties), new NetworkMetrics(routerMetrics.getMetricRegistry()),
-            SystemTime.getInstance());
+            new NetworkConfig(verifiableProperties), new NetworkMetrics(routerMetrics.getMetricRegistry()), mockTime));
+    childFactories.put(ReplicaType.DISK_BACKED,
+        new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime));
+    NetworkClientFactory networkClientFactory = new CompositeNetworkClientFactory(childFactories);
+
     router =
         new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, mockClusterMap,
             kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);

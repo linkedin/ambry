@@ -17,7 +17,6 @@ package com.github.ambry.network;
 
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaType;
-import com.github.ambry.utils.Pair;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -25,7 +24,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 
 
 /**
@@ -49,31 +47,32 @@ public class CompositeNetworkClient implements NetworkClient {
   @Override
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> allRequestsToSend, Set<Integer> allRequestsToDrop,
       int pollTimeoutMs) {
-    // the first item of the pair is requests to send, the second is correlation IDs to drop
-    Function<ReplicaType, Pair<List<RequestInfo>, Set<Integer>>> pairBuilder = replicaType -> {
-      if (!childNetworkClients.containsKey(replicaType)) {
-        throw new IllegalStateException("No NetworkClient configured for replica type: " + replicaType);
-      }
-      return new Pair<>(new ArrayList<>(), new HashSet<>());
-    };
-    EnumMap<ReplicaType, Pair<List<RequestInfo>, Set<Integer>>> requestsToSendAndDropByType =
-        new EnumMap<>(ReplicaType.class);
+    EnumMap<ReplicaType, List<RequestInfo>> requestsToSendByType = new EnumMap<>(ReplicaType.class);
+    EnumMap<ReplicaType, Set<Integer>> requestsToDropByType = new EnumMap<>(ReplicaType.class);
+    for (ReplicaType replicaType : childNetworkClients.keySet()) {
+      requestsToSendByType.put(replicaType, new ArrayList<>());
+      requestsToDropByType.put(replicaType, new HashSet<>());
+    }
     for (RequestInfo requestInfo : allRequestsToSend) {
       ReplicaType replicaType = requestInfo.getReplicaId().getReplicaType();
-      requestsToSendAndDropByType.computeIfAbsent(replicaType, pairBuilder).getFirst().add(requestInfo);
+      List<RequestInfo> requestsToSend = requestsToSendByType.get(replicaType);
+      if (requestsToSend == null) {
+        throw new IllegalStateException("No NetworkClient configured for replica type: " + replicaType);
+      }
+      requestsToSend.add(requestInfo);
       correlationIdToReplicaType.put(requestInfo.getRequest().getCorrelationId(), replicaType);
     }
     for (Integer correlationId : allRequestsToDrop) {
       ReplicaType replicaType = correlationIdToReplicaType.get(correlationId);
       if (replicaType != null) {
-        requestsToSendAndDropByType.computeIfAbsent(replicaType, pairBuilder).getSecond().add(correlationId);
+        requestsToDropByType.get(replicaType).add(correlationId);
       }
     }
     List<ResponseInfo> responses = new ArrayList<>();
-    requestsToSendAndDropByType.forEach((replicaType, requestsToSendAndDrop) -> {
-      NetworkClient client = childNetworkClients.get(replicaType);
-      responses.addAll(
-          client.sendAndPoll(requestsToSendAndDrop.getFirst(), requestsToSendAndDrop.getSecond(), pollTimeoutMs));
+    childNetworkClients.forEach((replicaType, client) -> {
+      List<RequestInfo> requestsToSend = requestsToSendByType.get(replicaType);
+      Set<Integer> requestsToDrop = requestsToDropByType.get(replicaType);
+      responses.addAll(client.sendAndPoll(requestsToSend, requestsToDrop, pollTimeoutMs));
     });
     // clean up correlation ids for completed requests
     responses.forEach(
