@@ -279,7 +279,7 @@ public class AzureBlobDataAccessor {
         return null;
       }
     } catch (BlobStorageException e) {
-      if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+      if (isNotFoundError(e.getErrorCode())) {
         logger.debug("Blob {} not found.", blobId);
         return null;
       }

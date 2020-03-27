@@ -31,6 +31,8 @@ public class VcrMetrics {
   public final Timer blobDecryptionTime;
   // Time to run compaction task
   public final Timer blobCompactionTime;
+  // Cache counters
+  public final Counter blobCacheLookupCount;
   public final Counter blobCacheHitCount;
   // Error counters
   public final Counter blobUploadSkippedCount;
@@ -56,6 +58,7 @@ public class VcrMetrics {
     blobUploadSkippedCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobUploadSkippedCount"));
     updateTtlNotSetError = registry.counter(MetricRegistry.name(CloudBlobStore.class, "UpdateTtlNotSetError"));
     blobCompactionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobCompactionTime"));
+    blobCacheLookupCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobCacheLookupCount"));
     blobCacheHitCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobCacheHitCount"));
     addPartitionErrorCount =
         registry.counter(MetricRegistry.name(VcrReplicationManager.class, "AddPartitionErrorCount"));

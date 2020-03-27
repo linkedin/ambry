@@ -147,7 +147,9 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   synchronized public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) {
-
+    if (map.containsKey(blobId)) {
+      return false;
+    }
     // Note: blobSize can be -1 when we dont know the actual blob size being uploaded.
     // So we have to do buffered reads to handle that case.
     int bufferSz = (blobSize == -1) ? 1024 : (int) blobSize;

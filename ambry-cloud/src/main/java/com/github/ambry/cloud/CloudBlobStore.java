@@ -341,8 +341,7 @@ class CloudBlobStore implements Store {
     if (messageInfo.isDeleted()) {
       return false;
     }
-    if (recentBlobCache.containsKey(messageInfo.getStoreKey().getID())) {
-      vcrMetrics.blobCacheHitCount.inc();
+    if (checkCacheState(messageInfo.getStoreKey().getID())) {
       return false;
     }
     if (isVcr) {
@@ -366,14 +365,11 @@ class CloudBlobStore implements Store {
     try {
       for (MessageInfo msgInfo : infos) {
         BlobId blobId = (BlobId) msgInfo.getStoreKey();
-        String blobKey = msgInfo.getStoreKey().getID();
-        BlobState blobState = recentBlobCache.get(blobKey);
-        if (blobState != BlobState.DELETED) {
+        String blobKey = blobId.getID();
+        if (!checkCacheState(blobKey, BlobState.DELETED)) {
           requestAgent.doWithRetries(() -> cloudDestination.deleteBlob(blobId, msgInfo.getOperationTimeMs()), "Delete",
               partitionId.toPathString());
           addToCache(blobKey, BlobState.DELETED);
-        } else {
-          vcrMetrics.blobCacheHitCount.inc();
         }
       }
     } catch (CloudStorageException ex) {
@@ -403,13 +399,10 @@ class CloudBlobStore implements Store {
         // need to be modified.
         if (msgInfo.isTtlUpdated()) {
           BlobId blobId = (BlobId) msgInfo.getStoreKey();
-          BlobState blobState = recentBlobCache.get(blobId.getID());
-          if (blobState == null || blobState == BlobState.CREATED) {
+          if (!checkCacheState(blobId.getID(), BlobState.TTL_UPDATED, BlobState.DELETED)) {
             requestAgent.doWithRetries(() -> cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time),
                 "UpdateTtl", partitionId.toPathString());
             addToCache(blobId.getID(), BlobState.TTL_UPDATED);
-          } else {
-            vcrMetrics.blobCacheHitCount.inc();
           }
         } else {
           logger.error("updateTtl() is called but msgInfo.isTtlUpdated is not set. msgInfo: {}", msgInfo);
@@ -418,6 +411,35 @@ class CloudBlobStore implements Store {
       }
     } catch (CloudStorageException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
+    }
+  }
+
+  /**
+   * Check the blob state in the recent blob cache against one or more desired states.
+   * @param blobKey the blob key to lookup.
+   * @param desiredStates the desired state(s) to check.  If empty, any cached state is accepted.
+   * @return true if the blob key is in the cache in one of the desired states, otherwise false.
+   */
+  private boolean checkCacheState(String blobKey, BlobState... desiredStates) {
+    if (isVcr) {
+      BlobState cachedState = recentBlobCache.get(blobKey);
+      vcrMetrics.blobCacheLookupCount.inc();
+      if (cachedState == null) {
+        return false;
+      }
+      if (desiredStates == null || desiredStates.length == 0) {
+        vcrMetrics.blobCacheHitCount.inc();
+        return true;
+      }
+      for (BlobState desiredState : desiredStates) {
+        if (desiredState == cachedState) {
+          vcrMetrics.blobCacheHitCount.inc();
+          return true;
+        }
+      }
+      return false;
+    } else {
+      return false;
     }
   }
 
@@ -473,10 +495,9 @@ class CloudBlobStore implements Store {
     checkStarted();
     // Check existence of keys in cloud metadata
     List<BlobId> blobIdQueryList = keys.stream()
-        .filter(key -> !recentBlobCache.containsKey(key.getID()))
+        .filter(key -> !checkCacheState(key.getID()))
         .map(key -> (BlobId) key)
         .collect(Collectors.toList());
-    vcrMetrics.blobCacheHitCount.inc(keys.size() - blobIdQueryList.size());
     if (blobIdQueryList.isEmpty()) {
       // Cool, the cache did its job and eliminated a Cosmos query!
       return Collections.emptySet();
@@ -504,7 +525,7 @@ class CloudBlobStore implements Store {
   public boolean isKeyDeleted(StoreKey key) throws StoreException {
     checkStarted();
     // Not definitive, but okay for some deletes to be replayed.
-    return (BlobState.DELETED == recentBlobCache.get(key.getID()));
+    return (checkCacheState(key.getID(),BlobState.DELETED));
   }
 
   @Override

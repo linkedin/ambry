@@ -203,19 +203,17 @@ public class CloudBlobStoreTest {
     assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
     assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
     assertEquals("Unexpected encryption count", expectedEncryptions, vcrMetrics.blobEncryptionCount.getCount());
+    verifyCacheHits(expectedUploads, 0);
 
     // Try to put the same blobs again (e.g. from another replica).
     // If isVcr is true, they should already be cached.
     messageWriteSet.resetBuffers();
     store.put(messageWriteSet);
-    if (!isVcr) {
-      expectedUploads *= 2;
-      expectedBytesUploaded *= 2;
-    }
     int expectedSkips = isVcr ? expectedUploads : 0;
     assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
     assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
     assertEquals("Unexpected skipped count", expectedSkips, vcrMetrics.blobUploadSkippedCount.getCount());
+    verifyCacheHits(2 * expectedUploads, expectedUploads);
   }
 
   /** Test the CloudBlobStore delete method. */
@@ -230,11 +228,13 @@ public class CloudBlobStoreTest {
     }
     store.delete(messageWriteSet.getMessageSetInfo());
     verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(operationTime));
+    verifyCacheHits(count, 0);
 
     // Call second time.  If isVcr, should be cached causing deletions to be skipped.
     store.delete(messageWriteSet.getMessageSetInfo());
     int expectedCount = isVcr ? count : count * 2;
     verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(operationTime));
+    verifyCacheHits(count * 2, count);
   }
 
   /** Test the CloudBlobStore updateTtl method. */
@@ -250,11 +250,13 @@ public class CloudBlobStoreTest {
     }
     store.updateTtl(messageWriteSet.getMessageSetInfo());
     verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong());
+    verifyCacheHits(count, 0);
 
     // Call second time, If isVcr, should be cached causing updates to be skipped.
     store.updateTtl(messageWriteSet.getMessageSetInfo());
     int expectedCount = isVcr ? count : count * 2;
     verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong());
+    verifyCacheHits(count * 2, count);
   }
 
   /** Test the CloudBlobStore findMissingKeys method. */
@@ -278,6 +280,9 @@ public class CloudBlobStoreTest {
     when(dest.getBlobMetadata(anyList())).thenReturn(metadataMap);
     Set<StoreKey> missingKeys = store.findMissingKeys(keys);
     verify(dest).getBlobMetadata(anyList());
+    int expectedLookups = keys.size();
+    int expectedHits = 0;
+    verifyCacheHits(expectedLookups, expectedHits);
     assertEquals("Wrong number of missing keys", count, missingKeys.size());
 
     if (isVcr) {
@@ -287,6 +292,9 @@ public class CloudBlobStoreTest {
       }
       missingKeys = store.findMissingKeys(keys);
       assertTrue("Expected no missing keys", missingKeys.isEmpty());
+      expectedLookups += keys.size();
+      expectedHits += keys.size();
+      verifyCacheHits(expectedLookups, expectedHits);
       // getBlobMetadata should not have been called a second time.
       verify(dest).getBlobMetadata(anyList());
     }
@@ -358,24 +366,51 @@ public class CloudBlobStoreTest {
     // findMissingKeys should stay in cache
     store.findMissingKeys(blobIdList);
     verify(dest, never()).getBlobMetadata(anyList());
+    int expectedLookups = blobIdList.size();
+    int expectedHits = expectedLookups;
+    verifyCacheHits(expectedLookups, expectedHits);
     // Perform access on first 5 blobs
+    int delta = 5;
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    for (int j = 0; j < 5; j++) {
+    for (int j = 0; j < delta; j++) {
       addBlobToSet(messageWriteSet, (BlobId) blobIdList.get(j), blobSize, Utils.Infinite_Time);
     }
     store.updateTtl(messageWriteSet.getMessageSetInfo());
+    expectedLookups += delta;
+    // Note: should be cache misses since blobs are still in CREATED state.
+    verifyCacheHits(expectedLookups, expectedHits);
 
     // put 5 more blobs
-    for (int j = 10; j < 15; j++) {
+    for (int j = cacheSize; j < cacheSize + delta; j++) {
       blobIdList.add(getUniqueId());
       store.addToCache(blobIdList.get(j).getID(), CloudBlobStore.BlobState.CREATED);
     }
     // get same 1-5 which should be still cached.
-    store.findMissingKeys(blobIdList.subList(0, 5));
+    store.findMissingKeys(blobIdList.subList(0, delta));
+    expectedLookups += delta;
+    expectedHits += delta;
+    verifyCacheHits(expectedLookups, expectedHits);
     verify(dest, never()).getBlobMetadata(anyList());
     // call findMissingKeys on 6-10 which should trigger getBlobMetadata
-    store.findMissingKeys(blobIdList.subList(5, 10));
+    store.findMissingKeys(blobIdList.subList(delta, cacheSize));
+    expectedLookups += delta;
+    verifyCacheHits(expectedLookups, expectedHits);
     verify(dest).getBlobMetadata(anyList());
+  }
+
+  /**
+   * Verify that the cache stats are expected.
+   * @param expectedLookups Expected cache lookup count.
+   * @param expectedHits Expected cache hit count.
+   */
+  private void verifyCacheHits(int expectedLookups, int expectedHits) {
+    if (isVcr) {
+      assertEquals("Cache lookup count", expectedLookups, vcrMetrics.blobCacheLookupCount.getCount());
+      assertEquals("Cache hit count", expectedHits, vcrMetrics.blobCacheHitCount.getCount());
+    } else {
+      assertEquals("Expected no cache lookups (not VCR)", 0, vcrMetrics.blobCacheLookupCount.getCount());
+      assertEquals("Expected no cache hits (not VCR)", 0, vcrMetrics.blobCacheHitCount.getCount());
+    }
   }
 
   /** Test verifying behavior when store not started. */
@@ -584,7 +619,11 @@ public class CloudBlobStoreTest {
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays) - 1);
     replicaThread.replicate();
-    assertFalse("Blob should not exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    if (isVcr) {
+      assertFalse("Blob should not exist (vcr).", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    } else {
+      assertTrue("Blob should exist (not vcr).", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    }
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
         Utils.Infinite_Time);
     replicaThread.replicate();
