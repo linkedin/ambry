@@ -44,7 +44,7 @@ class MessageInfoAndMetadataListSerde {
   static final short VERSION_6 = 6;
   static final short VERSION_MAX = VERSION_6;
 
-  static short AUTO_VERSION = VERSION_5;
+  static short AUTO_VERSION = VERSION_6;
 
   private final short version;
 
