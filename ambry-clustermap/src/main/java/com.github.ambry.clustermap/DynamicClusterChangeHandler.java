@@ -365,7 +365,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
             AmbryReplica replica;
             if (selfInstanceName.equals(instanceName)) {
               // if this is a newly added replica on current instance, it should be present in bootstrapReplicas map.
-              replica = clusterChangeHandlerCallback.popBootstrapReplica(mappedPartition.toPathString());
+              replica = clusterChangeHandlerCallback.fetchBootstrapReplica(mappedPartition.toPathString());
               if (replica == null) {
                 logger.error("Replica {} is not present in bootstrap replica set, abort instance info update",
                     mappedPartition.toPathString());

@@ -73,7 +73,7 @@ public class HelixClusterManager implements ClusterMap {
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   private final PartitionSelectionHelper partitionSelectionHelper;
   private final Map<String, Map<String, String>> partitionOverrideInfoMap = new HashMap<>();
-  private final ConcurrentHashMap<String, ReplicaId> bootstrapReplicas = new ConcurrentHashMap<>();
+  private final Map<String, ReplicaId> bootstrapReplicas = new ConcurrentHashMap<>();
   private ZkHelixPropertyStore<ZNRecord> helixPropertyStoreInLocalDc = null;
   // The current xid currently does not change after instantiation. This can change in the future, allowing the cluster
   // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
@@ -644,7 +644,7 @@ public class HelixClusterManager implements ClusterMap {
      * @param partitionName the partition name of bootstrap replica.
      * @return bootstrap replica or {@code null} if not found.
      */
-    AmbryReplica popBootstrapReplica(String partitionName) {
+    AmbryReplica fetchBootstrapReplica(String partitionName) {
       return (AmbryReplica) bootstrapReplicas.remove(partitionName);
     }
   }
