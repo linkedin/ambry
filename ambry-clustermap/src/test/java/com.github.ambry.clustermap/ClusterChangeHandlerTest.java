@@ -512,7 +512,7 @@ public class ClusterChangeHandlerTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     HelixClusterManager helixClusterManager =
         new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
-    // test setup: create 2 new partitions and place its replicas onto nodes that exclude currentNode. This is to avoid
+    // test setup: create 2 new partitions and place their replicas onto nodes that exclude currentNode. This is to avoid
     // edge case where currentNode already has all partitions in cluster
     Set<PartitionId> initialPartitionSet = new HashSet<>(testPartitionLayout.getPartitionLayout().getPartitions(null));
     List<DataNode> nodesToHostNewPartition = new ArrayList<>();
@@ -546,12 +546,15 @@ public class ClusterChangeHandlerTest {
         .findFirst()
         .get();
     int previousReplicaCnt = partitionInManager.getReplicaIds().size();
-    // test case 1: without populating bootstrap replica, new replica would be skipped on current node (this shouldn't
-    // happen in practice but we still mock this situation to perform exhaustive testing)
+    // test case 1: without populating bootstrap replica, new replica in InstanceConfig will trigger exception on current
+    // node (this shouldn't happen in practice but we still mock this situation to perform exhaustive testing)
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
     assertEquals("Replica count of testing partition shouldn't change", previousReplicaCnt,
         partitionInManager.getReplicaIds().size());
+    // verify there is an exception when handling instance config change due to replica not found in bootstrap replica map
+    assertEquals("Instance config change error count should be 1", 1,
+        helixClusterManager.helixClusterManagerMetrics.instanceConfigChangeErrorCount.getCount());
     helixClusterManager.close();
     // test case 2: call getBootstrapReplica in HelixClusterManager to populate bootstrap replica map and then upgrade
     // Helix again.

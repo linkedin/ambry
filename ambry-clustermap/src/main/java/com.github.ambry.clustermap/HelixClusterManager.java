@@ -119,7 +119,7 @@ public class HelixClusterManager implements ClusterMap {
             new DatacenterInitializer(clusterMapConfig, localManager, helixFactory, dcZkInfo, selfInstanceName,
                 partitionOverrideInfoMap, clusterChangeHandlerCallback, helixClusterManagerCallback,
                 helixClusterManagerMetrics, sealedStateChangeCounter, partitionMap, partitionNameToAmbryPartition,
-                ambryPartitionToAmbryReplicas, bootstrapReplicas);
+                ambryPartitionToAmbryReplicas);
         initializer.start();
         initializers.add(initializer);
       }
@@ -636,6 +636,16 @@ public class HelixClusterManager implements ClusterMap {
      */
     void addClusterWideRawCapacity(long diskRawCapacityBytes) {
       clusterWideRawCapacityBytes.getAndAdd(diskRawCapacityBytes);
+    }
+
+    /**
+     * Pop out bootstrap replica (if any) on current instance. A bootstrap replica is a replica dynamically added to
+     * current node at runtime.
+     * @param partitionName the partition name of bootstrap replica.
+     * @return bootstrap replica or {@code null} if not found.
+     */
+    AmbryReplica popBootstrapReplica(String partitionName) {
+      return (AmbryReplica) bootstrapReplicas.remove(partitionName);
     }
   }
 

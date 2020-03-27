@@ -54,8 +54,6 @@ class DatacenterInitializer {
   private final HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback;
   private final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final AtomicLong sealedStateChangeCounter;
-  // Fields to pass into only DynamicClusterChangeHandler
-  private final ConcurrentHashMap<String, ReplicaId> bootstrapReplicas;
   // Fields to pass into only SimpleClusterChangeHandler (These can be removed if SimpleClusterChangeHandler is removed)
   private final ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap;
   private final ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition;
@@ -75,7 +73,6 @@ class DatacenterInitializer {
    * @param partitionMap a map from serialized bytes to corresponding partition.
    * @param partitionNameToAmbryPartition a map from partition name to {@link AmbryPartition} object.
    * @param ambryPartitionToAmbryReplicas a map from {@link AmbryPartition} to its replicas.
-   * @param bootstrapReplicas a map recording bootstrap replicas created on current node (only applicable to server)
    */
   DatacenterInitializer(ClusterMapConfig clusterMapConfig, HelixManager localManager, HelixFactory helixFactory,
       ClusterMapUtils.DcZkInfo dcZkInfo, String selfInstanceName,
@@ -85,8 +82,7 @@ class DatacenterInitializer {
       HelixClusterManagerMetrics helixClusterManagerMetrics, AtomicLong sealedStateChangeCounter,
       ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap,
       ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition,
-      ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas,
-      ConcurrentHashMap<String, ReplicaId> bootstrapReplicas) {
+      ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas) {
     this.clusterMapConfig = clusterMapConfig;
     this.localManager = localManager;
     this.helixFactory = helixFactory;
@@ -100,7 +96,6 @@ class DatacenterInitializer {
     this.partitionMap = partitionMap;
     this.partitionNameToAmbryPartition = partitionNameToAmbryPartition;
     this.ambryPartitionToAmbryReplicas = ambryPartitionToAmbryReplicas;
-    this.bootstrapReplicas = bootstrapReplicas;
     dcName = dcZkInfo.getDcName();
   }
 
@@ -185,7 +180,7 @@ class DatacenterInitializer {
       clusterChangeHandler =
           new DynamicClusterChangeHandler(clusterMapConfig, dcName, selfInstanceName, partitionOverrideInfoMap,
               helixClusterManagerCallback, clusterChangeHandlerCallback, helixClusterManagerMetrics,
-              this::onInitializationFailure, sealedStateChangeCounter, bootstrapReplicas);
+              this::onInitializationFailure, sealedStateChangeCounter);
     } else {
       throw new IllegalArgumentException("Unsupported cluster change handler type: " + clusterChangeHandlerType);
     }
