@@ -204,6 +204,11 @@ public class MockConnectionPool implements ConnectionPool {
                 infoFound = new MessageInfo(putMsgInfo.getStoreKey(), putMsgInfo.getSize(), true, false,
                     putMsgInfo.getExpirationTimeInMs(), putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
                     putMsgInfo.getOperationTimeMs());
+              } else if (infoFound.isUndeleted()) {
+                MessageInfo putMsgInfo = getMessageInfo(infoFound.getStoreKey(), messageInfoList, false, false, false);
+                infoFound = new MessageInfo(putMsgInfo.getStoreKey(), putMsgInfo.getSize(), false, false, true,
+                    putMsgInfo.getExpirationTimeInMs(), null, putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
+                    putMsgInfo.getOperationTimeMs(), infoFound.getLifeVersion());
               }
               infosToReturn.get(partitionId).add(infoFound);
             }

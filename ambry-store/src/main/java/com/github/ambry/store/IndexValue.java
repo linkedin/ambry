@@ -55,8 +55,6 @@ class IndexValue implements Comparable<IndexValue> {
 
   final static byte FLAGS_DEFAULT_VALUE = (byte) 0;
   final static long UNKNOWN_ORIGINAL_MESSAGE_OFFSET = -1;
-  // The life version when the operation is trigger by the requests from frontend.
-  final static short LIFE_VERSION_FROM_FRONTEND = -1;
 
   private final static int BLOB_SIZE_IN_BYTES = 8;
   private final static int OFFSET_SIZE_IN_BYTES = 8;
@@ -328,7 +326,7 @@ class IndexValue implements Comparable<IndexValue> {
    * @return true when it's not from frontend requests.
    */
   static boolean hasLifeVersion(short lifeVersion) {
-    return lifeVersion > LIFE_VERSION_FROM_FRONTEND;
+    return lifeVersion > MessageInfo.LIFE_VERSION_FROM_FRONTEND;
   }
 
   /**

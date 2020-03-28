@@ -22,6 +22,8 @@ import java.util.Objects;
  */
 public class MessageInfo {
 
+  // The life version when the operation is trigger by the requests from frontend.
+  public final static short LIFE_VERSION_FROM_FRONTEND = -1;
   private final StoreKey key;
   private final long size;
   private final long expirationTimeInMs;
@@ -47,6 +49,21 @@ public class MessageInfo {
   public MessageInfo(StoreKey key, long size, long expirationTimeInMs, short accountId, short containerId,
       long operationTimeMs) {
     this(key, size, false, false, expirationTimeInMs, accountId, containerId, operationTimeMs);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message in bytes.
+   * @param accountId accountId of the blob
+   * @param containerId containerId of the blob
+   * @param operationTimeMs operation time in ms
+   * @param lifeVersion update version of update
+   */
+  public MessageInfo(StoreKey key, long size, short accountId, short containerId, long operationTimeMs,
+      short lifeVersion) {
+    this(key, size, false, false, false, Utils.Infinite_Time, null, accountId, containerId, operationTimeMs,
+        lifeVersion);
   }
 
   /**

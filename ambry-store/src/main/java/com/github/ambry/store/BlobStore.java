@@ -20,7 +20,6 @@ import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatInputStream;
-import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
@@ -410,8 +409,13 @@ public class BlobStore implements Store {
             ArrayList<IndexEntry> indexEntries = new ArrayList<>(messageInfo.size());
             for (MessageInfo info : messageInfo) {
               FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-              IndexValue value = new IndexValue(info.getSize(), fileSpan.getStartOffset(), info.getExpirationTimeInMs(),
-                  info.getOperationTimeMs(), info.getAccountId(), info.getContainerId());
+              // Put from frontend should always use 0 as lifeVersion. (0 is the starting life version number for any data).
+              // Put from replication or recovery should use liferVersion as it's.
+              short lifeVersion = IndexValue.hasLifeVersion(info.getLifeVersion()) ? info.getLifeVersion() : (short) 0;
+              IndexValue value =
+                  new IndexValue(info.getSize(), fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE,
+                      info.getExpirationTimeInMs(), info.getOperationTimeMs(), info.getAccountId(),
+                      info.getContainerId(), lifeVersion);
               IndexEntry entry = new IndexEntry(info.getStoreKey(), value, info.getCrc());
               indexEntries.add(entry);
               endOffsetOfLastMessage = fileSpan.getEndOffset();
@@ -470,23 +474,38 @@ public class BlobStore implements Store {
         if (value == null) {
           throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
               StoreErrorCodes.ID_Not_Found);
-        } else if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
-          if (config.storeValidateAuthorization) {
-            throw new StoreException("DELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: "
-                + value.getAccountId() + "Actually containerId: " + value.getContainerId(),
-                StoreErrorCodes.Authorization_Failure);
-          } else {
-            logger.warn("DELETE authorization failure. Key: {} Actually accountId: {} Actually containerId: {}",
-                info.getStoreKey(), value.getAccountId(), value.getContainerId());
-            metrics.deleteAuthorizationFailureCount.inc();
-          }
-        } else if (value.isDelete()) {
-          throw new StoreException(
-              "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
-              StoreErrorCodes.ID_Deleted);
         }
-        indexValuesToDelete.add(value);
-        lifeVersions.add(value.getLifeVersion());
+        if (info.getLifeVersion() == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
+          // This is a delete request from frontend
+          if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
+            if (config.storeValidateAuthorization) {
+              throw new StoreException(
+                  "DELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: "
+                      + value.getAccountId() + "Actually containerId: " + value.getContainerId(),
+                  StoreErrorCodes.Authorization_Failure);
+            } else {
+              logger.warn("DELETE authorization failure. Key: {} Actually accountId: {} Actually containerId: {}",
+                  info.getStoreKey(), value.getAccountId(), value.getContainerId());
+              metrics.deleteAuthorizationFailureCount.inc();
+            }
+          } else if (value.isDelete()) {
+            throw new StoreException(
+                "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                StoreErrorCodes.ID_Deleted);
+          }
+          indexValuesToDelete.add(value);
+          lifeVersions.add(value.getLifeVersion());
+        } else {
+          // This is a delete request from replication
+          if ((value.isDelete() && value.getLifeVersion() >= info.getLifeVersion()) || (value.getLifeVersion()
+              > info.getLifeVersion())) {
+            throw new StoreException(
+                "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                StoreErrorCodes.Life_Version_Conflict);
+          }
+          indexValuesToDelete.add(value);
+          lifeVersions.add(info.getLifeVersion());
+        }
       }
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
@@ -510,9 +529,10 @@ public class BlobStore implements Store {
           MessageFormatInputStream stream =
               new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
                   info.getOperationTimeMs(), lifeVersions.get(i));
+          // Don't change the lifeVersion here, there are other logic in markAsDeleted that relies on this lifeVersion.
           updatedInfos.add(
               new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
-                  info.getOperationTimeMs()));
+                  info.getOperationTimeMs(), info.getLifeVersion()));
           inputStreams.add(stream);
           i++;
         }
@@ -525,7 +545,8 @@ public class BlobStore implements Store {
         int correspondingPutIndex = 0;
         for (MessageInfo info : updatedInfos) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-          IndexValue deleteIndexValue = index.markAsDeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
+          IndexValue deleteIndexValue =
+              index.markAsDeleted(info.getStoreKey(), fileSpan, null, info.getOperationTimeMs(), info.getLifeVersion());
           endOffsetOfLastMessage = fileSpan.getEndOffset();
           blobStoreStats.handleNewDeleteEntry(deleteIndexValue, indexValuesToDelete.get(correspondingPutIndex++));
         }
@@ -617,9 +638,10 @@ public class BlobStore implements Store {
           MessageFormatInputStream stream =
               new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
                   info.getExpirationTimeInMs(), info.getOperationTimeMs(), lifeVersions.get(i));
+          // we only need change the stream size.
           updatedInfos.add(
               new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
-                  info.getOperationTimeMs()));
+                  info.getOperationTimeMs(), info.getLifeVersion()));
           inputStreams.add(stream);
           i++;
         }
@@ -632,7 +654,11 @@ public class BlobStore implements Store {
         int correspondingPutIndex = 0;
         for (MessageInfo info : updatedInfos) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-          IndexValue ttlUpdateValue = index.markAsPermanent(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
+          // Ttl update should aways use the same lifeVersion as it's previous value of the same key, that's why we are
+          // using LIFE_VERSION_FROM_FRONTEND here no matter the lifeVersion from the message info.
+          IndexValue ttlUpdateValue =
+              index.markAsPermanent(info.getStoreKey(), fileSpan, null, info.getOperationTimeMs(),
+                  MessageInfo.LIFE_VERSION_FROM_FRONTEND);
           endOffsetOfLastMessage = fileSpan.getEndOffset();
           blobStoreStats.handleNewTtlUpdateEntry(ttlUpdateValue, indexValuesToUpdate.get(correspondingPutIndex++));
         }
@@ -660,7 +686,7 @@ public class BlobStore implements Store {
       StoreKey id = info.getStoreKey();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       List<IndexValue> values = index.findAllIndexValuesForKey(id, null);
-      index.validateSanityForUndelete(id, values, IndexValue.LIFE_VERSION_FROM_FRONTEND);
+      index.validateSanityForUndelete(id, values, info.getLifeVersion());
       IndexValue latestValue = values.get(0);
       short lifeVersion = (short) (latestValue.getLifeVersion() + 1);
       MessageFormatInputStream stream =
@@ -668,7 +694,8 @@ public class BlobStore implements Store {
               info.getOperationTimeMs(), lifeVersion);
       // Update info to add stream size;
       info =
-          new MessageInfo(id, stream.getSize(), info.getAccountId(), info.getContainerId(), info.getOperationTimeMs());
+          new MessageInfo(id, stream.getSize(), info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
+              info.getLifeVersion());
       ArrayList<MessageInfo> infoList = new ArrayList<>();
       infoList.add(info);
       MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
@@ -699,7 +726,7 @@ public class BlobStore implements Store {
         writeSet.writeTo(log);
         logger.trace("Store : {} undelete mark written to log", dataDir);
         FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-        index.markAsUndeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
+        index.markAsUndeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs(), info.getLifeVersion());
         // TODO: update blobstore stats for undelete (2020-02-10)
       }
       onSuccess();
@@ -768,7 +795,7 @@ public class BlobStore implements Store {
         throw new StoreException("Key " + key + " not found in store. Cannot check if it is deleted",
             StoreErrorCodes.ID_Not_Found);
       }
-      return value.isFlagSet(IndexValue.Flags.Delete_Index);
+      return value.isDelete();
     } finally {
       context.stop();
     }

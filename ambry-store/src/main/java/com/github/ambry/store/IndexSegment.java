@@ -542,9 +542,11 @@ class IndexSegment {
       }
       if (resetKey == null) {
         PersistentIndex.IndexEntryType type = PersistentIndex.IndexEntryType.PUT;
-        if (entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+        if (entry.getValue().isDelete()) {
           type = PersistentIndex.IndexEntryType.DELETE;
-        } else if (entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        } else if (entry.getValue().isUndelete()) {
+          type = PersistentIndex.IndexEntryType.UNDELETE;
+        } else if (entry.getValue().isTTLUpdate()) {
           type = PersistentIndex.IndexEntryType.TTL_UPDATE;
         }
         resetKey = new Pair<>(entry.getKey(), type);
@@ -969,7 +971,7 @@ class IndexSegment {
               "IndexSegment : {} ignoring index entry outside the log end offset that was not synced logEndOffset "
                   + "{} key {} entryOffset {} entrySize {} entryDeleteState {}", indexFile.getAbsolutePath(),
               logEndOffset, key, blobValue.getOffset(), blobValue.getSize(),
-              blobValue.isFlagSet(IndexValue.Flags.Delete_Index));
+              blobValue.isDelete());
         }
       }
       endOffset.set(new Offset(startOffset.getName(), maxEndOffset));

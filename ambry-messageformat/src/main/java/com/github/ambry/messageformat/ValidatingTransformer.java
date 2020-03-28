@@ -25,6 +25,8 @@ import java.io.DataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
 
@@ -34,6 +36,7 @@ import static com.github.ambry.messageformat.MessageFormatRecord.*;
  */
 public class ValidatingTransformer implements Transformer {
   private final StoreKeyFactory storeKeyFactory;
+  private final static Logger logger = LoggerFactory.getLogger(ValidatingTransformer.class);
 
   public ValidatingTransformer(StoreKeyFactory storeKeyFactory, StoreKeyConverter storeKeyConverter) {
     this.storeKeyFactory = storeKeyFactory;
@@ -65,12 +68,16 @@ public class ValidatingTransformer implements Transformer {
       MessageHeader_Format header = getMessageHeader(version, headerBuffer);
       StoreKey keyInStream = storeKeyFactory.getStoreKey(new DataInputStream(msgStream));
       if (header.isPutRecord()) {
+        if (header.hasLifeVersion() && header.getLifeVersion() != msgInfo.getLifeVersion()) {
+          logger.warn("LifeVersion in stream: " + header.getLifeVersion() + " failed to match lifeVersion from Index: "
+              + msgInfo.getLifeVersion() + " for key " + keyInStream);
+        }
         encryptionKey = header.hasEncryptionKeyRecord() ? deserializeBlobEncryptionKey(msgStream) : null;
         props = deserializeBlobProperties(msgStream);
         metadata = deserializeUserMetadata(msgStream);
         blobData = deserializeBlob(msgStream);
       } else {
-        throw new IllegalStateException("Message cannot be a deleted record ");
+        throw new IllegalStateException("Message cannot be anything rather than put record ");
       }
       if (msgInfo.getStoreKey().equals(keyInStream)) {
         // BlobIDTransformer only exists on ambry-server and replication between servers is relying on blocking channel
@@ -78,11 +85,12 @@ public class ValidatingTransformer implements Transformer {
         // @todo, when netty Bytebuf is adopted for blocking channel on ambry-server, remember to release this ByteBuf.
         PutMessageFormatInputStream transformedStream =
             new PutMessageFormatInputStream(keyInStream, encryptionKey, props, metadata,
-                new ByteBufInputStream(blobData.content(), true), blobData.getSize(), blobData.getBlobType());
+                new ByteBufInputStream(blobData.content(), true), blobData.getSize(), blobData.getBlobType(),
+                msgInfo.getLifeVersion());
         MessageInfo transformedMsgInfo =
             new MessageInfo(keyInStream, transformedStream.getSize(), msgInfo.isDeleted(), msgInfo.isTtlUpdated(),
-                msgInfo.getExpirationTimeInMs(), msgInfo.getCrc(), msgInfo.getAccountId(), msgInfo.getContainerId(),
-                msgInfo.getOperationTimeMs());
+                false, msgInfo.getExpirationTimeInMs(), msgInfo.getCrc(), msgInfo.getAccountId(),
+                msgInfo.getContainerId(), msgInfo.getOperationTimeMs(), msgInfo.getLifeVersion());
         transformationOutput = new TransformationOutput(new Message(transformedMsgInfo, transformedStream));
       } else {
         throw new IllegalStateException(

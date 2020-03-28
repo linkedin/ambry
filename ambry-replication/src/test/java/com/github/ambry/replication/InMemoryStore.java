@@ -34,6 +34,7 @@ import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreStats;
 import com.github.ambry.store.Write;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
@@ -212,10 +213,14 @@ class InMemoryStore implements Store {
     }
     List<MessageInfo> infos = new ArrayList<>();
     for (MessageInfo info : newInfos) {
+      short lifeVersion = 0;
+      if (info.getLifeVersion() != MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
+        lifeVersion = info.getLifeVersion();
+      }
       if (info.isTtlUpdated()) {
         info = new MessageInfo(info.getStoreKey(), info.getSize(), info.isDeleted(), false, info.isUndeleted(),
             info.getExpirationTimeInMs(), info.getCrc(), info.getAccountId(), info.getContainerId(),
-            info.getOperationTimeMs(), (short) 0);
+            info.getOperationTimeMs(), lifeVersion);
       }
       infos.add(info);
     }
@@ -231,12 +236,34 @@ class InMemoryStore implements Store {
     List<InputStream> inputStreams = new ArrayList();
     try {
       for (MessageInfo info : infos) {
+        short lifeVersion = info.getLifeVersion();
+        MessageInfo latestInfo = getMergedMessageInfo(info.getStoreKey(), messageInfos);
+        if (latestInfo == null) {
+          throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
+              StoreErrorCodes.ID_Not_Found);
+        }
+        if (lifeVersion == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
+          if (latestInfo.isDeleted()) {
+            throw new StoreException(
+                "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                StoreErrorCodes.ID_Deleted);
+          }
+          lifeVersion = latestInfo.getLifeVersion();
+        } else {
+          if ((latestInfo.isDeleted() && latestInfo.getLifeVersion() >= info.getLifeVersion()) || (
+              latestInfo.getLifeVersion() > info.getLifeVersion())) {
+            throw new StoreException(
+                "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                StoreErrorCodes.Life_Version_Conflict);
+          }
+          lifeVersion = info.getLifeVersion();
+        }
         MessageFormatInputStream stream =
             new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                info.getOperationTimeMs(), info.getLifeVersion());
+                info.getOperationTimeMs(), lifeVersion);
         infosToDelete.add(new MessageInfo(info.getStoreKey(), stream.getSize(), true, info.isTtlUpdated(), false,
             info.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
-            info.getLifeVersion()));
+            lifeVersion));
         inputStreams.add(stream);
       }
       MessageFormatWriteSet writeSet =
@@ -255,19 +282,29 @@ class InMemoryStore implements Store {
     List<InputStream> inputStreams = new ArrayList<>();
     try {
       for (MessageInfo info : infos) {
-        if (getMessageInfo(info.getStoreKey(), messageInfos, true, false, false) != null) {
-          throw new StoreException("Deleted", StoreErrorCodes.ID_Deleted);
-        } else if (getMessageInfo(info.getStoreKey(), messageInfos, false, false, true) != null) {
-          throw new StoreException("Updated already", StoreErrorCodes.Already_Updated);
-        } else if (getMessageInfo(info.getStoreKey(), messageInfos, false, false, false) == null) {
-          throw new StoreException("Not Found", StoreErrorCodes.ID_Not_Found);
+        if (info.getExpirationTimeInMs() != Utils.Infinite_Time) {
+          throw new StoreException("BlobStore only supports removing the expiration time",
+              StoreErrorCodes.Update_Not_Allowed);
         }
+        MessageInfo latestInfo = getMergedMessageInfo(info.getStoreKey(), messageInfos);
+        if (latestInfo == null) {
+          throw new StoreException("Cannot update TTL of " + info.getStoreKey() + " since it's not in the index",
+              StoreErrorCodes.ID_Not_Found);
+        } else if (latestInfo.isDeleted()) {
+          throw new StoreException(
+              "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
+              StoreErrorCodes.ID_Deleted);
+        } else if (latestInfo.isTtlUpdated()) {
+          throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
+              StoreErrorCodes.Already_Updated);
+        }
+        short lifeVersion = latestInfo.getLifeVersion();
         MessageFormatInputStream stream =
             new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                info.getExpirationTimeInMs(), info.getOperationTimeMs(), info.getLifeVersion());
+                info.getExpirationTimeInMs(), info.getOperationTimeMs(), lifeVersion);
         infosToUpdate.add(
-            new MessageInfo(info.getStoreKey(), stream.getSize(), false, true, info.getExpirationTimeInMs(),
-                info.getAccountId(), info.getContainerId(), info.getOperationTimeMs()));
+            new MessageInfo(info.getStoreKey(), stream.getSize(), false, true, false, info.getExpirationTimeInMs(),
+                null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(), lifeVersion));
         inputStreams.add(stream);
       }
       MessageFormatWriteSet writeSet =
@@ -288,19 +325,30 @@ class InMemoryStore implements Store {
       throw new StoreException("Key " + key + " not delete yet", StoreErrorCodes.ID_Not_Deleted);
     }
     short lifeVersion = info.getLifeVersion();
-    if (info.getLifeVersion() == -1) {
+    MessageInfo latestInfo = deleteInfo;
+    if (info.getLifeVersion() == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
+      if (deleteInfo == null) {
+        throw new StoreException(
+            "Id " + key + " requires first value to be a put and last value to be a delete",
+            StoreErrorCodes.ID_Not_Deleted);
+      }
       lifeVersion = (short) (deleteInfo.getLifeVersion() + 1);
+    } else {
+      if (deleteInfo == null) {
+        latestInfo = getMergedMessageInfo(key, messageInfos);
+      }
     }
     try {
       MessageFormatInputStream stream =
           new UndeleteMessageFormatInputStream(key, info.getAccountId(), info.getContainerId(),
               info.getOperationTimeMs(), lifeVersion);
       // Update info to add stream size;
-      info = new MessageInfo(key, stream.getSize(), false, deleteInfo.isTtlUpdated(), true,
-          deleteInfo.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(),
+      info = new MessageInfo(key, stream.getSize(), false, latestInfo.isTtlUpdated(), true,
+          latestInfo.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(),
           info.getOperationTimeMs(), lifeVersion);
       MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, Collections.singletonList(info), false);
       writeSet.writeTo(log);
+      messageInfos.add(info);
       return lifeVersion;
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to undelete blobs from store", e,
