@@ -129,6 +129,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
             onInitializationFailure.accept(e);
           } else {
             logger.error("Exception occurred at runtime when handling instance config changes in {}: ", dcName, e);
+            helixClusterManagerMetrics.instanceConfigChangeErrorCount.inc();
           }
         } finally {
           instanceConfigInitialized = true;
@@ -360,10 +361,20 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
             // Ensure only one AmbryPartition instance exists for specific partition.
             mappedPartition = clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaCapacity);
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, dataNode, replicaCapacity);
-            // create new replica belonging to this partition
-            AmbryReplica replica =
-                new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
-                    replicaCapacity, sealedReplicas.contains(partitionName));
+            // create new replica belonging to this partition or find the existing replica from bootstrapReplicas map.
+            AmbryReplica replica;
+            if (selfInstanceName.equals(instanceName)) {
+              // if this is a newly added replica on current instance, it should be present in bootstrapReplicas map.
+              replica = clusterChangeHandlerCallback.fetchBootstrapReplica(mappedPartition.toPathString());
+              if (replica == null) {
+                logger.error("Replica {} is not present in bootstrap replica set, abort instance info update",
+                    mappedPartition.toPathString());
+                throw new IllegalStateException("Replica to add is not present in bootstrap replica map");
+              }
+            } else {
+              replica = new AmbryServerReplica(clusterMapConfig, mappedPartition, disk,
+                  stoppedReplicas.contains(partitionName), replicaCapacity, sealedReplicas.contains(partitionName));
+            }
             updateReplicaStateAndOverrideIfNeeded(replica, sealedReplicas, stoppedReplicas);
             // add new created replica to "replicasFromInstanceConfig" map
             replicasFromInstanceConfig.put(partitionName, replica);

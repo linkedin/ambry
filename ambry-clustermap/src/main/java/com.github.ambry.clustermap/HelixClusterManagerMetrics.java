@@ -40,6 +40,7 @@ class HelixClusterManagerMetrics {
   public final Counter getReplicaIdsMismatchCount;
   public final Counter getDataNodeIdsMismatchCount;
   public final Counter ignoredUpdatesCount;
+  public final Counter instanceConfigChangeErrorCount;
 
   public Gauge<Long> helixClusterManagerInstantiationFailed;
   public Gauge<Long> helixClusterManagerRemoteInstantiationFailed;
@@ -80,6 +81,8 @@ class HelixClusterManagerMetrics {
     getDataNodeIdsMismatchCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "getDataNodeIdsMismatchCount"));
     ignoredUpdatesCount = registry.counter(MetricRegistry.name(HelixClusterManager.class, "ignoredUpdatesCount"));
+    instanceConfigChangeErrorCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceConfigChangeErrorCount"));
   }
 
   void initializeInstantiationMetric(final boolean instantiated, final long instantiationExceptionCount) {
