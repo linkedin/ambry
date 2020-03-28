@@ -24,6 +24,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -31,6 +33,7 @@ import java.util.Set;
  * in the provided requests.
  */
 public class CompositeNetworkClient implements NetworkClient {
+  private static final Logger logger = LoggerFactory.getLogger(CompositeNetworkClient.class);
   /**
    * Used to properly route requests to drop.
    */
@@ -72,6 +75,10 @@ public class CompositeNetworkClient implements NetworkClient {
     childNetworkClients.forEach((replicaType, client) -> {
       List<RequestInfo> requestsToSend = requestsToSendByType.get(replicaType);
       Set<Integer> requestsToDrop = requestsToDropByType.get(replicaType);
+      if (!requestsToSend.isEmpty() || !requestsToDrop.isEmpty()) {
+        logger.trace("replicaType={}, requestsToSend={}, requestsToDrop={}", replicaType, requestsToSend,
+            requestsToDrop);
+      }
       responses.addAll(client.sendAndPoll(requestsToSend, requestsToDrop, pollTimeoutMs));
     });
     // clean up correlation ids for completed requests

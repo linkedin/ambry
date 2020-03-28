@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
@@ -923,7 +924,7 @@ public class OperationTrackerTest {
       // ensure the success target matches the number specified for each type of operaiton
       if (operationTracker != null) {
         assertEquals("The suggest target doesn't match", (long) entry.getValue(),
-            (operationTracker).getSuccessTarget());
+            operationTracker.getSuccessTarget(ReplicaType.DISK_BACKED));
       }
     }
   }

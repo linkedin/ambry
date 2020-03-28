@@ -97,6 +97,8 @@ public class RouterConfig {
   public static final String ROUTER_GET_ELIGIBLE_REPLICAS_BY_STATE_ENABLED =
       "router.get.eligible.replicas.by.state.enabled";
   public static final String ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET = "router.put.use.dynamic.success.target";
+  public static final String ROUTER_CLOUD_SUCCESS_TARGET = "router.cloud.success.target";
+  public static final String ROUTER_CLOUD_REQUEST_PARALLELISM = "router.cloud.request.parallelism";
 
   /**
    * Number of independent scaling units for the router.
@@ -455,6 +457,22 @@ public class RouterConfig {
   public final boolean routerPutUseDynamicSuccessTarget;
 
   /**
+   * The minimum number of successful responses required for a cloud operation of any type. Currently, cloud requests
+   * for any type of operation (get, put, delete, ttl update) will have the same success target and parallelism. This
+   * may change in the future with new operations introduced (such as undelete).
+   */
+  @Config(ROUTER_CLOUD_SUCCESS_TARGET)
+  @Default("1")
+  public final int routerCloudSuccessTarget;
+
+  /**
+   * The maximum number of parallel requests allowed when sending requests to cloud replicas.
+   */
+  @Config(ROUTER_CLOUD_REQUEST_PARALLELISM)
+  @Default("1")
+  public final int routerCloudRequestParallelism;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -553,5 +571,8 @@ public class RouterConfig {
     routerGetEligibleReplicasByStateEnabled =
         verifiableProperties.getBoolean(ROUTER_GET_ELIGIBLE_REPLICAS_BY_STATE_ENABLED, false);
     routerPutUseDynamicSuccessTarget = verifiableProperties.getBoolean(ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET, false);
+    routerCloudSuccessTarget = verifiableProperties.getIntInRange(ROUTER_CLOUD_SUCCESS_TARGET, 1, 1, Integer.MAX_VALUE);
+    routerCloudRequestParallelism =
+        verifiableProperties.getIntInRange(ROUTER_CLOUD_REQUEST_PARALLELISM, 1, 1, Integer.MAX_VALUE);
   }
 }

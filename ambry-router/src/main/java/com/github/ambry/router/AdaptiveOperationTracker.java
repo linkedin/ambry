@@ -58,8 +58,6 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   private final LinkedHashMap<ReplicaId, Pair<Boolean, Long>> unexpiredRequestSendTimes = new LinkedHashMap<>();
   private final Map<ReplicaId, Long> expiredRequestSendTimes = new HashMap<>();
 
-  private ReplicaId lastReturned = null;
-
   /**
    * Constructs an {@link AdaptiveOperationTracker}
    * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
@@ -83,7 +81,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       localDcResourceToHistogram = getResourceToLatencyMap(routerOperation, true);
       crossDcResourceToHistogram = getResourceToLatencyMap(routerOperation, false);
     }
-    if (parallelism > routerConfig.routerOperationTrackerMaxInflightRequests) {
+    if (Math.max(diskParallelism, cloudParallelism) > routerConfig.routerOperationTrackerMaxInflightRequests) {
       throw new IllegalArgumentException(
           "Operation tracker parallelism is larger than adaptive tracker max inflight number");
     }
@@ -224,7 +222,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     @Override
     public boolean hasNext() {
       if (replicaIterator.hasNext()) {
-        if (inflightCount < parallelism) {
+        if (inflightCount < getCurrentParallelism()) {
           return true;
         }
         if (inflightCount < routerConfig.routerOperationTrackerMaxInflightRequests && isOldestRequestPastDue()) {
@@ -237,14 +235,15 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     @Override
     public void remove() {
       replicaIterator.remove();
-      if (inflightCount >= parallelism && unexpiredRequestSendTimes.size() > 0) {
+      if (inflightCount >= getCurrentParallelism() && unexpiredRequestSendTimes.size() > 0) {
         // we are here because oldest request is past due
         Map.Entry<ReplicaId, Pair<Boolean, Long>> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
         expiredRequestSendTimes.put(oldestEntry.getKey(), oldestEntry.getValue().getSecond());
         unexpiredRequestSendTimes.remove(oldestEntry.getKey());
         pastDueCounter.inc();
       }
-      unexpiredRequestSendTimes.put(lastReturned, new Pair<>(false, time.milliseconds()));
+      unexpiredRequestSendTimes.put(lastReturnedByIterator, new Pair<>(false, time.milliseconds()));
+      inFlightReplicaType = lastReturnedByIterator.getReplicaType();
       inflightCount++;
     }
 
@@ -253,8 +252,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       if (!hasNext()) {
         throw new NoSuchElementException();
       }
-      lastReturned = replicaIterator.next();
-      return lastReturned;
+      lastReturnedByIterator = replicaIterator.next();
+      return lastReturnedByIterator;
     }
 
     /**
