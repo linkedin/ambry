@@ -119,6 +119,10 @@ public class MockPartitionId implements PartitionId {
     return true;
   }
 
+  public void setPartitionState(PartitionState state) {
+    partitionState = state;
+  }
+
   /**
    * If all replicaIds == !isSealed, then partition status = Read-Write, else Read-Only
    */

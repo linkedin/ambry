@@ -34,6 +34,7 @@ import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -422,10 +423,10 @@ public class NonBlockingRouterMetrics {
     rawBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "RawBlobGetCount"));
 
     // Track metrics at the DataNode level.
-    dataNodeToMetrics = new HashMap<>();
+    dataNodeToMetrics = new ConcurrentHashMap<>();
     for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
-      String dataNodeName = dataNodeId.getDatacenterName() + "." + dataNodeId.getHostname() + "." + Integer.toString(
-          dataNodeId.getPort());
+      String dataNodeName =
+          dataNodeId.getDatacenterName() + "." + dataNodeId.getHostname() + "." + dataNodeId.getPort();
       dataNodeToMetrics.put(dataNodeId, new NodeLevelMetrics(metricRegistry, dataNodeName));
     }
 
@@ -795,7 +796,10 @@ public class NonBlockingRouterMetrics {
    * @return The {@link NodeLevelMetrics}.
    */
   NodeLevelMetrics getDataNodeBasedMetrics(DataNodeId dataNodeId) {
-    return dataNodeToMetrics.get(dataNodeId);
+    // If datanode is not yet in the map, create a new NodeLevelMetrics and add it into map. This may happen when
+    // dynamically adding new nodes into cluster.
+    return dataNodeToMetrics.computeIfAbsent(dataNodeId, k -> new NodeLevelMetrics(metricRegistry,
+        dataNodeId.getDatacenterName() + "." + dataNodeId.getHostname() + "." + dataNodeId.getPort()));
   }
 
   /**
@@ -955,14 +959,14 @@ public class NonBlockingRouterMetrics {
       for (Map.Entry<Resource, CachedHistogram> resourceToHistogram : getBlobLocalDcResourceToLatency.entrySet()) {
         Resource resource = resourceToHistogram.getKey();
         CachedHistogram histogram = resourceToHistogram.getValue();
-        logger.debug("{} GetBlob local DC latency histogram {}th percentile in ms: {}", resource.toString(),
-            percentile, histogram.getCachedValue());
+        logger.debug("{} GetBlob local DC latency histogram {}th percentile in ms: {}", resource.toString(), percentile,
+            histogram.getCachedValue());
       }
       for (Map.Entry<Resource, CachedHistogram> resourceToHistogram : getBlobCrossDcResourceToLatency.entrySet()) {
         Resource resource = resourceToHistogram.getKey();
         CachedHistogram histogram = resourceToHistogram.getValue();
-        logger.trace("{} GetBlob cross DC latency histogram {}th percentile in ms: {}", resource.toString(),
-            percentile, histogram.getCachedValue());
+        logger.trace("{} GetBlob cross DC latency histogram {}th percentile in ms: {}", resource.toString(), percentile,
+            histogram.getCachedValue());
       }
       for (Map.Entry<Resource, CachedHistogram> resourceToHistogram : getBlobInfoLocalDcResourceToLatency.entrySet()) {
         Resource resource = resourceToHistogram.getKey();
