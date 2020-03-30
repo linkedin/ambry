@@ -621,10 +621,10 @@ public class NettyPerfClient {
         request.headers().add(RestUtils.Headers.BLOB_SIZE, totalSize);
         request.headers().add(RestUtils.Headers.SERVICE_ID, serviceId);
         request.headers().add(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
-        if (targetAccountName != null) {
+        if (targetAccountName != null && !targetAccountName.isEmpty()) {
           request.headers().add(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
         }
-        if (targetContainerName != null) {
+        if (targetContainerName != null && !targetContainerName.isEmpty() ) {
           request.headers().add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
         }
       } else {
