@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -930,6 +931,54 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Test cases with cloud replicas in the local datacenter.
+   */
+  @Test
+  public void cloudReplicaInLocalDcTest() {
+    // test success in cloud dc
+    initializeWithCloudDcs(true);
+    originatingDcName = getDatacenters(ReplicaType.DISK_BACKED).iterator().next();
+    OperationTracker ot =
+        getOperationTracker(true, 2, 3, false, Integer.MAX_VALUE, RouterOperation.GetBlobOperation, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    // parallelism of 1 for cloud replicas, so only one request should be sent
+    sendRequests(ot, 1, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+    // success target of 1 with cloud replicas.
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
+   * Test cases with cloud replicas in the remote datacenter.
+   */
+  @Test
+  public void cloudReplicaInRemoteDcTest() {
+    // test failure in disk dc with fallback to cloud DC
+    initializeWithCloudDcs(false);
+    originatingDcName = getDatacenters(ReplicaType.CLOUD_BACKED).iterator().next();
+    OperationTracker ot =
+        getOperationTracker(true, 2, 3, false, Integer.MAX_VALUE, RouterOperation.GetBlobOperation, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    // parallelism of 3 for disk replicas (local dc).
+    sendRequests(ot, 3, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+    // one response frees up a spot to send a cloud request
+    sendRequests(ot, 1, false);
+    for (int i = 0; i < 2; i++) {
+      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+      // parallelism should have changed to 1 after cloud request was sent
+      sendRequests(ot, 0, false);
+    }
+    assertFalse("Operation should not have been done.", ot.isDone());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
    * Initialize 4 DCs, each DC has 1 data node, which has 3 replicas.
    */
   private void initialize() {
@@ -946,16 +995,61 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Initialize 4 DCs, 2 disk datacenters, 2 cloud datacenters. Each disk datacenter has 3 replicas, and each cloud
+   * datacenter has 1 replica.
+   * @param makeCloudDcLocal {@code true} to make the local datacenter one of the cloud datacenters.
+   */
+  private void initializeWithCloudDcs(boolean makeCloudDcLocal) {
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    mockPartition = new MockPartitionId();
+    List<MockDataNodeId> diskNodes = Arrays.asList(new MockDataNodeId(portList, mountPaths, "dc-0"),
+        new MockDataNodeId(portList, mountPaths, "dc-1"));
+    populateReplicaList(3 * diskNodes.size(), ReplicaState.STANDBY, diskNodes);
+    List<MockDataNodeId> cloudNodes = Arrays.asList(new MockDataNodeId(portList, Collections.emptyList(), "cloud-dc-0"),
+        new MockDataNodeId(portList, Collections.emptyList(), "cloud-dc-1"));
+    // only one cloud replica per cloud dc.
+    populateReplicaList(cloudNodes.size(), ReplicaState.STANDBY, cloudNodes);
+    datanodes = new ArrayList<>();
+    datanodes.addAll(diskNodes);
+    datanodes.addAll(cloudNodes);
+    localDcName = (makeCloudDcLocal ? cloudNodes : diskNodes).get(0).getDatacenterName();
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+  }
+
+  /**
    * Populate replicas for a partition.
    * @param replicaCount The number of replicas to populate.
    * @param replicaState The {@link ReplicaState} associated with these replicas.
    */
   private void populateReplicaList(int replicaCount, ReplicaState replicaState) {
+    populateReplicaList(replicaCount, replicaState, datanodes);
+  }
+
+  /**
+   * Populate replicas for a partition.
+   * @param replicaCount The number of replicas to populate.
+   * @param replicaState The {@link ReplicaState} associated with these replicas.
+   * @param datanodes the datanodes to populate with replicas
+   */
+  private void populateReplicaList(int replicaCount, ReplicaState replicaState, List<MockDataNodeId> datanodes) {
     for (int i = 0; i < replicaCount; i++) {
       ReplicaId replicaId = new MockReplicaId(PORT, mockPartition, datanodes.get(i % datanodes.size()), 0);
       mockPartition.replicaIds.add(replicaId);
       mockPartition.replicaAndState.put(replicaId, replicaState);
     }
+  }
+
+  /**
+   * @param replicaType the type of replica to filter by.
+   * @return the datacenter names with replicas of type {@code replicaType}.
+   */
+  private Set<String> getDatacenters(ReplicaType replicaType) {
+    return mockPartition.getReplicaIds()
+        .stream()
+        .filter(r -> r.getReplicaType() == ReplicaType.CLOUD_BACKED)
+        .map(r -> r.getDataNodeId().getDatacenterName())
+        .collect(Collectors.toSet());
   }
 
   /**
@@ -1023,7 +1117,7 @@ public class OperationTrackerTest {
     while (replicaIdIterator.hasNext()) {
       ReplicaId nextReplica = replicaIdIterator.next();
       assertNotNull("There should be a replica to send a request to", nextReplica);
-      assertFalse("Replica that was used for a request returned by iterator again",
+      assertFalse("Replica that was used for a request returned by iterator again: " + nextReplica,
           repetitionTracker.contains(nextReplica));
       if (!skipAlternate || counter % 2 == 0) {
         inflightReplicas.offer(nextReplica);
