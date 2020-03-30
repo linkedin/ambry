@@ -119,6 +119,10 @@ public class MockPartitionId implements PartitionId {
     return true;
   }
 
+  /**
+   * Set state of this partition.
+   * @param state the {@link PartitionState} associated with this partition.
+   */
   public void setPartitionState(PartitionState state) {
     partitionState = state;
   }

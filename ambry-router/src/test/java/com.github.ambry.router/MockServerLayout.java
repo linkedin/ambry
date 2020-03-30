@@ -42,6 +42,11 @@ class MockServerLayout {
     }
   }
 
+  /**
+   * Dynamically add new mock servers into layout.
+   * @param newNodes a list of new nodes to add.
+   * @param clusterMap the {@link ClusterMap} used to associate a host and port with a MockServer.
+   */
   public void addMockServers(List<? extends DataNodeId> newNodes, ClusterMap clusterMap) {
     newNodes.forEach(node -> mockServers.putIfAbsent(node, new MockServer(clusterMap, node.getDatacenterName())));
   }

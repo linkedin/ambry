@@ -762,6 +762,7 @@ public class GetBlobOperationTest {
     mockServerLayout.addMockServers(newNodes, mockClusterMap);
     // put a composite blob which should go to new partitions on new nodes only
     doPut();
+    // make sure get blob from new partitions on new nodes succeeds
     getAndAssertSuccess();
   }
 
