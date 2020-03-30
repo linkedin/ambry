@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.protocol.RequestOrResponseType;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 
@@ -39,6 +40,15 @@ class MockServerLayout {
     for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
       mockServers.put(dataNodeId, new MockServer(clusterMap, dataNodeId.getDatacenterName()));
     }
+  }
+
+  /**
+   * Dynamically add new mock servers into layout.
+   * @param newNodes a list of new nodes to add.
+   * @param clusterMap the {@link ClusterMap} used to associate a host and port with a MockServer.
+   */
+  public void addMockServers(List<? extends DataNodeId> newNodes, ClusterMap clusterMap) {
+    newNodes.forEach(node -> mockServers.putIfAbsent(node, new MockServer(clusterMap, node.getDatacenterName())));
   }
 
   /**

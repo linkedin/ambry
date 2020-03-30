@@ -60,6 +60,10 @@ public class MockClusterMap implements ClusterMap {
   private MetricRegistry metricRegistry;
   // needs to be thread safe
   private List<String> lastRequestedPartitionClasses = new CopyOnWriteArrayList<>();
+  // expose current port numbers to other methods for dynamic nodes addition
+  private int currentPlainTextPort = PLAIN_TEXT_PORT_START_NUMBER;
+  private int currentSSLPort = SSL_PORT_START_NUMBER;
+  private int currentHttp2Port = HTTP2_PORT_START_NUMBER;
 
   // allow this to be changed to support some tests
   private String localDatacenterName;
@@ -119,9 +123,6 @@ public class MockClusterMap implements ClusterMap {
     //Every group of 3 nodes will be put in the same DC.
     int dcIndex = 0;
     String dcName = null;
-    int currentPlainTextPort = PLAIN_TEXT_PORT_START_NUMBER;
-    int currentSSLPort = SSL_PORT_START_NUMBER;
-    int currentHttp2Port = HTTP2_PORT_START_NUMBER;
     for (int i = 0; i < numNodes; i++) {
       if (i % 3 == 0) {
         dcIndex++;
@@ -297,6 +298,25 @@ public class MockClusterMap implements ClusterMap {
   }
 
   /**
+   * Create a number of new nodes in given data center and add them into mock clustermap.
+   * @param numNewNodes the number of new nodes to create
+   * @param dcName the data center where new nodes reside
+   * @return a list of created new nodes
+   */
+  public List<MockDataNodeId> createNewDataNodes(int numNewNodes, String dcName) throws Exception {
+    List<MockDataNodeId> createdNodes = new ArrayList<>();
+    for (int i = 0; i < numNewNodes; ++i) {
+      MockDataNodeId dataNodeId =
+          createDataNode(getListOfPorts(currentPlainTextPort++, null, currentHttp2Port++), dcName,
+              numMountPointsPerNode);
+      dataNodes.add(dataNodeId);
+      dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(dataNodeId);
+      createdNodes.add(dataNodeId);
+    }
+    return createdNodes;
+  }
+
+  /**
    * Create a new partition and add it to mock clustermap.
    * @param dataNodes the replicas of new partition should be placed on the given data nodes only.
    * @return new {@link PartitionId}
@@ -313,9 +333,11 @@ public class MockClusterMap implements ClusterMap {
    * @return new {@link PartitionId}
    */
   PartitionId createNewPartition(List<MockDataNodeId> dataNodes, int mountPathIndexToUse) {
-    PartitionId partitionId =
+    MockPartitionId partitionId =
         new MockPartitionId(partitions.size(), DEFAULT_PARTITION_CLASS, dataNodes, mountPathIndexToUse);
     partitions.put((long) partitions.size(), partitionId);
+    // make partitionSelectionHelper re-populate internal maps because new replicas(partition) are added
+    partitionSelectionHelper.onReplicaAddedOrRemoved(partitionId.getReplicaIds(), Collections.emptyList());
     return partitionId;
   }
 

@@ -516,7 +516,7 @@ public class AmbryServerRequestsTest {
     // create newPartition1 that no replica sits on current node.
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes()
         .stream()
-        .filter(node -> !node.getHostname().equals(dataNodeId.getHostname()) && node.getPort() != dataNodeId.getPort())
+        .filter(node -> !node.getHostname().equals(dataNodeId.getHostname()) || node.getPort() != dataNodeId.getPort())
         .collect(Collectors.toList());
     PartitionId newPartition1 = clusterMap.createNewPartition(dataNodes);
     // test that getting new replica from cluster map fails

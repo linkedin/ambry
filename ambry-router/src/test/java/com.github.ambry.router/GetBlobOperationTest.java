@@ -17,7 +17,10 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
@@ -738,6 +741,29 @@ public class GetBlobOperationTest {
     }
     getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDoesNotExist);
     mockServerLayout.getMockServers().forEach(MockServer::resetServerErrors);
+  }
+
+  /**
+   * Test the case new nodes/partitions are dynamically added and router should be able to route quests to new replicas
+   * and add new nodes into router metrics (if they are not present previously)
+   */
+  @Test
+  public void testGetBlobFromNewAddedNode() throws Exception {
+    // create 3 new nodes in mock clustermap and place new partitions on these nodes.
+    List<MockDataNodeId> newNodes = mockClusterMap.createNewDataNodes(3, LOCAL_DC);
+    // make all existing partitions READ_ONLY to force router to route PUT against new partitions
+    mockClusterMap.getAllPartitionIds(null)
+        .forEach(p -> ((MockPartitionId) p).setPartitionState(PartitionState.READ_ONLY));
+    // create 3 new partitions on new nodes
+    for (int i = 0; i < 3; ++i) {
+      mockClusterMap.createNewPartition(newNodes);
+    }
+    // add new nodes to mock server layout
+    mockServerLayout.addMockServers(newNodes, mockClusterMap);
+    // put a composite blob which should go to new partitions on new nodes only
+    doPut();
+    // make sure get blob from new partitions on new nodes succeeds
+    getAndAssertSuccess();
   }
 
   /**
