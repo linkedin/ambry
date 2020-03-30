@@ -384,8 +384,8 @@ class AzureCloudDestination implements CloudDestination {
     } else if (e instanceof DocumentClientException) {
       statusCode = ((DocumentClientException) e).getStatusCode();
       retryDelayMs = ((DocumentClientException) e).getRetryAfterInMilliseconds();
-    } else if (e instanceof RuntimeException) {
-      // Note: handling this separately since ABS timeouts are thrown as IllegalStateException
+    } else {
+      // Note: catch-all since ABS can throw things like IOException, IllegalStateException
       statusCode = StatusCodes.INTERNAL_SERVER_ERROR;
     }
     logger.info("{} status {}, {}", message, statusCode, e.toString());
