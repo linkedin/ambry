@@ -160,9 +160,8 @@ public class ServerSSLTest {
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest() throws Exception {
     // this test uses router to Put and direct GetRequest to verify Gets. So, no way to get access to encryptionKey against
     // which to compare the GetResponse. Hence skipping encryption flow for this test
-    if (!testEncryption) {
-      ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3", PortType.SSL,
-          sslCluster, notificationSystem, routerProps);
-    }
+    assumeTrue(!testEncryption);
+    ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3", PortType.SSL,
+        sslCluster, notificationSystem, routerProps);
   }
 }
