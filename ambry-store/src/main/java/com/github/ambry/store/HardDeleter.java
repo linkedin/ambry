@@ -52,7 +52,7 @@ public class HardDeleter implements Runnable {
   public static final short Cleanup_Token_Version_V1 = 1;
   private static final String Cleanup_Token_Filename = "cleanuptoken";
   //how long to sleep if token does not advance.
-  static final long HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS = 10 * Time.MsPerSec;
+  static final long HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS = 60 * Time.MsPerSec;
 
   final AtomicBoolean enabled = new AtomicBoolean(true);
   private volatile boolean awaitingAfterCaughtUp = false;
@@ -831,6 +831,19 @@ public class HardDeleter implements Runnable {
         HardDeletePersistItem item = itemsIterator.next();
         if (item.startTokenForBlobReadOptions.getType() == FindTokenType.Uninitialized) {
           itemsIterator.remove();
+        } else if (item.startTokenForBlobReadOptions.getType() == FindTokenType.JournalBased) {
+          // If the startToken for this blobReadOptions is JournalBased, then just don't remove it.
+          // This has a potential consequence that the HardDeletePersistItem list would grow to infinite
+          // since as HardDeleter moves through the PersistentIndex, it will points to Journal in the end
+          // and always stay in Journal.
+          // The solution to this problem is to force HardDeleter thread to sleep longer so the IndexPersistor
+          // thread in PersistentIndex would be able to call preLogFlush and postLogFlush with startToken being
+          // equal to endToken. For instance
+          // 1. HardDeleter performs a hard delete, then the startToken is set to be endToken and it sleeps
+          //    for 1 minutes
+          // 2. Within this one minute, IndexPersistor thread calls preLogFlush, logFlush and postLogFlush,
+          //    and since the startToken == endToken, the HardDeletePersistItem will be cleared.
+          break;
         } else {
           if (compareTwoTokens(item.startTokenForBlobReadOptions, token) >= 0) {
             break;
