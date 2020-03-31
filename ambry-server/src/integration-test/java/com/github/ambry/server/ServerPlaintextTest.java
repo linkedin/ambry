@@ -28,8 +28,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -44,7 +44,7 @@ public class ServerPlaintextTest {
   private static MockCluster plaintextCluster;
   private final boolean testEncryption;
 
-  @BeforeClass
+  @Before
   public static void initializeTests() throws Exception {
     routerProps = new Properties();
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
@@ -71,7 +71,7 @@ public class ServerPlaintextTest {
     this.testEncryption = testEncryption;
   }
 
-  @AfterClass
+  @After
   public static void cleanup() throws IOException {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast

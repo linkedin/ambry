@@ -488,7 +488,7 @@ class EventTracker {
    * @throws InterruptedException
    */
   boolean awaitBlobCreations() throws InterruptedException {
-    return creationHelper.await(10, TimeUnit.SECONDS);
+    return creationHelper.await(11, TimeUnit.SECONDS);
   }
 
   /**

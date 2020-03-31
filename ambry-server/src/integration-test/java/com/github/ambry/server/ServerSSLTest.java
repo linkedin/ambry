@@ -32,8 +32,8 @@ import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -57,8 +57,8 @@ public class ServerSSLTest {
   private static MockCluster sslCluster;
   private final boolean testEncryption;
 
-  @BeforeClass
-  public static void initializeTests() throws Exception {
+  @Before
+  public void initializeTests() throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
     clientSSLConfig1 =
         new SSLConfig(TestSSLUtils.createSslProps("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1"));
@@ -102,8 +102,8 @@ public class ServerSSLTest {
     this.testEncryption = testEncryption;
   }
 
-  @AfterClass
-  public static void cleanup() throws IOException {
+  @After
+  public void cleanup() throws IOException {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.

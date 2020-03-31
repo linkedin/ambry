@@ -182,6 +182,7 @@ public class AmbryRequests implements RequestAPI {
         metrics.blobSizeInBytes.update(receivedRequest.getBlobSize());
         metrics.blobUserMetadataSizeInBytes.update(receivedRequest.getUsermetadata().limit());
         if (notification != null) {
+          logger.info("AmbryRequests: write key " + receivedRequest.getBlobId() + " at port " + currentNode.getPort());
           notification.onBlobReplicaCreated(currentNode.getHostname(), currentNode.getPort(),
               receivedRequest.getBlobId().getID(), BlobReplicaSourceType.PRIMARY);
         }

@@ -423,6 +423,7 @@ public class BlobStore implements Store {
             FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfLastMessage);
             index.addToIndex(indexEntries, fileSpan);
             for (IndexEntry newEntry : indexEntries) {
+              System.out.println("Handle new put Entry for key " + newEntry.getKey());
               blobStoreStats.handleNewPutEntry(newEntry.getValue());
             }
             logger.trace("Store : {} message set written to index ", dataDir);
