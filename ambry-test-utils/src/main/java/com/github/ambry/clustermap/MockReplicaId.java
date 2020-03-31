@@ -24,6 +24,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 
 public class MockReplicaId implements ReplicaId {
   public static final long MOCK_REPLICA_CAPACITY = 100000000;
+  private static final String REPLICA_FILE_PREFIX = "replica";
   private String mountPath;
   private String replicaPath;
   private List<ReplicaId> peerReplicas;
@@ -47,10 +48,10 @@ public class MockReplicaId implements ReplicaId {
     } else {
       mountPath = dataNodeId.getMountPaths().get(indexOfMountPathToUse);
       File mountFile = new File(mountPath);
-      File replicaFile = new File(mountFile, "replica" + port + partitionId.partition);
+      File replicaFile = new File(mountFile, REPLICA_FILE_PREFIX + port + partitionId.partition);
       replicaFile.mkdir();
       replicaFile.deleteOnExit();
-      if (mountPath.startsWith("/vcr")) {
+      if (mountPath.startsWith(CLOUD_REPLICA_MOUNT)) {
         replicaType = ReplicaType.CLOUD_BACKED;
       } else {
         replicaType = ReplicaType.DISK_BACKED;

@@ -96,13 +96,9 @@ public class NonBlockingRouterFactory implements RouterFactory {
     http2ClientMetrics = new Http2ClientMetrics(registry);
 
     time = SystemTime.getInstance();
-    if (new ClusterMapConfig(verifiableProperties).clusterMapHttp2NetworkClientEnabled) {
-      networkClientFactory = new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslFactory, time);
-    } else {
-      networkClientFactory = new SocketNetworkClientFactory(networkMetrics, networkConfig, sslFactory,
-          routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
-          routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);
-    }
+    networkClientFactory =
+        getNetworkClientFactory(clusterMapConfig, routerConfig, networkConfig, http2ClientConfig, networkMetrics,
+            http2ClientMetrics, sslFactory, time);
     KeyManagementServiceFactory kmsFactory =
         Utils.getObj(routerConfig.routerKeyManagementServiceFactory, verifiableProperties,
             new ClusterMapConfig(verifiableProperties).clusterMapClusterName, registry);
@@ -126,6 +122,29 @@ public class NonBlockingRouterFactory implements RouterFactory {
           kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
     } catch (IOException e) {
       throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
+    }
+  }
+
+  /**
+   * @param clusterMapConfig {@link ClusterMapConfig} to use.
+   * @param routerConfig {@link RouterConfig} to use.
+   * @param networkConfig {@link NetworkConfig} to use for the socket client.
+   * @param http2ClientConfig {@link Http2ClientConfig} to use if HTTP2 mode is enabled.
+   * @param networkMetrics {@link NetworkMetrics} to use for the socket client.
+   * @param http2ClientMetrics {@link Http2ClientMetrics} to use if HTTP2 mode is enabled.
+   * @param sslFactory an {@link SSLFactory} instance.
+   * @param time a {@link Time} instance.
+   * @return a {@link NetworkClientFactory} for talking to ambry server nodes.
+   */
+  static NetworkClientFactory getNetworkClientFactory(ClusterMapConfig clusterMapConfig, RouterConfig routerConfig,
+      NetworkConfig networkConfig, Http2ClientConfig http2ClientConfig, NetworkMetrics networkMetrics,
+      Http2ClientMetrics http2ClientMetrics, SSLFactory sslFactory, Time time) {
+    if (clusterMapConfig.clusterMapHttp2NetworkClientEnabled) {
+      return new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslFactory, time);
+    } else {
+      return new SocketNetworkClientFactory(networkMetrics, networkConfig, sslFactory,
+          routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
+          routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);
     }
   }
 }

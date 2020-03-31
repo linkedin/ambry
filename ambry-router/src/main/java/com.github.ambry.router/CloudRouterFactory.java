@@ -38,9 +38,7 @@ import com.github.ambry.network.LocalNetworkClientFactory;
 import com.github.ambry.network.LocalRequestResponseChannel;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
-import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.network.http2.Http2ClientMetrics;
-import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestHandlerPool;
@@ -63,8 +61,13 @@ import org.slf4j.LoggerFactory;
  */
 public class CloudRouterFactory implements RouterFactory {
   private static final Logger logger = LoggerFactory.getLogger(CloudRouterFactory.class);
+  private final ClusterMapConfig clusterMapConfig;
   private final RouterConfig routerConfig;
+  private final NetworkConfig networkConfig;
+  private final Http2ClientConfig http2ClientConfig;
   private final NonBlockingRouterMetrics routerMetrics;
+  private final NetworkMetrics networkMetrics;
+  private final Http2ClientMetrics http2ClientMetrics;
   private final ClusterMap clusterMap;
   private final NotificationSystem notificationSystem;
   private final SSLFactory sslFactory;
@@ -93,7 +96,7 @@ public class CloudRouterFactory implements RouterFactory {
       throw new IllegalArgumentException("Null argument passed in");
     }
     this.verifiableProperties = verifiableProperties;
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     if (sslFactory == null && clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0) {
       throw new IllegalArgumentException("NonBlockingRouter requires SSL, but sslFactory is null");
     }
@@ -103,11 +106,15 @@ public class CloudRouterFactory implements RouterFactory {
       throw new IllegalStateException(
           "Router datacenter " + routerConfig.routerDatacenterName + " is not part of the clustermap");
     }
+    networkConfig = new NetworkConfig(verifiableProperties);
+    http2ClientConfig = new Http2ClientConfig(verifiableProperties);
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
     this.accountService = accountService;
     MetricRegistry registry = clusterMap.getMetricRegistry();
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
+    networkMetrics = new NetworkMetrics(registry);
+    http2ClientMetrics = new Http2ClientMetrics(registry);
     time = SystemTime.getInstance();
     KeyManagementServiceFactory kmsFactory =
         Utils.getObj(routerConfig.routerKeyManagementServiceFactory, verifiableProperties,
@@ -135,7 +142,7 @@ public class CloudRouterFactory implements RouterFactory {
       CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
       RequestHandlerPool requestHandlerPool =
           getRequestHandlerPool(verifiableProperties, clusterMap, cloudDestination, cloudConfig);
-      CompositeNetworkClientFactory networkClientFactory = getNetworkClientFactory(requestHandlerPool, registry);
+      CompositeNetworkClientFactory networkClientFactory = getCompositeNetworkClientFactory(requestHandlerPool);
       NonBlockingRouter router =
           new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap, kms,
               cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
@@ -173,30 +180,26 @@ public class CloudRouterFactory implements RouterFactory {
     StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
     StoreKeyConverterFactory storeKeyConverterFactory =
         Utils.getObj(serverConfig.serverStoreKeyConverterFactory, verifiableProperties, registry);
+    // A null notification system is passed into AmbryRequests so that replication events are not emitted from a
+    // frontend.
     AmbryRequests requests =
         new AmbryRequests(cloudStorageManager, channel, clusterMap, nodeId, registry, serverMetrics, null, null, null,
             storeKeyFactory, serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory);
     return new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, channel, requests);
   }
 
-  private CompositeNetworkClientFactory getNetworkClientFactory(RequestHandlerPool requestHandlerPool,
-      MetricRegistry registry) {
-    NetworkConfig networkConfig = new NetworkConfig(verifiableProperties);
-    NetworkMetrics networkMetrics = new NetworkMetrics(registry);
+  /**
+   * @param requestHandlerPool the pool to connect to {@link LocalNetworkClientFactory}.
+   * @return a {@link CompositeNetworkClientFactory} that can be used to talk to cloud managed services or ambry server
+   *         nodes.
+   */
+  private CompositeNetworkClientFactory getCompositeNetworkClientFactory(RequestHandlerPool requestHandlerPool) {
     NetworkClientFactory cloudNetworkClientFactory =
         new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(), networkConfig,
             networkMetrics, time);
-
-    NetworkClientFactory diskNetworkClientFactory;
-    if (new ClusterMapConfig(verifiableProperties).clusterMapHttp2NetworkClientEnabled) {
-      Http2ClientConfig http2ClientConfig = new Http2ClientConfig(verifiableProperties);
-      Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
-      diskNetworkClientFactory = new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslFactory, time);
-    } else {
-      diskNetworkClientFactory = new SocketNetworkClientFactory(networkMetrics, networkConfig, sslFactory,
-          routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
-          routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);
-    }
+    NetworkClientFactory diskNetworkClientFactory =
+        NonBlockingRouterFactory.getNetworkClientFactory(clusterMapConfig, routerConfig, networkConfig,
+            http2ClientConfig, networkMetrics, http2ClientMetrics, sslFactory, time);
 
     Map<ReplicaType, NetworkClientFactory> childFactories = new EnumMap<>(ReplicaType.class);
     childFactories.put(ReplicaType.CLOUD_BACKED, cloudNetworkClientFactory);
