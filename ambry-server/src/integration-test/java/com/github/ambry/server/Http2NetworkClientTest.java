@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -59,7 +60,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import org.junit.AfterClass;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -108,7 +108,7 @@ public class Http2NetworkClientTest {
   @Test
   public void putGetTest() throws Exception {
     MockClusterMap clusterMap = http2Cluster.getClusterMap();
-    DataNodeId dataNodeId = http2Cluster.getGeneralDataNode();
+    DataNodeId dataNodeId = http2Cluster.getPrefetchDataNode();
     BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
     SSLFactory sslFactory = new NettySslHttp2Factory(clientSSLConfig);
     Http2NetworkClient networkClient = new Http2NetworkClient(new Http2ClientMetrics(new MetricRegistry()),
@@ -117,7 +117,6 @@ public class Http2NetworkClientTest {
     int blobSize = 1024 * 1024;
     byte[] usermetadata = new byte[1000];
     byte[] data = new byte[blobSize];
-    byte[] encryptionKey = new byte[100];
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
 
@@ -136,7 +135,7 @@ public class Http2NetworkClientTest {
             properties.getBlobSize(), BlobType.DataBlob, null);
     RequestInfo request =
         new RequestInfo(dataNodeId.getHostname(), new Port(dataNodeId.getHttp2Port(), PortType.HTTP2), putRequest,
-            http2Cluster.getClusterMap().getReplicaIds(dataNodeId).get(0));
+            clusterMap.getReplicaIds(dataNodeId).get(0));
     List<ResponseInfo> responseInfos =
         networkClient.sendAndPoll(Collections.singletonList(request), new HashSet<>(), 300);
     long startTime = SystemTime.getInstance().milliseconds();
@@ -166,7 +165,7 @@ public class Http2NetworkClientTest {
         new GetRequest(1, "http2-clientid", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
 
     request = new RequestInfo(dataNodeId.getHostname(), new Port(dataNodeId.getHttp2Port(), PortType.HTTP2), getRequest,
-        http2Cluster.getClusterMap().getReplicaIds(dataNodeId).get(0));
+        clusterMap.getReplicaIds(dataNodeId).get(0));
     responseInfos = networkClient.sendAndPoll(Collections.singletonList(request), new HashSet<>(), 300);
     startTime = SystemTime.getInstance().milliseconds();
     while (responseInfos.size() == 0) {
@@ -204,21 +203,22 @@ public class Http2NetworkClientTest {
     Http2ClientConfig http2ClientConfig = new Http2ClientConfig(new VerifiableProperties(properties));
     Http2NetworkClient networkClient =
         new Http2NetworkClient(new Http2ClientMetrics(new MetricRegistry()), http2ClientConfig, sslFactory);
-
+    MockClusterMap clusterMap = http2Cluster.getClusterMap();
     assertEquals("Connection count is not expected", 0,
-        networkClient.warmUpConnections(http2Cluster.getClusterMap().getDataNodeIds(), 0, 1000, new ArrayList<>()));
+        networkClient.warmUpConnections(clusterMap.getDataNodeIds(), 0, 1000, new ArrayList<>()));
 
-    assertEquals("Connection count is not expected",
-        http2Cluster.getClusterMap().getDataNodeIds().size() * connectionPerPort / 2,
-        networkClient.warmUpConnections(http2Cluster.getClusterMap().getDataNodeIds(), 50, 1000, new ArrayList<>()));
+    assertEquals("Connection count is not expected", clusterMap.getDataNodeIds().size() * connectionPerPort / 2,
+        networkClient.warmUpConnections(clusterMap.getDataNodeIds(), 50, 1000, new ArrayList<>()));
 
-    assertEquals("Connection count is not expected",
-        http2Cluster.getClusterMap().getDataNodeIds().size() * connectionPerPort,
-        networkClient.warmUpConnections(http2Cluster.getClusterMap().getDataNodeIds(), 100, 1000, new ArrayList<>()));
+    assertEquals("Connection count is not expected", clusterMap.getDataNodeIds().size() * connectionPerPort,
+        networkClient.warmUpConnections(clusterMap.getDataNodeIds(), 100, 1000, new ArrayList<>()));
 
-    http2Cluster.cleanup();
     // All connection should be failed. Connection refused exceptions will be in test log.
+    List<Port> ports = new ArrayList<>();
+    ports.add(new Port(79, PortType.HTTP2));
+    ports.add(new Port(78, PortType.PLAINTEXT));
     assertEquals("Connection count is not expected", 0,
-        networkClient.warmUpConnections(http2Cluster.getClusterMap().getDataNodeIds(), 100, 1000, new ArrayList<>()));
+        networkClient.warmUpConnections(Collections.singletonList(new MockDataNodeId(ports, null, "DC1")), 100, 1000,
+            new ArrayList<>()));
   }
 }

@@ -101,7 +101,6 @@ public class Http2NetworkClient implements NetworkClient {
                   }
                 }
               });
-              ;
               requestInfo.setStreamSendTime(System.currentTimeMillis());
             } else {
               logger.error("Couldn't acquire stream channel to {}:{} . Cause: {}.", requestInfo.getHost(),
