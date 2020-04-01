@@ -250,7 +250,10 @@ public class RequestResponseTest {
                 end = blob.length;
                 ByteBuf blob3 = PooledByteBufAllocator.DEFAULT.heapBuffer(end - start);
                 blob3.writeBytes(blob, start, end - start);
-                blobBuf = new CompositeByteBuf(PooledByteBufAllocator.DEFAULT, false, 3, blob1, blob2, blob3);
+                blobBuf = PooledByteBufAllocator.DEFAULT.compositeHeapBuffer(3);
+                ((CompositeByteBuf)blobBuf).addComponent(true, blob1);
+                ((CompositeByteBuf)blobBuf).addComponent(true, blob2);
+                ((CompositeByteBuf)blobBuf).addComponent(true, blob3);
               }
               request = new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
                   blobBuf, blobSize, blobType, blobKey == null ? null : ByteBuffer.wrap(blobKey));

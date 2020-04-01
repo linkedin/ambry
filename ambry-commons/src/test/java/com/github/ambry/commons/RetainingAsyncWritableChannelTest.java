@@ -92,7 +92,7 @@ public class RetainingAsyncWritableChannelTest {
           chunk = ByteBufAllocator.DEFAULT.heapBuffer(data.length);
           chunk.writeBytes(data);
         } else {
-          CompositeByteBuf composite = new CompositeByteBuf(ByteBufAllocator.DEFAULT, false, 100);
+          CompositeByteBuf composite = ByteBufAllocator.DEFAULT.compositeHeapBuffer(100);
           ByteBuf c = ByteBufAllocator.DEFAULT.heapBuffer(data.length / 2);
           c.writeBytes(data, 0, data.length / 2);
           composite.addComponent(true, c);

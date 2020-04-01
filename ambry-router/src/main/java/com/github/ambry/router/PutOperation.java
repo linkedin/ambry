@@ -553,8 +553,6 @@ class PutOperation {
         // Attempt to fill a chunk
         if (channelReadBuf == null) {
           channelReadBuf = chunkFillerChannel.getNextByteBuf(0);
-          if (channelReadBuf != null) {
-          }
         }
         if (channelReadBuf != null) {
           maybeStopTrackingWaitForChannelDataTime();
@@ -603,10 +601,11 @@ class PutOperation {
         }
       }
       if (operationCompleted) {
-        logger.info("Clear unfinished chunk since operation is completed");
         PutChunk lastChunk = getBuildingChunk();
         if (lastChunk != null) {
-          lastChunk.clear();
+          logger.info("Clear unfinished chunk since operation is completed");
+          // call release blob content, not clear, since clear should only be used in the main thread.
+          lastChunk.releaseBlobContent();
         }
       }
     } catch (Exception e) {
@@ -615,7 +614,8 @@ class PutOperation {
               RouterErrorCode.UnexpectedInternalError);
       PutChunk lastChunk = getBuildingChunk();
       if (lastChunk != null) {
-        lastChunk.clear();
+        // call release blob content, not clear, since clear should only be used in the main thread.
+        lastChunk.releaseBlobContent();
       }
       routerMetrics.chunkFillerUnexpectedErrorCount.inc();
       setOperationExceptionAndComplete(routerException);
@@ -1135,10 +1135,62 @@ class PutOperation {
     }
 
     /**
+     * The callback method to handle the result and exception from an encryption job.
+     * @param result The result of Encryption job.
+     * @param exception The exception of Encryption job.
+     */
+    private void encryptionCallback(EncryptJob.EncryptJobResult result, Exception exception) {
+      logger.trace("Processing encrypt job callback for chunk at index {}", chunkIndex);
+      if (!isMetadataChunk()) {
+        // If this is a data blob, then release the content with or without exception.
+        // When there is no exception, then the encrypted data will be used.
+        // When there is an exception, then PutOperation will be terminated, and there is no use for this blob anymore.
+        releaseBlobContent();
+      }
+      encryptJobMetricsTracker.onJobResultProcessingStart();
+      if (exception == null && !isOperationComplete()) {
+        if (!isMetadataChunk()) {
+          buf = result.getEncryptedBlobContent();
+        }
+        encryptedPerBlobKey = result.getEncryptedKey();
+        chunkUserMetadata = result.getEncryptedUserMetadata().array();
+        logger.trace("Completing encrypt job result for chunk at index {}", chunkIndex);
+        prepareForSending();
+        chunkReadyAtMs = time.milliseconds();
+      } else {
+        encryptJobMetricsTracker.incrementOperationError();
+        if (!isOperationComplete()) {
+          logger.trace("Setting exception from encrypt of chunk at index {} ", chunkIndex, exception);
+          // If we are here, then the result is null. no need to release it.
+          setOperationExceptionAndComplete(
+              new RouterException("Exception thrown on encrypting the content for chunk at index " + chunkIndex,
+                  exception, RouterErrorCode.UnexpectedInternalError));
+        } else {
+          logger.trace(
+              "Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
+              chunkIndex, getOperationException(), exception);
+          // If we are here, then the operation is completed and the exception could be null, in this case,
+          // we have to release the content in the result.
+          if (result != null) {
+            result.release();
+          }
+        }
+      }
+      routerMetrics.encryptTimeMs.update(time.milliseconds() - chunkEncryptReadyAtMs);
+      encryptJobMetricsTracker.onJobResultProcessingComplete();
+      routerCallback.onPollReady();
+      // double check if the operation is not completed. If so, we have to release the buf here, since in
+      // main thread, chunk might already be released.
+      if (isOperationComplete()) {
+        logger.info("Release blob content for put chunk in encryption callback since operation is completed");
+        releaseBlobContent();
+      }
+    }
+
+    /**
      * Submits encrypt job for the given {@link PutChunk} and processes the callback for the same
      */
     private void encryptChunk() {
-      ByteBuf toEncrypt = buf.retain();
       try {
         logger.trace("Chunk at index {} moves to {} state", chunkIndex, ChunkState.Encrypting);
         state = ChunkState.Encrypting;
@@ -1147,62 +1199,14 @@ class PutOperation {
         logger.trace("Submitting encrypt job for chunk at index {}", chunkIndex);
         cryptoJobHandler.submitJob(
             new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
-                isMetadataChunk() ? null : toEncrypt.retainedDuplicate(), ByteBuffer.wrap(chunkUserMetadata),
-                kms.getRandomKey(), cryptoService, kms, encryptJobMetricsTracker,
-                (EncryptJob.EncryptJobResult result, Exception exception) -> {
-                  logger.trace("Processing encrypt job callback for chunk at index {}", chunkIndex);
-                  if (!isMetadataChunk()) {
-                    releaseBlobContent();
-                  }
-                  encryptJobMetricsTracker.onJobResultProcessingStart();
-                  if (exception == null && !isOperationComplete()) {
-                    if (!isMetadataChunk()) {
-                      buf = result.getEncryptedBlobContent();
-                    }
-                    encryptedPerBlobKey = result.getEncryptedKey();
-                    chunkUserMetadata = result.getEncryptedUserMetadata().array();
-                    logger.trace("Completing encrypt job result for chunk at index {}", chunkIndex);
-                    prepareForSending();
-                    chunkReadyAtMs = time.milliseconds();
-                  } else {
-                    encryptJobMetricsTracker.incrementOperationError();
-                    if (!isOperationComplete()) {
-                      logger.trace("Setting exception from encrypt of chunk at index {} ", chunkIndex, exception);
-                      // If we are here, then the result is null. no need to release it.
-                      setOperationExceptionAndComplete(new RouterException(
-                          "Exception thrown on encrypting the content for chunk at index " + chunkIndex, exception,
-                          RouterErrorCode.UnexpectedInternalError));
-                    } else {
-                      logger.trace(
-                          "Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
-                          chunkIndex, getOperationException(), exception);
-                      // If we are here, then the operation is completed and the exception could be null, in this case,
-                      // we have to release the content in the result.
-                      if (result != null) {
-                        result.release();
-                      }
-                    }
-                  }
-                  routerMetrics.encryptTimeMs.update(time.milliseconds() - chunkEncryptReadyAtMs);
-                  encryptJobMetricsTracker.onJobResultProcessingComplete();
-                  routerCallback.onPollReady();
-                  // double check if the operation is not completed. If so, we have to release the buf here, since in
-                  // main thread, chunk might already be released.
-                  if (isOperationComplete()) {
-                    logger.info("Clear put chunk in encryption callback since operation is completed");
-                    clear();
-                  }
-                }));
+                isMetadataChunk() ? null : buf.retainedDuplicate(), ByteBuffer.wrap(chunkUserMetadata),
+                kms.getRandomKey(), cryptoService, kms, encryptJobMetricsTracker, this::encryptionCallback));
       } catch (GeneralSecurityException e) {
         encryptJobMetricsTracker.incrementOperationError();
         logger.trace("Exception thrown while generating random key for chunk at index {}", chunkIndex, e);
         setOperationExceptionAndComplete(new RouterException(
             "GeneralSecurityException thrown while generating random key for chunk at index " + chunkIndex, e,
             RouterErrorCode.UnexpectedInternalError));
-      } finally {
-        if (toEncrypt != null) {
-          toEncrypt.release();
-        }
       }
     }
 
@@ -1230,33 +1234,23 @@ class PutOperation {
      * @return the number of bytes transferred in this operation.
      */
     int fillFrom(ByteBuf channelReadBuf) {
-      int toWrite = 0;
+      int toWrite;
       if (buf == null) {
-        if (channelReadBuf.readableBytes() > routerConfig.routerMaxPutChunkSizeBytes) {
-          toWrite = routerConfig.routerMaxPutChunkSizeBytes;
-          buf = channelReadBuf.readRetainedSlice(routerConfig.routerMaxPutChunkSizeBytes);
-        } else {
-          toWrite = channelReadBuf.readableBytes();
-          buf = channelReadBuf.readRetainedSlice(toWrite);
-        }
+        // If current buf is null, then only read the up to routerMaxPutChunkSizeBytes.
+        toWrite = Math.min(channelReadBuf.readableBytes(), routerConfig.routerMaxPutChunkSizeBytes);
+        buf = channelReadBuf.readRetainedSlice(toWrite);
       } else {
         int remainingSize = routerConfig.routerMaxPutChunkSizeBytes - buf.readableBytes();
-        ByteBuf remainingSlice = null;
-        if (channelReadBuf.readableBytes() > remainingSize) {
-          toWrite = remainingSize;
-          remainingSlice = channelReadBuf.readRetainedSlice(remainingSize);
-        } else {
-          toWrite = channelReadBuf.readableBytes();
-          remainingSlice = channelReadBuf.readRetainedSlice(toWrite);
-        }
-        int size = buf.readableBytes();
+        toWrite = Math.min(channelReadBuf.readableBytes(), remainingSize);
+        ByteBuf remainingSlice = channelReadBuf.readRetainedSlice(toWrite);
         // buf already has some bytes
         if (buf instanceof CompositeByteBuf) {
           // Buf is already a CompositeByteBuf, then just add the slice from
           ((CompositeByteBuf) buf).addComponent(true, remainingSlice);
         } else {
-          CompositeByteBuf composite =
-              new CompositeByteBuf(buf.alloc(), buf.isDirect(), routerConfig.routerMaxPutChunkSizeBytes);
+          int maxComponents = routerConfig.routerMaxPutChunkSizeBytes;
+          CompositeByteBuf composite = buf.isDirect() ? buf.alloc().compositeDirectBuffer(maxComponents)
+              : buf.alloc().compositeHeapBuffer(maxComponents);
           composite.addComponents(true, buf, remainingSlice);
           buf = composite;
         }
