@@ -43,18 +43,18 @@ import static org.junit.Assume.*;
 
 @RunWith(Parameterized.class)
 public class ServerSSLTest {
-  private static SSLFactory sslFactory;
-  private static SSLConfig clientSSLConfig1;
-  private static SSLConfig clientSSLConfig2;
-  private static SSLConfig clientSSLConfig3;
-  private static SSLSocketFactory clientSSLSocketFactory1;
-  private static SSLSocketFactory clientSSLSocketFactory2;
-  private static SSLSocketFactory clientSSLSocketFactory3;
-  private static File trustStoreFile;
-  private static Properties serverSSLProps;
-  private static Properties routerProps;
-  private static MockNotificationSystem notificationSystem;
-  private static MockCluster sslCluster;
+  private SSLFactory sslFactory;
+  private SSLConfig clientSSLConfig1;
+  private SSLConfig clientSSLConfig2;
+  private SSLConfig clientSSLConfig3;
+  private SSLSocketFactory clientSSLSocketFactory1;
+  private SSLSocketFactory clientSSLSocketFactory2;
+  private SSLSocketFactory clientSSLSocketFactory3;
+  private File trustStoreFile;
+  private Properties serverSSLProps;
+  private Properties routerProps;
+  private MockNotificationSystem notificationSystem;
+  private MockCluster sslCluster;
   private final boolean testEncryption;
 
   @Before

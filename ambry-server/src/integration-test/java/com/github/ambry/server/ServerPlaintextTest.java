@@ -39,13 +39,13 @@ import static org.junit.Assume.*;
 
 @RunWith(Parameterized.class)
 public class ServerPlaintextTest {
-  private static Properties routerProps;
-  private static MockNotificationSystem notificationSystem;
-  private static MockCluster plaintextCluster;
+  private Properties routerProps;
+  private MockNotificationSystem notificationSystem;
+  private MockCluster plaintextCluster;
   private final boolean testEncryption;
 
   @Before
-  public static void initializeTests() throws Exception {
+  public void initializeTests() throws Exception {
     routerProps = new Properties();
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -72,7 +72,7 @@ public class ServerPlaintextTest {
   }
 
   @After
-  public static void cleanup() throws IOException {
+  public void cleanup() throws IOException {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.
