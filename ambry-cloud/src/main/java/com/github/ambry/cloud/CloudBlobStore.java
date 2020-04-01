@@ -525,7 +525,7 @@ class CloudBlobStore implements Store {
   public boolean isKeyDeleted(StoreKey key) throws StoreException {
     checkStarted();
     // Not definitive, but okay for some deletes to be replayed.
-    return (checkCacheState(key.getID(),BlobState.DELETED));
+    return checkCacheState(key.getID(),BlobState.DELETED);
   }
 
   @Override
