@@ -863,7 +863,8 @@ public class HardDeleter implements Runnable {
      */
     int compareTwoTokens(StoreFindToken token1, StoreFindToken token2) {
       if (token1.getType() != FindTokenType.IndexBased || token2.getType() != FindTokenType.IndexBased) {
-        throw new IllegalStateException("Tokens need to be index based. First: " + token1 + " Second: " + token2);
+        throw new IllegalStateException(
+            "At store " + dataDir + " Tokens need to be index based. First: " + token1 + " Second: " + token2);
       }
       if (token1.equals(token2)) {
         return 0;
