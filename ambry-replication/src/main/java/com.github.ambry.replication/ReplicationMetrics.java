@@ -135,10 +135,12 @@ public class ReplicationMetrics {
   private Map<String, Counter> localStoreErrorMap;
   private Map<PartitionId, Counter> partitionIdToInvalidMessageStreamErrorCounter;
   private Map<PartitionId, Map<DataNodeId, Long>> partitionLags;
+  private Map<PartitionId, Long> partitionCatchUpPoint;
 
   public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds) {
     // ConcurrentHashMap is used to avoid cache incoherence.
     partitionLags = new ConcurrentHashMap<>();
+    partitionCatchUpPoint = new ConcurrentHashMap<>();
     metadataRequestErrorMap = new ConcurrentHashMap<>();
     getRequestErrorMap = new HashMap<>();
     localStoreErrorMap = new HashMap<>();
@@ -435,6 +437,20 @@ public class ReplicationMetrics {
   }
 
   /**
+   * Add catchup point metric(local from cloud) for given partitionId.
+   * @param partitionId partition to add metric for.
+   */
+  public void addCatchUpPointMetricForPartition(PartitionId partitionId) {
+    if (!partitionCatchUpPoint.containsKey(partitionId)) {
+      partitionCatchUpPoint.put(partitionId, 0L);
+      // Set up metrics if and only if no mapping for this partition before.
+      Gauge<Long> catchUpPoint = () -> partitionCatchUpPoint.get(partitionId);
+      registry.register(MetricRegistry.name(ReplicaThread.class,
+          "Partition-" + partitionId.toPathString() + "-catchupPointFromCloud"), catchUpPoint);
+    }
+  }
+
+  /**
    * Remove replication lag metric of given partition if it's present.
    * @param partitionId the given partition whose lag metric should be removed.
    */
@@ -442,6 +458,17 @@ public class ReplicationMetrics {
     if (partitionLags.containsKey(partitionId)) {
       registry.remove(MetricRegistry.name(ReplicaThread.class,
           "Partition-" + partitionId.toPathString() + "-maxLagFromPeersInBytes"));
+    }
+  }
+
+  /**
+   * Remove catch up point metric of given partition if it's present.
+   * @param partitionId the given partition whose catch up point metric should be removed.
+   */
+  public void removeCatchupPointMetricForPartition(PartitionId partitionId) {
+    if (partitionCatchUpPoint.containsKey(partitionId)) {
+      registry.remove(MetricRegistry.name(ReplicaThread.class,
+          "Partition-" + partitionId.toPathString() + "-catchupPointFromCloud"));
     }
   }
 
@@ -668,6 +695,18 @@ public class ReplicationMetrics {
     if (partitionLags.containsKey(replicaId.getPartitionId())) {
       // update the partition's lag if and only if it was tracked.
       partitionLags.get(replicaId.getPartitionId()).put(replicaId.getDataNodeId(), lag);
+    }
+  }
+
+  /**
+   * Update catch up point of local replica from the cloud replica.
+   * @param partitionId {@link PartitionId} of the cloud replica.
+   * @param catchUpPoint timestamp upto which local replica has caught with the cloud replica.
+   */
+  public void updateCatchupPointMetricForRemoteReplica(PartitionId partitionId, long catchUpPoint) {
+    if (partitionCatchUpPoint.containsKey(partitionId)) {
+      // update the partition's lag if and only if it was tracked.
+      partitionCatchUpPoint.put(partitionId, catchUpPoint);
     }
   }
 
