@@ -75,14 +75,14 @@ class SimpleOperationTracker implements OperationTracker {
   protected final int cloudParallelism;
   protected final boolean cloudReplicasPresent;
   // How many NotFound responses from originating dc will terminate the operation.
-  // It's decided by the success target of each mutation operations, including put, delete, update ttl etc.
+  // It is set to tolerate one random failure in the originating dc if all other responses are not found.
   protected final int originatingDcNotFoundFailureThreshold;
   protected final int totalReplicaCount;
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
 
   protected int inflightCount = 0;
-  protected int diskSucceededCount = 0;
-  protected int cloudSucceededCount = 0;
+  protected int diskReplicaSuccessCount = 0;
+  protected int cloudReplicaSuccessCount = 0;
   protected int failedCount = 0;
   protected int disabledCount = 0;
   protected int originatingDcNotFoundCount = 0;
@@ -177,8 +177,10 @@ class SimpleOperationTracker implements OperationTracker {
       default:
         throw new IllegalArgumentException("Unsupported operation: " + routerOperation);
     }
-    if (diskParallelism < 1) {
-      throw new IllegalArgumentException("Parallelism has to be > 0. Configured to be " + diskParallelism);
+    if (diskParallelism < 1 || cloudParallelism < 1) {
+      throw new IllegalArgumentException(
+          "Parallelism has to be > 0. diskParallelism=" + diskParallelism + ", cloudParallelism=" + cloudParallelism
+              + ", routerOperation=" + routerOperation);
     }
 
     // Order the replicas so that local healthy replicas are ordered and returned first,
@@ -190,8 +192,9 @@ class SimpleOperationTracker implements OperationTracker {
     if (shuffleReplicas) {
       Collections.shuffle(replicas);
     }
-    // While iterating through the replica list, count the number of replicas from the originating DC. And subtract
-    // the success target of each mutation operation to get the not found failure threshold.
+    int numReplicasInLocalDc = 0;
+    // While iterating through the replica list, count the number of replicas from the originating DC. Subtract
+    // 1 from this count to get the not found failure threshold.
     int numReplicasInOriginatingDc = 0;
 
     // The priority here is local dc replicas, originating dc replicas, other dc replicas, down replicas.
@@ -202,21 +205,24 @@ class SimpleOperationTracker implements OperationTracker {
     for (ReplicaId replicaId : replicas) {
       examinedReplicas.add(replicaId);
       String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
-      boolean localDcReplica = replicaDcName.equals(datacenterName);
-      boolean originatingDcReplica = replicaDcName.equals(originatingDcName);
-      if (originatingDcReplica) {
+      boolean isLocalDcReplica = replicaDcName.equals(datacenterName);
+      boolean isOriginatingDcReplica = replicaDcName.equals(originatingDcName);
+      if (isLocalDcReplica) {
+        numReplicasInLocalDc++;
+      }
+      if (isOriginatingDcReplica) {
         numReplicasInOriginatingDc++;
       }
       if (!replicaId.isDown()) {
-        if (localDcReplica) {
+        if (isLocalDcReplica) {
           replicaPool.addFirst(replicaId);
-        } else if (crossColoEnabled && originatingDcReplica) {
+        } else if (crossColoEnabled && isOriginatingDcReplica) {
           replicaPool.addLast(replicaId);
         } else if (crossColoEnabled) {
           backupReplicas.addFirst(replicaId);
         }
       } else {
-        if (localDcReplica) {
+        if (isLocalDcReplica) {
           downReplicas.addFirst(replicaId);
         } else if (crossColoEnabled) {
           downReplicas.addLast(replicaId);
@@ -288,9 +294,9 @@ class SimpleOperationTracker implements OperationTracker {
         && inFlightReplicaType == ReplicaType.DISK_BACKED) {
       // this logic only applies to disk replicas where the quorum can change during replica movement
       int dynamicSuccessTarget = Math.max(totalReplicaCount - disabledCount - 1, routerConfig.routerPutSuccessTarget);
-      hasSucceeded = diskSucceededCount >= dynamicSuccessTarget;
+      hasSucceeded = diskReplicaSuccessCount >= dynamicSuccessTarget;
     } else {
-      hasSucceeded = diskSucceededCount >= diskSuccessTarget || cloudSucceededCount >= cloudSuccessTarget;
+      hasSucceeded = diskReplicaSuccessCount >= diskSuccessTarget || cloudReplicaSuccessCount >= cloudSuccessTarget;
     }
     return hasSucceeded;
   }
@@ -314,9 +320,9 @@ class SimpleOperationTracker implements OperationTracker {
     switch (trackedRequestFinalState) {
       case SUCCESS:
         if (replicaId.getReplicaType() == ReplicaType.CLOUD_BACKED) {
-          cloudSucceededCount++;
+          cloudReplicaSuccessCount++;
         } else {
-          diskSucceededCount++;
+          diskReplicaSuccessCount++;
         }
         break;
       // Request disabled may happen when PUT/DELETE/TTLUpdate requests attempt to perform on replicas that are being

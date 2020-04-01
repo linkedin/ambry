@@ -931,13 +931,14 @@ public class OperationTrackerTest {
   }
 
   /**
-   * Test cases with cloud replicas in the local datacenter.
+   * Test cases with cloud replicas in the local datacenter and disk replicas in the originating datacenter.
    */
   @Test
-  public void cloudReplicaInLocalDcTest() {
-    // test success in cloud dc
+  public void localDcCloudOriginatingDcDiskTest() {
     initializeWithCloudDcs(true);
-    originatingDcName = getDatacenters(ReplicaType.DISK_BACKED).iterator().next();
+    originatingDcName = getDatacenters(ReplicaType.DISK_BACKED, localDcName).iterator().next();
+
+    // test success in cloud dc
     OperationTracker ot =
         getOperationTracker(true, 2, 3, false, Integer.MAX_VALUE, RouterOperation.GetBlobOperation, false);
     assertFalse("Operation should not have been done.", ot.isDone());
@@ -948,16 +949,56 @@ public class OperationTrackerTest {
     // success target of 1 with cloud replicas.
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
+
+    // test failure in cloud dc with fallback to disk DC.
+    repetitionTracker.clear();
+    ot = getOperationTracker(true, 2, 3, false, Integer.MAX_VALUE, RouterOperation.GetBlobOperation, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    sendRequests(ot, 1, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+    // parallelism should switch back to the default of 3.
+    sendRequests(ot, 3, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    // 1 failure, 2 successes should meet disk success target.
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+    for (int i = 0; i < 2; i++) {
+      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+    }
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
   }
 
   /**
-   * Test cases with cloud replicas in the remote datacenter.
+   * Test cases with cloud replicas in the local datacenter and cloud replicas in the originating datacenter.
    */
   @Test
-  public void cloudReplicaInRemoteDcTest() {
-    // test failure in disk dc with fallback to cloud DC
+  public void localDcCloudOriginatingDcCloudTest() {
+    initializeWithCloudDcs(true);
+    // test failure in cloud dc with fallback to cloud DC.
+    originatingDcName = getDatacenters(ReplicaType.CLOUD_BACKED, localDcName).iterator().next();
+    OperationTracker ot =
+        getOperationTracker(true, 2, 3, false, Integer.MAX_VALUE, RouterOperation.GetBlobOperation, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    sendRequests(ot, 1, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+    // parallelism should still be 1.
+    sendRequests(ot, 1, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
+   * Test cases with disk replicas in the local datacenter and cloud replicas in the originating datacenter.
+   */
+  @Test
+  public void localDcDiskOriginatingDcCloudTest() {
     initializeWithCloudDcs(false);
-    originatingDcName = getDatacenters(ReplicaType.CLOUD_BACKED).iterator().next();
+    // test failure in disk dc with fallback to cloud DC
+    originatingDcName = getDatacenters(ReplicaType.CLOUD_BACKED, localDcName).iterator().next();
     OperationTracker ot =
         getOperationTracker(true, 2, 3, false, Integer.MAX_VALUE, RouterOperation.GetBlobOperation, false);
     assertFalse("Operation should not have been done.", ot.isDone());
@@ -973,6 +1014,33 @@ public class OperationTrackerTest {
       sendRequests(ot, 0, false);
     }
     assertFalse("Operation should not have been done.", ot.isDone());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
+   * Test cases with disk replicas in the local datacenter and disk replicas in the originating datacenter. This helps
+   * to ensure that there are no regressions when cloud replicas are added to the clustermap.
+   */
+  @Test
+  public void localDcDiskOriginatingDcDiskTest() {
+    initializeWithCloudDcs(false);
+    // test failure in disk dc with fallback to disk DC
+    originatingDcName = getDatacenters(ReplicaType.DISK_BACKED, localDcName).iterator().next();
+    OperationTracker ot =
+        getOperationTracker(true, 2, 3, true, Integer.MAX_VALUE, RouterOperation.GetBlobOperation, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    // parallelism of 3 for disk replicas (local dc).
+    sendRequests(ot, 3, false);
+    assertFalse("Operation should not have been done.", ot.isDone());
+    for (int i = 0; i < 3; i++) {
+      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+      // parallelism should still be 3 after disk request returned a failure
+      sendRequests(ot, 1, false);
+    }
+    assertFalse("Operation should not have been done.", ot.isDone());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
@@ -1042,13 +1110,16 @@ public class OperationTrackerTest {
 
   /**
    * @param replicaType the type of replica to filter by.
+   * @param excludedDcs datacenter names to exclude in the returned set.
    * @return the datacenter names with replicas of type {@code replicaType}.
    */
-  private Set<String> getDatacenters(ReplicaType replicaType) {
+  private Set<String> getDatacenters(ReplicaType replicaType, String... excludedDcs) {
+    Set<String> excludedDcsSet = Arrays.stream(excludedDcs).collect(Collectors.toSet());
     return mockPartition.getReplicaIds()
         .stream()
-        .filter(r -> r.getReplicaType() == ReplicaType.CLOUD_BACKED)
+        .filter(r -> r.getReplicaType() == replicaType)
         .map(r -> r.getDataNodeId().getDatacenterName())
+        .filter(dc -> !excludedDcsSet.contains(dc))
         .collect(Collectors.toSet());
   }
 
@@ -1127,7 +1198,7 @@ public class OperationTrackerTest {
       }
       counter++;
     }
-    assertEquals("Did not send expected number of requests", numRequestsExpected, sent);
+    assertEquals("Did not send expected number of requests: " + inflightReplicas, numRequestsExpected, sent);
   }
 
   /**
