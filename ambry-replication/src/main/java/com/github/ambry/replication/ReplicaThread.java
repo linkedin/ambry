@@ -456,6 +456,10 @@ public class ReplicaThread implements Runnable {
               }
               replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
                   exchangeMetadataResponse.localLagFromRemoteInBytes);
+              replicationMetrics.updateCatchupPointMetricForRemoteReplica(
+                  remoteReplicaInfo.getReplicaId().getPartitionId(), replicaMetadataResponseInfo.getMessageInfoList()
+                      .get(replicaMetadataResponseInfo.getMessageInfoList().size() - 1)
+                      .getOperationTimeMs());
             } catch (Exception e) {
               logger.error(
                   "Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replica: " + remoteReplicaInfo
