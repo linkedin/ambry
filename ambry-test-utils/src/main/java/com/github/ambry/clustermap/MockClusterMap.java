@@ -84,7 +84,7 @@ public class MockClusterMap implements ClusterMap {
    * on the test machine.
    */
   public MockClusterMap() throws IOException {
-    this(false, 9, 3, 3, false);
+    this(false, 9, 3, 3, false, false);
   }
 
   /**
@@ -114,15 +114,31 @@ public class MockClusterMap implements ClusterMap {
    * @param numDefaultStoresPerMountPoint the number of stores that will be created on each mount point.
    * @param createOnlyDefaultPartitionClass if {@code true}, does not attempt to create the "special" partition. If
    *                                        {@code false}, attempts to do so. See javadoc of function for more details
+   * @param includeCloudDc {@code true} to make DC1 a "cloud" DC: one with a single {@link ReplicaType#CLOUD_BACKED}
+   *                       replica for each partition in the cluster map. The virtual datanode created for the cloud DC
+   *                       does not count against {@code numNodes}.
    */
   public MockClusterMap(boolean enableSSLPorts, int numNodes, int numMountPointsPerNode,
-      int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass) throws IOException {
+      int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass, boolean includeCloudDc)
+      throws IOException {
     this.enableSSLPorts = enableSSLPorts;
     this.numMountPointsPerNode = numMountPointsPerNode;
     dataNodes = new ArrayList<>(numNodes);
     //Every group of 3 nodes will be put in the same DC.
     int dcIndex = 0;
     String dcName = null;
+    String cloudDc;
+    if (includeCloudDc) {
+      dcIndex++;
+      dcName = "DC" + dcIndex;
+      dataCentersInClusterMap.add(dcName);
+      MockDataNodeId virtualNode = createDataNode(getListOfPorts(ClusterMapUtils.UNKNOWN_PORT, null, null), dcName, 0);
+      dataNodes.add(virtualNode);
+      dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(virtualNode);
+      cloudDc = dcName;
+    } else {
+      cloudDc = null;
+    }
     for (int i = 0; i < numNodes; i++) {
       if (i % 3 == 0) {
         dcIndex++;
@@ -146,7 +162,7 @@ public class MockClusterMap implements ClusterMap {
 
     // create partitions
     long partitionId = 0;
-    for (int i = 0; i < dataNodes.get(0).getMountPaths().size(); i++) {
+    for (int i = 0; i < numMountPointsPerNode; i++) {
       for (int j = 0; j < numDefaultStoresPerMountPoint; j++) {
         PartitionId id = new MockPartitionId(partitionId, DEFAULT_PARTITION_CLASS, dataNodes, i);
         partitions.put(partitionId, id);
@@ -157,8 +173,11 @@ public class MockClusterMap implements ClusterMap {
       // create one "special partition" that has 3 replicas in the local datacenter (as configured on startup) and
       // 2 everywhere else
       List<MockDataNodeId> nodeIds = new ArrayList<>();
-      dcToDataNodes.forEach(
-          (s, mockDataNodeIds) -> nodeIds.addAll(mockDataNodeIds.subList(0, localDatacenterName.equals(s) ? 3 : 2)));
+      dcToDataNodes.forEach((dc, mockDataNodeIds) -> {
+        if (!dc.equals(cloudDc)) {
+          nodeIds.addAll(mockDataNodeIds.subList(0, localDatacenterName.equals(dc) ? 3 : 2));
+        }
+      });
       MockPartitionId id = new MockPartitionId(partitionId, SPECIAL_PARTITION_CLASS, nodeIds, 0);
       partitions.put(partitionId, id);
       specialPartition = id;
@@ -511,10 +530,14 @@ public class MockClusterMap implements ClusterMap {
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
     switch (event) {
       case Disk_Error:
-        ((MockDiskId) replicaId.getDiskId()).onDiskError();
+        if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
+          ((MockDiskId) replicaId.getDiskId()).onDiskError();
+        }
         break;
       case Disk_Ok:
-        ((MockDiskId) replicaId.getDiskId()).onDiskOk();
+        if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
+          ((MockDiskId) replicaId.getDiskId()).onDiskOk();
+        }
         break;
       case Node_Timeout:
         ((MockDataNodeId) replicaId.getDataNodeId()).onNodeTimeout();

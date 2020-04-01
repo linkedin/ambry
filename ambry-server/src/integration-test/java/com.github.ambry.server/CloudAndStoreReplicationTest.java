@@ -19,6 +19,7 @@ import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
 import com.github.ambry.cloud.VcrServer;
 import com.github.ambry.cloud.VcrTestUtil;
+import com.github.ambry.clustermap.ClusterMapSnapshotConstants;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -113,7 +114,7 @@ public class CloudAndStoreReplicationTest {
   @Before
   public void setup() throws Exception {
     String cloudDc = "CloudDc";
-    String vcrMountPath = "/vcr/1";
+    String vcrMountPath = ClusterMapSnapshotConstants.CLOUD_REPLICA_MOUNT + "/1";
     recoveryProperties = new Properties();
     recoveryProperties.setProperty("replication.metadata.request.version", "2");
     recoveryProperties.setProperty("replication.enabled.with.vcr.cluster", "true");
@@ -130,7 +131,7 @@ public class CloudAndStoreReplicationTest {
         new MockDataNodeId("localhost", vcrPortList, Collections.singletonList(vcrMountPath), cloudDc);
 
     // create ambry server recovery cluster
-    MockClusterMap serverClusterMap = new MockClusterMap(false, 2, 1, 1, true);
+    MockClusterMap serverClusterMap = new MockClusterMap(false, 2, 1, 1, true, false);
     recoveryCluster = new MockCluster(serverClusterMap, Collections.singletonList(vcrNode), recoveryProperties);
     partitionId = recoveryCluster.getClusterMap().getWritablePartitionIds(null).get(0);
     allRecoveryNodes = serverClusterMap.getDataNodes();

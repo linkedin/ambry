@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
@@ -23,6 +24,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 
 public class MockReplicaId implements ReplicaId {
   public static final long MOCK_REPLICA_CAPACITY = 100000000;
+  private static final String REPLICA_FILE_PREFIX = "replica";
   private String mountPath;
   private String replicaPath;
   private List<ReplicaId> peerReplicas;
@@ -40,18 +42,23 @@ public class MockReplicaId implements ReplicaId {
   public MockReplicaId(int port, MockPartitionId partitionId, MockDataNodeId dataNodeId, int indexOfMountPathToUse) {
     this.partitionId = partitionId;
     this.dataNodeId = dataNodeId;
-    mountPath = dataNodeId.getMountPaths().get(indexOfMountPathToUse);
-    File mountFile = new File(mountPath);
-    File replicaFile = new File(mountFile, "replica" + port + partitionId.partition);
-    replicaFile.mkdir();
-    replicaFile.deleteOnExit();
-    if (mountPath.startsWith("/vcr")) {
+    if (dataNodeId.getMountPaths().isEmpty()) {
+      // a data node with no mount paths is a virtual data node which holds cloud service replicas.
       replicaType = ReplicaType.CLOUD_BACKED;
     } else {
-      replicaType = ReplicaType.DISK_BACKED;
+      mountPath = dataNodeId.getMountPaths().get(indexOfMountPathToUse);
+      File mountFile = new File(mountPath);
+      File replicaFile = new File(mountFile, REPLICA_FILE_PREFIX + port + partitionId.partition);
+      replicaFile.mkdir();
+      replicaFile.deleteOnExit();
+      if (mountPath.startsWith(CLOUD_REPLICA_MOUNT)) {
+        replicaType = ReplicaType.CLOUD_BACKED;
+      } else {
+        replicaType = ReplicaType.DISK_BACKED;
+      }
+      replicaPath = replicaFile.getAbsolutePath();
+      diskId = new MockDiskId(dataNodeId, mountPath);
     }
-    replicaPath = replicaFile.getAbsolutePath();
-    diskId = new MockDiskId(dataNodeId, mountPath);
     isSealed = partitionId.getPartitionState().equals(PartitionState.READ_ONLY);
   }
 
@@ -83,7 +90,7 @@ public class MockReplicaId implements ReplicaId {
   public void setPeerReplicas(List<ReplicaId> peerReplicas) {
     this.peerReplicas = new ArrayList<>();
     for (ReplicaId replicaId : peerReplicas) {
-      if (!(replicaId.getMountPath().compareTo(mountPath) == 0)) {
+      if (!Objects.equals(mountPath, replicaId.getMountPath())) {
         this.peerReplicas.add(replicaId);
       }
     }
@@ -104,8 +111,8 @@ public class MockReplicaId implements ReplicaId {
    */
   @Override
   public boolean isDown() {
-    return isMarkedDown || getDataNodeId().getState() == HardwareState.UNAVAILABLE
-        || getDiskId().getState() == HardwareState.UNAVAILABLE;
+    return isMarkedDown || getDataNodeId().getState() == HardwareState.UNAVAILABLE || (getDiskId() != null
+        && getDiskId().getState() == HardwareState.UNAVAILABLE);
   }
 
   @Override
@@ -118,7 +125,9 @@ public class MockReplicaId implements ReplicaId {
     JSONObject snapshot = new JSONObject();
     snapshot.put(REPLICA_NODE, dataNodeId.getHostname() + ":" + dataNodeId.getPort());
     snapshot.put(REPLICA_PARTITION, partitionId.toPathString());
-    snapshot.put(REPLICA_DISK, diskId.getMountPath());
+    if (diskId != null) {
+      snapshot.put(REPLICA_DISK, diskId.getMountPath());
+    }
     snapshot.put(REPLICA_PATH, replicaPath);
     snapshot.put(REPLICA_WRITE_STATE, isSealed() ? PartitionState.READ_ONLY.name() : PartitionState.READ_WRITE.name());
     String liveness = UP;
@@ -126,7 +135,7 @@ public class MockReplicaId implements ReplicaId {
       liveness = DOWN;
     } else if (getDataNodeId().getState() == HardwareState.UNAVAILABLE) {
       liveness = NODE_DOWN;
-    } else if (getDiskId().getState() == HardwareState.UNAVAILABLE) {
+    } else if (getDiskId() != null && getDiskId().getState() == HardwareState.UNAVAILABLE) {
       liveness = DISK_DOWN;
     }
     snapshot.put(LIVENESS, liveness);

@@ -316,10 +316,14 @@ public class HelixClusterManager implements ClusterMap {
         replica.getDataNodeId().onNodeTimeout();
         break;
       case Disk_Error:
-        replica.getDiskId().onDiskError();
+        if (replica.getReplicaType() == ReplicaType.DISK_BACKED) {
+          replica.getDiskId().onDiskError();
+        }
         break;
       case Disk_Ok:
-        replica.getDiskId().onDiskOk();
+        if (replica.getReplicaType() == ReplicaType.DISK_BACKED) {
+          replica.getDiskId().onDiskOk();
+        }
         break;
       case Partition_ReadOnly:
         replica.getPartitionId().onPartitionReadOnly();

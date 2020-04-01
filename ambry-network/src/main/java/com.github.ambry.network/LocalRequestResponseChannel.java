@@ -22,8 +22,8 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -43,8 +43,9 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   private static final Logger logger = LoggerFactory.getLogger(LocalRequestResponseChannel.class);
   private BlockingQueue<NetworkRequest> requestQueue = new LinkedBlockingQueue<>();
   private Map<Integer, BlockingQueue<ResponseInfo>> responseMap = new ConcurrentHashMap<>();
-  // buffer to hold size header that we strip off payloads
-  private static final byte[] sizeByteArray = new byte[Long.BYTES];
+  // buffer to hold size header that we strip off payloads. Only use this array to discard bytes since it is shared.
+  private static final byte[] SIZE_BYTE_ARRAY = new byte[Long.BYTES];
+  private static final ResponseInfo WAKEUP_MARKER = new ResponseInfo(null, null, null);
 
   @Override
   public void sendRequest(NetworkRequest request) {
@@ -95,9 +96,11 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
     if (firstResponse == null) {
       return Collections.emptyList();
     }
-    List<ResponseInfo> responseList = new ArrayList<>();
+    List<ResponseInfo> responseList = new LinkedList<>();
     responseList.add(firstResponse);
     responseQueue.drainTo(responseList);
+    // remove any wakeup markers since they are only there to stop a timed poll early
+    responseList.removeIf(responseInfo -> responseInfo == WAKEUP_MARKER);
     logger.debug("Returning {} responses for {}", responseList.size(), processorId);
     return responseList;
   }
@@ -119,14 +122,24 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   }
 
   /**
+   * Wake up a blocking call to {@link #receiveResponses}. This can be called so that some other entity can do some work
+   * on the main event loop even if no responses are received.
+   * @param processorId the processor ID to wake up.
+   */
+  public void wakeup(int processorId) {
+    // add a marker object to the queue to guarantee that a timed poll returns before the timeout
+    getResponseQueue(processorId).add(WAKEUP_MARKER);
+  }
+
+  /**
    * Utility to extract a {@link ByteBuf} from a {@link Send} object, skipping the size header.
    * @param payload the payload whose bytes we want.
    */
   static ByteBuf byteBufFromPayload(Send payload) throws IOException {
-    int bufferSize = (int) payload.sizeInBytes() - sizeByteArray.length;
+    int bufferSize = (int) payload.sizeInBytes() - SIZE_BYTE_ARRAY.length;
     ByteBuf buffer = Unpooled.buffer(bufferSize);
     // Skip the size header
-    payload.writeTo(new ByteBufferChannel(ByteBuffer.wrap(sizeByteArray)));
+    payload.writeTo(new ByteBufferChannel(ByteBuffer.wrap(SIZE_BYTE_ARRAY)));
     WritableByteChannel byteChannel = Channels.newChannel(new ByteBufOutputStream(buffer));
     payload.writeTo(byteChannel);
     return buffer;
@@ -156,6 +169,12 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
     @Override
     public long getStartTimeInMs() {
       return startTimeInMs;
+    }
+
+    @Override
+    public String toString() {
+      return "LocalChannelRequest{" + "requestInfo=" + requestInfo + ", input=" + input + ", startTimeInMs="
+          + startTimeInMs + ", processorId=" + processorId + '}';
     }
   }
 }

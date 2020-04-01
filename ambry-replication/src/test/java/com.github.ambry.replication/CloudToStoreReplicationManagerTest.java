@@ -13,6 +13,7 @@
  */
 package com.github.ambry.replication;
 
+import com.github.ambry.clustermap.ClusterMapSnapshotConstants;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockClusterSpectator;
@@ -62,7 +63,7 @@ import static org.junit.Assert.*;
 public class CloudToStoreReplicationManagerTest {
   private static final String NEW_PARTITION_NAME = "12";
   private static final String CLOUD_DC_NAME = "CloudDc";
-  private static final String VCR_MOUNT_PATH = "/vcr/1";
+  private static final String VCR_MOUNT_PATH = ClusterMapSnapshotConstants.CLOUD_REPLICA_MOUNT + "/1";
   private static final String VCR_REPLICA_THREAD_PREFIX = "VcrReplicaThread-";
   private final VerifiableProperties verifiableProperties;
   private final ScheduledExecutorService mockScheduler;

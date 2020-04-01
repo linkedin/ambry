@@ -107,7 +107,7 @@ public class SocketNetworkClientTest {
     networkClient =
         new SocketNetworkClient(selector, networkConfig, networkMetrics, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, time);
-    sslEnabledClusterMap = new MockClusterMap(true, 9, 3, 3, false);
+    sslEnabledClusterMap = new MockClusterMap(true, 9, 3, 3, false, false);
     localSslDataNodes = sslEnabledClusterMap.getDataNodeIds()
         .stream()
         .filter(dataNodeId -> sslEnabledClusterMap.getDatacenterName(sslEnabledClusterMap.getLocalDatacenterId())

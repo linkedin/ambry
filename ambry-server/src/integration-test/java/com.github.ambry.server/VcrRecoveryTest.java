@@ -19,6 +19,7 @@ import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
 import com.github.ambry.cloud.VcrServer;
 import com.github.ambry.cloud.VcrTestUtil;
+import com.github.ambry.clustermap.ClusterMapSnapshotConstants;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -82,7 +83,7 @@ public class VcrRecoveryTest {
   @Before
   public void setup() throws Exception {
     String dcName = "DC1";
-    String vcrMountPath = "/vcr/1";
+    String vcrMountPath = ClusterMapSnapshotConstants.CLOUD_REPLICA_MOUNT + "/1";
     recoveryProperties = new Properties();
     recoveryProperties.setProperty("replication.metadata.request.version", "2");
 
