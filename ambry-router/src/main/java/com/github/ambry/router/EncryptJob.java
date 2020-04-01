@@ -110,7 +110,7 @@ public class EncryptJob implements CryptoJob {
   /**
    * Class representing encrypt job result
    */
-  class EncryptJobResult {
+  static class EncryptJobResult {
     private final ByteBuffer encryptedKey;
     private final ByteBuffer encryptedUserMetadata;
     private final ByteBuf encryptedBlobContent;

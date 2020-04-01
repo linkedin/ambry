@@ -585,7 +585,7 @@ class PutOperation {
         }
       }
       if (chunkFillingCompletedSuccessfully) {
-        // If the blob size if less then 4MB or the last chunk size is less than 4MB, than this lastChunk will be
+        // If the blob size is less then 4MB or the last chunk size is less than 4MB, than this lastChunk will be
         // the chunk above.
         PutChunk lastChunk = getBuildingChunk();
         if (lastChunk != null) {
