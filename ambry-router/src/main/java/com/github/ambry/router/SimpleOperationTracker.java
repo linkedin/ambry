@@ -413,11 +413,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @return the success target number of this operation tracker for the provided replica type.
    */
   int getSuccessTarget(ReplicaType replicaType) {
-    if (replicaType == ReplicaType.CLOUD_BACKED) {
-      return cloudSuccessTarget;
-    } else {
-      return diskSuccessTarget;
-    }
+    return replicaType == ReplicaType.CLOUD_BACKED ? cloudSuccessTarget : diskSuccessTarget;
   }
 
   /**
