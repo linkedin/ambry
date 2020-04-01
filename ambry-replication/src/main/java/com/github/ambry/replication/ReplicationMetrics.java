@@ -22,6 +22,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaType;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -700,13 +701,15 @@ public class ReplicationMetrics {
 
   /**
    * Update catch up point of local replica from the cloud replica.
-   * @param partitionId {@link PartitionId} of the cloud replica.
+   * @param remoteReplicaInfo {@link RemoteReplicaInfo} of the cloud replica.
    * @param catchUpPoint timestamp upto which local replica has caught with the cloud replica.
    */
-  public void updateCatchupPointMetricForRemoteReplica(PartitionId partitionId, long catchUpPoint) {
-    if (partitionCatchUpPoint.containsKey(partitionId)) {
+  public void updateCatchupPointMetricForRemoteReplica(RemoteReplicaInfo remoteReplicaInfo, long catchUpPoint) {
+    // update this metric only for cloud peer replica. There will only be one cloud replica peer per partition.
+    if (remoteReplicaInfo.getReplicaId().getReplicaType() == ReplicaType.CLOUD_BACKED
+        && partitionCatchUpPoint.containsKey(remoteReplicaInfo.getLocalReplicaId().getPartitionId())) {
       // update the partition's lag if and only if it was tracked.
-      partitionCatchUpPoint.put(partitionId, catchUpPoint);
+      partitionCatchUpPoint.put(remoteReplicaInfo.getLocalReplicaId().getPartitionId(), catchUpPoint);
     }
   }
 
