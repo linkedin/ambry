@@ -306,8 +306,7 @@ public class FrontendIntegrationTest {
       verifyTrackingHeaders(response);
       ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
       JSONObject responseJson = new JSONObject(new String(content.array()));
-      String returnedReplicasStr =
-          responseJson.get(GetReplicasHandler.REPLICAS_KEY).toString().replace("\"", "").replace(", ", ",");
+      String returnedReplicasStr = responseJson.get(GetReplicasHandler.REPLICAS_KEY).toString().replace("\"", "");
       assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
           originalReplicaStr, returnedReplicasStr);
     }
