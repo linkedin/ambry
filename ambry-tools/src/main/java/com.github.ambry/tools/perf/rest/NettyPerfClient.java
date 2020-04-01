@@ -267,9 +267,6 @@ public class NettyPerfClient {
             || postBlobChunkSize <= 0) {
           throw new IllegalArgumentException(
               "Total size to be posted and size of each chunk need to be specified with POST and have to be > 0");
-        } else if (targetAccountName == null || targetAccountName.isEmpty() || targetContainerName == null
-            || targetContainerName.isEmpty()) {
-          throw new IllegalArgumentException("TargetAccountName and TargetContainerName cannot be empty with POST");
         }
       }
       if (serviceId == null || serviceId.isEmpty()) {
@@ -624,8 +621,12 @@ public class NettyPerfClient {
         request.headers().add(RestUtils.Headers.BLOB_SIZE, totalSize);
         request.headers().add(RestUtils.Headers.SERVICE_ID, serviceId);
         request.headers().add(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
-        request.headers().add(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
-        request.headers().add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
+        if (targetAccountName != null && !targetAccountName.isEmpty()) {
+          request.headers().add(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
+        }
+        if (targetContainerName != null && !targetContainerName.isEmpty() ) {
+          request.headers().add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
+        }
       } else {
         if (pathList == null) {
           request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, path);
