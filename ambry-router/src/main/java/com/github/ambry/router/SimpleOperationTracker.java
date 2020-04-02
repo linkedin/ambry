@@ -194,7 +194,6 @@ class SimpleOperationTracker implements OperationTracker {
     if (shuffleReplicas) {
       Collections.shuffle(replicas);
     }
-    int numReplicasInLocalDc = 0;
     // While iterating through the replica list, count the number of replicas from the originating DC. Subtract
     // 1 from this count to get the not found failure threshold.
     int numReplicasInOriginatingDc = 0;
@@ -209,9 +208,6 @@ class SimpleOperationTracker implements OperationTracker {
       String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
       boolean isLocalDcReplica = replicaDcName.equals(datacenterName);
       boolean isOriginatingDcReplica = replicaDcName.equals(originatingDcName);
-      if (isLocalDcReplica) {
-        numReplicasInLocalDc++;
-      }
       if (isOriginatingDcReplica) {
         numReplicasInOriginatingDc++;
       }
