@@ -43,8 +43,6 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -52,9 +50,6 @@ import org.slf4j.LoggerFactory;
  */
 @RunWith(Parameterized.class)
 public class CloudRouterTest extends NonBlockingRouterTest {
-  private static final int SUCCESS_TARGET = 1;
-  private static final int REQUEST_PARALLELISM = 1;
-  private static final Logger logger = LoggerFactory.getLogger(CloudRouterTest.class);
 
   /**
    * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
@@ -94,15 +89,6 @@ public class CloudRouterTest extends NonBlockingRouterTest {
   @Override
   protected Properties getNonBlockingRouterProperties(String routerDataCenter) {
     Properties properties = super.getNonBlockingRouterProperties(routerDataCenter);
-    // Set parallelism and success quorum to 1 for all operations
-    properties.setProperty("router.put.request.parallelism", Integer.toString(REQUEST_PARALLELISM));
-    properties.setProperty("router.put.success.target", Integer.toString(SUCCESS_TARGET));
-    properties.setProperty("router.get.request.parallelism", Integer.toString(REQUEST_PARALLELISM));
-    properties.setProperty("router.get.success.target", Integer.toString(SUCCESS_TARGET));
-    properties.setProperty("router.delete.request.parallelism", Integer.toString(REQUEST_PARALLELISM));
-    properties.setProperty("router.delete.success.target", Integer.toString(SUCCESS_TARGET));
-    properties.setProperty("router.ttl.update.request.parallelism", Integer.toString(REQUEST_PARALLELISM));
-    properties.setProperty("router.ttl.update.success.target", Integer.toString(SUCCESS_TARGET));
     properties.setProperty("clustermap.port", "1666");
     properties.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
     properties.setProperty("clustermap.resolve.hostnames", "false");

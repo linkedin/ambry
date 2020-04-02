@@ -492,10 +492,14 @@ class StaticClusterManager implements ClusterMap {
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
     switch (event) {
       case Disk_Error:
-        ((Disk) replicaId.getDiskId()).onDiskError();
+        if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
+          ((Disk) replicaId.getDiskId()).onDiskError();
+        }
         break;
       case Disk_Ok:
-        ((Disk) replicaId.getDiskId()).onDiskOk();
+        if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
+          ((Disk) replicaId.getDiskId()).onDiskOk();
+        }
         break;
       case Node_Timeout:
         ((DataNode) replicaId.getDataNodeId()).onNodeTimeout();
