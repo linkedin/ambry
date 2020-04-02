@@ -186,6 +186,7 @@ public class SocketNetworkClient implements NetworkClient {
           throw new IllegalStateException("ReplicaId in request is null.");
         }
         if (requestsToDrop.contains(requestMetadata.requestInfo.getRequest().getCorrelationId())) {
+          requestMetadata.requestInfo.getRequest().release();
           responseInfoList.add(
               new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.ConnectionUnavailable, null));
           if (requestMetadata.pendingConnectionId != null) {
@@ -376,6 +377,19 @@ public class SocketNetworkClient implements NetworkClient {
    */
   @Override
   public void close() {
+    if (pendingRequests != null) {
+      pendingRequests.forEach(requestMetadata -> {
+        requestMetadata.requestInfo.getRequest().release();
+      });
+    } if (connectionIdToRequestInFlight != null) {
+      connectionIdToRequestInFlight.values().forEach(requestMetadata -> {
+        requestMetadata.requestInfo.getRequest().release();
+      });
+    } if (pendingConnectionsToAssociatedRequests != null) {
+      pendingConnectionsToAssociatedRequests.values().forEach(requestMetadata -> {
+        requestMetadata.requestInfo.getRequest().release();
+      });
+    }
     logger.trace("Closing the SocketNetworkClient");
     selector.close();
     closed = true;

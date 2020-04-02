@@ -104,6 +104,10 @@ public class EncryptJob implements CryptoJob {
    */
   @Override
   public void closeJob(GeneralSecurityException gse) {
+    if (blobContentToEncrypt != null) {
+      blobContentToEncrypt.release();
+      blobContentToEncrypt = null;
+    }
     callback.onCompletion(null, gse);
   }
 
