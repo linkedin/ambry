@@ -402,7 +402,6 @@ public class ReplicationManager extends ReplicationEngine {
               leaderReplica.getDataNodeId().getDatacenterName());
         }
       }
-
       peerLeaderReplicasByPartition.put(partitionName, peerLeaderReplicas);
     }
 
