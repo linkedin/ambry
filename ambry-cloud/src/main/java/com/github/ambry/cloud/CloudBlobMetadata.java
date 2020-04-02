@@ -434,6 +434,14 @@ public class CloudBlobMetadata {
     });
   }
 
+  /**
+   * @return a {@link CloudBlobMetadata} from a property map.
+   * @param properties the key-value property map.
+   */
+  public static CloudBlobMetadata fromMap(Map<String, String> properties) {
+    return objectMapper.convertValue(properties, CloudBlobMetadata.class);
+  }
+
   /** Custom serializer for CloudBlobMetadata class that omits fields with default values. */
   static class MetadataSerializer extends StdSerializer<CloudBlobMetadata> {
 
@@ -469,7 +477,7 @@ public class CloudBlobMetadata {
         gen.writeNumberField(FIELD_NAME_SCHEME_VERSION, value.nameSchemeVersion);
       }
       // Encryption fields that may or may not apply
-      if (value.encryptionOrigin != EncryptionOrigin.NONE) {
+      if (value.encryptionOrigin != null && value.encryptionOrigin != EncryptionOrigin.NONE) {
         gen.writeStringField(FIELD_ENCRYPTION_ORIGIN, value.encryptionOrigin.toString());
         if (value.encryptionOrigin == EncryptionOrigin.VCR) {
           gen.writeStringField(FIELD_VCR_KMS_CONTEXT, value.vcrKmsContext);

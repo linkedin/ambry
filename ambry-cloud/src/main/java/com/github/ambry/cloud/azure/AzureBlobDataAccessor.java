@@ -263,12 +263,40 @@ public class AzureBlobDataAccessor {
   }
 
   /**
+   * Retrieve the metadata for the specified blob.
+   * @param blobId The {@link BlobId} to retrieve.
+   * @return The {@link CloudBlobMetadata} if the blob was found, or null otherwise.
+   * @throws BlobStorageException
+   */
+  public CloudBlobMetadata getBlobMetadata(BlobId blobId) throws BlobStorageException {
+    BlockBlobClient blobClient = getBlockBlobClient(blobId, false);
+    BlobProperties blobProperties = null;
+    try {
+      blobProperties =
+          blobClient.getPropertiesWithResponse(defaultRequestConditions, requestTimeout, Context.NONE).getValue();
+      if (blobProperties == null) {
+        logger.debug("Blob {} not found.", blobId);
+        return null;
+      }
+    } catch (BlobStorageException e) {
+      if (isNotFoundError(e.getErrorCode())) {
+        logger.debug("Blob {} not found.", blobId);
+        return null;
+      }
+      throw e;
+    }
+    Map<String, String> metadata = blobProperties.getMetadata();
+    return CloudBlobMetadata.fromMap(metadata);
+  }
+
+  /**
    * Update the metadata for the specified blob.
    * @param blobId The {@link BlobId} to update.
    * @param fieldName The metadata field to modify.
    * @param value The new value.
    * @return {@code true} if the udpate succeeded, {@code false} if the blob was not found.
    * @throws BlobStorageException
+   * @throws IllegalStateException on request timeout.
    */
   public boolean updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws BlobStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");

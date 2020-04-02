@@ -19,6 +19,7 @@ import com.azure.storage.blob.batch.BlobBatch;
 import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobDownloadResponse;
 import com.azure.storage.blob.models.BlobErrorCode;
+import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.codahale.metrics.MetricRegistry;
@@ -343,6 +344,28 @@ public class AzureCloudDestinationTest {
     assertFalse("Expected retrieveTokens to return false", azureDest.retrieveTokens(path, tokenFile, outputStream));
   }
 
+  /** Test to make sure that getting metadata for single blob calls ABS and not Cosmos. */
+  @Test
+  public void testGetOneMetadata() throws Exception {
+    // Get for existing blob
+    Response<BlobProperties> mockResponse = mock(Response.class);
+    BlobProperties mockProperties = mock(BlobProperties.class);
+    Map<String, String> propertyMap = new CloudBlobMetadata(blobId, 0, -1, 0, null).toMap();
+    when(mockProperties.getMetadata()).thenReturn(propertyMap);
+    when(mockResponse.getValue()).thenReturn(mockProperties);
+    when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenReturn(mockResponse);
+    Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(Collections.singletonList(blobId));
+    assertEquals("Expected map of one", 1, metadataMap.size());
+    verifyZeroInteractions(mockumentClient);
+
+    // Get for nonexistent blob
+    BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
+    when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
+    metadataMap = azureDest.getBlobMetadata(Collections.singletonList(blobId));
+    assertTrue("Expected empty map", metadataMap.isEmpty());
+    verifyZeroInteractions(mockumentClient);
+  }
+
   /** Test querying metadata. */
   @Test
   public void testQueryMetadata() throws Exception {
@@ -627,8 +650,7 @@ public class AzureCloudDestinationTest {
       doReturn(mockResponse).when(mockBlockBlobClient)
           .downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
     } else {
-      BlobStorageException ex = mock(BlobStorageException.class);
-      when(ex.getErrorCode()).thenReturn(BlobErrorCode.BLOB_NOT_FOUND);
+      BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
       doThrow(ex).when(mockBlockBlobClient)
           .downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
     }

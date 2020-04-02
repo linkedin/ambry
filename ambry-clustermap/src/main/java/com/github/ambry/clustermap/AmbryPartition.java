@@ -30,7 +30,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
  * {@link PartitionId} implementation to use within dynamic cluster managers.
  */
 public class AmbryPartition implements PartitionId {
-  private final Long id;
+  private final long id;
   private final String partitionClass;
   private final ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback;
   private final Lock stateChangeLock = new ReentrantLock();
@@ -81,7 +81,25 @@ public class AmbryPartition implements PartitionId {
 
   @Override
   public boolean isEqual(String other) {
-    return id.toString().equals(other);
+    return Long.toString(id).equals(other);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    AmbryPartition partition = (AmbryPartition) o;
+    return id == partition.id;
+  }
+
+  @Override
+  public int hashCode() {
+    return Long.hashCode(id);
   }
 
   @Override
@@ -92,7 +110,7 @@ public class AmbryPartition implements PartitionId {
   @Override
   public int compareTo(PartitionId o) {
     AmbryPartition other = (AmbryPartition) o;
-    return id.compareTo(other.id);
+    return Long.compare(id, other.id);
   }
 
   /**
@@ -111,7 +129,7 @@ public class AmbryPartition implements PartitionId {
    */
   @Override
   public String toPathString() {
-    return id.toString();
+    return Long.toString(id);
   }
 
   @Override
