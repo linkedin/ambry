@@ -547,7 +547,7 @@ public class NonBlockingRouterMetrics {
    *                                  instead of the parameters from the config.
    * @return a configured {@link CachedHistogram}.
    */
-  private static CachedHistogram createHistogram(RouterConfig routerConfig, boolean useDefaultReservoirParams) {
+  static CachedHistogram createHistogram(RouterConfig routerConfig, boolean useDefaultReservoirParams) {
     Reservoir reservoir;
     long cacheTimeoutMs;
     double quantile;

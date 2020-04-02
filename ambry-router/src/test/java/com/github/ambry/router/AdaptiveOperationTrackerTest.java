@@ -218,8 +218,8 @@ public class AdaptiveOperationTrackerTest {
    */
   @Test
   public void partitionLevelAdaptiveTrackerTest() throws Exception {
-    MockPartitionId mockPartition1 = new MockPartitionId(1L, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    MockPartitionId mockPartition2 = new MockPartitionId(2L, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    MockPartitionId mockPartition1 = new MockPartitionId(0L, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    MockPartitionId mockPartition2 = new MockPartitionId(1L, MockClusterMap.DEFAULT_PARTITION_CLASS);
     for (int i = 0; i < REPLICA_COUNT; i++) {
       mockPartition1.replicaIds.add(new MockReplicaId(PORT, mockPartition1, datanodes.get(i % datanodes.size()), 1));
       mockPartition2.replicaIds.add(new MockReplicaId(PORT, mockPartition2, datanodes.get(i % datanodes.size()), 2));
@@ -297,6 +297,22 @@ public class AdaptiveOperationTrackerTest {
     // The number of data points in cross colo histogram should be 2 (both of them come from partition1)
     assertEquals("Mismatch in number of data points in cross colo histogram", 2,
         routerMetrics.getBlobCrossDcLatencyMs.getCount());
+
+    // additional test: mock new partition is dynamically added and adaptive operation track should be able to create
+    // histogram on demand.
+    MockPartitionId mockPartition3 = (MockPartitionId) clusterMap.createNewPartition(datanodes);
+    OperationTracker tracker3 = getOperationTracker(routerConfig, mockPartition3);
+    // send 1st request
+    sendRequests(tracker3, 1);
+    // attempt to send 2nd request to make tracker check histogram and create a new one associated with this partition
+    // the oldest one hasn't passed due (because there are not enough data points in histogram), so 2nd is not sent
+    sendRequests(tracker3, 0);
+    tracker3.onResponse(partitionAndInflightReplicas.get(mockPartition3).poll(), TrackedRequestFinalState.SUCCESS);
+    // now it should be able to send 2nd request
+    sendRequests(tracker3, 1);
+    tracker3.onResponse(partitionAndInflightReplicas.get(mockPartition3).poll(), TrackedRequestFinalState.SUCCESS);
+    assertTrue("Operation should have succeeded", tracker3.hasSucceeded());
+
     // restore the tracer scope and routerMetrics
     trackerScope = OperationTrackerScope.Datacenter;
     routerMetrics = originalMetrics;
@@ -600,8 +616,9 @@ public class AdaptiveOperationTrackerTest {
     RouterConfig routerConfig = createRouterConfig(false, 1, 1, 6, customPercentiles, true);
     String[] percentileArray = customPercentiles.split(",");
     Arrays.sort(percentileArray);
-    List<String> sortedPercentiles =
-        Arrays.stream(percentileArray).map(p -> String.valueOf(Double.valueOf(p) * 100)).collect(Collectors.toList());
+    List<String> sortedPercentiles = Arrays.stream(percentileArray)
+        .map(p -> String.valueOf(Double.parseDouble(p) * 100))
+        .collect(Collectors.toList());
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     gauges = routerMetrics.getMetricRegistry().getGauges(filter);
     // Note that each percentile creates 4 metrics (GetBlobInfo/GetBlob joins LocalColo/CrossColo). So, the total number of
