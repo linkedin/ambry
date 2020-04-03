@@ -162,7 +162,7 @@ class GetBlobInfoOperation extends GetOperation {
     while (replicaIterator.hasNext()) {
       ReplicaId replicaId = replicaIterator.next();
       String hostname = replicaId.getDataNodeId().getHostname();
-      Port port = replicaId.getDataNodeId().getPortToConnectTo();
+      Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
       GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), options.getBlobOptions.getGetOption());
       RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId);
       int correlationId = getRequest.getCorrelationId();

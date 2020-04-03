@@ -118,7 +118,7 @@ class TtlUpdateOperation {
     while (replicaIterator.hasNext()) {
       ReplicaId replica = replicaIterator.next();
       String hostname = replica.getDataNodeId().getHostname();
-      Port port = replica.getDataNodeId().getPortToConnectTo();
+      Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       TtlUpdateRequest ttlUpdateRequest = createTtlUpdateRequest();
       ttlUpdateRequestInfos.put(ttlUpdateRequest.getCorrelationId(),
           new TtlUpdateRequestInfo(time.milliseconds(), replica));

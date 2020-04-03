@@ -18,20 +18,24 @@
 package com.github.ambry.network.http2;
 
 import com.github.ambry.commons.NettyUtils;
+import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.Http2ClientConfig;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.pool.ChannelPool;
-import io.netty.channel.pool.ChannelPoolHandler;
 import io.netty.channel.pool.SimpleChannelPool;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.Promise;
 import io.netty.util.concurrent.PromiseCombiner;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,12 +53,14 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
 
   /**
    * Reference to the {@link MultiplexedChannelRecord} on a channel.
+   * Attribute of parent channel.
    */
   static final AttributeKey<MultiplexedChannelRecord> MULTIPLEXED_CHANNEL =
       AttributeKey.newInstance("MULTIPLEXED_CHANNEL");
 
   /**
    * Reference to {@link Http2MultiplexedChannelPool} where stream channel is acquired.
+   * Attribute of parent channel.
    */
   static final AttributeKey<Http2MultiplexedChannelPool> HTTP2_MULTIPLEXED_CHANNEL_POOL =
       AttributeKey.newInstance("HTTP2_MULTIPLEXED_CHANNEL_POOL");
@@ -65,28 +71,37 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
   private static final AttributeKey<Boolean> PARENT_CHANNEL_RELEASED =
       AttributeKey.newInstance("PARENT_CHANNEL_RELEASED");
 
+  // HTTP/2 physical connection pool.
   private final ChannelPool parentConnectionPool;
   private final EventLoopGroup eventLoopGroup;
   private final Set<MultiplexedChannelRecord> parentConnections;
   private final Long idleConnectionTimeoutMs;
   private final int minParentConnections;
   private final int maxConcurrentStreamsAllowed;
+  private final int maxContentLength;
+  private final Http2ClientMetrics http2ClientMetrics;
 
   private AtomicBoolean closed = new AtomicBoolean(false);
 
   /**
-   * @param parentBootstrap {@link Bootstrap} to create {@link ChannelPool}.
-   * @param http2ChannelPoolHandler {@link ChannelPoolHandler} to create {@link ChannelPool}.
+   * @param inetSocketAddress IP Socket Address (IP address + port number).
+   * @param sslFactory {@link SSLFactory} used for SSL connection.
    * @param eventLoopGroup The event loop group.
-   * @param idleConnectionTimeoutMs the idle time before a channel is closed.
-   * @param minParentConnections Minimum number of parent channel will be created before reuse.
-   * @param maxConcurrentStreamsAllowed The maximum streams allowed per parent channel.
+   * @param http2ClientConfig http2 client configs.
+   * @param http2ClientMetrics http2 client metrics.
    */
-  Http2MultiplexedChannelPool(Bootstrap parentBootstrap, Http2ChannelPoolHandler http2ChannelPoolHandler,
-      EventLoopGroup eventLoopGroup, Long idleConnectionTimeoutMs, int minParentConnections,
-      int maxConcurrentStreamsAllowed) {
-    this(new SimpleChannelPool(parentBootstrap, http2ChannelPoolHandler), eventLoopGroup, ConcurrentHashMap.newKeySet(),
-        idleConnectionTimeoutMs, minParentConnections, maxConcurrentStreamsAllowed);
+  Http2MultiplexedChannelPool(InetSocketAddress inetSocketAddress, SSLFactory sslFactory, EventLoopGroup eventLoopGroup,
+      Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics) {
+    this(new SimpleChannelPool(new Bootstrap().group(eventLoopGroup)
+            .channel(NioSocketChannel.class)
+            .option(ChannelOption.SO_KEEPALIVE, true)
+            .option(ChannelOption.SO_RCVBUF, http2ClientConfig.nettyReceiveBufferSize)
+            .option(ChannelOption.SO_SNDBUF, http2ClientConfig.nettySendBufferSize)
+            .remoteAddress(inetSocketAddress),
+            new Http2ChannelPoolHandler(sslFactory, inetSocketAddress.getHostName(), inetSocketAddress.getPort())),
+        eventLoopGroup, ConcurrentHashMap.newKeySet(), http2ClientConfig.idleConnectionTimeoutMs,
+        http2ClientConfig.http2MinConnectionPerPort, http2ClientConfig.http2MaxConcurrentStreamsPerConnection,
+        http2ClientConfig.http2MaxContentLength, http2ClientMetrics);
   }
 
   /**
@@ -95,16 +110,20 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
    * @param idleConnectionTimeoutMs the idle time before a channel is closed.
    * @param minParentConnections Minimum number of parent channel will be created before reuse.
    * @param maxConcurrentStreamsAllowed The maximum streams allowed per parent channel.
+   * @param maxContentLength Maximum content length for a full HTTP/2 content. Used in HttpObjectAggregator.
+   * @param http2ClientMetrics Http2 client metrics.
    */
   Http2MultiplexedChannelPool(ChannelPool connectionPool, EventLoopGroup eventLoopGroup,
       Set<MultiplexedChannelRecord> connections, Long idleConnectionTimeoutMs, int minParentConnections,
-      int maxConcurrentStreamsAllowed) {
+      int maxConcurrentStreamsAllowed, int maxContentLength, Http2ClientMetrics http2ClientMetrics) {
     this.parentConnectionPool = connectionPool;
     this.eventLoopGroup = eventLoopGroup;
     this.parentConnections = connections;
     this.idleConnectionTimeoutMs = idleConnectionTimeoutMs;
     this.minParentConnections = minParentConnections;
     this.maxConcurrentStreamsAllowed = maxConcurrentStreamsAllowed;
+    this.maxContentLength = maxContentLength;
+    this.http2ClientMetrics = http2ClientMetrics;
   }
 
   @Override
@@ -114,33 +133,40 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
 
   @Override
   public Future<Channel> acquire(Promise<Channel> promise) {
+    http2ClientMetrics.http2NewStreamCount.inc();
     if (closed.get()) {
       return promise.setFailure(new IOException("Channel pool is closed!"));
     }
 
     if (parentConnections.size() >= minParentConnections) {
+      // TODO: if warmup is not 100%, new connections are still required.
       // This is a passive load balance depends on compareAndSet in claimStream().
       for (MultiplexedChannelRecord multiplexedChannel : parentConnections) {
         if (acquireStreamOnInitializedConnection(multiplexedChannel, promise)) {
           return promise;
         }
+        http2ClientMetrics.http2StreamSlipAcquireCount.inc();
       }
     }
 
-    // No connection needed or No available streams on existing connections, establish new connection and add it to set.
+    // No connection or No available streams on existing connections, establish new connection and add it to set.
     acquireStreamOnNewConnection(promise);
     return promise;
   }
 
   private void acquireStreamOnNewConnection(Promise<Channel> promise) {
+    log.trace("Creating new connection, number of connections: {}", parentConnections.size());
+    http2ClientMetrics.http2NewConnectionCount.inc();
+    long startTime = System.currentTimeMillis();
     Future<Channel> newConnectionAcquire = parentConnectionPool.acquire();
 
     newConnectionAcquire.addListener(f -> {
       if (!newConnectionAcquire.isSuccess()) {
+        http2ClientMetrics.http2NewConnectionFailureCount.inc();
         promise.setFailure(newConnectionAcquire.cause());
         return;
       }
-
+      http2ClientMetrics.http2ConnectionAcquireTime.update(System.currentTimeMillis() - startTime);
       Channel parentChannel = newConnectionAcquire.getNow();
       try {
         parentChannel.attr(HTTP2_MULTIPLEXED_CHANNEL_POOL).set(this);
@@ -154,9 +180,11 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
   }
 
   private void acquireStreamOnFreshConnection(Promise<Channel> promise, Channel parentChannel) {
+    long startTime = System.currentTimeMillis();
     try {
       MultiplexedChannelRecord multiplexedChannel =
-          new MultiplexedChannelRecord(parentChannel, maxConcurrentStreamsAllowed, idleConnectionTimeoutMs);
+          new MultiplexedChannelRecord(parentChannel, maxConcurrentStreamsAllowed, idleConnectionTimeoutMs,
+              maxContentLength);
       parentChannel.attr(MULTIPLEXED_CHANNEL).set(multiplexedChannel);
 
       Promise<Channel> streamPromise = parentChannel.eventLoop().newPromise();
@@ -175,6 +203,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
 
         Channel stream = streamPromise.getNow();
         cacheConnectionForFutureStreams(stream, multiplexedChannel, promise);
+        http2ClientMetrics.http2FirstStreamAcquireTime.update(System.currentTimeMillis() - startTime);
       });
     } catch (Throwable e) {
       failAndCloseParent(promise, parentChannel, e);
@@ -214,6 +243,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
    */
   private boolean acquireStreamOnInitializedConnection(MultiplexedChannelRecord channelRecord,
       Promise<Channel> promise) {
+    long startTime = System.currentTimeMillis();
     Promise<Channel> acquirePromise = channelRecord.getParentChannel().eventLoop().newPromise();
 
     if (!channelRecord.acquireStream(acquirePromise)) {
@@ -231,6 +261,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
         channel.parent().attr(HTTP2_MULTIPLEXED_CHANNEL_POOL).set(this);
         channel.parent().attr(MULTIPLEXED_CHANNEL).set(channelRecord);
         promise.setSuccess(channel);
+        http2ClientMetrics.http2RegularStreamAcquireTime.update(System.currentTimeMillis() - startTime);
       } catch (Exception e) {
         promise.setFailure(e);
       }
@@ -269,6 +300,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
     multiplexedChannel.closeAndReleaseChild(childChannel);
 
     if (multiplexedChannel.canBeClosedAndReleased()) {
+      log.debug("Parent channel closed: " + parentChannel.remoteAddress());
       // We just closed the last stream in a connection that has reached the end of its life.
       return closeAndReleaseParent(parentChannel, null, promise);
     }

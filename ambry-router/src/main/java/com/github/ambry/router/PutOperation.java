@@ -1319,7 +1319,7 @@ class PutOperation {
       while (replicaIterator.hasNext()) {
         ReplicaId replicaId = replicaIterator.next();
         String hostname = replicaId.getDataNodeId().getHostname();
-        Port port = replicaId.getDataNodeId().getPortToConnectTo();
+        Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         PutRequest putRequest = createPutRequest();
         RequestInfo request = new RequestInfo(hostname, port, putRequest, replicaId);
         int correlationId = putRequest.getCorrelationId();

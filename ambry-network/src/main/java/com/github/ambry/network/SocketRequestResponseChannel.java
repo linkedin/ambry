@@ -40,7 +40,7 @@ class SocketServerRequest extends AbstractByteBufHolder<SocketServerRequest> imp
     this.connectionId = connectionId;
     this.content = content;
     this.input = new NettyByteBufDataInputStream(content);
-    this.startTimeInMs = SystemTime.getInstance().milliseconds();
+    this.startTimeInMs = System.currentTimeMillis();
     logger.trace("Processor {} received request : {}", processor, connectionId);
   }
 
@@ -102,12 +102,12 @@ class SocketServerResponse implements NetworkResponse {
   }
 
   public void onEnqueueIntoResponseQueue() {
-    this.startQueueTimeInMs = SystemTime.getInstance().milliseconds();
+    this.startQueueTimeInMs = System.currentTimeMillis();
   }
 
   public void onDequeueFromResponseQueue() {
     if (metrics != null) {
-      metrics.updateQueueTime(SystemTime.getInstance().milliseconds() - startQueueTimeInMs);
+      metrics.updateQueueTime(System.currentTimeMillis() - startQueueTimeInMs);
     }
   }
 

@@ -38,10 +38,12 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobAll;
@@ -2252,7 +2254,11 @@ final class ServerTestUtil {
    * @throws Exception
    */
   static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties) throws Exception {
-    boolean requiresSSL = new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
+    if (new RouterConfig(verifiableProperties).routerEnableHttp2NetworkClient) {
+      return new NettySslHttp2Factory(new SSLConfig(verifiableProperties));
+    }
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    boolean requiresSSL = clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0;
     return requiresSSL ? SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)) : null;
   }
 

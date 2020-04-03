@@ -53,6 +53,7 @@ public class MultiplexedChannelRecord {
   private final Channel parentChannel;
   private final int maxConcurrentStreams;
   private final Long allowedIdleTimeInMs;
+  private final int maxContentLength;
 
   private final AtomicInteger numOfAvailableStreams;
   private volatile long lastReserveAttemptTimeMillis;
@@ -66,11 +67,13 @@ public class MultiplexedChannelRecord {
 
   private volatile int lastStreamId;
 
-  MultiplexedChannelRecord(Channel parentChannel, int maxConcurrentStreams, Long allowedIdleTimeInMs) {
+  MultiplexedChannelRecord(Channel parentChannel, int maxConcurrentStreams, Long allowedIdleTimeInMs,
+      int maxContentLength) {
     this.parentChannel = parentChannel;
     this.maxConcurrentStreams = maxConcurrentStreams;
     this.numOfAvailableStreams = new AtomicInteger(maxConcurrentStreams);
     this.allowedIdleTimeInMs = allowedIdleTimeInMs;
+    this.maxContentLength = maxContentLength;
   }
 
   AtomicInteger getNumOfAvailableStreams() {
@@ -83,6 +86,7 @@ public class MultiplexedChannelRecord {
       acquireClaimedStream(promise);
       return true;
     }
+    log.warn("No available streams on this connection: {}", parentChannel.remoteAddress());
     return false;
   }
 
@@ -108,7 +112,7 @@ public class MultiplexedChannelRecord {
             protected void initChannel(Channel ch) throws Exception {
               ChannelPipeline p = ch.pipeline();
               p.addLast(new Http2StreamFrameToHttpObjectCodec(false));
-              p.addLast(new HttpObjectAggregator(1024 * 1024));
+              p.addLast(new HttpObjectAggregator(maxContentLength));
             }
           }).open();
       streamFuture.addListener((GenericFutureListener<Future<Http2StreamChannel>>) future -> {
@@ -131,10 +135,11 @@ public class MultiplexedChannelRecord {
   }
 
   private void enableCloseIfIdleTask() {
+    log.info("enableCloseIfIdleTask is enabled.");
     NettyUtils.warnIfNotInEventLoop(parentChannel.eventLoop());
 
-    // Don't poll more frequently than 1 second. Being overly-conservative is okay. Blowing up our CPU is not.
-    long taskFrequencyMillis = Math.max(allowedIdleTimeInMs, 1_000);
+    // Don't poll more frequently than 800 ms. Being overly-conservative is okay. Blowing up our CPU is not.
+    long taskFrequencyMillis = Math.max(allowedIdleTimeInMs, 800);
 
     closeIfIdleTask = parentChannel.eventLoop()
         .scheduleAtFixedRate(this::closeIfIdle, taskFrequencyMillis, taskFrequencyMillis, TimeUnit.MILLISECONDS);
@@ -237,7 +242,7 @@ public class MultiplexedChannelRecord {
 
     // Don't close if there have been any reserves attempted since the idle connection time.
     long nonVolatileLastReserveAttemptTimeMillis = lastReserveAttemptTimeMillis;
-    if (nonVolatileLastReserveAttemptTimeMillis > SystemTime.getInstance().milliseconds() - allowedIdleTimeInMs) {
+    if (nonVolatileLastReserveAttemptTimeMillis > System.currentTimeMillis() - allowedIdleTimeInMs) {
       return;
     }
 
@@ -266,6 +271,7 @@ public class MultiplexedChannelRecord {
     return parentChannel;
   }
 
+  // Return true if we are not run out of streams.
   private boolean claimStream() {
     lastReserveAttemptTimeMillis = System.currentTimeMillis();
     for (int attempt = 0; attempt < 5; ++attempt) {

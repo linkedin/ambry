@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import io.netty.channel.ChannelInitializer;
@@ -36,6 +37,7 @@ import java.util.Objects;
 public class StorageServerNettyChannelInitializer extends ChannelInitializer<SocketChannel> {
   private final NettyConfig nettyConfig;
   private final PerformanceConfig performanceConfig;
+  private final Http2ClientConfig http2ClientConfig;
   private final NettyMetrics nettyMetrics;
   private final ConnectionStatsHandler connectionStatsHandler;
   private final RestRequestHandler requestHandler;
@@ -44,6 +46,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
   /**
    * Construct a {@link StorageServerNettyChannelInitializer}.
    * @param nettyConfig the config to use when instantiating certain handlers on this pipeline.
+   * @param http2ClientConfig configs that http2 client used.
    * @param performanceConfig the config to use when evaluating ambry service level objectives that include latency.
    * @param nettyMetrics the {@link NettyMetrics} object to use.
    * @param connectionStatsHandler the {@link ConnectionStatsHandler} to use.
@@ -51,11 +54,12 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
    * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
    *                   or {@code null} if SSL is not enabled in this pipeline.
    */
-  public StorageServerNettyChannelInitializer(NettyConfig nettyConfig, PerformanceConfig performanceConfig,
-      NettyMetrics nettyMetrics, ConnectionStatsHandler connectionStatsHandler, RestRequestHandler requestHandler,
-      SSLFactory sslFactory, MetricRegistry metricRegistry) {
+  public StorageServerNettyChannelInitializer(NettyConfig nettyConfig, Http2ClientConfig http2ClientConfig,
+      PerformanceConfig performanceConfig, NettyMetrics nettyMetrics, ConnectionStatsHandler connectionStatsHandler,
+      RestRequestHandler requestHandler, SSLFactory sslFactory, MetricRegistry metricRegistry) {
     this.nettyConfig = nettyConfig;
     this.performanceConfig = performanceConfig;
+    this.http2ClientConfig = http2ClientConfig;
     this.nettyMetrics = nettyMetrics;
     // For http2, SSL encrypted is required. sslFactory should not be null.
     Objects.requireNonNull(sslFactory);
@@ -80,7 +84,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     pipeline.addLast("SslHandler", sslHandler);
     pipeline.addLast(Http2FrameCodecBuilder.forServer().initialSettings(Http2Settings.defaultSettings()).build())
         .addLast("Http2MultiplexHandler", new Http2MultiplexHandler(
-            new Http2StreamHandler(nettyMetrics, nettyConfig, performanceConfig, requestHandler)));
+            new Http2StreamHandler(nettyMetrics, nettyConfig, performanceConfig, http2ClientConfig, requestHandler)));
   }
 }
 

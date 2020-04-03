@@ -90,6 +90,7 @@ public class NonBlockingRouterMetrics {
   public final Histogram deleteBlobOperationLatencyMs;
   public final Histogram updateBlobTtlOperationLatencyMs;
   public final Histogram routerRequestLatencyMs;
+  public final Histogram responseReceiveToHandleLatencyMs;
 
   // Operation error count.
   public final Counter putBlobErrorCount;
@@ -285,6 +286,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(TtlUpdateOperation.class, "UpdateBlobTtlOperationLatencyMs"));
     routerRequestLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "RouterRequestLatencyMs"));
+    responseReceiveToHandleLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "ResponseReceiveToHandleLatencyMs"));
 
     // Operation error count.
     putBlobErrorCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "PutBlobErrorCount"));

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import io.netty.channel.ChannelHandler;
@@ -32,23 +33,25 @@ public class Http2StreamHandler extends ChannelInboundHandlerAdapter {
   private NettyMetrics nettyMetrics;
   private NettyConfig nettyConfig;
   private PerformanceConfig performanceConfig;
+  private Http2ClientConfig http2ClientConfig;
   private RestRequestHandler requestHandler;
 
   public Http2StreamHandler(NettyMetrics nettyMetrics, NettyConfig nettyConfig, PerformanceConfig performanceConfig,
-      RestRequestHandler requestHandler) {
+      Http2ClientConfig http2ClientConfig, RestRequestHandler requestHandler) {
     this.nettyMetrics = nettyMetrics;
     this.nettyConfig = nettyConfig;
     this.performanceConfig = performanceConfig;
+    this.http2ClientConfig = http2ClientConfig;
     this.requestHandler = requestHandler;
   }
 
   @Override
   public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
     ctx.pipeline().addLast(new Http2StreamFrameToHttpObjectCodec(true));
-    // TODO: this is known issue in PR 1421. Since it may take time to merge 1421, just add it to be a quick fix.
-    ctx.pipeline().addLast(new HttpObjectAggregator(10 * 1024 * 1024));
+    // TODO: Remove HttpObjectAggregator. Currently, without HttpObjectAggregator, last httpContent can't be recognized as LastHttpContent.
+    ctx.pipeline().addLast(new HttpObjectAggregator(http2ClientConfig.http2MaxContentLength));
     // NettyMessageProcessor depends on ChunkedWriteHandler.
-    // TODO: add deployment health check handler.
+    // TODO: Add deployment health check handler.
     ctx.pipeline().addLast(new ChunkedWriteHandler());
     ctx.pipeline().addLast(new NettyMessageProcessor(nettyMetrics, nettyConfig, performanceConfig, requestHandler));
   }

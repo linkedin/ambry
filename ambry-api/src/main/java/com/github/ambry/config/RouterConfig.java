@@ -99,6 +99,7 @@ public class RouterConfig {
   public static final String ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET = "router.put.use.dynamic.success.target";
   public static final String ROUTER_CLOUD_SUCCESS_TARGET = "router.cloud.success.target";
   public static final String ROUTER_CLOUD_REQUEST_PARALLELISM = "router.cloud.request.parallelism";
+  public static final String ROUTER_ENABLE_HTTP2_NETWORK_CLIENT = "router.enable.http2.network.client";
 
   /**
    * Number of independent scaling units for the router.
@@ -473,6 +474,13 @@ public class RouterConfig {
   public final int routerCloudRequestParallelism;
 
   /**
+   * Whether or not to use HTTP/2 network client
+   */
+  @Config(ROUTER_ENABLE_HTTP2_NETWORK_CLIENT)
+  @Default("false")
+  public final boolean routerEnableHttp2NetworkClient;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -574,5 +582,6 @@ public class RouterConfig {
     routerCloudSuccessTarget = verifiableProperties.getIntInRange(ROUTER_CLOUD_SUCCESS_TARGET, 1, 1, Integer.MAX_VALUE);
     routerCloudRequestParallelism =
         verifiableProperties.getIntInRange(ROUTER_CLOUD_REQUEST_PARALLELISM, 1, 1, Integer.MAX_VALUE);
+    routerEnableHttp2NetworkClient = verifiableProperties.getBoolean(ROUTER_ENABLE_HTTP2_NETWORK_CLIENT, false);
   }
 }
