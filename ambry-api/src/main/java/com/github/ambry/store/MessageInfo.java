@@ -24,8 +24,6 @@ public class MessageInfo {
   // The life version when the operation is trigger by the requests from frontend.
   public final static short LIFE_VERSION_FROM_FRONTEND = -1;
 
-  // The life version when the operation is triggered by the requests from frontend.
-  public final static short LIFE_VERSION_FROM_FRONTEND = -1;
   private final StoreKey key;
   private final long size;
   private final long expirationTimeInMs;
