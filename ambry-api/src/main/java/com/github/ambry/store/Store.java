@@ -41,29 +41,37 @@ public interface Store {
   StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException;
 
   /**
-   * Puts a set of messages into the store
+   * Puts a set of messages into the store. When the lifeVersion is {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND}, this
+   * method is invoked by the responding to the frontend request. Otherwise, it's invoked in the replication thread.
    * @param messageSetToWrite The message set to write to the store
+   *                          Only the Storekey, OperationTime, ExpirationTime, LifeVersion  should be used in this method.
    * @throws StoreException
    */
   void put(MessageWriteSet messageSetToWrite) throws StoreException;
 
   /**
-   * Deletes all the messages that are part of the message set
-   * @param infosToDelete The list of messages that need to be deleted
+   * Deletes all the messages in the list. When the lifeVersion is {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND}, this
+   * method is invoked by the responding to the frontend request. Otherwise, it's invoked in the replication thread.
+   * @param infosToDelete The list of messages that need to be deleted.
+   *                      Only the StoreKey, OperationTime, LifeVersion should be used in this method.
    * @throws StoreException
    */
   void delete(List<MessageInfo> infosToDelete) throws StoreException;
 
   /**
-   * Undelete the blob identified by {@code id}.
+   * Undelete the blob identified by {@code id}. When the lifeVersion is {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND},
+   * this method is invoked by the responding to the frontend request. Otherwise, it's invoked in the replication thread.
    * @param info The {@link MessageInfo} that carries some basic information about this operation.
+   *             Only the StoreKey, OperationTime, LifeVersion should be used in this method.
    * @return the lifeVersion of the undeleted blob.
    */
   short undelete(MessageInfo info) throws StoreException;
 
   /**
-   * Updates the TTL of all the messages that are part of the message set
+   * Updates the TTL of all the messages in the list. When the lifeVersion is {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND},
+   * this method is invoked by the responding to the frontend request. Otherwise, it's invoked in the replication thread.
    * @param infosToUpdate The list of messages that need to be updated
+   *                      Only the StoreKey, OperationTime, ExpirationTime, LifeVersion should be used in this method.
    * @throws StoreException
    */
   void updateTtl(List<MessageInfo> infosToUpdate) throws StoreException;
