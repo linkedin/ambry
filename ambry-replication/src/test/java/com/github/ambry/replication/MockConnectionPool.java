@@ -201,9 +201,9 @@ public class MockConnectionPool implements ConnectionPool {
               // looks for. Just set the deleted flag to true for the constructed MessageInfo from Put.
               if (infoFound.isDeleted()) {
                 MessageInfo putMsgInfo = getMessageInfo(infoFound.getStoreKey(), messageInfoList, false, false, false);
-                infoFound = new MessageInfo(putMsgInfo.getStoreKey(), putMsgInfo.getSize(), true, false,
-                    putMsgInfo.getExpirationTimeInMs(), putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
-                    putMsgInfo.getOperationTimeMs());
+                infoFound = new MessageInfo(putMsgInfo.getStoreKey(), putMsgInfo.getSize(), true, false, false,
+                    putMsgInfo.getExpirationTimeInMs(), null, putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
+                    putMsgInfo.getOperationTimeMs(), infoFound.getLifeVersion());
               } else if (infoFound.isUndeleted()) {
                 MessageInfo putMsgInfo = getMessageInfo(infoFound.getStoreKey(), messageInfoList, false, false, false);
                 infoFound = new MessageInfo(putMsgInfo.getStoreKey(), putMsgInfo.getSize(), false, false, true,

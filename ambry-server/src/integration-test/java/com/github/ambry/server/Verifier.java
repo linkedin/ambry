@@ -141,8 +141,6 @@ class Verifier implements Runnable {
                     System.out.println(exceptionMsg);
                     throw new IllegalStateException(exceptionMsg);
                   }
-                  // blob property doesn't have the correct expiration time after ttl update.
-                  //checkExpiryTimeMatch(payload, ServerTestUtil.getExpiryTimeMs(propertyOutput), "blobproperty");
                   long actualExpiryTimeMs =
                       resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs();
                   checkExpiryTimeMatch(payload, actualExpiryTimeMs, "messageinfo in blobproperty");
@@ -241,9 +239,6 @@ class Verifier implements Runnable {
                   if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
                     throw new IllegalStateException();
                   }
-                  //checkExpiryTimeMatch(payload,
-                  //    ServerTestUtil.getExpiryTimeMs(blobAll.getBlobInfo().getBlobProperties()),
-                  //    "blobproperty in bloball");
                   long actualExpiryTimeMs =
                       resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs();
                   checkExpiryTimeMatch(payload, actualExpiryTimeMs, "messageinfo in bloball");
