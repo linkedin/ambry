@@ -608,7 +608,7 @@ class CuratedLogIndexState {
         retCandidate = value;
         break;
       } else if (types.contains(PersistentIndex.IndexEntryType.TTL_UPDATE) && !value.isDelete() && !value.isUndelete()
-          && value.isTTLUpdate()) {
+          && value.isTtlUpdate()) {
         retCandidate = value;
         break;
       } else if (types.contains(PersistentIndex.IndexEntryType.PUT) && value.isPut()) {
@@ -619,8 +619,8 @@ class CuratedLogIndexState {
 
     if (retCandidate != null) {
       IndexValue latest = toConsider.get(toConsider.size() - 1);
-      if (latest.getExpiresAtMs() != retCandidate.getExpiresAtMs() || (!retCandidate.isTTLUpdate()
-          && latest.isTTLUpdate())) {
+      if (latest.getExpiresAtMs() != retCandidate.getExpiresAtMs() || (!retCandidate.isTtlUpdate()
+          && latest.isTtlUpdate())) {
         retCandidate = new IndexValue(retCandidate.getOffset().getName(), retCandidate.getBytes(),
             retCandidate.getFormatVersion());
         retCandidate.setFlag(IndexValue.Flags.Ttl_Update_Index);

@@ -611,7 +611,7 @@ class PersistentIndex {
               retCandidate = value;
               break;
             } else if (types.contains(IndexEntryType.TTL_UPDATE) && !value.isDelete() && !value.isUndelete()
-                && value.isTTLUpdate()) {
+                && value.isTtlUpdate()) {
               retCandidate = value;
               break;
             } else if (types.contains(IndexEntryType.PUT) && value.isPut()) {
@@ -623,7 +623,7 @@ class PersistentIndex {
           }
           if (retCandidate != null) {
             // merge entries if required to account for updated fields
-            if (latest.isTTLUpdate() && !retCandidate.isTTLUpdate()) {
+            if (latest.isTtlUpdate() && !retCandidate.isTtlUpdate()) {
               retCandidate = new IndexValue(retCandidate.getOffset().getName(), retCandidate.getBytes(),
                   retCandidate.getFormatVersion());
               retCandidate.setFlag(IndexValue.Flags.Ttl_Update_Index);
@@ -696,7 +696,7 @@ class PersistentIndex {
             IndexValue value = it.next();
             if ((types.contains(IndexEntryType.DELETE) && value.isDelete()) || (types.contains(IndexEntryType.UNDELETE)
                 && value.isUndelete()) || (types.contains(IndexEntryType.TTL_UPDATE) && !value.isDelete()
-                && !value.isUndelete() && value.isTTLUpdate()) || (types.contains(IndexEntryType.PUT)
+                && !value.isUndelete() && value.isTtlUpdate()) || (types.contains(IndexEntryType.PUT)
                 && value.isPut())) {
               // Add a copy of the value to the result since we return a modifiable list to the caller.
               result.add(new IndexValue(value));
@@ -763,7 +763,7 @@ class PersistentIndex {
     // P/T + D + U + D
     if (values.size() == 1) {
       IndexValue value = values.get(0);
-      if (value.isDelete() || value.isTTLUpdate()) {
+      if (value.isDelete() || value.isTtlUpdate()) {
         throw new StoreException("Id " + key + " is compacted in index" + dataDir,
             StoreErrorCodes.ID_Deleted_Permanently);
       } else if (value.isPut()) {
@@ -803,11 +803,11 @@ class PersistentIndex {
    * @param allValues the given list of {@link IndexValue}s.
    */
   void maybeChangeExpirationDate(IndexValue target, List<IndexValue> allValues) {
-    if (target.isTTLUpdate() && target.getExpiresAtMs() == Utils.Infinite_Time) {
+    if (target.isTtlUpdate() && target.getExpiresAtMs() == Utils.Infinite_Time) {
       return;
     }
     for (IndexValue v : allValues) {
-      if (v.isTTLUpdate()) {
+      if (v.isTtlUpdate()) {
         target.setExpiresAtMs(v.getExpiresAtMs());
         target.setFlag(IndexValue.Flags.Ttl_Update_Index);
         return;
@@ -844,7 +844,7 @@ class PersistentIndex {
    * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise. Used if the PUT
    *             record could not be found
    * @param deletionTimeMs deletion time of the blob. In-case of recovery, deletion time is obtained from {@code info}.
-   * @param lifeVersion lifeVersion of this undelete record.
+   * @param lifeVersion lifeVersion of this delete record.
    * @return the {@link IndexValue} of the delete record
    * @throws StoreException
    */
@@ -932,7 +932,7 @@ class PersistentIndex {
     short retrievedLifeVersion = value == null ? info.getLifeVersion() : value.getLifeVersion();
     if (value != null && value.isDelete()) {
       throw new StoreException("Id " + id + " deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
-    } else if (value != null && value.isTTLUpdate()) {
+    } else if (value != null && value.isTtlUpdate()) {
       throw new StoreException("TTL of " + id + " already updated in index" + dataDir, StoreErrorCodes.Already_Updated);
     } else if (hasLifeVersion && retrievedLifeVersion > lifeVersion) {
       throw new StoreException("LifeVersion conflict in index. Id " + id + " LifeVersion: " + retrievedLifeVersion
@@ -1036,7 +1036,7 @@ class PersistentIndex {
       readOptions = getUndeletedBlobReadOptions(value, id, indexSegments);
     } else {
       readOptions = new BlobReadOptions(log, value.getOffset(),
-          new MessageInfo(id, value.getSize(), value.isDelete(), value.isTTLUpdate(), value.isUndelete(),
+          new MessageInfo(id, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
               value.getExpiresAtMs(), journal.getCrcOfKey(id), value.getAccountId(), value.getContainerId(),
               value.getOperationTimeInMs(), value.getLifeVersion()));
     }
@@ -1060,7 +1060,7 @@ class PersistentIndex {
     if (putValue != null) {
       // use the expiration time from the original value because it may have been updated
       readOptions = new BlobReadOptions(log, putValue.getOffset(),
-          new MessageInfo(key, putValue.getSize(), true, value.isTTLUpdate(), false, value.getExpiresAtMs(), null,
+          new MessageInfo(key, putValue.getSize(), true, value.isTtlUpdate(), false, value.getExpiresAtMs(), null,
               putValue.getAccountId(), putValue.getContainerId(), putValue.getOperationTimeInMs(),
               value.getLifeVersion()));
     } else {
@@ -1089,7 +1089,7 @@ class PersistentIndex {
       // use the expiration time from the original value because it may have been updated
       // since we are here dealing with undelete blob, we have to return the right life version
       return new BlobReadOptions(log, putValue.getOffset(),
-          new MessageInfo(key, putValue.getSize(), false, value.isTTLUpdate(), true, value.getExpiresAtMs(), null,
+          new MessageInfo(key, putValue.getSize(), false, value.isTtlUpdate(), true, value.getExpiresAtMs(), null,
               putValue.getAccountId(), putValue.getContainerId(), putValue.getOperationTimeInMs(),
               value.getLifeVersion()));
     } else {
@@ -1166,7 +1166,7 @@ class PersistentIndex {
             IndexValue value =
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
                     EnumSet.allOf(IndexEntryType.class), indexSegments);
-            messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), value.isDelete(), value.isTTLUpdate(),
+            messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), value.isDelete(), value.isTtlUpdate(),
                 value.isUndelete(), value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(),
                 value.getOperationTimeInMs(), value.getLifeVersion()));
             currentTotalSizeOfEntries += value.getSize();
@@ -1517,7 +1517,7 @@ class PersistentIndex {
           newTokenOffsetInJournal = entry.getOffset();
           IndexValue value = findKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSnapshot),
               EnumSet.allOf(IndexEntryType.class), indexSegments);
-          messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), value.isDelete(), value.isTTLUpdate(),
+          messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), value.isDelete(), value.isTtlUpdate(),
               value.isUndelete(), value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(),
               value.getOperationTimeInMs(), value.getLifeVersion()));
           currentTotalSizeOfEntries.addAndGet(value.getSize());
@@ -1615,7 +1615,7 @@ class PersistentIndex {
           EnumSet.of(IndexEntryType.TTL_UPDATE, IndexEntryType.DELETE, IndexEntryType.UNDELETE));
       if (indexValue != null) {
         messageInfo = new MessageInfo(messageInfo.getStoreKey(), indexValue.getSize(), indexValue.isDelete(),
-            indexValue.isTTLUpdate(), indexValue.isUndelete(), indexValue.getExpiresAtMs(), null,
+            indexValue.isTtlUpdate(), indexValue.isUndelete(), indexValue.getExpiresAtMs(), null,
             indexValue.getAccountId(), indexValue.getContainerId(), indexValue.getOperationTimeInMs(),
             indexValue.getLifeVersion());
         messageEntriesIterator.set(messageInfo);
@@ -1798,7 +1798,7 @@ class PersistentIndex {
                   EnumSet.allOf(IndexEntryType.class), indexSegments);
           if (value.isDelete()) {
             messageEntries.add(
-                new MessageInfo(entry.getKey(), value.getSize(), true, value.isTTLUpdate(), value.isUndelete(),
+                new MessageInfo(entry.getKey(), value.getSize(), true, value.isTtlUpdate(), value.isUndelete(),
                     value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(),
                     value.getOperationTimeInMs(), value.getLifeVersion()));
           }

@@ -44,7 +44,7 @@ public interface Store {
    * Puts a set of messages into the store. When the lifeVersion is {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND}, this
    * method is invoked by the responding to the frontend request. Otherwise, it's invoked in the replication thread.
    * @param messageSetToWrite The message set to write to the store
-   *                          Only the Storekey, OperationTime, ExpirationTime, LifeVersion  should be used in this method.
+   *                          Only the StoreKey, OperationTime, ExpirationTime, LifeVersion should be used in this method.
    * @throws StoreException
    */
   void put(MessageWriteSet messageSetToWrite) throws StoreException;

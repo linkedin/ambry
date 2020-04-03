@@ -546,7 +546,7 @@ class IndexSegment {
           type = PersistentIndex.IndexEntryType.DELETE;
         } else if (entry.getValue().isUndelete()) {
           type = PersistentIndex.IndexEntryType.UNDELETE;
-        } else if (entry.getValue().isTTLUpdate()) {
+        } else if (entry.getValue().isTtlUpdate()) {
           type = PersistentIndex.IndexEntryType.TTL_UPDATE;
         }
         resetKey = new Pair<>(entry.getKey(), type);
@@ -1012,7 +1012,7 @@ class IndexSegment {
         getIndexEntriesSince(key, findEntriesCondition, indexEntries, currentTotalSizeOfEntriesInBytes, true);
     for (IndexEntry indexEntry : indexEntries) {
       IndexValue value = indexEntry.getValue();
-      MessageInfo info = new MessageInfo(indexEntry.getKey(), value.getSize(), value.isDelete(), value.isTTLUpdate(),
+      MessageInfo info = new MessageInfo(indexEntry.getKey(), value.getSize(), value.isDelete(), value.isTtlUpdate(),
           value.isUndelete(), value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(),
           value.getOperationTimeInMs(), value.getLifeVersion());
       entries.add(info);

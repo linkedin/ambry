@@ -475,20 +475,20 @@ public class BlobStore implements Store {
           throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
               StoreErrorCodes.ID_Not_Found);
         }
+        if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
+          if (config.storeValidateAuthorization) {
+            throw new StoreException("DELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: "
+                + value.getAccountId() + "Actually containerId: " + value.getContainerId(),
+                StoreErrorCodes.Authorization_Failure);
+          } else {
+            logger.warn("DELETE authorization failure. Key: {} Actually accountId: {} Actually containerId: {}",
+                info.getStoreKey(), value.getAccountId(), value.getContainerId());
+            metrics.deleteAuthorizationFailureCount.inc();
+          }
+        }
         if (info.getLifeVersion() == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
           // This is a delete request from frontend
-          if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
-            if (config.storeValidateAuthorization) {
-              throw new StoreException(
-                  "DELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: "
-                      + value.getAccountId() + "Actually containerId: " + value.getContainerId(),
-                  StoreErrorCodes.Authorization_Failure);
-            } else {
-              logger.warn("DELETE authorization failure. Key: {} Actually accountId: {} Actually containerId: {}",
-                  info.getStoreKey(), value.getAccountId(), value.getContainerId());
-              metrics.deleteAuthorizationFailureCount.inc();
-            }
-          } else if (value.isDelete()) {
+          if (value.isDelete()) {
             throw new StoreException(
                 "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
                 StoreErrorCodes.ID_Deleted);
@@ -511,15 +511,17 @@ public class BlobStore implements Store {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
+          int i = 0;
           for (MessageInfo info : infosToDelete) {
             IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
                 EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE,
                     PersistentIndex.IndexEntryType.UNDELETE));
-            if (value != null && value.isDelete()) {
+            if (value != null && value.isDelete() && value.getLifeVersion() == lifeVersions.get(i)) {
               throw new StoreException(
                   "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
                   StoreErrorCodes.ID_Deleted);
             }
+            i++;
           }
         }
         List<InputStream> inputStreams = new ArrayList<>(infosToDelete.size());
@@ -599,7 +601,7 @@ public class BlobStore implements Store {
           throw new StoreException(
               "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
               StoreErrorCodes.ID_Deleted);
-        } else if (value.isTTLUpdate()) {
+        } else if (value.isTtlUpdate()) {
           throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
               StoreErrorCodes.Already_Updated);
         } else if (value.getExpiresAtMs() != Utils.Infinite_Time
@@ -624,7 +626,7 @@ public class BlobStore implements Store {
                 throw new StoreException(
                     "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
                     StoreErrorCodes.ID_Deleted);
-              } else if (value.isTTLUpdate()) {
+              } else if (value.isTtlUpdate()) {
                 throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
                     StoreErrorCodes.Already_Updated);
               }

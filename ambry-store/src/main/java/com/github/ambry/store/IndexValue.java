@@ -256,7 +256,7 @@ class IndexValue implements Comparable<IndexValue> {
    * Helper function for isFlagSet(Flags.Ttl_Update_Index).
    * @return true when the Ttl_Update_Index is set.
    */
-  boolean isTTLUpdate() {
+  boolean isTtlUpdate() {
     return isFlagSet(Flags.Ttl_Update_Index);
   }
 
@@ -435,7 +435,7 @@ class IndexValue implements Comparable<IndexValue> {
 
   @Override
   public String toString() {
-    return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isDelete() + ", TTL Updated: " + isTTLUpdate()
+    return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isDelete() + ", TTL Updated: " + isTtlUpdate()
         + ", Undelete: " + isUndelete() + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: "
         + getOriginalMessageOffset() + (formatVersion != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs "
         + getOperationTimeInMs() + ", AccountId " + getAccountId() + ", ContainerId " + getContainerId()) : "") + (
