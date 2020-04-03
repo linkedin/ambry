@@ -135,7 +135,7 @@ public class IndexTest {
     assertNotNull("Version 3 should be able to read version 2 expired key", value);
     assertEquals("Version doesn't match", PersistentIndex.VERSION_2, value.getFormatVersion());
     assertFalse("Not deleted", value.isDelete());
-    assertFalse("Not ttlupdated", value.isTTLUpdate());
+    assertFalse("Not ttlupdated", value.isTtlUpdate());
 
     value = state.index.findKey(state.deletedKeys.iterator().next());
     assertNotNull("Version 3 should be able to read version 2 deleted key", value);
@@ -374,7 +374,7 @@ public class IndexTest {
     assertNotNull(value);
     assertTrue("targetKey is not undeleted", value.isUndelete());
     assertTrue("targetKey has delete flag", !value.isDelete());
-    assertEquals("Ttl update flag mismatch", expectTtlUpdateSet, value.isTTLUpdate());
+    assertEquals("Ttl update flag mismatch", expectTtlUpdateSet, value.isTtlUpdate());
     actualLifeVersion = value.getLifeVersion();
     assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
         actualLifeVersion);
@@ -2482,7 +2482,7 @@ public class IndexTest {
       long operationTimeMs = undeleteValue != null ? undeleteValue.getOperationTimeInMs()
           : deleteValue != null ? deleteValue.getOperationTimeInMs()
               : ttlUpdateValue != null ? ttlUpdateValue.getOperationTimeInMs() : putValue.getOperationTimeInMs();
-      boolean isTtlUpdated = undeleteValue != null ? undeleteValue.isTTLUpdate()
+      boolean isTtlUpdated = undeleteValue != null ? undeleteValue.isTtlUpdate()
           : deleteValue != null ? deleteValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) : ttlUpdateValue != null;
       // if a key is updated, it doesn't matter if we reached the update record or not, the updated state will be
       // the one that is returned.

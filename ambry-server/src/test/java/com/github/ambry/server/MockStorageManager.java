@@ -138,12 +138,14 @@ class MockStorageManager extends StorageManager {
       MessageWriteSet writeSet;
       try {
         for (MessageInfo info : infos) {
+          short lifeVersion =
+              info.getLifeVersion() == MessageInfo.LIFE_VERSION_FROM_FRONTEND ? 0 : info.getLifeVersion();
           MessageFormatInputStream stream =
               new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                  info.getOperationTimeMs(), info.getLifeVersion());
+                  info.getOperationTimeMs(), lifeVersion);
           infosToDelete.add(new MessageInfo(info.getStoreKey(), stream.getSize(), true, info.isTtlUpdated(), false,
               info.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
-              info.getLifeVersion()));
+              lifeVersion));
           inputStreams.add(stream);
         }
         writeSet =
@@ -165,12 +167,14 @@ class MockStorageManager extends StorageManager {
       MessageFormatWriteSet writeSet;
       try {
         for (MessageInfo info : infos) {
+          short lifeVersion =
+              info.getLifeVersion() == MessageInfo.LIFE_VERSION_FROM_FRONTEND ? 0 : info.getLifeVersion();
           MessageFormatInputStream stream =
               new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                  info.getExpirationTimeInMs(), info.getOperationTimeMs(), info.getLifeVersion());
+                  info.getExpirationTimeInMs(), info.getOperationTimeMs(), lifeVersion);
           infosToUpdate.add(
               new MessageInfo(info.getStoreKey(), stream.getSize(), false, true, false, info.getExpirationTimeInMs(),
-                  null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(), info.getLifeVersion()));
+                  null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(), lifeVersion));
           inputStreams.add(stream);
         }
         writeSet =

@@ -141,10 +141,9 @@ class Verifier implements Runnable {
                     System.out.println(exceptionMsg);
                     throw new IllegalStateException(exceptionMsg);
                   }
-                  checkExpiryTimeMatch(payload, ServerTestUtil.getExpiryTimeMs(propertyOutput));
                   long actualExpiryTimeMs =
                       resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs();
-                  checkExpiryTimeMatch(payload, actualExpiryTimeMs);
+                  checkExpiryTimeMatch(payload, actualExpiryTimeMs, "messageinfo in blobproperty");
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException(e);
@@ -173,7 +172,7 @@ class Verifier implements Runnable {
                   }
                   long actualExpiryTimeMs =
                       resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs();
-                  checkExpiryTimeMatch(payload, actualExpiryTimeMs);
+                  checkExpiryTimeMatch(payload, actualExpiryTimeMs, "messageinfo in usermetadatga");
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();
@@ -210,7 +209,7 @@ class Verifier implements Runnable {
                   }
                   long actualExpiryTimeMs =
                       resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs();
-                  checkExpiryTimeMatch(payload, actualExpiryTimeMs);
+                  checkExpiryTimeMatch(payload, actualExpiryTimeMs, "messageinfo in blobdata");
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();
@@ -240,22 +239,24 @@ class Verifier implements Runnable {
                   if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
                     throw new IllegalStateException();
                   }
-                  checkExpiryTimeMatch(payload,
-                      ServerTestUtil.getExpiryTimeMs(blobAll.getBlobInfo().getBlobProperties()));
                   long actualExpiryTimeMs =
                       resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs();
-                  checkExpiryTimeMatch(payload, actualExpiryTimeMs);
+                  checkExpiryTimeMatch(payload, actualExpiryTimeMs, "messageinfo in bloball");
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();
                 }
               }
 
-              // ttl update, check and wait for replication
-              ServerTestUtil.updateBlobTtl(channel1, new BlobId(payload.blobId, clusterMap));
-              ServerTestUtil.checkTtlUpdateStatus(channel1, clusterMap, new BlobIdFactory(clusterMap), blobId,
-                  payload.blob, true, Utils.Infinite_Time);
-              notificationSystem.awaitBlobUpdates(payload.blobId, UpdateType.TTL_UPDATE);
+              if (payload.blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
+                // ttl update, check and wait for replication
+                ServerTestUtil.updateBlobTtl(channel1, new BlobId(payload.blobId, clusterMap));
+                ServerTestUtil.checkTtlUpdateStatus(channel1, clusterMap, new BlobIdFactory(clusterMap), blobId, payload.blob, true, Utils.Infinite_Time);
+                notificationSystem.awaitBlobUpdates(payload.blobId, UpdateType.TTL_UPDATE);
+                BlobProperties old = payload.blobProperties;
+                payload.blobProperties = new BlobProperties(old.getBlobSize(), old.getServiceId(), old.getOwnerId(), old.getContentType(),
+                    old.isEncrypted(), Utils.Infinite_Time, old.getCreationTimeInMs(), old.getAccountId(), old.getContainerId(), old.isEncrypted(), old.getExternalAssetTag());
+              }
             } catch (Exception e) {
               if (channel1 != null) {
                 connectionPool.destroyConnection(channel1);
@@ -285,11 +286,12 @@ class Verifier implements Runnable {
    * @param actualExpiryTimeMs the actual expiry time received
    * @throws IllegalStateException if the times don't match
    */
-  private void checkExpiryTimeMatch(Payload payload, long actualExpiryTimeMs) {
+  private void checkExpiryTimeMatch(Payload payload, long actualExpiryTimeMs, String context) {
     long expectedExpiryTimeMs = ServerTestUtil.getExpiryTimeMs(payload.blobProperties);
     if (actualExpiryTimeMs != expectedExpiryTimeMs) {
       String exceptionMsg =
-          "Expiry time (props) not matching " + " expected " + expectedExpiryTimeMs + " actual " + actualExpiryTimeMs;
+          "Expiry time (props) not matching in context " + context + " expected " + expectedExpiryTimeMs + " actual "
+              + actualExpiryTimeMs;
       System.out.println(exceptionMsg);
       throw new IllegalStateException(exceptionMsg);
     }

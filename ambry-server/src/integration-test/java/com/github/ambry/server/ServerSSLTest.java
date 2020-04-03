@@ -32,8 +32,8 @@ import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -43,22 +43,22 @@ import static org.junit.Assume.*;
 
 @RunWith(Parameterized.class)
 public class ServerSSLTest {
-  private static SSLFactory sslFactory;
-  private static SSLConfig clientSSLConfig1;
-  private static SSLConfig clientSSLConfig2;
-  private static SSLConfig clientSSLConfig3;
-  private static SSLSocketFactory clientSSLSocketFactory1;
-  private static SSLSocketFactory clientSSLSocketFactory2;
-  private static SSLSocketFactory clientSSLSocketFactory3;
-  private static File trustStoreFile;
-  private static Properties serverSSLProps;
-  private static Properties routerProps;
-  private static MockNotificationSystem notificationSystem;
-  private static MockCluster sslCluster;
+  private SSLFactory sslFactory;
+  private SSLConfig clientSSLConfig1;
+  private SSLConfig clientSSLConfig2;
+  private SSLConfig clientSSLConfig3;
+  private SSLSocketFactory clientSSLSocketFactory1;
+  private SSLSocketFactory clientSSLSocketFactory2;
+  private SSLSocketFactory clientSSLSocketFactory3;
+  private File trustStoreFile;
+  private Properties serverSSLProps;
+  private Properties routerProps;
+  private MockNotificationSystem notificationSystem;
+  private MockCluster sslCluster;
   private final boolean testEncryption;
 
-  @BeforeClass
-  public static void initializeTests() throws Exception {
+  @Before
+  public void initializeTests() throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
     clientSSLConfig1 =
         new SSLConfig(TestSSLUtils.createSslProps("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1"));
@@ -102,8 +102,8 @@ public class ServerSSLTest {
     this.testEncryption = testEncryption;
   }
 
-  @AfterClass
-  public static void cleanup() throws IOException {
+  @After
+  public void cleanup() throws IOException {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.
@@ -160,9 +160,8 @@ public class ServerSSLTest {
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest() throws Exception {
     // this test uses router to Put and direct GetRequest to verify Gets. So, no way to get access to encryptionKey against
     // which to compare the GetResponse. Hence skipping encryption flow for this test
-    if (!testEncryption) {
-      ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3", PortType.SSL,
-          sslCluster, notificationSystem, routerProps);
-    }
+    assumeTrue(!testEncryption);
+    ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3", PortType.SSL,
+        sslCluster, notificationSystem, routerProps);
   }
 }

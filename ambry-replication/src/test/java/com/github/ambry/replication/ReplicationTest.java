@@ -119,7 +119,7 @@ public class ReplicationTest {
 
   private static int CONSTANT_TIME_MS = 100000;
   private static long EXPIRY_TIME_MS = SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(7);
-  private static long UPDATED_EXPIRY_TIME_MS = SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(14);
+  private static long UPDATED_EXPIRY_TIME_MS = Utils.Infinite_Time;
   private static final short VERSION_2 = 2;
   private static final short VERSION_5 = 5;
   private final MockTime time = new MockTime();
@@ -2469,7 +2469,8 @@ public class ReplicationTest {
   static MessageInfo getMessageInfo(StoreKey id, List<MessageInfo> messageInfos, boolean deleteMsg, boolean undeleteMsg,
       boolean ttlUpdateMsg) {
     MessageInfo toRet = null;
-    for (MessageInfo messageInfo : messageInfos) {
+    for (int i = messageInfos.size() - 1; i >= 0; i--) {
+      MessageInfo messageInfo = messageInfos.get(i);
       if (messageInfo.getStoreKey().equals(id)) {
         if (deleteMsg && messageInfo.isDeleted()) {
           toRet = messageInfo;
@@ -2481,7 +2482,8 @@ public class ReplicationTest {
             && messageInfo.isTtlUpdated()) {
           toRet = messageInfo;
           break;
-        } else if (!deleteMsg && !ttlUpdateMsg && !undeleteMsg) {
+        } else if (!deleteMsg && !ttlUpdateMsg && !undeleteMsg && !messageInfo.isUndeleted() & !messageInfo.isDeleted()
+            && !messageInfo.isTtlUpdated()) {
           toRet = messageInfo;
           break;
         }

@@ -20,7 +20,6 @@ import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
-import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
@@ -675,6 +674,222 @@ public class BlobStoreTest {
       verifyUndeleteFutures(undeleters,
           futures.subList(putters.size() + getters.size() + deleters.size() + ttlUpdaters.size(), callables.size()));
     }
+  }
+
+  /**
+   * Tests when the lifeVersion for put record is not 0.
+   * @throws StoreException
+   * @throws IOException
+   */
+  @Test
+  public void putLifeVersionTest() throws StoreException, IOException {
+    short lifeVersion = 2;
+    MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), lifeVersion).get(0);
+
+    StoreInfo storeInfo = store.get(Arrays.asList(addedId), EnumSet.noneOf(StoreGetOptions.class));
+    checkStoreInfo(storeInfo, Collections.singleton(addedId), lifeVersion);
+    delete(addedId);
+  }
+
+  /**
+   * Tests when the lifeVersion for ttl update is not -1.
+   * @throws StoreException
+   */
+  @Test
+  public void ttlUpdateLifeVersionTest() throws StoreException {
+    short lifeVersion = 2;
+    MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), lifeVersion).get(0);
+
+    MessageInfo info = new MessageInfo(addedId, TTL_UPDATE_RECORD_SIZE, false, true, false, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), (short) (lifeVersion + 1));
+    store.updateTtl(Collections.singletonList(info));
+    ttlUpdatedKeys.add(addedId);
+    StoreInfo storeInfo = store.get(Arrays.asList(addedId), EnumSet.noneOf(StoreGetOptions.class));
+    assertEquals(1, storeInfo.getMessageReadSetInfo().size());
+    // still the lifeVersion is 2, not 3
+    assertEquals(lifeVersion, storeInfo.getMessageReadSetInfo().get(0).getLifeVersion());
+
+    // We can't ttl update it again
+    try {
+      store.updateTtl(Collections.singletonList(info));
+      fail("Should not ttl update again");
+    } catch (StoreException e) {
+      assertEquals(e.getErrorCode(), StoreErrorCodes.Already_Updated);
+    }
+    delete(addedId);
+
+    // Add a new put
+    addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), lifeVersion).get(0);
+    // Use -1 as lifeVersion, should succeed.
+    info = new MessageInfo(addedId, TTL_UPDATE_RECORD_SIZE, false, true, false, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+    store.updateTtl(Collections.singletonList(info));
+    ttlUpdatedKeys.add(addedId);
+    storeInfo = store.get(Arrays.asList(addedId), EnumSet.noneOf(StoreGetOptions.class));
+    assertEquals(1, storeInfo.getMessageReadSetInfo().size());
+    // still the lifeVersion is 2, not -1
+    assertEquals(lifeVersion, storeInfo.getMessageReadSetInfo().get(0).getLifeVersion());
+  }
+
+  /**
+   * Tests when lifeVersion for delete is not -1.
+   * @throws StoreException
+   */
+  @Test
+  public void deleteLifeVersionTest() throws StoreException {
+    short lifeVersion = 2;
+    MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), lifeVersion).get(0);
+
+    MessageInfo info = new MessageInfo(addedId, DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), (short) (lifeVersion - 1));
+    try {
+      store.delete(Collections.singletonList(info));
+      fail("Should not delete");
+    } catch (StoreException e) {
+      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+    }
+
+    info = new MessageInfo(addedId, DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), lifeVersion);
+    store.delete(Collections.singletonList(info));
+    deletedKeys.add(addedId);
+    undeletedKeys.remove(addedId);
+    liveKeys.remove(addedId);
+    StoreInfo storeInfo = store.get(Arrays.asList(addedId), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
+    assertEquals(1, storeInfo.getMessageReadSetInfo().size());
+    assertEquals(lifeVersion, storeInfo.getMessageReadSetInfo().get(0).getLifeVersion());
+    assertTrue(storeInfo.getMessageReadSetInfo().get(0).isDeleted());
+    assertFalse(storeInfo.getMessageReadSetInfo().get(0).isUndeleted());
+
+    // delete with the same lifeVersion, should fail with life_version_conflict
+    info = new MessageInfo(addedId, DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), lifeVersion);
+    try {
+      store.delete(Collections.singletonList(info));
+      fail("Should not delete");
+    } catch (StoreException e) {
+      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+    }
+
+    // delete with the smaller lifeVersion, should fail with life_version_conflict
+    info = new MessageInfo(addedId, DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), (short) 0);
+    try {
+      store.delete(Collections.singletonList(info));
+      fail("Should not delete");
+    } catch (StoreException e) {
+      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+    }
+
+    // delete with larger lifeVersion, should succeed.
+    info = new MessageInfo(addedId, DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), (short) (lifeVersion + 1));
+    store.delete(Collections.singletonList(info));
+    storeInfo = store.get(Arrays.asList(addedId), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
+    assertEquals(1, storeInfo.getMessageReadSetInfo().size());
+    assertEquals((short) (lifeVersion + 1), storeInfo.getMessageReadSetInfo().get(0).getLifeVersion());
+    assertTrue(storeInfo.getMessageReadSetInfo().get(0).isDeleted());
+    assertFalse(storeInfo.getMessageReadSetInfo().get(0).isUndeleted());
+
+    // Add a new put
+    addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), lifeVersion).get(0);
+    info = new MessageInfo(addedId, DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+    store.delete(Collections.singletonList(info));
+    deletedKeys.add(addedId);
+    undeletedKeys.remove(addedId);
+    liveKeys.remove(addedId);
+    storeInfo = store.get(Arrays.asList(addedId), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
+    assertEquals(1, storeInfo.getMessageReadSetInfo().size());
+    assertEquals(lifeVersion, storeInfo.getMessageReadSetInfo().get(0).getLifeVersion());
+    assertTrue(storeInfo.getMessageReadSetInfo().get(0).isDeleted());
+    assertFalse(storeInfo.getMessageReadSetInfo().get(0).isUndeleted());
+  }
+
+  /**
+   * Tests when the lifeVersion for undelete is not -1.
+   * @throws StoreException
+   */
+  @Test
+  public void undeleteLifeVersionTest() throws StoreException, IOException {
+    short lifeVersion = 2;
+    MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), lifeVersion).get(0);
+
+    // Undelete with -1 as lifeVersion since it's not deleted, should fail
+    MessageInfo info = new MessageInfo(addedId, UNDELETE_RECORD_SIZE, false, false, true, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+    try {
+      store.undelete(info);
+      fail("Should not succeed");
+    } catch (StoreException e) {
+      assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Deleted);
+    }
+
+    // Undelete with smaller lifeVersion, should fail
+    info = new MessageInfo(addedId, UNDELETE_RECORD_SIZE, false, false, true, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), (short) (lifeVersion - 1));
+    try {
+      store.undelete(info);
+      fail("Should not succeed");
+    } catch (StoreException e) {
+      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+    }
+
+    // Undelete with same lifeVersion, should fail
+    info = new MessageInfo(addedId, UNDELETE_RECORD_SIZE, false, false, true, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), lifeVersion);
+    try {
+      store.undelete(info);
+      fail("Should not succeed");
+    } catch (StoreException e) {
+      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+    }
+
+    // Undelete with larger lifeVersion, should succeed.
+    info = new MessageInfo(addedId, UNDELETE_RECORD_SIZE, false, false, true, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), (short) (lifeVersion + 2));
+    store.undelete(info);
+    deletedKeys.remove(addedId);
+    liveKeys.add(addedId);
+    undeletedKeys.add(addedId);
+    StoreInfo storeInfo = store.get(Arrays.asList(addedId), EnumSet.noneOf(StoreGetOptions.class));
+    checkStoreInfo(storeInfo, Collections.singleton(addedId), (short) (lifeVersion + 2));
+
+    // Undelete with same lifeVersion, should fail.
+    info = new MessageInfo(addedId, UNDELETE_RECORD_SIZE, false, false, true, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), (short) (lifeVersion + 2));
+    try {
+      store.undelete(info);
+      fail("Should not succeed");
+    } catch (StoreException e) {
+      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+    }
+
+    // Undelete with even larger lifeVersion, should succeed.
+    info = new MessageInfo(addedId, UNDELETE_RECORD_SIZE, false, false, true, Utils.Infinite_Time, null,
+        addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), (short) (lifeVersion + 4));
+    store.undelete(info);
+    storeInfo = store.get(Arrays.asList(addedId), EnumSet.noneOf(StoreGetOptions.class));
+    checkStoreInfo(storeInfo, Collections.singleton(addedId), (short) (lifeVersion + 4));
+
+    delete(addedId);
+
+    addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), lifeVersion).get(0);
+    delete(addedId);
+    undelete(addedId);
+    storeInfo = store.get(Arrays.asList(addedId), EnumSet.noneOf(StoreGetOptions.class));
+    checkStoreInfo(storeInfo, Collections.singleton(addedId), (short) (lifeVersion + 1));
+    delete(addedId);
+    undelete(addedId);
+    storeInfo = store.get(Arrays.asList(addedId), EnumSet.noneOf(StoreGetOptions.class));
+    checkStoreInfo(storeInfo, Collections.singleton(addedId), (short) (lifeVersion + 2));
   }
 
   /**
@@ -1493,8 +1708,8 @@ public class BlobStoreTest {
    * @throws StoreException
    */
   private List<MockId> put(int count, long size, long expiresAtMs) throws StoreException {
-    return put(count, size, expiresAtMs, Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM));
+    return put(count, size, expiresAtMs, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
+        MessageInfo.LIFE_VERSION_FROM_FRONTEND);
   }
 
   /**
@@ -1509,6 +1724,22 @@ public class BlobStoreTest {
    */
   private List<MockId> put(int count, long size, long expiresAtMs, short accountId, short containerId)
       throws StoreException {
+    return put(count, size, expiresAtMs, accountId, containerId, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+  }
+
+  /**
+   * Puts some blobs into the {@link BlobStore}.
+   * @param count the number of blobs to PUT.
+   * @param size the size of each blob.
+   * @param expiresAtMs the expiry time (in ms) of each blob.
+   * @param accountId the accountId of each blob.
+   * @param containerId the containerId of each blob.
+   * @param lifeVersion the lifeVersion of each blob.
+   * @return the {@link MockId}s of the blobs created.
+   * @throws StoreException
+   */
+  private List<MockId> put(int count, long size, long expiresAtMs, short accountId, short containerId,
+      short lifeVersion) throws StoreException {
     if (count <= 0) {
       throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
     }
@@ -1519,8 +1750,8 @@ public class BlobStoreTest {
       MockId id = getUniqueId(accountId, containerId);
       long crc = random.nextLong();
       MessageInfo info =
-          new MessageInfo(id, size, false, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
-              Utils.Infinite_Time);
+          new MessageInfo(id, size, false, false, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
+              Utils.Infinite_Time, lifeVersion);
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
       ids.add(id);
       infos.add(info);
@@ -1557,7 +1788,7 @@ public class BlobStoreTest {
     MessageInfo putMsgInfo = allKeys.get(idToDelete).getFirst();
     MessageInfo info =
         new MessageInfo(idToDelete, DELETE_RECORD_SIZE, putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
-            operationTimeMs);
+            operationTimeMs, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
     store.delete(Collections.singletonList(info));
     deletedKeys.add(idToDelete);
     undeletedKeys.remove(idToDelete);
@@ -1565,11 +1796,17 @@ public class BlobStoreTest {
     return info;
   }
 
+  /**
+   * Undeletes a blob.
+   * @param idToUndelete the blob id to undelete.
+   * @return the lifeVersion after undelete.
+   * @throws StoreException
+   */
   private short undelete(MockId idToUndelete) throws StoreException {
     MessageInfo putMsgInfo = allKeys.get(idToUndelete).getFirst();
     MessageInfo info =
         new MessageInfo(idToUndelete, UNDELETE_RECORD_SIZE, putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
-            time.milliseconds());
+            time.milliseconds(), MessageInfo.LIFE_VERSION_FROM_FRONTEND);
     short lifeVersion = store.undelete(info);
     deletedKeys.remove(idToUndelete);
     liveKeys.add(idToUndelete);
@@ -1586,8 +1823,9 @@ public class BlobStoreTest {
   private MessageInfo updateTtl(MockId idToUpdate) throws StoreException {
     MessageInfo putMsgInfo = allKeys.get(idToUpdate).getFirst();
     MessageInfo info =
-        new MessageInfo(idToUpdate, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, putMsgInfo.getAccountId(),
-            putMsgInfo.getContainerId(), time.milliseconds());
+        new MessageInfo(idToUpdate, TTL_UPDATE_RECORD_SIZE, false, true, false, Utils.Infinite_Time, null,
+            putMsgInfo.getAccountId(), putMsgInfo.getContainerId(), time.milliseconds(),
+            MessageInfo.LIFE_VERSION_FROM_FRONTEND);
     store.updateTtl(Collections.singletonList(info));
     ttlUpdatedKeys.add(idToUpdate);
     return info;
@@ -1601,6 +1839,18 @@ public class BlobStoreTest {
    * @throws IOException
    */
   private void checkStoreInfo(StoreInfo storeInfo, Set<MockId> expectedKeys) throws IOException {
+    checkStoreInfo(storeInfo, expectedKeys, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+  }
+
+  /**
+   * Verifies the provided {@code storeInfo} for correctness of the {@link MessageInfo}. Also reads the blob as
+   * described by the {@link MessageReadSet} inside {@code storeInfo} to verify that it matches the reference.
+   * @param storeInfo the {@link StoreInfo} to verify.
+   * @param expectedKeys all the {@link MockId}s that are expected to be found in {@code storeInfo}.
+   * @param lifeVersion the expected life version for all the keys.
+   * @throws IOException
+   */
+  private void checkStoreInfo(StoreInfo storeInfo, Set<MockId> expectedKeys, short lifeVersion) throws IOException {
     List<MessageInfo> messageInfos = storeInfo.getMessageReadSetInfo();
     MessageReadSet readSet = storeInfo.getMessageReadSet();
     assertEquals("ReadSet contains an unexpected number of messages", expectedKeys.size(), readSet.count());
@@ -1616,6 +1866,9 @@ public class BlobStoreTest {
       assertEquals("isTTLUpdated not as expected", ttlUpdatedKeys.contains(id), messageInfo.isTtlUpdated());
       assertEquals("isDeleted not as expected", deletedKeys.contains(id), messageInfo.isDeleted());
       assertEquals("isUndeleted not as expected", undeletedKeys.contains(id), messageInfo.isUndeleted());
+      if (IndexValue.hasLifeVersion(lifeVersion)) {
+        assertEquals("lifeVersion not as expected", lifeVersion, messageInfo.getLifeVersion());
+      }
       long expiresAtMs = ttlUpdatedKeys.contains(id) ? Utils.Infinite_Time : expectedInfo.getExpirationTimeInMs();
       expiresAtMs = Utils.getTimeInMsToTheNearestSec(expiresAtMs);
       assertEquals("Unexpected expiresAtMs in MessageInfo", expiresAtMs, messageInfo.getExpirationTimeInMs());
@@ -2240,7 +2493,7 @@ public class BlobStoreTest {
     StoreInfo storeInfo = store.get(Collections.singletonList(id), EnumSet.noneOf(StoreGetOptions.class));
     assertEquals("ID not as expected", id, storeInfo.getMessageReadSetInfo().get(0).getStoreKey());
     assertTrue("Undelete flag not expected", storeInfo.getMessageReadSetInfo().get(0).isUndeleted());
-    checkStoreInfo(storeInfo, Collections.singleton(id));
+    checkStoreInfo(storeInfo, Collections.singleton(id), (short) 1);
   }
 
   // putErrorCasesTest() helpers
@@ -2273,7 +2526,7 @@ public class BlobStoreTest {
   private void verifyDeleteFailure(MockId idToDelete, StoreErrorCodes expectedErrorCode) {
     MessageInfo info =
         new MessageInfo(idToDelete, DELETE_RECORD_SIZE, idToDelete.getAccountId(), idToDelete.getContainerId(),
-            time.milliseconds());
+            time.milliseconds(), MessageInfo.LIFE_VERSION_FROM_FRONTEND);
     try {
       store.delete(Collections.singletonList(info));
       fail("Store DELETE should have failed");
@@ -2291,9 +2544,9 @@ public class BlobStoreTest {
    * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
    */
   private void verifyTtlUpdateFailure(MockId idToUpdate, long newExpiryTimeMs, StoreErrorCodes expectedErrorCode) {
-    MessageInfo info =
-        new MessageInfo(idToUpdate, TTL_UPDATE_RECORD_SIZE, false, true, newExpiryTimeMs, idToUpdate.getAccountId(),
-            idToUpdate.getContainerId(), time.milliseconds());
+    MessageInfo info = new MessageInfo(idToUpdate, TTL_UPDATE_RECORD_SIZE, false, true, false, newExpiryTimeMs, null,
+        idToUpdate.getAccountId(), idToUpdate.getContainerId(), time.milliseconds(),
+        MessageInfo.LIFE_VERSION_FROM_FRONTEND);
     try {
       store.updateTtl(Collections.singletonList(info));
       fail("Store TTL UPDATE should have failed");
@@ -2310,7 +2563,7 @@ public class BlobStoreTest {
   private void verifyUndeleteFailure(MockId idToUndelete, StoreErrorCodes expectedErrorCode) {
     MessageInfo info =
         new MessageInfo(idToUndelete, UNDELETE_RECORD_SIZE, idToUndelete.getAccountId(), idToUndelete.getContainerId(),
-            time.milliseconds());
+            time.milliseconds(), MessageInfo.LIFE_VERSION_FROM_FRONTEND);
     try {
       store.undelete(info);
       fail("Store UNDELETE should have failed for key " + idToUndelete);

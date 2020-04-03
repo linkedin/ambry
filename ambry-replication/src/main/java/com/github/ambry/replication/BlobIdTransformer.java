@@ -42,6 +42,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
 
@@ -54,6 +56,7 @@ public class BlobIdTransformer implements Transformer {
 
   private final StoreKeyConverter storeKeyConverter;
   private final StoreKeyFactory storeKeyFactory;
+  private final static Logger logger = LoggerFactory.getLogger(BlobIdTransformer.class);
 
   /**
    * StoreKeyConverter should already have converted the expected list of IDs.
@@ -134,7 +137,7 @@ public class BlobIdTransformer implements Transformer {
         header = new MessageFormatRecord.MessageHeader_Format_V3(headerBuf);
         break;
       default:
-        throw new MessageFormatException("Message header version not supported",
+        throw new MessageFormatException("Message header version [" + headerVersion + "] not supported",
             MessageFormatErrorCodes.Unknown_Format_Version);
     }
     header.verifyHeader();
@@ -157,6 +160,12 @@ public class BlobIdTransformer implements Transformer {
     BlobId newBlobId = (BlobId) newKey;
 
     if (headerFormat.isPutRecord()) {
+      if (headerFormat.hasLifeVersion() && headerFormat.getLifeVersion() != oldMessageInfo.getLifeVersion()) {
+        // The original Put buffer might have lifeVersion as 0, but the message info might have a higher lifeVersion.
+        logger.trace(
+            "LifeVersion in stream: " + headerFormat.getLifeVersion() + " failed to match lifeVersion from Index: "
+                + oldMessageInfo.getLifeVersion() + " for key " + oldMessageInfo.getStoreKey());
+      }
       ByteBuffer blobEncryptionKey = null;
       if (headerFormat.hasEncryptionKeyRecord()) {
         blobEncryptionKey = deserializeBlobEncryptionKey(inputStream);
@@ -247,16 +256,17 @@ public class BlobIdTransformer implements Transformer {
       // @todo, when netty Bytebuf is adopted for blocking channel on ambry-server, remember to release this ByteBuf.
       PutMessageFormatInputStream putMessageFormatInputStream =
           new PutMessageFormatInputStream(newKey, blobEncryptionKey, newProperties, userMetaData,
-              new ByteBufInputStream(blobDataBytes, true), blobData.getSize(), blobData.getBlobType());
+              new ByteBufInputStream(blobDataBytes, true), blobData.getSize(), blobData.getBlobType(),
+              oldMessageInfo.getLifeVersion());
       // Reuse the original CRC if present in the oldMessageInfo. This is important to ensure that messages that are
       // received via replication are sent to the store with proper CRCs (which the store needs to detect duplicate
       // messages). As an additional guard, here the original CRC is only reused if the key's ID in string form is the
       // same after conversion.
       Long originalCrc = oldMessageInfo.getStoreKey().getID().equals(newKey.getID()) ? oldMessageInfo.getCrc() : null;
       MessageInfo info =
-          new MessageInfo(newKey, putMessageFormatInputStream.getSize(), false, oldMessageInfo.isTtlUpdated(),
+          new MessageInfo(newKey, putMessageFormatInputStream.getSize(), false, oldMessageInfo.isTtlUpdated(), false,
               oldMessageInfo.getExpirationTimeInMs(), originalCrc, newProperties.getAccountId(),
-              newProperties.getContainerId(), oldMessageInfo.getOperationTimeMs());
+              newProperties.getContainerId(), oldMessageInfo.getOperationTimeMs(), oldMessageInfo.getLifeVersion());
       return new Message(info, putMessageFormatInputStream);
     } else {
       throw new IllegalArgumentException("Only 'put' records are valid");

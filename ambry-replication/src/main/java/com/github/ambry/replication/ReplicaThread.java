@@ -848,8 +848,8 @@ public class ReplicaThread implements Runnable {
                     + " are not the same");
           }
           if (partitionResponseInfo.getErrorCode() == ServerErrorCode.No_Error) {
+            List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
             try {
-              List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Messages to fix: {} "
                       + "Partition: {} Local mount path: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
                   exchangeMetadataResponse.missingStoreKeys, remoteReplicaInfo.getReplicaId().getPartitionId(),

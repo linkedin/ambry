@@ -275,7 +275,7 @@ class CuratedLogIndexState {
    * @throws StoreException
    */
   FileSpan makePermanent(MockId id, boolean forcePut) throws StoreException {
-    return makePermanent(id, forcePut, IndexValue.LIFE_VERSION_FROM_FRONTEND);
+    return makePermanent(id, forcePut, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
   }
 
   /**
@@ -353,7 +353,7 @@ class CuratedLogIndexState {
   }
 
   FileSpan addDeleteEntry(MockId idToDelete, MessageInfo info) throws StoreException {
-    return addDeleteEntry(idToDelete, info, IndexValue.LIFE_VERSION_FROM_FRONTEND);
+    return addDeleteEntry(idToDelete, info, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
   }
 
   /**
@@ -444,7 +444,7 @@ class CuratedLogIndexState {
    * @throws StoreException
    */
   FileSpan addUndeleteEntry(MockId idToDelete) throws StoreException {
-    return addUndeleteEntry(idToDelete, IndexValue.LIFE_VERSION_FROM_FRONTEND);
+    return addUndeleteEntry(idToDelete, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
   }
 
   /**
@@ -608,7 +608,7 @@ class CuratedLogIndexState {
         retCandidate = value;
         break;
       } else if (types.contains(PersistentIndex.IndexEntryType.TTL_UPDATE) && !value.isDelete() && !value.isUndelete()
-          && value.isTTLUpdate()) {
+          && value.isTtlUpdate()) {
         retCandidate = value;
         break;
       } else if (types.contains(PersistentIndex.IndexEntryType.PUT) && value.isPut()) {
@@ -619,8 +619,8 @@ class CuratedLogIndexState {
 
     if (retCandidate != null) {
       IndexValue latest = toConsider.get(toConsider.size() - 1);
-      if (latest.getExpiresAtMs() != retCandidate.getExpiresAtMs() || (!retCandidate.isTTLUpdate()
-          && latest.isTTLUpdate())) {
+      if (latest.getExpiresAtMs() != retCandidate.getExpiresAtMs() || (!retCandidate.isTtlUpdate()
+          && latest.isTtlUpdate())) {
         retCandidate = new IndexValue(retCandidate.getOffset().getName(), retCandidate.getBytes(),
             retCandidate.getFormatVersion());
         retCandidate.setFlag(IndexValue.Flags.Ttl_Update_Index);
