@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -751,6 +752,56 @@ class BlobStoreCompactor {
         } else {
           logger.trace("{} in index segment with start offset {} in {} is not valid because it is an expired PUT",
               indexEntry, indexSegment.getStartOffset(), storeId);
+        }
+      }
+    }
+
+    Iterator<IndexEntry> iterator = indexSegment.getIterator();
+    StoreKey lastKey = null;
+    IndexValue lastFinalState = null;
+    while(iterator.hasNext()) {
+      IndexEntry entry = iterator.next();
+      StoreKey currentKey = entry.getKey();
+      IndexValue currentValue = entry.getValue();
+      IndexValue currentFinalState = null;
+
+      if (currentKey.equals(lastKey)) {
+        currentFinalState = lastFinalState;
+      } else {
+        lastKey = currentKey;
+        lastFinalState = currentFinalState = srcIndex.findKey(currentKey);
+      }
+
+      if (currentValue.isUndelete()) {
+        if (currentFinalState.isPut()) {
+          throw new IllegalStateException("Undelete's final state can't be put for key" + currentKey + " in store " + dataDir);
+        }
+      } else if (currentValue.isDelete()) {
+        if (currentFinalState.isPut()) {
+          throw new IllegalStateException("Delete's final state can't be put for key" + currentKey + " in store " + dataDir);
+        }
+        if (currentFinalState.isDelete()) {
+          if (currentFinalState.getLifeVersion() == currentValue.getLifeVersion()) {
+            validEntries.add(entry);
+          }
+        }
+      } else {
+        if (currentValue.isTTLUpdate() && currentFinalState.isPut()) {
+          throw new IllegalStateException("TtlUpdate's final state can't be put for key" + currentKey + " in store " + dataDir);
+        }
+        if (srcIndex.isExpired(currentFinalState)) {
+          continue;
+        }
+        IndexEntry newEntry = new IndexEntryBuilder(entry).lifeVersion(currentFinalState.getLifeVersion()).build());
+        if (currentFinalState.isPut()) {
+          if (currentFinalState.getLifeVersion() != currentValue.getLifeVersion()) {
+            throw new IllegalStateException("Two different lifeVersions  for puts key" + currentKey + " in store " + dataDir);
+          }
+          validEntries.add(newEntry);
+        } else if (currentFinalState.isDelete() && srcIndex.reachRetention(currentFinalState)) {
+          validEntries.add(newEntry);
+        } else {
+          validEntries.add(newEntry);
         }
       }
     }
