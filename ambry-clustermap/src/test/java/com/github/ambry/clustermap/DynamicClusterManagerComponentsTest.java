@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -264,8 +265,8 @@ public class DynamicClusterManagerComponentsTest {
     CloudServiceDataNode node = new CloudServiceDataNode(dcName, clusterMapConfig1);
     assertEquals(dcName, node.getHostname());
     assertEquals(dcName, node.getDatacenterName());
-    assertEquals(UNKNOWN_PORT, node.getPort());
-    assertException(UnsupportedOperationException.class, node::getPortToConnectTo, null);
+    assertEquals(DataNodeId.UNKNOWN_PORT, node.getPort());
+    assertEquals(new Port(DataNodeId.UNKNOWN_PORT, PortType.PLAINTEXT), node.getPortToConnectTo());
     assertNull(node.getRackId());
     assertEquals(DEFAULT_XID, node.getXid());
     // the snapshot is for debug info, but just check that it works without throwing exceptions.
