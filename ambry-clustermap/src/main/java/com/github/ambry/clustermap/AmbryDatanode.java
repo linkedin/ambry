@@ -43,7 +43,7 @@ abstract class AmbryDataNode implements DataNodeId {
    * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    * @param hostName the hostName identifying this data node.
    * @param plaintextPortNum the plaintext port identifying this data node. This can be
-   *        {@link ClusterMapUtils#UNKNOWN_PORT} if this object represents an in-process entity without a real TCP
+   *        {@link DataNodeId#UNKNOWN_PORT} if this object represents an in-process entity without a real TCP
    *        port.
    * @param sslPortNum the ssl port associated with this data node (may be null).
    * @param http2PortNum the http2 ssl port associated with this data node (may be null).

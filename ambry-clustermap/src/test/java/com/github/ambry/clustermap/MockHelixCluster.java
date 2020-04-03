@@ -162,7 +162,7 @@ public class MockHelixCluster {
     dataCenterToZkAddress.values()
         .stream()
         .filter(info -> info.getReplicaType() == ReplicaType.CLOUD_BACKED)
-        .forEach(info -> upInstances.add(ClusterMapUtils.getInstanceName(info.getDcName(), UNKNOWN_PORT)));
+        .forEach(info -> upInstances.add(ClusterMapUtils.getInstanceName(info.getDcName(), DataNodeId.UNKNOWN_PORT)));
     return upInstances;
   }
 

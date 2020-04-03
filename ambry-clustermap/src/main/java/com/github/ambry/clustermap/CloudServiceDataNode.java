@@ -41,9 +41,13 @@ class CloudServiceDataNode extends AmbryDataNode {
     super(dataCenterName, clusterMapConfig, dataCenterName, UNKNOWN_PORT, null, null);
   }
 
+  /**
+   * @return a port with number {@link #UNKNOWN_PORT}, since CloudServiceDataNode cannot be connected to via a socket.
+   */
   @Override
   public Port getPortToConnectTo() {
-    throw new UnsupportedOperationException("No port to connect to CloudServiceDataNode");
+    // plaintextPort is constructed using UNKNOWN_PORT
+    return plainTextPort;
   }
 
   @Override

@@ -132,7 +132,7 @@ public class MockClusterMap implements ClusterMap {
       dcIndex++;
       dcName = "DC" + dcIndex;
       dataCentersInClusterMap.add(dcName);
-      MockDataNodeId virtualNode = createDataNode(getListOfPorts(ClusterMapUtils.UNKNOWN_PORT, null, null), dcName, 0);
+      MockDataNodeId virtualNode = createDataNode(getListOfPorts(DataNodeId.UNKNOWN_PORT, null, null), dcName, 0);
       dataNodes.add(virtualNode);
       dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(virtualNode);
       cloudDc = dcName;

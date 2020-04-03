@@ -44,10 +44,6 @@ import org.slf4j.LoggerFactory;
 public class ClusterMapUtils {
   // datacenterId == UNKNOWN_DATACENTER_ID indicate datacenterId is not available at the time when this blobId is formed.
   public static final byte UNKNOWN_DATACENTER_ID = -1;
-  /**
-   * Can be used for {@link DataNodeId} objects that represent in-process entities without a real port.
-   */
-  public static final int UNKNOWN_PORT = -1;
   public static final String PARTITION_OVERRIDE_STR = "PartitionOverride";
   public static final String REPLICA_ADDITION_STR = "ReplicaAddition";
   public static final String PROPERTYSTORE_STR = "PROPERTYSTORE";

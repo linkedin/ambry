@@ -20,6 +20,10 @@ import com.github.ambry.network.Port;
  * A DataNodeId has many devices. A DataNodeId stores one or more {@link ReplicaId}s upon each device.
  */
 public interface DataNodeId extends Resource, Comparable<DataNodeId> {
+  /**
+   * Can be used for {@link DataNodeId} objects that represent in-process entities without a real port.
+   */
+  static final int UNKNOWN_PORT = -1;
 
   /**
    * Gets the hostname of this DataNodeId.
@@ -31,7 +35,9 @@ public interface DataNodeId extends Resource, Comparable<DataNodeId> {
   /**
    * Gets the DataNodeId's connection port number.
    *
-   * @return Port number upon which to establish a connection with the DataNodeId.
+   * @return Port number upon which to establish a connection with the DataNodeId, or {@link #UNKNOWN_PORT} if this
+   *         data node cannot be connected to via a socket. This behavior differs from other "optional" ports since many
+   *         callers currently require this method to return without throwing exceptions for logging purposes.
    */
   int getPort();
 
@@ -66,7 +72,8 @@ public interface DataNodeId extends Resource, Comparable<DataNodeId> {
   /**
    * Returns the {@link Port} of this node to connect to.
    *
-   * @return {@link Port} to which the caller can connect to.
+   * @return {@link Port} to which the caller can connect to, or a {@link Port} with number {@link #UNKNOWN_PORT} if
+   *         this data node cannot be connected to via a socket.
    */
   Port getPortToConnectTo();
 
