@@ -71,7 +71,7 @@ class CryptoJobHandler implements Closeable {
         }
       }
       try {
-        scheduler.awaitTermination(10000, TimeUnit.MILLISECONDS);
+        scheduler.awaitTermination(1000, TimeUnit.MILLISECONDS);
       } catch (Exception e) {
         logger.error("Unexpected exception while waiting for crypto jobs to terminate", e);
       }
