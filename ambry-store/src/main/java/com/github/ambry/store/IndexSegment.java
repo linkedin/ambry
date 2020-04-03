@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -1020,6 +1021,10 @@ class IndexSegment {
     return areNewEntriesAdded;
   }
 
+  Iterator<IndexEntry> getIterator() {
+    return sealed.get() ? new SealedIndexSegmentEntryIterator() : new UnsealedIndexSegmentEntryIterator();
+  }
+
   /**
    * Gets all the index entries upto maxEntries from the start of a given key (exclusive) or all entries if key is null,
    * till maxTotalSizeOfEntriesInBytes
@@ -1169,6 +1174,56 @@ class IndexSegment {
       startOffsetValue = filename.substring(lastButOneSepIdx + 1, lastSepIdx);
     }
     return new Offset(logSegmentName, Long.parseLong(startOffsetValue));
+  }
+
+  class SealedIndexSegmentEntryIterator implements Iterator<IndexEntry> {
+    private int currentIdx = 0;
+    private ByteBuffer mmap = serEntries.duplicate();
+    private byte[] valueBuf = new byte[valueSize];
+
+    @Override
+    public boolean hasNext() {
+      return currentIdx < numberOfEntries(mmap);
+    }
+
+    @Override
+    public IndexEntry next() {
+      try {
+        StoreKey key = getKeyAt(mmap, currentIdx);
+        mmap.get(valueBuf);
+        return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
+      } catch (Exception e) {
+        logger.error("Failed to read index entry at " + currentIdx, e);
+      }
+      return null;
+    }
+  }
+
+  class UnsealedIndexSegmentEntryIterator implements Iterator<IndexEntry> {
+    private Iterator<Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>>> mapEntryIterator =
+        index.entrySet().iterator();
+    private StoreKey currentKey = null;
+    private Iterator<IndexValue> setIterator = null;
+
+    @Override
+    public boolean hasNext() {
+      if (setIterator == null || !setIterator.hasNext()) {
+        if (mapEntryIterator.hasNext()) {
+          Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> mapEntry = mapEntryIterator.next();
+          currentKey = mapEntry.getKey();
+          setIterator = mapEntry.getValue().iterator();
+        } else {
+          return false;
+        }
+      }
+      return setIterator.hasNext() || mapEntryIterator.hasNext();
+    }
+
+    @Override
+    public IndexEntry next() {
+      return new IndexEntry(currentKey,
+          new IndexValue(startOffset.getName(), setIterator.next().getBytes(), getVersion()));
+    }
   }
 }
 

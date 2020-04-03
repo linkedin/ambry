@@ -208,7 +208,7 @@ class IndexValue implements Comparable<IndexValue> {
    * @param containerId the containerId that this blob belongs to
    * @param lifeVersion the life version of this blob.
    */
-  private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset,
+  IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset,
       long operationTimeInMs, short accountId, short containerId, short lifeVersion) {
     this.size = size;
     this.offset = offset;
