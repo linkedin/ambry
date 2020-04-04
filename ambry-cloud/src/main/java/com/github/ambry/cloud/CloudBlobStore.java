@@ -518,7 +518,7 @@ class CloudBlobStore implements Store {
 
   @Override
   public MessageInfo findKey(StoreKey key) throws StoreException {
-    // This is a walkaround. This is only used in replication where replicaThread need to figure out if the blob
+    // This is a workaround. This is only used in replication where replicaThread need to figure out if the blob
     // is deleted and if the blob is ttlupdated, and also returns the lifeVersion.
     // Since we are not supporting lifeVersion in CloudBlobStore yet, for lifVersion, we will return 0 as default value.
     // For deleted, use return value from isKeyDeleted.
