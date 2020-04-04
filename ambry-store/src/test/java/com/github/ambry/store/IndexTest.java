@@ -947,13 +947,13 @@ public class IndexTest {
     doRecoveryFailureTest(info, StoreErrorCodes.Already_Updated);
     // recovery info contains a Ttl Update for a key that is already deleted
     MockId deletedId = state.deletedKeys.iterator().next();
-    info = new MessageInfo(deletedId, TTL_UPDATE_RECORD_SIZE, false, true, deletedId.getAccountId(),
-        deletedId.getContainerId(), state.time.milliseconds());
+    info =
+        new MessageInfo(deletedId, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, deletedId.getAccountId(),
+            deletedId.getContainerId(), state.time.milliseconds());
     doRecoveryFailureTest(info, StoreErrorCodes.ID_Deleted);
     // recovery info contains a DELETE for a key that has been deleted, with the same lifeVersion
     info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
-        false, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-        state.time.milliseconds(), (short) 0);
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds());
     doRecoveryFailureTest(info, StoreErrorCodes.Life_Version_Conflict);
     // recovery info that contains a PUT beyond the end offset of the log segment
     info = new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
@@ -2114,72 +2114,67 @@ public class IndexTest {
         + 5 * TTL_UPDATE_RECORD_SIZE);
     // 1 TTL update for a PUT not in the infos (won't be deleted)
     MockId idToUpdate = state.getIdToTtlUpdateFromLogSegment(state.log.getFirstSegment());
-    infos.add(new MessageInfo(idToUpdate, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, false,
-        Utils.Infinite_Time, null, idToUpdate.getAccountId(), idToUpdate.getContainerId(),
-        state.time.milliseconds(), (short) 0));
+    infos.add(
+        new MessageInfo(idToUpdate, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, idToUpdate.getAccountId(),
+            idToUpdate.getContainerId(), state.time.milliseconds()));
     // 1 TTL update for a PUT not in the infos (will be deleted)
     MockId idToUpdateAndDelete = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment(), false);
-    infos.add(new MessageInfo(idToUpdateAndDelete, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, false,
-        Utils.Infinite_Time, null, idToUpdateAndDelete.getAccountId(), idToUpdateAndDelete.getContainerId(),
-        state.time.milliseconds(), (short) 0));
+    infos.add(new MessageInfo(idToUpdateAndDelete, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
+        idToUpdateAndDelete.getAccountId(), idToUpdateAndDelete.getContainerId(), state.time.milliseconds()));
     // 1 DELETE for a PUT not in the infos
     // ttl updated is false because when the delete record is read, the MessageInfo constructed will not know if there
     // has been a ttl update
-    infos.add(new MessageInfo(idToUpdateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, false,
-        Utils.Infinite_Time, null, idToUpdateAndDelete.getAccountId(), idToUpdateAndDelete.getContainerId(),
-        state.time.milliseconds(), (short) 0));
+    infos.add(new MessageInfo(idToUpdateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
+        idToUpdateAndDelete.getAccountId(), idToUpdateAndDelete.getContainerId(), state.time.milliseconds()));
     // 1 DELETE for a PUT + ttl update not in the infos
     MockId idToDelete = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment(), true);
     // ttl updated is false because when the delete record is read, the MessageInfo constructed will not know if there
     // has been a ttl update
-    infos.add(new MessageInfo(idToDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, false,
-        Utils.Infinite_Time, null, idToDelete.getAccountId(), idToDelete.getContainerId(),
-        state.time.milliseconds(), (short) 0));
+    infos.add(
+        new MessageInfo(idToDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, idToDelete.getAccountId(),
+            idToDelete.getContainerId(), state.time.milliseconds()));
     // 3 PUT
     MockId idToCreateUpdateAndDelete = state.getUniqueId();
     short accountId = idToCreateUpdateAndDelete.getAccountId();
     short containerId = idToCreateUpdateAndDelete.getContainerId();
     infos.add(new MessageInfo(idToCreateUpdateAndDelete, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId,
-        state.time.milliseconds(), (short) 0));
+        Utils.Infinite_Time));
     MockId idToCreateAndUpdate = state.getUniqueId();
     infos.add(
         new MessageInfo(idToCreateAndUpdate, CuratedLogIndexState.PUT_RECORD_SIZE, idToCreateAndUpdate.getAccountId(),
-            idToCreateAndUpdate.getContainerId(), state.time.milliseconds(), (short) 0));
+            idToCreateAndUpdate.getContainerId(), state.time.milliseconds()));
     MockId id = state.getUniqueId();
     infos.add(new MessageInfo(id, CuratedLogIndexState.PUT_RECORD_SIZE, id.getAccountId(), id.getContainerId(),
-        state.time.milliseconds(), (short) 0));
+        Utils.Infinite_Time));
     // 1 TTL update for a PUT in the infos (will get deleted)
     infos.add(
-        new MessageInfo(idToCreateUpdateAndDelete, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, false,
-            Utils.Infinite_Time, null, accountId, containerId, state.time.milliseconds(), (short) 0));
+        new MessageInfo(idToCreateUpdateAndDelete, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, accountId,
+            containerId, state.time.milliseconds()));
     // 1 DELETE for a PUT + ttl update in the infos
-    infos.add(new MessageInfo(idToCreateUpdateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, false,
-        Utils.Infinite_Time, null, accountId, containerId, state.time.milliseconds(), (short) 0));
+    infos.add(
+        new MessageInfo(idToCreateUpdateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, accountId,
+            containerId, state.time.milliseconds()));
     // 1 TTL update for a PUT in the infos (won't get deleted)
-    infos.add(new MessageInfo(idToCreateAndUpdate, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, false,
-        Utils.Infinite_Time, null, idToCreateAndUpdate.getAccountId(), idToCreateAndUpdate.getContainerId(),
-        state.time.milliseconds(), (short) 0));
+    infos.add(new MessageInfo(idToCreateAndUpdate, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
+        idToCreateAndUpdate.getAccountId(), idToCreateAndUpdate.getContainerId(), state.time.milliseconds()));
     // 1 expired PUT
     id = state.getUniqueId();
-    infos.add(new MessageInfo(id, CuratedLogIndexState.PUT_RECORD_SIZE, false, false, false, 0, null, id.getAccountId(),
-        id.getContainerId(), state.time.milliseconds(), (short) 0));
+    infos.add(new MessageInfo(id, CuratedLogIndexState.PUT_RECORD_SIZE, 0, id.getAccountId(), id.getContainerId(),
+        Utils.Infinite_Time));
     // 1 delete for PUT that does not exist in the index
     id = state.getUniqueId();
-    infos.add(
-        new MessageInfo(id, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time,
-            null, id.getAccountId(), id.getContainerId(), state.time.milliseconds(), (short) 0));
+    infos.add(new MessageInfo(id, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, id.getAccountId(),
+        id.getContainerId(), state.time.milliseconds()));
     // 1 ttl update for a PUT that does not exist in the index (because compaction has cleaned the PUT)
     id = state.getUniqueId();
-    infos.add(
-        new MessageInfo(id, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, false, Utils.Infinite_Time,
-            null, id.getAccountId(), id.getContainerId(), state.time.milliseconds(), (short) 0));
+    infos.add(new MessageInfo(id, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, id.getAccountId(),
+        id.getContainerId(), state.time.milliseconds()));
     // a delete for the TTL update above (compaction can only clean if there was a delete - so there will never be JUST
     // a TTL update)
     // ttl updated is false because when the delete record is read, the MessageInfo constructed will not know if there
     // has been a ttl update
-    infos.add(
-        new MessageInfo(id, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time,
-            null, id.getAccountId(), id.getContainerId(), state.time.milliseconds(), (short) 0));
+    infos.add(new MessageInfo(id, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, id.getAccountId(),
+        id.getContainerId(), state.time.milliseconds()));
     return infos;
   }
 

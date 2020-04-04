@@ -21,9 +21,9 @@ import java.util.Objects;
  * A message info class that contains basic info about a message
  */
 public class MessageInfo {
-  // The life version when the operation is trigger by the requests from frontend.
-  public final static short LIFE_VERSION_FROM_FRONTEND = -1;
 
+  // The life version when the operation is triggered by the requests from frontend.
+  public final static short LIFE_VERSION_FROM_FRONTEND = -1;
   private final StoreKey key;
   private final long size;
   private final long expirationTimeInMs;
@@ -113,7 +113,7 @@ public class MessageInfo {
   public MessageInfo(StoreKey key, long size, boolean deleted, boolean ttlUpdated, long expirationTimeInMs,
       short accountId, short containerId, long operationTimeMs) {
     this(key, size, deleted, ttlUpdated, false, expirationTimeInMs, null, accountId, containerId, operationTimeMs,
-        LIFE_VERSION_FROM_FRONTEND);
+        (short) 0);
   }
 
   /**
@@ -143,7 +143,7 @@ public class MessageInfo {
   public MessageInfo(StoreKey key, long size, boolean deleted, boolean ttlUpdated, long expirationTimeInMs, Long crc,
       short accountId, short containerId, long operationTimeMs) {
     this(key, size, deleted, ttlUpdated, false, expirationTimeInMs, crc, accountId, containerId, operationTimeMs,
-        LIFE_VERSION_FROM_FRONTEND);
+        (short) 0);
   }
 
   /**

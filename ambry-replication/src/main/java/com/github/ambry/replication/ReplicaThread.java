@@ -969,8 +969,6 @@ public class ReplicaThread implements Runnable {
    * Applies a TTL update to the blob described by {@code messageInfo}.
    * @param messageInfo the {@link MessageInfo} that will be transformed into a TTL update
    * @param remoteReplicaInfo The remote replica that is being replicated from
-   * @throws IOException
-   * @throws MessageFormatException
    * @throws StoreException
    */
   private void applyTtlUpdate(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
@@ -1007,6 +1005,12 @@ public class ReplicaThread implements Runnable {
     }
   }
 
+  /**
+   * Applies an undelete to the blob described by {@code messageInfo}.
+   * @param messageInfo the {@link MessageInfo} that will be transformed into a TTL update
+   * @param remoteReplicaInfo The remote replica that is being replicated from
+   * @throws StoreException
+   */
   private void applyUndelete(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
     try {
@@ -1035,6 +1039,12 @@ public class ReplicaThread implements Runnable {
     }
   }
 
+  /**
+   * Applies a delete to the blob described by {@code messageInfo}.
+   * @param messageInfo the {@link MessageInfo} that will be transformed into a TTL update
+   * @param remoteReplicaInfo The remote replica that is being replicated from
+   * @throws StoreException
+   */
   private void applyDelete(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
     try {

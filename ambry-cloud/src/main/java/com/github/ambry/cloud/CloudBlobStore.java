@@ -156,9 +156,10 @@ class CloudBlobStore implements Store {
         // is applied by GetOperation.
         boolean ttlUpdated = blobMetadata.getExpirationTime() == Utils.Infinite_Time;
         boolean deleted = blobMetadata.getDeletionTime() != Utils.Infinite_Time;
-        MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), deleted, ttlUpdated, false,
-            blobMetadata.getExpirationTime(), null, (short) blobMetadata.getAccountId(),
-            (short) blobMetadata.getContainerId(), getOperationTime(blobMetadata), (short) 0);
+        MessageInfo messageInfo =
+            new MessageInfo(blobId, blobMetadata.getSize(), deleted, ttlUpdated, blobMetadata.getExpirationTime(),
+                (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(),
+                getOperationTime(blobMetadata));
         messageInfos.add(messageInfo);
         blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
       }
@@ -485,8 +486,8 @@ class CloudBlobStore implements Store {
         : (metadata.getCreationTime() > 0) ? metadata.getCreationTime() : metadata.getUploadTime();
     boolean isDeleted = metadata.getDeletionTime() > 0;
     boolean isTtlUpdated = false;  // No way to know
-    return new MessageInfo(blobId, metadata.getSize(), isDeleted, isTtlUpdated, false, metadata.getExpirationTime(),
-        null, (short) metadata.getAccountId(), (short) metadata.getContainerId(), operationTime, (short) 0);
+    return new MessageInfo(blobId, metadata.getSize(), isDeleted, isTtlUpdated, metadata.getExpirationTime(),
+        (short) metadata.getAccountId(), (short) metadata.getContainerId(), operationTime);
   }
 
   @Override
@@ -536,7 +537,7 @@ class CloudBlobStore implements Store {
   public boolean isKeyDeleted(StoreKey key) throws StoreException {
     checkStarted();
     // Not definitive, but okay for some deletes to be replayed.
-    return checkCacheState(key.getID(),BlobState.DELETED);
+    return checkCacheState(key.getID(), BlobState.DELETED);
   }
 
   @Override

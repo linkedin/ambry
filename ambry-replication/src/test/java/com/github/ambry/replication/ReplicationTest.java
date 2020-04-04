@@ -835,8 +835,8 @@ public class ReplicationTest {
   }
 
   /**
-   * Tests pausing all pars thatitions and makes sure that the replica thread pauses. Also testt it resumes when one
-   * eligible partition is reenabled and that replication completes successfully.
+   * Tests pausing all partitions and makes sure that the replica thread pauses. Also tests that it resumes when one
+   * eligible partition is re-enabled and that replication completes successfully.
    * @throws Exception
    */
   @Test
@@ -1434,8 +1434,8 @@ public class ReplicationTest {
               containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       PutMsgInfoAndBuffer msgInfoAndBuffer = createPutMessage(id, accountId, containerId, toEncrypt);
       remoteHost.addMessage(partitionId,
-          new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), false, false, false, 1, null, accountId,
-              containerId, msgInfoAndBuffer.messageInfo.getOperationTimeMs(), (short) 0), msgInfoAndBuffer.byteBuffer);
+          new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), 1, accountId, containerId,
+              msgInfoAndBuffer.messageInfo.getOperationTimeMs()), msgInfoAndBuffer.byteBuffer);
 
       // add 3 messages to the remote host only
       expectedIds.addAll(addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 3));
@@ -1516,8 +1516,8 @@ public class ReplicationTest {
               containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       PutMsgInfoAndBuffer msgInfoAndBuffer = createPutMessage(id, accountId, containerId, toEncrypt);
       remoteHost.addMessage(partitionId,
-          new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), false, false, false, 1, null, accountId,
-              containerId, msgInfoAndBuffer.messageInfo.getOperationTimeMs(), (short) 0), msgInfoAndBuffer.byteBuffer);
+          new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), 1, accountId, containerId,
+              msgInfoAndBuffer.messageInfo.getOperationTimeMs()), msgInfoAndBuffer.byteBuffer);
 
       // add 3 messages to the remote host only
       expectedIds.addAll(addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 3));
@@ -1687,8 +1687,8 @@ public class ReplicationTest {
               containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       PutMsgInfoAndBuffer msgInfoAndBuffer = createPutMessage(id, accountId, containerId, toEncrypt);
       remoteHost.addMessage(partitionId,
-          new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), false, false, false, 1, null, accountId,
-              containerId, msgInfoAndBuffer.messageInfo.getOperationTimeMs(), (short) 0), msgInfoAndBuffer.byteBuffer);
+          new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), 1, accountId, containerId,
+              msgInfoAndBuffer.messageInfo.getOperationTimeMs()), msgInfoAndBuffer.byteBuffer);
       idsToBeIgnored.add(id);
 
       // add 3 messages to the remote host only
@@ -2914,28 +2914,16 @@ public class ReplicationTest {
     return addPutMessagesToReplicasOfPartition(partitionId, hosts, (short) 0, count);
   }
 
-  private List<StoreKey> generateUniqueIds(PartitionId partitionId, boolean toEncrypt, int count) {
-    List<StoreKey> ids = new ArrayList<>();
-    for (int i = 0; i < count; i++) {
-      ids.add(generateUniqueId(partitionId, toEncrypt));
-    }
-    return ids;
-  }
-
-  private BlobId generateUniqueId(PartitionId partitionId, boolean toEncrypt) {
-    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
-    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
-    return new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-        containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
-  }
-
   private List<StoreKey> addPutMessagesToReplicasOfPartition(PartitionId partitionId, List<MockHost> hosts,
       short lifeVersion, int count) throws MessageFormatException, IOException {
     List<StoreKey> ids = new ArrayList<>();
     for (int i = 0; i < count; i++) {
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       boolean toEncrypt = i % 2 == 0;
-      BlobId id = generateUniqueId(partitionId, toEncrypt);
+      BlobId id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
+          containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       ids.add(id);
       PutMsgInfoAndBuffer msgInfoAndBuffer =
           createPutMessage(id, id.getAccountId(), id.getContainerId(), toEncrypt, lifeVersion);

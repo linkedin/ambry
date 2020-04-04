@@ -52,25 +52,25 @@ public class MessageInfoTest {
             new MessageInfo(keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], times[i], crcs[i],
                 accountIds[i], containerIds[i], times[i]);
         checkGetters(info, keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], false, times[i], crcs[i],
-            accountIds[i], containerIds[i], times[i], MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+            accountIds[i], containerIds[i], times[i], (short) 0);
 
         info = new MessageInfo(keys[i], blobSizes[i], accountIds[i], containerIds[i], times[i]);
         checkGetters(info, keys[i], blobSizes[i], false, false, false, Utils.Infinite_Time, null, accountIds[i],
-            containerIds[i], times[i], MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+            containerIds[i], times[i], (short) 0);
 
         info = new MessageInfo(keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], times[i], accountIds[i],
             containerIds[i], times[i]);
         checkGetters(info, keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], false, times[i], null,
-            accountIds[i], containerIds[i], times[i], MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+            accountIds[i], containerIds[i], times[i], (short) 0);
 
         info = new MessageInfo(keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], accountIds[i],
             containerIds[i], times[i]);
         checkGetters(info, keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], false, Utils.Infinite_Time,
-            null, accountIds[i], containerIds[i], times[i], MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+            null, accountIds[i], containerIds[i], times[i], (short) 0);
 
         info = new MessageInfo(keys[i], blobSizes[i], times[i], accountIds[i], containerIds[i], times[i]);
         checkGetters(info, keys[i], blobSizes[i], false, false, false, times[i], null, accountIds[i], containerIds[i],
-            times[i], MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+            times[i], (short) 0);
 
         info =
             new MessageInfo(keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], isUndeletedVals[j], times[i],

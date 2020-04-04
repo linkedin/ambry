@@ -556,8 +556,9 @@ public class BlobIdTransformerTest {
         ttlUpdated = true;
         expiryTimeMs = Utils.Infinite_Time;
       }
-      messageInfo = new MessageInfo(blobId, inputStreamSize, false, ttlUpdated, false, expiryTimeMs, crcInMsgInfo,
-          blobId.getAccountId(), blobId.getContainerId(), blobProperties.getCreationTimeInMs(), (short) 0);
+      messageInfo =
+          new MessageInfo(blobId, inputStreamSize, false, ttlUpdated, expiryTimeMs, crcInMsgInfo, blobId.getAccountId(),
+              blobId.getContainerId(), blobProperties.getCreationTimeInMs());
       return new Message(messageInfo, inputStream);
     }
 
