@@ -28,6 +28,7 @@ class HelixParticipantMetrics {
   final AtomicInteger leaderCount = new AtomicInteger();
   final AtomicInteger inactiveCount = new AtomicInteger();
   final AtomicInteger offlineCount = new AtomicInteger();
+  final AtomicInteger errorStateCount = new AtomicInteger();
   // no need to record exact number of "dropped" partition, a counter to track partition-dropped events would suffice
   final Counter partitionDroppedCount;
 
@@ -57,8 +58,8 @@ class HelixParticipantMetrics {
   void setLocalPartitionCount(int partitionCount) {
     // this method should be invoked before participation, so the initial value is expected to be 0.
     if (!offlineCount.compareAndSet(0, partitionCount)) {
-      throw new IllegalStateException(
-          "Number of OFFLINE partitions has changed before initializing participant metrics");
+      throw new IllegalStateException("Number of OFFLINE partitions has changed to " + offlineCount.get()
+          + " before initializing participant metrics ");
     }
   }
 }

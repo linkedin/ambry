@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -86,10 +87,10 @@ public interface ClusterParticipant extends AutoCloseable {
   boolean updateDataNodeInfoInCluster(ReplicaId replicaId, boolean shouldExist);
 
   /**
-   * Initialize participant related metrics if needed.
-   * @param localPartitionCount total number of partitions on local node.
+   * Set initial local partitions that the cluster participant hosts.
+   * @param localPartitions a collection of initial local partitions.
    */
-  default void initializeParticipantMetrics(int localPartitionCount) {
+  default void setInitialLocalPartitions(Collection<String> localPartitions) {
   }
 
   /**

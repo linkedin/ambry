@@ -244,6 +244,10 @@ public class ClusterChangeHandlerTest {
     dcsToZkInfo.get(localDc).setPort(savedport);
   }
 
+  /**
+   * Test that {@link DynamicClusterChangeHandler} is able to handle invalid info entry in the InstanceConfig at runtime
+   * or during initialization.
+   */
   @Test
   public void instanceConfigInvalidInfoEntryTest() {
     Properties properties = new Properties();

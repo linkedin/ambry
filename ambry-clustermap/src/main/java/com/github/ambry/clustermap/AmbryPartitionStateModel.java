@@ -32,16 +32,13 @@ public class AmbryPartitionStateModel extends StateModel {
   private final String partitionName;
   private final PartitionStateChangeListener partitionStateChangeListener;
   private final ClusterMapConfig clusterMapConfig;
-  private final HelixParticipantMetrics helixParticipantMetrics;
 
   AmbryPartitionStateModel(String resourceName, String partitionName,
-      PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig,
-      HelixParticipantMetrics helixParticipantMetrics) {
+      PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig) {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
     this.partitionStateChangeListener = Objects.requireNonNull(partitionStateChangeListener);
     this.clusterMapConfig = Objects.requireNonNull(clusterMapConfig);
-    this.helixParticipantMetrics = Objects.requireNonNull(helixParticipantMetrics);
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(AmbryPartitionStateModel.class);
   }
@@ -53,8 +50,6 @@ public class AmbryPartitionStateModel extends StateModel {
     if (clusterMapConfig.clustermapEnableStateModelListener) {
       partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(message.getPartitionName());
     }
-    helixParticipantMetrics.offlineCount.addAndGet(-1);
-    helixParticipantMetrics.bootstrapCount.addAndGet(1);
   }
 
   @Transition(to = "STANDBY", from = "BOOTSTRAP")
@@ -65,8 +60,6 @@ public class AmbryPartitionStateModel extends StateModel {
     if (clusterMapConfig.clustermapEnableStateModelListener) {
       partitionStateChangeListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
     }
-    helixParticipantMetrics.bootstrapCount.addAndGet(-1);
-    helixParticipantMetrics.standbyCount.addAndGet(1);
   }
 
   @Transition(to = "LEADER", from = "STANDBY")
@@ -74,8 +67,6 @@ public class AmbryPartitionStateModel extends StateModel {
     logger.info("Partition {} in resource {} is becoming LEADER from STANDBY", message.getPartitionName(),
         message.getResourceName());
     partitionStateChangeListener.onPartitionBecomeLeaderFromStandby(message.getPartitionName());
-    helixParticipantMetrics.standbyCount.addAndGet(-1);
-    helixParticipantMetrics.leaderCount.addAndGet(1);
   }
 
   @Transition(to = "STANDBY", from = "LEADER")
@@ -83,8 +74,6 @@ public class AmbryPartitionStateModel extends StateModel {
     logger.info("Partition {} in resource {} is becoming STANDBY from LEADER", message.getPartitionName(),
         message.getResourceName());
     partitionStateChangeListener.onPartitionBecomeStandbyFromLeader(message.getPartitionName());
-    helixParticipantMetrics.leaderCount.addAndGet(-1);
-    helixParticipantMetrics.standbyCount.addAndGet(1);
   }
 
   @Transition(to = "INACTIVE", from = "STANDBY")
@@ -95,8 +84,6 @@ public class AmbryPartitionStateModel extends StateModel {
     if (clusterMapConfig.clustermapEnableStateModelListener) {
       partitionStateChangeListener.onPartitionBecomeInactiveFromStandby(partitionName);
     }
-    helixParticipantMetrics.standbyCount.addAndGet(-1);
-    helixParticipantMetrics.inactiveCount.addAndGet(1);
   }
 
   @Transition(to = "OFFLINE", from = "INACTIVE")
@@ -107,8 +94,6 @@ public class AmbryPartitionStateModel extends StateModel {
     if (clusterMapConfig.clustermapEnableStateModelListener) {
       partitionStateChangeListener.onPartitionBecomeOfflineFromInactive(partitionName);
     }
-    helixParticipantMetrics.inactiveCount.addAndGet(-1);
-    helixParticipantMetrics.offlineCount.addAndGet(1);
   }
 
   @Transition(to = "DROPPED", from = "OFFLINE")
@@ -119,27 +104,25 @@ public class AmbryPartitionStateModel extends StateModel {
     if (clusterMapConfig.clustermapEnableStateModelListener) {
       partitionStateChangeListener.onPartitionBecomeDroppedFromOffline(partitionName);
     }
-    helixParticipantMetrics.offlineCount.addAndGet(-1);
-    helixParticipantMetrics.partitionDroppedCount.inc();
   }
 
   @Transition(to = "DROPPED", from = "ERROR")
   public void onBecomeDroppedFromError(Message message, NotificationContext context) {
     logger.info("Partition {} in resource {} is becoming DROPPED from ERROR", message.getPartitionName(),
         message.getResourceName());
-    helixParticipantMetrics.partitionDroppedCount.inc();
+    partitionStateChangeListener.onPartitionBecomeDroppedFromError(message.getPartitionName());
   }
 
   @Transition(to = "OFFLINE", from = "ERROR")
-  public void onBecomeOfflineFromError(Message message, NotificationContext context){
+  public void onBecomeOfflineFromError(Message message, NotificationContext context) {
     logger.info("Partition {} in resource {} is becoming OFFLINE from ERROR", message.getPartitionName(),
         message.getResourceName());
-    helixParticipantMetrics.offlineCount.addAndGet(1);
+    partitionStateChangeListener.onPartitionBecomeOfflineFromError(message.getPartitionName());
   }
 
   @Override
   public void reset() {
     logger.info("Reset method invoked. Partition {} in resource {} is reset to OFFLINE", partitionName, resourceName);
-    helixParticipantMetrics.offlineCount.addAndGet(1);
+    partitionStateChangeListener.onReset(partitionName);
   }
 }

@@ -156,6 +156,7 @@ public class StatsManagerTest {
     storeMap.put(partitionId, new MockStore(new MockStoreStats(snapshotsByType, false)));
     partitionToSnapshot.put(partitionId, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
     storageManager = new MockStorageManager(storeMap, dataNodeId);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
     clusterParticipant = new MockHelixParticipant(clusterMapConfig);
     statsManager =
         new StatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, new MockTime(), null);
