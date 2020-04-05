@@ -177,10 +177,14 @@ public class AmbryStateModelFactoryTest {
     assertEquals("Offline count should be 0", 0,
         metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
     assertEquals("Dropped count should be updated", 1, participantMetrics.partitionDroppedCount.getCount());
+    // ERROR -> OFFLINE (this occurs when we use Helix API to reset certain partition in ERROR state)
+    stateModel.onBecomeOfflineFromError(mockMessage, null);
+    assertEquals("Offline count should be 1", 1,
+        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
 
     // reset method
     stateModel.reset();
-    assertEquals("Offline count should be 1 after reset", 1,
+    assertEquals("Offline count should be 1 after reset", 2,
         metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
   }
 }

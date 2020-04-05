@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -22,6 +23,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -29,19 +31,24 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import org.apache.helix.ZNRecord;
+import org.apache.helix.model.InstanceConfig;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.HelixClusterManagerTest.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
+import static org.mockito.AdditionalAnswers.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -235,6 +242,62 @@ public class ClusterChangeHandlerTest {
     }
     // restore original setup
     dcsToZkInfo.get(localDc).setPort(savedport);
+  }
+
+  @Test
+  public void instanceConfigInvalidInfoEntryTest() {
+    Properties properties = new Properties();
+    properties.putAll(props);
+    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    HelixClusterManager.HelixClusterManagerCallback mockManagerCallback =
+        Mockito.mock(HelixClusterManager.HelixClusterManagerCallback.class);
+    HelixClusterManager.ClusterChangeHandlerCallback mockHandlerCallback =
+        Mockito.mock(HelixClusterManager.ClusterChangeHandlerCallback.class);
+    doAnswer(returnsFirstArg()).when(mockHandlerCallback).addPartitionIfAbsent(any(), anyLong());
+
+    Counter initFailureCount = new Counter();
+    DynamicClusterChangeHandler dynamicChangeHandler =
+        new DynamicClusterChangeHandler(clusterMapConfig, localDc, selfInstanceName, Collections.emptyMap(),
+            mockManagerCallback, mockHandlerCallback,
+            new HelixClusterManagerMetrics(new MetricRegistry(), mockManagerCallback), e -> initFailureCount.inc(),
+            new AtomicLong());
+    // create an InstanceConfig with invalid entry that mocks error info added by Helix controller
+    PartitionId selectedPartition = testPartitionLayout.getPartitionLayout().getPartitions(null).get(0);
+    Replica testReplica = (Replica) selectedPartition.getReplicaIds().get(0);
+    DataNode testNode = (DataNode) testReplica.getDataNodeId();
+    InstanceConfig instanceConfig = new InstanceConfig(getInstanceName(testNode.getHostname(), testNode.getPort()));
+    instanceConfig.setHostName(testNode.getHostname());
+    instanceConfig.setPort(Integer.toString(testNode.getPort()));
+    instanceConfig.getRecord().setSimpleField(ClusterMapUtils.DATACENTER_STR, testNode.getDatacenterName());
+    instanceConfig.getRecord().setSimpleField(ClusterMapUtils.RACKID_STR, testNode.getRackId());
+    instanceConfig.getRecord()
+        .setSimpleField(ClusterMapUtils.SCHEMA_VERSION_STR, Integer.toString(ClusterMapUtils.CURRENT_SCHEMA_VERSION));
+    instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, Collections.emptyList());
+    instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, Collections.emptyList());
+
+    Map<String, Map<String, String>> diskInfos = new HashMap<>();
+    assertNotNull("testReplica should not be null", testReplica);
+    Map<String, String> diskInfo = new HashMap<>();
+    diskInfo.put(ClusterMapUtils.DISK_CAPACITY_STR, Long.toString(testReplica.getDiskId().getRawCapacityInBytes()));
+    diskInfo.put(ClusterMapUtils.DISK_STATE, ClusterMapUtils.AVAILABLE_STR);
+    String replicasStrBuilder =
+        testReplica.getPartition().getId() + ClusterMapUtils.REPLICAS_STR_SEPARATOR + testReplica.getCapacityInBytes()
+            + ClusterMapUtils.REPLICAS_STR_SEPARATOR + testReplica.getPartition().getPartitionClass()
+            + ClusterMapUtils.REPLICAS_DELIM_STR;
+    diskInfo.put(ClusterMapUtils.REPLICAS_STR, replicasStrBuilder);
+    diskInfos.put(testReplica.getDiskId().getMountPath(), diskInfo);
+    // add an invalid entry at the end of diskInfos
+    Map<String, String> invalidEntry = new HashMap<>();
+    invalidEntry.put("INVALID_KEY", "INVALID_VALUE");
+    diskInfos.put("INVALID_MOUNT_PATH", invalidEntry);
+    instanceConfig.getRecord().setMapFields(diskInfos);
+    // we call onInstanceConfigChange() twice
+    // 1st call, to verify initialization code path
+    dynamicChangeHandler.onInstanceConfigChange(Collections.singletonList(instanceConfig), null);
+    // 2nd call, to verify dynamic update code path
+    dynamicChangeHandler.onInstanceConfigChange(Collections.singletonList(instanceConfig), null);
+    assertEquals("There shouldn't be initialization errors", 0, initFailureCount.getCount());
   }
 
   /**

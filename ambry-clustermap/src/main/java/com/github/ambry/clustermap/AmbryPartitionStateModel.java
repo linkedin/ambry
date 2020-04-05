@@ -130,6 +130,13 @@ public class AmbryPartitionStateModel extends StateModel {
     helixParticipantMetrics.partitionDroppedCount.inc();
   }
 
+  @Transition(to = "OFFLINE", from = "ERROR")
+  public void onBecomeOfflineFromError(Message message, NotificationContext context){
+    logger.info("Partition {} in resource {} is becoming OFFLINE from ERROR", message.getPartitionName(),
+        message.getResourceName());
+    helixParticipantMetrics.offlineCount.addAndGet(1);
+  }
+
   @Override
   public void reset() {
     logger.info("Reset method invoked. Partition {} in resource {} is reset to OFFLINE", partitionName, resourceName);
