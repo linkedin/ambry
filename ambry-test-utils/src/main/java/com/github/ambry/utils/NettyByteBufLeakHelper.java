@@ -39,6 +39,8 @@ public class NettyByteBufLeakHelper {
   // when the cache is enable, just don't check the allocation and deallocation.
   private boolean cachedEnabled;
 
+  private boolean disabled;
+
   /**
    * Constructor to create a {@link NettyByteBufLeakHelper}.
    */
@@ -71,7 +73,7 @@ public class NettyByteBufLeakHelper {
    * Method to call at any method that is tagged {@link org.junit.After} to verify there is no leak within this test case.
    */
   public void afterTest() {
-    if (cachedEnabled) {
+    if (cachedEnabled || disabled) {
       return;
     }
 
@@ -92,5 +94,14 @@ public class NettyByteBufLeakHelper {
     message = String.format("HeapMemoryLeak: [allocation|deallocation] before test[%d|%d], after test[%d|%d]",
         heapAllocations, heapDeallocations, currentHeapAllocations, currentHeapDeallocations);
     Assert.assertEquals(message, activeHeapAllocations, currentActiveHeapAllocations);
+  }
+
+  /**
+   * Disable this leak detector by passing true to this function. Some test cases would perform some usual behaviors, like
+   * kill thread, forcefully close some service. In those cases, there might be some leaks that can't be fixed.
+   * @param disabled true to disable the leak detector.
+   */
+  public void setDisabled(boolean disabled) {
+    this.disabled = disabled;
   }
 }

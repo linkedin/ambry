@@ -50,4 +50,9 @@ public interface Send {
    * @return The size of the data in bytes to be written
    */
   long sizeInBytes();
+
+  /**
+   * Release all the resource this object holds. Make this a default method so subclasses don't have to override it.
+   */
+  default void release() {}
 }

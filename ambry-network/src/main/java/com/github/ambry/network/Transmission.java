@@ -119,7 +119,7 @@ public abstract class Transmission {
   }
 
   /**
-   * Actions to be taken on completion of {@link BoundedReceive} in {@link NetworkReceive}
+   * Actions to be taken on completion of {@link BoundedNettyByteBufReceive} in {@link NetworkReceive}
    */
   public void onReceiveComplete() {
     long receiveTimeMs = time.milliseconds() - networkReceive.getReceiveStartTimeInMs();
@@ -177,6 +177,9 @@ public abstract class Transmission {
   }
 
   protected void release() {
+    if (networkSend != null) {
+      networkSend.getPayload().release();
+    }
     if (networkReceive != null) {
       networkReceive.getReceivedBytes().release();
     }

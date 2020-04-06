@@ -167,7 +167,7 @@ public class ByteBufferAsyncWritableChannelTest {
     // null input.
     ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     try {
-      channel.write((ByteBuffer) null, null);
+      channel.write((ByteBuf) null, null);
       fail("Write should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -309,7 +309,7 @@ class ChannelWriter {
           chunk = ByteBufAllocator.DEFAULT.heapBuffer(data.length);
           chunk.writeBytes(data);
         } else {
-          CompositeByteBuf composite = new CompositeByteBuf(ByteBufAllocator.DEFAULT, false, 100);
+          CompositeByteBuf composite = ByteBufAllocator.DEFAULT.compositeHeapBuffer(100);
           ByteBuf c = ByteBufAllocator.DEFAULT.heapBuffer(50);
           c.writeBytes(data, 0, 50);
           composite.addComponent(true, c);

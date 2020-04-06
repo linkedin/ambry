@@ -108,11 +108,12 @@ public class SocketNetworkClient implements NetworkClient {
     }
     long startTime = time.milliseconds();
     List<ResponseInfo> responseInfoList = new ArrayList<>();
+    List<NetworkSend> sends = null;
     try {
       for (RequestInfo requestInfo : requestsToSend) {
         pendingRequests.add(new RequestMetadata(requestInfo));
       }
-      List<NetworkSend> sends = prepareSends(requestsToDrop, responseInfoList);
+      sends = prepareSends(requestsToDrop, responseInfoList);
       replenishConnections();
       for (Integer correlationId : requestsToDrop) {
         String connectionId = correlationIdInFlightToConnectionId.get(correlationId);
@@ -127,6 +128,9 @@ public class SocketNetworkClient implements NetworkClient {
     } catch (Exception e) {
       logger.error("Received an unexpected error during sendAndPoll(): ", e);
       networkMetrics.networkClientException.inc();
+      if (sends != null) {
+        sends.forEach(send -> send.getPayload().release());
+      }
     } finally {
       numPendingRequests.set(pendingRequests.size());
       networkMetrics.networkClientSendAndPollTime.update(time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
@@ -157,6 +161,7 @@ public class SocketNetworkClient implements NetworkClient {
         logger.trace("Failing request to host {} port {} due to connection unavailability",
             requestMetadata.requestInfo.getHost(), requestMetadata.requestInfo.getPort());
         iter.remove();
+        requestMetadata.requestInfo.getRequest().release();
         if (requestMetadata.pendingConnectionId != null) {
           pendingConnectionsToAssociatedRequests.remove(requestMetadata.pendingConnectionId);
           requestMetadata.pendingConnectionId = null;
@@ -181,6 +186,7 @@ public class SocketNetworkClient implements NetworkClient {
           throw new IllegalStateException("ReplicaId in request is null.");
         }
         if (requestsToDrop.contains(requestMetadata.requestInfo.getRequest().getCorrelationId())) {
+          requestMetadata.requestInfo.getRequest().release();
           responseInfoList.add(
               new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.ConnectionUnavailable, null));
           if (requestMetadata.pendingConnectionId != null) {
@@ -217,6 +223,7 @@ public class SocketNetworkClient implements NetworkClient {
           }
         }
       } catch (IOException e) {
+        requestMetadata.requestInfo.getRequest().release();
         networkMetrics.networkClientIOError.inc();
         logger.error("Received exception while checking out a connection", e);
       }
@@ -345,6 +352,9 @@ public class SocketNetworkClient implements NetworkClient {
           // No need to call pendingRequests.remove() because it has been removed due to connection unavailability in prepareSends()
         }
       }
+      if (requestMetadata != null) {
+        requestMetadata.requestInfo.getRequest().release();
+      }
       networkMetrics.connectionDisconnected.inc();
     }
 
@@ -367,6 +377,19 @@ public class SocketNetworkClient implements NetworkClient {
    */
   @Override
   public void close() {
+    if (pendingRequests != null) {
+      pendingRequests.forEach(requestMetadata -> {
+        requestMetadata.requestInfo.getRequest().release();
+      });
+    } if (connectionIdToRequestInFlight != null) {
+      connectionIdToRequestInFlight.values().forEach(requestMetadata -> {
+        requestMetadata.requestInfo.getRequest().release();
+      });
+    } if (pendingConnectionsToAssociatedRequests != null) {
+      pendingConnectionsToAssociatedRequests.values().forEach(requestMetadata -> {
+        requestMetadata.requestInfo.getRequest().release();
+      });
+    }
     logger.trace("Closing the SocketNetworkClient");
     selector.close();
     closed = true;

@@ -54,7 +54,7 @@ public interface AsyncWritableChannel extends Channel {
    * Write data in {@code src} to the channel and the {@code callback} will be invoked once the write succeeds or fails.
    * This method is the counterpart for {@link ByteBuf}. It shares the same guarantee as the {@link #write(ByteBuffer, Callback)}.
    * Whoever implements this interface, shouldn't release the {@code src}. If releasing is expected after finishing writing
-   * to channel, please releas this {@link ByteBuf} in the callback method.
+   * to channel, please release this {@link ByteBuf} in the callback method.
    * @param src The data taht needs to be written to the channel.
    * @param callback The {@link Callback} that will be invoked once the write succeeds/fails. This can be null.
    * @return a {@link Future} that will eventually contain the result of the write operation (the number of bytes

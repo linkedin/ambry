@@ -60,7 +60,7 @@ import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
+import io.netty.buffer.PooledByteBufAllocator;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -254,7 +254,7 @@ public class GetBlobOperationTest {
    * @param blobContent the raw content for the blob to upload (i.e. this can be serialized composite blob metadata or
    *                    an encrypted blob).
    */
-  private void doDirectPut(BlobType blobType, ByteBuffer blobContent) throws Exception {
+  private void doDirectPut(BlobType blobType, ByteBuf blobContent) throws Exception {
     List<PartitionId> writablePartitionIds = mockClusterMap.getWritablePartitionIds(null);
     PartitionId partitionId = writablePartitionIds.get(random.nextInt(writablePartitionIds.size()));
     blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
@@ -273,23 +273,27 @@ public class GetBlobOperationTest {
     if (blobProperties.isEncrypted()) {
       FutureResult<EncryptJob.EncryptJobResult> futureResult = new FutureResult<>();
       cryptoJobHandler.submitJob(new EncryptJob(blobProperties.getAccountId(), blobProperties.getContainerId(),
-          blobType == BlobType.MetadataBlob ? null : blobContent.duplicate(), userMetadataBuf.duplicate(),
+          blobType == BlobType.MetadataBlob ? null : blobContent.retainedDuplicate(), userMetadataBuf.duplicate(),
           kms.getRandomKey(), cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
           futureResult::done));
       EncryptJob.EncryptJobResult result = futureResult.get(5, TimeUnit.SECONDS);
       blobEncryptionKey = result.getEncryptedKey();
-      blobContent = blobType == BlobType.MetadataBlob ? blobContent : result.getEncryptedBlobContent();
+      if (blobType != BlobType.MetadataBlob) {
+        blobContent.release();
+        blobContent = result.getEncryptedBlobContent();
+      }
       userMetadataBuf = result.getEncryptedUserMetadata();
     }
     while (servers.hasNext()) {
       MockServer server = servers.next();
       PutRequest request =
           new PutRequest(random.nextInt(), "clientId", blobId, blobProperties, userMetadataBuf.duplicate(),
-              Unpooled.wrappedBuffer(blobContent.duplicate()), blobContent.remaining(), blobType,
+              blobContent.retainedDuplicate(), blobContent.readableBytes(), blobType,
               blobEncryptionKey == null ? null : blobEncryptionKey.duplicate());
       // Make sure we release the BoundedNettyByteBufReceive.
       server.send(request).release();
     }
+    blobContent.release();
   }
 
   /**
@@ -1002,7 +1006,10 @@ public class GetBlobOperationTest {
     blobProperties =
         new BlobProperties(blobSize + 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null);
-    doDirectPut(BlobType.DataBlob, ByteBuffer.wrap(putContent));
+    ByteBuf putContentBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(blobSize);
+    putContentBuf.writeBytes(putContent);
+    doDirectPut(BlobType.DataBlob, putContentBuf.retainedDuplicate());
+    putContentBuf.release();
     Counter sizeMismatchCounter = (testEncryption ? routerMetrics.simpleEncryptedBlobSizeMismatchCount
         : routerMetrics.simpleUnencryptedBlobSizeMismatchCount);
     long startCount = sizeMismatchCounter.getCount();
@@ -1024,7 +1031,10 @@ public class GetBlobOperationTest {
     blobProperties =
         new BlobProperties(blobSize - 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null);
-    doDirectPut(BlobType.MetadataBlob, metadataContent);
+    ByteBuf metadataContentBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(metadataContent.remaining());
+    metadataContentBuf.writeBytes(metadataContent.duplicate());
+    doDirectPut(BlobType.MetadataBlob, metadataContentBuf.retainedDuplicate());
+    metadataContentBuf.release();
     startCount = routerMetrics.compositeBlobSizeMismatchCount.getCount();
     getAndAssertSuccess();
     endCount = routerMetrics.compositeBlobSizeMismatchCount.getCount();
