@@ -536,7 +536,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     } finally {
       participantMetrics.standbyCount.addAndGet(-1);
     }
-
     participantMetrics.leaderCount.addAndGet(1);
   }
 
