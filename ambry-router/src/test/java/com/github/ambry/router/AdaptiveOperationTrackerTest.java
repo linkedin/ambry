@@ -352,7 +352,6 @@ public class AdaptiveOperationTrackerTest {
     // mock different latency distribution of local hosts and remote host
     Histogram localHistogram1 = localColoMap.get(localHost1);
     Histogram localHistogram2 = localColoMap.get(localHost2);
-    //Histogram remoteHistogram1 = crossColoMap.get(remoteHost1);
     primeTracker(localHistogram1, routerConfig.routerOperationTrackerMinDataPointsRequired, new Pair<>(0L, 50L));
     primeTracker(localHistogram2, routerConfig.routerOperationTrackerMinDataPointsRequired, new Pair<>(100L, 120L));
     double localHostCutoff1 = localHistogram1.getSnapshot().getValue(QUANTILE);

@@ -47,6 +47,9 @@ class HelixParticipantMetrics {
     Gauge<Integer> offlinePartitionCount = offlineCount::get;
     metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "offlinePartitionCount"),
         offlinePartitionCount);
+    Gauge<Integer> errorStatePartitionCount = errorStateCount::get;
+    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "errorStatePartitionCount"),
+        errorStatePartitionCount);
     partitionDroppedCount =
         metricRegistry.counter(MetricRegistry.name(HelixParticipant.class, "partitionDroppedCount"));
   }

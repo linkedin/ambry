@@ -124,6 +124,9 @@ public class MockHelixParticipant extends HelixParticipant {
     // no op
   }
 
+  /**
+   * @return the {@link HelixParticipantMetrics} associated with this participant.
+   */
   HelixParticipantMetrics getHelixParticipantMetrics() {
     return participantMetrics;
   }
