@@ -333,7 +333,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
       Map<String, String> diskInfo = entry.getValue();
       AmbryDisk disk = mountPathToDisk.getOrDefault(mountPath, null);
       if (disk == null) {
-        logger.info("{} is a new disk or unrecognizable disk which is not supported on existing node {}.", mountPath,
+        logger.warn("{} is a new disk or unrecognizable disk which is not supported on existing node {}.", mountPath,
             instanceName);
         // TODO support dynamically adding disk in the future
         continue;
