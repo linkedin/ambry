@@ -333,7 +333,8 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
       Map<String, String> diskInfo = entry.getValue();
       AmbryDisk disk = mountPathToDisk.getOrDefault(mountPath, null);
       if (disk == null) {
-        logger.info("Temporarily don't support adding new disk to existing node.");
+        logger.warn("{} is a new disk or unrecognizable disk which is not supported on existing node {}.", mountPath,
+            instanceName);
         // TODO support dynamically adding disk in the future
         continue;
       }
@@ -472,6 +473,13 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
     for (Map.Entry<String, Map<String, String>> entry : diskInfos.entrySet()) {
       String mountPath = entry.getKey();
       Map<String, String> diskInfo = entry.getValue();
+      if (diskInfo.get(DISK_STATE) == null) {
+        // This may happen when Helix controller adds partitions in ERROR state to InstanceConfig. (The additional string
+        // is not recognizable for current HelixClusterManager)
+        logger.warn("{} is invalid disk info on {}. Skip it and continue on next one.", mountPath,
+            instanceConfig.getInstanceName());
+        continue;
+      }
       HardwareState diskState =
           diskInfo.get(DISK_STATE).equals(AVAILABLE_STR) ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE;
       long capacityBytes = Long.parseLong(diskInfo.get(DISK_CAPACITY_STR));

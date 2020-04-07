@@ -19,6 +19,8 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import org.apache.helix.model.Message;
@@ -59,6 +61,7 @@ public class AmbryStateModelFactoryTest {
     props.setProperty("clustermap.datacenter.name", "DC0");
     props.setProperty("clustermap.state.model.definition", stateModelDef);
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.enable.state.model.listener", Boolean.toString(true));
     config = new ClusterMapConfig(new VerifiableProperties(props));
     this.stateModelDef = stateModelDef;
   }
@@ -100,7 +103,7 @@ public class AmbryStateModelFactoryTest {
       public void onPartitionBecomeDroppedFromOffline(String partitionName) {
         // no op
       }
-    }, new HelixParticipantMetrics(new MetricRegistry()));
+    });
     StateModel stateModel;
     switch (config.clustermapStateModelDefinition) {
       case ClusterMapConfig.OLD_STATE_MODEL_DEF:
@@ -123,17 +126,18 @@ public class AmbryStateModelFactoryTest {
   @Test
   public void testAmbryPartitionStateModel() throws Exception {
     assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
-    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(config);
     MetricRegistry metricRegistry = new MetricRegistry();
-    HelixParticipantMetrics participantMetrics = new HelixParticipantMetrics(metricRegistry);
+    MockHelixParticipant.metricRegistry = metricRegistry;
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(config);
+    HelixParticipantMetrics participantMetrics = mockHelixParticipant.getHelixParticipantMetrics();
     String resourceName = "0";
     String partitionName = "1";
     Message mockMessage = Mockito.mock(Message.class);
     when(mockMessage.getPartitionName()).thenReturn(partitionName);
     when(mockMessage.getResourceName()).thenReturn(resourceName);
     AmbryPartitionStateModel stateModel =
-        new AmbryPartitionStateModel(resourceName, partitionName, mockHelixParticipant, config, participantMetrics);
-    participantMetrics.setLocalPartitionCount(1);
+        new AmbryPartitionStateModel(resourceName, partitionName, mockHelixParticipant, config);
+    mockHelixParticipant.setInitialLocalPartitions(new HashSet<>(Collections.singletonList(partitionName)));
     assertEquals("Offline count is not expected", 1,
         metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
     // OFFLINE -> BOOTSTRAP
@@ -177,10 +181,16 @@ public class AmbryStateModelFactoryTest {
     assertEquals("Offline count should be 0", 0,
         metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
     assertEquals("Dropped count should be updated", 1, participantMetrics.partitionDroppedCount.getCount());
-
+    // ERROR -> DROPPED
+    stateModel.onBecomeDroppedFromError(mockMessage, null);
+    assertEquals("Dropped count should be updated", 2, participantMetrics.partitionDroppedCount.getCount());
+    // ERROR -> OFFLINE (this occurs when we use Helix API to reset certain partition in ERROR state)
+    stateModel.onBecomeOfflineFromError(mockMessage, null);
+    assertEquals("Offline count should be 1", 1,
+        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
     // reset method
     stateModel.reset();
-    assertEquals("Offline count should be 1 after reset", 1,
+    assertEquals("Offline count should be 1 after reset", 2,
         metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
   }
 }

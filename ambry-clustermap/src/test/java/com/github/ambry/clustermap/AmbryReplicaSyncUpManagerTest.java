@@ -77,13 +77,13 @@ public class AmbryReplicaSyncUpManagerTest {
     properties.setProperty("clustermap.enable.state.model.listener", Boolean.toString(true));
     properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
     mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
     replicaSyncUpService = (AmbryReplicaSyncUpManager) mockHelixParticipant.getReplicaSyncUpManager();
     mockHelixParticipant.currentReplica = currentReplica;
     mockHelixParticipant.replicaSyncUpService = replicaSyncUpService;
     stateModel =
-        new AmbryPartitionStateModel(RESOURCE_NAME, partition.toPathString(), mockHelixParticipant, clusterMapConfig,
-            new HelixParticipantMetrics(new MetricRegistry()));
+        new AmbryPartitionStateModel(RESOURCE_NAME, partition.toPathString(), mockHelixParticipant, clusterMapConfig);
     mockMessage = Mockito.mock(Message.class);
     when(mockMessage.getPartitionName()).thenReturn(partition.toPathString());
     when(mockMessage.getResourceName()).thenReturn(RESOURCE_NAME);

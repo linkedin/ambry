@@ -59,4 +59,25 @@ public interface PartitionStateChangeListener {
    * @param partitionName of the partition.
    */
   void onPartitionBecomeDroppedFromOffline(String partitionName);
+
+  /**
+   * Action to take when partition becomes dropped from error.
+   * @param partitionName of the partition.
+   */
+  default void onPartitionBecomeDroppedFromError(String partitionName) {
+  }
+
+  /**
+   * Action to take when partition becomes offline from error.
+   * @param partitionName of the partition.
+   */
+  default void onPartitionBecomeOfflineFromError(String partitionName) {
+  }
+
+  /**
+   * Action to take when reset method is called on certain partition.
+   * @param partitionName of the partition.
+   */
+  default void onReset(String partitionName) {
+  }
 }

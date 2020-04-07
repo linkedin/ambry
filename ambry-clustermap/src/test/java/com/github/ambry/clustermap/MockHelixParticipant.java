@@ -23,12 +23,12 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 import org.mockito.Mockito;
-import org.mockito.stubbing.Answer;
 
 import static org.mockito.Mockito.*;
 
 
 public class MockHelixParticipant extends HelixParticipant {
+  public static MetricRegistry metricRegistry = new MetricRegistry();
   public Boolean updateNodeInfoReturnVal = null;
   public PartitionStateChangeListener mockStatsManagerListener = null;
   CountDownLatch listenerLatch = null;
@@ -40,11 +40,11 @@ public class MockHelixParticipant extends HelixParticipant {
   private PartitionStateChangeListener mockReplicationManagerListener;
 
   public MockHelixParticipant(ClusterMapConfig clusterMapConfig) throws IOException {
-    super(clusterMapConfig, new MockHelixManagerFactory(), new MetricRegistry());
+    super(clusterMapConfig, new MockHelixManagerFactory(), metricRegistry);
     // create mock state change listener for ReplicationManager
     mockReplicationManagerListener = Mockito.mock(PartitionStateChangeListener.class);
     // mock Bootstrap-To-Standby change
-    doAnswer((Answer) invocation -> {
+    doAnswer(invocation -> {
       replicaState = ReplicaState.BOOTSTRAP;
       if (replicaSyncUpService != null && currentReplica != null) {
         replicaSyncUpService.initiateBootstrap(currentReplica);
@@ -55,7 +55,7 @@ public class MockHelixParticipant extends HelixParticipant {
       return null;
     }).when(mockReplicationManagerListener).onPartitionBecomeStandbyFromBootstrap(any(String.class));
     // mock Standby-To-Inactive change
-    doAnswer((Answer) invocation -> {
+    doAnswer(invocation -> {
       replicaState = ReplicaState.INACTIVE;
       if (replicaSyncUpService != null && currentReplica != null) {
         replicaSyncUpService.initiateDeactivation(currentReplica);
@@ -66,7 +66,7 @@ public class MockHelixParticipant extends HelixParticipant {
       return null;
     }).when(mockReplicationManagerListener).onPartitionBecomeInactiveFromStandby(any(String.class));
     // mock Inactive-To-Offline change
-    doAnswer((Answer) invocation -> {
+    doAnswer(invocation -> {
       replicaState = ReplicaState.OFFLINE;
       if (replicaSyncUpService != null && currentReplica != null) {
         replicaSyncUpService.initiateDisconnection(currentReplica);
@@ -122,6 +122,13 @@ public class MockHelixParticipant extends HelixParticipant {
   @Override
   public void close() {
     // no op
+  }
+
+  /**
+   * @return the {@link HelixParticipantMetrics} associated with this participant.
+   */
+  HelixParticipantMetrics getHelixParticipantMetrics() {
+    return participantMetrics;
   }
 
   /**

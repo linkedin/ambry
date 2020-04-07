@@ -218,8 +218,8 @@ public class AdaptiveOperationTrackerTest {
    */
   @Test
   public void partitionLevelAdaptiveTrackerTest() throws Exception {
-    MockPartitionId mockPartition1 = new MockPartitionId(1L, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    MockPartitionId mockPartition2 = new MockPartitionId(2L, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    MockPartitionId mockPartition1 = new MockPartitionId(0L, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    MockPartitionId mockPartition2 = new MockPartitionId(1L, MockClusterMap.DEFAULT_PARTITION_CLASS);
     for (int i = 0; i < REPLICA_COUNT; i++) {
       mockPartition1.replicaIds.add(new MockReplicaId(PORT, mockPartition1, datanodes.get(i % datanodes.size()), 1));
       mockPartition2.replicaIds.add(new MockReplicaId(PORT, mockPartition2, datanodes.get(i % datanodes.size()), 2));
@@ -297,6 +297,22 @@ public class AdaptiveOperationTrackerTest {
     // The number of data points in cross colo histogram should be 2 (both of them come from partition1)
     assertEquals("Mismatch in number of data points in cross colo histogram", 2,
         routerMetrics.getBlobCrossDcLatencyMs.getCount());
+
+    // additional test: mock new partition is dynamically added and adaptive operation track should be able to create
+    // histogram on demand.
+    MockPartitionId mockPartition3 = (MockPartitionId) clusterMap.createNewPartition(datanodes);
+    OperationTracker tracker3 = getOperationTracker(routerConfig, mockPartition3);
+    // send 1st request
+    sendRequests(tracker3, 1);
+    // attempt to send 2nd request to make tracker check histogram and create a new one associated with this partition
+    // the oldest one hasn't passed due (because there are not enough data points in histogram), so 2nd is not sent
+    sendRequests(tracker3, 0);
+    tracker3.onResponse(partitionAndInflightReplicas.get(mockPartition3).poll(), TrackedRequestFinalState.SUCCESS);
+    // now it should be able to send 2nd request
+    sendRequests(tracker3, 1);
+    tracker3.onResponse(partitionAndInflightReplicas.get(mockPartition3).poll(), TrackedRequestFinalState.SUCCESS);
+    assertTrue("Operation should have succeeded", tracker3.hasSucceeded());
+
     // restore the tracer scope and routerMetrics
     trackerScope = OperationTrackerScope.Datacenter;
     routerMetrics = originalMetrics;
@@ -336,7 +352,6 @@ public class AdaptiveOperationTrackerTest {
     // mock different latency distribution of local hosts and remote host
     Histogram localHistogram1 = localColoMap.get(localHost1);
     Histogram localHistogram2 = localColoMap.get(localHost2);
-    Histogram remoteHistogram1 = crossColoMap.get(remoteHost1);
     primeTracker(localHistogram1, routerConfig.routerOperationTrackerMinDataPointsRequired, new Pair<>(0L, 50L));
     primeTracker(localHistogram2, routerConfig.routerOperationTrackerMinDataPointsRequired, new Pair<>(100L, 120L));
     double localHostCutoff1 = localHistogram1.getSnapshot().getValue(QUANTILE);
@@ -377,6 +392,26 @@ public class AdaptiveOperationTrackerTest {
     // should be updated twice in this case.
     assertEquals("Mismatch in number of data points in cross colo histogram", 2,
         routerMetrics.getBlobCrossDcLatencyMs.getCount());
+
+    // additional test: dynamically add 1 new partition and 2 new nodes. Each new node hosts a replica from new partition
+    MockDataNodeId newNode1 = clusterMap.createNewDataNodes(1, "dc-0").get(0);
+    MockDataNodeId newNode2 = clusterMap.createNewDataNodes(1, "dc-1").get(0);
+    MockPartitionId mockPartition3 = new MockPartitionId(3L, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    mockPartition3.replicaIds.add(new MockReplicaId(PORT, mockPartition3, newNode1, 1));
+    mockPartition3.replicaIds.add(new MockReplicaId(PORT, mockPartition3, newNode2, 2));
+    OperationTracker tracker3 = getOperationTracker(routerConfig, mockPartition3);
+    // send 1st request
+    sendRequests(tracker3, 1);
+    // attempt to send 2nd one. This will trigger router metrics to create a histogram that associated with new node
+    // However, there is no 2nd request out because new created histogram doesn't of enough data points.
+    sendRequests(tracker3, 0);
+    // make the 1st request fail
+    tracker3.onResponse(partitionAndInflightReplicas.get(mockPartition3).poll(), TrackedRequestFinalState.FAILURE);
+    // 2nd request is sent
+    sendRequests(tracker3, 1);
+    // make the 2nd request succeed
+    tracker3.onResponse(partitionAndInflightReplicas.get(mockPartition3).poll(), TrackedRequestFinalState.SUCCESS);
+    assertTrue("Operation should have succeeded", tracker3.hasSucceeded());
     // restore the tracer scope and routerMetrics
     trackerScope = OperationTrackerScope.Datacenter;
     routerMetrics = originalMetrics;
@@ -384,15 +419,21 @@ public class AdaptiveOperationTrackerTest {
 
   /**
    * Tests that adaptive tracker uses separate disk-level histogram to determine if inflight requests are past due.
-   * Mock a partition layout as follows for this test.
-   *             |       |   Partition 1 |  Partition 2
-   * ---------------------------------------------------
-   * LocalHost1  | Disk0 |   Replica_1   |
-   *             | Disk1 |               |  Replica_1
-   * ---------------------------------------------------
-   * RemoteHost1 | Disk0 |   Replica_2   |  Replica_2
-   *             | Disk1 |   Replica_3   |  Replica_3
-   * ---------------------------------------------------
+   * Mock a partition layout as follows for this test. This test also tests the case where new nodes and new partition
+   * are dynamically added.
+   *             |       |   Partition 1 |  Partition 2  | Partition 3 (added at runtime)
+   * -------------------------------------------------------------------------------------
+   * LocalHost1  | Disk0 |   Replica_1   |               |
+   *             | Disk1 |               |  Replica_1    |
+   * -------------------------------------------------------------------------------------
+   * RemoteHost1 | Disk0 |   Replica_2   |  Replica_2    |
+   *             | Disk1 |   Replica_3   |  Replica_3    |
+   * -------------------------------------------------------------------------------------
+   *  NewNode1   | Disk0 |               |               |          Replica_1
+   *             | Disk1 |               |               |
+   * -------------------------------------------------------------------------------------
+   *  NewNod2    | Disk0 |               |               |
+   *             | Disk1 |               |               |          Replica_2
    * @throws Exception
    */
   @Test
@@ -483,6 +524,27 @@ public class AdaptiveOperationTrackerTest {
     // number of data points in cross colo histogram should be 2 because two timed-out requests should be counted
     assertEquals("Mismatch in number of data points in cross colo histogram", 2,
         routerMetrics.getBlobCrossDcLatencyMs.getCount());
+
+    // additional test: dynamically add 1 new partition and 2 new nodes. Each new node hosts a replica from new partition
+    MockDataNodeId newNode1 = clusterMap.createNewDataNodes(1, "dc-0").get(0);
+    MockDataNodeId newNode2 = clusterMap.createNewDataNodes(1, "dc-1").get(0);
+    MockPartitionId mockPartition3 = new MockPartitionId(3L, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    mockPartition3.replicaIds.add(new MockReplicaId(PORT, mockPartition3, newNode1, 0));
+    mockPartition3.replicaIds.add(new MockReplicaId(PORT, mockPartition3, newNode2, 1));
+    OperationTracker tracker3 = getOperationTracker(routerConfig, mockPartition3);
+    // send 1st request
+    sendRequests(tracker3, 1);
+    // attempt to send 2nd one. This will trigger router metrics to create a histogram that associated with new disk
+    // However, there is no 2nd request out because new created histogram doesn't of enough data points.
+    sendRequests(tracker3, 0);
+    // make the 1st request fail
+    tracker3.onResponse(partitionAndInflightReplicas.get(mockPartition3).poll(), TrackedRequestFinalState.FAILURE);
+    // 2nd request is sent
+    sendRequests(tracker3, 1);
+    // make the 2nd request succeed
+    tracker3.onResponse(partitionAndInflightReplicas.get(mockPartition3).poll(), TrackedRequestFinalState.SUCCESS);
+    assertTrue("Operation should have succeeded", tracker3.hasSucceeded());
+
     // restore the tracer scope and routerMetrics
     trackerScope = OperationTrackerScope.Datacenter;
     routerMetrics = originalMetrics;
@@ -600,8 +662,9 @@ public class AdaptiveOperationTrackerTest {
     RouterConfig routerConfig = createRouterConfig(false, 1, 1, 6, customPercentiles, true);
     String[] percentileArray = customPercentiles.split(",");
     Arrays.sort(percentileArray);
-    List<String> sortedPercentiles =
-        Arrays.stream(percentileArray).map(p -> String.valueOf(Double.valueOf(p) * 100)).collect(Collectors.toList());
+    List<String> sortedPercentiles = Arrays.stream(percentileArray)
+        .map(p -> String.valueOf(Double.parseDouble(p) * 100))
+        .collect(Collectors.toList());
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     gauges = routerMetrics.getMetricRegistry().getGauges(filter);
     // Note that each percentile creates 4 metrics (GetBlobInfo/GetBlob joins LocalColo/CrossColo). So, the total number of

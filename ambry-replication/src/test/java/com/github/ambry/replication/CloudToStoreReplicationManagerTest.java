@@ -13,6 +13,7 @@
  */
 package com.github.ambry.replication;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockClusterSpectator;
@@ -118,6 +119,7 @@ public class CloudToStoreReplicationManagerTest {
     clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
     serverConfig = new ServerConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
     mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
   }
 

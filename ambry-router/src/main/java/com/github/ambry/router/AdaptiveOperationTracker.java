@@ -30,6 +30,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+import static com.github.ambry.router.NonBlockingRouterMetrics.*;
+
 
 /**
  * An implementation of {@link OperationTracker}. It internally maintains the status of a corresponding operation, and
@@ -135,18 +137,21 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
         break;
       case Partition:
         PartitionId partitionId = replicaId.getPartitionId();
-        histogramToReturn =
-            isLocalReplica ? localDcResourceToHistogram.get(partitionId) : crossDcResourceToHistogram.get(partitionId);
+        histogramToReturn = isLocalReplica ? localDcResourceToHistogram.computeIfAbsent(partitionId,
+            k -> createHistogram(routerConfig, false))
+            : crossDcResourceToHistogram.computeIfAbsent(partitionId, k -> createHistogram(routerConfig, false));
         break;
       case DataNode:
         DataNodeId dataNodeId = replicaId.getDataNodeId();
-        histogramToReturn =
-            isLocalReplica ? localDcResourceToHistogram.get(dataNodeId) : crossDcResourceToHistogram.get(dataNodeId);
+        histogramToReturn = isLocalReplica ? localDcResourceToHistogram.computeIfAbsent(dataNodeId,
+            k -> createHistogram(routerConfig, false))
+            : crossDcResourceToHistogram.computeIfAbsent(dataNodeId, k -> createHistogram(routerConfig, false));
         break;
       case Disk:
         DiskId diskId = replicaId.getDiskId();
-        histogramToReturn =
-            isLocalReplica ? localDcResourceToHistogram.get(diskId) : crossDcResourceToHistogram.get(diskId);
+        histogramToReturn = isLocalReplica ? localDcResourceToHistogram.computeIfAbsent(diskId,
+            k -> createHistogram(routerConfig, false))
+            : crossDcResourceToHistogram.computeIfAbsent(diskId, k -> createHistogram(routerConfig, false));
         break;
       default:
         throw new IllegalArgumentException("Unsupported operation tracker metric scope.");

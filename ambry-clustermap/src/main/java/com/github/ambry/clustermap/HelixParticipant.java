@@ -20,12 +20,14 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
@@ -48,11 +50,12 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
  * An implementation of {@link ClusterParticipant} that registers as a participant to a Helix cluster.
  */
 public class HelixParticipant implements ClusterParticipant, PartitionStateChangeListener {
+  protected final HelixParticipantMetrics participantMetrics;
   private final String clusterName;
   private final String zkConnectStr;
   private final Object helixAdministrationLock = new Object();
   private final ClusterMapConfig clusterMapConfig;
-  private final HelixParticipantMetrics participantMetrics;
+  private final Set<String> localPartitions = ConcurrentHashMap.newKeySet();
   private HelixManager manager;
   private String instanceName;
   private HelixAdmin helixAdmin;
@@ -76,7 +79,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     instanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
     if (clusterName.isEmpty()) {
-      throw new IllegalStateException("Clustername is empty in clusterMapConfig");
+      throw new IllegalStateException("Cluster name is empty in clusterMapConfig");
     }
     try {
       zkConnectStr = ClusterMapUtils.parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings)
@@ -94,8 +97,9 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   @Override
-  public void initializeParticipantMetrics(int localPartitionCount) {
-    participantMetrics.setLocalPartitionCount(localPartitionCount);
+  public void setInitialLocalPartitions(Collection<String> localPartitions) {
+    this.localPartitions.addAll(localPartitions);
+    participantMetrics.setLocalPartitionCount(localPartitions.size());
   }
 
   /**
@@ -110,7 +114,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig, this, participantMetrics));
+        new AmbryStateModelFactory(clusterMapConfig, this));
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
       synchronized (helixAdministrationLock) {
@@ -454,62 +458,97 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-    // 1. take actions in storage manager (add new replica if necessary)
-    PartitionStateChangeListener storageManagerListener =
-        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
-    if (storageManagerListener != null) {
-      storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+    // this method may be called when dynamically adding a new replica that is not present on local node previously. In
+    // this case we don't change offline count as the metric was set to initial number of local partitions during startup.
+    int offlineCountChange = localPartitions.contains(partitionName) ? -1 : 0;
+    try {
+      // 1. take actions in storage manager (add new replica if necessary)
+      PartitionStateChangeListener storageManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+      if (storageManagerListener != null) {
+        storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+      }
+      // 2. take actions in replication manager (add new replica if necessary)
+      PartitionStateChangeListener replicationManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+      if (replicationManagerListener != null) {
+        replicationManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+      }
+      // 3. take actions in stats manager (add new replica if necessary)
+      PartitionStateChangeListener statsManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
+      if (statsManagerListener != null) {
+        statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+      }
+    } catch (Exception e) {
+      participantMetrics.errorStateCount.addAndGet(1);
+      throw e;
+    } finally {
+      participantMetrics.offlineCount.addAndGet(offlineCountChange);
     }
-    // 2. take actions in replication manager (add new replica if necessary)
-    PartitionStateChangeListener replicationManagerListener =
-        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
-    if (replicationManagerListener != null) {
-      replicationManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
-    }
-    // 3. take actions in stats manager (add new replica if necessary)
-    PartitionStateChangeListener statsManagerListener =
-        partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
-    if (statsManagerListener != null) {
-      statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
-    }
+    participantMetrics.bootstrapCount.addAndGet(1);
+    // Here we directly add the partition into set even though it may already exit because the op should be idempotent)
+    localPartitions.add(partitionName);
   }
 
   @Override
   public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
     PartitionStateChangeListener replicationManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
-    if (replicationManagerListener != null) {
-      replicationManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
-      // after bootstrap is initiated in ReplicationManager, transition is blocked here and wait until local replica has
-      // caught up with enough peer replicas.
-      try {
+    try {
+      if (replicationManagerListener != null) {
+
+        replicationManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
+        // after bootstrap is initiated in ReplicationManager, transition is blocked here and wait until local replica has
+        // caught up with enough peer replicas.
         replicaSyncUpManager.waitBootstrapCompleted(partitionName);
-      } catch (InterruptedException e) {
-        logger.error("Bootstrap was interrupted on partition {}", partitionName);
-        throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
-      } catch (StateTransitionException e) {
-        logger.error("Bootstrap didn't complete on partition {}", partitionName, e);
-        throw e;
       }
+    } catch (InterruptedException e) {
+      logger.error("Bootstrap was interrupted on partition {}", partitionName);
+      participantMetrics.errorStateCount.addAndGet(1);
+      throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
+    } catch (StateTransitionException e) {
+      logger.error("Bootstrap didn't complete on partition {}", partitionName, e);
+      participantMetrics.errorStateCount.addAndGet(1);
+      throw e;
+    } finally {
+      participantMetrics.bootstrapCount.addAndGet(-1);
     }
+    participantMetrics.standbyCount.addAndGet(1);
   }
 
   @Override
   public void onPartitionBecomeLeaderFromStandby(String partitionName) {
-    PartitionStateChangeListener cloudToStoreReplicationListener =
-        partitionStateChangeListeners.get(StateModelListenerType.CloudToStoreReplicationManagerListener);
-    if (cloudToStoreReplicationListener != null) {
-      cloudToStoreReplicationListener.onPartitionBecomeLeaderFromStandby(partitionName);
+    try {
+      PartitionStateChangeListener cloudToStoreReplicationListener =
+          partitionStateChangeListeners.get(StateModelListenerType.CloudToStoreReplicationManagerListener);
+      if (cloudToStoreReplicationListener != null) {
+        cloudToStoreReplicationListener.onPartitionBecomeLeaderFromStandby(partitionName);
+      }
+    } catch (Exception e) {
+      participantMetrics.errorStateCount.addAndGet(1);
+      throw e;
+    } finally {
+      participantMetrics.standbyCount.addAndGet(-1);
     }
+    participantMetrics.leaderCount.addAndGet(1);
   }
 
   @Override
   public void onPartitionBecomeStandbyFromLeader(String partitionName) {
-    PartitionStateChangeListener cloudToStoreReplicationListener =
-        partitionStateChangeListeners.get(StateModelListenerType.CloudToStoreReplicationManagerListener);
-    if (cloudToStoreReplicationListener != null) {
-      cloudToStoreReplicationListener.onPartitionBecomeStandbyFromLeader(partitionName);
+    try {
+      PartitionStateChangeListener cloudToStoreReplicationListener =
+          partitionStateChangeListeners.get(StateModelListenerType.CloudToStoreReplicationManagerListener);
+      if (cloudToStoreReplicationListener != null) {
+        cloudToStoreReplicationListener.onPartitionBecomeStandbyFromLeader(partitionName);
+      }
+    } catch (Exception e) {
+      participantMetrics.errorStateCount.addAndGet(1);
+      throw e;
+    } finally {
+      participantMetrics.leaderCount.addAndGet(-1);
     }
+    participantMetrics.standbyCount.addAndGet(1);
   }
 
   @Override
@@ -518,55 +557,72 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     PartitionStateChangeListener storageManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
     if (storageManagerListener != null) {
-      storageManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+      try {
+        storageManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+      } catch (Exception e) {
+        participantMetrics.standbyCount.addAndGet(-1);
+        participantMetrics.errorStateCount.addAndGet(1);
+        throw e;
+      }
     }
     // 2. replication manager initiates deactivation
     PartitionStateChangeListener replicationManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
-    if (replicationManagerListener != null) {
-      replicationManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
-      // after deactivation is initiated in ReplicationManager, transition is blocked here and wait until enough peer
-      // replicas have caught up with last PUT in local store.
-      try {
+    try {
+      if (replicationManagerListener != null) {
+
+        replicationManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+        // after deactivation is initiated in ReplicationManager, transition is blocked here and wait until enough peer
+        // replicas have caught up with last PUT in local store.
         // TODO considering moving wait deactivation logic into replication manager listener
         replicaSyncUpManager.waitDeactivationCompleted(partitionName);
-      } catch (InterruptedException e) {
-        logger.error("Deactivation was interrupted on partition {}", partitionName);
-        throw new StateTransitionException("Deactivation failed or was interrupted", DeactivationFailure);
-      } catch (StateTransitionException e) {
-        logger.error("Deactivation didn't complete on partition {}", partitionName, e);
-        throw e;
       }
+    } catch (InterruptedException e) {
+      logger.error("Deactivation was interrupted on partition {}", partitionName);
+      participantMetrics.errorStateCount.addAndGet(1);
+      throw new StateTransitionException("Deactivation failed or was interrupted", DeactivationFailure);
+    } catch (StateTransitionException e) {
+      logger.error("Deactivation didn't complete on partition {}", partitionName, e);
+      participantMetrics.errorStateCount.addAndGet(1);
+      throw e;
+    } finally {
+      participantMetrics.standbyCount.addAndGet(-1);
     }
+    participantMetrics.inactiveCount.addAndGet(1);
   }
 
   @Override
   public void onPartitionBecomeOfflineFromInactive(String partitionName) {
     PartitionStateChangeListener replicationManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
-    if (replicationManagerListener != null) {
-      // 1. take actions in replication manager
-      //    (1) set local store state to OFFLINE
-      //    (2) initiate disconnection in ReplicaSyncUpManager
-      replicationManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
-      // 2. wait until peer replicas have caught up with local replica
-      try {
+    try {
+      if (replicationManagerListener != null) {
+        // 1. take actions in replication manager
+        //    (1) set local store state to OFFLINE
+        //    (2) initiate disconnection in ReplicaSyncUpManager
+        replicationManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
+        // 2. wait until peer replicas have caught up with local replica
         // TODO considering moving wait disconnection logic into replication manager listener
         replicaSyncUpManager.waitDisconnectionCompleted(partitionName);
-      } catch (InterruptedException e) {
-        logger.error("Disconnection was interrupted on partition {}", partitionName);
-        throw new StateTransitionException("Disconnection failed or was interrupted", DisconnectionFailure);
-      } catch (StateTransitionException e) {
-        logger.error("Disconnection didn't complete ", e);
-        throw e;
       }
+      // 3. take actions in storage manager (stop the store and update instanceConfig)
+      PartitionStateChangeListener storageManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+      if (storageManagerListener != null) {
+        storageManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
+      }
+    } catch (InterruptedException e) {
+      logger.error("Disconnection was interrupted on partition {}", partitionName);
+      participantMetrics.errorStateCount.addAndGet(1);
+      throw new StateTransitionException("Disconnection failed or was interrupted", DisconnectionFailure);
+    } catch (StateTransitionException e) {
+      logger.error("Exception occurred during Inactive-To-Offline transition ", e);
+      participantMetrics.errorStateCount.addAndGet(1);
+      throw e;
+    } finally {
+      participantMetrics.inactiveCount.addAndGet(-1);
     }
-    // 3. take actions in storage manager (stop the store and update instanceConfig)
-    PartitionStateChangeListener storageManagerListener =
-        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
-    if (storageManagerListener != null) {
-      storageManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
-    }
+    participantMetrics.offlineCount.addAndGet(1);
   }
 
   @Override
@@ -575,8 +631,33 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     // failure and remove old replica from replication/stats manager)
     PartitionStateChangeListener storageManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
-    if (storageManagerListener != null) {
-      storageManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+    try {
+      if (storageManagerListener != null) {
+        storageManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+      }
+    } catch (Exception e) {
+      participantMetrics.errorStateCount.addAndGet(1);
+      throw e;
+    } finally {
+      participantMetrics.offlineCount.addAndGet(-1);
     }
+    participantMetrics.partitionDroppedCount.inc();
+  }
+
+  @Override
+  public void onPartitionBecomeDroppedFromError(String partitionName) {
+    participantMetrics.errorStateCount.addAndGet(-1);
+    participantMetrics.partitionDroppedCount.inc();
+  }
+
+  @Override
+  public void onPartitionBecomeOfflineFromError(String partitionName) {
+    participantMetrics.errorStateCount.addAndGet(-1);
+    participantMetrics.offlineCount.addAndGet(1);
+  }
+
+  @Override
+  public void onReset(String partitionName) {
+    participantMetrics.offlineCount.addAndGet(1);
   }
 }

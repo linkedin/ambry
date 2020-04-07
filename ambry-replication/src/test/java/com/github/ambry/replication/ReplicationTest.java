@@ -409,6 +409,7 @@ public class ReplicationTest {
   public void replicaFromOfflineToBootstrapTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
     MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
     DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);
     Pair<StorageManager, ReplicationManager> managers =
@@ -461,6 +462,7 @@ public class ReplicationTest {
   public void replicaFromBootstrapToStandbyTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
     MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
@@ -511,6 +513,7 @@ public class ReplicationTest {
   public void replicaFromStandbyToInactiveTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
     MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
@@ -595,6 +598,7 @@ public class ReplicationTest {
   public void replicaFromStandbyToLeaderTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
     MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
@@ -614,6 +618,7 @@ public class ReplicationTest {
   public void replicaFromLeaderToStandbyTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
     MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
@@ -631,6 +636,7 @@ public class ReplicationTest {
   public void replicaFromInactiveToOfflineTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
     MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
@@ -726,6 +732,7 @@ public class ReplicationTest {
   public void replicaResumeDecommissionTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
     MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
     // choose a replica on local node and put decommission file into its dir
     ReplicaId localReplica = clusterMap.getReplicaIds(clusterMap.getDataNodeIds().get(0)).get(0);
