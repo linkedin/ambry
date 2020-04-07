@@ -482,6 +482,10 @@ public class ReplicaThread implements Runnable {
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
               replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
                   exchangeMetadataResponse.localLagFromRemoteInBytes);
+              replicationMetrics.updateCatchupPointMetricForRemoteReplica(
+                  remoteReplicaInfo, replicaMetadataResponseInfo.getMessageInfoList()
+                      .get(replicaMetadataResponseInfo.getMessageInfoList().size() - 1)
+                      .getOperationTimeMs());
             } catch (Exception e) {
               if (e instanceof StoreException
                   && ((StoreException) e).getErrorCode() == StoreErrorCodes.Store_Not_Started) {

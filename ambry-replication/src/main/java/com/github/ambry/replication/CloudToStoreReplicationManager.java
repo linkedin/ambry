@@ -196,6 +196,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
       replicationMetrics.addLagMetricForPartition(partitionId);
     }
+    replicationMetrics.addCatchUpPointMetricForPartition(partitionId);
   }
 
   /**
@@ -231,6 +232,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     }
     PartitionId partitionId = localReplica.getPartitionId();
     stopPartitionReplication(partitionId);
+    replicationMetrics.removeLagMetricForPartition(partitionId);
+    replicationMetrics.removeCatchupPointMetricForPartition(partitionId);
     logger.info("Cloud Partition {} removed from {}", partitionId, dataNodeId);
   }
 
