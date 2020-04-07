@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.replication.FindToken;
@@ -61,21 +62,26 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
   @Override
   public FindResult getNextEntriesAndUpdatedToken(FindToken curfindToken, long maxTotalSizeOfEntries,
       String partitionPath) throws DocumentClientException {
-    CosmosUpdateTimeFindToken findToken = (CosmosUpdateTimeFindToken) curfindToken;
-    SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
-        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, queryBatchSize),
-            new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime())));
-    List<CloudBlobMetadata> queryResults =
-        cosmosDataAccessor.queryMetadata(partitionPath, entriesSinceQuery, azureMetrics.findSinceQueryTime);
-    if (queryResults.isEmpty()) {
-      return new FindResult(new ArrayList<>(), findToken);
+    Timer.Context operationTimer = azureMetrics.replicationFeedQueryTime.time();
+    try {
+      CosmosUpdateTimeFindToken findToken = (CosmosUpdateTimeFindToken) curfindToken;
+      SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
+          new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, queryBatchSize),
+              new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime())));
+      List<CloudBlobMetadata> queryResults =
+          cosmosDataAccessor.queryMetadata(partitionPath, entriesSinceQuery, azureMetrics.findSinceQueryTime);
+      if (queryResults.isEmpty()) {
+        return new FindResult(new ArrayList<>(), findToken);
+      }
+      if (queryResults.get(0).getLastUpdateTime() == findToken.getLastUpdateTime()) {
+        filterOutLastReadBlobs(queryResults, findToken.getLastUpdateTimeReadBlobIds(), findToken.getLastUpdateTime());
+      }
+      List<CloudBlobMetadata> cappedResults =
+          CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
+      return new FindResult(cappedResults, CosmosUpdateTimeFindToken.getUpdatedToken(findToken, cappedResults));
+    } finally {
+      operationTimer.stop();
     }
-    if (queryResults.get(0).getLastUpdateTime() == findToken.getLastUpdateTime()) {
-      filterOutLastReadBlobs(queryResults, findToken.getLastUpdateTimeReadBlobIds(), findToken.getLastUpdateTime());
-    }
-    List<CloudBlobMetadata> cappedResults =
-        CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
-    return new FindResult(cappedResults, CosmosUpdateTimeFindToken.getUpdatedToken(findToken, cappedResults));
   }
 
   @Override
