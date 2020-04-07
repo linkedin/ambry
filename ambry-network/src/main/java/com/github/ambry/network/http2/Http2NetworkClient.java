@@ -99,12 +99,16 @@ public class Http2NetworkClient implements NetworkClient {
                     http2ClientMetrics.http2StreamWriteAndFlushErrorCount.inc();
                     logger.warn("Stream writeAndFlush fail: {}", future.cause());
                   }
+                  // release related bytebuf
+                  requestInfo.getRequest().release();
                 }
               });
               requestInfo.setStreamSendTime(System.currentTimeMillis());
             } else {
               logger.error("Couldn't acquire stream channel to {}:{} . Cause: {}.", requestInfo.getHost(),
                   requestInfo.getPort().getPort(), future.cause());
+              // release related bytebuf
+              requestInfo.getRequest().release();
               readyResponseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
             }
           });
