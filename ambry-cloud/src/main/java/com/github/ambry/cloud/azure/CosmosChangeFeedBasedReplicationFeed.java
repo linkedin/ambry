@@ -172,11 +172,11 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
       if (changeFeedCacheEntry == null || !isCacheValid(partitionPath, cosmosChangeFeedFindToken,
           changeFeedCacheEntry)) {
         // the cache may not be valid. So we cannot use session id
+        azureMetrics.changeFeedCacheMissRate.mark();
+        cacheHit = false;
         changeFeedCacheEntry = getNextChangeFeed(partitionPath, cosmosChangeFeedFindToken.getStartContinuationToken());
         // invalidate the previous token's cache
         changeFeedCache.remove(cosmosChangeFeedFindToken.getCacheSessionId());
-        azureMetrics.changeFeedCacheMissRate.mark();
-        cacheHit = false;
         index = 0;
       }
 
