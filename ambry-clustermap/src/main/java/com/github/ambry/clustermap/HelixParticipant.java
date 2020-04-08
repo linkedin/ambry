@@ -525,6 +525,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       if (cloudToStoreReplicationListener != null) {
         cloudToStoreReplicationListener.onPartitionBecomeLeaderFromStandby(partitionName);
       }
+      PartitionStateChangeListener replicationManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+      if (replicationManagerListener != null) {
+        replicationManagerListener.onPartitionBecomeLeaderFromStandby(partitionName);
+      }
     } catch (Exception e) {
       participantMetrics.errorStateCount.addAndGet(1);
       throw e;
@@ -541,6 +546,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
           partitionStateChangeListeners.get(StateModelListenerType.CloudToStoreReplicationManagerListener);
       if (cloudToStoreReplicationListener != null) {
         cloudToStoreReplicationListener.onPartitionBecomeStandbyFromLeader(partitionName);
+      }
+      PartitionStateChangeListener replicationManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+      if (replicationManagerListener != null) {
+        replicationManagerListener.onPartitionBecomeStandbyFromLeader(partitionName);
       }
     } catch (Exception e) {
       participantMetrics.errorStateCount.addAndGet(1);
