@@ -530,7 +530,6 @@ class BlobStoreCompactor {
   private boolean copyDataByIndexSegment(LogSegment logSegmentToCopy, IndexSegment indexSegmentToCopy,
       FileSpan duplicateSearchSpan) throws IOException, StoreException {
     logger.debug("Copying data from {}", indexSegmentToCopy.getFile());
-    List<IndexEntry> allIndexEntries = new ArrayList<>();
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
     boolean checkAlreadyCopied =
@@ -672,43 +671,101 @@ class BlobStoreCompactor {
           throw new IllegalStateException(
               "Undelete's final state can't be put for key" + currentKey + " in store " + dataDir);
         }
+        if (currentFinalState.isUndelete() && currentFinalState.getLifeVersion() == currentValue.getLifeVersion()) {
+          validEntries.add(entry);
+        }
       } else if (currentValue.isDelete()) {
         if (currentFinalState.isPut()) {
           throw new IllegalStateException(
               "Delete's final state can't be put for key" + currentKey + " in store " + dataDir);
         }
-        if (currentFinalState.isDelete()) {
-          if (currentFinalState.getLifeVersion() == currentValue.getLifeVersion()) {
-            validEntries.add(entry);
-          }
+        if (currentFinalState.isDelete() && currentFinalState.getLifeVersion() == currentValue.getLifeVersion()) {
+          validEntries.add(entry);
         }
-      } else {
-        if (currentValue.isTTLUpdate() && currentFinalState.isPut()) {
+      } else if (currentValue.isTtlUpdate()) {
+        if (currentFinalState.isPut()) {
+          // If isPut returns true, when the final state doesn't carry ttl_update flag, this is wrong
           throw new IllegalStateException(
               "TtlUpdate's final state can't be put for key" + currentKey + " in store " + dataDir);
         }
+        // This is a TTL_UPDATE record, then the blob can't be expired. Only check if it's deleted or not.
+        if (currentFinalState.isDelete()) {
+          if (currentFinalState.getOperationTimeInMs() >= compactionLog.getCompactionDetails().getReferenceTimeMs()) {
+            validEntries.add(entry);
+          } else if (isTtlUpdateEntryValidWhenFinalStateIsDeleteAndRetention(currentKey,
+              indexSegment.getStartOffset())) {
+            validEntries.add(entry);
+          }
+        } else {
+          validEntries.add(entry);
+        }
+      } else {
         if (srcIndex.isExpired(currentFinalState)) {
+          logger.trace("{} in index segment with start offset {} in {} is not valid because it is an expired PUT",
+              entry, indexSegment.getStartOffset(), storeId);
           continue;
         }
-        IndexEntry newEntry = new IndexEntry(currentKey,
-            new IndexValue(currentValue.getSize(), currentValue.getOffset(), currentValue.getFlags(),
-                currentValue.getExpiresAtMs(), currentValue.getOriginalMessageOffset(),
-                currentValue.getOperationTimeInMs(), currentValue.getAccountId(), currentValue.getContainerId(),
-                currentFinalState.getLifeVersion()), entry.getCrc());
         if (currentFinalState.isPut()) {
           if (currentFinalState.getLifeVersion() != currentValue.getLifeVersion()) {
             throw new IllegalStateException(
                 "Two different lifeVersions  for puts key" + currentKey + " in store " + dataDir);
           }
-          validEntries.add(newEntry);
-        } else if (currentFinalState.isDelete() && srcIndex.reachRetention(currentFinalState)) {
-          validEntries.add(newEntry);
+          validEntries.add(entry);
+        } else if (currentFinalState.isDelete()) {
+          if (currentFinalState.getOperationTimeInMs() >= compactionLog.getCompactionDetails().getReferenceTimeMs()) {
+            validEntries.add(entry);
+          } else {
+            logger.trace("{} in index segment with start offset {} in {} is not valid because it is a deleted PUT",
+                entry, indexSegment.getStartOffset(), storeId);
+          }
         } else {
-          validEntries.add(newEntry);
+          validEntries.add(entry);
         }
       }
     }
     return validEntries;
+  }
+
+  /**
+   * Determines whether a TTL update entry is valid. A TTL update entry is valid as long as the associated PUT record
+   * is still present in the store (the validity of the PUT record does not matter - only its presence/absence does).
+   * @param key the {@link StoreKey} being examined
+   * @param indexSegmentStartOffset the start offset of the {@link IndexSegment} that the TTL update record is in
+   * @return {@code true} if the TTL update entry is valid
+   * @throws StoreException if there are problems reading the index
+   */
+  private boolean isTtlUpdateEntryValidWhenFinalStateIsDeleteAndRetention(StoreKey key, Offset indexSegmentStartOffset)
+      throws StoreException {
+    boolean valid = false;
+    //  A TTL update entry is "valid" if the corresponding PUT is still alive
+    // The PUT entry, if it exists, must be "before" this TTL update entry.
+    FileSpan srcSearchSpan = new FileSpan(srcIndex.getStartOffset(), indexSegmentStartOffset);
+    IndexValue srcValue = srcIndex.findKey(key, srcSearchSpan, EnumSet.of(PersistentIndex.IndexEntryType.PUT));
+    if (srcValue == null) {
+      // PUT is not in the source - it might be compacted
+      logger.trace("TTL update of {} in segment with start offset {} in {} is not valid the corresponding PUT entry "
+          + "does not exist anymore", key, indexSegmentStartOffset, storeId);
+    } else {
+      // Exists in the source. This can happen either because
+      // 1. The FileSpan to which srcValue belongs is not under compaction (so there is no reason for tgt to have it)
+      // 2. srcValue will be compacted in this cycle (because it has been determined that the PUT is not valid. Since
+      // the PUT is going away in this cycle, it is safe to remove the TTL update also)
+      //
+      // For condition one, we will keep TTL_UPDATE, for condition 2, we will remove it.
+      if (isOffsetUnderCompaction(srcValue.getOffset())) {
+        logger.trace(
+            "TTL update of {} in segment with start offset {} in {} is not valid because the corresponding PUT entry"
+                + " {} will be compacted in this cycle ({} are being compacted in this cycle)", key,
+            indexSegmentStartOffset, storeId, srcValue,
+            compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction());
+      } else {
+        // PUT entry exists in both the src and tgt,
+        // OR PUT entry exists in source and the offset of the source entry is not under compaction in this cycle
+        // therefore this TTL update entry cannot be compacted
+        valid = true;
+      }
+    }
+    return valid;
   }
 
   /**
@@ -736,23 +793,43 @@ class BlobStoreCompactor {
   private boolean alreadyExists(PersistentIndex idx, FileSpan searchSpan, StoreKey key, IndexValue srcValue)
       throws StoreException {
     IndexValue value = idx.findKey(key, searchSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
-    boolean exists = false;
+    if (value == null) {
+      return false;
+    }
     if (value.getLifeVersion() > srcValue.getLifeVersion()) {
-      exists = true;
+      // If the IndexValue in the previous index has a lifeVersion higher than source value, then this
+      // must be a duplicate.
+      return true;
+    } else if (value.getLifeVersion() < srcValue.getLifeVersion()) {
+      // If the IndexValue in the previous index has a lifeVersion lower than source value, then this
+      // is not a duplicate.
+      return false;
     } else {
-      if (value != null) {
-        if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-          exists = true;
-        } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
-          // if srcValue is not a delete, it is a duplicate.
-          exists = !srcValue.isFlagSet(IndexValue.Flags.Delete_Index);
-        } else {
-          // value is a PUT without a TTL update or a DELETE
-          exists = !srcValue.isFlagSet(IndexValue.Flags.Delete_Index) && !srcValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index);
+      // When the lifeVersions are the same, the order of the record are **FIX** as
+      // P/U -> T -> D
+      if (value.isDelete()) {
+        return true;
+      } else if (value.isTtlUpdate()) {
+        // if srcValue is not a delete, it is a duplicate.
+        return !srcValue.isDelete();
+      } else if (value.isUndelete()) {
+        if (srcValue.isPut()) {
+          throw new IllegalStateException(
+              "An Undelete[" + value + "] and a Put[" + srcValue + "] can't be at the same lifeVersion at store "
+                  + dataDir);
         }
+        // value is a UNDELETE without a TTL update or a DELETE
+        return !srcValue.isDelete() && !srcValue.isTtlUpdate();
+      } else {
+        if (srcValue.isUndelete()) {
+          throw new IllegalStateException(
+              "A Put[" + value + "] and an Undelete[" + srcValue + "] can't be at the same lifeVersion at store "
+                  + dataDir);
+        }
+        // value is a PUT without a TTL update or a DELETE
+        return !srcValue.isDelete() && !srcValue.isTtlUpdate();
       }
     }
-    return exists;
   }
 
   /**
@@ -852,9 +929,10 @@ class BlobStoreCompactor {
             }
             FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
             IndexValue valueFromTgtIdx = tgtIndex.findKey(srcIndexEntry.getKey());
-            if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+            if (srcValue.isDelete()) {
               if (valueFromTgtIdx != null) {
-                tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan, srcValue.getOperationTimeInMs());
+                tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan, null, srcValue.getOperationTimeInMs(),
+                    srcValue.getLifeVersion());
               } else {
                 IndexValue tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getFlags(),
                     srcValue.getExpiresAtMs(), srcValue.getOperationTimeInMs(), srcValue.getAccountId(),
@@ -863,9 +941,22 @@ class BlobStoreCompactor {
                 tgtValue.clearOriginalMessageOffset();
                 tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
               }
-            } else if (srcValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+            } else if (srcValue.isUndelete()) {
               if (valueFromTgtIdx != null) {
-                tgtIndex.markAsPermanent(srcIndexEntry.getKey(), fileSpan, srcValue.getOperationTimeInMs());
+                tgtIndex.markAsUndeleted(srcIndexEntry.getKey(), fileSpan, srcValue.getOperationTimeInMs(),
+                    srcValue.getLifeVersion());
+              } else {
+                IndexValue tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getFlags(),
+                    srcValue.getExpiresAtMs(), srcValue.getOperationTimeInMs(), srcValue.getAccountId(),
+                    srcValue.getContainerId(), srcValue.getLifeVersion());
+                tgtValue.setFlag(IndexValue.Flags.Undelete_Index);
+                tgtValue.clearOriginalMessageOffset();
+                tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
+              }
+            } else if (srcValue.isTtlUpdate()) {
+              if (valueFromTgtIdx != null) {
+                tgtIndex.markAsPermanent(srcIndexEntry.getKey(), fileSpan, null, srcValue.getOperationTimeInMs(),
+                    srcValue.getLifeVersion());
               } else {
                 IndexValue tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getFlags(),
                     srcValue.getExpiresAtMs(), srcValue.getOperationTimeInMs(), srcValue.getAccountId(),

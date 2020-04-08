@@ -183,7 +183,7 @@ public class BlobStoreCompactorTest {
     // compaction range contains segments in the wrong order
     details = new CompactionDetails(state.time.milliseconds() + Time.MsPerSec,
         Arrays.asList(secondLogSegmentName, firstLogSegmentName));
-    ensureArgumentFailure(details, "Should have failed because compaction range contains offsets still in the journal");
+    ensureArgumentFailure(details, "Should have failed because segments are in the wrong order");
 
     // compaction contains segments that don't exist
     details = new CompactionDetails(0,
@@ -1053,7 +1053,7 @@ public class BlobStoreCompactorTest {
     if (state != null) {
       state.destroy();
     }
-    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true, false);
+    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true, true);
   }
 
   /**
@@ -1133,11 +1133,10 @@ public class BlobStoreCompactorTest {
    * @param countRequired the number of log segments required.
    * @param expiryTimes the expiry times desired. A fraction of the blobs written will contain those expiry times in
    *                    round robin order
-   * @throws IOException
    * @throws StoreException
    */
   private void writeDataToMeetRequiredSegmentCount(long countRequired, List<Long> expiryTimes)
-      throws IOException, StoreException {
+      throws StoreException {
     long capacityLimit = countRequired * state.log.getSegmentCapacity();
     int blobsPut = 0;
     int expiredBlobsCount = 0;
@@ -1282,7 +1281,7 @@ public class BlobStoreCompactorTest {
     long savedBytesReported = metricRegistry.getCounters()
         .get(MetricRegistry.name(BlobStoreCompactor.class, "CompactionBytesReclaimedCount"))
         .getCount();
-    // have to reload log since the instance changed by the old compactor compactor is different.
+    // have to reload log since the instance changed by the old compactor is different.
     state.reloadLog(false);
     // use the "real" log, index and disk IO schedulers this time.
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
@@ -1349,6 +1348,8 @@ public class BlobStoreCompactorTest {
   private void checkVitals(boolean changeExpected, long originalLogSegmentSizeSum, long originalLogSegmentCount,
       long originalIndexSegmentCount) {
     if (changeExpected) {
+      // Compaction remove some of the records in the log, so the end of the compacted log should be less than the
+      // original one.
       assertTrue("Compaction did not cause in change in sum of log segment sizes",
           originalLogSegmentSizeSum > getSumOfLogSegmentEndOffsets());
     } else {
@@ -1512,9 +1513,9 @@ public class BlobStoreCompactorTest {
           assertEquals(id + " failed with error code " + e.getErrorCode(), expectedErrorCode, e.getErrorCode());
         }
       } else if (state.deletedKeys.contains(id)) {
-        boolean shouldBeAbsent =
-            state.getExpectedValue(id, true) == null || (idsInCompactedLogSegments.contains(id) && state.isDeletedAt(id,
-                deleteReferenceTimeMs));
+        IndexValue latestValue = state.getExpectedValue(id, false);
+        boolean shouldBeAbsent = state.getExpectedValue(id, true) == null || (idsInCompactedLogSegments.contains(id)
+            && latestValue.getOperationTimeInMs() < deleteReferenceTimeMs);
         try {
           state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class));
           fail("Should not be able to GET " + id);
@@ -1610,9 +1611,11 @@ public class BlobStoreCompactorTest {
     for (IndexEntry entry : indexEntries) {
       MockId id = (MockId) entry.getKey();
       PersistentIndex.IndexEntryType entryType = PersistentIndex.IndexEntryType.PUT;
-      if (entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+      if (entry.getValue().isDelete()) {
         entryType = PersistentIndex.IndexEntryType.DELETE;
-      } else if (entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+      } else if (entry.getValue().isUndelete()) {
+        entryType = PersistentIndex.IndexEntryType.UNDELETE;
+      } else if (entry.getValue().isTtlUpdate()) {
         entryType = PersistentIndex.IndexEntryType.TTL_UPDATE;
       }
       logEntriesInOrder.add(new LogEntry(id, entryType, entry.getValue().getSize()));

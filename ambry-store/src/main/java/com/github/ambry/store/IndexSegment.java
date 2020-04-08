@@ -526,7 +526,7 @@ class IndexSegment {
    * @throws StoreException
    */
   void addEntry(IndexEntry entry, Offset fileEndOffset) throws StoreException {
-    rwLock.readLock().lock();
+    rwLock.writeLock().lock();
     try {
       if (sealed.get()) {
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " cannot add to a sealed index ",
@@ -575,7 +575,7 @@ class IndexSegment {
             indexFile.getAbsolutePath(), persistedEntrySize, key.getLongForm(), startOffset);
       }
     } finally {
-      rwLock.readLock().unlock();
+      rwLock.writeLock().unlock();
     }
   }
 
@@ -603,7 +603,7 @@ class IndexSegment {
     rwLock.readLock().lock();
     try {
       if (sealed.get()) {
-        throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed");
+        throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed: " + getStartOffset());
       }
       return numberOfItems.get();
     } finally {
@@ -971,8 +971,7 @@ class IndexSegment {
           logger.info(
               "IndexSegment : {} ignoring index entry outside the log end offset that was not synced logEndOffset "
                   + "{} key {} entryOffset {} entrySize {} entryDeleteState {}", indexFile.getAbsolutePath(),
-              logEndOffset, key, blobValue.getOffset(), blobValue.getSize(),
-              blobValue.isDelete());
+              logEndOffset, key, blobValue.getOffset(), blobValue.getSize(), blobValue.isDelete());
         }
       }
       endOffset.set(new Offset(startOffset.getName(), maxEndOffset));
@@ -1194,6 +1193,8 @@ class IndexSegment {
         return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
       } catch (Exception e) {
         logger.error("Failed to read index entry at " + currentIdx, e);
+      } finally {
+        currentIdx++;
       }
       return null;
     }

@@ -1103,14 +1103,6 @@ class PersistentIndex {
     return value.getExpiresAtMs() != Utils.Infinite_Time && time.milliseconds() > value.getExpiresAtMs();
   }
 
-  boolean reachRetention(IndexValue value) {
-    if (value.isDelete()) {
-      throw new IllegalStateException("Value should be delete when verify if it reaches retention date");
-    }
-    return value.getOperationTimeInMs() + TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays)
-        < time.milliseconds();
-  }
-
   /**
    * Returns the list of keys that are not found in the index from the given input keys. This also checks
    * keys that are marked for deletion and those that have an expired ttl

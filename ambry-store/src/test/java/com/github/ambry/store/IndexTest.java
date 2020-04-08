@@ -433,9 +433,6 @@ public class IndexTest {
     //Get deleted key that hasn't been TTLUpdated
     StoreKey targetKey = null;
     for (StoreKey key : state.deletedKeys) {
-      if (state.deletedAndShouldBeCompactedKeys.contains(key)) {
-        continue;
-      }
       IndexValue value = state.index.findKey(key);
       if (!value.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !state.index.isExpired(value)
           && state.getExpectedValue((MockId) key, true) != null) {
@@ -532,14 +529,6 @@ public class IndexTest {
       fail("Should have failed because ID provided for udneleted is already undeleted.");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Undeleted, e.getErrorCode());
-    }
-
-    try {
-      MockId id = (MockId) state.deletedAndShouldBeCompactedKeys.iterator().next();
-      state.index.markAsUndeleted(id, fileSpan, state.time.milliseconds());
-      fail("Should have failed because ID " + id + " for udneleted is deleted permanently.");
-    } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted_Permanently, e.getErrorCode());
     }
   }
 
