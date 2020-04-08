@@ -111,14 +111,6 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     }
 
     /**
-     * Return the creation time stamp.
-     * @return  {@code creationTimestamp}
-     */
-    public long getCreationTimestamp() {
-      return creationTimestamp;
-    }
-
-    /**
      * Check if is this entry is expired. The condition for expiry uses {@code creationTimestamp}. This is good enough as
      * this means that the cached set of fetches entries hasn't been consumed within the invalidation duration.
      * @return true if this entry is expired. false otherwise.
@@ -164,7 +156,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
    * @param partitionPath Partition for which change feed entries have to be returned.
    * @return {@link FindResult} instance that contains updated {@link FindToken} object which can act as a bookmark for
    * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
-   * @throws {@link DocumentClientException}.
+   * @throws DocumentClientException if any cosmos query encounters error.
    */
   @Override
   public FindResult getNextEntriesAndUpdatedToken(FindToken curFindToken, long maxTotalSizeOfEntries,
@@ -199,7 +191,10 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
             changeFeedCacheEntry.getCacheSessionId());
         fetchedEntries = changeFeedCacheEntry.getFetchedEntries();
         if (fetchedEntries.isEmpty()) {
-          // this means that there are no new changes
+          // This means that either there are no new changes, or change feed made progress in continuation token
+          // but no change feed results were returned (probably because this cosmos shard's change feed has other
+          // other partition feed too, and they were filtered out). In either case its appropriate to break here and
+          // return updated token. The source replication logic will retry replication with updated token.
           break;
         }
         index = 0;
@@ -260,9 +255,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     String newRequestContinuationToken =
         cosmosDataAccessor.queryChangeFeed(startRequestContinuationToken, defaultCacheSize, changeFeedEntries,
             partitionId, azureMetrics.changeFeedQueryTime);
-    ChangeFeedCacheEntry changeFeedCacheEntry =
-        new ChangeFeedCacheEntry(startRequestContinuationToken, newRequestContinuationToken, cacheSessionId,
-            changeFeedEntries, partitionId);
-    return changeFeedCacheEntry;
+    return new ChangeFeedCacheEntry(startRequestContinuationToken, newRequestContinuationToken, cacheSessionId,
+        changeFeedEntries, partitionId);
   }
 }
