@@ -16,8 +16,10 @@ package com.github.ambry.clustermap;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -53,10 +55,16 @@ public class MockPartitionId implements PartitionId {
     this.partitionClass = partitionClass;
     this.replicaIds = new ArrayList<>(dataNodes.size());
     replicaAndState = new HashMap<>();
+    Set<String> dataCenters = new HashSet<>();
     for (MockDataNodeId dataNode : dataNodes) {
       MockReplicaId replicaId = new MockReplicaId(dataNode.getPort(), this, dataNode, mountPathIndexToUse);
       replicaIds.add(replicaId);
-      replicaAndState.put(replicaId, ReplicaState.STANDBY);
+      if (dataCenters.contains(dataNode.getDatacenterName())) {
+        replicaAndState.put(replicaId, ReplicaState.STANDBY);
+      } else {
+        dataCenters.add(dataNode.getDatacenterName());
+        replicaAndState.put(replicaId, ReplicaState.LEADER);
+      }
     }
     for (ReplicaId replicaId : replicaIds) {
       ((MockReplicaId) replicaId).setPeerReplicas(replicaIds);

@@ -105,6 +105,7 @@ import org.mockito.Mockito;
 import static com.github.ambry.clustermap.MockClusterMap.*;
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
+import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -590,8 +591,10 @@ public class ReplicationTest {
   }
 
   /**
-   * Test state transition in replication manager from STANDBY to LEADER (right now it is no-op in prod code, but we
-   * keep test here for future use)
+   * Test state transition in replication manager from STANDBY to LEADER
+   * Test setup: When creating partitions, make sure that there is exactly one replica in LEADER STATE on each data center
+   * Test condition: When a partition on current node moves from standby to leader, verify that in-memory map storing
+   * partition to peer leader replicas is updated correctly
    * @throws Exception
    */
   @Test
@@ -605,13 +608,25 @@ public class ReplicationTest {
     StorageManager storageManager = managers.getFirst();
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
     PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    String currentDataCenter =
+        storageManager.getReplica(existingPartition.toString()).getDataNodeId().getDatacenterName();
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(existingPartition.toPathString());
+    List<ReplicaId> peerLeaderReplicasInReplicationManager =
+        replicationManager.getPeerLeaderReplicasByPartition().get(existingPartition.toPathString());
+    List<ReplicaId> peerLeaderReplicasInClusterMap = existingPartition.getReplicaIdsByState(ReplicaState.LEADER, null)
+        .stream()
+        .filter(r -> !r.getDataNodeId().getDatacenterName().equals(currentDataCenter))
+        .collect(Collectors.toList());
+    assertThat("Mismatch in list of leader peer replicas stored by partition in replication manager and cluster map",
+        peerLeaderReplicasInReplicationManager, is(peerLeaderReplicasInClusterMap));
     storageManager.shutdown();
   }
 
   /**
-   * Test state transition in replication manager from LEADER to STANDBY (right now it is no-op in prod code, but we
-   * keep test here for future use)
+   * Test state transition in replication manager from LEADER to STANDBY
+   * Test setup: When creating partitions, make sure that there is exactly one replica in LEADER STATE on each data center
+   * Test condition: When a partition on the current node moves from leader to standby, verify that in-memory map storing
+   * partition to peer leader replicas is updated correctly
    * @throws Exception
    */
   @Test
@@ -625,7 +640,15 @@ public class ReplicationTest {
     StorageManager storageManager = managers.getFirst();
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
     PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    mockHelixParticipant.onPartitionBecomeLeaderFromStandby(existingPartition.toPathString());
+    Map<String, List<ReplicaId>> peerLeaderReplicasByPartition = replicationManager.getPeerLeaderReplicasByPartition();
+    assertTrue(
+        "Partition is not present in the map of partition to peer leader replicas after it moved from standby to leader",
+        peerLeaderReplicasByPartition.containsKey(existingPartition.toPathString()));
     mockHelixParticipant.onPartitionBecomeStandbyFromLeader(existingPartition.toPathString());
+    assertTrue(
+        "Partition is still present in the map of partition to peer leader replicas after it moved from leader to standby",
+        !peerLeaderReplicasByPartition.containsKey(existingPartition.toPathString()));
     storageManager.shutdown();
   }
 
