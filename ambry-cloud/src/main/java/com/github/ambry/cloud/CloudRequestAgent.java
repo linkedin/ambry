@@ -22,14 +22,14 @@ import org.slf4j.LoggerFactory;
 /**
  * Utility class to issue cloud requests with retries and throttling.
  */
-class CloudRequestAgent {
+public class CloudRequestAgent {
 
   private static final Logger logger = LoggerFactory.getLogger(CloudRequestAgent.class);
   private final int defaultRetryDelay;
   private final int maxAttempts;
   private final VcrMetrics vcrMetrics;
 
-  CloudRequestAgent(CloudConfig cloudConfig, VcrMetrics vcrMetrics) {
+  public CloudRequestAgent(CloudConfig cloudConfig, VcrMetrics vcrMetrics) {
     defaultRetryDelay = cloudConfig.cloudDefaultRetryDelay;
     maxAttempts = cloudConfig.cloudMaxAttempts;
     this.vcrMetrics = vcrMetrics;
@@ -41,9 +41,9 @@ class CloudRequestAgent {
    * @param actionName the name of the action.
    * @param partitionPath the partition acted on.
    * @return the return value of the action.
-   * @throws CloudStorageException
+   * @throws CloudStorageException if any error encountered in executing action.
    */
-  <T> T doWithRetries(Callable<T> action, String actionName, String partitionPath) throws CloudStorageException {
+  public <T> T doWithRetries(Callable<T> action, String actionName, String partitionPath) throws CloudStorageException {
     int attempts = 0;
     while (attempts < maxAttempts) {
       try {
@@ -54,7 +54,8 @@ class CloudRequestAgent {
       }
     }
     // Line should never be reached
-    throw new CloudStorageException(actionName + " failed partition " + partitionPath + " made " + attempts + " attempts");
+    throw new CloudStorageException(
+        actionName + " failed partition " + partitionPath + " made " + attempts + " attempts");
   }
 
   /**
@@ -63,14 +64,16 @@ class CloudRequestAgent {
    * @param actionName the name of the action that threw the exception.
    * @param partitionPath the partition acted on.
    * @param attempts the number of attempts made so far.
-   * @throws CloudStorageException
+   * @throws CloudStorageException in case of any error.
    */
-  private void throwOrDelay(Throwable e, String actionName, String partitionPath, int attempts) throws CloudStorageException {
+  private void throwOrDelay(Throwable e, String actionName, String partitionPath, int attempts)
+      throws CloudStorageException {
     if (e instanceof CloudStorageException) {
       CloudStorageException cse = (CloudStorageException) e;
       if (cse.isRetryable() && attempts < maxAttempts) {
         long delay = (cse.getRetryDelayMs() > 0) ? cse.getRetryDelayMs() : defaultRetryDelay;
-        logger.warn("{} failed partition {} attempt {}, retrying after {} ms.", actionName, partitionPath, attempts, delay);
+        logger.warn("{} failed partition {} attempt {}, retrying after {} ms.", actionName, partitionPath, attempts,
+            delay);
         try {
           Thread.sleep(delay);
         } catch (InterruptedException iex) {

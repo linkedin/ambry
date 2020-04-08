@@ -16,8 +16,10 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.FindResult;
+import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -31,7 +33,6 @@ import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -70,6 +71,7 @@ public class AzureIntegrationTest {
   private final String cryptoAgentFactory = CloudConfig.DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS;
   private VerifiableProperties verifiableProperties;
   private AzureCloudDestination azureDest;
+  private CloudRequestAgent cloudRequestAgent;
   private int blobSize = 1024;
   private byte dataCenterId = 66;
   private short accountId = 101;
@@ -98,6 +100,8 @@ public class AzureIntegrationTest {
     testProperties.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
     verifiableProperties = new VerifiableProperties(testProperties);
     azureDest = getAzureDestination(verifiableProperties);
+    cloudRequestAgent =
+        new CloudRequestAgent(new CloudConfig(verifiableProperties), new VcrMetrics(new MetricRegistry()));
   }
 
   /**
@@ -131,27 +135,31 @@ public class AzureIntegrationTest {
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, now, now + 60000, blobSize, CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext,
             cryptoAgentFactory, blobSize);
-    assertTrue("Expected upload to return true",
-        azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+    assertTrue("Expected upload to return true", uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, inputStream));
 
     // Get blob should return the same data
     verifyDownloadMatches(blobId, uploadData);
 
     // Try to upload same blob again
     assertFalse("Expected duplicate upload to return false",
-        azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, new ByteArrayInputStream(uploadData)));
+        uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, new ByteArrayInputStream(uploadData)));
     long expirationTime = Utils.Infinite_Time;
-    assertTrue("Expected update to return true", azureDest.updateBlobExpiration(blobId, expirationTime));
-    CloudBlobMetadata metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
+    assertTrue("Expected update to return true", updateBlobExpirationWithRetry(blobId, expirationTime));
+    CloudBlobMetadata metadata =
+        getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).
+            get(blobId.getID());
     assertEquals(expirationTime, metadata.getExpirationTime());
     long deletionTime = now + 10000;
-    assertTrue("Expected deletion to return true", azureDest.deleteBlob(blobId, deletionTime));
-    metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
+    assertTrue("Expected deletion to return true",
+        cloudRequestAgent.doWithRetries(() -> azureDest.deleteBlob(blobId, deletionTime), "DeleteBlob",
+            partitionId.toPathString()));
+    metadata =
+        getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).get(blobId.getID());
     assertEquals(deletionTime, metadata.getDeletionTime());
 
-    azureDest.purgeBlobs(Collections.singletonList(metadata));
+    purgeBlobsWithRetry(Collections.singletonList(metadata), partitionId.toPathString());
     assertTrue("Expected empty set after purge",
-        azureDest.getBlobMetadata(Collections.singletonList(blobId)).isEmpty());
+        getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).isEmpty());
 
     // Get blob should fail after purge
     try {
@@ -184,11 +192,11 @@ public class AzureIntegrationTest {
       CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       assertTrue("Expected upload to return true",
-          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, new ByteArrayInputStream(randomBytes)));
+          uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, new ByteArrayInputStream(randomBytes)));
     }
     long uploadTime = System.currentTimeMillis() - creationTime;
     logger.info("Uploaded {} blobs in {} ms", numBlobs, uploadTime);
-    Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(blobIdList);
+    Map<String, CloudBlobMetadata> metadataMap = getBlobMetadataWithRetry(blobIdList, partitionId.toPathString());
     assertEquals("Unexpected size of returned metadata map", numBlobs, metadataMap.size());
     for (BlobId blobId : blobIdList) {
       CloudBlobMetadata metadata = metadataMap.get(blobId.getID());
@@ -221,7 +229,6 @@ public class AzureIntegrationTest {
     // Upload blobs in various lifecycle states
     long now = System.currentTimeMillis();
     long creationTime = now - TimeUnit.DAYS.toMillis(7);
-    int expectedDeadBlobs = 0;
     for (int j = 0; j < bucketCount; j++) {
       Thread.sleep(20);
       logger.info("Uploading bucket {}", j);
@@ -229,53 +236,47 @@ public class AzureIntegrationTest {
       BlobId blobId =
           new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
               BlobDataType.DATACHUNK);
-      InputStream inputStream = getBlobInputStream(blobSize);
       CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
+      InputStream inputStream = getBlobInputStream(blobSize);
       assertTrue("Expected upload to return true",
-          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+          uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, inputStream));
 
       // Blob deleted before retention cutoff (should match)
       long timeOfDeath = now - TimeUnit.DAYS.toMillis(retentionPeriodDays + 1);
       blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
           BlobDataType.DATACHUNK);
-      inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       cloudBlobMetadata.setDeletionTime(timeOfDeath);
       assertTrue("Expected upload to return true",
-          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
-      expectedDeadBlobs++;
+          uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, getBlobInputStream(blobSize)));
 
       // Blob expired before retention cutoff (should match)
       blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
           BlobDataType.DATACHUNK);
-      inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata =
           new CloudBlobMetadata(blobId, creationTime, timeOfDeath, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE);
       assertTrue("Expected upload to return true",
-          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
-      expectedDeadBlobs++;
+          uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, getBlobInputStream(blobSize)));
 
       // Blob deleted after retention cutoff
       timeOfDeath = now - TimeUnit.HOURS.toMillis(1);
       blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
           BlobDataType.DATACHUNK);
-      inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       cloudBlobMetadata.setDeletionTime(timeOfDeath);
       assertTrue("Expected upload to return true",
-          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+          uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, getBlobInputStream(blobSize)));
 
       // Blob expired after retention cutoff
       blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
           BlobDataType.DATACHUNK);
-      inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata =
           new CloudBlobMetadata(blobId, creationTime, timeOfDeath, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE);
       assertTrue("Expected upload to return true",
-          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+          uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, getBlobInputStream(blobSize)));
     }
 
     // run getDeadBlobs query, should return 2 * bucketCount
@@ -283,20 +284,28 @@ public class AzureIntegrationTest {
     long queryStartTime = 1;
     long queryEndTime = now - TimeUnit.DAYS.toMillis(retentionPeriodDays);
     logger.info("First call to getDeletedBlobs");
-    List<CloudBlobMetadata> deadBlobs = azureDest.getDeletedBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount);
+    List<CloudBlobMetadata> deadBlobs = cloudRequestAgent.doWithRetries(
+        () -> azureDest.getDeletedBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount), "GetDeadBlobs",
+        partitionPath);
     assertEquals("Unexpected number returned", bucketCount, deadBlobs.size());
     logger.info("First call to purge");
-    assertEquals("Not all blobs were purged", bucketCount, azureDest.purgeBlobs(deadBlobs));
+    assertEquals("Not all blobs were purged", bucketCount, purgeBlobsWithRetry(deadBlobs, partitionPath));
     logger.info("Second call to getDeletedBlobs");
-    deadBlobs = azureDest.getDeletedBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount);
+    deadBlobs = cloudRequestAgent.doWithRetries(
+        () -> azureDest.getDeletedBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount), "GetDeadBlobs",
+        partitionPath);
     assertEquals("Expected zero", 0, deadBlobs.size());
     logger.info("First call to getExpiredBlobs");
-    deadBlobs = azureDest.getExpiredBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount);
+    deadBlobs = cloudRequestAgent.doWithRetries(
+        () -> azureDest.getExpiredBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount), "GetDeadBlobs",
+        partitionPath);
     assertEquals("Unexpected number returned", bucketCount, deadBlobs.size());
     logger.info("First call to purge");
-    assertEquals("Not all blobs were purged", bucketCount, azureDest.purgeBlobs(deadBlobs));
+    assertEquals("Not all blobs were purged", bucketCount, purgeBlobsWithRetry(deadBlobs, partitionPath));
     logger.info("Second call to getExpiredBlobs");
-    deadBlobs = azureDest.getExpiredBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount);
+    deadBlobs = cloudRequestAgent.doWithRetries(
+        () -> azureDest.getExpiredBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount), "GetDeadBlobs",
+        partitionPath);
     assertEquals("Expected zero", 0, deadBlobs.size());
     cleanup();
   }
@@ -310,17 +319,8 @@ public class AzureIntegrationTest {
   }
 
   /**
-   * Test findEntriesSince with CosmosChangeFeedFindTokenFactory.
-   */
-  @Ignore // Fails with wrong number of queries.
-  @Test
-  public void testFindEntriesSinceByChangeFeed() throws Exception {
-    testFindEntriesSince("com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory");
-  }
-
-  /**
    * Test findEntriesSince with specified cloud token factory.
-   * @#param replicationCloudTokenFactory the factory to use.
+   * @param replicationCloudTokenFactory the factory to use.
    * @throws Exception on error
    */
   private void testFindEntriesSince(String replicationCloudTokenFactory) throws Exception {
@@ -343,7 +343,7 @@ public class AzureIntegrationTest {
     int blobCount = 90;
     int chunkSize = 1000;
     int maxTotalSize = 20000;
-    int expectedNumQueries = (blobCount * chunkSize) / maxTotalSize + 2;
+    int expectedNumQueries = (blobCount * chunkSize) / maxTotalSize + 1;
 
     long now = System.currentTimeMillis();
     long startTime = now - TimeUnit.DAYS.toMillis(7);
@@ -356,7 +356,7 @@ public class AzureIntegrationTest {
           CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, chunkSize);
       cloudBlobMetadata.setUploadTime(startTime + j * 1000);
       assertTrue("Expected upload to return true",
-          azureDest.uploadBlob(blobId, chunkSize, cloudBlobMetadata, inputStream));
+          uploadBlobWithRetry(blobId, chunkSize, cloudBlobMetadata, inputStream));
     }
 
     FindToken findToken = findTokenFactory.getNewFindToken();
@@ -365,11 +365,13 @@ public class AzureIntegrationTest {
     int numQueries = 0;
     int totalBlobsReturned = 0;
     do {
-      findResult = azureDest.findEntriesSince(partitionPath, findToken, maxTotalSize);
+      findResult = findEntriesSinceWithRetry(partitionPath, findToken, maxTotalSize);
       findToken = findResult.getUpdatedFindToken();
-      numQueries++;
+      if (!findResult.getMetadataList().isEmpty()) {
+        numQueries++;
+      }
       totalBlobsReturned += findResult.getMetadataList().size();
-    } while (!findResult.getMetadataList().isEmpty());
+    } while (!noMoreFindSinceEntries(findResult, findToken));
 
     assertEquals("Wrong number of queries", expectedNumQueries, numQueries);
     assertEquals("Wrong number of blobs", blobCount, totalBlobsReturned);
@@ -391,7 +393,7 @@ public class AzureIntegrationTest {
     long now = System.currentTimeMillis();
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, now, now + 60000, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE);
-    azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream);
+    uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, inputStream);
     // Different instance to simulate concurrent update in separate session.
     AzureCloudDestination concurrentUpdater = getAzureDestination(verifiableProperties);
     String fieldName = CloudBlobMetadata.FIELD_UPLOAD_TIME;
@@ -421,15 +423,6 @@ public class AzureIntegrationTest {
     }
   }
 
-  private void cleanup() throws Exception {
-    String partitionPath = String.valueOf(testPartition);
-    Timer dummyTimer = new Timer();
-    List<CloudBlobMetadata> allBlobsInPartition =
-        azureDest.getCosmosDataAccessor().queryMetadata(partitionPath, "SELECT * FROM c", dummyTimer);
-    int numPurged = azureDest.purgeBlobs(allBlobsInPartition);
-    logger.info("Cleaned up {} blobs", numPurged);
-  }
-
   /** Persist tokens to Azure, then read them back and verify they match. */
   @Test
   public void testTokens() throws Exception {
@@ -453,15 +446,125 @@ public class AzureIntegrationTest {
   }
 
   /**
+   * Test findEntriesSince with CosmosChangeFeedFindTokenFactory.
+   */
+  @Test
+  public void testFindEntriesSinceByChangeFeed() throws Exception {
+    testFindEntriesSince("com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory");
+  }
+
+  /** Cleanup the test setup */
+  private void cleanup() throws Exception {
+    String partitionPath = String.valueOf(testPartition);
+    Timer dummyTimer = new Timer();
+    List<CloudBlobMetadata> allBlobsInPartition = cloudRequestAgent.doWithRetries(
+        () -> azureDest.getCosmosDataAccessor().queryMetadata(partitionPath, "SELECT * FROM c", dummyTimer),
+        "QueryMetadata", partitionPath);
+    int numPurged = purgeBlobsWithRetry(allBlobsInPartition, partitionPath);
+    logger.info("Cleaned up {} blobs", numPurged);
+  }
+
+  /**
    * test download matches the blob previously uploaded.
    * @param blobId id of the blob to download
    * @param uploadedData data uploaded to the blob
-   * @throws CloudStorageException
+   * @throws CloudStorageException if download encounters an error.
    */
   private void verifyDownloadMatches(BlobId blobId, byte[] uploadedData) throws CloudStorageException {
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream(blobSize);
-    azureDest.downloadBlob(blobId, outputStream);
+    cloudRequestAgent.doWithRetries(() -> {
+      azureDest.downloadBlob(blobId, outputStream);
+      return null;
+    }, "DownloadBlob", String.valueOf(testPartition));
     assertArrayEquals("Downloaded data should match the uploaded data", uploadedData, outputStream.toByteArray());
+  }
+
+  /**
+   * Upload blob. Retry with appropriate throttling if required.
+   * Upload blob to the cloud destination.
+   * @param blobId id of the Ambry blob
+   * @param blobSize the length of the input stream, if known, -1 if unknown.
+   * @param cloudBlobMetadata the {@link CloudBlobMetadata} for the blob being uploaded.
+   * @param inputStream the stream to read blob data
+   * @return flag indicating whether the blob was uploaded
+   * @throws CloudStorageException if the upload encounters an error.
+   */
+  private boolean uploadBlobWithRetry(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
+      InputStream inputStream) throws CloudStorageException {
+    return cloudRequestAgent.doWithRetries(() -> azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream),
+        "UploadBlob", blobId.getPartition().toPathString());
+  }
+
+  /**
+   * Get metadata for blobs. Retry with appropriate throttling if required.
+   * @param blobIds list of blob Ids to query.
+   * @param partitionPath partition of the blobs.
+   * @return a {@link Map} of blobId strings to {@link CloudBlobMetadata}.  If metadata for a blob could not be found,
+   * it will not be included in the returned map.
+   * @throws CloudStorageException if query encounters an error.
+   */
+  private Map<String, CloudBlobMetadata> getBlobMetadataWithRetry(List<BlobId> blobIds, String partitionPath)
+      throws CloudStorageException {
+    return cloudRequestAgent.doWithRetries(() -> azureDest.getBlobMetadata(blobIds), "GetBlobMetadata", partitionPath);
+  }
+
+  /**
+   * Purge blobs. Retry with appropriate throttling if required.
+   * @param blobMetadataList the list of {@link CloudBlobMetadata} referencing the blobs to purge.
+   * @param partitionPath partition of the blobs.
+   * @return the number of blobs successfully purged.
+   * @throws CloudStorageException if purge encounters an error.
+   */
+  private int purgeBlobsWithRetry(List<CloudBlobMetadata> blobMetadataList, String partitionPath)
+      throws CloudStorageException {
+    return cloudRequestAgent.doWithRetries(() -> azureDest.purgeBlobs(blobMetadataList), "PurgeBlobs", partitionPath);
+  }
+
+  /**
+   * Update blob expiration. Retry with appropriate throttling if required.
+   * @param blobId id of the Ambry blob.
+   * @param expirationTime the new expiration time.
+   * @return flag indicating whether the blob was updated
+   * @throws CloudStorageException if update encounters an error.
+   */
+  private boolean updateBlobExpirationWithRetry(BlobId blobId, long expirationTime) throws CloudStorageException {
+    return cloudRequestAgent.doWithRetries(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
+        "UpdateBlobExpiration", blobId.getPartition().toPathString());
+  }
+
+  /**
+   * do FindEntriesSince with retry.
+   * @param partitionPath the partition to query.
+   * @param findToken the {@link FindToken} specifying the boundary for the query.
+   * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
+   * @return {@link FindResult} instance that contains updated {@link FindToken} object which can act as a bookmark for
+   * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries referencing the blobs returned by the query.
+   * @throws CloudStorageException if there is an error in findEntriesSince call.
+   */
+  private FindResult findEntriesSinceWithRetry(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries)
+      throws CloudStorageException {
+    return cloudRequestAgent.doWithRetries(
+        () -> azureDest.findEntriesSince(partitionPath, findToken, maxTotalSizeOfEntries), "FindEntriesSince",
+        partitionPath);
+  }
+
+  /**
+   * Check if there are no more find since entries to return, with criteria for check determined by {@link FindToken}.
+   * @param findResult {@link FindResult} object used to determine if there are no more find since entries
+   *                                     for {@link CosmosUpdateTimeBasedReplicationFeed}.
+   * @param findToken {@link FindToken} used to determine if there are no more find since entries
+   *                                   for {@link CosmosChangeFeedBasedReplicationFeed}
+   * @return true if there are no more find since entries. false otherwise.
+   */
+  private boolean noMoreFindSinceEntries(FindResult findResult, FindToken findToken) {
+    if (findToken instanceof CosmosChangeFeedFindToken) {
+      CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) findToken;
+      return cosmosChangeFeedFindToken.getStartContinuationToken()
+          .equals(cosmosChangeFeedFindToken.getEndContinuationToken());
+    } else if (findToken instanceof CosmosUpdateTimeFindToken) {
+      return findResult.getMetadataList().isEmpty();
+    }
+    throw new IllegalArgumentException("Unknown find token type");
   }
 
   /**
