@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -93,7 +94,7 @@ import org.slf4j.LoggerFactory;
  *  }
  *}
  */
-class HelixBootstrapUpgradeUtil {
+public class HelixBootstrapUpgradeUtil {
   private final StaticClusterManager staticClusterMap;
   private final String zkLayoutPath;
   private final String stateModelDef;
@@ -109,8 +110,8 @@ class HelixBootstrapUpgradeUtil {
   private final int maxPartitionsInOneResource;
   private final boolean dryRun;
   private final boolean forceRemove;
-  private final boolean resourceChangeOnly;
   private final String clusterName;
+  private final HelixAdminOperation helixAdminOperation;
   private boolean expectMoreInHelixDuringValidate = false;
   private ConcurrentHashMap<String, Set<String>> instancesNotForceRemovedByDc = new ConcurrentHashMap<>();
   private ConcurrentHashMap<String, Set<String>> partitionsNotForceRemovedByDc = new ConcurrentHashMap<>();
@@ -120,10 +121,16 @@ class HelixBootstrapUpgradeUtil {
   private final AtomicInteger resourcesAdded = new AtomicInteger();
   private final AtomicInteger resourcesUpdated = new AtomicInteger();
   private final AtomicInteger resourcesDropped = new AtomicInteger();
+  private final AtomicInteger partitionsDisabled = new AtomicInteger();
   private Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress;
   private HelixClusterManager validatingHelixClusterManager;
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
   private static final String ALL = "all";
+
+  enum HelixAdminOperation {
+    // todo add ResetPartition into this admin operation set.
+    BootstrapCluster, ValidateCluster, UpdateIdealState, DisablePartition
+  }
 
   /**
    * Parse the dc string argument and return a map of dc -> DcZkInfo for every datacenter that is enabled.
@@ -171,22 +178,23 @@ class HelixBootstrapUpgradeUtil {
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @param startValidatingClusterManager whether validation should include starting up a {@link HelixClusterManager}
    * @param stateModelDef the state model definition to use in Ambry cluster.
-   * @param resourceChangeOnly if {@code true}, update IdealState only without changing InstanceConfig. This is used in
-   *                           the context of move replica. The InstanceConfig will be updated by nodes themselves.
+   * @param helixAdminOperation the {@link HelixAdminOperation} to perform on resources (partitions). This is used in
+   *                           the context of move replica. So it only updates IdealState without touching anything else.
+   *                           InstanceConfig will be updated by nodes themselves.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
       HelixAdminFactory helixAdminFactory, boolean startValidatingClusterManager, String stateModelDef,
-      boolean resourceChangeOnly) throws Exception {
+      HelixAdminOperation helixAdminOperation) throws Exception {
     if (dryRun) {
       info("==== This is a dry run ====");
       info("No changes will be made to the information in Helix (except adding the cluster if it does not exist.");
     }
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-            maxPartitionsInOneResource, dryRun, forceRemove, helixAdminFactory, stateModelDef, resourceChangeOnly);
+            maxPartitionsInOneResource, dryRun, forceRemove, helixAdminFactory, stateModelDef, helixAdminOperation);
     if (dryRun) {
       info("To drop the cluster, run this tool again with the '--dropCluster {}' argument.",
           clusterMapToHelixMapper.clusterName);
@@ -219,7 +227,7 @@ class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             maxPartitionsInOneResource, false, false, helixAdminFactory, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF,
-            false);
+            null);
     for (String adminType : adminTypes) {
       generateAdminInfosAndUpload(clusterMapToHelixMapper, adminType);
     }
@@ -233,7 +241,7 @@ class HelixBootstrapUpgradeUtil {
       String stateModelDef) throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-            maxPartitionsInOneResource, false, false, helixAdminFactory, stateModelDef, false);
+            maxPartitionsInOneResource, false, false, helixAdminFactory, stateModelDef, null);
     clusterMapToHelixMapper.addStateModelDef();
     info("State model def is successfully added");
   }
@@ -257,7 +265,7 @@ class HelixBootstrapUpgradeUtil {
       throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs, 0,
-            false, false, helixAdminFactory, stateModelDef, false);
+            false, false, helixAdminFactory, stateModelDef, HelixAdminOperation.ValidateCluster);
     clusterMapToHelixMapper.validateAndClose();
     clusterMapToHelixMapper.logSummary();
   }
@@ -320,20 +328,20 @@ class HelixBootstrapUpgradeUtil {
    * @param forceRemove if true, removes any hosts from Helix not present in the json files.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @param stateModelDef the state model definition to use in Ambry cluster.
-   * @param resourceChangeOnly if {@code true}, update IdealState only without changing InstanceConfig. This is used in
-   *                           the context of move replica. The InstanceConfig will be updated by nodes themselves.
+   * @param helixAdminOperation the {@link HelixAdminOperation} to perform.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   private HelixBootstrapUpgradeUtil(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
-      HelixAdminFactory helixAdminFactory, String stateModelDef, boolean resourceChangeOnly) throws Exception {
+      HelixAdminFactory helixAdminFactory, String stateModelDef, HelixAdminOperation helixAdminOperation)
+      throws Exception {
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     this.dryRun = dryRun;
     this.forceRemove = forceRemove;
     this.zkLayoutPath = zkLayoutPath;
     this.stateModelDef = stateModelDef;
-    this.resourceChangeOnly = resourceChangeOnly;
+    this.helixAdminOperation = helixAdminOperation;
     dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     Properties props = new Properties();
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
@@ -585,8 +593,8 @@ class HelixBootstrapUpgradeUtil {
         info("\n========Skipping datacenter: {}==========\n", dc.getName());
       }
     }
-    // make sure bootstrap has completed in all dcs
-    bootstrapLatch.await(10, TimeUnit.MINUTES);
+    // make sure bootstrap has completed in all dcs (can extend timeout if amount of resources in each datacenter is really large)
+    bootstrapLatch.await(15, TimeUnit.MINUTES);
   }
 
   /**
@@ -615,17 +623,20 @@ class HelixBootstrapUpgradeUtil {
           createInstanceConfigFromStaticInfo(dcToInstanceNameToDataNodeId.get(dcName).get(instanceName),
               partitionsToInstancesInDc, instanceToDiskReplicasMap, instanceConfigInHelix);
       if (!instanceConfigFromStatic.getRecord().equals(instanceConfigInHelix.getRecord())) {
-        info(
-            "[{}] Instance {} already present in Helix, but InstanceConfig has changed, updating. Remaining instances: {}",
-            dcName.toUpperCase(), instanceName, --totalInstances);
-        // Continuing on the note above, if there is indeed a change, we must make a call on whether RO/RW, replica
-        // availability and so on should be updated at all (if not, instanceConfigFromStatic should be replaced with
-        // the appropriate instanceConfig that is constructed with the correct values from both).
-        // If this operation only requires resource(IdealState) change, we skip updating existing InstanceConfigs.
-        if (!dryRun && !resourceChangeOnly) {
-          dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfigFromStatic);
+        if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
+          if (!dryRun) {
+            info(
+                "[{}] Instance {} already present in Helix, but InstanceConfig has changed, updating. Remaining instances: {}",
+                dcName.toUpperCase(), instanceName, --totalInstances);
+            // Continuing on the note above, if there is indeed a change, we must make a call on whether RO/RW, replica
+            // availability and so on should be updated at all (if not, instanceConfigFromStatic should be replaced with
+            // the appropriate instanceConfig that is constructed with the correct values from both).
+            // For now, only bootstrapping cluster is allowed to directly change InstanceConfig
+            dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfigFromStatic);
+          }
+          // for dryRun, we update counter but don't really change the InstanceConfig in Helix
+          instancesUpdated.getAndIncrement();
         }
-        instancesUpdated.getAndIncrement();
       } else {
         info("[{}] Instance {} already present in Helix, with same InstanceConfig, skipping. Remaining instances: {}",
             dcName.toUpperCase(), instanceName, --totalInstances);
@@ -638,23 +649,27 @@ class HelixBootstrapUpgradeUtil {
               partitionsToInstancesInDc, instanceToDiskReplicasMap, null);
       info("[{}] Instance {} is new, adding to Helix. Remaining instances: {}", dcName.toUpperCase(), instanceName,
           --totalInstances);
-      // Note: for now, if we want to move replica to new instance (not present in cluster yet), we must take two steps:
-      // step1: add new instance (empty) to cluster, which is a regular bootstrap; step2: make resource(IdealState Change)
+      // Note: for now, if we want to move replica to new instance (not present in cluster yet), we should take two steps:
+      // step1: add new instance (empty) to cluster, which is a regular bootstrap; step2: add replica to IdealState
       // Helix controller will notify new instance to perform replica addition.
-      if (!dryRun && !resourceChangeOnly) {
-        dcAdmin.addInstance(clusterName, instanceConfigFromStatic);
+      if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
+        if (!dryRun) {
+          dcAdmin.addInstance(clusterName, instanceConfigFromStatic);
+        }
+        instancesAdded.getAndIncrement();
       }
-      instancesAdded.getAndIncrement();
     }
 
     for (String instanceName : instancesInHelix) {
       if (forceRemove) {
         info("[{}] Instance {} is in Helix, but not in static. Forcefully removing. Remaining instances: {}",
             dcName.toUpperCase(), instanceName, --totalInstances);
-        if (!dryRun && !resourceChangeOnly) {
-          dcAdmin.dropInstance(clusterName, new InstanceConfig(instanceName));
+        if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
+          if (!dryRun) {
+            dcAdmin.dropInstance(clusterName, new InstanceConfig(instanceName));
+          }
+          instancesDropped.getAndIncrement();
         }
-        instancesDropped.getAndIncrement();
       } else {
         info(
             "[{}] Instance {} is in Helix, but not in static. Ignoring for now (use --forceRemove to forcefully remove). "
@@ -707,7 +722,10 @@ class HelixBootstrapUpgradeUtil {
                 .add(partitionName);
           }
         } else if (!instanceSetInStatic.equals(instanceSetInHelix)) {
-          // @formatter:off
+          // we change the IdealState only when the operation is meant to bootstrap cluster or indeed update IdealState
+          if (EnumSet.of(HelixAdminOperation.UpdateIdealState, HelixAdminOperation.BootstrapCluster)
+              .contains(helixAdminOperation)) {
+            // @formatter:off
           info(
               "[{}] Different instance sets for partition {} under resource {}. "
                   + "Updating Helix using static. "
@@ -715,14 +733,34 @@ class HelixBootstrapUpgradeUtil {
               dcName.toUpperCase(), partitionName, resourceName,
               String.join(",", instanceSetInHelix), String.join(",", instanceSetInStatic));
           // @formatter:on
-          ArrayList<String> newInstances = new ArrayList<>(instanceSetInStatic);
-          Collections.shuffle(newInstances);
-          resourceIs.setPreferenceList(partitionName, newInstances);
-          // Existing resources may not have ANY_LIVEINSTANCE set as the numReplicas (which allows for different
-          // replication for different partitions under the same resource). So set it here (We use the name() method and
-          // not the toString() method for the enum as that is what Helix uses).
-          resourceIs.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.name());
-          resourceModified = true;
+            ArrayList<String> newInstances = new ArrayList<>(instanceSetInStatic);
+            Collections.shuffle(newInstances);
+            resourceIs.setPreferenceList(partitionName, newInstances);
+            // Existing resources may not have ANY_LIVEINSTANCE set as the numReplicas (which allows for different
+            // replication for different partitions under the same resource). So set it here (We use the name() method and
+            // not the toString() method for the enum as that is what Helix uses).
+            resourceIs.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.name());
+            resourceModified = true;
+          } else if (helixAdminOperation == HelixAdminOperation.DisablePartition) {
+            // if this is DisablePartition operation, we don't modify IdealState and only make InstanceConfig to disable
+            // certain partition on specific node.
+            // 1. extract difference between Helix and Static instance sets. Determine which replica is removed
+            instanceSetInHelix.removeAll(instanceSetInStatic);
+            // 2. disable removed replica on certain node.
+            for (String instanceInHelixOnly : instanceSetInHelix) {
+              info("Disabling partition {} under resource {} on node {}", partitionName, resourceName,
+                  instanceInHelixOnly);
+              InstanceConfig instanceConfig = dcAdmin.getInstanceConfig(clusterName, instanceInHelixOnly);
+              instanceConfig.setInstanceEnabledForPartition(resourceName, partitionName, false);
+              dcAdmin.setInstanceConfig(clusterName, instanceInHelixOnly, instanceConfig);
+              // note that disabling partition also updates InstanceConfig of certain node which hosts the partition.
+              instancesUpdated.getAndIncrement();
+              partitionsDisabled.getAndIncrement();
+            }
+            // Disabling partition won't remove certain replica from IdealState. So replicas of this partition in Helix
+            // will be more than that in static clustermap.
+            expectMoreInHelixDuringValidate = true;
+          }
         }
       }
       // update state model def if necessary
@@ -1005,7 +1043,7 @@ class HelixBootstrapUpgradeUtil {
         }
       }, false).start();
     }
-    verificationLatch.await(5, TimeUnit.MINUTES);
+    verificationLatch.await(10, TimeUnit.MINUTES);
     ensureOrThrow(errorCount.get() == 0, "Error occurred when verifying equivalency with static cluster map");
     info("Successfully verified equivalency of static cluster: " + clusterNameInStaticClusterMap
         + " with the corresponding cluster in Helix: " + clusterName);
@@ -1049,9 +1087,10 @@ class HelixBootstrapUpgradeUtil {
             "[" + dcName.toUpperCase() + "] Capacity mismatch for instance " + instanceName + " disk "
                 + disk.getMountPath());
 
-        // We skip checking replicaInfo if this operation only updates resource(IdealState) without changing InstanceConfig
-        // Replica infos are expected to be different on certain nodes.
-        if (!resourceChangeOnly) {
+        // We check replicaInfo only when this is a Bootstrap or Validate operation. For other operations, replica infos
+        // are expected to be different on certain nodes.
+        if (EnumSet.of(HelixAdminOperation.BootstrapCluster, HelixAdminOperation.ValidateCluster)
+            .contains(helixAdminOperation)) {
           Set<String> replicasInClusterMap = new HashSet<>();
           Map<String, ReplicaId> replicaList = mountPathToReplicas.get(disk.getMountPath());
           if (replicaList != null) {
@@ -1083,9 +1122,16 @@ class HelixBootstrapUpgradeUtil {
                   + replicasInClusterMap);
         }
       }
-      ensureOrThrow(diskInfos.isEmpty(),
-          "[" + dcName.toUpperCase() + "] Instance " + instanceName + " has extra disks in Helix: " + diskInfos);
-
+      for (Map.Entry<String, Map<String, String>> entry : diskInfos.entrySet()) {
+        String mountPath = entry.getKey();
+        if (!mountPath.startsWith("/mnt")) {
+          logger.warn("[{}] Instance {} has unidentifiable mount path in Helix: {}", dcName.toUpperCase(), instanceName,
+              mountPath);
+        } else {
+          throw new AssertionError(
+              "[" + dcName.toUpperCase() + "] Instance " + instanceName + " has extra disk in Helix: " + entry);
+        }
+      }
       ensureOrThrow(!dataNode.hasSSLPort() || (dataNode.getSSLPort() == Integer.parseInt(
           instanceConfig.getRecord().getSimpleField(ClusterMapUtils.SSL_PORT_STR))),
           "[" + dcName.toUpperCase() + "] SSL Port mismatch for instance " + instanceName);
@@ -1107,7 +1153,8 @@ class HelixBootstrapUpgradeUtil {
           "[" + dcName.toUpperCase() + "] Xid mismatch for instance " + instanceName);
     }
     if (expectMoreInHelixDuringValidate) {
-      ensureOrThrow(allInstancesInHelix.equals(instancesNotForceRemovedByDc.get(dc.getName())),
+      ensureOrThrow(
+          allInstancesInHelix.equals(instancesNotForceRemovedByDc.getOrDefault(dc.getName(), new HashSet<>())),
           "[" + dcName.toUpperCase() + "] Additional instances in Helix: " + allInstancesInHelix
               + " not what is expected " + instancesNotForceRemovedByDc.get(dc.getName()));
       info("[{}] *** Helix may have more instances than in the given clustermap as removals were not forced.",
@@ -1235,7 +1282,7 @@ class HelixBootstrapUpgradeUtil {
    */
   private void logSummary() {
     if (instancesUpdated.get() + instancesAdded.get() + instancesDropped.get() + resourcesUpdated.get() + resourcesAdded
-        .get() + resourcesDropped.get() > 0) {
+        .get() + resourcesDropped.get() + partitionsDisabled.get() > 0) {
       if (!dryRun) {
         info("========Cluster in Helix was updated, summary:========");
       } else {
@@ -1247,6 +1294,7 @@ class HelixBootstrapUpgradeUtil {
       info("New resources added: {}", resourcesAdded.get());
       info("Existing resources updated: {}", resourcesUpdated.get());
       info("Existing resources dropped: {}", resourcesDropped.get());
+      info("Partitions disabled: {}", partitionsDisabled.get());
     } else {
       info("========No updates were done to the cluster in Helix========");
     }

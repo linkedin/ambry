@@ -332,9 +332,8 @@ public class TestUtils {
      * @param dcName the name of the datacenter.
      * @param id the id of the datacenter.
      * @param port the port at which this Zk server should run on localhost.
-     * @throws IOException
      */
-    public ZkInfo(String tempDirPath, String dcName, byte id, int port, boolean start) throws IOException {
+    public ZkInfo(String tempDirPath, String dcName, byte id, int port, boolean start) {
       this.dcName = dcName;
       this.id = id;
       this.port = port;
