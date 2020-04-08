@@ -80,6 +80,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final Map<PartitionId, PartitionInfo> partitionToPartitionInfo;
   protected final Map<String, Set<PartitionInfo>> mountPathToPartitionInfos;
+  protected final Map<String, List<ReplicaId>> peerLeaderReplicasByPartition;
   protected final ReplicaSyncUpManager replicaSyncUpManager;
   protected final StoreManager storeManager;
   protected ReplicaTokenPersistor persistor = null;
@@ -119,6 +120,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.transformerClassName = transformerClassName;
     this.storeManager = storeManager;
     replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
+    peerLeaderReplicasByPartition = new ConcurrentHashMap<>();
   }
 
   /**
