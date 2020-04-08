@@ -38,6 +38,9 @@ import java.util.stream.Collectors;
  */
 public class ReplicationMetrics {
 
+  private final static String MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE = "Partition-%s-maxLagFromPeersInBytes";
+  private final static String CATCH_POINT_FROM_CLOUD_METRIC_NAME_TEMPLATE = "Partition-%s-catchupPointFromCloud";
+  
   public final Map<String, Meter> interColoReplicationBytesRate = new HashMap<String, Meter>();
   public final Meter intraColoReplicationBytesRate;
   public final Map<String, Meter> plainTextInterColoReplicationBytesRate = new HashMap<String, Meter>();
@@ -429,7 +432,7 @@ public class ReplicationMetrics {
       // Set up metrics if and only if no mapping for this partition before.
       Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
       registry.register(MetricRegistry.name(ReplicaThread.class,
-          "Partition-" + partitionId.toPathString() + "-maxLagFromPeersInBytes"), replicaLag);
+          String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())), replicaLag);
     }
   }
 
@@ -443,7 +446,7 @@ public class ReplicationMetrics {
       // Set up metrics if and only if no mapping for this partition before.
       Gauge<Long> catchUpPoint = () -> cloudReplicaCatchUpPoint.get(partitionId);
       registry.register(MetricRegistry.name(ReplicaThread.class,
-          "Partition-" + partitionId.toPathString() + "-catchupPointFromCloud"), catchUpPoint);
+          String.format(CATCH_POINT_FROM_CLOUD_METRIC_NAME_TEMPLATE, partitionId.toPathString())), catchUpPoint);
     }
   }
 
@@ -454,7 +457,7 @@ public class ReplicationMetrics {
   public void removeLagMetricForPartition(PartitionId partitionId) {
     if (partitionLags.containsKey(partitionId)) {
       registry.remove(MetricRegistry.name(ReplicaThread.class,
-          "Partition-" + partitionId.toPathString() + "-maxLagFromPeersInBytes"));
+          String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())));
     }
   }
 
@@ -465,7 +468,7 @@ public class ReplicationMetrics {
   public void removeCatchupPointMetricForPartition(PartitionId partitionId) {
     if (cloudReplicaCatchUpPoint.containsKey(partitionId)) {
       registry.remove(MetricRegistry.name(ReplicaThread.class,
-          "Partition-" + partitionId.toPathString() + "-catchupPointFromCloud"));
+          String.format(CATCH_POINT_FROM_CLOUD_METRIC_NAME_TEMPLATE, partitionId.toPathString())));
     }
   }
 
