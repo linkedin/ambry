@@ -367,8 +367,14 @@ class CuratedLogIndexState {
     //check if we should reject this delete entry
     if (value == null && !allKeys.containsKey(idToDelete) && info == null) {
       throw new IllegalArgumentException(idToDelete + " does not exist in the index");
-    } else if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-      throw new IllegalArgumentException(idToDelete + " is already deleted");
+    } else if (value != null && value.isDelete()) {
+      if (lifeVersion == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
+        throw new IllegalArgumentException(idToDelete + " is already deleted");
+      } else {
+        if (value.getLifeVersion() >= lifeVersion) {
+          throw new IllegalArgumentException(idToDelete + " lifeVersion Conflict");
+        }
+      }
     }
 
     //add delete to the log
@@ -421,7 +427,7 @@ class CuratedLogIndexState {
     if (forceDeleteEntry) {
       index.addToIndex(new IndexEntry(idToDelete, newValue), fileSpan);
     } else {
-      index.markAsDeleted(idToDelete, fileSpan, newValue.getOperationTimeInMs());
+      index.markAsDeleted(idToDelete, fileSpan, null, newValue.getOperationTimeInMs(), newValue.getLifeVersion());
     }
     markAsDeleted(idToDelete);
     logOrder.put(startOffset, new Pair<>(idToDelete, new LogEntry(dataWritten, newValue)));

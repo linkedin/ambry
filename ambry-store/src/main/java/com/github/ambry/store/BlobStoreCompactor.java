@@ -671,7 +671,8 @@ class BlobStoreCompactor {
           throw new IllegalStateException(
               "Undelete's final state can't be put for key" + currentKey + " in store " + dataDir);
         }
-        if (currentFinalState.isUndelete() && currentFinalState.getLifeVersion() == currentValue.getLifeVersion()) {
+        if (currentFinalState.isUndelete() && currentFinalState.getLifeVersion() == currentValue.getLifeVersion()
+            && !srcIndex.isExpired(currentValue)) {
           validEntries.add(entry);
         }
       } else if (currentValue.isDelete()) {
