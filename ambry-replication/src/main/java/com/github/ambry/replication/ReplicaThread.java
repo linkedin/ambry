@@ -318,7 +318,7 @@ public class ReplicaThread implements Runnable {
       long replicationStartTimeInMs = SystemTime.getInstance().milliseconds();
       long startTimeInMs = replicationStartTimeInMs;
 
-      List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<RemoteReplicaInfo>();
+      List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
         ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
         boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
@@ -438,9 +438,9 @@ public class ReplicaThread implements Runnable {
               ExchangeMetadataResponse exchangeMetadataResponse =
                   new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken(),
                       replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
-              exchangeMetadataResponseList.add(exchangeMetadataResponse);
               // update replication lag in ReplicaSyncUpManager
-              if (replicaSyncUpManager != null) {
+              if (replicaSyncUpManager != null
+                  && remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.BOOTSTRAP) {
                 ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
                 ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
                 boolean updated = replicaSyncUpManager.updateLagBetweenReplicas(localReplica, remoteReplica,
@@ -454,6 +454,10 @@ public class ReplicaThread implements Runnable {
                   remoteReplicaInfo.getLocalStore().completeBootstrap();
                 }
               }
+              // add exchangeMetadataResponse to list after replicaSyncUpManager(if not null) has completed update. The
+              // reason is replicaSyncUpManager may also throw exception and add one more exchangeMetadataResponse
+              // associated with same RemoteReplicaInfo.
+              exchangeMetadataResponseList.add(exchangeMetadataResponse);
               replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
                   exchangeMetadataResponse.localLagFromRemoteInBytes);
             } catch (Exception e) {
@@ -816,11 +820,10 @@ public class ReplicaThread implements Runnable {
    * @param replicasToReplicatePerNode The list of remote replicas for the remote node
    * @param remoteNode The remote node from which replication needs to happen
    * @throws IOException
-   * @throws MessageFormatException
    */
   private void writeMessagesToLocalStoreAndAdvanceTokens(List<ExchangeMetadataResponse> exchangeMetadataResponseList,
       GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode)
-      throws IOException, MessageFormatException {
+      throws IOException {
     int partitionResponseInfoIndex = 0;
     long totalBytesFixed = 0;
     long totalBlobsFixed = 0;

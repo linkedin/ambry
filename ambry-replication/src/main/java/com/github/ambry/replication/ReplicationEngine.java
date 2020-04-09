@@ -172,7 +172,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
           if (updated && replicaSyncUpManager.isSyncUpComplete(localReplica)) {
             replicaSyncUpManager.onDeactivationComplete(localReplica);
           }
-        } else if (localStore.isDecommissionInProgress() && localStore.getCurrentState() == ReplicaState.OFFLINE) {
+        } else if (localStore.getCurrentState() == ReplicaState.OFFLINE && localStore.isDecommissionInProgress()) {
           // if local store is in OFFLINE state, we need more info to determine if replica is really in Inactive-To-Offline
           // transition. So we check if decommission file is present. If present, we update SyncUpManager by peer's lag
           // from end offset in local store.

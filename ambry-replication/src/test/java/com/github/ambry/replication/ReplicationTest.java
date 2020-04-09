@@ -1922,6 +1922,9 @@ public class ReplicationTest {
             null, replicaSyncUpService);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate1 = replicasAndThread1.getFirst();
     ReplicaThread replicaThread1 = replicasAndThread1.getSecond();
+    // mock Bootstrap-To-Standby transition in ReplicationManager: 1. update store current state; 2. initiate bootstrap
+    replicasToReplicate1.get(remoteHost1.dataNodeId)
+        .forEach(info -> info.getLocalStore().setCurrentState(ReplicaState.BOOTSTRAP));
     clusterMap.getReplicaIds(localHost.dataNodeId).forEach(replicaSyncUpService::initiateBootstrap);
 
     List<ReplicaThread.ExchangeMetadataResponse> response =
@@ -1952,16 +1955,19 @@ public class ReplicationTest {
             null, replicaSyncUpService);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate2 = replicasAndThread2.getFirst();
     ReplicaThread replicaThread2 = replicasAndThread2.getSecond();
-    response = replicaThread2.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
-        replicasToReplicate2.get(remoteHost2.dataNodeId));
-    replicaThread2.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
-        replicasToReplicate2.get(remoteHost2.dataNodeId), response);
-    // verify replica of special partition has completed bootstrap and becomes standby
+    // initiate bootstrap on replica of special partition
     RemoteReplicaInfo specialReplicaInfo = replicasToReplicate2.get(remoteHost2.dataNodeId)
         .stream()
         .filter(info -> info.getReplicaId().getPartitionId() == specialPartitionId)
         .findFirst()
         .get();
+    specialReplicaInfo.getLocalStore().setCurrentState(ReplicaState.BOOTSTRAP);
+    replicaSyncUpService.initiateBootstrap(specialReplicaInfo.getLocalReplicaId());
+    response = replicaThread2.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
+        replicasToReplicate2.get(remoteHost2.dataNodeId));
+    replicaThread2.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
+        replicasToReplicate2.get(remoteHost2.dataNodeId), response);
+    // verify replica of special partition has completed bootstrap and becomes standby
     assertEquals("Store state is not expected", ReplicaState.STANDBY,
         specialReplicaInfo.getLocalStore().getCurrentState());
   }
