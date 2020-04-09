@@ -79,11 +79,15 @@ public class CompositeNetworkClient implements NetworkClient {
         logger.trace("replicaType={}, requestsToSend={}, requestsToDrop={}", replicaType, requestsToSend,
             requestsToDrop);
       }
-      responses.addAll(client.sendAndPoll(requestsToSend, requestsToDrop, pollTimeoutMs));
+      List<ResponseInfo> childClientResponses = client.sendAndPoll(requestsToSend, requestsToDrop, pollTimeoutMs);
+      childClientResponses.forEach(responseInfo -> {
+        // clean up correlation ids for completed requests
+        if (responseInfo.getRequestInfo() != null) {
+          correlationIdToReplicaType.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
+        }
+        responses.add(responseInfo);
+      });
     });
-    // clean up correlation ids for completed requests
-    responses.forEach(
-        response -> correlationIdToReplicaType.remove(response.getRequestInfo().getRequest().getCorrelationId()));
     return responses;
   }
 

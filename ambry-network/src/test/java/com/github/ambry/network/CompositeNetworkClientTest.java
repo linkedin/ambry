@@ -168,6 +168,20 @@ public class CompositeNetworkClientTest {
   }
 
   /**
+   * No NPEs should happen if a child client returns {@link ResponseInfo} with a null {@link RequestInfo}. This is used
+   * in by client implementations to indicate a connection creation failure so that the failure can be tracked.
+   * @throws Exception
+   */
+  @Test
+  public void testRequestInfoNullInResponse() throws Exception {
+    NetworkClient compositeClient = factory.getNetworkClient();
+    when(diskMocks.client.sendAndPoll(any(), any(), anyInt())).thenReturn(
+        Collections.singletonList(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null)));
+    compositeClient.sendAndPoll(Collections.emptyList(), Collections.emptySet(), 1000);
+    verify(diskMocks.client).sendAndPoll(Collections.emptyList(), Collections.emptySet(), 1000);
+  }
+
+  /**
    * @param replicaType the {@link ReplicaType} for the request.
    * @return a new {@link RequestInfo} with a new correlation ID.
    */
