@@ -779,7 +779,7 @@ class PersistentIndex {
             StoreErrorCodes.ID_Undeleted);
       }
     }
-    // Latest value has to be put and oldest value has to be a delete.
+    // Oldest value has to be put and latest value has to be a delete.
     // PutRecord can't expire and delete record can't be older than the delete retention time.
     IndexValue latestValue = values.get(0);
     IndexValue oldestValue = values.get(values.size() - 1);
