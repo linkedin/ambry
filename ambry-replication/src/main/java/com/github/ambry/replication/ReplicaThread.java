@@ -427,6 +427,11 @@ public class ReplicaThread implements Runnable {
               response.getReplicaMetadataResponseInfoList().get(i);
           responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
           if (replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) {
+            // Skip stores that were stopped during call to getReplicaMetadataResponse
+            if (!remoteReplicaInfo.getLocalStore().isStarted()) {
+              exchangeMetadataResponseList.add(new ExchangeMetadataResponse(ServerErrorCode.Temporarily_Disabled));
+              continue;
+            }
             try {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
@@ -461,22 +466,24 @@ public class ReplicaThread implements Runnable {
               replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
                   exchangeMetadataResponse.localLagFromRemoteInBytes);
             } catch (Exception e) {
-              logger.error(
-                  "Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replica: " + remoteReplicaInfo
-                      .getReplicaId(), e);
-              replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
-              responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), e);
-              ExchangeMetadataResponse exchangeMetadataResponse =
-                  new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error);
-              exchangeMetadataResponseList.add(exchangeMetadataResponse);
+              if (e instanceof StoreException
+                  && ((StoreException) e).getErrorCode() == StoreErrorCodes.Store_Not_Started) {
+                // Must have just been stopped, just skip it and move on.
+                logger.info("Local store not started for remote replica: {}", remoteReplicaInfo.getReplicaId());
+                exchangeMetadataResponseList.add(new ExchangeMetadataResponse(ServerErrorCode.Temporarily_Disabled));
+              } else {
+                logger.error("Remote node: {} Thread name: {} Remote replica: {}", remoteNode, threadName,
+                    remoteReplicaInfo.getReplicaId(), e);
+                replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
+                responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), e);
+                exchangeMetadataResponseList.add(new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error));
+              }
             }
           } else {
             replicationMetrics.updateMetadataRequestError(remoteReplicaInfo.getReplicaId());
             logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
                 remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
-            ExchangeMetadataResponse exchangeMetadataResponse =
-                new ExchangeMetadataResponse(replicaMetadataResponseInfo.getError());
-            exchangeMetadataResponseList.add(exchangeMetadataResponse);
+            exchangeMetadataResponseList.add(new ExchangeMetadataResponse(replicaMetadataResponseInfo.getError()));
           }
         }
         long processMetadataResponseTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;

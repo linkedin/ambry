@@ -550,10 +550,15 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   private void updateExpiryTimeForAllPuts(List<IndexEntry> indexEntries) throws StoreException {
     for (IndexEntry entry : indexEntries) {
-      if (!entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !entry.getValue()
-          .isFlagSet(IndexValue.Flags.Delete_Index)) {
-        long expiryTimeMs = index.findKey(entry.getKey()).getExpiresAtMs();
-        entry.getValue().setExpiresAtMs(expiryTimeMs);
+      IndexValue entryValue = entry.getValue();
+      if (!entryValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !entryValue.isFlagSet(
+          IndexValue.Flags.Delete_Index)) {
+        IndexValue indexValue = index.findKey(entry.getKey());
+        if (indexValue != null) {
+          entryValue.setExpiresAtMs(indexValue.getExpiresAtMs());
+        } else {
+          logger.warn("No index value found for {}", entry.getKey().getID());
+        }
       }
     }
   }
@@ -609,6 +614,10 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   private boolean isTtlUpdateEntryValid(StoreKey key, IndexValue ttlUpdateValue, long referenceTimeInMs,
       Map<StoreKey, Long> deletedKeys) throws StoreException {
+    // Offset sanity check
+    if (ttlUpdateValue.getOffset().compareTo(index.getStartOffset()) < 0) {
+      return false;
+    }
     FileSpan searchSpan = new FileSpan(index.getStartOffset(), ttlUpdateValue.getOffset());
     IndexValue putValue = index.findKey(key, searchSpan, EnumSet.of(PersistentIndex.IndexEntryType.PUT));
     boolean valid = true;
