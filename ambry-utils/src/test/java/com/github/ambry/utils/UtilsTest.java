@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.net.ssl.SSLException;
 import org.apache.commons.io.FileUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -576,6 +577,11 @@ public class UtilsTest {
     // debatable but this is the current implementation.
     assertFalse("Should not be declared as a client termination", Utils.isPossibleClientTermination(exception));
     exception = Utils.convertToClientTerminationException(exception);
+    assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
+
+    exception = new SSLException("Handshake failure");
+    assertFalse("Should not be declared as a client termination", Utils.isPossibleClientTermination(exception));
+    exception = new SSLException("SSLEngine closed already");
     assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
   }
 

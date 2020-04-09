@@ -58,6 +58,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.net.ssl.SSLException;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -91,6 +92,9 @@ public class Utils {
   public static final String ACCOUNT_CONTAINER_SEPARATOR = "___";
   private static final String CLIENT_RESET_EXCEPTION_MSG = "Connection reset by peer";
   private static final String CLIENT_BROKEN_PIPE_EXCEPTION_MSG = "Broken pipe";
+  // This is found in Netty's SslHandler, which does not expose the exception message as a constant. Be careful, since
+  // the message may change in the future.
+  private static final String SSL_ENGINE_CLOSED_EXCEPTION_MSG = "SSLEngine closed already";
   private static final Logger logger = LoggerFactory.getLogger(Utils.class);
 
   // The read*String methods assume that the underlying stream is blocking
@@ -1026,8 +1030,14 @@ public class Utils {
    * @return {@code true} this cause indicates a possible early termination from the client. {@code false} otherwise.
    */
   public static boolean isPossibleClientTermination(Throwable cause) {
-    return cause instanceof IOException && (CLIENT_RESET_EXCEPTION_MSG.equals(cause.getMessage())
-        || CLIENT_BROKEN_PIPE_EXCEPTION_MSG.equals(cause.getMessage()));
+    if (cause instanceof SSLException) {
+      return SSL_ENGINE_CLOSED_EXCEPTION_MSG.equals(cause.getMessage());
+    } else if (cause instanceof IOException) {
+      return CLIENT_RESET_EXCEPTION_MSG.equals(cause.getMessage()) || CLIENT_BROKEN_PIPE_EXCEPTION_MSG.equals(
+          cause.getMessage());
+    } else {
+      return false;
+    }
   }
 
   /**
