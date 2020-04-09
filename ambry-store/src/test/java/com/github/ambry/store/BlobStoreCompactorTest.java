@@ -872,7 +872,7 @@ public class BlobStoreCompactorTest {
     // check all delete records to make sure they remain
     for (MockId deletedKey : state.deletedKeys) {
       assertTrue(deletedKey + " should be deleted",
-          state.index.findKey(deletedKey).isFlagSet(IndexValue.Flags.Delete_Index));
+          state.index.findKey(deletedKey).isDelete());
       checkIndexValue(deletedKey);
     }
 
@@ -881,7 +881,7 @@ public class BlobStoreCompactorTest {
     otherPuts.add(p2);
     for (IndexEntry entry : otherPuts) {
       MockId id = (MockId) entry.getKey();
-      assertFalse(id + " should not be deleted", state.index.findKey(id).isFlagSet(IndexValue.Flags.Delete_Index));
+      assertFalse(id + " should not be deleted", state.index.findKey(id).isDelete());
       checkIndexValue(id);
       try (BlobReadOptions options = state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class))) {
         checkRecord(id, options);
@@ -897,7 +897,7 @@ public class BlobStoreCompactorTest {
       MockId id = (MockId) entry.getKey();
       IndexValue value = state.index.findKey(id);
       // the delete record should remain
-      assertTrue(id + " should be deleted", value.isFlagSet(IndexValue.Flags.Delete_Index));
+      assertTrue(id + " should be deleted", value.isDelete());
       // the put record should be cleaned up
       assertEquals("There should no original message offset", IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET,
           value.getOriginalMessageOffset());
@@ -915,7 +915,7 @@ public class BlobStoreCompactorTest {
       MockId id = (MockId) entry.getKey();
       IndexValue value = state.index.findKey(id);
       // the delete record should remain
-      assertTrue(id + " should be deleted", value.isFlagSet(IndexValue.Flags.Delete_Index));
+      assertTrue(id + " should be deleted", value.isDelete());
       // the put record however should not be cleaned up
       if (value.getOriginalMessageOffset() == IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET) {
         // PUT record should exist
@@ -1018,7 +1018,7 @@ public class BlobStoreCompactorTest {
       segment.getIndexEntriesSince(null, condition, indexEntries, currentTotalSize, false);
     }
     indexEntries.forEach(entry -> {
-      assertTrue("There cannot be a non-delete entry", entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index));
+      assertTrue("There cannot be a non-delete entry", entry.getValue().isDelete());
       assertTrue("Every key should be seen only once", seenIds.add((MockId) entry.getKey()));
     });
     assertEquals("All ids not present", ids, seenIds);
@@ -2052,7 +2052,7 @@ public class BlobStoreCompactorTest {
     assertEquals("Offset not as expected", offset, value.getOffset().getOffset());
     assertEquals("Size not as expected", size, value.getSize());
     assertEquals("ExpiresAtMs not as expected", expiresAtMs, value.getExpiresAtMs());
-    assertEquals("Entry type not as expected", isDeleted, value.isFlagSet(IndexValue.Flags.Delete_Index));
+    assertEquals("Entry type not as expected", isDeleted, value.isDelete());
     assertEquals("Original message offset not as expected", origMsgOffset, value.getOriginalMessageOffset());
   }
 

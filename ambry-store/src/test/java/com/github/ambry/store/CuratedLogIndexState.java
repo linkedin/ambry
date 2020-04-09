@@ -290,9 +290,9 @@ class CuratedLogIndexState {
     boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
     if (!forcePut && value == null) {
       throw new IllegalArgumentException(id + " does not exist in the index");
-    } else if (expiredKeys.contains(id) || (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index))) {
+    } else if (expiredKeys.contains(id) || (value != null && value.isDelete())) {
       throw new IllegalArgumentException(id + " is deleted or expired");
-    } else if (value != null && value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+    } else if (value != null && value.isTtlUpdate()) {
       throw new IllegalArgumentException(id + " ttl has already been updated");
     }
 
@@ -840,8 +840,7 @@ class CuratedLogIndexState {
    */
   boolean isDeletedAt(MockId id, long referenceTimeMs) {
     IndexValue value = getExpectedValue(id, false);
-    Offset deleteIndexSegmentStartOffset =
-        value.isFlagSet(IndexValue.Flags.Delete_Index) ? referenceIndex.floorKey(value.getOffset()) : null;
+    Offset deleteIndexSegmentStartOffset = value.isDelete() ? referenceIndex.floorKey(value.getOffset()) : null;
     return deleteIndexSegmentStartOffset != null
         && lastModifiedTimesInSecs.get(deleteIndexSegmentStartOffset) * Time.MsPerSec < referenceTimeMs;
   }
@@ -894,11 +893,11 @@ class CuratedLogIndexState {
         IndexValue value = entry.getValue();
         Boolean deleteSeen = keyToDeleteSeenMap.get(id);
         Boolean ttlUpdateSeen = keyToTtlUpdateSeenMap.get(id);
-        if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+        if (value.isDelete()) {
           // should not be repeated
           assertTrue("Duplicated DELETE record for " + id, deleteSeen == null || !deleteSeen);
           keyToDeleteSeenMap.put(id, true);
-        } else if (value.isFlagSet(IndexValue.Flags.Undelete_Index)) {
+        } else if (value.isUndelete()) {
           short prevLifeVersion = keyToLifeVersionMap.put(id, value.getLifeVersion());
           short currentLifeVersion = value.getLifeVersion();
           if (PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3) {
@@ -906,7 +905,7 @@ class CuratedLogIndexState {
                 + " Previous: " + prevLifeVersion, prevLifeVersion < currentLifeVersion);
           }
           keyToDeleteSeenMap.put(id, false);
-        } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        } else if (value.isTtlUpdate()) {
           // should not be repeated
           assertTrue("Duplicated TTL update record for " + id, ttlUpdateSeen == null || !ttlUpdateSeen);
           // should not after a delete record
