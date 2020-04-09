@@ -57,6 +57,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.apache.commons.codec.binary.Base64;
@@ -473,6 +474,10 @@ public class AzureCloudDestinationTest {
       assertEquals("Find token has wrong end continuation token", (findToken).getIndex(), firstResult.size());
       assertEquals("Find token has wrong totalItems count", (findToken).getTotalItems(),
           Math.min(blobIdList.size(), azureDest.getQueryBatchSize()));
+      assertEquals("Unexpected change feed cache miss count", 1, azureMetrics.changeFeedCacheMissRate.getCount());
+      assertEquals("Unexpected change feed cache refresh count", 0, azureMetrics.changeFeedCacheRefreshRate.getCount());
+      assertEquals("Unexpected change feed cache hit count", 0, azureMetrics.changeFeedCacheHitRate.getCount());
+
       cloudBlobMetadataList = cloudBlobMetadataList.subList(firstResult.size(), cloudBlobMetadataList.size());
 
       findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
@@ -485,10 +490,45 @@ public class AzureCloudDestinationTest {
       assertEquals("Find token has wrong totalItems count", (findToken).getTotalItems(),
           Math.min(blobIdList.size(), azureDest.getQueryBatchSize()));
 
+      assertEquals("Unexpected change feed cache miss count", 1, azureMetrics.changeFeedCacheMissRate.getCount());
+      assertEquals("Unexpected change feed cache refresh count", 0, azureMetrics.changeFeedCacheRefreshRate.getCount());
+      assertEquals("Unexpected change feed cache hit count", 1, azureMetrics.changeFeedCacheHitRate.getCount());
+
       // Rerun with max size below blob size, and make sure it returns one result
       findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize - 1);
       List<CloudBlobMetadata> thirdResult = findResult.getMetadataList();
       assertEquals("Expected one result", 1, thirdResult.size());
+      findToken = (CosmosChangeFeedFindToken) findResult.getUpdatedFindToken();
+
+      assertEquals("Unexpected change feed cache miss count", 1, azureMetrics.changeFeedCacheMissRate.getCount());
+      assertEquals("Unexpected change feed cache refresh count", 0, azureMetrics.changeFeedCacheRefreshRate.getCount());
+      assertEquals("Unexpected change feed cache hit count", 2, azureMetrics.changeFeedCacheHitRate.getCount());
+
+      // Add more than AzureCloudConfig.cosmosQueryBatchSize blobs and test for correct change feed cache hits and misses.
+      AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
+      for (int j = 0; j < azureConfig.cosmosQueryBatchSize + 5; j++) {
+        BlobId blobId = generateBlobId();
+        blobIdList.add(blobId.getID());
+        CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, 10,
+            CloudBlobMetadata.EncryptionOrigin.NONE);
+        inputMetadata.setUploadTime(startTime + j);
+        cloudBlobMetadataList.add(inputMetadata);
+      }
+      cloudBlobMetadataList.stream().forEach(doc -> mockChangeFeedQuery.add(doc));
+
+      // Final correct query to drain out all the blobs and trigger a cache refresh.
+      String prevEndToken = findToken.getEndContinuationToken();
+      findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, 1000000);
+      findToken = (CosmosChangeFeedFindToken) findResult.getUpdatedFindToken();
+
+      assertEquals("Unexpected change feed cache miss count", 1, azureMetrics.changeFeedCacheMissRate.getCount());
+      assertEquals("Unexpected change feed cache refresh count", 1, azureMetrics.changeFeedCacheRefreshRate.getCount());
+      assertEquals("Unexpected change feed cache hit count", 3, azureMetrics.changeFeedCacheHitRate.getCount());
+      assertEquals("Since this would have triggered refresh, start token should have been previous token's end token",
+          prevEndToken, findToken.getStartContinuationToken());
+
+      // Query changefeed with invalid token and check for cache miss
+      testFindEntriesSinceUsingChangeFeedWithInvalidToken(findToken);
     } finally {
       if (azureReplicationFeed != null) {
         azureReplicationFeed.close();
@@ -511,6 +551,60 @@ public class AzureCloudDestinationTest {
         updateTimeBasedAzureCloudDestination.close();
       }
     }
+  }
+
+  /**
+   * Query changefeed with invalid token and check for cache miss.
+   * @param findToken {@link CosmosChangeFeedFindToken} to continue from.
+   * @throws CloudStorageException
+   */
+  private void testFindEntriesSinceUsingChangeFeedWithInvalidToken(CosmosChangeFeedFindToken findToken)
+      throws CloudStorageException {
+    // Invalid session id.
+    CosmosChangeFeedFindToken invalidFindToken =
+        new CosmosChangeFeedFindToken(findToken.getBytesRead(), findToken.getStartContinuationToken(),
+            findToken.getEndContinuationToken(), findToken.getIndex(), findToken.getTotalItems(),
+            UUID.randomUUID().toString(), findToken.getVersion());
+    FindResult findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), invalidFindToken, 10);
+    findToken = (CosmosChangeFeedFindToken) findResult.getUpdatedFindToken();
+
+    assertEquals("Unexpected change feed cache miss count", 2, azureMetrics.changeFeedCacheMissRate.getCount());
+    assertEquals("Unexpected change feed cache refresh count", 1, azureMetrics.changeFeedCacheRefreshRate.getCount());
+    assertEquals("Unexpected change feed cache hit count", 3, azureMetrics.changeFeedCacheHitRate.getCount());
+
+    // invalid end token.
+    invalidFindToken =
+        new CosmosChangeFeedFindToken(findToken.getBytesRead(), findToken.getStartContinuationToken(), "5000",
+            findToken.getIndex(), findToken.getTotalItems(), findToken.getCacheSessionId(), findToken.getVersion());
+    findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), invalidFindToken, 10);
+    findToken = (CosmosChangeFeedFindToken) findResult.getUpdatedFindToken();
+
+    assertEquals("Unexpected change feed cache miss count", 3, azureMetrics.changeFeedCacheMissRate.getCount());
+    assertEquals("Unexpected change feed cache refresh count", 1, azureMetrics.changeFeedCacheRefreshRate.getCount());
+    assertEquals("Unexpected change feed cache hit count", 3, azureMetrics.changeFeedCacheHitRate.getCount());
+
+    // invalid start token.
+    invalidFindToken =
+        new CosmosChangeFeedFindToken(findToken.getBytesRead(), "5000", findToken.getEndContinuationToken(),
+            findToken.getIndex(), findToken.getTotalItems(), findToken.getCacheSessionId(), findToken.getVersion());
+    try {
+      azureDest.findEntriesSince(blobId.getPartition().toPathString(), invalidFindToken, 10);
+    } catch (Exception ex) {
+    }
+
+    assertEquals("Unexpected change feed cache miss count", 4, azureMetrics.changeFeedCacheMissRate.getCount());
+    assertEquals("Unexpected change feed cache refresh count", 1, azureMetrics.changeFeedCacheRefreshRate.getCount());
+    assertEquals("Unexpected change feed cache hit count", 3, azureMetrics.changeFeedCacheHitRate.getCount());
+
+    // invalid total items.
+    invalidFindToken = new CosmosChangeFeedFindToken(findToken.getBytesRead(), findToken.getStartContinuationToken(),
+        findToken.getEndContinuationToken(), findToken.getIndex(), 9000, findToken.getCacheSessionId(),
+        findToken.getVersion());
+    azureDest.findEntriesSince(blobId.getPartition().toPathString(), invalidFindToken, 10);
+
+    assertEquals("Unexpected change feed cache miss count", 5, azureMetrics.changeFeedCacheMissRate.getCount());
+    assertEquals("Unexpected change feed cache refresh count", 1, azureMetrics.changeFeedCacheRefreshRate.getCount());
+    assertEquals("Unexpected change feed cache hit count", 3, azureMetrics.changeFeedCacheHitRate.getCount());
   }
 
   /**

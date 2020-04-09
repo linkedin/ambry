@@ -42,6 +42,10 @@ public class AzureMetrics {
   public static final String CHANGEFEED_QUERY_FAILURE_COUNT = "ChangeFeedFailureQueryCount";
   public static final String MISSING_KEYS_QUERY_TIME = "MissingKeysQueryTime";
   public static final String CHANGE_FEED_QUERY_TIME = "ChangeFeedQueryTime";
+  public static final String REPLICATION_FEED_QUERY_TIME = "ReplicationFeedQueryTime";
+  public static final String CHANGE_FEED_CACHE_HIT_RATE = "ChangeFeedCacheHitRate";
+  public static final String CHANGE_FEED_CACHE_MISS_RATE = "ChangeFeedCacheMissRate";
+  public static final String CHANGE_FEED_CACHE_REFRESH_RATE = "ChangeFeedCacheRefreshRate";
   public static final String DEAD_BLOBS_QUERY_TIME = "DeadBlobsQueryTime";
   public static final String FIND_SINCE_QUERY_TIME = "FindSinceQueryTime";
   public static final String BLOB_UPDATE_ERROR_COUNT = "BlobUpdateErrorCount";
@@ -75,6 +79,10 @@ public class AzureMetrics {
   public final Timer documentDeleteTime;
   public final Timer missingKeysQueryTime;
   public final Timer changeFeedQueryTime;
+  public final Timer replicationFeedQueryTime;
+  public final Meter changeFeedCacheHitRate;
+  public final Meter changeFeedCacheMissRate;
+  public final Meter changeFeedCacheRefreshRate;
   public final Counter documentQueryCount;
   public final Counter changeFeedQueryCount;
   public final Counter changeFeedQueryFailureCount;
@@ -121,6 +129,14 @@ public class AzureMetrics {
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, CHANGEFEED_QUERY_FAILURE_COUNT));
     missingKeysQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, MISSING_KEYS_QUERY_TIME));
     changeFeedQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, CHANGE_FEED_QUERY_TIME));
+    replicationFeedQueryTime =
+        registry.timer(MetricRegistry.name(AzureCloudDestination.class, REPLICATION_FEED_QUERY_TIME));
+    changeFeedCacheHitRate =
+        registry.meter(MetricRegistry.name(AzureCloudDestination.class, CHANGE_FEED_CACHE_HIT_RATE));
+    changeFeedCacheMissRate =
+        registry.meter(MetricRegistry.name(AzureCloudDestination.class, CHANGE_FEED_CACHE_MISS_RATE));
+    changeFeedCacheRefreshRate =
+        registry.meter(MetricRegistry.name(AzureCloudDestination.class, CHANGE_FEED_CACHE_REFRESH_RATE));
     deadBlobsQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DEAD_BLOBS_QUERY_TIME));
     findSinceQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, FIND_SINCE_QUERY_TIME));
     blobUpdateErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_ERROR_COUNT));
