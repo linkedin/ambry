@@ -90,6 +90,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetSignedUrlHandler getSignedUrlHandler;
   private PostBlobHandler postBlobHandler;
   private TtlUpdateHandler ttlUpdateHandler;
+  private UndeleteHandler undeleteHandler;
   private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
   private GetAccountsHandler getAccountsHandler;
   private PostAccountsHandler postAccountsHandler;
@@ -160,6 +161,9 @@ class FrontendRestRequestService implements RestRequestService {
             SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
+            clusterMap);
+    undeleteHandler =
+        new UndeleteHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap);
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
@@ -248,6 +252,11 @@ class FrontendRestRequestService implements RestRequestService {
               && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobUpdateNotAllowed) {
             restResponseChannel.setHeader(Headers.ALLOW, TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE);
           }
+          submitResponse(restRequest, restResponseChannel, null, e);
+        });
+      } else if (requestPath.matchesOperation(Operations.UNDELETE) && frontendConfig.enableUndelete) {
+        // If the undelete is not enabled, then treat it as unrecognized operation.
+        undeleteHandler.handle(restRequest, restResponseChannel, (r, e) -> {
           submitResponse(restRequest, restResponseChannel, null, e);
         });
       } else {

@@ -29,18 +29,18 @@ public interface RestRequestService {
    * This method should be called before {@link RestRequestService#start()}
    * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses.
    */
-  public void setupResponseHandler(RestResponseHandler responseHandler);
+  void setupResponseHandler(RestResponseHandler responseHandler);
 
   /**
    * Does startup tasks for the RestRequestService. When the function returns, startup is FULLY complete.
    * @throws InstantiationException if RestRequestService is unable to start.
    */
-  public void start() throws InstantiationException;
+  void start() throws InstantiationException;
 
   /**
    * Does shutdown tasks for the RestRequestService. When the function returns, shutdown is FULLY complete.
    */
-  public void shutdown();
+  void shutdown();
 
   /**
    * Handles a GET operation.
@@ -50,7 +50,7 @@ public interface RestRequestService {
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
    */
-  public void handleGet(RestRequest restRequest, RestResponseChannel restResponseChannel);
+  void handleGet(RestRequest restRequest, RestResponseChannel restResponseChannel);
 
   /**
    * Handles a POST operation.
@@ -60,7 +60,7 @@ public interface RestRequestService {
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
    */
-  public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel);
+  void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel);
 
   /**
    * Handles a PUT operation.
@@ -70,7 +70,7 @@ public interface RestRequestService {
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
    */
-  public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel);
+  void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel);
 
   /**
    * Handles a DELETE operation.
@@ -80,7 +80,7 @@ public interface RestRequestService {
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
    */
-  public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel);
+  void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel);
 
   /**
    * Handles a HEAD operation.
@@ -90,7 +90,7 @@ public interface RestRequestService {
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
    */
-  public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel);
+  void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel);
 
   /**
    * Handles an OPTIONS request.
@@ -100,5 +100,5 @@ public interface RestRequestService {
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
    */
-  public void handleOptions(RestRequest restRequest, RestResponseChannel restResponseChannel);
+  void handleOptions(RestRequest restRequest, RestResponseChannel restResponseChannel);
 }

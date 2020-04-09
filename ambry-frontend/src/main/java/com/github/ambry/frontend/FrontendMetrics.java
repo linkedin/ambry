@@ -48,6 +48,7 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup postAccountsMetricsGroup;
   // PUT
   public final RestRequestMetricsGroup updateBlobTtlMetricsGroup;
+  public final RestRequestMetricsGroup undeleteBlobMetricsGroup;
 
   // AsyncOperationTracker.Metrics instances
   public final AsyncOperationTracker.Metrics postSecurityProcessRequestMetrics;
@@ -63,6 +64,12 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics updateBlobTtlRouterMetrics;
   public final AsyncOperationTracker.Metrics updateBlobTtlIdConversionMetrics;
   public final AsyncOperationTracker.Metrics updateBlobTtlSecurityProcessResponseMetrics;
+
+  public final AsyncOperationTracker.Metrics undeleteBlobSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics undeleteBlobSecurityPostProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics undeleteBlobRouterMetrics;
+  public final AsyncOperationTracker.Metrics undeleteBlobIdConversionMetrics;
+  public final AsyncOperationTracker.Metrics undeleteBlobSecurityProcessResponseMetrics;
 
   public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityPostProcessRequestMetrics;
@@ -223,6 +230,8 @@ public class FrontendMetrics {
     // PUT
     updateBlobTtlMetricsGroup =
         new RestRequestMetricsGroup(TtlUpdateHandler.class, "UpdateBlobTtl", false, true, metricRegistry);
+    undeleteBlobMetricsGroup =
+        new RestRequestMetricsGroup(UndeleteHandler.class, "UndeleteBlob", false, true, metricRegistry);
 
     // AsyncOperationTracker.Metrics instances
     postSecurityProcessRequestMetrics =
@@ -249,6 +258,16 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "idConversion", metricRegistry);
     updateBlobTtlSecurityProcessResponseMetrics =
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "securityProcessResponse", metricRegistry);
+
+    undeleteBlobSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(UndeleteHandler.class, "securityProcessRequest", metricRegistry);
+    undeleteBlobSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(UndeleteHandler.class, "securityPostProcessRequest", metricRegistry);
+    undeleteBlobRouterMetrics = new AsyncOperationTracker.Metrics(UndeleteHandler.class, "router", metricRegistry);
+    undeleteBlobIdConversionMetrics =
+        new AsyncOperationTracker.Metrics(UndeleteHandler.class, "idConversion", metricRegistry);
+    undeleteBlobSecurityProcessResponseMetrics =
+        new AsyncOperationTracker.Metrics(UndeleteHandler.class, "securityProcessResponse", metricRegistry);
 
     getClusterMapSnapshotSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityProcessRequest", metricRegistry);

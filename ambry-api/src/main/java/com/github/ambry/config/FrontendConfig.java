@@ -36,6 +36,7 @@ public class FrontendConfig {
   public static final String MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY =
       PREFIX + "max.acceptable.ttl.secs.if.ttl.required";
   public static final String MAX_JSON_REQUEST_SIZE_BYTES_KEY = PREFIX + "max.json.request.size.bytes";
+  public static final String ENABLE_UNDELETE = PREFIX + "enable.undelete";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -46,6 +47,7 @@ public class FrontendConfig {
 
   private static final String DEFAULT_REST_REQUEST_QUOTA_STRING =
       "{\"PUT\": \"-1\",\"GET\": \"-1\",\"POST\": \"-1\",\"HEAD\": \"-1\",\"OPTIONS\": \"-1\",\"UNKNOWN\": \"-1\",\"DELETE\": \"-1\"}";
+
 
   /**
    * Cache validity in seconds for non-private blobs for GET.
@@ -201,6 +203,10 @@ public class FrontendConfig {
   @Default("20 * 1024 * 1024")
   public final int maxJsonRequestSizeBytes;
 
+  @Config(ENABLE_UNDELETE)
+  @Default("false")
+  public final boolean enableUndelete;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
@@ -246,6 +252,7 @@ public class FrontendConfig {
         (int) TimeUnit.DAYS.toSeconds(30), 0, Integer.MAX_VALUE);
     maxJsonRequestSizeBytes =
         verifiableProperties.getIntInRange(MAX_JSON_REQUEST_SIZE_BYTES_KEY, 20 * 1024 * 1024, 0, Integer.MAX_VALUE);
+    enableUndelete = verifiableProperties.getBoolean(ENABLE_UNDELETE, false);
   }
 
   /**
