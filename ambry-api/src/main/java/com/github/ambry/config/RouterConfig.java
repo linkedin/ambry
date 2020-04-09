@@ -100,6 +100,7 @@ public class RouterConfig {
   public static final String ROUTER_CLOUD_SUCCESS_TARGET = "router.cloud.success.target";
   public static final String ROUTER_CLOUD_REQUEST_PARALLELISM = "router.cloud.request.parallelism";
   public static final String ROUTER_ENABLE_HTTP2_NETWORK_CLIENT = "router.enable.http2.network.client";
+  public static final String ROUTER_ENABLE_UNDELETE = "router.enable.undelete";
 
   /**
    * Number of independent scaling units for the router.
@@ -481,6 +482,13 @@ public class RouterConfig {
   public final boolean routerEnableHttp2NetworkClient;
 
   /**
+   * Whether or not to enable undelete operation
+   */
+  @Config(ROUTER_ENABLE_UNDELETE)
+  @Default("false")
+  public final boolean routerEnableUndelete;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -583,5 +591,6 @@ public class RouterConfig {
     routerCloudRequestParallelism =
         verifiableProperties.getIntInRange(ROUTER_CLOUD_REQUEST_PARALLELISM, 1, 1, Integer.MAX_VALUE);
     routerEnableHttp2NetworkClient = verifiableProperties.getBoolean(ROUTER_ENABLE_HTTP2_NETWORK_CLIENT, false);
+    routerEnableUndelete = verifiableProperties.getBoolean(ROUTER_ENABLE_UNDELETE, false);
   }
 }

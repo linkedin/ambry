@@ -61,6 +61,7 @@ public class NonBlockingRouterMetrics {
   public final Meter getBlobWithRangeOperationRate;
   public final Meter getBlobWithSegmentOperationRate;
   public final Meter deleteBlobOperationRate;
+  public final Meter undeleteBlobOperationRate;
   public final Meter updateBlobTtlOperationRate;
   public final Meter putEncryptedBlobOperationRate;
   public final Meter stitchEncryptedBlobOperationRate;
@@ -72,6 +73,7 @@ public class NonBlockingRouterMetrics {
   public final Meter operationDequeuingRate;
   public final Meter getBlobNotOriginateLocalOperationRate;
   public final Meter deleteBlobNotOriginateLocalOperationRate;
+  public final Meter undeleteBlobNotOriginateLocalOperationRate;
   public final Meter ttlUpdateBlobNotOriginateLocalOperationRate;
 
   // Latency.
@@ -88,6 +90,7 @@ public class NonBlockingRouterMetrics {
   public final Histogram getEncryptedBlobOperationLatencyMs;
   public final Histogram getEncryptedBlobOperationTotalTimeMs;
   public final Histogram deleteBlobOperationLatencyMs;
+  public final Histogram undeleteBlobOperationLatencyMs;
   public final Histogram updateBlobTtlOperationLatencyMs;
   public final Histogram routerRequestLatencyMs;
   public final Histogram responseReceiveToHandleLatencyMs;
@@ -106,6 +109,7 @@ public class NonBlockingRouterMetrics {
   public final Counter getEncryptedBlobWithRangeErrorCount;
   public final Counter getEncryptedBlobWithSegmentErrorCount;
   public final Counter deleteBlobErrorCount;
+  public final Counter undeleteBlobErrorCount;
   public final Counter updateBlobTtlErrorCount;
   public final Counter operationAbortCount;
   public final Counter routerRequestErrorCount;
@@ -138,10 +142,12 @@ public class NonBlockingRouterMetrics {
   public final Histogram putManagerPollTimeMs;
   public final Histogram getManagerPollTimeMs;
   public final Histogram deleteManagerPollTimeMs;
+  public final Histogram undeleteManagerPollTimeMs;
   public final Histogram ttlUpdateManagerPollTimeMs;
   public final Histogram putManagerHandleResponseTimeMs;
   public final Histogram getManagerHandleResponseTimeMs;
   public final Histogram deleteManagerHandleResponseTimeMs;
+  public final Histogram undeleteManagerHandleResponseTimeMs;
   public final Histogram ttlUpdateManagerHandleResponseTimeMs;
   // time spent in getting a chunk filled once it is available.
   public final Histogram chunkFillTimeMs;
@@ -243,6 +249,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobWithSegmentOperationRate"));
     deleteBlobOperationRate =
         metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationRate"));
+    undeleteBlobOperationRate =
+        metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "UndeleteBlobOperationRate"));
     updateBlobTtlOperationRate =
         metricRegistry.meter(MetricRegistry.name(TtlUpdateOperation.class, "UpdateBlobTtlOperationRate"));
     operationQueuingRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationQueuingRate"));
@@ -252,6 +260,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobNotOriginateLocalOperationRate"));
     deleteBlobNotOriginateLocalOperationRate =
         metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobNotOriginateLocalOperationRate"));
+    undeleteBlobNotOriginateLocalOperationRate =
+        metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "UndeleteBlobNotOriginateLocalOperationRate"));
     ttlUpdateBlobNotOriginateLocalOperationRate = metricRegistry.meter(
         MetricRegistry.name(TtlUpdateOperation.class, "TtlUpdateBlobNotOriginateLocalOperationRate"));
 
@@ -282,6 +292,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobOperationTotalTimeMs"));
     deleteBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationLatencyMs"));
+    undeleteBlobOperationLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(DeleteOperation.class, "UndeleteBlobOperationLatencyMs"));
     updateBlobTtlOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(TtlUpdateOperation.class, "UpdateBlobTtlOperationLatencyMs"));
     routerRequestLatencyMs =
@@ -312,6 +324,7 @@ public class NonBlockingRouterMetrics {
     getEncryptedBlobWithSegmentErrorCount =
         metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobWithSegmentErrorCount"));
     deleteBlobErrorCount = metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobErrorCount"));
+    undeleteBlobErrorCount = metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "UndeleteBlobErrorCount"));
     updateBlobTtlErrorCount =
         metricRegistry.counter(MetricRegistry.name(TtlUpdateOperation.class, "UpdateBlobTtlErrorCount"));
     operationAbortCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationAbortCount"));
@@ -369,6 +382,8 @@ public class NonBlockingRouterMetrics {
     getManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetManagerPollTimeMs"));
     deleteManagerPollTimeMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "DeleteManagerPollTimeMs"));
+    undeleteManagerPollTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "UndeleteManagerPollTimeMs"));
     ttlUpdateManagerPollTimeMs =
         metricRegistry.histogram(MetricRegistry.name(TtlUpdateManager.class, "TtlUpdateManagerPollTimeMs"));
     putManagerHandleResponseTimeMs =
@@ -377,6 +392,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetManagerHandleResponseTimeMs"));
     deleteManagerHandleResponseTimeMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "DeleteManagerHandleResponseTimeMs"));
+    undeleteManagerHandleResponseTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "UndeleteManagerHandleResponseTimeMs"));
     ttlUpdateManagerHandleResponseTimeMs =
         metricRegistry.histogram(MetricRegistry.name(TtlUpdateManager.class, "TtlUpdateManagerHandleResponseTimeMs"));
     chunkFillTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillTimeMs"));
@@ -786,6 +803,18 @@ public class NonBlockingRouterMetrics {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       updateBlobTtlErrorCount.inc();
+      operationErrorRate.mark();
+    }
+  }
+
+  /**
+   * Update appropriate metrics on a undeleteBlob operation related error.
+   * @param e the {@link Exception} associated with the error.
+   */
+  void onUndeleteBlobError(Exception e) {
+    onError(e);
+    if (RouterUtils.isSystemHealthError(e)) {
+      undeleteBlobErrorCount.inc();
       operationErrorRate.mark();
     }
   }

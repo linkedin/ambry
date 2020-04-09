@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,6 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-
 package com.github.ambry.router;
 
 import com.github.ambry.account.Account;
@@ -25,8 +24,8 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.TtlUpdateRequest;
-import com.github.ambry.protocol.TtlUpdateResponse;
+import com.github.ambry.protocol.UndeleteRequest;
+import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
@@ -42,10 +41,10 @@ import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
- * Handles {@link TtlUpdateOperation}. A {@code TtlUpdateManager} keeps track of all the TTL update
+ * Handles {@link UndeleteOperation}. A {@code UndeleteManager} keeps track of all the Undelete
  * operations that are assigned to it, and manages their states and life cycles.
  */
-class TtlUpdateManager {
+public class UndeleteManager {
   private final ClusterMap clusterMap;
   private final NotificationSystem notificationSystem;
   private final Time time;
@@ -53,74 +52,72 @@ class TtlUpdateManager {
   private final AccountService accountService;
   private final NonBlockingRouterMetrics routerMetrics;
   private final RouterConfig routerConfig;
-  private final Set<TtlUpdateOperation> ttlUpdateOperations = ConcurrentHashMap.newKeySet();
-  private final Map<Integer, TtlUpdateOperation> correlationIdToTtlUpdateOperation = new HashMap<>();
-  private final RequestRegistrationCallback<TtlUpdateOperation> requestRegistrationCallback =
-      new RequestRegistrationCallback<>(correlationIdToTtlUpdateOperation);
+  private final Set<UndeleteOperation> undeleteOperations = ConcurrentHashMap.newKeySet();
+  private final Map<Integer, UndeleteOperation> correlationIdToUndeleteOperation = new HashMap<>();
+  private final RequestRegistrationCallback<UndeleteOperation> requestRegistrationCallback =
+      new RequestRegistrationCallback<>(correlationIdToUndeleteOperation);
 
   /**
-   * Creates a TtlUpdateManager.
+   * Creates a UndeleteManager.
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
-   * @param notificationSystem The {@link NotificationSystem} used for notifying ttl updates for blobs.
+   * @param notificationSystem The {@link NotificationSystem} used for notifying undelete for blobs.
    * @param accountService The {@link AccountService} used for account/container id and name mapping.
-   * @param routerConfig The {@link RouterConfig} containing the configs for the TtlUpdateManager.
+   * @param routerConfig The {@link RouterConfig} containing the configs for the UndeleteManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param time The {@link Time} instance to use.
    */
-  TtlUpdateManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
+  UndeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       AccountService accountService, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
-    this.accountService = accountService;
     this.notificationSystem = notificationSystem;
+    this.accountService = accountService;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.time = time;
   }
 
   /**
-   * Submits {@link TtlUpdateOperation}(s) to this {@link TtlUpdateManager}.
+   * Submits {@link UndeleteOperation}(s) to this {@link UndeleteManager}.
    * @param blobIdStrs The original blobId strings
-   * @param serviceId The service ID of the service updating the ttl of the blob(s). This can be null if unknown.
-   * @param expiresAtMs The new expiry time (in ms) of the blob.
+   * @param serviceId The service ID of the service undeleting the blob(s). This can be null if unknown.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
    * @param callback The {@link Callback} that will be called on completion of the request.
    * @throws RouterException if the blobIdStr is invalid.
    */
-  void submitTtlUpdateOperation(Collection<String> blobIdStrs, String serviceId, long expiresAtMs,
-      FutureResult<Void> futureResult, Callback<Void> callback) throws RouterException {
+  void submitUndeleteOperation(Collection<String> blobIdStrs, String serviceId, FutureResult<Void> futureResult,
+      Callback<Void> callback) throws RouterException {
     List<BlobId> blobIds = new ArrayList<>();
     for (String blobIdStr : blobIdStrs) {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
       if (blobId.getDatacenterId() != ClusterMapUtils.UNKNOWN_DATACENTER_ID
           && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
-        routerMetrics.ttlUpdateBlobNotOriginateLocalOperationRate.mark();
+        routerMetrics.undeleteBlobNotOriginateLocalOperationRate.mark();
       }
       blobIds.add(blobId);
     }
     if (blobIds.size() == 1) {
-      TtlUpdateOperation ttlUpdateOperation =
-          new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, blobIds.get(0), serviceId, expiresAtMs,
-              time.milliseconds(), callback, time, futureResult);
-      ttlUpdateOperations.add(ttlUpdateOperation);
+      UndeleteOperation undeleteOperation =
+          new UndeleteOperation(clusterMap, routerConfig, routerMetrics, blobIds.get(0), serviceId, time.milliseconds(),
+              callback, time, futureResult);
+      undeleteOperations.add(undeleteOperation);
     } else {
-      BatchTtlUpdateOperationCallbackTracker tracker =
-          new BatchTtlUpdateOperationCallbackTracker(blobIds, futureResult, callback);
+      BatchUndeleteOperationCallbackTracker tracker =
+          new BatchUndeleteOperationCallbackTracker(blobIds, futureResult, callback);
       long operationTimeMs = time.milliseconds();
       for (BlobId blobId : blobIds) {
-        TtlUpdateOperation ttlUpdateOperation =
-            new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, expiresAtMs,
-                operationTimeMs, tracker.getCallback(blobId), time,
-                BatchTtlUpdateOperationCallbackTracker.DUMMY_FUTURE);
-        ttlUpdateOperations.add(ttlUpdateOperation);
+        UndeleteOperation undeleteOperation =
+            new UndeleteOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, operationTimeMs,
+                tracker.getCallback(blobId), time, BatchUndeleteOperationCallbackTracker.DUMMY_FUTURE);
+        undeleteOperations.add(undeleteOperation);
       }
     }
   }
 
   /**
-   * Polls all ttl update operations and populates a list of {@link RequestInfo} to be sent to data nodes in order to
-   * complete ttl update operations.
+   * Polls all undelete operations and populates a list of {@link RequestInfo} to be sent to data nodes in order to
+   * complete undelete operations.
    * @param requestsToSend list to be filled with the requests created.
    * @param requestsToDrop list to be filled with the requests to drop.
    */
@@ -128,105 +125,105 @@ class TtlUpdateManager {
     long startTime = time.milliseconds();
     requestRegistrationCallback.setRequestsToSend(requestsToSend);
     requestRegistrationCallback.setRequestsToDrop(requestsToDrop);
-    for (TtlUpdateOperation op : ttlUpdateOperations) {
+    for (UndeleteOperation op : undeleteOperations) {
       boolean exceptionEncountered = false;
       try {
         op.poll(requestRegistrationCallback);
       } catch (Exception e) {
         exceptionEncountered = true;
         op.setOperationException(
-            new RouterException("TTL poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
+            new RouterException("Undelete poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
       }
       if (exceptionEncountered || op.isOperationComplete()) {
-        if (ttlUpdateOperations.remove(op)) {
+        if (undeleteOperations.remove(op)) {
           // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
           // operation actually gets removed from the set of operations. See comment within close().
           onComplete(op);
         }
       }
     }
-    routerMetrics.ttlUpdateManagerPollTimeMs.update(time.milliseconds() - startTime);
+    routerMetrics.undeleteManagerPollTimeMs.update(time.milliseconds() - startTime);
   }
 
   /**
-   * Handles responses received for each of the {@link TtlUpdateOperation} within this TtlUpdateManager.
+   * Handles responses received for each of the {@link UndeleteOperation} within this UndeleteManager.
    * @param responseInfo the {@link ResponseInfo} containing the response.
    */
   void handleResponse(ResponseInfo responseInfo) {
     long startTime = time.milliseconds();
-    TtlUpdateResponse ttlUpdateResponse =
+    UndeleteResponse undeleteResponse =
         RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
-            TtlUpdateResponse::readFrom, TtlUpdateResponse::getError);
+            UndeleteResponse::readFrom, UndeleteResponse::getError);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
-    int correlationId = ((TtlUpdateRequest) routerRequestInfo.getRequest()).getCorrelationId();
-    TtlUpdateOperation ttlUpdateOperation = correlationIdToTtlUpdateOperation.remove(correlationId);
+    int correlationId = ((UndeleteRequest) routerRequestInfo.getRequest()).getCorrelationId();
+    UndeleteOperation undeleteOperation = correlationIdToUndeleteOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
-    if (ttlUpdateOperations.contains(ttlUpdateOperation)) {
+    if (undeleteOperations.contains(undeleteOperation)) {
       boolean exceptionEncountered = false;
       try {
-        ttlUpdateOperation.handleResponse(responseInfo, ttlUpdateResponse);
+        undeleteOperation.handleResponse(responseInfo, undeleteResponse);
       } catch (Exception e) {
         exceptionEncountered = true;
-        ttlUpdateOperation.setOperationException(
-            new RouterException("TTLUpdate handleResponse encountered unexpected error", e,
+        undeleteOperation.setOperationException(
+            new RouterException("Undelete handleResponse encountered unexpected error", e,
                 RouterErrorCode.UnexpectedInternalError));
       }
-      if (exceptionEncountered || ttlUpdateOperation.isOperationComplete()) {
-        if (ttlUpdateOperations.remove(ttlUpdateOperation)) {
-          onComplete(ttlUpdateOperation);
+      if (exceptionEncountered || undeleteOperation.isOperationComplete()) {
+        if (undeleteOperations.remove(undeleteOperation)) {
+          onComplete(undeleteOperation);
         }
       }
-      routerMetrics.ttlUpdateManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
+      routerMetrics.undeleteManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
     } else {
       routerMetrics.ignoredResponseCount.inc();
     }
   }
 
   /**
-   * Called when the ttl update operation is completed. The {@link TtlUpdateManager} also finishes the ttl update
+   * Called when the undelete operation is completed. The {@link UndeleteManager} also finishes the undelete
    * operation by performing the callback and notification.
-   * @param op The {@link TtlUpdateOperation} that has completed.
+   * @param op The {@link UndeleteOperation} that has completed.
    */
-  private void onComplete(TtlUpdateOperation op) {
+  private void onComplete(UndeleteOperation op) {
     Exception e = op.getOperationException();
     if (e == null) {
       BlobId blobId = op.getBlobId();
       Pair<Account, Container> accountContainer =
           RouterUtils.getAccountContainer(accountService, blobId.getAccountId(), blobId.getContainerId());
-      notificationSystem.onBlobTtlUpdated(op.getBlobId().getID(), op.getServiceId(), op.getExpiresAtMs(),
-          accountContainer.getFirst(), accountContainer.getSecond());
+      notificationSystem.onBlobUndeleted(op.getBlobId().getID(), op.getServiceId(), accountContainer.getFirst(),
+          accountContainer.getSecond());
     } else {
-      routerMetrics.onUpdateBlobTtlError(e);
+      routerMetrics.onUndeleteBlobError(e);
     }
     routerMetrics.operationDequeuingRate.mark();
-    routerMetrics.updateBlobTtlOperationLatencyMs.update(time.milliseconds() - op.getOperationTimeMs());
+    routerMetrics.undeleteBlobOperationLatencyMs.update(time.milliseconds() - op.getOperationTimeMs());
     NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
         op.getOperationException());
   }
 
   /**
-   * Closes the {@link TtlUpdateManager}. A {@link TtlUpdateManager} can be closed for only once. Any further close action
+   * Closes the {@link UndeleteManager}. A {@link UndeleteManager} can be closed for only once. Any further close action
    * will have no effect.
    */
   void close() {
-    for (TtlUpdateOperation op : ttlUpdateOperations) {
+    for (UndeleteOperation op : undeleteOperations) {
       // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
-      if (ttlUpdateOperations.remove(op)) {
+      if (undeleteOperations.remove(op)) {
         Exception e = new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
-        routerMetrics.onUpdateBlobTtlError(e);
+        routerMetrics.onUndeleteBlobError(e);
         NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
       }
     }
   }
 
   /**
-   * Tracks callbacks for TtlUpdate operations over multiple chunks of a single blob
+   * Tracks callbacks for Undelete operations over multiple chunks of a single blob
    */
-  private static class BatchTtlUpdateOperationCallbackTracker {
+  private static class BatchUndeleteOperationCallbackTracker {
     static final FutureResult<Void> DUMMY_FUTURE = new FutureResult<>();
 
     private final FutureResult<Void> futureResult;
@@ -242,7 +239,7 @@ class TtlUpdateManager {
      * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs
      * @param callback the {@link Callback} to be triggered once acks are received for all blobs
      */
-    BatchTtlUpdateOperationCallbackTracker(List<BlobId> blobIds, FutureResult<Void> futureResult,
+    BatchUndeleteOperationCallbackTracker(List<BlobId> blobIds, FutureResult<Void> futureResult,
         Callback<Void> callback) {
       numBlobIds = blobIds.size();
       blobIds.forEach(blobId -> blobIdToAck.put(blobId, false));
@@ -256,7 +253,7 @@ class TtlUpdateManager {
     /**
      * Gets a {@link Callback} personalized for {@code blobId}.
      * @param blobId the {@link BlobId} for which the
-     * @return the {@link Callback} to be used with the {@link TtlUpdateOperation} for {@code blobId}.
+     * @return the {@link Callback} to be used with the {@link UndeleteOperation} for {@code blobId}.
      */
     Callback<Void> getCallback(final BlobId blobId) {
       return (result, exception) -> {
@@ -286,4 +283,3 @@ class TtlUpdateManager {
     }
   }
 }
-

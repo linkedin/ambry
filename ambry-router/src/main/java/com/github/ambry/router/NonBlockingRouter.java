@@ -287,6 +287,30 @@ class NonBlockingRouter implements Router {
     return futureResult;
   }
 
+  @Override
+  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+    if (!routerConfig.routerEnableUndelete) {
+      throw new IllegalStateException("Undelete not supported");
+    }
+    if (blobId == null) {
+      throw new IllegalArgumentException("blobId must not be null");
+    }
+    currentOperationsCount.incrementAndGet();
+    routerMetrics.undeleteBlobOperationRate.mark();
+    routerMetrics.operationQueuingRate.mark();
+    FutureResult<Void> futureResult = new FutureResult<>();
+    if (isOpen.get()) {
+      getOperationController().undeleteBlob(blobId, serviceId, futureResult, callback);
+    } else {
+      RouterException routerException =
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
+      routerMetrics.operationDequeuingRate.mark();
+      routerMetrics.onUndeleteBlobError(routerException);
+      completeOperation(futureResult, callback, null, routerException);
+    }
+    return futureResult;
+  }
+
   /**
    * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
    * about whether the request succeeded or not.
@@ -396,6 +420,20 @@ class NonBlockingRouter implements Router {
       Callback<Void> callback) {
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.onUpdateBlobTtlError(routerException);
+    completeOperation(futureResult, callback, null, routerException);
+  }
+
+  /**
+   * Completes a undelete blob operation by invoking the {@code callback} and setting the {@code futureResult} with the
+   * given {@code routerException}.
+   * @param routerException {@link RouterException} to be set in the callback and future result
+   * @param futureResult the {@link FutureResult} that needs to be set.
+   * @param callback that {@link Callback} that needs to be invoked. Can be null.
+   */
+  private void completeUndeleteBlobOperation(RouterException routerException, FutureResult<Void> futureResult,
+      Callback<Void> callback) {
+    routerMetrics.operationDequeuingRate.mark();
+    routerMetrics.onUndeleteBlobError(routerException);
     completeOperation(futureResult, callback, null, routerException);
   }
 
@@ -557,6 +595,7 @@ class NonBlockingRouter implements Router {
     final GetManager getManager;
     final DeleteManager deleteManager;
     final TtlUpdateManager ttlUpdateManager;
+    final UndeleteManager undeleteManager;
     private final NetworkClient networkClient;
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
@@ -610,6 +649,9 @@ class NonBlockingRouter implements Router {
           routerMetrics, routerCallback, time);
       ttlUpdateManager =
           new TtlUpdateManager(clusterMap, responseHandler, notificationSystem, accountService, routerConfig,
+              routerMetrics, time);
+      undeleteManager =
+          new UndeleteManager(clusterMap, responseHandler, notificationSystem, accountService, routerConfig,
               routerMetrics, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + suffix, this, true);
       requestResponseHandlerThread.start();
@@ -707,6 +749,55 @@ class NonBlockingRouter implements Router {
     }
 
     /**
+     * Requests for a blob to be undeleted asynchronously and invokes the {@link Callback} when the request completes.
+     * @param blobIdStr The ID of the blob that needs to be undeleted in string form
+     * @param serviceId The service ID of the service undeleting the blob. This can be null if unknown.
+     * @param futureResult A future that would contain information about whether the undelete succeeded or not,
+     *                     eventually.
+     * @param callback The {@link Callback} which will be invoked on the completion of a request.
+     */
+    protected void undeleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
+        final Callback<Void> callback) {
+      // Can skip GET if we can determine this is not a metadata bllob
+      if (isMaybeMetadataBlob(blobIdStr)) {
+        Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
+          if (exception != null) {
+            completeOperation(futureResult, callback, null, exception, false);
+          } else if (result.getBlobResult != null) {
+            exception = new RouterException(
+                "GET blob call returned the blob instead of just the store keys (before TTL update)",
+                RouterErrorCode.UnexpectedInternalError);
+            completeOperation(futureResult, callback, null, exception, false);
+          } else {
+            List<String> blobIdStrs = new ArrayList<>();
+            blobIdStrs.add(blobIdStr);
+            if (result.storeKeys != null) {
+              result.storeKeys.forEach(key -> blobIdStrs.add(key.getID()));
+            }
+            // UndeleteManager undeletes all chunks in parallel
+            currentOperationsCount.addAndGet(blobIdStrs.size());
+            doUndeleteOperation(blobIdStrs, serviceId, futureResult, callback);
+          }
+        };
+
+        GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+            .getOption(GetOption.None)
+            .build();
+        GetBlobOptionsInternal optionsInternal =
+            new GetBlobOptionsInternal(options, true, routerMetrics.ageAtTtlUpdate);
+        try {
+          getBlob(blobIdStr, optionsInternal, internalCallback);
+        } catch (RouterException e) {
+          completeUpdateBlobTtlOperation(e, futureResult, callback);
+        }
+      } else {
+        // do undelete directly on single blobId
+        routerMetrics.skippedGetBlobCount.inc();
+        doUndeleteOperation(Collections.singletonList(blobIdStr), serviceId, futureResult, callback);
+      }
+    }
+
+    /**
      * Requests for the ttl of a blob to be updated asynchronously and invokes the {@link Callback} when the request
      * completes.
      * @param blobIdStr The ID of the blob that needs the ttl update in string form
@@ -778,6 +869,24 @@ class NonBlockingRouter implements Router {
     }
 
     /**
+     * Helper method that submits the undelete operation and handles exceptions.
+     * @param blobIdStrs The original blobId strings
+     * @param serviceId The service ID of the service undeleting the blob(s). This can be null if unknown.
+     * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
+     * @param callback The {@link Callback} that will be called on completion of the request.
+     */
+    private void doUndeleteOperation(List<String> blobIdStrs, final String serviceId, FutureResult<Void> futureResult,
+        Callback<Void> callback) {
+      try {
+        undeleteManager.submitUndeleteOperation(blobIdStrs, serviceId,  futureResult, callback);
+        routerCallback.onPollReady();
+      } catch (RouterException e) {
+        currentOperationsCount.addAndGet(1 - blobIdStrs.size());
+        completeUndeleteBlobOperation(e, futureResult, callback);
+      }
+    }
+
+    /**
      * To be called if a put/stitch call is made while {@link PutManager} is closed. It will complete the operation
      * with an exception and close the router.
      * @param blobProperties the {@link BlobProperties} for the put call.
@@ -813,6 +922,7 @@ class NonBlockingRouter implements Router {
       getManager.close();
       deleteManager.close();
       ttlUpdateManager.close();
+      undeleteManager.close();
     }
 
     /**
@@ -829,6 +939,7 @@ class NonBlockingRouter implements Router {
         backgroundDeleteRequests.clear();
         deleteManager.poll(requestsToSend, requestsToDrop);
         ttlUpdateManager.poll(requestsToSend, requestsToDrop);
+        undeleteManager.poll(requestsToSend, requestsToDrop);
       } catch (Exception e) {
         logger.error("Operation Manager poll received an unexpected error: ", e);
         routerMetrics.operationManagerPollErrorCount.inc();
@@ -869,6 +980,9 @@ class NonBlockingRouter implements Router {
                 break;
               case TtlUpdateRequest:
                 ttlUpdateManager.handleResponse(responseInfo);
+                break;
+              case UndeleteRequest:
+                undeleteManager.handleResponse(responseInfo);
                 break;
               default:
                 logger.error("Unexpected response type: " + type + " received, discarding");
