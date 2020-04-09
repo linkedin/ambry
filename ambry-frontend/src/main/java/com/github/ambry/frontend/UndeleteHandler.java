@@ -32,7 +32,7 @@ import static com.github.ambry.frontend.FrontendUtils.*;
  * Handler for all Undelete requests.
  */
 public class UndeleteHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(TtlUpdateHandler.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(UndeleteHandler.class);
 
   private final Router router;
   private final SecurityService securityService;
@@ -122,13 +122,13 @@ public class UndeleteHandler {
       return buildCallback(metrics.undeleteBlobIdConversionMetrics, convertedBlobId -> {
         BlobId blobId = FrontendUtils.getBlobIdFromString(convertedBlobId, clusterMap);
         accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
-            metrics.updateBlobTtlMetricsGroup);
+            metrics.undeleteBlobMetricsGroup);
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
     /**
-     * After {@link SecurityService#postProcessRequest} finishes, call {@link Router#updateBlobTtl} to undelete
+     * After {@link SecurityService#postProcessRequest} finishes, call {@link Router#undeleteBlob} to undelete
      * the blob in the storage layer.
      * @param blobId the {@link BlobId} to undelete
      * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
@@ -141,12 +141,12 @@ public class UndeleteHandler {
     }
 
     /**
-     * After {@link Router#updateBlobTtl} finishes, call {@link SecurityService#processResponse}.
-     * @return a {@link Callback} to be used with {@link Router#updateBlobTtl}.
+     * After {@link Router#undeleteBlob} finishes, call {@link SecurityService#processResponse}.
+     * @return a {@link Callback} to be used with {@link Router#undeleteBlob}.
      */
     private Callback<Void> routerCallback() {
       return buildCallback(metrics.undeleteBlobRouterMetrics, result -> {
-        LOGGER.debug("Updated TTL of {}", RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
+        LOGGER.debug("Undeleted {}", RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
         securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
