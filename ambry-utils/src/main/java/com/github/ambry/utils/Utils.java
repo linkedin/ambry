@@ -58,7 +58,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import javax.net.ssl.SSLException;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -1030,14 +1029,9 @@ public class Utils {
    * @return {@code true} this cause indicates a possible early termination from the client. {@code false} otherwise.
    */
   public static boolean isPossibleClientTermination(Throwable cause) {
-    if (cause instanceof SSLException) {
-      return SSL_ENGINE_CLOSED_EXCEPTION_MSG.equals(cause.getMessage());
-    } else if (cause instanceof IOException) {
-      return CLIENT_RESET_EXCEPTION_MSG.equals(cause.getMessage()) || CLIENT_BROKEN_PIPE_EXCEPTION_MSG.equals(
-          cause.getMessage());
-    } else {
-      return false;
-    }
+    return cause instanceof IOException && (CLIENT_RESET_EXCEPTION_MSG.equals(cause.getMessage())
+        || CLIENT_BROKEN_PIPE_EXCEPTION_MSG.equals(cause.getMessage()) || SSL_ENGINE_CLOSED_EXCEPTION_MSG.equals(
+        cause.getMessage()));
   }
 
   /**
