@@ -388,7 +388,7 @@ class AzureCloudDestination implements CloudDestination {
       // Note: catch-all since ABS can throw things like IOException, IllegalStateException
       statusCode = StatusCodes.INTERNAL_SERVER_ERROR;
     }
-    logger.info("{} status {}, {}", message, statusCode, e.toString());
+    logger.debug("{} status {}, {}", message, statusCode, e.toString());
     // Everything is retryable except NOT_FOUND
     boolean isRetryable = (statusCode != StatusCodes.NOTFOUND);
     return new CloudStorageException(message, e, isRetryable, retryDelayMs);
