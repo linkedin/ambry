@@ -40,7 +40,7 @@ public class ReplicationMetrics {
 
   private final static String MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE = "Partition-%s-maxLagFromPeersInBytes";
   private final static String CATCH_POINT_FROM_CLOUD_METRIC_NAME_TEMPLATE = "Partition-%s-catchupPointFromCloud";
-  
+
   public final Map<String, Meter> interColoReplicationBytesRate = new HashMap<String, Meter>();
   public final Meter intraColoReplicationBytesRate;
   public final Map<String, Meter> plainTextInterColoReplicationBytesRate = new HashMap<String, Meter>();
@@ -736,7 +736,7 @@ public class ReplicationMetrics {
     // update this metric only for cloud peer replica. There will only be one cloud replica peer per partition.
     if (remoteReplicaInfo.getReplicaId().getReplicaType() == ReplicaType.CLOUD_BACKED
         && cloudReplicaCatchUpPoint.containsKey(remoteReplicaInfo.getLocalReplicaId().getPartitionId())) {
-      // update the partition's lag if and only if it was tracked.
+      // update the partition's catch up point if and only if it was tracked.
       cloudReplicaCatchUpPoint.put(remoteReplicaInfo.getLocalReplicaId().getPartitionId(), catchUpPoint);
     }
   }
