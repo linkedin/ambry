@@ -17,11 +17,14 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -58,6 +61,10 @@ public class UndeleteOperation {
   private boolean operationCompleted = false;
   private static final Logger LOGGER = LoggerFactory.getLogger(UndeleteOperation.class);
 
+  private Short lifeVersion = null;
+  // The replica that sends back the first response
+  private ReplicaId firstResponseReplicaId = null;
+
   /**
    * Instantiates a {@link UndeleteOperation}.
    * @param clusterMap the {@link ClusterMap} to use.
@@ -83,9 +90,7 @@ public class UndeleteOperation {
     this.operationTimeMs = operationTimeMs;
     byte blobDcId = blobId.getDatacenterId();
     String originatingDcName = clusterMap.getDatacenterName(blobDcId);
-    this.operationTracker =
-        new SimpleOperationTracker(routerConfig, RouterOperation.UndeleteOperation, blobId.getPartition(),
-            originatingDcName, false);
+    this.operationTracker = new UndeleteOperationTracker(routerConfig, blobId.getPartition(), originatingDcName);
   }
 
   /**
@@ -94,6 +99,48 @@ public class UndeleteOperation {
    *                            that gets created as part of this poll operation.
    */
   void poll(RequestRegistrationCallback<UndeleteOperation> requestRegistrationCallback) {
+    cleanupExpiredInflightRequests(requestRegistrationCallback);
+    checkAndMaybeComplete();
+    if (!isOperationComplete()) {
+      fetchRequests(requestRegistrationCallback);
+    }
+  }
+
+  /**
+   * Fetch {@link UndeleteRequest}s to send for the operation.
+   * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to use for addition of requests that
+   *                                    need to be sent to the storage server
+   */
+  private void fetchRequests(RequestRegistrationCallback<UndeleteOperation> requestRegistrationCallback) {
+    Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
+    while (replicaIterator.hasNext()) {
+      ReplicaId replica = replicaIterator.next();
+      String hostname = replica.getDataNodeId().getHostname();
+      Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
+      UndeleteRequest undeleteRequest = createUndeleteRequest();
+      undeleteRequestInfos.put(undeleteRequest.getCorrelationId(),
+          new UndeleteRequestInfo(time.milliseconds(), replica));
+      RequestInfo requestInfo = new RequestInfo(hostname, port, undeleteRequest, replica);
+      requestRegistrationCallback.registerRequestToSend(this, requestInfo);
+      replicaIterator.remove();
+      if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
+        LOGGER.trace("Making request with correlationId {} to a remote replica {} in {} ",
+            undeleteRequest.getCorrelationId(), replica.getDataNodeId(), replica.getDataNodeId().getDatacenterName());
+        routerMetrics.crossColoRequestCount.inc();
+      } else {
+        LOGGER.trace("Making request with correlationId {} to a local replica {} ", undeleteRequest.getCorrelationId(),
+            replica.getDataNodeId());
+      }
+      routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).undeleteRequestRate.mark();
+    }
+  }
+
+  /**
+   * @return a {@link UndeleteRequest} to send to a replica.
+   */
+  private UndeleteRequest createUndeleteRequest() {
+    return new UndeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
+        blobId, operationTimeMs);
   }
 
   /**
@@ -104,6 +151,89 @@ public class UndeleteOperation {
    * @param undeleteResponse The {@link UndeleteResponse} associated with this response.
    */
   void handleResponse(ResponseInfo responseInfo, UndeleteResponse undeleteResponse) {
+    UndeleteRequest undeleteRequest = (UndeleteRequest) responseInfo.getRequestInfo().getRequest();
+    UndeleteRequestInfo undeleteRequestInfo = undeleteRequestInfos.remove(undeleteRequest.getCorrelationId());
+    // undeleteRequestInfo can be null if this request was timed out before this response is received. No
+    // metric is updated here, as corresponding metrics have been updated when the request was timed out.
+    if (undeleteRequestInfo == null) {
+      return;
+    }
+    ReplicaId replica = undeleteRequestInfo.replica;
+    long requestLatencyMs = time.milliseconds() - undeleteRequestInfo.startTimeMs;
+    routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
+    routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).undeleteRequestLatencyMs.update(requestLatencyMs);
+    // Check the error code from NetworkClient.
+    if (responseInfo.getError() != null) {
+      LOGGER.trace("UndeleteRequest with response correlationId {} timed out for replica {} ",
+          undeleteRequest.getCorrelationId(), replica.getDataNodeId());
+      onErrorResponse(replica, new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
+    } else {
+      if (undeleteResponse == null) {
+        LOGGER.trace(
+            "UndeleteRequest with response correlationId {} received UnexpectedInternalError on response deserialization for replica {} ",
+            undeleteRequest.getCorrelationId(), replica.getDataNodeId());
+        onErrorResponse(replica, new RouterException("Response deserialization received an unexpected error",
+            RouterErrorCode.UnexpectedInternalError));
+      } else {
+        // The true case below should not really happen. This means a response has been received
+        // not for its original request. We will immediately fail this operation.
+        if (undeleteResponse.getCorrelationId() != undeleteRequest.getCorrelationId()) {
+          LOGGER.error("The correlation id in the DeleteResponse " + undeleteResponse.getCorrelationId()
+              + " is not the same as the correlation id in the associated DeleteRequest: "
+              + undeleteRequest.getCorrelationId());
+          routerMetrics.unknownReplicaResponseError.inc();
+          onErrorResponse(replica,
+              new RouterException("Received wrong response that is not for the corresponding request.",
+                  RouterErrorCode.UnexpectedInternalError));
+        } else {
+          ServerErrorCode serverError = undeleteResponse.getError();
+          if (serverError == ServerErrorCode.No_Error) {
+            operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
+            if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
+              LOGGER.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
+                  replica.getDataNodeId().getDatacenterName());
+              routerMetrics.crossColoSuccessCount.inc();
+            }
+            if (lifeVersion == null) {
+              // This is first successful response.
+              lifeVersion = undeleteResponse.getLifeVersion();
+              firstResponseReplicaId = replica;
+            } else {
+              if (lifeVersion.shortValue() != undeleteResponse.getLifeVersion()) {
+                String message = String.format(
+                    "LifeVersion from Replica {} is different than the lifeVersion from replica {}, {} != {}",
+                    firstResponseReplicaId, replica, lifeVersion, undeleteResponse.getLifeVersion());
+                LOGGER.error(message);
+                // this is a successful response and one that completes the operation regardless of whether the
+                // success target has been reached or not.
+                operationCompleted = true;
+                onErrorResponse(replica, new RouterException(message, RouterErrorCode.LifeVersionConflict));
+              }
+            }
+          } else if (serverError == ServerErrorCode.Disk_Unavailable) {
+            LOGGER.trace("Replica {} returned Disk_Unavailable for a delete request with correlationId : {} ", replica,
+                undeleteRequest.getCorrelationId());
+            operationTracker.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
+            setOperationException(
+                new RouterException("Server returned: " + serverError, RouterErrorCode.AmbryUnavailable));
+            routerMetrics.routerRequestErrorCount.inc();
+            routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).undeleteRequestErrorCount.inc();
+          } else {
+            LOGGER.trace("Replica {} returned an error {} for a delete request with response correlationId : {} ",
+                replica, serverError, undeleteRequest.getCorrelationId());
+            RouterErrorCode routerErrorCode = processServerError(serverError);
+            if (serverError == ServerErrorCode.Blob_Authorization_Failure) {
+              // this is a successful response and one that completes the operation regardless of whether the
+              // success target has been reached or not.
+              operationCompleted = true;
+            }
+            // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
+            onErrorResponse(replica, new RouterException("Server returned: " + serverError, routerErrorCode));
+          }
+        }
+      }
+    }
+    checkAndMaybeComplete();
   }
 
   /**
@@ -116,6 +246,96 @@ public class UndeleteOperation {
     UndeleteRequestInfo(long submissionTime, ReplicaId replica) {
       this.startTimeMs = submissionTime;
       this.replica = replica;
+    }
+  }
+
+  /**
+   * Goes through the inflight request list of this {@link UndeleteOperation} and remove those that
+   * have been timed out.
+   * @param requestRegistrationCallback The callback to use to notify the networking layer of dropped requests.
+   */
+  private void cleanupExpiredInflightRequests(
+      RequestRegistrationCallback<UndeleteOperation> requestRegistrationCallback) {
+    Iterator<Map.Entry<Integer, UndeleteRequestInfo>> iter = undeleteRequestInfos.entrySet().iterator();
+    while (iter.hasNext()) {
+      Map.Entry<Integer, UndeleteRequestInfo> undeleteRequestInfoEntry = iter.next();
+      int correlationId = undeleteRequestInfoEntry.getKey();
+      UndeleteRequestInfo undeleteRequestInfo = undeleteRequestInfoEntry.getValue();
+      if (time.milliseconds() - undeleteRequestInfo.startTimeMs > routerConfig.routerRequestTimeoutMs) {
+        iter.remove();
+        LOGGER.warn("Undelete request with correlationid {} in flight has expired for replica {} ", correlationId,
+            undeleteRequestInfo.replica.getDataNodeId());
+        // Do not notify this as a failure to the response handler, as this timeout could simply be due to
+        // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
+        // response and the response handler will be notified accordingly.
+        onErrorResponse(undeleteRequestInfo.replica,
+            RouterUtils.buildTimeoutException(correlationId, undeleteRequestInfo.replica.getDataNodeId(), blobId));
+        requestRegistrationCallback.registerRequestToDrop(correlationId);
+      } else {
+        // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
+        break;
+      }
+    }
+  }
+
+  /**
+   * Processes {@link ServerErrorCode} received from {@code replica}. This method maps a {@link ServerErrorCode}
+   * to a {@link RouterErrorCode}
+   * @param serverErrorCode The ServerErrorCode received from the replica.
+   * @return the {@link RouterErrorCode} mapped from server error code.
+   */
+  private RouterErrorCode processServerError(ServerErrorCode serverErrorCode) {
+    switch (serverErrorCode) {
+      case Blob_Authorization_Failure:
+        return RouterErrorCode.BlobAuthorizationFailure;
+      case Blob_Deleted:
+        return RouterErrorCode.BlobDeleted;
+      case Blob_Expired:
+        return RouterErrorCode.BlobExpired;
+      case Blob_Not_Found:
+        return RouterErrorCode.BlobDoesNotExist;
+      case Disk_Unavailable:
+      case Replica_Unavailable:
+        return RouterErrorCode.AmbryUnavailable;
+      case Blob_Update_Not_Allowed:
+        return RouterErrorCode.BlobUpdateNotAllowed;
+      case Blob_Not_Deleted:
+        return RouterErrorCode.BlobNotDeleted;
+      case Blob_Already_Undeleted:
+        return RouterErrorCode.BlobUndeleted;
+      case Blob_Life_Version_Conflict:
+        return RouterErrorCode.LifeVersionConflict;
+      default:
+        return RouterErrorCode.UnexpectedInternalError;
+    }
+  }
+
+  /**
+   * Perform the necessary actions when a request to a replica fails.
+   * @param replicaId the {@link ReplicaId} associated with the failed response.
+   * @param exception the {@link RouterException} associated with the failed response.
+   */
+  private void onErrorResponse(ReplicaId replicaId, RouterException exception) {
+    operationTracker.onResponse(replicaId,
+        TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
+    setOperationException(exception);
+    routerMetrics.routerRequestErrorCount.inc();
+    routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).undeleteRequestErrorCount.inc();
+  }
+
+  /**
+   * Completes the {@code UndeleteOperation} if it is done.
+   */
+  private void checkAndMaybeComplete() {
+    // operationCompleted is true if Blob_Authorization_Failure was received.
+    if (operationTracker.isDone() || operationCompleted) {
+      if (operationTracker.hasSucceeded()) {
+        operationException.set(null);
+      } else if (operationTracker.hasFailedOnNotFound()) {
+        operationException.set(
+            new RouterException("UndeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
+      }
+      operationCompleted = true;
     }
   }
 
@@ -141,19 +361,19 @@ public class UndeleteOperation {
     switch (routerErrorCode) {
       case BlobAuthorizationFailure:
         return 0;
-      case BlobDeleted:
+      case LifeVersionConflict:
         return 1;
       case BlobExpired:
         return 2;
-      case BlobUpdateNotAllowed:
-        return 3;
       case AmbryUnavailable:
-        return 4;
+        return 3;
       case UnexpectedInternalError:
-        return 5;
+        return 4;
       case OperationTimedOut:
-        return 6;
+        return 5;
       case BlobDoesNotExist:
+        return 6;
+      case BlobNotDeleted:
         return 7;
       default:
         return Integer.MIN_VALUE;

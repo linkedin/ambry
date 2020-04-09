@@ -132,7 +132,6 @@ public class OperationTrackerTest {
     // 0-0-2-1; 9-0-0-0
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
-    System.out.println(((SimpleOperationTracker) ot).hasFailed());
   }
 
   /**
