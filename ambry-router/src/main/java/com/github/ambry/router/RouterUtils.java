@@ -85,6 +85,7 @@ class RouterUtils {
    */
   static boolean isSystemHealthError(Exception exception) {
     boolean isSystemHealthError = true;
+    boolean isInternalError = false;
     if (exception instanceof RouterException) {
       RouterErrorCode routerErrorCode = ((RouterException) exception).getErrorCode();
       switch (routerErrorCode) {
@@ -102,12 +103,20 @@ class RouterUtils {
         case BlobUpdateNotAllowed:
           isSystemHealthError = false;
           break;
+        case UnexpectedInternalError:
+          isInternalError = true;
+          break;
       }
     } else if (Utils.isPossibleClientTermination(exception)) {
       isSystemHealthError = false;
     }
     if (isSystemHealthError) {
-      logger.error("Router operation met with a system health error: ", exception);
+      if (isInternalError) {
+        logger.error("Router operation met with a system health error: ", exception);
+      } else {
+        // Be less verbose with transient errors like operation timeouts
+        logger.warn("Router operation error: {}", exception.toString());
+      }
     }
     return isSystemHealthError;
   }
