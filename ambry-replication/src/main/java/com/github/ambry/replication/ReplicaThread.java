@@ -440,7 +440,8 @@ public class ReplicaThread implements Runnable {
                       replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
               // update replication lag in ReplicaSyncUpManager
-              if (replicaSyncUpManager != null) {
+              if (replicaSyncUpManager != null
+                  && remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.BOOTSTRAP) {
                 ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
                 ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
                 boolean updated = replicaSyncUpManager.updateLagBetweenReplicas(localReplica, remoteReplica,

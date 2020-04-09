@@ -113,10 +113,11 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   @Override
   public boolean updateLagBetweenReplicas(ReplicaId localReplica, ReplicaId peerReplica, long lagInBytes) {
     boolean updated = false;
-    if (replicaToLagInfos.containsKey(localReplica)) {
-      replicaToLagInfos.get(localReplica).updateLagInfo(peerReplica, lagInBytes);
+    LocalReplicaLagInfos lagInfos = replicaToLagInfos.get(localReplica);
+    if (lagInfos != null) {
+      lagInfos.updateLagInfo(peerReplica, lagInBytes);
       if (logger.isDebugEnabled()) {
-        logger.debug(replicaToLagInfos.get(localReplica).toString());
+        logger.debug(lagInfos.toString());
       }
       updated = true;
     }
