@@ -557,7 +557,7 @@ class BlobStoreStats implements StoreStats, Closeable {
         if (indexValue != null) {
           entryValue.setExpiresAtMs(indexValue.getExpiresAtMs());
         } else {
-          logger.info("No index value found for {}", entry.getKey().getID());
+          logger.warn("No index value found for {}", entry.getKey().getID());
         }
       }
     }
