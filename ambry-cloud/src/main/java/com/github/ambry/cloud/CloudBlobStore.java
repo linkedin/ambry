@@ -524,6 +524,8 @@ class CloudBlobStore implements Store {
     // For deleted, use return value from isKeyDeleted.
     // For ttl update, return false to trigger ttl update operation in replication. For an already ttl udpated blob
     // second ttl update would end up with an error, which replication will be able to silence.
+
+    // TODO: isKeyDeleted isn't reliable for determining if the blob is deleted or not. Fix it later.
     return new MessageInfo(key, 0, isKeyDeleted(key), false, false, Utils.Infinite_Time, null,
         ((BlobId) key).getAccountId(), ((BlobId) key).getContainerId(), (long) 0, (short) 0);
   }

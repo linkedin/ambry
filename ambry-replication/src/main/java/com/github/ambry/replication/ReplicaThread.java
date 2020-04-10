@@ -437,7 +437,7 @@ public class ReplicaThread implements Runnable {
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
                   replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
               Set<StoreKey> remoteMissingStoreKeys =
-                  getRemoteMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+                  getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
               processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
                   remoteNode, remoteKeyToLocalKeyMap);
               ExchangeMetadataResponse exchangeMetadataResponse =
@@ -598,7 +598,7 @@ public class ReplicaThread implements Runnable {
    * @return List of store keys that are missing from the local store
    * @throws StoreException if store error (usually IOError) occurs when getting missing keys.
    */
-  private Set<StoreKey> getRemoteMissingStoreKeys(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
+  private Set<StoreKey> getMissingStoreKeys(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
       DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
@@ -1007,7 +1007,7 @@ public class ReplicaThread implements Runnable {
 
   /**
    * Applies an undelete to the blob described by {@code messageInfo}.
-   * @param messageInfo the {@link MessageInfo} that will be transformed into a TTL update
+   * @param messageInfo the {@link MessageInfo} that will be transformed into an undelete
    * @param remoteReplicaInfo The remote replica that is being replicated from
    * @throws StoreException
    */
@@ -1041,7 +1041,7 @@ public class ReplicaThread implements Runnable {
 
   /**
    * Applies a delete to the blob described by {@code messageInfo}.
-   * @param messageInfo the {@link MessageInfo} that will be transformed into a TTL update
+   * @param messageInfo the {@link MessageInfo} that will be transformed into a delete
    * @param remoteReplicaInfo The remote replica that is being replicated from
    * @throws StoreException
    */
@@ -1049,7 +1049,7 @@ public class ReplicaThread implements Runnable {
     DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
     try {
       messageInfo =
-          new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(), false, messageInfo.isTtlUpdated(), false,
+          new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(), true, messageInfo.isTtlUpdated(), false,
               messageInfo.getExpirationTimeInMs(), messageInfo.getCrc(), messageInfo.getAccountId(),
               messageInfo.getContainerId(), messageInfo.getOperationTimeMs(), messageInfo.getLifeVersion());
       remoteReplicaInfo.getLocalStore().delete(Collections.singletonList(messageInfo));

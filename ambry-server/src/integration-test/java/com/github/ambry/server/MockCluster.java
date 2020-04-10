@@ -484,7 +484,7 @@ class EventTracker {
 
   /**
    * Waits for blob creations on all replicas
-   * @return {@code true} if creations were received in all replicas within the {@code duration} specified.
+   * @return {@code true} if creations were received in all replicas.
    * @throws InterruptedException
    */
   boolean awaitBlobCreations() throws InterruptedException {
@@ -493,7 +493,7 @@ class EventTracker {
 
   /**
    * Waits for blob deletions on all replicas
-   * @return {@code true} if deletions were received in all replicas within the {@code duration} specified.
+   * @return {@code true} if deletions were received in all replicas.
    * @throws InterruptedException
    */
   boolean awaitBlobDeletions() throws InterruptedException {
@@ -503,7 +503,7 @@ class EventTracker {
 
   /**
    * Waits for blob undeletes on all replicas
-   * @return {@code true} if undeletes were received in all replicas within the {@code duration} specified.
+   * @return {@code true} if undeletes were received in all replicas.
    * @throws InterruptedException
    */
   boolean awaitBlobUndeletes() throws InterruptedException {
