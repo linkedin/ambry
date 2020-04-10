@@ -632,17 +632,36 @@ class BlobStoreCompactor {
    * @throws StoreException if {@link BlobReadOptions} could not be obtained from the store for deleted blobs.
    */
   private List<IndexEntry> getValidIndexEntries(IndexSegment indexSegment) throws StoreException {
-    // save a token for restart (the key gets ignored but is required to be non null for construction)
-    // Assumed preference order from IndexSegment (current impl)
-    // (Legend: entry/entries in segment -> output from IndexSegment#getIndexEntriesSince())
-    // PUT entry only -> PUT entry
-    // TTL update entry only -> TTL update entry
-    // DELETE entry only -> DELETE entry
-    // PUT + DELETE -> DELETE
-    // TTL update + DELETE -> DELETE
-    // PUT + TTL update -> PUT (the one relevant to this comment)
-    // PUT + TTL update + DELETE -> DELETE
-    // TODO: move this blob store stats
+    // Validity of a IndexValue is determined by itself and it's latest state. For example, if the current IndexValue
+    // is a Put, and the latest IndexValue for this blob is a Delete, and the operation is done out of retention duration,
+    // then this Put IndexValue is considered as invalid.
+    //
+    // There is one exception, TtlUpdate IndexValue. A TtlUpdate IndexValue's validity is not only depends on the latest
+    // state of the blob, it's also affected by the Put IndexValue. If the latest IndexValue for this blob is a Delete,
+    // and it's operation time is out of the retention duration, this TtlUpdate record would be considered as invalid.
+    // However if the Put IndexValue exists for this TtlUpdate and is not under compaction, then we will keep this TtlUpdate
+    // anyway.
+    //
+    // This is a table that shows how the validity of the current IndexValue is determined.
+    // ----------------------------------------------------------------------------------------
+    // Current IndexValue  | Latest IndexValue | Action                                       |
+    // --------------------+-------------------+----------------------------------------------|
+    // Put(verion c)       | Put(version f)    | isExpired(Pc)?false:true                     |
+    //                     | Delete(f)         | reachRetention(Df)||isExpired(Df)?false:true |
+    //                     | Undelete(f)       | isExpired(Uf)?false:true                     |
+    // --------------------+-------------------+----------------------------------------------|
+    // TtlUpdate(c)        | Put(f)            | Exception                                    |
+    //                     | Delete(f)         | reachRetention(Df)?false:true                |
+    //                     | Undelete(f)       | true                                         |
+    // --------------------+-------------------+----------------------------------------------|
+    // Delete(c)           | Put(f)            | Exception                                    |
+    //                     | Delete(f)         | c==f?true:false                              |
+    //                     | Undelete(f)       | false                                        |
+    // --------------------+-------------------+----------------------------------------------|
+    // Undelete(c)         | Put(f)            | Exception                                    |
+    //                     | Delete(f)         | false                                        |
+    //                     | Undelete(f)       | c==f&&!isExpired(Uc)?true:false              |
+    // ----------------------------------------------------------------------------------------
     List<IndexEntry> validEntries = new ArrayList<>();
     Iterator<IndexEntry> iterator = indexSegment.getIterator();
     StoreKey lastKey = null;
@@ -654,6 +673,7 @@ class BlobStoreCompactor {
       IndexValue currentFinalState;
 
       if (lastKey == null) {
+        // save a token for restart (the key gets ignored but is required to be non null for construction)
         StoreFindToken safeToken =
             new StoreFindToken(currentKey, indexSegment.getStartOffset(), sessionId, incarnationId);
         compactionLog.setSafeToken(safeToken);
