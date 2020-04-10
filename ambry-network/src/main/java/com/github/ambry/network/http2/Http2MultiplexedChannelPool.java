@@ -27,6 +27,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.pool.ChannelPool;
 import io.netty.channel.pool.SimpleChannelPool;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -93,7 +95,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
   Http2MultiplexedChannelPool(InetSocketAddress inetSocketAddress, SSLFactory sslFactory, EventLoopGroup eventLoopGroup,
       Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics) {
     this(new SimpleChannelPool(new Bootstrap().group(eventLoopGroup)
-            .channel(NioSocketChannel.class)
+            .channel(Epoll.isAvailable() ? EpollSocketChannel.class : NioSocketChannel.class)
             .option(ChannelOption.SO_KEEPALIVE, true)
             .option(ChannelOption.SO_RCVBUF, http2ClientConfig.nettyReceiveBufferSize)
             .option(ChannelOption.SO_SNDBUF, http2ClientConfig.nettySendBufferSize)

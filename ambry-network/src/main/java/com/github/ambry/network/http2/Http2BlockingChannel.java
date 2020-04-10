@@ -32,6 +32,9 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -90,10 +93,10 @@ public class Http2BlockingChannel implements ConnectedChannel {
 
   @Override
   public void connect() throws IOException {
-    workerGroup = new NioEventLoopGroup();
+    workerGroup = Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup();
     Bootstrap b = new Bootstrap();
     b.group(workerGroup);
-    b.channel(NioSocketChannel.class);
+    b.channel(Epoll.isAvailable() ? EpollSocketChannel.class : NioSocketChannel.class);
     b.option(ChannelOption.SO_KEEPALIVE, true);
     b.remoteAddress(hostName, port);
     b.handler(new ChannelInitializer<SocketChannel>() {

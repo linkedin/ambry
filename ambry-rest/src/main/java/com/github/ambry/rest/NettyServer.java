@@ -18,7 +18,11 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.logging.LogLevel;
@@ -72,8 +76,14 @@ public class NettyServer implements NioServer {
     long startupBeginTime = System.currentTimeMillis();
     try {
       logger.trace("Starting NettyServer deployment");
-      bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
-      workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
+      if (Epoll.isAvailable()) {
+        logger.trace("Using EpollEventLoopGroup in NettyServer.");
+        bossGroup = new EpollEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
+        workerGroup = new EpollEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
+      } else {
+        bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
+        workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
+      }
       for (Map.Entry<Integer, ChannelInitializer<SocketChannel>> entry : channelInitializers.entrySet()) {
         bindServer(entry.getKey(), entry.getValue(), bossGroup, workerGroup);
       }
@@ -123,8 +133,10 @@ public class NettyServer implements NioServer {
   private void bindServer(int port, ChannelInitializer<SocketChannel> channelInitializer, EventLoopGroup bossGroup,
       EventLoopGroup workerGroup) throws InterruptedException {
     ServerBootstrap b = new ServerBootstrap();
+    Class<? extends ServerSocketChannel> channelClass =
+        Epoll.isAvailable() ? EpollServerSocketChannel.class : NioServerSocketChannel.class;
     b.group(bossGroup, workerGroup)
-        .channel(NioServerSocketChannel.class)
+        .channel(channelClass)
         .option(ChannelOption.SO_BACKLOG, nettyConfig.nettyServerSoBacklog)
         .handler(new LoggingHandler(LogLevel.DEBUG))
         .childHandler(channelInitializer);
