@@ -2838,11 +2838,7 @@ class FrontendTestRouter implements Router {
    * Enumerates the different operation types in the router.
    */
   enum OpType {
-    DeleteBlob,
-    GetBlob,
-    PutBlob,
-    StitchBlob,
-    UpdateBlobTtl
+    DeleteBlob, GetBlob, PutBlob, StitchBlob, UpdateBlobTtl, UndeleteBlob,
   }
 
   OpType exceptionOpType = null;
@@ -2850,6 +2846,7 @@ class FrontendTestRouter implements Router {
   RuntimeException exceptionToThrow = null;
   String deleteServiceId = null;
   String ttlUpdateServiceId = null;
+  String undeleteServiceId = null;
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
@@ -2894,6 +2891,12 @@ class FrontendTestRouter implements Router {
   public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback) {
     ttlUpdateServiceId = serviceId;
     return completeOperation(null, callback, OpType.UpdateBlobTtl);
+  }
+
+  @Override
+  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+    undeleteServiceId = serviceId;
+    return completeOperation(null, callback, OpType.UndeleteBlob);
   }
 
   @Override

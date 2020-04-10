@@ -164,6 +164,11 @@ public class MockRouter implements Router {
     throw new UnsupportedOperationException("updateBlobTtl is not supported by this mock");
   }
 
+  @Override
+  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+    throw new UnsupportedOperationException("Undelete is currently unsupported");
+  }
+
   /**
    * clear would remove all the blob in the map.
    */

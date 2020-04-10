@@ -95,14 +95,7 @@ public interface Router extends Closeable {
    * @param callback The {@link Callback} which will be invoked on the completion of a request.
    * @return A future that would contain information about whether the undelete succeeded or not, eventually.
    */
-  default Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback) {
-    FutureResult<Void> result = new FutureResult<>();
-    result.done(null, null);
-    if (callback != null) {
-      callback.onCompletion(null, null);
-    }
-    return result;
-  }
+  Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback);
 
   /**
    * Closes the router and releases any resources held by the router. If the router is already closed, then this

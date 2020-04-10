@@ -287,11 +287,15 @@ class NonBlockingRouter implements Router {
     return futureResult;
   }
 
+  /**
+   * Requests for a blob to be undeleted asynchronously and invokes the {@link Callback} when the request completes.
+   * @param blobId The ID of the blob that needs to be undeleted.
+   * @param serviceId The service ID of the service undeleting the blob. This can be null if unknown.
+   * @param callback The {@link Callback} which will be invoked on the completion of a request.
+   * @return A future that would contain information about whether the undelete succeeded or not, eventually.
+   */
   @Override
   public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback) {
-    if (!routerConfig.routerEnableUndelete) {
-      throw new IllegalStateException("Undelete not supported");
-    }
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");
     }

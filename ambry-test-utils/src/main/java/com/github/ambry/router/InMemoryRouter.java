@@ -303,6 +303,11 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
+  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+    throw new UnsupportedOperationException("Undelete is currently unsupported");
+  }
+
+  @Override
   public void close() {
     if (routerOpen.compareAndSet(true, false)) {
       shutDownExecutorService(operationPool, 1, TimeUnit.MINUTES);
@@ -447,9 +452,8 @@ public class InMemoryRouter implements Router {
         } else {
           blobData = readBlob(postData.getReadableStreamChannel(), postData.getOptions().getMaxUploadSize());
         }
-        InMemoryBlob blob =
-            new InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData,
-                postData.getChunksToStitch());
+        InMemoryBlob blob = new InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData,
+            postData.getChunksToStitch());
         blobs.put(blobId, blob);
         if (notificationSystem != null) {
           notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), null, null,
@@ -558,7 +562,8 @@ public class InMemoryRouter implements Router {
     }
 
     PostData(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel readableStreamChannel,
-        List<ChunkInfo> chunksToStitch, PutBlobOptions options, Callback<String> callback, FutureResult<String> future) {
+        List<ChunkInfo> chunksToStitch, PutBlobOptions options, Callback<String> callback,
+        FutureResult<String> future) {
       this.blobProperties = blobProperties;
       this.usermetadata = usermetadata;
       this.readableStreamChannel = readableStreamChannel;
