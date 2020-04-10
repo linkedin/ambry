@@ -583,11 +583,13 @@ class NonBlockingRouter implements Router {
           // ignore any in-process "data nodes" without TCP ports
           .filter(dataNodeId -> dataNodeId.getPort() != DataNodeId.UNKNOWN_PORT)
           .collect(Collectors.partitioningBy(dataNodeId -> localDatacenter.equals(dataNodeId.getDatacenterName())));
-      logger.info("Warming up local datacenter connections to {} nodes", localAndRemoteNodes.get(true).size());
+      logger.info("Warming up local datacenter connections to {} nodes. Connections warmup percentage: {}%.",
+          localAndRemoteNodes.get(true).size(), routerConfig.routerConnectionsLocalDcWarmUpPercentage);
       networkClient.warmUpConnections(localAndRemoteNodes.get(true),
           routerConfig.routerConnectionsLocalDcWarmUpPercentage, routerConfig.routerConnectionsWarmUpTimeoutMs,
           responseInfos);
-      logger.info("Warming up remote datacenter connections to {} nodes", localAndRemoteNodes.get(false).size());
+      logger.info("Warming up remote datacenter connections to {} nodes. Connections warmup percentage: {}%.",
+          localAndRemoteNodes.get(false).size(), routerConfig.routerConnectionsRemoteDcWarmUpPercentage);
       networkClient.warmUpConnections(localAndRemoteNodes.get(false),
           routerConfig.routerConnectionsRemoteDcWarmUpPercentage, routerConfig.routerConnectionsWarmUpTimeoutMs,
           responseInfos);
