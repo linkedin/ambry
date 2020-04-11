@@ -176,7 +176,8 @@ public class HelixBootstrapUpgradeTool {
     ArgumentAcceptingOptionSpec<String> adminOperationOpt = parser.accepts("adminOperation",
         "(Optional argument) Perform admin operations to manage resources in cluster. For example: "
             + " '--adminOperation UpdateIdealState'  # Update IdealState based on static clustermap. This won't change InstanceConfig"
-            + " '--adminOperation DisablePartition'  # Disable partitions that are not present in static clustermap."
+            + " '--adminOperation DisablePartition'  # Disable partition on certain node. Usually used as first step to decommission certain replica"
+            + " '--adminOperation EnablePartition'   # Enable partitions on certain node (if partition is previously disabled)"
             + " '--adminOperation ValidateCluster'   # Validates the information in static clustermap is consistent with the information in Helix"
             + " '--adminOperation BootstrapCluster'  # (Default operation if not specified) Bootstrap cluster based on static clustermap")
         .withRequiredArg()

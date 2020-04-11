@@ -726,13 +726,13 @@ public class HelixBootstrapUpgradeUtil {
           if (EnumSet.of(HelixAdminOperation.UpdateIdealState, HelixAdminOperation.BootstrapCluster)
               .contains(helixAdminOperation)) {
             // @formatter:off
-          info(
-              "[{}] Different instance sets for partition {} under resource {}. "
-                  + "Updating Helix using static. "
-                  + "Previous instance set: [{}], new instance set: [{}]",
-              dcName.toUpperCase(), partitionName, resourceName,
-              String.join(",", instanceSetInHelix), String.join(",", instanceSetInStatic));
-          // @formatter:on
+            info(
+                "[{}] Different instance sets for partition {} under resource {}. "
+                    + "Updating Helix using static. "
+                    + "Previous instance set: [{}], new instance set: [{}]",
+                dcName.toUpperCase(), partitionName, resourceName,
+                String.join(",", instanceSetInHelix), String.join(",", instanceSetInStatic));
+            // @formatter:on
             ArrayList<String> newInstances = new ArrayList<>(instanceSetInStatic);
             Collections.shuffle(newInstances);
             resourceIs.setPreferenceList(partitionName, newInstances);
