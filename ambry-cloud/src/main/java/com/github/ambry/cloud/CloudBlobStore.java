@@ -365,16 +365,32 @@ class CloudBlobStore implements Store {
     try {
       for (MessageInfo msgInfo : infos) {
         BlobId blobId = (BlobId) msgInfo.getStoreKey();
-        String blobKey = blobId.getID();
-        if (!checkCacheState(blobKey, BlobState.DELETED)) {
-          requestAgent.doWithRetries(() -> cloudDestination.deleteBlob(blobId, msgInfo.getOperationTimeMs()), "Delete",
-              partitionId.toPathString());
-          addToCache(blobKey, BlobState.DELETED);
-        }
+        // If the cache has been updated by another thread, retry may be avoided
+        requestAgent.doWithRetries(() -> deleteIfNeeded(blobId, msgInfo.getOperationTimeMs()), "Delete",
+            partitionId.toPathString());
       }
     } catch (CloudStorageException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
     }
+  }
+
+  /**
+   * Delete the specified blob if needed depending on the cache state.
+   * @param blobId the blob to delete
+   * @param deletionTime the deletion time
+   * @return whether the deletion was performed
+   * @throws CloudStorageException
+   */
+  private boolean deleteIfNeeded(BlobId blobId, long deletionTime) throws CloudStorageException {
+    String blobKey = blobId.getID();
+    // Note: always check cache before operation attempt, since this could be a retry after a CONFLICT error,
+    // in which case the cache may have been updated by another threat.
+    if (!checkCacheState(blobKey, BlobState.DELETED)) {
+      boolean deleted = cloudDestination.deleteBlob(blobId, deletionTime);
+      addToCache(blobKey, BlobState.DELETED);
+      return deleted;
+    }
+    return false;
   }
 
   @Override
@@ -399,11 +415,7 @@ class CloudBlobStore implements Store {
         // need to be modified.
         if (msgInfo.isTtlUpdated()) {
           BlobId blobId = (BlobId) msgInfo.getStoreKey();
-          if (!checkCacheState(blobId.getID(), BlobState.TTL_UPDATED, BlobState.DELETED)) {
-            requestAgent.doWithRetries(() -> cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time),
-                "UpdateTtl", partitionId.toPathString());
-            addToCache(blobId.getID(), BlobState.TTL_UPDATED);
-          }
+          requestAgent.doWithRetries(() -> updateTtlIfNeeded(blobId), "UpdateTtl", partitionId.toPathString());
         } else {
           logger.error("updateTtl() is called but msgInfo.isTtlUpdated is not set. msgInfo: {}", msgInfo);
           vcrMetrics.updateTtlNotSetError.inc();
@@ -412,6 +424,23 @@ class CloudBlobStore implements Store {
     } catch (CloudStorageException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
     }
+  }
+
+  /**
+   * Update the TTL of the specified blob if needed depending on the cache state.
+   * @param blobId the blob to update
+   * @return whether the update was performed
+   * @throws CloudStorageException
+   */
+  private boolean updateTtlIfNeeded(BlobId blobId) throws CloudStorageException {
+    String blobKey = blobId.getID();
+    // See note in deleteIfNeeded.
+    if (!checkCacheState(blobKey, BlobState.TTL_UPDATED, BlobState.DELETED)) {
+      boolean updated = cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time);
+      addToCache(blobKey, BlobState.TTL_UPDATED);
+      return updated;
+    }
+    return false;
   }
 
   /**
@@ -525,7 +554,7 @@ class CloudBlobStore implements Store {
   public boolean isKeyDeleted(StoreKey key) throws StoreException {
     checkStarted();
     // Not definitive, but okay for some deletes to be replayed.
-    return checkCacheState(key.getID(),BlobState.DELETED);
+    return checkCacheState(key.getID(), BlobState.DELETED);
   }
 
   @Override

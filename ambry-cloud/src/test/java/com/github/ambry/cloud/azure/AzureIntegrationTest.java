@@ -418,9 +418,11 @@ public class AzureIntegrationTest {
       azureDest.updateBlobExpiration(blobId, ++now);
       fail("Expected 412 error");
     } catch (CloudStorageException csex) {
-      // TODO: check nested exception is DocClientException with status code 412
       assertEquals("Expected update conflict", 2, azureDest.getAzureMetrics().blobUpdateConflictCount.getCount());
     }
+    azureDest.getCosmosDataAccessor().setUpdateCallback(null);
+    assertTrue("Expected update to return true", azureDest.updateBlobExpiration(blobId, ++now));
+    assertEquals("Expected no new update conflict", 2, azureDest.getAzureMetrics().blobUpdateConflictCount.getCount());
   }
 
   /** Persist tokens to Azure, then read them back and verify they match. */

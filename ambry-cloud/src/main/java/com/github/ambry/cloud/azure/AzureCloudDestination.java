@@ -129,7 +129,6 @@ class AzureCloudDestination implements CloudDestination {
       return uploaded;
     } catch (Exception e) {
       azureMetrics.backupErrorCount.inc();
-      updateErrorMetrics(e);
       throw toCloudStorageException("Error uploading blob " + blobId, e);
     }
   }
@@ -139,7 +138,6 @@ class AzureCloudDestination implements CloudDestination {
     try {
       azureBlobDataAccessor.downloadBlob(blobId, outputStream);
     } catch (Exception e) {
-      updateErrorMetrics(e);
       throw toCloudStorageException("Error downloading blob " + blobId, e);
     }
   }
@@ -263,7 +261,6 @@ class AzureCloudDestination implements CloudDestination {
       return true;
     } catch (Exception e) {
       azureMetrics.blobUpdateErrorCount.inc();
-      updateErrorMetrics(e);
       throw toCloudStorageException("Error updating blob metadata: " + blobId, e);
     }
   }
@@ -376,16 +373,19 @@ class AzureCloudDestination implements CloudDestination {
    * @param e the root cause exception.
    * @return the {@link CloudStorageException}.
    */
-  private static CloudStorageException toCloudStorageException(String message, Exception e) {
+  private CloudStorageException toCloudStorageException(String message, Exception e) {
     Long retryDelayMs = null;
     int statusCode = -1;
     if (e instanceof BlobStorageException) {
+      azureMetrics.storageErrorCount.inc();
       statusCode = ((BlobStorageException) e).getStatusCode();
     } else if (e instanceof DocumentClientException) {
+      azureMetrics.documentErrorCount.inc();
       statusCode = ((DocumentClientException) e).getStatusCode();
       retryDelayMs = ((DocumentClientException) e).getRetryAfterInMilliseconds();
     } else {
       // Note: catch-all since ABS can throw things like IOException, IllegalStateException
+      azureMetrics.storageErrorCount.inc();
       statusCode = StatusCodes.INTERNAL_SERVER_ERROR;
     }
     logger.info("{} status {}, {}", message, statusCode, e.toString());
@@ -412,18 +412,6 @@ class AzureCloudDestination implements CloudDestination {
       default:
         throw new IllegalArgumentException(
             String.format("Unknown cloud replication feed type: %s", azureReplicationFeedType));
-    }
-  }
-
-  /**
-   * Update the appropriate error metrics corresponding to the thrown exception.
-   * @param e the exception thrown.
-   */
-  private void updateErrorMetrics(Exception e) {
-    if (e instanceof DocumentClientException) {
-      azureMetrics.documentErrorCount.inc();
-    } else {
-      azureMetrics.storageErrorCount.inc();
     }
   }
 }

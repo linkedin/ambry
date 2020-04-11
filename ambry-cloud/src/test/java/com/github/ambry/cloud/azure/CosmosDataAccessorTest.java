@@ -28,6 +28,7 @@ import com.microsoft.azure.cosmosdb.FeedResponse;
 import com.microsoft.azure.cosmosdb.RequestOptions;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.internal.HttpConstants;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,7 +38,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 import rx.Observable;
-import rx.observables.BlockingObservable;
 
 import static com.github.ambry.cloud.azure.AzureTestUtils.*;
 import static com.github.ambry.commons.BlobId.*;
@@ -79,28 +79,40 @@ public class CosmosDataAccessorTest {
    */
   @Test
   public void testUpsertNormal() throws Exception {
-    Observable<ResourceResponse<Document>> mockResponse = mock(Observable.class);
-    BlockingObservable<ResourceResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
-    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
-    ResourceResponse<Document> mockResourceResponse = mock(ResourceResponse.class);
-    when(mockBlockingObservable.single()).thenReturn(mockResourceResponse);
+    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource();
     when(mockumentClient.upsertDocument(anyString(), any(), any(RequestOptions.class), anyBoolean())).thenReturn(
         mockResponse);
     cosmosAccessor.upsertMetadata(blobMetadata);
     assertEquals(1, azureMetrics.documentCreateTime.getCount());
   }
 
-  /** Test read. */
+  /** Test update. */
   @Test
-  public void testReadNormal() throws Exception {
-    Observable<ResourceResponse<Document>> mockResponse = mock(Observable.class);
-    BlockingObservable<ResourceResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
-    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
-    ResourceResponse<Document> mockResourceResponse = mock(ResourceResponse.class);
-    when(mockBlockingObservable.single()).thenReturn(mockResourceResponse);
+  public void testUpdateNormal() throws Exception {
+    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource();
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
-    cosmosAccessor.readMetadata(blobId);
+    when(mockumentClient.replaceDocument(any(), any())).thenReturn(mockResponse);
+    cosmosAccessor.updateMetadata(blobId, CloudBlobMetadata.FIELD_DELETION_TIME, System.currentTimeMillis());
     assertEquals(1, azureMetrics.documentReadTime.getCount());
+    assertEquals(1, azureMetrics.documentUpdateTime.getCount());
+  }
+
+  /** Test update with conflict. */
+  @Test
+  public void testUpdateConflict() throws Exception {
+    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource();
+    when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
+    when(mockumentClient.replaceDocument(any(), any())).thenThrow(new RuntimeException(new DocumentClientException(
+        HttpConstants.StatusCodes.PRECONDITION_FAILED)));
+    try {
+      cosmosAccessor.updateMetadata(blobId, CloudBlobMetadata.FIELD_DELETION_TIME, System.currentTimeMillis());
+      fail("Expected exception");
+    } catch (DocumentClientException ex) {
+      // expected
+    }
+    assertEquals(1, azureMetrics.documentReadTime.getCount());
+    assertEquals(1, azureMetrics.documentUpdateTime.getCount());
+    assertEquals(1, azureMetrics.blobUpdateConflictCount.getCount());
   }
 
   /** Test query metadata. */
