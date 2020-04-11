@@ -466,11 +466,13 @@ public class BlobStore implements Store {
     checkDuplicates(infosToDelete);
     final Timer.Context context = metrics.deleteResponse.time();
     try {
-      List<IndexValue> indexValuesToDelete = new ArrayList<>();
+      List<IndexValue> putValuesToDelete = new ArrayList<>();
+      List<IndexValue> latestValues = new ArrayList<>();
       List<Short> lifeVersions = new ArrayList<>();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       for (MessageInfo info : infosToDelete) {
         IndexValue value = index.findKey(info.getStoreKey());
+        IndexValue putValue = index.findKey(info.getStoreKey(), null, EnumSet.of(PersistentIndex.IndexEntryType.PUT));
         if (value == null) {
           throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
               StoreErrorCodes.ID_Not_Found);
@@ -493,7 +495,8 @@ public class BlobStore implements Store {
                 "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
                 StoreErrorCodes.ID_Deleted);
           }
-          indexValuesToDelete.add(value);
+          putValuesToDelete.add(putValue);
+          latestValues.add(value);
           lifeVersions.add(value.getLifeVersion());
         } else {
           // This is a delete request from replication
@@ -503,7 +506,8 @@ public class BlobStore implements Store {
                 "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
                 StoreErrorCodes.Life_Version_Conflict);
           }
-          indexValuesToDelete.add(value);
+          putValuesToDelete.add(putValue);
+          latestValues.add(value);
           lifeVersions.add(info.getLifeVersion());
         }
       }
@@ -550,7 +554,10 @@ public class BlobStore implements Store {
           IndexValue deleteIndexValue =
               index.markAsDeleted(info.getStoreKey(), fileSpan, null, info.getOperationTimeMs(), info.getLifeVersion());
           endOffsetOfLastMessage = fileSpan.getEndOffset();
-          blobStoreStats.handleNewDeleteEntry(deleteIndexValue, indexValuesToDelete.get(correspondingPutIndex++));
+
+          blobStoreStats.handleNewDeleteEntry(deleteIndexValue, latestValues.get(correspondingPutIndex),
+              putValuesToDelete.get(correspondingPutIndex));
+          correspondingPutIndex++;
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }
@@ -728,8 +735,9 @@ public class BlobStore implements Store {
         writeSet.writeTo(log);
         logger.trace("Store : {} undelete mark written to log", dataDir);
         FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-        index.markAsUndeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs(), info.getLifeVersion());
-        // TODO: update blobstore stats for undelete (2020-02-10)
+        IndexValue undeleteValue =
+            index.markAsUndeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs(), info.getLifeVersion());
+        blobStoreStats.handleNewUndeleteEntry(undeleteValue, latestValue, values.get(0));
       }
       onSuccess();
       return lifeVersion;
