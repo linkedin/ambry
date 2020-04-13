@@ -63,6 +63,7 @@ public class BlobStoreCompactorTest {
   private final File tempDir;
   private final String tempDirStr;
   private final boolean doDirectIO;
+  private final boolean withUndelete;
   private final StoreConfig config;
 
   private CuratedLogIndexState state = null;
@@ -86,18 +87,19 @@ public class BlobStoreCompactorTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{true}, {false}});
+    return Arrays.asList(new Object[][]{{true, false}, {false, false}, {false, true}});
   }
 
   /**
    * Creates a temporary directory for the store.
    * @throws Exception
    */
-  public BlobStoreCompactorTest(boolean doDirectIO) throws Exception {
+  public BlobStoreCompactorTest(boolean doDirectIO, boolean withUndelete) throws Exception {
     tempDir = StoreTestUtils.createTempDirectory("compactorDir-" + TestUtils.getRandomString(10));
     tempDirStr = tempDir.getAbsolutePath();
     config = new StoreConfig(new VerifiableProperties(new Properties()));
     this.doDirectIO = doDirectIO;
+    this.withUndelete = withUndelete;
     if (doDirectIO) {
       Assume.assumeTrue(Utils.isLinux());
     }
@@ -871,8 +873,7 @@ public class BlobStoreCompactorTest {
 
     // check all delete records to make sure they remain
     for (MockId deletedKey : state.deletedKeys) {
-      assertTrue(deletedKey + " should be deleted",
-          state.index.findKey(deletedKey).isDelete());
+      assertTrue(deletedKey + " should be deleted", state.index.findKey(deletedKey).isDelete());
       checkIndexValue(deletedKey);
     }
 
@@ -1046,6 +1047,7 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void undeleteSameIndexSegmentTest() throws Exception {
+    Assume.assumeTrue(withUndelete);
     refreshState(false, false);
     state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
     state.initIndex(null);
@@ -1251,6 +1253,7 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void undeleteCrossLogSegmentTest() throws Exception {
+    Assume.assumeTrue(withUndelete);
     refreshState(false, false);
     int numPuts = (int) Math.floorDiv(state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE,
         CuratedLogIndexState.PUT_RECORD_SIZE + (CuratedLogIndexState.DELETE_RECORD_SIZE) / 2) - 1;
@@ -1285,7 +1288,7 @@ public class BlobStoreCompactorTest {
     if (state != null) {
       state.destroy();
     }
-    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true, true);
+    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true, withUndelete);
   }
 
   /**
@@ -1300,6 +1303,9 @@ public class BlobStoreCompactorTest {
     closeOrExceptionInduced = false;
     if (doDirectIO) {
       state.properties.put("store.compaction.enable.direct.io", "true");
+    }
+    if (withUndelete) {
+      state.properties.put("store.compaction.filter", "IndexSegmentValidEntryWithUndelete");
     }
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     metricRegistry = new MetricRegistry();

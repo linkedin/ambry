@@ -603,7 +603,8 @@ class IndexSegment {
     rwLock.readLock().lock();
     try {
       if (sealed.get()) {
-        throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed: " + getStartOffset());
+        throw new UnsupportedOperationException(
+            "Operation supported only on index segments that are not sealed: " + getStartOffset());
       }
       return numberOfItems.get();
     } finally {
@@ -1020,8 +1021,16 @@ class IndexSegment {
     return areNewEntriesAdded;
   }
 
+  /**
+   * Return an {@link Iterator<IndexEntry>} from a sealed IndexSegment.
+   * @return an {@link Iterator<IndexEntry>}.
+   */
   Iterator<IndexEntry> getIterator() {
-    return sealed.get() ? new SealedIndexSegmentEntryIterator() : new UnsealedIndexSegmentEntryIterator();
+    if (!sealed.get()) {
+      throw new IllegalStateException(
+          "IndexSegment at " + indexFile.getAbsolutePath() + " is not sealed to get iterator");
+    }
+    return new SealedIndexSegmentEntryIterator();
   }
 
   /**
@@ -1175,6 +1184,10 @@ class IndexSegment {
     return new Offset(logSegmentName, Long.parseLong(startOffsetValue));
   }
 
+  /**
+   * An {@link IndexEntry} {@link Iterator} for a sealed {@link IndexSegment}. This {@link Iterator} should
+   * only be used in the compaction so that the {@link IndexSegment} should be sealed already.
+   */
   class SealedIndexSegmentEntryIterator implements Iterator<IndexEntry> {
     private int currentIdx = 0;
     private ByteBuffer mmap = serEntries.duplicate();
@@ -1197,33 +1210,6 @@ class IndexSegment {
         currentIdx++;
       }
       return null;
-    }
-  }
-
-  class UnsealedIndexSegmentEntryIterator implements Iterator<IndexEntry> {
-    private Iterator<Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>>> mapEntryIterator =
-        index.entrySet().iterator();
-    private StoreKey currentKey = null;
-    private Iterator<IndexValue> setIterator = null;
-
-    @Override
-    public boolean hasNext() {
-      if (setIterator == null || !setIterator.hasNext()) {
-        if (mapEntryIterator.hasNext()) {
-          Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> mapEntry = mapEntryIterator.next();
-          currentKey = mapEntry.getKey();
-          setIterator = mapEntry.getValue().iterator();
-        } else {
-          return false;
-        }
-      }
-      return setIterator.hasNext() || mapEntryIterator.hasNext();
-    }
-
-    @Override
-    public IndexEntry next() {
-      return new IndexEntry(currentKey,
-          new IndexValue(startOffset.getName(), setIterator.next().getBytes(), getVersion()));
     }
   }
 }

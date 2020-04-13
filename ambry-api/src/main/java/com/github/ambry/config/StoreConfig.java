@@ -110,6 +110,10 @@ public class StoreConfig {
   @Default("10*1024*1024")
   public final int storeCompactionMinBufferSize;
 
+  @Config("store.compaction.filter")
+  @Default("IndexSegmentValidEntryFilterWithoutUndelete")
+  public final String storeCompactionFilter;
+
   /**
    * Whether hard deletes are to be enabled or not
    */
@@ -327,6 +331,8 @@ public class StoreConfig {
     storeCompactionEnableDirectIO = verifiableProperties.getBoolean("store.compaction.enable.direct.io", false);
     storeCompactionMinBufferSize =
         verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 0, Integer.MAX_VALUE);
+    storeCompactionFilter =
+        verifiableProperties.getString("store.compaction.filter", "IndexSegmentValidEntryFilterWithoutUndelete");
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
     storeSegmentSizeInBytes =
         verifiableProperties.getLongInRange("store.segment.size.in.bytes", Long.MAX_VALUE, 1, Long.MAX_VALUE);
