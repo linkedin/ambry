@@ -358,8 +358,6 @@ class CloudBlobStore implements Store {
     }
   }
 
-  // TODO: delete and update should throw StoreErrorCodes.ID_Not_Found on 404
-
   @Override
   public void delete(List<MessageInfo> infos) throws StoreException {
     checkStarted();
@@ -389,7 +387,7 @@ class CloudBlobStore implements Store {
   private boolean deleteIfNeeded(BlobId blobId, long deletionTime) throws CloudStorageException {
     String blobKey = blobId.getID();
     // Note: always check cache before operation attempt, since this could be a retry after a CONFLICT error,
-    // in which case the cache may have been updated by another threat.
+    // in which case the cache may have been updated by another thread.
     if (!checkCacheState(blobKey, BlobState.DELETED)) {
       boolean deleted = cloudDestination.deleteBlob(blobId, deletionTime);
       addToCache(blobKey, BlobState.DELETED);

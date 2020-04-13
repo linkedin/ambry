@@ -151,7 +151,7 @@ public class CosmosDataAccessor {
    * @param fieldName the metadata field to update.
    * @param value the new value for the field.
    * @return the {@link ResourceResponse} returned by the operation, if successful.
-   * Returns {@Null} if the document is not found or the field already has the specified value.
+   * Returns {@Null} if the field already has the specified value.
    * @throws DocumentClientException if the record was not found or if the operation failed.
    */
   ResourceResponse<Document> updateMetadata(BlobId blobId, String fieldName, Object value)

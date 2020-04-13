@@ -166,8 +166,10 @@ class AzureCloudDestination implements CloudDestination {
       return Collections.emptyMap();
     }
 
-    // For single blob GET request, get metadata from ABS instead of Cosmos
-    // Note: findMissingKeys needs to query Cosmos regardless
+    // For single blob GET request (isVcr = false), get metadata from ABS instead of Cosmos
+    // Note: findMissingKeys (isVcr = true) needs to query Cosmos regardless, because a partial failure in a
+    // previous upload could have resulted in a missing record in Cosmos; the findMissingKeys result
+    // needs to include that store key to replay the upload.
     if (!isVcr && blobIds.size() == 1) {
       CloudBlobMetadata metadata = azureBlobDataAccessor.getBlobMetadata(blobIds.get(0));
       return metadata == null ? Collections.emptyMap() : Collections.singletonMap(metadata.getId(), metadata);
@@ -257,15 +259,15 @@ class AzureCloudDestination implements CloudDestination {
     // 1) the blob storage entry metadata (so GET's can be served entirely from ABS)
     // 2) the CosmosDB metadata collection
     try {
-      boolean updatedStorage, updatedCosmos = false;
       AzureBlobDataAccessor.UpdateResponse updateResponse =
           azureBlobDataAccessor.updateBlobMetadata(blobId, fieldName, value);
       // Note: if blob does not exist will throw exception with NOT_FOUND status
       Map<String, String> metadataMap = updateResponse.metadata;
-      updatedStorage = updateResponse.wasUpdated;
+      boolean updatedStorage = updateResponse.wasUpdated;
 
       // Note: even if nothing changed in blob storage, still attempt to update Cosmos since this could be a retry
       // of a request where ABS was updated but Cosmos update failed.
+      boolean updatedCosmos = false;
       try {
         ResourceResponse<Document> response = cosmosDataAccessor.updateMetadata(blobId, fieldName, value);
         updatedCosmos = response != null;
