@@ -18,21 +18,28 @@ package com.github.ambry.cloud;
  */
 public class CloudStorageException extends Exception {
   private static final long serialVersionUID = 1;
+  private static final int DEFAULT_STATUS_CODE = 500;
+  private final int statusCode;
   private final boolean isRetryable;
   private final Long retryDelayMs;
 
   public CloudStorageException(String message) {
-    this(message, null, false, null);
+    this(message, null);
   }
 
   public CloudStorageException(String message, Throwable e) {
-    this(message, e, false, null);
+    this(message, e, DEFAULT_STATUS_CODE, false, null);
   }
 
-  public CloudStorageException(String message, Throwable e, boolean isRetryable, Long retryDelayMs) {
+  public CloudStorageException(String message, Throwable e, int statusCode, boolean isRetryable, Long retryDelayMs) {
     super(message, e);
+    this.statusCode = statusCode;
     this.isRetryable = isRetryable;
     this.retryDelayMs = retryDelayMs;
+  }
+
+  public int getStatusCode() {
+    return statusCode;
   }
 
   public boolean isRetryable() {

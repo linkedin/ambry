@@ -127,14 +127,20 @@ public class AzureBlobDataAccessorTest {
   @Test
   public void testDelete() throws Exception {
     mockBlobExistence(true);
-    assertTrue("Expected success", dataAccessor.updateBlobMetadata(blobId, "deletionTime", deletionTime));
+    AzureBlobDataAccessor.UpdateResponse response =
+        dataAccessor.updateBlobMetadata(blobId, "deletionTime", deletionTime);
+    assertTrue("Expected was updated", response.wasUpdated);
+    assertNotNull("Expected metadata", response.metadata);
   }
 
   /** Test normal expiration. */
   @Test
   public void testExpire() throws Exception {
     mockBlobExistence(true);
-    assertTrue("Expected success", dataAccessor.updateBlobMetadata(blobId, "expirationTime", expirationTime));
+    AzureBlobDataAccessor.UpdateResponse response =
+        dataAccessor.updateBlobMetadata(blobId, "expirationTime", expirationTime);
+    assertTrue("Expected was updated", response.wasUpdated);
+    assertNotNull("Expected metadata", response.metadata);
   }
 
   /** Test purge */
@@ -220,13 +226,11 @@ public class AzureBlobDataAccessorTest {
   public void testUpdateNotExists() throws Exception {
     BlobStorageException ex = mock(BlobStorageException.class);
     when(ex.getErrorCode()).thenReturn(BlobErrorCode.BLOB_NOT_FOUND);
-    when(mockBlockBlobClient.setMetadataWithResponse(any(), any(), any(), any())).thenThrow(ex);
-    assertFalse("Update of nonexistent blob should return false",
-        dataAccessor.updateBlobMetadata(blobId, "expirationTime", expirationTime));
-    assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
+    when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
+    expectBlobStorageException(() -> dataAccessor.updateBlobMetadata(blobId, "expirationTime", expirationTime));
   }
 
-  private void mockBlobExistence(boolean exists) throws Exception {
+  private void mockBlobExistence(boolean exists) {
     when(mockBlockBlobClient.exists()).thenReturn(exists);
   }
 
@@ -258,7 +262,7 @@ public class AzureBlobDataAccessorTest {
     try {
       runnable.run();
       fail("Expected BlobStorageException");
-    } catch (BlobStorageException csex) {
+    } catch (BlobStorageException e) {
     }
   }
 }

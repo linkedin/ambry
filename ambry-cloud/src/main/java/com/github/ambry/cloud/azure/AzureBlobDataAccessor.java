@@ -294,11 +294,11 @@ public class AzureBlobDataAccessor {
    * @param blobId The {@link BlobId} to update.
    * @param fieldName The metadata field to modify.
    * @param value The new value.
-   * @return {@code true} if the udpate succeeded, {@code false} if the blob was not found.
-   * @throws BlobStorageException
+   * @return a {@link UpdateResponse} with the updated metadata.
+   * @throws BlobStorageException if the blob does not exist or an error occurred.
    * @throws IllegalStateException on request timeout.
    */
-  public boolean updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws BlobStorageException {
+  public UpdateResponse updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws BlobStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     Objects.requireNonNull(fieldName, "Field name cannot be null");
 
@@ -308,10 +308,7 @@ public class AzureBlobDataAccessor {
       try {
         BlobProperties blobProperties =
             blobClient.getPropertiesWithResponse(defaultRequestConditions, requestTimeout, Context.NONE).getValue();
-        if (blobProperties == null) {
-          logger.debug("Blob {} not found.", blobId);
-          return false;
-        }
+        // Note: above throws 404 exception if blob does not exist.
         String etag = blobProperties.getETag();
         Map<String, String> metadata = blobProperties.getMetadata();
         // Update only if value has changed
@@ -328,14 +325,16 @@ public class AzureBlobDataAccessor {
           // Set condition to ensure we don't clobber a concurrent update
           BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(etag);
           blobClient.setMetadataWithResponse(metadata, blobRequestConditions, requestTimeout, Context.NONE);
+          return new UpdateResponse(true, metadata);
+        } else {
+          return new UpdateResponse(false, metadata);
         }
-        return true;
       } finally {
         storageTimer.stop();
       }
     } catch (BlobStorageException e) {
       if (isNotFoundError(e.getErrorCode())) {
-        return false;
+        logger.warn("Blob {} not found, cannot update {}.", blobId, fieldName);
       }
       if (e.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
         azureMetrics.blobUpdateConflictCount.inc();
@@ -446,5 +445,21 @@ public class AzureBlobDataAccessor {
    */
   private static boolean isNotFoundError(BlobErrorCode errorCode) {
     return (errorCode == BlobErrorCode.BLOB_NOT_FOUND || errorCode == BlobErrorCode.CONTAINER_NOT_FOUND);
+  }
+
+  /**
+   * Struct returned by updateBlobMetadata that tells the caller whether the metadata was updated
+   * and also returns the (possibly modified) metadata.
+   */
+  static class UpdateResponse {
+    /** Flag indicating whether the metadata was updated. */
+    final boolean wasUpdated;
+    /** The resulting metadata map. */
+    final Map<String, String> metadata;
+
+    UpdateResponse(boolean wasUpdated, Map<String, String> metadata) {
+      this.wasUpdated = wasUpdated;
+      this.metadata = metadata;
+    }
   }
 }

@@ -152,7 +152,7 @@ public class CosmosDataAccessor {
    * @param value the new value for the field.
    * @return the {@link ResourceResponse} returned by the operation, if successful.
    * Returns {@Null} if the document is not found or the field already has the specified value.
-   * @throws DocumentClientException if the operation failed.
+   * @throws DocumentClientException if the record was not found or if the operation failed.
    */
   ResourceResponse<Document> updateMetadata(BlobId blobId, String fieldName, Object value)
       throws DocumentClientException {
@@ -160,14 +160,11 @@ public class CosmosDataAccessor {
     // Read the existing record
     String docLink = getDocumentLink(blobId.getID());
     RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
-    ResourceResponse<Document> response =
+    ResourceResponse<Document> readResponse =
         executeCosmosAction(() -> asyncDocumentClient.readDocument(docLink, options).toBlocking().single(),
             azureMetrics.documentReadTime);
-    Document doc = response.getResource();
-    if (doc == null) {
-      logger.warn("Blob metadata record not found: {}", blobId.getID());
-      return null;
-    }
+    Document doc = readResponse.getResource();
+
     // Update only if value has changed
     if (value.equals(doc.get(fieldName))) {
       logger.debug("No change in value for {} in blob {}", fieldName, blobId.getID());

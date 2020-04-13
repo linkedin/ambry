@@ -26,7 +26,10 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Utils;
+import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
+import com.microsoft.azure.cosmosdb.ResourceResponse;
+import com.microsoft.azure.cosmosdb.internal.HttpConstants;
 import com.microsoft.azure.cosmosdb.internal.HttpConstants.StatusCodes;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
@@ -57,6 +60,7 @@ class AzureCloudDestination implements CloudDestination {
   private final AzureReplicationFeed azureReplicationFeed;
   private final AzureMetrics azureMetrics;
   private final int queryBatchSize;
+  private final boolean isVcr;
 
   /**
    * Construct an Azure cloud destination from config properties.
@@ -76,6 +80,7 @@ class AzureCloudDestination implements CloudDestination {
     this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, azureMetrics);
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
+    isVcr = cloudConfig.cloudIsVcr;
     logger.info("Created Azure destination");
   }
 
@@ -87,10 +92,11 @@ class AzureCloudDestination implements CloudDestination {
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    * @param azureReplicationFeedType the {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
+   * @param isVcr whether this instance is a VCR.
    */
   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
       AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String clusterName,
-      AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType) {
+      AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType, boolean isVcr) {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
@@ -98,6 +104,7 @@ class AzureCloudDestination implements CloudDestination {
     this.cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
+    this.isVcr = isVcr;
   }
 
   /**
@@ -160,7 +167,8 @@ class AzureCloudDestination implements CloudDestination {
     }
 
     // For single blob GET request, get metadata from ABS instead of Cosmos
-    if (blobIds.size() == 1) {
+    // Note: findMissingKeys needs to query Cosmos regardless
+    if (!isVcr && blobIds.size() == 1) {
       CloudBlobMetadata metadata = azureBlobDataAccessor.getBlobMetadata(blobIds.get(0));
       return metadata == null ? Collections.emptyMap() : Collections.singletonMap(metadata.getId(), metadata);
     }
@@ -246,19 +254,41 @@ class AzureCloudDestination implements CloudDestination {
     Objects.requireNonNull(fieldName, "Field name cannot be null");
 
     // We update the blob metadata value in two places:
-    // 1) the CosmosDB metadata collection
-    // 2) the blob storage entry metadata (to enable rebuilding the database)
-
+    // 1) the blob storage entry metadata (so GET's can be served entirely from ABS)
+    // 2) the CosmosDB metadata collection
     try {
-      if (!azureBlobDataAccessor.updateBlobMetadata(blobId, fieldName, value)) {
-        // TODO: what if this is a retry where ABS has been updated but Cosmos has not?
-        return false;
+      boolean updatedStorage, updatedCosmos = false;
+      AzureBlobDataAccessor.UpdateResponse updateResponse =
+          azureBlobDataAccessor.updateBlobMetadata(blobId, fieldName, value);
+      // Note: if blob does not exist will throw exception with NOT_FOUND status
+      Map<String, String> metadataMap = updateResponse.metadata;
+      updatedStorage = updateResponse.wasUpdated;
+
+      // Note: even if nothing changed in blob storage, still attempt to update Cosmos since this could be a retry
+      // of a request where ABS was updated but Cosmos update failed.
+      try {
+        ResourceResponse<Document> response = cosmosDataAccessor.updateMetadata(blobId, fieldName, value);
+        updatedCosmos = response != null;
+      } catch (DocumentClientException dex) {
+        if (dex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
+          // blob exists in ABS but not Cosmos - inconsistent state
+          // Recover by inserting the updated map into cosmos
+          cosmosDataAccessor.upsertMetadata(CloudBlobMetadata.fromMap(metadataMap));
+          azureMetrics.blobUpdateRecoverCount.inc();
+          updatedCosmos = true;
+        } else {
+          throw dex;
+        }
       }
 
-      cosmosDataAccessor.updateMetadata(blobId, fieldName, value);
-      logger.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
-      azureMetrics.blobUpdatedCount.inc();
-      return true;
+      if (updatedStorage || updatedCosmos) {
+        logger.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
+        azureMetrics.blobUpdatedCount.inc();
+        return true;
+      } else {
+        logger.debug("Blob {} already has {} = {} in ABS and Cosmos", blobId, fieldName, value);
+        return false;
+      }
     } catch (Exception e) {
       azureMetrics.blobUpdateErrorCount.inc();
       throw toCloudStorageException("Error updating blob metadata: " + blobId, e);
@@ -302,7 +332,8 @@ class AzureCloudDestination implements CloudDestination {
       return true;
     } catch (DocumentClientException dex) {
       if (dex.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
-        logger.warn("Could not find metadata for blob {} to delete", blobMetadata.getId());
+        // Can happen if this is a retry
+        logger.debug("Could not find metadata for blob {} to delete", blobMetadata.getId());
         return false;
       } else {
         throw dex;
@@ -388,10 +419,9 @@ class AzureCloudDestination implements CloudDestination {
       azureMetrics.storageErrorCount.inc();
       statusCode = StatusCodes.INTERNAL_SERVER_ERROR;
     }
-    logger.info("{} status {}, {}", message, statusCode, e.toString());
     // Everything is retryable except NOT_FOUND
     boolean isRetryable = (statusCode != StatusCodes.NOTFOUND);
-    return new CloudStorageException(message, e, isRetryable, retryDelayMs);
+    return new CloudStorageException(message, e, statusCode, isRetryable, retryDelayMs);
   }
 
   /**

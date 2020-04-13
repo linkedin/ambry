@@ -67,6 +67,7 @@ class CloudBlobStore implements Store {
   private static final Logger logger = LoggerFactory.getLogger(CloudBlobStore.class);
   private static final int cacheInitialCapacity = 1000;
   private static final float cacheLoadFactor = 0.75f;
+  private static final int STATUS_NOT_FOUND = 404;
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
   private final ClusterMap clusterMap;
@@ -357,6 +358,8 @@ class CloudBlobStore implements Store {
     }
   }
 
+  // TODO: delete and update should throw StoreErrorCodes.ID_Not_Found on 404
+
   @Override
   public void delete(List<MessageInfo> infos) throws StoreException {
     checkStarted();
@@ -370,7 +373,9 @@ class CloudBlobStore implements Store {
             partitionId.toPathString());
       }
     } catch (CloudStorageException ex) {
-      throw new StoreException(ex, StoreErrorCodes.IOError);
+      StoreErrorCodes errorCode =
+          (ex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
+      throw new StoreException(ex, errorCode);
     }
   }
 
@@ -422,7 +427,9 @@ class CloudBlobStore implements Store {
         }
       }
     } catch (CloudStorageException ex) {
-      throw new StoreException(ex, StoreErrorCodes.IOError);
+      StoreErrorCodes errorCode =
+          (ex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
+      throw new StoreException(ex, errorCode);
     }
   }
 

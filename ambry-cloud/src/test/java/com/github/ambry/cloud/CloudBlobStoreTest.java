@@ -60,8 +60,6 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.DocumentClientException;
-import com.microsoft.azure.cosmosdb.internal.HttpConstants;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -112,8 +110,6 @@ public class CloudBlobStoreTest {
   private short refContainerId = 100;
   private long operationTime = System.currentTimeMillis();
   private final int defaultCacheLimit = 1000;
-  private final CloudStorageException conflictException = new CloudStorageException("Conflict", new DocumentClientException(
-      HttpConstants.StatusCodes.CONFLICT), true, null);
 
   /**
    * Run in both VCR and live serving mode.
@@ -489,10 +485,12 @@ public class CloudBlobStoreTest {
     CloudDestination exDest = mock(CloudDestination.class);
     long retryDelay = 5;
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    BlobId blobId = addBlobToSet(messageWriteSet, SMALL_BLOB_SIZE, Utils.Infinite_Time, refAccountId, refContainerId, false);
+    BlobId blobId =
+        addBlobToSet(messageWriteSet, SMALL_BLOB_SIZE, Utils.Infinite_Time, refAccountId, refContainerId, false);
     List<StoreKey> keys = Collections.singletonList(blobId);
     CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, operationTime, Utils.Infinite_Time, 1024, null);
-    CloudStorageException retryableException = new CloudStorageException("Server unavailable", null, true, retryDelay);
+    CloudStorageException retryableException =
+        new CloudStorageException("Server unavailable", null, 500, true, retryDelay);
     when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(retryableException)
         .thenReturn(true);
     when(exDest.deleteBlob(any(BlobId.class), anyLong())).thenThrow(retryableException).thenReturn(true);
