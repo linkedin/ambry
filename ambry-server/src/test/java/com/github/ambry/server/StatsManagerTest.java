@@ -723,6 +723,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public MessageInfo findKey(StoreKey key) throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public StoreStats getStoreStats() {
       isCollected = true;
       getStatsCountdown.countDown();

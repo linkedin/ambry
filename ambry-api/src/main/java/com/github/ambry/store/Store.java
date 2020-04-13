@@ -95,6 +95,14 @@ public interface Store {
   Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException;
 
   /**
+   * Return {@link MessageInfo} of given key. This method will only be used in replication thread.
+   * @param key The key of which blob to return {@link MessageInfo}.
+   * @return The {@link MessageInfo}.
+   * @throws StoreException
+   */
+  MessageInfo findKey(StoreKey key) throws StoreException;
+
+  /**
    * Get the corresponding {@link StoreStats} instance for this store.
    * @return a {@link StoreStats} instance which can be used to fetch store related stats
    */

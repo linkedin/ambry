@@ -484,7 +484,7 @@ class EventTracker {
 
   /**
    * Waits for blob creations on all replicas
-   * @return {@code true} if creations were received in all replicas within the {@code duration} specified.
+   * @return {@code true} if creations were received in all replicas.
    * @throws InterruptedException
    */
   boolean awaitBlobCreations() throws InterruptedException {
@@ -493,11 +493,21 @@ class EventTracker {
 
   /**
    * Waits for blob deletions on all replicas
-   * @return {@code true} if deletions were received in all replicas within the {@code duration} specified.
+   * @return {@code true} if deletions were received in all replicas.
    * @throws InterruptedException
    */
   boolean awaitBlobDeletions() throws InterruptedException {
     return deletionHelper.await(10, TimeUnit.SECONDS);
+  }
+
+
+  /**
+   * Waits for blob undeletes on all replicas
+   * @return {@code true} if undeletes were received in all replicas.
+   * @throws InterruptedException
+   */
+  boolean awaitBlobUndeletes() throws InterruptedException {
+    return undeleteHelper.await(10, TimeUnit.SECONDS);
   }
 
   /**
@@ -654,6 +664,20 @@ class MockNotificationSystem implements NotificationSystem {
     try {
       if (!objectTracker.get(blobId).awaitBlobUpdates(updateType)) {
         Assert.fail("Failed awaiting for " + blobId + " updates of type " + updateType);
+      }
+    } catch (InterruptedException e) {
+      // ignore
+    }
+  }
+
+  /**
+   * Waits for blob undeletes on all replicas for {@code blobId}
+   * @param blobId the ID of the blob
+   */
+  void awaitBlobUndeletes(String blobId) {
+    try {
+      if (!objectTracker.get(blobId).awaitBlobUndeletes()) {
+        Assert.fail("Failed awaiting for " + blobId + " undeletes");
       }
     } catch (InterruptedException e) {
       // ignore
