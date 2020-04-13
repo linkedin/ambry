@@ -121,10 +121,9 @@ public class AmbryStateModelFactoryTest {
 
   /**
    * Test that {@link HelixParticipantMetrics} keeps track of partition during state transition
-   * @throws Exception
    */
   @Test
-  public void testAmbryPartitionStateModel() throws Exception {
+  public void testAmbryPartitionStateModel() {
     assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
     MetricRegistry metricRegistry = new MetricRegistry();
     MockHelixParticipant.metricRegistry = metricRegistry;
@@ -139,47 +138,47 @@ public class AmbryStateModelFactoryTest {
         new AmbryPartitionStateModel(resourceName, partitionName, mockHelixParticipant, config);
     mockHelixParticipant.setInitialLocalPartitions(new HashSet<>(Collections.singletonList(partitionName)));
     assertEquals("Offline count is not expected", 1,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     // OFFLINE -> BOOTSTRAP
     stateModel.onBecomeBootstrapFromOffline(mockMessage, null);
     assertEquals("Bootstrap count should be 1", 1,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".bootstrapPartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "bootstrapPartitionCount"));
     assertEquals("Offline count should be 0", 0,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     // BOOTSTRAP -> STANDBY
     stateModel.onBecomeStandbyFromBootstrap(mockMessage, null);
     assertEquals("Standby count should be 1", 1,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".standbyPartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "standbyPartitionCount"));
     assertEquals("Bootstrap count should be 0", 0,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".bootstrapPartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "bootstrapPartitionCount"));
     // STANDBY -> LEADER
     stateModel.onBecomeLeaderFromStandby(mockMessage, null);
     assertEquals("Leader count should be 1", 1,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".leaderPartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "leaderPartitionCount"));
     assertEquals("Standby count should be 0", 0,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".standbyPartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "standbyPartitionCount"));
     // LEADER -> STANDBY
     stateModel.onBecomeStandbyFromLeader(mockMessage, null);
     assertEquals("Standby count should be 1", 1,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".standbyPartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "standbyPartitionCount"));
     assertEquals("Leader count should be 0", 0,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".leaderPartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "leaderPartitionCount"));
     // STANDBY -> INACTIVE
     stateModel.onBecomeInactiveFromStandby(mockMessage, null);
     assertEquals("Inactive count should be 1", 1,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".inactivePartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "inactivePartitionCount"));
     assertEquals("Standby count should be 0", 0,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".standbyPartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "standbyPartitionCount"));
     // INACTIVE -> OFFLINE
     stateModel.onBecomeOfflineFromInactive(mockMessage, null);
     assertEquals("Offline count should be 1", 1,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     assertEquals("Inactive count should be 0", 0,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".inactivePartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "inactivePartitionCount"));
     // OFFLINE -> DROPPED
     stateModel.onBecomeDroppedFromOffline(mockMessage, null);
     assertEquals("Offline count should be 0", 0,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     assertEquals("Dropped count should be updated", 1, participantMetrics.partitionDroppedCount.getCount());
     // ERROR -> DROPPED
     stateModel.onBecomeDroppedFromError(mockMessage, null);
@@ -187,10 +186,27 @@ public class AmbryStateModelFactoryTest {
     // ERROR -> OFFLINE (this occurs when we use Helix API to reset certain partition in ERROR state)
     stateModel.onBecomeOfflineFromError(mockMessage, null);
     assertEquals("Offline count should be 1", 1,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     // reset method
     stateModel.reset();
     assertEquals("Offline count should be 1 after reset", 2,
-        metricRegistry.getGauges().get(HelixParticipant.class.getName() + ".offlinePartitionCount").getValue());
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
+  }
+
+  /**
+   * Get value of a certain metric which starts with given keywords.
+   * @param metricRegistry the {@link MetricRegistry} to use.
+   * @param className the name of class that metric associates with.
+   * @param metricName the keywords of metric name.
+   * @return value of found metric.
+   */
+  private Object getHelixParticipantMetricValue(MetricRegistry metricRegistry, String className, String metricName) {
+    String metricKey = metricRegistry.getGauges()
+        .keySet()
+        .stream()
+        .filter(key -> key.startsWith(className + "." + metricName))
+        .findFirst()
+        .get();
+    return metricRegistry.getGauges().get(metricKey).getValue();
   }
 }
