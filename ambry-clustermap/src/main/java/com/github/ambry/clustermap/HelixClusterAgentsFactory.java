@@ -52,6 +52,19 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
     this.metricRegistry = metricRegistry;
   }
 
+  /**
+   * Ctor exposed for testing purpose
+   * @param clusterMapConfig the {@link ClusterMapConfig} to specify cluster configuration parameters.
+   * @param helixFactory the {@link HelixFactory} that helps get reference of HelixManager and HelixAdmin.
+   */
+  HelixClusterAgentsFactory(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) {
+    this.clusterMapConfig = clusterMapConfig;
+    this.instanceName =
+        ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
+    this.helixFactory = helixFactory;
+    this.metricRegistry = new MetricRegistry();
+  }
+
   @Override
   public HelixClusterManager getClusterMap() throws IOException {
     if (helixClusterManager == null) {

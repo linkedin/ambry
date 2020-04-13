@@ -39,7 +39,6 @@ import org.apache.helix.task.TaskCallbackContext;
 import org.apache.helix.task.TaskConstants;
 import org.apache.helix.task.TaskFactory;
 import org.apache.helix.task.TaskStateModelFactory;
-import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,7 +74,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       String zkConnectStr) {
     this.clusterMapConfig = clusterMapConfig;
     this.zkConnectStr = zkConnectStr;
-    participantMetrics = new HelixParticipantMetrics(metricRegistry);
+    participantMetrics = new HelixParticipantMetrics(metricRegistry, zkConnectStr);
     clusterName = clusterMapConfig.clusterMapClusterName;
     instanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
