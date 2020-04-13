@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,7 +70,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
   }
 
   @Override
-  public ClusterParticipant getClusterParticipant() {
+  public List<ClusterParticipant> getClusterParticipants() {
     if (clusterParticipant == null) {
       clusterParticipant = new ClusterParticipant() {
         private final Map<StateModelListenerType, PartitionStateChangeListener>
@@ -143,6 +144,6 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         }
       };
     }
-    return clusterParticipant;
+    return Collections.singletonList(clusterParticipant);
   }
 }

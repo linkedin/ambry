@@ -91,9 +91,10 @@ public class HelixParticipantTest {
     String hostname = "localhost";
     int port = 2200;
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant helixParticipant =
-        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory,
-            new MetricRegistry());
+        new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+            getDefaultZkConnectStr(clusterMapConfig));
     helixParticipant.participate(Collections.emptyList());
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
@@ -181,12 +182,14 @@ public class HelixParticipantTest {
     int port = 2200;
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
     String instanceNameDummy = ClusterMapUtils.getInstanceName("dummyHost", 2200);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    ClusterMapConfig clusterMapConfigDummy = new ClusterMapConfig(new VerifiableProperties(propsDummy));
     HelixParticipant helixParticipant =
-        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory,
-            new MetricRegistry());
+        new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+            getDefaultZkConnectStr(clusterMapConfig));
     HelixParticipant helixParticipantDummy =
-        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(propsDummy)), helixManagerFactory,
-            new MetricRegistry());
+        new HelixParticipant(clusterMapConfigDummy, helixManagerFactory, new MetricRegistry(),
+            getDefaultZkConnectStr(clusterMapConfigDummy));
     HelixParticipant helixParticipantSpy = Mockito.spy(helixParticipant);
     helixParticipant.participate(Collections.emptyList());
     helixParticipantDummy.participate(Collections.emptyList());
@@ -279,7 +282,8 @@ public class HelixParticipantTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     helixManagerFactory.getHelixManager().beBad = true;
     HelixParticipant helixParticipant =
-        new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
+        new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+            getDefaultZkConnectStr(clusterMapConfig));
     try {
       helixParticipant.participate(Collections.emptyList());
       fail("Participation should have failed");
@@ -291,7 +295,8 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.cluster.name", "");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
-      new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
+      new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+          getDefaultZkConnectStr(clusterMapConfig));
       fail("Instantiation should have failed");
     } catch (IllegalStateException e) {
       // OK
@@ -301,7 +306,7 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", "");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
-      new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
+      new HelixClusterAgentsFactory(clusterMapConfig, new MetricRegistry()).getClusterParticipants();
       fail("Instantiation should have failed");
     } catch (IOException e) {
       // OK
@@ -315,7 +320,8 @@ public class HelixParticipantTest {
   @Test
   public void testHelixParticipant() throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
+    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+        getDefaultZkConnectStr(clusterMapConfig));
     participant.participate(Collections.emptyList());
     MockHelixManagerFactory.MockHelixManager helixManager = helixManagerFactory.getHelixManager();
     assertTrue(helixManager.isConnected());
@@ -340,7 +346,8 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(true));
     props.setProperty("clustermap.port", String.valueOf(localNode.getPort()));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
+    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+        getDefaultZkConnectStr(clusterMapConfig));
     // create InstanceConfig for local node. Also, put existing replica into sealed list
     List<String> sealedList = new ArrayList<>();
     sealedList.add(existingReplica.getPartitionId().toPathString());
@@ -393,6 +400,17 @@ public class HelixParticipantTest {
     // reset props
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(false));
     props.setProperty("clustermap.port", "2200");
+  }
+
+  /**
+   * Get the default zk connect string in current dc. The default zk connect string is the first one (if there are
+   * multiple strings associated with same dc) specified in clustermap config.
+   * @param clusterMapConfig the {@link ClusterMapConfig} to parse default zk connect string associated with current dc.
+   * @return the zk connection string representing the ZK service endpoint.
+   */
+  private String getDefaultZkConnectStr(ClusterMapConfig clusterMapConfig) {
+    return parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
+        clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0);
   }
 
   /**

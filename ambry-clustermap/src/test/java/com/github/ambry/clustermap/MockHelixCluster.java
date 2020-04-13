@@ -241,12 +241,12 @@ public class MockHelixCluster {
   }
 
   void addNewResource(String resourceName, IdealState idealState, String dcName) throws Exception {
-    MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStr());
+    MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
     helixAdmin.addNewResource(resourceName, idealState);
   }
 
   Map<String, String> getPartitionToLeaderReplica(String dcName) {
-    MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStr());
+    MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
     return helixAdmin.getPartitionToLeaderReplica();
   }
 
@@ -254,7 +254,7 @@ public class MockHelixCluster {
    * @return {@link MockHelixAdmin} from specified dc
    */
   MockHelixAdmin getHelixAdminFromDc(String dcName) {
-    return helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStr());
+    return helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
   }
 
   InstanceConfig getInstanceConfig(String instanceName) {
@@ -276,7 +276,7 @@ public class MockHelixCluster {
   List<InstanceConfig> getInstanceConfigsFromDcs(String[] dcNames) {
     List<InstanceConfig> configs = new ArrayList<>();
     for (String dcName : dcNames) {
-      MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStr());
+      MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
       configs.addAll(helixAdmin.getInstanceConfigs(clusterName));
     }
     return configs;

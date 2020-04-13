@@ -158,7 +158,10 @@ class DatacenterInitializer {
    * @throws Exception if something went wrong during startup
    */
   private DcInfo initializeHelixDatacenter() throws Exception {
-    String zkConnectStr = dcZkInfo.getZkConnectStr();
+    // For now, the first ZK endpoint (if there are more than one endpoints) will be adopted by default for initialization.
+    // If we really need multiple HelixClusterManagers on same node in the future, we can use separate zk connect str configs
+    // for HelixClusterManager and HelixParticipant.
+    String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
     HelixManager manager;
     if (dcZkInfo.getDcName().equals(clusterMapConfig.clusterMapDatacenterName)) {
       manager = Objects.requireNonNull(localManager, "localManager should have been set");

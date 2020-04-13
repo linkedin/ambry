@@ -69,11 +69,12 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this participant.
    * @param helixFactory the {@link HelixFactory} to use to get the {@link HelixManager}.
    * @param metricRegistry the {@link MetricRegistry} to instantiate {@link HelixParticipantMetrics}.
-   * @throws IOException if there is an error in parsing the JSON serialized ZK connect string config.
+   * @param zkConnectStr the address identifying the zk service which this participant interacts with.
    */
-  public HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory, MetricRegistry metricRegistry)
-      throws IOException {
+  public HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory, MetricRegistry metricRegistry,
+      String zkConnectStr) {
     this.clusterMapConfig = clusterMapConfig;
+    this.zkConnectStr = zkConnectStr;
     participantMetrics = new HelixParticipantMetrics(metricRegistry);
     clusterName = clusterMapConfig.clusterMapClusterName;
     instanceName =
@@ -81,17 +82,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     if (clusterName.isEmpty()) {
       throw new IllegalStateException("Cluster name is empty in clusterMapConfig");
     }
-    try {
-      zkConnectStr = ClusterMapUtils.parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings)
-          .get(clusterMapConfig.clusterMapDatacenterName)
-          .getZkConnectStr();
-      // HelixAdmin is initialized in constructor allowing caller to do any administrative operations in Helix
-      // before participating.
-      helixAdmin = helixFactory.getHelixAdmin(zkConnectStr);
-    } catch (JSONException e) {
-      throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
-    }
-    manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
+    // HelixAdmin is initialized in constructor allowing caller to do any administrative operations in Helix
+    // before participating.
+    helixAdmin = helixFactory.getHelixAdmin(this.zkConnectStr);
+    manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, this.zkConnectStr);
     replicaSyncUpManager = new AmbryReplicaSyncUpManager(clusterMapConfig);
     partitionStateChangeListeners = new HashMap<>();
   }
@@ -132,6 +126,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     for (AmbryHealthReport ambryHealthReport : ambryHealthReports) {
       manager.getHealthReportCollector().addHealthReportProvider((HealthReportProvider) ambryHealthReport);
     }
+    logger.info("Completed participation in cluster {} at {}", clusterName, zkConnectStr);
   }
 
   @Override

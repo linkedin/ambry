@@ -275,7 +275,11 @@ class HelixBootstrapUpgradeUtil {
     Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     info("Dropping cluster {} from Helix", clusterName);
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
-      HelixAdmin admin = helixAdminFactory.getHelixAdmin(entry.getValue().getZkConnectStr());
+      List<String> zkConnectStrs = entry.getValue().getZkConnectStrs();
+      if (zkConnectStrs.size() != 1) {
+        throw new AssertionError(entry.getKey() + " has invalid number of ZK endpoints: " + zkConnectStrs.size());
+      }
+      HelixAdmin admin = helixAdminFactory.getHelixAdmin(zkConnectStrs.get(0));
       admin.dropCluster(clusterName);
       info("Dropped cluster from {}", entry.getKey());
     }
@@ -360,7 +364,10 @@ class HelixBootstrapUpgradeUtil {
       }
     }
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
-      HelixAdmin admin = helixAdminFactory.getHelixAdmin(entry.getValue().getZkConnectStr());
+      List<String> zkConnectStrs = entry.getValue().getZkConnectStrs();
+      ensureOrThrow(zkConnectStrs.size() == 1,
+          entry.getKey() + "has invalid number of ZK endpoints: " + zkConnectStrs.size());
+      HelixAdmin admin = helixAdminFactory.getHelixAdmin(zkConnectStrs.get(0));
       adminForDc.put(entry.getKey(), admin);
     }
   }
@@ -490,8 +497,11 @@ class HelixBootstrapUpgradeUtil {
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
       info("Uploading {} infos for datacenter {}.", clusterAdminType, entry.getKey());
+      List<String> zkConnectStrs = entry.getValue().getZkConnectStrs();
+      ensureOrThrow(zkConnectStrs.size() == 1,
+          entry.getKey() + "has invalid number of ZK endpoints: " + zkConnectStrs.size());
       HelixPropertyStore<ZNRecord> helixPropertyStore =
-          CommonUtils.createHelixPropertyStore(entry.getValue().getZkConnectStr(), propertyStoreConfig, null);
+          CommonUtils.createHelixPropertyStore(zkConnectStrs.get(0), propertyStoreConfig, null);
       ZNRecord znRecord = new ZNRecord(clusterAdminType);
       znRecord.setMapFields(adminInfosByDc.get(entry.getKey()));
       if (!helixPropertyStore.set(adminConfigZNodePath, znRecord, AccessOption.PERSISTENT)) {
