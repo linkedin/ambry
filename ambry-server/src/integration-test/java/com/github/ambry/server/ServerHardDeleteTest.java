@@ -94,7 +94,7 @@ public class ServerHardDeleteTest {
     props.setProperty("port", Integer.toString(mockClusterMap.getDataNodes().get(0).getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
     props.setProperty("store.enable.hard.delete", "true");
-    props.setProperty("store.deleted.message.retention.days", "1");
+    props.setProperty("store.deleted.message.retention.days", "7");
     props.setProperty("server.handle.undelete.request.enabled", "true");
     props.setProperty("clustermap.cluster.name", "test");
     props.setProperty("clustermap.datacenter.name", "DC1");
@@ -307,7 +307,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(1).getID());
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
-    time.sleep(TimeUnit.DAYS.toMillis(1));
+    time.sleep(TimeUnit.DAYS.toMillis(7));
     // For each future change to this offset, add to this variable and write an explanation of why the number changed.
     // old value: 198728. Increased by 4 to 198732 because the format for delete record went from 2 to 3 which adds
     // 4 bytes (two shorts) extra. The last record is a delete record so its extra 4 bytes are not (yet) added
@@ -347,7 +347,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
     undeleteBlob(blobIdList.get(0), channel);
-    // No replication for undelete for now, so don't await for blob undelete to be replicated.
+    notificationSystem.awaitBlobUndeletes(blobIdList.get(0).getID());
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
     // For each future change to this offset, add to this variable and write an explanation of why the number changed.
@@ -385,7 +385,7 @@ public class ServerHardDeleteTest {
     channel.send(putRequest0);
     InputStream putResponseStream = channel.receive().getInputStream();
     PutResponse response0 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-    Assert.assertEquals(response0.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(ServerErrorCode.No_Error, response0.getError());
   }
 
   /**
@@ -399,7 +399,7 @@ public class ServerHardDeleteTest {
     channel.send(deleteRequest);
     InputStream deleteResponseStream = channel.receive().getInputStream();
     DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
-    Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
   }
 
   /**
@@ -413,7 +413,7 @@ public class ServerHardDeleteTest {
     channel.send(deleteRequest);
     InputStream undeleteResponseStream = channel.receive().getInputStream();
     UndeleteResponse undeleteResponse = UndeleteResponse.readFrom(new DataInputStream(undeleteResponseStream));
-    Assert.assertEquals(undeleteResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals("BlobId " + blobId + " undelete failed", ServerErrorCode.No_Error, undeleteResponse.getError());
   }
 
   /**

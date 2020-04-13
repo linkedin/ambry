@@ -91,6 +91,9 @@ public class Utils {
   public static final String ACCOUNT_CONTAINER_SEPARATOR = "___";
   private static final String CLIENT_RESET_EXCEPTION_MSG = "Connection reset by peer";
   private static final String CLIENT_BROKEN_PIPE_EXCEPTION_MSG = "Broken pipe";
+  // This is found in Netty's SslHandler, which does not expose the exception message as a constant. Be careful, since
+  // the message may change in the future.
+  private static final String SSL_ENGINE_CLOSED_EXCEPTION_MSG = "SSLEngine closed already";
   private static final Logger logger = LoggerFactory.getLogger(Utils.class);
 
   // The read*String methods assume that the underlying stream is blocking
@@ -1027,7 +1030,8 @@ public class Utils {
    */
   public static boolean isPossibleClientTermination(Throwable cause) {
     return cause instanceof IOException && (CLIENT_RESET_EXCEPTION_MSG.equals(cause.getMessage())
-        || CLIENT_BROKEN_PIPE_EXCEPTION_MSG.equals(cause.getMessage()));
+        || CLIENT_BROKEN_PIPE_EXCEPTION_MSG.equals(cause.getMessage()) || SSL_ENGINE_CLOSED_EXCEPTION_MSG.equals(
+        cause.getMessage()));
   }
 
   /**

@@ -42,11 +42,13 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
+import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.ValidatingTransformer;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Port;
@@ -834,7 +836,7 @@ public class ReplicationTest {
 
   /**
    * Tests pausing all partitions and makes sure that the replica thread pauses. Also tests that it resumes when one
-   * eligible partition is reenabled and that replication completes successfully.
+   * eligible partition is re-enabled and that replication completes successfully.
    * @throws Exception
    */
   @Test
@@ -1273,6 +1275,13 @@ public class ReplicationTest {
       numMessagesInEachPart = remoteHost.infosByPartition.get(pid).size();
     }
 
+    // After the for loop above, we have records in hosts just like below
+    // L|id0|id1|id2|id0D|id1T|   |   |    |    |    |    |    |    |    |   |   |b0p|b1p|   |  |b0pT|    |    |    |
+    // R|id0|id1|id2|    |    |id3|id4|id4T|id3T|id2T|id1T|id0T|id1D|id3D|idT|idD|b0 |b1 |b2 |b3|b0T |b1T |b2T | b3T|
+    // E|id0|id1|id2|id0D|id1T|   |id4|id4T|    |id2T|    |    |id1D|    |   |   |b0p|b1p|b2p|  |b0pT|b1pT|b2pT|    |
+    //
+    // converter map: b0->b0p, b1->b1p, b2->b2p, b3->null
+
     int batchSize = 4;
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
         getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
@@ -1282,22 +1291,33 @@ public class ReplicationTest {
 
     Map<PartitionId, List<ByteBuffer>> missingBuffers =
         expectedLocalHost.getMissingBuffers(localHost.buffersByPartition);
+    // We can see from the table in the comments above, Local has 7 records less than expected local.
     for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
       assertEquals("Missing buffers count mismatch", 7, entry.getValue().size());
     }
 
     // 1st iteration - 0 missing keys (3 puts already present, one put missing but del in remote, 1 ttl update will be
-    // applied, 1 delete will be applied)
+    // applied, 1 delete will be applied): Remote returns: id0T, id1TD, id2T, id3TD. id3 put missing, but it's deleted.
+    // id1 apply delete, id2 apply ttl update. Token index is pointing to id3.
     // 2nd iteration - 1 missing key, 1 of which will also be ttl updated (one key with put + ttl update missing but
-    // del in remote, one put and ttl update replicated)
+    // del in remote, one put and ttl update replicated): Remote returns: id3TD, id4T. id4 put missing, id3 deleted.
+    // Token index is pointing to id3T.
     // 3rd iteration - 0 missing keys (1 ttl update missing but del in remote, 1 already ttl updated in iter 1, 1 key
-    // already ttl updated in local, 1 key del local)
+    // already ttl updated in local, 1 key del local): Remote returns: id3TD, id2T, id1TD, id0T. Token index is pointing
+    // to id0T.
     // 4th iteration - 0 missing keys (1 key del local, 1 key already deleted, 1 key missing but del in remote, 1 key
-    // with ttl update missing but del remote)
+    // with ttl update missing but del remote): Remote returns: id0T, id1D, id3TD, idTD. Token index is pointing to idT.
     // 5th iteration - 0 missing keys (1 key - two records - missing but del remote, 2 puts already present but TTL
-    // update of one of them is applied)
-    // 6th iteration - 1 missing key (put + ttl update for a key, 1 deprecated id ignored, 1 TTL update already applied)
+    // update of one of them is applied): Remote returns: idTD, b0T, b1T. b1 apply ttl update. Token index is pointing to
+    // b1.
+    // 6th iteration - 1 missing key (put + ttl update for a key, 1 deprecated id ignored, 1 TTL update already applied):
+    // Remote returns: b1T, b2T, b3T, b0T. b2 missing, and ttl updated. b3 has no local key.
     // 7th iteration - 0 missing keys (2 TTL updates already applied, 1 TTL update of a deprecated ID ignored)
+    //                                                                                                              |1st iter |2nd iter|3rd iter|4th iter|5th iter|6th iter|7th iter|
+    // L|id0|id1|id2|id0D|id1T|   |   |    |    |    |    |    |    |    |   |   |b0p|b1p|   |  |b0pT|    |    |    |id1D|id2T|id4|id4T|        |        |b1pT    |b2p|b2pT|
+    // R|id0|id1|id2|    |    |id3|id4|id4T|id3T|id2T|id1T|id0T|id1D|id3D|idT|idD|b0 |b1 |b2 |b3|b0T |b1T |b2T | b3T|
+    // E|id0|id1|id2|id0D|id1T|   |id4|id4T|    |id2T|    |    |id1D|    |   |   |b0p|b1p|b2p|  |b0pT|b1pT|b2pT|    |
+
     int[] missingKeysCounts = {0, 1, 0, 0, 0, 1, 0};
     int[] missingBuffersCount = {5, 3, 3, 3, 2, 0, 0};
     int expectedIndex = 0;
@@ -1542,8 +1562,8 @@ public class ReplicationTest {
     int i = remoteHost.infosByPartition.get(partitionId).indexOf(msgInfoToExpire);
     remoteHost.infosByPartition.get(partitionId)
         .set(i, new MessageInfo(msgInfoToExpire.getStoreKey(), msgInfoToExpire.getSize(), msgInfoToExpire.isDeleted(),
-            msgInfoToExpire.isTtlUpdated(), 1, msgInfoToExpire.getAccountId(), msgInfoToExpire.getContainerId(),
-            msgInfoToExpire.getOperationTimeMs()));
+            msgInfoToExpire.isTtlUpdated(), msgInfoToExpire.isUndeleted(), 1, null, msgInfoToExpire.getAccountId(),
+            msgInfoToExpire.getContainerId(), msgInfoToExpire.getOperationTimeMs(), msgInfoToExpire.getLifeVersion()));
 
     testSetup.replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
         testSetup.replicasToReplicate.get(remoteHost.dataNodeId), responses);
@@ -1922,6 +1942,9 @@ public class ReplicationTest {
             null, replicaSyncUpService);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate1 = replicasAndThread1.getFirst();
     ReplicaThread replicaThread1 = replicasAndThread1.getSecond();
+    // mock Bootstrap-To-Standby transition in ReplicationManager: 1. update store current state; 2. initiate bootstrap
+    replicasToReplicate1.get(remoteHost1.dataNodeId)
+        .forEach(info -> info.getLocalStore().setCurrentState(ReplicaState.BOOTSTRAP));
     clusterMap.getReplicaIds(localHost.dataNodeId).forEach(replicaSyncUpService::initiateBootstrap);
 
     List<ReplicaThread.ExchangeMetadataResponse> response =
@@ -1952,16 +1975,19 @@ public class ReplicationTest {
             null, replicaSyncUpService);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate2 = replicasAndThread2.getFirst();
     ReplicaThread replicaThread2 = replicasAndThread2.getSecond();
-    response = replicaThread2.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
-        replicasToReplicate2.get(remoteHost2.dataNodeId));
-    replicaThread2.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
-        replicasToReplicate2.get(remoteHost2.dataNodeId), response);
-    // verify replica of special partition has completed bootstrap and becomes standby
+    // initiate bootstrap on replica of special partition
     RemoteReplicaInfo specialReplicaInfo = replicasToReplicate2.get(remoteHost2.dataNodeId)
         .stream()
         .filter(info -> info.getReplicaId().getPartitionId() == specialPartitionId)
         .findFirst()
         .get();
+    specialReplicaInfo.getLocalStore().setCurrentState(ReplicaState.BOOTSTRAP);
+    replicaSyncUpService.initiateBootstrap(specialReplicaInfo.getLocalReplicaId());
+    response = replicaThread2.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
+        replicasToReplicate2.get(remoteHost2.dataNodeId));
+    replicaThread2.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
+        replicasToReplicate2.get(remoteHost2.dataNodeId), response);
+    // verify replica of special partition has completed bootstrap and becomes standby
     assertEquals("Store state is not expected", ReplicaState.STANDBY,
         specialReplicaInfo.getLocalStore().getCurrentState());
   }
@@ -2024,7 +2050,615 @@ public class ReplicationTest {
     remoteReplicaInfo.onTokenPersisted();
   }
 
+  /**
+   * Tests when the local records has higher lifeVersion than remote records.
+   */
+  @Test
+  public void replicaThreadLifeVersionLocalGreaterThanRemote() throws Exception {
+    lifeVersionLocalGreaterThanRemote_Delete(false, false);
+    lifeVersionLocalGreaterThanRemote_Delete(false, true);
+    lifeVersionLocalGreaterThanRemote_Delete(true, false);
+    lifeVersionLocalGreaterThanRemote_Delete(true, true);
+  }
+
+  /**
+   * Tests when the local store missing put records with lifeVersion greater than 0
+   */
+  @Test
+  public void replicaThreadLifeVersionLocalLessThanRemote_MissingPuts() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+    Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
+    storeKeyConverter.setConversionMap(conversionMap);
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+    Map<PartitionId, List<StoreKey>> idsToBeIgnoredByPartition = new HashMap<>();
+    Map<PartitionId, List<StoreKey>> idsToBeTtlUpdatedByPartition = new HashMap<>();
+    short lifeVersion = 1;
+    for (int i = 0; i < partitionIds.size(); i++) {
+      List<StoreKey> toBeIgnored = new ArrayList<>();
+      List<StoreKey> toBeTtlUpdated = new ArrayList<>();
+      PartitionId partitionId = partitionIds.get(i);
+      // Adding 1 put to remoteHost at lifeVersion 0
+      List<StoreKey> ids = addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 1);
+      // Adding 1 put to remoteHost at lifeVersion 1
+      ids.addAll(
+          addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), lifeVersion, 1));
+
+      // Adding one put to remoteHost at lifeVersion 1, which would be ttl updated later at lifeVersion 1
+      StoreKey toTtlUpdateId =
+          addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), lifeVersion, 1).get(
+              0);
+      ids.add(toTtlUpdateId);
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, toTtlUpdateId, Collections.singletonList(remoteHost),
+          UPDATED_EXPIRY_TIME_MS, lifeVersion);
+      toBeTtlUpdated.add(toTtlUpdateId);
+
+      // Adding one put to remoteHost at lifeVersion 0, which would be ttl updated later at lifeVersion 1
+      toTtlUpdateId = addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 1).get(0);
+      ids.add(toTtlUpdateId);
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, toTtlUpdateId, Collections.singletonList(remoteHost),
+          UPDATED_EXPIRY_TIME_MS, lifeVersion);
+      toBeTtlUpdated.add(toTtlUpdateId);
+
+      // Adding one put to remoteHost, which would be deleted later
+      StoreKey toDeleteId =
+          addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), lifeVersion, 1).get(0);
+      ids.add(toDeleteId);
+      addDeleteMessagesToReplicasOfPartition(partitionId, toDeleteId, Collections.singletonList(remoteHost),
+          lifeVersion, EXPIRY_TIME_MS);
+      toBeIgnored.add(toDeleteId);
+
+      // Adding one put to remoteHost, which would be ttl updated and deleted later
+      StoreKey toDeleteAndTtlUpdateId =
+          addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), lifeVersion, 1).get(0);
+      ids.add(toDeleteAndTtlUpdateId);
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, toDeleteAndTtlUpdateId,
+          Collections.singletonList(remoteHost), UPDATED_EXPIRY_TIME_MS, lifeVersion);
+      toBeTtlUpdated.add(toDeleteAndTtlUpdateId);
+      addDeleteMessagesToReplicasOfPartition(partitionId, toDeleteAndTtlUpdateId, Collections.singletonList(remoteHost),
+          lifeVersion, UPDATED_EXPIRY_TIME_MS);
+      toBeIgnored.add(toDeleteAndTtlUpdateId);
+
+      // Adding one put to remoteHost at lifeVersion 0, delete it and then add undelete at lifeVersion 1
+      StoreKey deleteAndUndeleteId =
+          addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 1).get(0);
+      ids.add(deleteAndUndeleteId);
+      addDeleteMessagesToReplicasOfPartition(partitionId, deleteAndUndeleteId, Collections.singletonList(remoteHost),
+          (short) 0, EXPIRY_TIME_MS);
+      addUndeleteMessagesToReplicasOfPartition(partitionId, deleteAndUndeleteId, Collections.singletonList(remoteHost),
+          lifeVersion);
+
+      idsToBeIgnoredByPartition.put(partitionId, toBeIgnored);
+      idsToBeTtlUpdatedByPartition.put(partitionId, toBeTtlUpdated);
+
+      // Adding one put to both remote and local host.
+      ids.addAll(
+          addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(localHost, remoteHost), lifeVersion, 1));
+    }
+
+    int batchSize = 100;
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null, null);
+    List<RemoteReplicaInfo> remoteReplicaInfos = replicasAndThread.getFirst().get(remoteHost.dataNodeId);
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    int missingKeyCount = 5;
+    List<ReplicaThread.ExchangeMetadataResponse> response =
+        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+            remoteReplicaInfos);
+    assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
+    for (int i = 0; i < response.size(); i++) {
+      assertEquals(missingKeyCount, response.get(i).missingStoreKeys.size());
+      remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
+    }
+    replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize), remoteReplicaInfos,
+        response);
+    for (int i = 0; i < response.size(); i++) {
+      assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
+          remoteReplicaInfos.get(i).getToken());
+    }
+    // Don't compare buffers here, PutBuffer might be different since we might change the lifeVersion.
+    for (Map.Entry<PartitionId, List<MessageInfo>> localInfoEntry : localHost.infosByPartition.entrySet()) {
+      assertEquals("MessageInfo number mismatch", 8, localInfoEntry.getValue().size());
+    }
+
+    for (Map.Entry<PartitionId, List<MessageInfo>> remoteInfoEntry : remoteHost.infosByPartition.entrySet()) {
+      List<MessageInfo> remoteInfos = remoteInfoEntry.getValue();
+      List<MessageInfo> localInfos = localHost.infosByPartition.get(remoteInfoEntry.getKey());
+      int remoteIndex = 0;
+
+      Set<StoreKey> seen = new HashSet<>();
+      for (MessageInfo remoteInfo : remoteInfos) {
+        StoreKey id = remoteInfo.getStoreKey();
+        if (seen.add(id)) {
+          MessageInfo localInfo = getMessageInfo(id, localInfos, false, false, false);
+          if (localInfo == null) {
+            assertTrue("Should be ignored", idsToBeIgnoredByPartition.get(remoteInfoEntry.getKey()).contains(id));
+          } else {
+            assertFalse("Should not be ignored", idsToBeIgnoredByPartition.get(remoteInfoEntry.getKey()).contains(id));
+            MessageInfo mergedLocalInfo = getMergedMessageInfo(id, localInfos);
+            MessageInfo mergedRemoteInfo = getMergedMessageInfo(id, remoteInfos);
+            assertEquals(mergedLocalInfo.isDeleted(), mergedRemoteInfo.isDeleted());
+            assertEquals(mergedLocalInfo.isTtlUpdated(), mergedRemoteInfo.isTtlUpdated());
+            assertEquals(mergedLocalInfo.isTtlUpdated(),
+                idsToBeTtlUpdatedByPartition.get(remoteInfoEntry.getKey()).contains(id));
+            assertEquals(mergedLocalInfo.getLifeVersion(), mergedRemoteInfo.getLifeVersion());
+            assertEquals(mergedLocalInfo.getAccountId(), mergedRemoteInfo.getAccountId());
+            assertEquals(mergedLocalInfo.getContainerId(), mergedRemoteInfo.getContainerId());
+            assertEquals("Key " + id, mergedLocalInfo.getExpirationTimeInMs(),
+                mergedRemoteInfo.getExpirationTimeInMs());
+            ByteBuffer putRecordBuffer = null;
+            for (int i = 0; i < localInfos.size(); i++) {
+              if (localInfo.equals(localInfos.get(i))) {
+                putRecordBuffer = localHost.buffersByPartition.get(remoteInfoEntry.getKey()).get(i).duplicate();
+                break;
+              }
+            }
+            assertNotNull(putRecordBuffer);
+            // Make sure the put buffer contains the same info as the message Info
+            assertPutRecord(putRecordBuffer,
+                remoteHost.buffersByPartition.get(remoteInfoEntry.getKey()).get(remoteIndex).duplicate(),
+                mergedLocalInfo);
+          }
+        }
+        remoteIndex++;
+      }
+    }
+  }
+
+  /**
+   * Tests when the lifeVersion in local is less than the lifeVersion in remote and the final state from remote
+   * is delete.
+   * @throws Exception
+   */
+  @Test
+  public void replicaThreadLifeVersionLocalLessThanRemote_FinalState_Delete() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+    Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
+    storeKeyConverter.setConversionMap(conversionMap);
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+
+    Map<PartitionId, List<StoreKey>> idsByPartition = new HashMap<>();
+    Map<PartitionId, StoreKey> idsToBeIgnoredByPartition = new HashMap<>();
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+    // When the final state is delete in remote host, then local host might have several different states.
+    // 1 missing 2 Delete 3 Put(w/ or w/o ttl update)
+    for (int i = 0; i < partitionIds.size(); i++) {
+      PartitionId partitionId = partitionIds.get(i);
+      List<StoreKey> ids = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), 1);
+      // Adding a Put and Delete to remote but nothing in local
+      StoreKey id = ids.get(0);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost), (short) 1,
+          EXPIRY_TIME_MS);
+      idsToBeIgnoredByPartition.put(partitionId, id);
+
+      // Adding one Delete to remote and add delete to local but with lower lifeVersion
+      id = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost, localHost), 1).get(0);
+      ids.add(id);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(localHost), (short) 0,
+          EXPIRY_TIME_MS);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost), (short) 1,
+          EXPIRY_TIME_MS);
+
+      // Adding one Put and Delete to remote and add the same put to local host
+      id = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost, localHost), 1).get(0);
+      ids.add(id);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost), (short) 1,
+          EXPIRY_TIME_MS);
+
+      // Adding one Put and Delete to remote and add same Put and a TtlUpdate to local host
+      id = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost, localHost), 1).get(0);
+      ids.add(id);
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(localHost),
+          UPDATED_EXPIRY_TIME_MS, (short) 0);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost), (short) 1,
+          EXPIRY_TIME_MS);
+
+      // Adding one Put and Delete to remote and add same Put and a Delete and Undelete to local.
+      id = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost, localHost), 1).get(0);
+      ids.add(id);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(localHost), (short) 0,
+          EXPIRY_TIME_MS);
+      addUndeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost), (short) 1);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost), (short) 2,
+          EXPIRY_TIME_MS);
+      ids.add(id);
+      idsByPartition.put(partitionId, ids);
+    }
+
+    int batchSize = 100;
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null, null);
+    List<RemoteReplicaInfo> remoteReplicaInfos = replicasAndThread.getFirst().get(remoteHost.dataNodeId);
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    // It's all deletes, there is no missing key.
+    List<ReplicaThread.ExchangeMetadataResponse> response =
+        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+            remoteReplicaInfos);
+    assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
+    for (int i = 0; i < response.size(); i++) {
+      assertEquals(0, response.get(i).missingStoreKeys.size());
+      remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
+    }
+
+    // Before exchange metadata, the number of message infos in local host is 7. Exchange metadata would add another 4(all deletes).
+    for (Map.Entry<PartitionId, List<MessageInfo>> localInfoEntry : localHost.infosByPartition.entrySet()) {
+      assertEquals("MessageInfo number mismatch", 11, localInfoEntry.getValue().size());
+    }
+
+    for (Map.Entry<PartitionId, List<StoreKey>> idsEntry : idsByPartition.entrySet()) {
+      List<MessageInfo> remoteInfos = remoteHost.infosByPartition.get(idsEntry.getKey());
+      List<MessageInfo> localInfos = localHost.infosByPartition.get(idsEntry.getKey());
+
+      for (StoreKey id : idsEntry.getValue()) {
+        if (!idsToBeIgnoredByPartition.get(idsEntry.getKey()).equals(id)) {
+          MessageInfo localInfo = getMergedMessageInfo(id, localInfos);
+          MessageInfo remoteInfo = getMergedMessageInfo(id, remoteInfos);
+          assertTrue(localInfo.isDeleted());
+          assertTrue(remoteInfo.isDeleted());
+          assertEquals(localInfo.getLifeVersion(), remoteInfo.getLifeVersion());
+        }
+      }
+    }
+  }
+
+  /**
+   * Tests when the lifeVersion in local is less than the lifeVersion in remote and the final state from remote
+   * is delete with ttl update.
+   * @throws Exception
+   */
+  @Test
+  public void replicaThreadLifeVersionLocalLessThanRemote_FinalState_TtlUpdateDelete() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+    Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
+    storeKeyConverter.setConversionMap(conversionMap);
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+
+    Map<PartitionId, List<StoreKey>> idsByPartition = new HashMap<>();
+    Map<PartitionId, StoreKey> idsToBeIgnoredByPartition = new HashMap<>();
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+    // When the remote host has P, T, D, then local host might have several different states.
+    // 1 Missing -> []
+    // 2 P -> [T, D]
+    // 3 P, T -> [D]
+    // 4 P, T, D -> [D]
+    // 5 P, D -> [U, T, D]
+    for (int i = 0; i < partitionIds.size(); i++) {
+      PartitionId partitionId = partitionIds.get(i);
+      List<StoreKey> ids = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), 1);
+      // 1 Missing
+      StoreKey id = ids.get(0);
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+          UPDATED_EXPIRY_TIME_MS, (short) 0);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost), (short) 1,
+          UPDATED_EXPIRY_TIME_MS);
+      idsToBeIgnoredByPartition.put(partitionId, id);
+
+      // 2 P -> [T, D]
+      id = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost, localHost), 1).get(0);
+      ids.add(id);
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+          UPDATED_EXPIRY_TIME_MS, (short) 0);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost), (short) 1,
+          UPDATED_EXPIRY_TIME_MS);
+
+      // 3 P, T -> [D]
+      id = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost, localHost), 1).get(0);
+      ids.add(id);
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Arrays.asList(localHost, remoteHost),
+          UPDATED_EXPIRY_TIME_MS, (short) 0);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost), (short) 1,
+          UPDATED_EXPIRY_TIME_MS);
+
+      // 4 P, T, D -> [D]
+      id = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost, localHost), 1).get(0);
+      ids.add(id);
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Arrays.asList(localHost, remoteHost),
+          UPDATED_EXPIRY_TIME_MS, (short) 0);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(localHost), (short) 0,
+          UPDATED_EXPIRY_TIME_MS);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost), (short) 1,
+          UPDATED_EXPIRY_TIME_MS);
+
+      // 5 P, D -> [U, T, D]
+      id = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost, localHost), 1).get(0);
+      ids.add(id);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(localHost), (short) 0,
+          EXPIRY_TIME_MS);
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+          UPDATED_EXPIRY_TIME_MS, (short) 0);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost), (short) 1,
+          UPDATED_EXPIRY_TIME_MS);
+      ids.add(id);
+      idsByPartition.put(partitionId, ids);
+    }
+
+    int batchSize = 100;
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null, null);
+    List<RemoteReplicaInfo> remoteReplicaInfos = replicasAndThread.getFirst().get(remoteHost.dataNodeId);
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    // It's all deletes, there is no missing key.
+    List<ReplicaThread.ExchangeMetadataResponse> response =
+        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+            remoteReplicaInfos);
+    assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
+    for (int i = 0; i < response.size(); i++) {
+      assertEquals(0, response.get(i).missingStoreKeys.size());
+      remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
+    }
+
+    // Before exchange metadata, the number of message infos in local host is 8. Exchange metadata would add another 7.
+    for (Map.Entry<PartitionId, List<MessageInfo>> localInfoEntry : localHost.infosByPartition.entrySet()) {
+      assertEquals("MessageInfo number mismatch", 15, localInfoEntry.getValue().size());
+    }
+
+    for (Map.Entry<PartitionId, List<StoreKey>> idsEntry : idsByPartition.entrySet()) {
+      List<MessageInfo> remoteInfos = remoteHost.infosByPartition.get(idsEntry.getKey());
+      List<MessageInfo> localInfos = localHost.infosByPartition.get(idsEntry.getKey());
+
+      for (StoreKey id : idsEntry.getValue()) {
+        if (!idsToBeIgnoredByPartition.get(idsEntry.getKey()).equals(id)) {
+          MessageInfo localInfo = getMergedMessageInfo(id, localInfos);
+          MessageInfo remoteInfo = getMergedMessageInfo(id, remoteInfos);
+          assertTrue(localInfo.isDeleted());
+          assertTrue(remoteInfo.isDeleted());
+          assertTrue(localInfo.isTtlUpdated());
+          assertTrue(remoteInfo.isTtlUpdated());
+          assertEquals(localInfo.getLifeVersion(), remoteInfo.getLifeVersion());
+        }
+      }
+    }
+  }
+
+  /**
+   * Tests when lifeVersion in local is less than the lifeVersion in remote and the final state is not
+   * delete, it would be Put, TtlUpdate or Undelete.
+   * @throws Exception
+   */
+  @Test
+  public void replicaThreadLifeVersionLocalLessThanRemote_FinalState_NotDelete() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+    Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
+    storeKeyConverter.setConversionMap(conversionMap);
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+
+    Map<PartitionId, List<StoreKey>> idsByPartition = new HashMap<>();
+    Map<PartitionId, StoreKey> idsToBeIgnoredByPartition = new HashMap<>();
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+    // Remote host has final state as "Not Delete", it would be Put, Ttl update or Undelete. Put and Undelete are practically
+    // the same. So we can create two separate set of remote host, with ttl update or without ttl update.
+    //
+    // When the remote has ttl update, assuming it's P1, T1, then the local can be
+    // 1 Missing -> [P1, T1]
+    // 2 P0 -> [U1, T1]
+    // 3 P0, T0 -> [U1]
+    // 4 P0, T0, D0 -> [U1]
+    // 5 P0, D0 -> [U1, T1]
+    //
+    // When the remote has not ttl update, assuming it's P1, then the local can be
+    // 1 Missing -> [P1]
+    // 2 P0 -> [U1]
+    // 3 P0, T0 -> [U1]
+    // 4 P0, T0, D0 -> [U1]
+    // 5 P0, D0 -> [U1]
+    for (int i = 0; i < partitionIds.size(); i++) {
+      PartitionId partitionId = partitionIds.get(i);
+      List<StoreKey> ids = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), (short) 1, 5);
+      for (StoreKey id : ids) {
+        addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+            UPDATED_EXPIRY_TIME_MS, (short) 1);
+      }
+
+      // 1 Missing
+      StoreKey id = ids.get(0);
+
+      // 2 P0 -> [U1, T1]
+      id = ids.get(1);
+      addPutMessagesToReplicasOfPartition(Collections.singletonList(id), Collections.singletonList(localHost));
+
+      // 3 P0, T0 -> [U1]
+      id = ids.get(2);
+      addPutMessagesToReplicasOfPartition(Collections.singletonList(id), Collections.singletonList(localHost));
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Arrays.asList(localHost), UPDATED_EXPIRY_TIME_MS,
+          (short) 0);
+
+      // 4 P0, T0, D0 -> [U1]
+      id = ids.get(3);
+      addPutMessagesToReplicasOfPartition(Collections.singletonList(id), Collections.singletonList(localHost));
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Arrays.asList(localHost), UPDATED_EXPIRY_TIME_MS,
+          (short) 0);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(localHost), (short) 0,
+          UPDATED_EXPIRY_TIME_MS);
+
+      // 5 P, D -> [U, T, D]
+      id = ids.get(4);
+      addPutMessagesToReplicasOfPartition(Collections.singletonList(id), Collections.singletonList(localHost));
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(localHost), (short) 0,
+          UPDATED_EXPIRY_TIME_MS);
+    }
+
+    int batchSize = 100;
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null, null);
+    List<RemoteReplicaInfo> remoteReplicaInfos = replicasAndThread.getFirst().get(remoteHost.dataNodeId);
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    // There is one missing key
+    List<ReplicaThread.ExchangeMetadataResponse> response =
+        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+            remoteReplicaInfos);
+    assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
+    for (int i = 0; i < response.size(); i++) {
+      assertEquals(1, response.get(i).missingStoreKeys.size());
+      remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
+    }
+
+    replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize), remoteReplicaInfos,
+        response);
+
+    // Before exchange metadata, the number of message infos in local host is 8. Exchange metadata would add another 8.
+    for (Map.Entry<PartitionId, List<MessageInfo>> localInfoEntry : localHost.infosByPartition.entrySet()) {
+      assertEquals("MessageInfo number mismatch", 16, localInfoEntry.getValue().size());
+    }
+
+    for (Map.Entry<PartitionId, List<StoreKey>> idsEntry : idsByPartition.entrySet()) {
+      List<MessageInfo> remoteInfos = remoteHost.infosByPartition.get(idsEntry.getKey());
+      List<MessageInfo> localInfos = localHost.infosByPartition.get(idsEntry.getKey());
+
+      for (StoreKey id : idsEntry.getValue()) {
+        if (!idsToBeIgnoredByPartition.get(idsEntry.getKey()).equals(id)) {
+          MessageInfo localInfo = getMergedMessageInfo(id, localInfos);
+          MessageInfo remoteInfo = getMergedMessageInfo(id, remoteInfos);
+          assertTrue(localInfo.isDeleted());
+          assertTrue(remoteInfo.isDeleted());
+          assertTrue(localInfo.isTtlUpdated());
+          assertTrue(remoteInfo.isTtlUpdated());
+          assertEquals(localInfo.getLifeVersion(), remoteInfo.getLifeVersion());
+        }
+      }
+    }
+  }
+
   // helpers
+
+  private void assertPutRecord(ByteBuffer putRecordBuffer, ByteBuffer expectedPutRecordBuffer, MessageInfo info) {
+    // The second short should be the lifeVersion, and it should match lifeVersion from info.
+    putRecordBuffer.position(2);
+    short lifeVersion = putRecordBuffer.getShort();
+    assertEquals("LifeVersion doesn't match", lifeVersion, info.getLifeVersion());
+    putRecordBuffer.position(32); // this is where header crc starts
+    long crc = putRecordBuffer.getLong();
+    expectedPutRecordBuffer.position(2);
+    expectedPutRecordBuffer.putShort(lifeVersion);
+    expectedPutRecordBuffer.position(32);
+    expectedPutRecordBuffer.putLong(crc);
+    assertArrayEquals(putRecordBuffer.array(), expectedPutRecordBuffer.array());
+  }
+
+  /**
+   * Helepr function to test when the local lifeVersion is greater than the remote lifeVersion.
+   * @param localTtlUpdated
+   * @param remoteTtlUpdated
+   * @throws Exception
+   */
+  private void lifeVersionLocalGreaterThanRemote_Delete(boolean localTtlUpdated, boolean remoteTtlUpdated)
+      throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+    for (int i = 0; i < partitionIds.size(); i++) {
+      PartitionId partitionId = partitionIds.get(i);
+      // add 1 messages to remote host with lifeVersion being 0 and add it local host with lifeVersion being 1.
+      StoreKey toDeleteId = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), 1).get(0);
+      if (remoteTtlUpdated) {
+        addTtlUpdateMessagesToReplicasOfPartition(partitionId, toDeleteId, Arrays.asList(remoteHost),
+            UPDATED_EXPIRY_TIME_MS);
+      }
+      addDeleteMessagesToReplicasOfPartition(partitionId, toDeleteId, Collections.singletonList(remoteHost));
+
+      BlobId blobId = (BlobId) toDeleteId;
+      short accountId = blobId.getAccountId();
+      short containerId = blobId.getContainerId();
+      short lifeVersion = 1;
+      // first put message has encryption turned on
+      boolean toEncrypt = true;
+
+      // create a put message with lifeVersion bigger than 0
+      PutMsgInfoAndBuffer msgInfoAndBuffer =
+          createPutMessage(toDeleteId, accountId, containerId, toEncrypt, lifeVersion);
+      localHost.addMessage(partitionId,
+          new MessageInfo(toDeleteId, msgInfoAndBuffer.byteBuffer.remaining(), false, false, false, Utils.Infinite_Time,
+              null, accountId, containerId, msgInfoAndBuffer.messageInfo.getOperationTimeMs(), lifeVersion),
+          msgInfoAndBuffer.byteBuffer);
+      if (localTtlUpdated) {
+        addTtlUpdateMessagesToReplicasOfPartition(partitionId, toDeleteId, Collections.singletonList(localHost),
+            EXPIRY_TIME_MS, lifeVersion);
+      }
+
+      // ensure that the first key is not deleted in the local host
+      assertNull(toDeleteId + " should not be deleted in the local host",
+          getMessageInfo(toDeleteId, localHost.infosByPartition.get(partitionId), true, false, false));
+    }
+
+    int batchSize = 4;
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, null, null,
+            null);
+    List<RemoteReplicaInfo> remoteReplicaInfos = replicasAndThread.getFirst().get(remoteHost.dataNodeId);
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    // Do the replica metadata exchange.
+    List<ReplicaThread.ExchangeMetadataResponse> response =
+        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+            remoteReplicaInfos);
+
+    assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
+    for (int i = 0; i < response.size(); i++) {
+      // we don't have any missing key here.
+      assertEquals(0, response.get(i).missingStoreKeys.size());
+      remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
+      PartitionId partitionId = partitionIds.get(i);
+      StoreKey key = localHost.infosByPartition.get(partitionId).get(0).getStoreKey();
+      assertNull(key + " should not be deleted in the local host",
+          getMessageInfo(key, localHost.infosByPartition.get(partitionId), true, false, false));
+      if (!localTtlUpdated) {
+        assertNull(key + " should not be ttlUpdated in the local host",
+            getMessageInfo(key, localHost.infosByPartition.get(partitionId), false, false, true));
+      }
+    }
+  }
 
   /**
    * Verify remote replica info is/isn't present in given {@link PartitionInfo}.
@@ -2277,6 +2911,11 @@ public class ReplicationTest {
    */
   private List<StoreKey> addPutMessagesToReplicasOfPartition(PartitionId partitionId, List<MockHost> hosts, int count)
       throws MessageFormatException, IOException {
+    return addPutMessagesToReplicasOfPartition(partitionId, hosts, (short) 0, count);
+  }
+
+  private List<StoreKey> addPutMessagesToReplicasOfPartition(PartitionId partitionId, List<MockHost> hosts,
+      short lifeVersion, int count) throws MessageFormatException, IOException {
     List<StoreKey> ids = new ArrayList<>();
     for (int i = 0; i < count; i++) {
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -2286,7 +2925,8 @@ public class ReplicationTest {
       BlobId id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
           containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       ids.add(id);
-      PutMsgInfoAndBuffer msgInfoAndBuffer = createPutMessage(id, accountId, containerId, toEncrypt);
+      PutMsgInfoAndBuffer msgInfoAndBuffer =
+          createPutMessage(id, id.getAccountId(), id.getContainerId(), toEncrypt, lifeVersion);
       for (MockHost host : hosts) {
         host.addMessage(partitionId, msgInfoAndBuffer.messageInfo, msgInfoAndBuffer.byteBuffer.duplicate());
       }
@@ -2350,19 +2990,36 @@ public class ReplicationTest {
     MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false, false, false);
     short aid;
     short cid;
+    short lifeVersion;
     if (putMsg == null) {
       // the StoreKey must be a BlobId in this case (to get the account and container id)
       aid = ((BlobId) id).getAccountId();
       cid = ((BlobId) id).getContainerId();
+      lifeVersion = 0;
     } else {
       aid = putMsg.getAccountId();
       cid = putMsg.getContainerId();
+      lifeVersion = putMsg.getLifeVersion();
     }
-    ByteBuffer buffer = getDeleteMessage(id, aid, cid, CONSTANT_TIME_MS);
+    ByteBuffer buffer = getDeleteMessage(id, aid, cid, CONSTANT_TIME_MS, lifeVersion);
     for (MockHost host : hosts) {
       // ok to send false for ttlUpdated
-      host.addMessage(partitionId, new MessageInfo(id, buffer.remaining(), true, false, aid, cid, CONSTANT_TIME_MS),
-          buffer.duplicate());
+      host.addMessage(partitionId,
+          new MessageInfo(id, buffer.remaining(), true, false, false, Utils.Infinite_Time, null, aid, cid,
+              CONSTANT_TIME_MS, lifeVersion), buffer.duplicate());
+    }
+  }
+
+  private void addDeleteMessagesToReplicasOfPartition(PartitionId partitionId, StoreKey id, List<MockHost> hosts,
+      short lifeVersion, long expirationTime) throws MessageFormatException, IOException {
+    short accountId = ((BlobId) id).getAccountId();
+    short containerId = ((BlobId) id).getContainerId();
+    ByteBuffer buffer = getDeleteMessage(id, accountId, containerId, CONSTANT_TIME_MS, lifeVersion);
+    for (MockHost host : hosts) {
+      // ok to send false for ttlUpdated
+      host.addMessage(partitionId,
+          new MessageInfo(id, buffer.remaining(), true, false, false, expirationTime, null, accountId, containerId,
+              CONSTANT_TIME_MS, lifeVersion), buffer.duplicate());
     }
   }
 
@@ -2386,8 +3043,8 @@ public class ReplicationTest {
     ReplicationTest.PutMsgInfoAndBuffer msgInfoAndBuffer = createPutMessage(id, accountId, containerId, toEncrypt);
     for (MockHost host : hosts) {
       host.addMessage(partitionId,
-          new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), expirationTime, accountId, containerId,
-              operationTime), msgInfoAndBuffer.byteBuffer);
+          new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), false, false, false, expirationTime, null,
+              accountId, containerId, operationTime, (short) 0), msgInfoAndBuffer.byteBuffer);
     }
   }
 
@@ -2405,20 +3062,63 @@ public class ReplicationTest {
     MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false, false, false);
     short aid;
     short cid;
+    short lifeVersion;
     if (putMsg == null) {
       // the StoreKey must be a BlobId in this case (to get the account and container id)
       aid = ((BlobId) id).getAccountId();
       cid = ((BlobId) id).getContainerId();
+      lifeVersion = 0;
     } else {
       aid = putMsg.getAccountId();
       cid = putMsg.getContainerId();
+      lifeVersion = putMsg.getLifeVersion();
     }
     ByteBuffer buffer = getTtlUpdateMessage(id, aid, cid, expirationTime, CONSTANT_TIME_MS);
     for (MockHost host : hosts) {
       host.addMessage(partitionId,
-          new MessageInfo(id, buffer.remaining(), false, true, expirationTime, aid, cid, CONSTANT_TIME_MS),
-          buffer.duplicate());
+          new MessageInfo(id, buffer.remaining(), false, true, false, expirationTime, null, aid, cid, CONSTANT_TIME_MS,
+              lifeVersion), buffer.duplicate());
     }
+  }
+
+  private void addTtlUpdateMessagesToReplicasOfPartition(PartitionId partitionId, StoreKey id, List<MockHost> hosts,
+      long expirationTime, short lifeVersion) throws MessageFormatException, IOException {
+    short accountId = ((BlobId) id).getAccountId();
+    short containerId = ((BlobId) id).getContainerId();
+    ByteBuffer buffer = getTtlUpdateMessage(id, accountId, containerId, expirationTime, CONSTANT_TIME_MS);
+    for (MockHost host : hosts) {
+      host.addMessage(partitionId,
+          new MessageInfo(id, buffer.remaining(), false, true, false, expirationTime, null, accountId, containerId,
+              CONSTANT_TIME_MS, lifeVersion), buffer.duplicate());
+    }
+  }
+
+  private void addUndeleteMessagesToReplicasOfPartition(PartitionId partitionId, StoreKey id, List<MockHost> hosts,
+      short lifeVersion) throws MessageFormatException, IOException {
+    for (MockHost host : hosts) {
+      MessageInfo latestInfo = getMergedMessageInfo(id, host.infosByPartition.get(partitionId));
+      short aid;
+      short cid;
+      long expirationTime;
+      if (latestInfo == null) {
+        aid = ((BlobId) id).getAccountId();
+        cid = ((BlobId) id).getContainerId();
+        expirationTime = EXPIRY_TIME_MS;
+      } else {
+        aid = latestInfo.getAccountId();
+        cid = latestInfo.getContainerId();
+        expirationTime = latestInfo.getExpirationTimeInMs();
+      }
+      ByteBuffer buffer = getUndeleteMessage(id, aid, cid, lifeVersion, CONSTANT_TIME_MS);
+      host.addMessage(partitionId,
+          new MessageInfo(id, buffer.remaining(), false, false, true, expirationTime, null, aid, cid, CONSTANT_TIME_MS,
+              lifeVersion), buffer.duplicate());
+    }
+  }
+
+  public static PutMsgInfoAndBuffer createPutMessage(StoreKey id, short accountId, short containerId,
+      boolean enableEncryption) throws MessageFormatException, IOException {
+    return createPutMessage(id, accountId, containerId, enableEncryption, (short) 0);
   }
 
   /**
@@ -2427,13 +3127,14 @@ public class ReplicationTest {
    * @param accountId accountId of the blob
    * @param containerId containerId of the blob
    * @param enableEncryption {@code true} if encryption needs to be enabled. {@code false} otherwise
+   * @param lifeVersion lifeVersion for this hich the message has to be constructed.
    * @return a {@link Pair} of {@link ByteBuffer} and {@link MessageInfo} representing the entire message and the
    *         associated {@link MessageInfo}
    * @throws MessageFormatException
    * @throws IOException
    */
   public static PutMsgInfoAndBuffer createPutMessage(StoreKey id, short accountId, short containerId,
-      boolean enableEncryption) throws MessageFormatException, IOException {
+      boolean enableEncryption, short lifeVersion) throws MessageFormatException, IOException {
     Random blobIdRandom = new Random(id.getID().hashCode());
     int blobSize = blobIdRandom.nextInt(500) + 501;
     int userMetadataSize = blobIdRandom.nextInt(blobSize / 2);
@@ -2448,10 +3149,12 @@ public class ReplicationTest {
             accountId, containerId, encryptionKey != null, null);
     MessageFormatInputStream stream =
         new PutMessageFormatInputStream(id, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey),
-            blobProperties, ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize);
+            blobProperties, ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize,
+            BlobType.DataBlob, lifeVersion);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
     return new PutMsgInfoAndBuffer(ByteBuffer.wrap(message),
-        new MessageInfo(id, message.length, EXPIRY_TIME_MS, accountId, containerId, CONSTANT_TIME_MS));
+        new MessageInfo(id, message.length, false, false, false, EXPIRY_TIME_MS, null, accountId, containerId,
+            CONSTANT_TIME_MS, lifeVersion));
   }
 
   /**
@@ -2461,9 +3164,10 @@ public class ReplicationTest {
    * @throws MessageFormatException
    * @throws IOException
    */
-  private ByteBuffer getDeleteMessage(StoreKey id, short accountId, short containerId, long deletionTimeMs)
-      throws MessageFormatException, IOException {
-    MessageFormatInputStream stream = new DeleteMessageFormatInputStream(id, accountId, containerId, deletionTimeMs);
+  private ByteBuffer getDeleteMessage(StoreKey id, short accountId, short containerId, long deletionTimeMs,
+      short lifeVersion) throws MessageFormatException, IOException {
+    MessageFormatInputStream stream =
+        new DeleteMessageFormatInputStream(id, accountId, containerId, deletionTimeMs, lifeVersion);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
     return ByteBuffer.wrap(message);
   }
@@ -2481,8 +3185,21 @@ public class ReplicationTest {
    */
   private static ByteBuffer getTtlUpdateMessage(StoreKey id, short accountId, short containerId, long expiresAtMs,
       long updateTimeMs) throws MessageFormatException, IOException {
+    return getTtlUpdateMessage(id, accountId, containerId, expiresAtMs, updateTimeMs, (short) 0);
+  }
+
+  private static ByteBuffer getTtlUpdateMessage(StoreKey id, short accountId, short containerId, long expiresAtMs,
+      long updateTimeMs, short lifeVersion) throws MessageFormatException, IOException {
     MessageFormatInputStream stream =
-        new TtlUpdateMessageFormatInputStream(id, accountId, containerId, expiresAtMs, updateTimeMs);
+        new TtlUpdateMessageFormatInputStream(id, accountId, containerId, expiresAtMs, updateTimeMs, lifeVersion);
+    byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
+    return ByteBuffer.wrap(message);
+  }
+
+  private static ByteBuffer getUndeleteMessage(StoreKey id, short accountId, short containerId, short lifeVersion,
+      long undeleteTimeMs) throws MessageFormatException, IOException {
+    MessageFormatInputStream stream =
+        new UndeleteMessageFormatInputStream(id, accountId, containerId, undeleteTimeMs, lifeVersion);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
     return ByteBuffer.wrap(message);
   }
@@ -2512,7 +3229,7 @@ public class ReplicationTest {
             && messageInfo.isTtlUpdated()) {
           toRet = messageInfo;
           break;
-        } else if (!deleteMsg && !ttlUpdateMsg && !undeleteMsg && !messageInfo.isUndeleted() & !messageInfo.isDeleted()
+        } else if (!deleteMsg && !ttlUpdateMsg && !undeleteMsg && !messageInfo.isUndeleted() && !messageInfo.isDeleted()
             && !messageInfo.isTtlUpdated()) {
           toRet = messageInfo;
           break;

@@ -665,10 +665,11 @@ public class ReplicationMetrics {
    */
   public void updateLagMetricForRemoteReplica(RemoteReplicaInfo remoteReplicaInfo, long lag) {
     ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-    if (partitionLags.containsKey(replicaId.getPartitionId())) {
-      // update the partition's lag if and only if it was tracked.
-      partitionLags.get(replicaId.getPartitionId()).put(replicaId.getDataNodeId(), lag);
-    }
+    // update the partition's lag if and only if it was tracked.
+    partitionLags.computeIfPresent(replicaId.getPartitionId(), (k, v) -> {
+      v.put(replicaId.getDataNodeId(), lag);
+      return v;
+    });
   }
 
   /**

@@ -551,6 +551,20 @@ class CloudBlobStore implements Store {
   }
 
   @Override
+  public MessageInfo findKey(StoreKey key) throws StoreException {
+    // This is a workaround. This is only used in replication where replicaThread need to figure out if the blob
+    // is deleted and if the blob is ttlupdated, and also returns the lifeVersion.
+    // Since we are not supporting lifeVersion in CloudBlobStore yet, for lifVersion, we will return 0 as default value.
+    // For deleted, use return value from isKeyDeleted.
+    // For ttl update, return false to trigger ttl update operation in replication. For an already ttl udpated blob
+    // second ttl update would end up with an error, which replication will be able to silence.
+
+    // TODO: isKeyDeleted isn't reliable for determining if the blob is deleted or not. Fix it later.
+    return new MessageInfo(key, 0, isKeyDeleted(key), false, false, Utils.Infinite_Time, null,
+        ((BlobId) key).getAccountId(), ((BlobId) key).getContainerId(), (long) 0, (short) 0);
+  }
+
+  @Override
   public StoreStats getStoreStats() {
     return null;
   }

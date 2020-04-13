@@ -437,7 +437,7 @@ class IndexValue implements Comparable<IndexValue> {
   public String toString() {
     return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isDelete() + ", TTL Updated: " + isTtlUpdate()
         + ", Undelete: " + isUndelete() + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: "
-        + getOriginalMessageOffset() + (formatVersion != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs "
+        + getOriginalMessageOffset() + (formatVersion != PersistentIndex.VERSION_0 ? (", OperationTimeInMs "
         + getOperationTimeInMs() + ", AccountId " + getAccountId() + ", ContainerId " + getContainerId()) : "") + (
         formatVersion > PersistentIndex.VERSION_2 ? ", Life Version:" + lifeVersion : "");
   }
