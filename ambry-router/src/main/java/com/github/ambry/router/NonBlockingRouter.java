@@ -843,10 +843,6 @@ class NonBlockingRouter implements Router {
       for (ResponseInfo responseInfo : responseInfoList) {
         try {
           RequestInfo requestInfo = responseInfo.getRequestInfo();
-          long responseReceiveTime = requestInfo.getStreamReceiveTime();
-          if (responseReceiveTime != -1) {
-            routerMetrics.responseReceiveToHandleLatencyMs.update(System.currentTimeMillis() - responseReceiveTime);
-          }
           if (requestInfo == null) {
             // If requestInfo is null, it means request has been failed previously due to long wait in pending requests
             // queue. The failed request was already handled by one of the managers(PutManager, GetManager, etc). Current
@@ -855,6 +851,10 @@ class NonBlockingRouter implements Router {
             DataNodeId dataNodeId = responseInfo.getDataNode();
             responseHandler.onConnectionTimeout(dataNodeId);
           } else {
+            long responseReceiveTime = requestInfo.getStreamReceiveTime();
+            if (responseReceiveTime != -1) {
+              routerMetrics.responseReceiveToHandleLatencyMs.update(System.currentTimeMillis() - responseReceiveTime);
+            }
             RequestOrResponseType type = ((RequestOrResponse) requestInfo.getRequest()).getRequestType();
             logger.debug("Handling response of type {} for {}", type, requestInfo.getRequest().getCorrelationId());
             switch (type) {
