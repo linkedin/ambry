@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -911,15 +912,20 @@ public class NonBlockingRouterTest {
     List<ResponseInfo> responseInfoList = new ArrayList<>();
     MockDataNodeId testDataNode = (MockDataNodeId) mockClusterMap.getDataNodeIds().get(0);
     responseInfoList.add(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, testDataNode));
-    Mockito.when(mockNetworkClient.sendAndPoll(anyList(), anySet(), anyInt())).thenReturn(responseInfoList);
+    // By default, there are 1 operation controller and 1 background deleter thread. We set CountDownLatch to 3 so that
+    // at least one thread has completed calling onResponse() and test node's state has been updated in ResponseHandler
+    CountDownLatch invocationLatch = new CountDownLatch(3);
+    doAnswer(invocation -> {
+      invocationLatch.countDown();
+      return responseInfoList;
+    }).when(mockNetworkClient).sendAndPoll(anyList(), anySet(), anyInt());
     NetworkClientFactory networkClientFactory = Mockito.mock(NetworkClientFactory.class);
     Mockito.when(networkClientFactory.getNetworkClient()).thenReturn(mockNetworkClient);
-    Router testRouter =
+    NonBlockingRouter testRouter =
         new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, new LoggingNotificationSystem(),
             mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime,
             MockClusterMap.DEFAULT_PARTITION_CLASS);
-    setOperationParams();
-    testRouter.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
+    assertTrue("Invocation latch didn't count to 0 within 10 seconds", invocationLatch.await(10, TimeUnit.SECONDS));
     // verify the test node is considered timeout
     assertTrue("The node should be considered timeout", testDataNode.isTimedOut());
     testRouter.close();
