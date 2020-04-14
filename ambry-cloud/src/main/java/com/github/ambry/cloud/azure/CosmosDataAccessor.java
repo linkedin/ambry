@@ -61,7 +61,6 @@ public class CosmosDataAccessor {
   private Callable<?> updateCallback = null;
   private final int continuationTokenLimitKb;
   private final int requestChargeThreshold;
-  private final int queryBatchSize;
 
   /** Production constructor */
   CosmosDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics) {
@@ -88,7 +87,6 @@ public class CosmosDataAccessor {
         .build();
 
     this.cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
-    this.queryBatchSize = azureCloudConfig.cosmosQueryBatchSize;
     this.continuationTokenLimitKb = azureCloudConfig.cosmosContinuationTokenLimitKb;
     this.requestChargeThreshold = azureCloudConfig.cosmosRequestChargeThreshold;
     this.azureMetrics = azureMetrics;
@@ -98,7 +96,6 @@ public class CosmosDataAccessor {
   CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, AzureMetrics azureMetrics) {
     this.asyncDocumentClient = asyncDocumentClient;
     this.cosmosCollectionLink = cosmosCollectionLink;
-    this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
     this.continuationTokenLimitKb = AzureCloudConfig.DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT;
     this.requestChargeThreshold = AzureCloudConfig.DEFAULT_COSMOS_REQUEST_CHARGE_THRESHOLD;
     this.azureMetrics = azureMetrics;
@@ -144,47 +141,37 @@ public class CosmosDataAccessor {
   ResourceResponse<Document> deleteMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
     String docLink = getDocumentLink(blobMetadata.getId());
     RequestOptions options = getRequestOptions(blobMetadata.getPartitionId());
-    options.setPartitionKey(new PartitionKey(blobMetadata.getPartitionId()));
     return executeCosmosAction(() -> asyncDocumentClient.deleteDocument(docLink, options).toBlocking().single(),
         azureMetrics.documentDeleteTime);
   }
 
   /**
-   * Read the blob metadata document in the CosmosDB collection.
-   * @param blobId the {@link BlobId} for which metadata is requested.
-   * @return the {@link ResourceResponse} containing the metadata document.
-   * @throws DocumentClientException if the operation failed.
-   */
-  ResourceResponse<Document> readMetadata(BlobId blobId) throws DocumentClientException {
-    String docLink = getDocumentLink(blobId.getID());
-    RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
-    return executeCosmosAction(() -> asyncDocumentClient.readDocument(docLink, options).toBlocking().single(),
-        azureMetrics.documentReadTime);
-  }
-
-  /**
-   * Update the blob metadata document in the CosmosDB collection, retrying as necessary.
+   * Update the blob metadata document in the CosmosDB collection.
    * @param blobId the {@link BlobId} for which metadata is replaced.
    * @param fieldName the metadata field to update.
    * @param value the new value for the field.
    * @return the {@link ResourceResponse} returned by the operation, if successful.
-   * Returns {@Null} if the document is not found or the field already has the specified value.
-   * @throws DocumentClientException if the operation failed.
+   * Returns {@Null} if the field already has the specified value.
+   * @throws DocumentClientException if the record was not found or if the operation failed.
    */
   ResourceResponse<Document> updateMetadata(BlobId blobId, String fieldName, Object value)
       throws DocumentClientException {
-    ResourceResponse<Document> response = readMetadata(blobId);
-    Document doc = response.getResource();
-    if (doc == null) {
-      logger.warn("Blob metadata record not found: {}", blobId.getID());
-      return null;
-    }
+
+    // Read the existing record
+    String docLink = getDocumentLink(blobId.getID());
+    RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
+    ResourceResponse<Document> readResponse =
+        executeCosmosAction(() -> asyncDocumentClient.readDocument(docLink, options).toBlocking().single(),
+            azureMetrics.documentReadTime);
+    Document doc = readResponse.getResource();
+
     // Update only if value has changed
     if (value.equals(doc.get(fieldName))) {
       logger.debug("No change in value for {} in blob {}", fieldName, blobId.getID());
       return null;
     }
 
+    // For testing conflict handling
     if (updateCallback != null) {
       try {
         updateCallback.call();
@@ -193,8 +180,8 @@ public class CosmosDataAccessor {
       }
     }
 
+    // Perform the update
     doc.set(fieldName, value);
-    RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
     // Set condition to ensure we don't clobber a concurrent update
     AccessCondition accessCondition = new AccessCondition();
     accessCondition.setCondition(doc.getETag());
@@ -257,7 +244,8 @@ public class CosmosDataAccessor {
       return deadBlobsList;
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
-        logger.warn("Dead blobs query {} on partition {} got {}", deadBlobsQuery, partitionPath, rex);
+        logger.warn("Dead blobs query {} on partition {} got {}", deadBlobsQuery, partitionPath,
+            ((DocumentClientException) rex.getCause()).getStatusCode());
         throw (DocumentClientException) rex.getCause();
       }
       throw rex;
@@ -323,7 +311,8 @@ public class CosmosDataAccessor {
       return metadataList;
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
-        logger.warn("Query {} on partition {} got {}", querySpec.getQueryText(), partitionPath, rex);
+        logger.warn("Query {} on partition {} got {}", querySpec.getQueryText(), partitionPath,
+            ((DocumentClientException) rex.getCause()).getStatusCode());
         throw (DocumentClientException) rex.getCause();
       }
       throw rex;

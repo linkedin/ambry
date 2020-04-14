@@ -133,7 +133,7 @@ public class AzureCloudDestinationTest {
     configProps.setProperty("clustermap.host.name", "localhost");
     azureMetrics = new AzureMetrics(new MetricRegistry());
     azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-        azureMetrics, defaultAzureReplicationFeedType);
+        azureMetrics, defaultAzureReplicationFeedType, false);
   }
 
   @After
@@ -292,26 +292,28 @@ public class AzureCloudDestinationTest {
 
   /** Test delete of nonexistent blob. */
   @Test
-  public void testDeleteNotFound() throws Exception {
+  public void testDeleteBlobNotFound() {
     BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
-    when(mockBlockBlobClient.setMetadataWithResponse(any(), any(), any(), any())).thenThrow(ex);
-    assertFalse("Delete of nonexistent blob should return false", azureDest.deleteBlob(blobId, deletionTime));
-    assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
+    when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
+    expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime), BlobStorageException.class);
+    assertEquals(1, azureMetrics.blobUpdateErrorCount.getCount());
+    assertEquals(1, azureMetrics.storageErrorCount.getCount());
   }
 
   /** Test update of nonexistent blob. */
   @Test
-  public void testUpdateNotFound() throws Exception {
+  public void testUpdateBlobNotFound() {
     BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
-    when(mockBlockBlobClient.setMetadataWithResponse(any(), any(), any(), any())).thenThrow(ex);
-    assertFalse("Update of nonexistent blob should return false",
-        azureDest.updateBlobExpiration(blobId, expirationTime));
-    assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
+    when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
+    expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
+        BlobStorageException.class);
+    assertEquals(1, azureMetrics.blobUpdateErrorCount.getCount());
+    assertEquals(1, azureMetrics.storageErrorCount.getCount());
   }
 
-  /** Test update methods when blob throws exception. */
+  /** Test update methods when ABS throws exception. */
   @Test
-  public void testUpdateBlobException() throws Exception {
+  public void testUpdateBlobException() {
     BlobStorageException ex = mockStorageException(BlobErrorCode.INTERNAL_ERROR);
     when(mockBlockBlobClient.setMetadataWithResponse(any(), any(), any(), any())).thenThrow(ex);
     expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime), BlobStorageException.class);
@@ -320,12 +322,25 @@ public class AzureCloudDestinationTest {
     verifyUpdateErrorMetrics(2, false);
   }
 
-  /** Test update methods when doc client throws exception. */
+  /** Test update methods when record not found in Cosmos. */
   @Test
-  public void testUpdateDocClientException() throws Exception {
+  public void testUpdateCosmosNotFound() throws Exception {
     mockBlobExistence(true);
     when(mockumentClient.readDocument(anyString(), any())).thenThrow(
         new RuntimeException("Dcoument not Found", new DocumentClientException(404)));
+    assertTrue("Expected update to recover", azureDest.deleteBlob(blobId, deletionTime));
+    assertTrue("Expected update to recover", azureDest.updateBlobExpiration(blobId, expirationTime));
+    verify(mockumentClient, times(2)).upsertDocument(anyString(), any(Object.class), any(RequestOptions.class),
+        anyBoolean());
+    assertEquals("Expected two recoveries", 2, azureMetrics.blobUpdateRecoverCount.getCount());
+  }
+
+  /** Test update methods when Cosmos throws other exception. */
+  @Test
+  public void testUpdateCosmosException() {
+    mockBlobExistence(true);
+    when(mockumentClient.readDocument(anyString(), any())).thenThrow(
+        new RuntimeException("Dcoument not Found", new DocumentClientException(500)));
     expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime), DocumentClientException.class);
     expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
         DocumentClientException.class);
@@ -345,26 +360,50 @@ public class AzureCloudDestinationTest {
     assertFalse("Expected retrieveTokens to return false", azureDest.retrieveTokens(path, tokenFile, outputStream));
   }
 
-  /** Test to make sure that getting metadata for single blob calls ABS and not Cosmos. */
+  /** Test to make sure that getting metadata for single blob calls ABS when not vcr and Cosmos when vcr. */
   @Test
   public void testGetOneMetadata() throws Exception {
+    //
+    // Test 1: isVcr = false (already setup)
+    //
     // Get for existing blob
     Response<BlobProperties> mockResponse = mock(Response.class);
     BlobProperties mockProperties = mock(BlobProperties.class);
-    Map<String, String> propertyMap = new CloudBlobMetadata(blobId, 0, -1, 0, null).toMap();
+    CloudBlobMetadata blobMetadata = new CloudBlobMetadata(blobId, 0, -1, 0, null);
+    Map<String, String> propertyMap = blobMetadata.toMap();
     when(mockProperties.getMetadata()).thenReturn(propertyMap);
     when(mockResponse.getValue()).thenReturn(mockProperties);
     when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenReturn(mockResponse);
-    Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(Collections.singletonList(blobId));
+    List<BlobId> singleBlobList = Collections.singletonList(blobId);
+    Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(singleBlobList);
     assertEquals("Expected map of one", 1, metadataMap.size());
+    verify(mockBlockBlobClient).getPropertiesWithResponse(any(), any(), any());
     verifyZeroInteractions(mockumentClient);
 
     // Get for nonexistent blob
     BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
     when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
-    metadataMap = azureDest.getBlobMetadata(Collections.singletonList(blobId));
+    metadataMap = azureDest.getBlobMetadata(singleBlobList);
     assertTrue("Expected empty map", metadataMap.isEmpty());
+    verify(mockBlockBlobClient, times(2)).getPropertiesWithResponse(any(), any(), any());
     verifyZeroInteractions(mockumentClient);
+
+    //
+    // Test 2: isVcr = true
+    //
+    azureDest.close();
+    azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
+        azureMetrics, defaultAzureReplicationFeedType, true);
+    // Existing blob
+    List<Document> docList = Collections.singletonList(createDocumentFromCloudBlobMetadata(blobMetadata, objectMapper));
+    Observable<FeedResponse<Document>> feedResponse = mock(Observable.class);
+    mockObservableForQuery(docList, feedResponse);
+    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
+        feedResponse);
+    metadataMap = azureDest.getBlobMetadata(singleBlobList);
+    assertEquals("Expected map of one", 1, metadataMap.size());
+    verify(mockumentClient).queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class));
+    verifyNoMoreInteractions(mockBlockBlobClient);
   }
 
   /** Test querying metadata. */
@@ -389,7 +428,7 @@ public class AzureCloudDestinationTest {
     azureMetrics = new AzureMetrics(new MetricRegistry());
     try {
       azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-          azureMetrics, defaultAzureReplicationFeedType);
+          azureMetrics, defaultAzureReplicationFeedType, false);
       List<BlobId> blobIdList = new ArrayList<>();
       List<Document> docList = new ArrayList<>();
       for (int j = 0; j < numBlobs; j++) {
@@ -543,7 +582,7 @@ public class AzureCloudDestinationTest {
     try {
       updateTimeBasedAzureCloudDestination =
           new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-              azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME);
+              azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME, false);
       testFindEntriesSinceWithUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
       testFindEntriesSinceWithNonUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
     } finally {

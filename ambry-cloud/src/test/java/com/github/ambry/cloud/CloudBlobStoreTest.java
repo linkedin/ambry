@@ -98,6 +98,7 @@ import static org.mockito.Mockito.*;
 @RunWith(Parameterized.class)
 public class CloudBlobStoreTest {
 
+  private static final int SMALL_BLOB_SIZE = 100;
   private final boolean isVcr;
   private CloudBlobStore store;
   private CloudDestination dest;
@@ -223,8 +224,7 @@ public class CloudBlobStoreTest {
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
     for (int j = 0; j < count; j++) {
-      long size = 10;
-      addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, true);
+      addBlobToSet(messageWriteSet, SMALL_BLOB_SIZE, Utils.Infinite_Time, refAccountId, refContainerId, true);
     }
     store.delete(messageWriteSet.getMessageSetInfo());
     verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(operationTime));
@@ -244,9 +244,8 @@ public class CloudBlobStoreTest {
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
     for (int j = 0; j < count; j++) {
-      long size = 10;
       long expirationTime = Math.abs(random.nextLong());
-      addBlobToSet(messageWriteSet, size, expirationTime, refAccountId, refContainerId, true);
+      addBlobToSet(messageWriteSet, SMALL_BLOB_SIZE, expirationTime, refAccountId, refContainerId, true);
     }
     store.updateTtl(messageWriteSet.getMessageSetInfo());
     verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong());
@@ -354,7 +353,6 @@ public class CloudBlobStoreTest {
 
     // setup store with small cache size
     int cacheSize = 10;
-    long blobSize = 10;
     setupCloudStore(false, false, cacheSize, true);
     // put blobs to fill up cache
     List<StoreKey> blobIdList = new ArrayList<>();
@@ -373,7 +371,7 @@ public class CloudBlobStoreTest {
     int delta = 5;
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     for (int j = 0; j < delta; j++) {
-      addBlobToSet(messageWriteSet, (BlobId) blobIdList.get(j), blobSize, Utils.Infinite_Time);
+      addBlobToSet(messageWriteSet, (BlobId) blobIdList.get(j), SMALL_BLOB_SIZE, Utils.Infinite_Time);
     }
     store.updateTtl(messageWriteSet.getMessageSetInfo());
     expectedLookups += delta;
@@ -484,17 +482,19 @@ public class CloudBlobStoreTest {
   /* Test retry behavior */
   @Test
   public void testExceptionRetry() throws Exception {
-    assumeTrue(!isVcr);
     CloudDestination exDest = mock(CloudDestination.class);
     long retryDelay = 5;
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    BlobId blobId = addBlobToSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId, true);
+    BlobId blobId =
+        addBlobToSet(messageWriteSet, SMALL_BLOB_SIZE, Utils.Infinite_Time, refAccountId, refContainerId, false);
     List<StoreKey> keys = Collections.singletonList(blobId);
     CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, operationTime, Utils.Infinite_Time, 1024, null);
-    CloudStorageException retryableException = new CloudStorageException("Server unavailable", null, true, retryDelay);
+    CloudStorageException retryableException =
+        new CloudStorageException("Server unavailable", null, 500, true, retryDelay);
     when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(retryableException)
         .thenReturn(true);
     when(exDest.deleteBlob(any(BlobId.class), anyLong())).thenThrow(retryableException).thenReturn(true);
+    when(exDest.updateBlobExpiration(any(BlobId.class), anyLong())).thenThrow(retryableException).thenReturn(true);
     when(exDest.getBlobMetadata(anyList())).thenThrow(retryableException)
         .thenReturn(Collections.singletonMap(metadata.getId(), metadata));
     doThrow(retryableException).doNothing().when(exDest).downloadBlob(any(BlobId.class), any());
@@ -508,13 +508,36 @@ public class CloudBlobStoreTest {
         new CloudBlobStore(new VerifiableProperties(props), partitionId, exDest, clusterMap, vcrMetrics);
     exStore.start();
 
-    // Run all three operations, they should be retried and succeed second time.
+    // Run all operations, they should be retried and succeed second time.
+    int expectedCacheLookups = 0, expectedRetries = 0;
     exStore.put(messageWriteSet);
+    expectedRetries++;
+    expectedCacheLookups++;
+    exStore.updateTtl(messageWriteSet.getMessageSetInfo());
+    expectedRetries++;
+    expectedCacheLookups += 2;
     exStore.delete(messageWriteSet.getMessageSetInfo());
+    expectedRetries++;
+    expectedCacheLookups += 2;
     exStore.get(keys, EnumSet.noneOf(StoreGetOptions.class));
+    expectedRetries++;
     exStore.downloadBlob(metadata, blobId, new ByteArrayOutputStream());
-    assertEquals("Unexpected retry count", 4, vcrMetrics.retryCount.getCount());
-    assertEquals("Unexpected wait time", 4 * retryDelay, vcrMetrics.retryWaitTimeMsec.getCount());
+    expectedRetries++;
+    // Expect retries for all ops, cache lookups for the first three
+    assertEquals("Unexpected retry count", expectedRetries, vcrMetrics.retryCount.getCount());
+    assertEquals("Unexpected wait time", expectedRetries * retryDelay, vcrMetrics.retryWaitTimeMsec.getCount());
+    verifyCacheHits(expectedCacheLookups, 0);
+
+    // Rerun the first three, should all skip due to cache hit
+    messageWriteSet.resetBuffers();
+    int expectedCacheHits = 0;
+    exStore.put(messageWriteSet);
+    expectedCacheHits++;
+    exStore.updateTtl(messageWriteSet.getMessageSetInfo());
+    expectedCacheHits++;
+    exStore.delete(messageWriteSet.getMessageSetInfo());
+    expectedCacheHits++;
+    verifyCacheHits(expectedCacheLookups + expectedCacheHits, expectedCacheHits);
   }
 
   /**
@@ -932,7 +955,7 @@ public class CloudBlobStoreTest {
    */
   private BlobId forceUploadExpiredBlob() throws CloudStorageException {
     BlobId expiredBlobId = getUniqueId(refAccountId, refContainerId, false);
-    long size = 1024;
+    long size = SMALL_BLOB_SIZE;
     long currentTime = System.currentTimeMillis();
     CloudBlobMetadata expiredBlobMetadata =
         new CloudBlobMetadata(expiredBlobId, currentTime, currentTime - 1, size, null);

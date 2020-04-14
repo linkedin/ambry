@@ -418,9 +418,35 @@ public class AzureIntegrationTest {
       azureDest.updateBlobExpiration(blobId, ++now);
       fail("Expected 412 error");
     } catch (CloudStorageException csex) {
-      // TODO: check nested exception is DocClientException with status code 412
       assertEquals("Expected update conflict", 2, azureDest.getAzureMetrics().blobUpdateConflictCount.getCount());
     }
+    azureDest.getCosmosDataAccessor().setUpdateCallback(null);
+    assertTrue("Expected update to return true", azureDest.updateBlobExpiration(blobId, ++now));
+    assertEquals("Expected no new update conflict", 2, azureDest.getAzureMetrics().blobUpdateConflictCount.getCount());
+  }
+
+  /** Test that ABS/Cosmos inconsistencies get fixed on update. */
+  @Test
+  public void testRepairInconsistency() throws Exception {
+    // Upload a blob
+    PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    BlobId blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+        BlobDataType.DATACHUNK);
+    InputStream inputStream = getBlobInputStream(blobSize);
+    long now = System.currentTimeMillis();
+    CloudBlobMetadata cloudBlobMetadata =
+        new CloudBlobMetadata(blobId, now, now + 60000, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE);
+    uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, inputStream);
+
+    // Remove blob record from Cosmos to create inconsistency
+    azureDest.getCosmosDataAccessor().deleteMetadata(cloudBlobMetadata);
+
+    // Now update the blob and see if it gets fixed
+    azureDest.updateBlobExpiration(blobId, Utils.Infinite_Time);
+    List<CloudBlobMetadata> resultList = azureDest.getCosmosDataAccessor()
+        .queryMetadata(partitionId.toPathString(), "SELECT * FROM c WHERE c.id = '" + blobId.getID() + "'",
+            azureDest.getAzureMetrics().missingKeysQueryTime);
+    assertEquals("Expected record to exist", 1, resultList.size());
   }
 
   /** Persist tokens to Azure, then read them back and verify they match. */
