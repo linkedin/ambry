@@ -66,7 +66,6 @@ public class BlobStoreStatsTest {
   private final ScheduledExecutorService indexScannerScheduler = Utils.newScheduler(1, true);
   private final ScheduledExecutorService queueProcessorScheduler = Utils.newScheduler(1, true);
   private final boolean bucketingEnabled;
-  private final boolean isLogSegmented;
   private CuratedLogIndexState state;
   private File tempDir;
 
@@ -74,11 +73,10 @@ public class BlobStoreStatsTest {
    * Creates a temporary directory and sets up some test state.
    * @throws IOException
    */
-  public BlobStoreStatsTest(boolean isLogSegmented, boolean isBucketingEnabled) throws IOException, StoreException {
+  public BlobStoreStatsTest(boolean isBucketingEnabled) throws IOException, StoreException {
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + TestUtils.getRandomString(10));
-    state = new CuratedLogIndexState(isLogSegmented, tempDir, true, false);
+    state = new CuratedLogIndexState(true, tempDir, true, true);
     bucketingEnabled = isBucketingEnabled;
-    this.isLogSegmented = isLogSegmented;
   }
 
   private BlobStoreStats setupBlobStoreStats(int bucketCount, long logSegmentForecastOffsetMs) {
@@ -93,7 +91,7 @@ public class BlobStoreStatsTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
+    return Arrays.asList(new Object[][]{{false}, {true}});
   }
 
   /**
@@ -618,7 +616,7 @@ public class BlobStoreStatsTest {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + TestUtils.getRandomString(10));
-    state = new CuratedLogIndexState(isLogSegmented, tempDir, false, false, true, false);
+    state = new CuratedLogIndexState(true, tempDir, false, false, true, false);
     int bucketCount = bucketingEnabled ? 1 : 0;
     BlobStoreStats blobStoreStats = setupBlobStoreStats(bucketCount, 0);
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
@@ -637,7 +635,7 @@ public class BlobStoreStatsTest {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + TestUtils.getRandomString(10));
-    state = new CuratedLogIndexState(isLogSegmented, tempDir, false, false, true, false);
+    state = new CuratedLogIndexState(true, tempDir, false, false, true, false);
     MockThrottler mockThrottler = new MockThrottler(new CountDownLatch(0), new CountDownLatch(0));
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
     int bucketCount = 50;
@@ -934,7 +932,7 @@ public class BlobStoreStatsTest {
   private void newDelete(BlobStoreStats blobStoreStats, MockId idToDelete) throws StoreException, IOException {
     state.addDeleteEntry(idToDelete);
     blobStoreStats.handleNewDeleteEntry(state.getExpectedValue(idToDelete, false),
-        state.getExpectedValue(idToDelete, true));
+        state.getExpectedValue(idToDelete, true), state.getExpectedValue(idToDelete, true));
   }
 
   /**
@@ -1052,8 +1050,7 @@ public class BlobStoreStatsTest {
               deleteAndExpirationRefTimeInMs, null);
       for (IndexEntry indexEntry : validEntries) {
         IndexValue indexValue = indexEntry.getValue();
-        if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index) && !indexValue.isFlagSet(
-            IndexValue.Flags.Ttl_Update_Index)) {
+        if (indexValue.isPut()) {
           updateNestedMapHelper(containerValidSizeMap, "A[" + indexValue.getAccountId() + "]",
               "C[" + indexValue.getContainerId() + "]", indexValue.getSize());
         }
