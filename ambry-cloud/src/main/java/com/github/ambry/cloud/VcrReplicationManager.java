@@ -23,7 +23,6 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenFactory;
@@ -58,13 +57,12 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final CloudStorageCompactor cloudStorageCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
 
-  public VcrReplicationManager(VerifiableProperties properties, CloudConfig cloudConfig,
-      ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig, StoreConfig storeConfig,
-      StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
-      VirtualReplicatorCluster virtualReplicatorCluster, CloudDestination cloudDestination,
-      ScheduledExecutorService scheduler, ConnectionPool connectionPool, VcrMetrics vcrMetrics,
-      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
-      String transformerClassName) throws ReplicationException {
+  public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
+      ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
+      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VirtualReplicatorCluster virtualReplicatorCluster,
+      CloudDestination cloudDestination, ScheduledExecutorService scheduler, ConnectionPool connectionPool,
+      VcrMetrics vcrMetrics, NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
+      String transformerClassName) throws ReplicationException, IllegalStateException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
         virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool,
         vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null,
@@ -79,6 +77,12 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudStorageCompactor =
         cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
             partitionToPartitionInfo.keySet(), vcrMetrics) : null;
+    // We need a datacenter to replicate from. For DR, we currently deploy VCR nodes on same datacenter as ambry-server.
+    // For serving data from cloud, we must specify the ambry-server datacenter(s) from which to replicate.
+    if (!cloudConfig.cloudIsVcr && cloudConfig.vcrCrossColoReplicationPeerDatacenters.isEmpty()) {
+      throw new IllegalStateException(
+          "Either this should be a vcr replicator OR one or more vcr cross colo replication peer datacenter should be specified");
+    }
   }
 
   @Override
@@ -155,7 +159,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     Store store = storeManager.getStore(partitionId);
     if (peerReplicas != null) {
       for (ReplicaId peerReplica : peerReplicas) {
-        if (!peerReplica.getDataNodeId().getDatacenterName().equals(dataNodeId.getDatacenterName())) {
+        if (!shouldReplicateFromDc(peerReplica.getDataNodeId().getDatacenterName())) {
           continue;
         }
         // We need to ensure that a replica token gets persisted only after the corresponding data in the
@@ -235,5 +239,19 @@ public class VcrReplicationManager extends ReplicationEngine {
   public long getRemoteReplicaLagFromLocalInBytes(PartitionId partitionId, String hostName, String replicaPath) {
     // TODO get replica lag from cosmos?
     return -1;
+  }
+
+  /**
+   * Check if replication is allowed from given datacenter.
+   * @param datacenterName datacenter name to check.
+   * @return true if replication is allowed. false otherwise.
+   */
+  private boolean shouldReplicateFromDc(String datacenterName) {
+    if (cloudConfig.cloudIsVcr) {
+      // for DR replication is allowed from the same datacenter where VCR cloud nodes are deployed.
+      return datacenterName.equals(dataNodeId.getDatacenterName());
+    } else {
+      return cloudConfig.vcrCrossColoReplicationPeerDatacenters.contains(datacenterName);
+    }
   }
 }
