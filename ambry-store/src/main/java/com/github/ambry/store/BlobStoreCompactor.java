@@ -1000,7 +1000,7 @@ class BlobStoreCompactor {
   }
 
   /**
-   * IndexSegmentValidEntryFilter with out undelete log records.
+   * IndexSegmentValidEntryFilter without undelete log records.
    */
   class IndexSegmentValidEntryFilterWithoutUndelete implements IndexSegmentValidEntryFilter {
 

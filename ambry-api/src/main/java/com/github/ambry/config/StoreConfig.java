@@ -110,6 +110,9 @@ public class StoreConfig {
   @Default("10*1024*1024")
   public final int storeCompactionMinBufferSize;
 
+  /**
+   *The IndexSegmentValidEntryFilter type to use for compaction.
+   */
   @Config("store.compaction.filter")
   @Default("IndexSegmentValidEntryFilterWithoutUndelete")
   public final String storeCompactionFilter;
