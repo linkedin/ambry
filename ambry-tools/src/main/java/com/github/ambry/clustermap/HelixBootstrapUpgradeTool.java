@@ -245,8 +245,8 @@ public class HelixBootstrapUpgradeTool {
               clusterNamePrefixOpt, dcsNameOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       String[] adminTypes = adminConfigStr.replaceAll("\\p{Space}", "").split(",");
-      HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix, dcs, new HelixAdminFactory(), adminTypes);
+      HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          clusterNamePrefix, dcs, options.has(forceRemove), new HelixAdminFactory(), adminTypes);
     } else if (options.has(addStateModel)) {
       listOpt.add(stateModelDefinitionOpt);
       ToolUtils.ensureOrExit(listOpt, options, parser);

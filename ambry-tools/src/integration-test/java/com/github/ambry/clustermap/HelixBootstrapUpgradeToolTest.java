@@ -391,11 +391,12 @@ public class HelixBootstrapUpgradeToolTest {
 
   /**
    * Test that new replicas can be correctly extracted from the diff between static clustermap and clustermap in Helix.
-   * Also test that new added replica infos are correct (i.e. partition class, replica size, data node and mount path)
+   * Verify that new added replica infos are correct (i.e. partition class, replica size, data node and mount path)
+   * Also, this method tests replica addition config can be deleted correctly.
    * @throws Exception
    */
   @Test
-  public void testReplicaAdditionConfigUpload() throws Exception {
+  public void testReplicaAdditionConfigUploadAndDelete() throws Exception {
     // Test bootstrap
     long expectedResourceCount =
         (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
@@ -429,15 +430,15 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // test invalid admin type
     try {
-      HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), new String[]{"invalid_admin_type"});
+      HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          CLUSTER_NAME_PREFIX, dcStr, false, new HelixAdminFactory(), new String[]{"invalid_admin_type"});
       fail("should fail because of invalid admin type");
     } catch (IllegalArgumentException e) {
       // expected
     }
     // upload replica addition admin config
-    HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), new String[]{ClusterMapUtils.REPLICA_ADDITION_STR});
+    HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, false, new HelixAdminFactory(), new String[]{ClusterMapUtils.REPLICA_ADDITION_STR});
     // verify replica addition znode in Helix PropertyStore
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
       HelixPropertyStore<ZNRecord> propertyStore =
@@ -468,6 +469,26 @@ public class HelixBootstrapUpgradeToolTest {
         assertTrue("Instance name doesn't exist", newReplicaMap.containsKey(instanceName));
         assertEquals("Mount path is not expected", diskForNewReplica.getMountPath(), newReplicaMap.get(instanceName));
       }
+    }
+    // test deleting replica addition config (failure case)
+    try {
+      HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          CLUSTER_NAME_PREFIX, dcStr, true, new HelixAdminFactory(), new String[]{"invalid_admin_type"});
+      fail("should fail because of invalid admin type");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+    // test deleting replica addition config (success case)
+    HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, true, new HelixAdminFactory(), new String[]{ClusterMapUtils.REPLICA_ADDITION_STR});
+    // verify config no longer exists
+    for (ZkInfo zkInfo : dcsToZkInfo.values()) {
+      HelixPropertyStore<ZNRecord> propertyStore =
+          CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
+              Collections.singletonList(propertyStoreConfig.rootPath));
+      String getPath = ClusterMapUtils.REPLICA_ADDITION_ZNODE_PATH;
+      ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
+      assertNull("ZNode associated with admin config should not exist", zNRecord);
     }
   }
 
@@ -753,6 +774,7 @@ public class HelixBootstrapUpgradeToolTest {
   /**
    * Write the layout files out from the constructed in-memory hardware and partition layouts; use the upload cluster config
    * tool to upload the partition seal states onto Zookeeper; verify that the writable partitions are consistent between the two.
+   * After verification is done, partition override config will be safely deleted.
    * @throws IOException if a file read error is encountered.
    * @throws JSONException if a JSON parse error is encountered.
    */
@@ -763,8 +785,9 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-    HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), new String[]{ClusterMapUtils.PARTITION_OVERRIDE_STR});
+    HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, false, new HelixAdminFactory(),
+        new String[]{ClusterMapUtils.PARTITION_OVERRIDE_STR});
     // Check writable partitions in each datacenter
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
       HelixPropertyStore<ZNRecord> propertyStore =
@@ -787,6 +810,19 @@ public class HelixBootstrapUpgradeToolTest {
         assertEquals("Mismatch in writable partitions for partitionLayout and propertyStore", writableInPartitionLayout,
             writableInDC);
       }
+    }
+    // delete partition override config
+    HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, true, new HelixAdminFactory(),
+        new String[]{ClusterMapUtils.PARTITION_OVERRIDE_STR});
+    // verify that the config is cleaned up
+    for (ZkInfo zkInfo : dcsToZkInfo.values()) {
+      HelixPropertyStore<ZNRecord> propertyStore =
+          CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
+              Collections.singletonList(propertyStoreConfig.rootPath));
+      String getPath = ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH;
+      ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
+      assertNull("Partition override config should no longer exist", zNRecord);
     }
   }
 

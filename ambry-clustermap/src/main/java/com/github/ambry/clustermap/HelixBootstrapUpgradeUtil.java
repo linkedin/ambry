@@ -54,6 +54,8 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
+
 
 /**
  * A class to bootstrap static cluster map information into Helix.
@@ -216,27 +218,37 @@ public class HelixBootstrapUpgradeUtil {
   }
 
   /**
-   * Takes in the path to the files that make up the static cluster map and uploads the cluster admin configs (such as
-   * partition override, replica addition) to HelixPropertyStore in zookeeper.
+   * Upload or delete cluster admin configs.
+   * For upload, it takes in the path to the files that make up the static cluster map and uploads the cluster admin
+   * configs (such as partition override, replica addition) to HelixPropertyStore in zookeeper.
+   * For delete, it searches admin config names in given dc and delete them if corresponding znodes exist.
    * @param hardwareLayoutPath the path to the hardware layout file.
    * @param partitionLayoutPath the path to the partition layout file.
    * @param zkLayoutPath the path to the zookeeper layout file.
    * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
    *                          will give the cluster name in Helix to bootstrap or upgrade.
    * @param dcs the comma-separated list of data centers that needs to be upgraded/bootstrapped.
+   * @param forceRemove whether to remove admin configs from cluster.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @param adminTypes types of admin operation that requires to generate config and upload it to Helix PropertyStore.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
-  static void uploadClusterAdminConfigs(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, String dcs, HelixAdminFactory helixAdminFactory, String[] adminTypes) throws Exception {
+  static void uploadOrDeleteAdminConfigs(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+      String clusterNamePrefix, String dcs, boolean forceRemove, HelixAdminFactory helixAdminFactory,
+      String[] adminTypes) throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, helixAdminFactory,
+            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, helixAdminFactory,
             ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, null, null, null, null);
-    for (String adminType : adminTypes) {
-      generateAdminInfosAndUpload(clusterMapToHelixMapper, adminType);
+    if (forceRemove) {
+      for (String adminType : adminTypes) {
+        removeAdminInfosFromCluster(clusterMapToHelixMapper, adminType);
+      }
+    } else {
+      for (String adminType : adminTypes) {
+        generateAdminInfosAndUpload(clusterMapToHelixMapper, adminType);
+      }
     }
   }
 
@@ -336,24 +348,46 @@ public class HelixBootstrapUpgradeUtil {
    */
   private static void generateAdminInfosAndUpload(HelixBootstrapUpgradeUtil clusterMapToHelixMapper, String adminType) {
     switch (adminType) {
-      case ClusterMapUtils.PARTITION_OVERRIDE_STR:
+      case PARTITION_OVERRIDE_STR:
         Map<String, Map<String, Map<String, String>>> partitionOverrideInfosByDc =
             clusterMapToHelixMapper.generatePartitionOverrideFromAllDCs();
-        clusterMapToHelixMapper.uploadClusterAdminInfos(partitionOverrideInfosByDc,
-            ClusterMapUtils.PARTITION_OVERRIDE_STR, ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH);
+        clusterMapToHelixMapper.uploadClusterAdminInfos(partitionOverrideInfosByDc, PARTITION_OVERRIDE_STR,
+            PARTITION_OVERRIDE_ZNODE_PATH);
         break;
-      case ClusterMapUtils.REPLICA_ADDITION_STR:
+      case REPLICA_ADDITION_STR:
         Map<String, Map<String, Map<String, String>>> replicaAdditionInfosByDc =
             clusterMapToHelixMapper.generateReplicaAdditionMap();
-        clusterMapToHelixMapper.uploadClusterAdminInfos(replicaAdditionInfosByDc, ClusterMapUtils.REPLICA_ADDITION_STR,
-            ClusterMapUtils.REPLICA_ADDITION_ZNODE_PATH);
+        clusterMapToHelixMapper.uploadClusterAdminInfos(replicaAdditionInfosByDc, REPLICA_ADDITION_STR,
+            REPLICA_ADDITION_ZNODE_PATH);
         break;
       default:
         throw new IllegalArgumentException(
-            "Unrecognized admin config type: " + adminType + ". Current supported types are: "
-                + ClusterMapUtils.PARTITION_OVERRIDE_STR + ", " + ClusterMapUtils.REPLICA_ADDITION_STR);
+            "Unrecognized admin config type: " + adminType + ". Current supported types are: " + PARTITION_OVERRIDE_STR
+                + ", " + REPLICA_ADDITION_STR);
     }
     info("Upload cluster configs completed.");
+  }
+
+  /**
+   * Remove admin config from cluster.
+   * @param helixBootstrapUpgradeUtil the {@link HelixBootstrapUpgradeUtil} to use
+   * @param adminType the name of admin config
+   */
+  private static void removeAdminInfosFromCluster(HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil,
+      String adminType) {
+    switch (adminType) {
+      case PARTITION_OVERRIDE_STR:
+        helixBootstrapUpgradeUtil.deleteClusterAdminInfos(adminType, PARTITION_OVERRIDE_ZNODE_PATH);
+        break;
+      case REPLICA_ADDITION_STR:
+        helixBootstrapUpgradeUtil.deleteClusterAdminInfos(adminType, REPLICA_ADDITION_ZNODE_PATH);
+        break;
+      default:
+        throw new IllegalArgumentException(
+            "Unrecognized admin config type: " + adminType + ". Current supported types are: " + PARTITION_OVERRIDE_STR
+                + ", " + REPLICA_ADDITION_STR);
+    }
+    info("Delete cluster configs completed.");
   }
 
   /**
@@ -439,9 +473,8 @@ public class HelixBootstrapUpgradeUtil {
     for (PartitionId partitionId : staticClusterMap.getAllPartitionIds(null)) {
       String partitionName = partitionId.toPathString();
       Map<String, String> partitionProperties = new HashMap<>();
-      partitionProperties.put(ClusterMapUtils.PARTITION_STATE,
-          partitionId.getPartitionState() == PartitionState.READ_WRITE ? ClusterMapUtils.READ_WRITE_STR
-              : ClusterMapUtils.READ_ONLY_STR);
+      partitionProperties.put(PARTITION_STATE,
+          partitionId.getPartitionState() == PartitionState.READ_WRITE ? READ_WRITE_STR : READ_ONLY_STR);
       partitionOverrideInfos.put(partitionName, partitionProperties);
     }
     Map<String, Map<String, Map<String, String>>> partitionOverrideByDc = new HashMap<>();
@@ -516,8 +549,8 @@ public class HelixBootstrapUpgradeUtil {
                   replica.getMountPath());
               newAddedReplicasInDc.computeIfAbsent(partitionStr, key -> {
                 Map<String, String> partitionMap = new HashMap<>();
-                partitionMap.put(ClusterMapUtils.PARTITION_CLASS_STR, replica.getPartitionId().getPartitionClass());
-                partitionMap.put(ClusterMapUtils.REPLICAS_CAPACITY_STR, String.valueOf(replica.getCapacityInBytes()));
+                partitionMap.put(PARTITION_CLASS_STR, replica.getPartitionId().getPartitionClass());
+                partitionMap.put(REPLICAS_CAPACITY_STR, String.valueOf(replica.getCapacityInBytes()));
                 return partitionMap;
               }).put(instance, replica.getMountPath());
             }
@@ -539,8 +572,7 @@ public class HelixBootstrapUpgradeUtil {
   private void uploadClusterAdminInfos(Map<String, Map<String, Map<String, String>>> adminInfosByDc,
       String clusterAdminType, String adminConfigZNodePath) {
     Properties storeProps = new Properties();
-    storeProps.setProperty("helix.property.store.root.path",
-        "/" + clusterName + "/" + ClusterMapUtils.PROPERTYSTORE_STR);
+    storeProps.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
       info("Uploading {} infos for datacenter {}.", clusterAdminType, entry.getKey());
@@ -549,7 +581,26 @@ public class HelixBootstrapUpgradeUtil {
       ZNRecord znRecord = new ZNRecord(clusterAdminType);
       znRecord.setMapFields(adminInfosByDc.get(entry.getKey()));
       if (!helixPropertyStore.set(adminConfigZNodePath, znRecord, AccessOption.PERSISTENT)) {
-        info("Failed to upload {} infos for datacenter {}", clusterAdminType, entry.getKey());
+        logger.error("Failed to upload {} infos for datacenter {}", clusterAdminType, entry.getKey());
+      }
+    }
+  }
+
+  /**
+   * Delete specified admin config at given znode path.
+   * @param clusterAdminType the name of admin config.
+   * @param adminConfigZNodePath the znode path of admin config.
+   */
+  private void deleteClusterAdminInfos(String clusterAdminType, String adminConfigZNodePath) {
+    Properties storeProps = new Properties();
+    storeProps.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
+    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
+    for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
+      info("Deleting {} infos for datacenter {}.", clusterAdminType, entry.getKey());
+      HelixPropertyStore<ZNRecord> helixPropertyStore =
+          CommonUtils.createHelixPropertyStore(entry.getValue().getZkConnectStr(), propertyStoreConfig, null);
+      if (!helixPropertyStore.remove(adminConfigZNodePath, AccessOption.PERSISTENT)) {
+        logger.error("Failed to remove {} infos from datacenter {}", clusterAdminType, entry.getKey());
       }
     }
   }
@@ -983,20 +1034,19 @@ public class HelixBootstrapUpgradeUtil {
     instanceConfig.setHostName(node.getHostname());
     instanceConfig.setPort(Integer.toString(node.getPort()));
     if (node.hasSSLPort()) {
-      instanceConfig.getRecord().setSimpleField(ClusterMapUtils.SSL_PORT_STR, Integer.toString(node.getSSLPort()));
+      instanceConfig.getRecord().setSimpleField(SSL_PORT_STR, Integer.toString(node.getSSLPort()));
     }
     if (node.hasHttp2Port()) {
-      instanceConfig.getRecord().setSimpleField(ClusterMapUtils.HTTP2_PORT_STR, Integer.toString(node.getHttp2Port()));
+      instanceConfig.getRecord().setSimpleField(HTTP2_PORT_STR, Integer.toString(node.getHttp2Port()));
     }
-    instanceConfig.getRecord().setSimpleField(ClusterMapUtils.DATACENTER_STR, node.getDatacenterName());
-    instanceConfig.getRecord().setSimpleField(ClusterMapUtils.RACKID_STR, node.getRackId());
+    instanceConfig.getRecord().setSimpleField(DATACENTER_STR, node.getDatacenterName());
+    instanceConfig.getRecord().setSimpleField(RACKID_STR, node.getRackId());
     long xid = node.getXid();
-    if (xid != ClusterMapUtils.DEFAULT_XID) {
+    if (xid != DEFAULT_XID) {
       // Set the XID only if it is not the default, in order to avoid unnecessary updates.
-      instanceConfig.getRecord().setSimpleField(ClusterMapUtils.XID_STR, Long.toString(node.getXid()));
+      instanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(node.getXid()));
     }
-    instanceConfig.getRecord()
-        .setSimpleField(ClusterMapUtils.SCHEMA_VERSION_STR, Integer.toString(ClusterMapUtils.CURRENT_SCHEMA_VERSION));
+    instanceConfig.getRecord().setSimpleField(SCHEMA_VERSION_STR, Integer.toString(CURRENT_SCHEMA_VERSION));
 
     List<String> sealedPartitionsList = new ArrayList<>();
     List<String> stoppedReplicasList = new ArrayList<>();
@@ -1013,11 +1063,11 @@ public class HelixBootstrapUpgradeUtil {
         for (ReplicaId replicaId : replicasInDisk) {
           Replica replica = (Replica) replicaId;
           replicasStrBuilder.append(replica.getPartition().getId())
-              .append(ClusterMapUtils.REPLICAS_STR_SEPARATOR)
+              .append(REPLICAS_STR_SEPARATOR)
               .append(replica.getCapacityInBytes())
-              .append(ClusterMapUtils.REPLICAS_STR_SEPARATOR)
+              .append(REPLICAS_STR_SEPARATOR)
               .append(replica.getPartition().getPartitionClass())
-              .append(ClusterMapUtils.REPLICAS_DELIM_STR);
+              .append(REPLICAS_DELIM_STR);
           if (referenceInstanceConfig == null && replica.isSealed()) {
             sealedPartitionsList.add(Long.toString(replica.getPartition().getId()));
           }
@@ -1025,9 +1075,9 @@ public class HelixBootstrapUpgradeUtil {
               .add(instanceName);
         }
         Map<String, String> diskInfo = new HashMap<>();
-        diskInfo.put(ClusterMapUtils.DISK_CAPACITY_STR, Long.toString(disk.getRawCapacityInBytes()));
-        diskInfo.put(ClusterMapUtils.DISK_STATE, ClusterMapUtils.AVAILABLE_STR);
-        diskInfo.put(ClusterMapUtils.REPLICAS_STR, replicasStrBuilder.toString());
+        diskInfo.put(DISK_CAPACITY_STR, Long.toString(disk.getRawCapacityInBytes()));
+        diskInfo.put(DISK_STATE, AVAILABLE_STR);
+        diskInfo.put(REPLICAS_STR, replicasStrBuilder.toString());
         diskInfos.put(disk.getMountPath(), diskInfo);
       }
       instanceConfig.getRecord().setMapFields(diskInfos);
@@ -1038,8 +1088,8 @@ public class HelixBootstrapUpgradeUtil {
       sealedPartitionsList = ClusterMapUtils.getSealedReplicas(referenceInstanceConfig);
       stoppedReplicasList = ClusterMapUtils.getStoppedReplicas(referenceInstanceConfig);
     }
-    instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedPartitionsList);
-    instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicasList);
+    instanceConfig.getRecord().setListField(SEALED_STR, sealedPartitionsList);
+    instanceConfig.getRecord().setListField(STOPPED_REPLICAS_STR, stoppedReplicasList);
     return instanceConfig;
   }
 
@@ -1217,8 +1267,7 @@ public class HelixBootstrapUpgradeUtil {
         ensureOrThrow(diskInfoInHelix != null,
             "[" + dcName.toUpperCase() + "] Disk not present for instance " + instanceName + " disk "
                 + disk.getMountPath());
-        ensureOrThrow(
-            disk.getRawCapacityInBytes() == Long.parseLong(diskInfoInHelix.get(ClusterMapUtils.DISK_CAPACITY_STR)),
+        ensureOrThrow(disk.getRawCapacityInBytes() == Long.parseLong(diskInfoInHelix.get(DISK_CAPACITY_STR)),
             "[" + dcName.toUpperCase() + "] Capacity mismatch for instance " + instanceName + " disk "
                 + disk.getMountPath());
 
@@ -1232,11 +1281,11 @@ public class HelixBootstrapUpgradeUtil {
             replicasInClusterMap.addAll(replicaList.keySet());
           }
           Set<String> replicasInHelix = new HashSet<>();
-          String replicasStr = diskInfoInHelix.get(ClusterMapUtils.REPLICAS_STR);
+          String replicasStr = diskInfoInHelix.get(REPLICAS_STR);
           if (!replicasStr.isEmpty()) {
-            String[] replicaInfoList = replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR);
+            String[] replicaInfoList = replicasStr.split(REPLICAS_DELIM_STR);
             for (String replicaInfo : replicaInfoList) {
-              String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
+              String[] info = replicaInfo.split(REPLICAS_STR_SEPARATOR);
               // This is schema specific, but the assumption is that partition id and capacity fields should always be
               // there. At this time these are the only things checked.
               ensureOrThrow(info.length >= 2, "[" + dcName.toUpperCase()
@@ -1268,21 +1317,19 @@ public class HelixBootstrapUpgradeUtil {
         }
       }
       ensureOrThrow(!dataNode.hasSSLPort() || (dataNode.getSSLPort() == Integer.parseInt(
-          instanceConfig.getRecord().getSimpleField(ClusterMapUtils.SSL_PORT_STR))),
+          instanceConfig.getRecord().getSimpleField(SSL_PORT_STR))),
           "[" + dcName.toUpperCase() + "] SSL Port mismatch for instance " + instanceName);
       ensureOrThrow(!dataNode.hasHttp2Port() || (dataNode.getHttp2Port() == Integer.parseInt(
-          instanceConfig.getRecord().getSimpleField(ClusterMapUtils.HTTP2_PORT_STR))),
+          instanceConfig.getRecord().getSimpleField(HTTP2_PORT_STR))),
           "[" + dcName.toUpperCase() + "] HTTP2 Port mismatch for instance " + instanceName);
-      ensureOrThrow(dataNode.getDatacenterName()
-              .equals(instanceConfig.getRecord().getSimpleField(ClusterMapUtils.DATACENTER_STR)),
+      ensureOrThrow(dataNode.getDatacenterName().equals(instanceConfig.getRecord().getSimpleField(DATACENTER_STR)),
           "[" + dcName.toUpperCase() + "] Datacenter mismatch for instance " + instanceName);
-      ensureOrThrow(
-          Objects.equals(dataNode.getRackId(), instanceConfig.getRecord().getSimpleField(ClusterMapUtils.RACKID_STR)),
+      ensureOrThrow(Objects.equals(dataNode.getRackId(), instanceConfig.getRecord().getSimpleField(RACKID_STR)),
           "[" + dcName.toUpperCase() + "] Rack Id mismatch for instance " + instanceName);
 
-      String xidInHelix = instanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR);
+      String xidInHelix = instanceConfig.getRecord().getSimpleField(XID_STR);
       if (xidInHelix == null) {
-        xidInHelix = Long.toString(ClusterMapUtils.DEFAULT_XID);
+        xidInHelix = Long.toString(DEFAULT_XID);
       }
       ensureOrThrow(Objects.equals(Long.toString(dataNode.getXid()), xidInHelix),
           "[" + dcName.toUpperCase() + "] Xid mismatch for instance " + instanceName);
