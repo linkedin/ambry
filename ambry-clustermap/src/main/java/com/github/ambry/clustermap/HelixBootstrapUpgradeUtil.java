@@ -30,6 +30,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.SortedSet;
@@ -95,6 +96,9 @@ import org.slf4j.LoggerFactory;
  *}
  */
 public class HelixBootstrapUpgradeUtil {
+  static final int DEFAULT_MAX_PARTITIONS_PER_RESOURCE = 100;
+  static final String HELIX_DISABLED_PARTITION_STR =
+      InstanceConfig.InstanceConfigProperty.HELIX_DISABLED_PARTITION.name();
   private final StaticClusterManager staticClusterMap;
   private final String zkLayoutPath;
   private final String stateModelDef;
@@ -111,6 +115,9 @@ public class HelixBootstrapUpgradeUtil {
   private final boolean dryRun;
   private final boolean forceRemove;
   private final String clusterName;
+  private final String hostName;
+  private final Integer portNum;
+  private final String partitionName;
   private final HelixAdminOperation helixAdminOperation;
   private boolean expectMoreInHelixDuringValidate = false;
   private ConcurrentHashMap<String, Set<String>> instancesNotForceRemovedByDc = new ConcurrentHashMap<>();
@@ -122,14 +129,15 @@ public class HelixBootstrapUpgradeUtil {
   private final AtomicInteger resourcesUpdated = new AtomicInteger();
   private final AtomicInteger resourcesDropped = new AtomicInteger();
   private final AtomicInteger partitionsDisabled = new AtomicInteger();
+  private final AtomicInteger partitionsEnabled = new AtomicInteger();
+  private final AtomicInteger partitionsReset = new AtomicInteger();
   private Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress;
   private HelixClusterManager validatingHelixClusterManager;
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
   private static final String ALL = "all";
 
   enum HelixAdminOperation {
-    // todo add ResetPartition into this admin operation set.
-    BootstrapCluster, ValidateCluster, UpdateIdealState, DisablePartition
+    BootstrapCluster, ValidateCluster, UpdateIdealState, DisablePartition, EnablePartition, ResetPartition
   }
 
   /**
@@ -194,7 +202,8 @@ public class HelixBootstrapUpgradeUtil {
     }
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-            maxPartitionsInOneResource, dryRun, forceRemove, helixAdminFactory, stateModelDef, helixAdminOperation);
+            maxPartitionsInOneResource, dryRun, forceRemove, helixAdminFactory, stateModelDef, null, null, null,
+            helixAdminOperation);
     if (dryRun) {
       info("To drop the cluster, run this tool again with the '--dropCluster {}' argument.",
           clusterMapToHelixMapper.clusterName);
@@ -215,19 +224,17 @@ public class HelixBootstrapUpgradeUtil {
    * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
    *                          will give the cluster name in Helix to bootstrap or upgrade.
    * @param dcs the comma-separated list of data centers that needs to be upgraded/bootstrapped.
-   * @param maxPartitionsInOneResource the maximum number of Ambry partitions to group under a single Helix resource.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @param adminTypes types of admin operation that requires to generate config and upload it to Helix PropertyStore.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void uploadClusterAdminConfigs(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, HelixAdminFactory helixAdminFactory,
-      String[] adminTypes) throws Exception {
+      String clusterNamePrefix, String dcs, HelixAdminFactory helixAdminFactory, String[] adminTypes) throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-            maxPartitionsInOneResource, false, false, helixAdminFactory, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF,
-            null);
+            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, helixAdminFactory,
+            ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, null, null, null, null);
     for (String adminType : adminTypes) {
       generateAdminInfosAndUpload(clusterMapToHelixMapper, adminType);
     }
@@ -237,11 +244,12 @@ public class HelixBootstrapUpgradeUtil {
    * Add given state model def to ambry cluster in enabled datacenter(s)
    */
   static void addStateModelDef(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, HelixAdminFactory helixAdminFactory,
-      String stateModelDef) throws Exception {
+      String clusterNamePrefix, String dcs, HelixAdminFactory helixAdminFactory, String stateModelDef)
+      throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-            maxPartitionsInOneResource, false, false, helixAdminFactory, stateModelDef, null);
+            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, helixAdminFactory, stateModelDef, null, null, null,
+            null);
     clusterMapToHelixMapper.addStateModelDef();
     info("State model def is successfully added");
   }
@@ -264,10 +272,42 @@ public class HelixBootstrapUpgradeUtil {
       String clusterNamePrefix, String dcs, HelixAdminFactory helixAdminFactory, String stateModelDef)
       throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
-        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs, 0,
-            false, false, helixAdminFactory, stateModelDef, HelixAdminOperation.ValidateCluster);
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
+            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, helixAdminFactory, stateModelDef, null, null, null,
+            HelixAdminOperation.ValidateCluster);
     clusterMapToHelixMapper.validateAndClose();
     clusterMapToHelixMapper.logSummary();
+  }
+
+  /**
+   * Control the state of partition on given node. Currently this method supports Disable/Enable/Reset partition.
+   * @param hardwareLayoutPath the path to the hardware layout file.
+   * @param partitionLayoutPath the path to the partition layout file.
+   * @param zkLayoutPath the path to the zookeeper layout file.
+   * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
+   *                          will give the cluster name in Helix to bootstrap or upgrade.
+   * @param dcs the comma-separated list of data centers that needs to be upgraded/bootstrapped.
+   * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
+   * @param hostname the host on which admin operation should be performed
+   * @param portNum the port number associated with host
+   * @param operation the {@link HelixAdminOperation} to perform
+   * @param partitionName the partition on which admin operation should be performed
+   * @throws Exception
+   */
+  static void controlPartitionState(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+      String clusterNamePrefix, String dcs, HelixAdminFactory helixAdminFactory, String hostname, Integer portNum,
+      HelixAdminOperation operation, String partitionName) throws Exception {
+
+    HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil =
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
+            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, helixAdminFactory, null,
+            Objects.requireNonNull(hostname), portNum, Objects.requireNonNull(partitionName), operation);
+    if (operation == HelixAdminOperation.ResetPartition) {
+      helixBootstrapUpgradeUtil.resetPartition();
+    } else {
+      helixBootstrapUpgradeUtil.controlPartitionState();
+    }
+    helixBootstrapUpgradeUtil.logSummary();
   }
 
   /**
@@ -328,19 +368,25 @@ public class HelixBootstrapUpgradeUtil {
    * @param forceRemove if true, removes any hosts from Helix not present in the json files.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @param stateModelDef the state model definition to use in Ambry cluster.
+   * @param hostname the host (if not null) on which the admin operation should be performed.
+   * @param portNum the port number (if not null) associated with host.
+   * @param partitionName the partition (if not null) on which the admin operation should be performed.
    * @param helixAdminOperation the {@link HelixAdminOperation} to perform.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   private HelixBootstrapUpgradeUtil(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
-      HelixAdminFactory helixAdminFactory, String stateModelDef, HelixAdminOperation helixAdminOperation)
-      throws Exception {
+      HelixAdminFactory helixAdminFactory, String stateModelDef, String hostname, Integer portNum, String partitionName,
+      HelixAdminOperation helixAdminOperation) throws Exception {
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     this.dryRun = dryRun;
     this.forceRemove = forceRemove;
     this.zkLayoutPath = zkLayoutPath;
     this.stateModelDef = stateModelDef;
+    this.hostName = hostname;
+    this.portNum = portNum;
+    this.partitionName = partitionName;
     this.helixAdminOperation = helixAdminOperation;
     dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     Properties props = new Properties();
@@ -527,6 +573,76 @@ public class HelixBootstrapUpgradeUtil {
             .add((Replica) replicaId);
       }
     }
+  }
+
+  /**
+   * Control state of partition on certain node. (i.e. DisablePartition, EnablePartition)
+   */
+  private void controlPartitionState() {
+    // for now, we only support controlling state of single partition on certain node. Hence, there should be only 1 dc
+    // in adminForDc map.
+    if (adminForDc.size() != 1) {
+      throw new IllegalStateException("The dc count is not 1 for partition state control operation");
+    }
+    HelixAdmin helixAdmin = adminForDc.values().iterator().next();
+    String instanceName;
+    if (portNum == null) {
+      Optional<DataNodeId> optionalDataNode =
+          staticClusterMap.getDataNodeIds().stream().filter(node -> node.getHostname().equals(hostName)).findFirst();
+      if (!optionalDataNode.isPresent()) {
+        throw new IllegalStateException("Host " + hostName + " is not found in static clustermap");
+      }
+      DataNode dataNode = (DataNode) optionalDataNode.get();
+      instanceName = getInstanceName(dataNode);
+    } else {
+      instanceName = ClusterMapUtils.getInstanceName(hostName, portNum);
+    }
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    String resourceNameForPartition = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
+    info("{} partition {} under resource {} on node {}",
+        helixAdminOperation == HelixAdminOperation.EnablePartition ? "Enabling" : "Disabling", partitionName,
+        resourceNameForPartition, instanceName);
+    instanceConfig.setInstanceEnabledForPartition(resourceNameForPartition, partitionName,
+        helixAdminOperation == HelixAdminOperation.EnablePartition);
+    // clean up the disabled partition entry if it exists and is empty.
+    Map<String, String> disabledPartitions =
+        instanceConfig.getRecord().getMapFields().get(HELIX_DISABLED_PARTITION_STR);
+    if (disabledPartitions != null && disabledPartitions.isEmpty()) {
+      instanceConfig.getRecord().getMapFields().remove(HELIX_DISABLED_PARTITION_STR);
+    }
+    helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+    instancesUpdated.getAndIncrement();
+    if (helixAdminOperation == HelixAdminOperation.EnablePartition) {
+      partitionsEnabled.getAndIncrement();
+    } else {
+      partitionsDisabled.getAndIncrement();
+    }
+  }
+
+  /**
+   * Reset the partition on specific node.
+   */
+  private void resetPartition() {
+    if (adminForDc.size() != 1) {
+      throw new IllegalStateException("The dc count is not 1 for resetting partition operation");
+    }
+    HelixAdmin helixAdmin = adminForDc.values().iterator().next();
+    String instanceName;
+    if (portNum == null) {
+      Optional<DataNodeId> optionalDataNode =
+          staticClusterMap.getDataNodeIds().stream().filter(node -> node.getHostname().equals(hostName)).findFirst();
+      if (!optionalDataNode.isPresent()) {
+        throw new IllegalStateException("Host " + hostName + " is not found in static clustermap");
+      }
+      DataNodeId dataNodeId = optionalDataNode.get();
+      instanceName = getInstanceName(dataNodeId);
+    } else {
+      instanceName = ClusterMapUtils.getInstanceName(hostName, portNum);
+    }
+    String resourceName = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
+    info("Resetting partition {} under resource {} on node {}", partitionName, resourceName, hostName);
+    helixAdmin.resetPartition(clusterName, instanceName, resourceName, Collections.singletonList(partitionName));
+    partitionsReset.getAndIncrement();
   }
 
   /**
@@ -988,6 +1104,25 @@ public class HelixBootstrapUpgradeUtil {
   }
 
   /**
+   * Get resource name associated with given partition.
+   * @param helixAdmin the {@link HelixAdmin} to access resources in cluster
+   * @param clusterName the name of cluster in which the partition resides
+   * @param partitionName name of partition
+   * @return resource name associated with given partition. {@code null} if not found.
+   */
+  static String getResourceNameOfPartition(HelixAdmin helixAdmin, String clusterName, String partitionName) {
+    String result = null;
+    for (String resourceName : helixAdmin.getResourcesInCluster(clusterName)) {
+      IdealState idealState = helixAdmin.getResourceIdealState(clusterName, resourceName);
+      if (idealState.getPartitionSet().contains(partitionName)) {
+        result = resourceName;
+        break;
+      }
+    }
+    return result;
+  }
+
+  /**
    * Validate that the information in Helix is consistent with the information in the static clustermap; and close
    * all the admin connections to ZK hosts.
    */
@@ -1282,7 +1417,8 @@ public class HelixBootstrapUpgradeUtil {
    */
   private void logSummary() {
     if (instancesUpdated.get() + instancesAdded.get() + instancesDropped.get() + resourcesUpdated.get() + resourcesAdded
-        .get() + resourcesDropped.get() + partitionsDisabled.get() > 0) {
+        .get() + resourcesDropped.get() + partitionsDisabled.get() + partitionsEnabled.get() + partitionsReset.get()
+        > 0) {
       if (!dryRun) {
         info("========Cluster in Helix was updated, summary:========");
       } else {
@@ -1295,6 +1431,8 @@ public class HelixBootstrapUpgradeUtil {
       info("Existing resources updated: {}", resourcesUpdated.get());
       info("Existing resources dropped: {}", resourcesDropped.get());
       info("Partitions disabled: {}", partitionsDisabled.get());
+      info("Partitions enabled: {}", partitionsEnabled.get());
+      info("Partitions reset: {}", partitionsReset.get());
     } else {
       info("========No updates were done to the cluster in Helix========");
     }
