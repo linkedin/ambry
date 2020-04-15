@@ -240,10 +240,8 @@ public class HelixBootstrapUpgradeTool {
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       HelixBootstrapUpgradeUtil.dropCluster(zkLayoutPath, clusterName, dcs, new HelixAdminFactory());
     } else if (adminConfigStr != null) {
-      List<OptionSpec<?>> expectedOpts =
-          Arrays.asList(adminConfigsOpt, zkLayoutPathOpt, hardwareLayoutPathOpt, partitionLayoutPathOpt,
-              clusterNamePrefixOpt, dcsNameOpt);
-      ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
+      listOpt.add(adminConfigsOpt);
+      ToolUtils.ensureOrExit(listOpt, options, parser);
       String[] adminTypes = adminConfigStr.replaceAll("\\p{Space}", "").split(",");
       HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
           clusterNamePrefix, dcs, options.has(forceRemove), new HelixAdminFactory(), adminTypes);
