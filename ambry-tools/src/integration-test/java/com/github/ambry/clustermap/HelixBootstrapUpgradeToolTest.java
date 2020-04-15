@@ -179,8 +179,7 @@ public class HelixBootstrapUpgradeToolTest {
     // test add state model to non-exist cluster, which should fail
     try {
       HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(),
-          ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
+          CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
       fail("should fail due to non-exist cluster");
     } catch (IllegalStateException e) {
       // expected
@@ -191,12 +190,10 @@ public class HelixBootstrapUpgradeToolTest {
         ClusterMapConfig.OLD_STATE_MODEL_DEF, BootstrapCluster);
     // add new state model def
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(),
-        ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
+        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
     // add existing state model def should be no-op
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(),
-        ClusterMapConfig.OLD_STATE_MODEL_DEF);
+        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), ClusterMapConfig.OLD_STATE_MODEL_DEF);
     // ensure that active dcs have new state model def
     String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
     for (Datacenter dc : testHardwareLayout.getHardwareLayout().getDatacenters()) {
@@ -433,16 +430,14 @@ public class HelixBootstrapUpgradeToolTest {
     // test invalid admin type
     try {
       HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(),
-          new String[]{"invalid_admin_type"});
+          CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), new String[]{"invalid_admin_type"});
       fail("should fail because of invalid admin type");
     } catch (IllegalArgumentException e) {
       // expected
     }
     // upload replica addition admin config
     HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(),
-        new String[]{ClusterMapUtils.REPLICA_ADDITION_STR});
+        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), new String[]{ClusterMapUtils.REPLICA_ADDITION_STR});
     // verify replica addition znode in Helix PropertyStore
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
       HelixPropertyStore<ZNRecord> propertyStore =
@@ -769,8 +764,7 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(),
-        new String[]{ClusterMapUtils.PARTITION_OVERRIDE_STR});
+        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), new String[]{ClusterMapUtils.PARTITION_OVERRIDE_STR});
     // Check writable partitions in each datacenter
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
       HelixPropertyStore<ZNRecord> propertyStore =
