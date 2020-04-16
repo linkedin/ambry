@@ -32,8 +32,8 @@ public interface ClusterAgentsFactory {
   /**
    * Construct and return the references or return the references to the previously constructed
    * {@link ClusterParticipant}(s). We extend this method to support multiple participants on same node. In some special
-   * cases we require a data node to participate into multiple clusters and each participant interacts with corresponding
-   * cluster independently.
+   * cases (i.e. migrating cluster to another Zookeeper), we require a data node to participate into multiple ZK clusters
+   * and each participant interacts with corresponding ZK independently.
    * @return a list of {@link ClusterParticipant}(s) on current node.
    */
   List<ClusterParticipant> getClusterParticipants() throws IOException;

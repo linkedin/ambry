@@ -197,12 +197,12 @@ public class HelixClusterManager implements ClusterMap {
   private HelixManager initializeHelixManagerAndPropertyStoreInLocalDC(Map<String, DcZkInfo> dataCenterToZkAddress,
       String instanceName, HelixFactory helixFactory) throws Exception {
     DcZkInfo dcZkInfo = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName);
-    // For now, the first ZK endpoint (if there are more than one endpoints) will be adopted by default. We can update
-    // this if we really need to initialize mulitiple HelixManager in local dc.
-    String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
     if (dcZkInfo.getReplicaType() == ReplicaType.CLOUD_BACKED) {
       return null;
     }
+    // For now, the first ZK endpoint (if there are more than one endpoints) will be adopted by default. We can update
+    // this if we really need to initialize multiple HelixManagers in local dc.
+    String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
     HelixManager manager =
         helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
     logger.info("Connecting to Helix manager in local zookeeper at {}", zkConnectStr);

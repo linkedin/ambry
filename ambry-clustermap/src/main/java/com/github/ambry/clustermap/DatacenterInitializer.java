@@ -159,8 +159,7 @@ class DatacenterInitializer {
    */
   private DcInfo initializeHelixDatacenter() throws Exception {
     // For now, the first ZK endpoint (if there are more than one endpoints) will be adopted by default for initialization.
-    // If we really need multiple HelixClusterManagers on same node in the future, we can use separate zk connect str configs
-    // for HelixClusterManager and HelixParticipant.
+    // Note that, Ambry currently doesn't support multiple spectators, because there should be only one source of truth.
     String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
     HelixManager manager;
     if (dcZkInfo.getDcName().equals(clusterMapConfig.clusterMapDatacenterName)) {

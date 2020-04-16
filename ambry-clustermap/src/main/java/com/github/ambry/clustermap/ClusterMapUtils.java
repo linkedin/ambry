@@ -14,11 +14,11 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.network.Port;
+import com.github.ambry.utils.Utils;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -72,8 +72,8 @@ public class ClusterMapUtils {
   static final String AVAILABLE_STR = "AVAILABLE";
   static final String READ_ONLY_STR = "RO";
   static final String READ_WRITE_STR = "RW";
-  static final String ZKCONNECTSTR_STR = "zkConnectStr";
-  static final String ZKCONNECTSTR_DELIMITER = ",";
+  static final String ZKCONNECT_STR = "zkConnectStr";
+  static final String ZKCONNECT_STR_DELIMITER = ",";
   static final String ZKINFO_STR = "zkInfo";
   static final String DATACENTER_STR = "datacenter";
   static final String DATACENTER_ID_STR = "id";
@@ -155,10 +155,10 @@ public class ClusterMapUtils {
       String name = entry.getString(DATACENTER_STR);
       byte id = (byte) entry.getInt(DATACENTER_ID_STR);
       ReplicaType replicaType = entry.optEnum(ReplicaType.class, REPLICA_TYPE_STR, ReplicaType.DISK_BACKED);
-      String[] zkConnectStrs =
-          (replicaType == ReplicaType.DISK_BACKED) ? entry.getString(ZKCONNECTSTR_STR).split(ZKCONNECTSTR_DELIMITER)
-              : entry.optString(ZKCONNECTSTR_STR).split(ZKCONNECTSTR_DELIMITER);
-      DcZkInfo dcZkInfo = new DcZkInfo(name, id, Arrays.asList(zkConnectStrs), replicaType);
+      ArrayList<String> zkConnectStrs =
+          (replicaType == ReplicaType.DISK_BACKED) ? Utils.splitString(entry.getString(ZKCONNECT_STR),
+              ZKCONNECT_STR_DELIMITER) : Utils.splitString(entry.optString(ZKCONNECT_STR), ZKCONNECT_STR_DELIMITER);
+      DcZkInfo dcZkInfo = new DcZkInfo(name, id, zkConnectStrs, replicaType);
       dataCenterToZkAddress.put(dcZkInfo.dcName, dcZkInfo);
     }
     return dataCenterToZkAddress;
@@ -243,7 +243,7 @@ public class ClusterMapUtils {
    */
   static long getXid(InstanceConfig instanceConfig) {
     String xid = instanceConfig.getRecord().getSimpleField(XID_STR);
-    return xid == null ? DEFAULT_XID : Long.valueOf(xid);
+    return xid == null ? DEFAULT_XID : Long.parseLong(xid);
   }
 
   /**

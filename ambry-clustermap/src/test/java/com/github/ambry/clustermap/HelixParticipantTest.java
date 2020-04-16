@@ -325,7 +325,7 @@ public class HelixParticipantTest {
     JSONObject zkInfoJson = new JSONObject();
     zkInfoJson.put(ClusterMapUtils.DATACENTER_STR, "DC0");
     zkInfoJson.put(ClusterMapUtils.DATACENTER_ID_STR, (byte) 0);
-    zkInfoJson.put(ClusterMapUtils.ZKCONNECTSTR_STR, "localhost:2199" + ZKCONNECTSTR_DELIMITER + "localhost:2299");
+    zkInfoJson.put(ClusterMapUtils.ZKCONNECT_STR, "localhost:2199" + ZKCONNECT_STR_DELIMITER + "localhost:2299");
     zkInfosJson.put(zkInfoJson);
     JSONObject jsonObject = new JSONObject().put(ClusterMapUtils.ZKINFO_STR, zkInfosJson);
     props.setProperty("clustermap.dcs.zk.connect.strings", jsonObject.toString(2));

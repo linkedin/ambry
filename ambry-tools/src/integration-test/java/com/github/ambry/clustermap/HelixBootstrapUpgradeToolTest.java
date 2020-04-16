@@ -248,8 +248,9 @@ public class HelixBootstrapUpgradeToolTest {
       JSONObject zkInfoJson = new JSONObject();
       zkInfoJson.put(ClusterMapUtils.DATACENTER_STR, zkInfo.getDcName());
       zkInfoJson.put(ClusterMapUtils.DATACENTER_ID_STR, zkInfo.getId());
-      zkInfoJson.put(ClusterMapUtils.ZKCONNECTSTR_STR,
-          "localhost1:" + zkInfo.getPort() + ClusterMapUtils.ZKCONNECTSTR_DELIMITER + "localhost2:" + zkInfo.getPort());
+      zkInfoJson.put(ClusterMapUtils.ZKCONNECT_STR,
+          "localhost1:" + zkInfo.getPort() + ClusterMapUtils.ZKCONNECT_STR_DELIMITER + "localhost2:"
+              + zkInfo.getPort());
       zkInfosJson.put(zkInfoJson);
     }
     JSONObject jsonObject = new JSONObject().put(ClusterMapUtils.ZKINFO_STR, zkInfosJson);
@@ -258,7 +259,7 @@ public class HelixBootstrapUpgradeToolTest {
       HelixBootstrapUpgradeUtil.dropCluster(zkLayoutPath, CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP,
           dcStr, new HelixAdminFactory());
       fail("should fail because of invalid zk endpoint count");
-    } catch (AssertionError error) {
+    } catch (IllegalArgumentException e) {
       // expected
     }
   }
