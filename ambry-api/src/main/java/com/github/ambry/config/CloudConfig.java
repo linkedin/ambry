@@ -50,7 +50,8 @@ public class CloudConfig {
   public static final String VCR_PROXY_HOST = "vcr.proxy.host";
   public static final String VCR_PROXY_PORT = "vcr.proxy.port";
   public static final String VCR_CLUSTER_SPECTATOR_FACTORY_CLASS = "vcr.cluster.spectator.factory.class";
-  public static final String VCR_CROSS_COLO_REPLICATION_PEER_DATACENTERS = "vcr.cross.colo.replication.peer.datacenter";
+  // Comma separated names of datacenter(s) which the VCR replicate from.
+  public static final String VCR_SOURCE_DATACENTERS = "vcr.source.datacenters";
 
   public static final String DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS =
       "com.github.ambry.cloud.StaticVcrClusterFactory";
@@ -271,9 +272,9 @@ public class CloudConfig {
   /**
    * Comma separated set of datacenters which can act as peer for cross colo replication.
    */
-  @Config(VCR_CROSS_COLO_REPLICATION_PEER_DATACENTERS)
+  @Config(VCR_SOURCE_DATACENTERS)
   @Default("")
-  public final Set<String> vcrCrossColoReplicationPeerDatacenters;
+  public final Set<String> vcrSourceDatacenters;
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
@@ -316,8 +317,7 @@ public class CloudConfig {
     vcrClusterSpectatorFactoryClass = verifiableProperties.getString(VCR_CLUSTER_SPECTATOR_FACTORY_CLASS,
         DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS);
 
-    vcrCrossColoReplicationPeerDatacenters =
-        Utils.splitString(verifiableProperties.getString(VCR_CROSS_COLO_REPLICATION_PEER_DATACENTERS, ""), ",",
-            HashSet::new);
+    vcrSourceDatacenters =
+        Utils.splitString(verifiableProperties.getString(VCR_SOURCE_DATACENTERS, ""), ",", HashSet::new);
   }
 }

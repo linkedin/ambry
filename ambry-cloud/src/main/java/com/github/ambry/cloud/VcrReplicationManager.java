@@ -77,11 +77,9 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudStorageCompactor =
         cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
             partitionToPartitionInfo.keySet(), vcrMetrics) : null;
-    // We need a datacenter to replicate from. For DR, we currently deploy VCR nodes on same datacenter as ambry-server.
-    // For serving data from cloud, we must specify the ambry-server datacenter(s) from which to replicate.
-    if (!cloudConfig.cloudIsVcr && cloudConfig.vcrCrossColoReplicationPeerDatacenters.isEmpty()) {
-      throw new IllegalStateException(
-          "Either this should be a vcr replicator OR one or more vcr cross colo replication peer datacenter should be specified");
+    // We need a datacenter to replicate from, which should be specified in the cloud config.
+    if (cloudConfig.vcrSourceDatacenters.isEmpty()) {
+      throw new IllegalStateException("One or more VCR cross colo replication peer datacenter should be specified");
     }
   }
 
@@ -247,11 +245,6 @@ public class VcrReplicationManager extends ReplicationEngine {
    * @return true if replication is allowed. false otherwise.
    */
   private boolean shouldReplicateFromDc(String datacenterName) {
-    if (cloudConfig.cloudIsVcr) {
-      // for DR replication is allowed from the same datacenter where VCR cloud nodes are deployed.
-      return datacenterName.equals(dataNodeId.getDatacenterName());
-    } else {
-      return cloudConfig.vcrCrossColoReplicationPeerDatacenters.contains(datacenterName);
-    }
+    return cloudConfig.vcrSourceDatacenters.contains(datacenterName);
   }
 }
