@@ -21,6 +21,11 @@ import org.json.JSONObject;
  * The configs for resource state.
  */
 public class ClusterMapConfig {
+
+  public static final String CLUSTERMAP_CLUSTER_NAME = "clustermap.cluster.name";
+  public static final String CLUSTERMAP_DATACENTER_NAME = "clustermap.datacenter.name";
+  public static final String CLUSTERMAP_HOST_NAME = "clustermap.host.name";
+  public static final String CLUSTERMAP_PORT = "clustermap.port";
   public static final String AMBRY_STATE_MODEL_DEF = "AmbryLeaderStandby";
   public static final String OLD_STATE_MODEL_DEF = LeaderStandbySMD.name;
   public static final String DEFAULT_STATE_MODEL_DEF = AMBRY_STATE_MODEL_DEF;
@@ -128,25 +133,25 @@ public class ClusterMapConfig {
   /**
    * The name of the associated cluster for this node.
    */
-  @Config("clustermap.cluster.name")
+  @Config(CLUSTERMAP_CLUSTER_NAME)
   public final String clusterMapClusterName;
 
   /**
    * The name of the associated datacenter for this node.
    */
-  @Config("clustermap.datacenter.name")
+  @Config(CLUSTERMAP_DATACENTER_NAME)
   public final String clusterMapDatacenterName;
 
   /**
    * The host name associated with this node.
    */
-  @Config("clustermap.host.name")
+  @Config(CLUSTERMAP_HOST_NAME)
   public final String clusterMapHostName;
 
   /**
    * The port number associated with this node.
    */
-  @Config("clustermap.port")
+  @Config(CLUSTERMAP_PORT)
   @Default("null")
   public final Integer clusterMapPort;
 
@@ -282,10 +287,10 @@ public class ClusterMapConfig {
     clusterMapClusterChangeHandlerType =
         verifiableProperties.getString("clustermap.cluster.change.handler.type", "SimpleClusterChangeHandler");
     clusterMapDcsZkConnectStrings = verifiableProperties.getString("clustermap.dcs.zk.connect.strings", "");
-    clusterMapClusterName = verifiableProperties.getString("clustermap.cluster.name");
-    clusterMapDatacenterName = verifiableProperties.getString("clustermap.datacenter.name");
-    clusterMapHostName = verifiableProperties.getString("clustermap.host.name");
-    clusterMapPort = verifiableProperties.getInteger("clustermap.port", null);
+    clusterMapClusterName = verifiableProperties.getString(CLUSTERMAP_CLUSTER_NAME);
+    clusterMapDatacenterName = verifiableProperties.getString(CLUSTERMAP_DATACENTER_NAME);
+    clusterMapHostName = verifiableProperties.getString(CLUSTERMAP_HOST_NAME);
+    clusterMapPort = verifiableProperties.getInteger(CLUSTERMAP_PORT, null);
     clusterMapResolveHostnames = verifiableProperties.getBoolean("clustermap.resolve.hostnames", true);
     clusterMapDefaultPartitionClass =
         verifiableProperties.getString("clustermap.default.partition.class", MAX_REPLICAS_ALL_DATACENTERS);

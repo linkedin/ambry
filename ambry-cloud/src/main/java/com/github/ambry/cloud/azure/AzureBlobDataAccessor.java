@@ -82,7 +82,7 @@ public class AzureBlobDataAccessor {
    * @param blobLayoutStrategy the {@link AzureBlobLayoutStrategy} to use.
    * @param azureMetrics the {@link AzureMetrics} to use.
    */
-  AzureBlobDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
+  public AzureBlobDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
       AzureBlobLayoutStrategy blobLayoutStrategy, AzureMetrics azureMetrics) {
     this.blobLayoutStrategy = blobLayoutStrategy;
     this.azureMetrics = azureMetrics;
@@ -127,6 +127,10 @@ public class AzureBlobDataAccessor {
     requestTimeout = null;
     uploadTimeout = null;
     batchTimeout = null;
+  }
+
+  public BlobServiceClient getStorageClient() {
+    return storageClient;
   }
 
   /** Visible for testing */
@@ -215,7 +219,8 @@ public class AzureBlobDataAccessor {
       throws BlobStorageException {
     try {
       BlockBlobClient blobClient = getBlockBlobClient(containerName, fileName, false);
-      blobClient.downloadWithResponse(outputStream, null, null, defaultRequestConditions, false, requestTimeout,
+      // Might as well use same timeout for upload and download
+      blobClient.downloadWithResponse(outputStream, null, null, defaultRequestConditions, false, uploadTimeout,
           Context.NONE);
       return true;
     } catch (BlobStorageException e) {
