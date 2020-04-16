@@ -1191,11 +1191,12 @@ class IndexSegment {
   class SealedIndexSegmentEntryIterator implements Iterator<IndexEntry> {
     private int currentIdx = 0;
     private ByteBuffer mmap = serEntries.duplicate();
+    private int numberOfEntries = numberOfEntries(mmap);
     private byte[] valueBuf = new byte[valueSize];
 
     @Override
     public boolean hasNext() {
-      return currentIdx < numberOfEntries(mmap);
+      return currentIdx < numberOfEntries;
     }
 
     @Override
@@ -1205,11 +1206,12 @@ class IndexSegment {
         mmap.get(valueBuf);
         return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
       } catch (Exception e) {
-        logger.error("Failed to read index entry at " + currentIdx, e);
+        String message = "Failed to read index entry at " + currentIdx;
+        logger.error(message, e);
+        throw new IllegalStateException(message, e);
       } finally {
         currentIdx++;
       }
-      return null;
     }
   }
 }

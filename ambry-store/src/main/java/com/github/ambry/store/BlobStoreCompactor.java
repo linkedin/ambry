@@ -127,13 +127,11 @@ class BlobStoreCompactor {
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
     this.useDirectIO = Utils.isLinux() && config.storeCompactionEnableDirectIO;
-    IndexSegmentValidEntryFilter filter;
     if (config.storeCompactionFilter.equals(IndexSegmentValidEntryFilterWithoutUndelete.class.getSimpleName())) {
-      filter = new IndexSegmentValidEntryFilterWithoutUndelete();
+      validEntryFilter = new IndexSegmentValidEntryFilterWithoutUndelete();
     } else {
-      filter = new IndexSegmentValidEntryFilterWithUndelete();
+      validEntryFilter = new IndexSegmentValidEntryFilterWithUndelete();
     }
-    validEntryFilter = filter;
     fixStateIfRequired();
     logger.trace("Constructed BlobStoreCompactor for {}", dataDir);
   }
@@ -1013,8 +1011,7 @@ class BlobStoreCompactor {
           new AtomicLong(0), true);
       // save a token for restart (the key gets ignored but is required to be non null for construction)
       StoreFindToken safeToken =
-          new StoreFindToken(allIndexEntries.get(0).getKey(), indexSegment.getStartOffset(), sessionId,
-              incarnationId);
+          new StoreFindToken(allIndexEntries.get(0).getKey(), indexSegment.getStartOffset(), sessionId, incarnationId);
       compactionLog.setSafeToken(safeToken);
       logger.debug("Set safe token for compaction in {} to {}", storeId, safeToken);
 
@@ -1339,7 +1336,7 @@ class BlobStoreCompactor {
       //
       // This is a table that shows how the validity of the current IndexValue is determined.
       // ----------------------------------------------------------------------------------------
-      // Current IndexValue  | Latest IndexValue | Action                                       |
+      // Current IndexValue  | Latest IndexValue | Is Valid                                     |
       // --------------------+-------------------+----------------------------------------------|
       // Put(verion c)       | Put(version f)    | isExpired(Pc)?false:true                     |
       //                     | Delete(f)         | reachRetention(Df)||isExpired(Df)?false:true |
@@ -1374,6 +1371,9 @@ class BlobStoreCompactor {
           compactionLog.setSafeToken(safeToken);
           logger.debug("Set safe token for compaction in {} to {}", storeId, safeToken);
         }
+        // If an IndexSegment contains more than one IndexValue for the same StoreKey, then they must follow each other
+        // since IndexSegment store IndexValues based on StoreKey. If the current key equals to the previous key, then
+        // we don't have to query the final state again.
         if (currentKey.equals(lastKey)) {
           currentFinalState = lastFinalState;
         } else {
@@ -1462,12 +1462,13 @@ class BlobStoreCompactor {
         logger.trace("TTL update of {} in segment with start offset {} in {} is not valid the corresponding PUT entry "
             + "does not exist anymore", key, indexSegmentStartOffset, storeId);
       } else {
-        // Exists in the source. This can happen either because
-        // 1. The FileSpan to which srcValue belongs is not under compaction (so there is no reason for tgt to have it)
-        // 2. srcValue will be compacted in this cycle (because it has been determined that the PUT is not valid. Since
+        // PUT exists in the source index even when the final state for this StoreKey is delete and delete already reaches
+        // retention date. This can happen either because
+        // 1. The log segment to which srcValue(PUT) belongs is not under compaction, thus PUT is not compacted.
+        // 2. srcValue(PUT) will be compacted in this cycle (because it has been determined that the PUT is not valid. Since
         // the PUT is going away in this cycle, it is safe to remove the TTL update also)
         //
-        // For condition one, we will keep TTL_UPDATE, for condition 2, we will remove it.
+        // For condition one, we will keep TTL_UPDATE, for condition 2, we will remove TTL_UPDATE.
         if (isOffsetUnderCompaction(srcValue.getOffset())) {
           logger.trace(
               "TTL update of {} in segment with start offset {} in {} is not valid because the corresponding PUT entry"
@@ -1513,16 +1514,16 @@ class BlobStoreCompactor {
                 "An Undelete[" + value + "] and a Put[" + srcValue + "] can't be at the same lifeVersion at store "
                     + dataDir);
           }
-          // value is a UNDELETE without a TTL update or a DELETE
-          return !srcValue.isDelete() && !srcValue.isTtlUpdate();
+          // value is a UNDELETE without a TTL update or
+          return srcValue.isUndelete();
         } else {
           if (srcValue.isUndelete()) {
             throw new IllegalStateException(
                 "A Put[" + value + "] and an Undelete[" + srcValue + "] can't be at the same lifeVersion at store "
                     + dataDir);
           }
-          // value is a PUT without a TTL update or a DELETE
-          return !srcValue.isDelete() && !srcValue.isTtlUpdate();
+          // value is a PUT without a TTL update
+          return srcValue.isPut();
         }
       }
     }
