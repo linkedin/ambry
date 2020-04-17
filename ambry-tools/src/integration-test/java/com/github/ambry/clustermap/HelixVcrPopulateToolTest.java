@@ -18,14 +18,11 @@ import com.github.ambry.utils.TestUtils;
 import java.util.HashSet;
 import java.util.Set;
 import org.apache.helix.HelixAdmin;
-import org.apache.helix.controller.rebalancer.strategy.CrushRebalanceStrategy;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.manager.zk.client.HelixZkClient;
 import org.apache.helix.manager.zk.client.SharedZkClientFactory;
 import org.apache.helix.model.IdealState;
-import org.apache.helix.model.LeaderStandbySMD;
-import org.apache.helix.model.builder.FullAutoModeISBuilder;
 import org.apache.helix.tools.ClusterSetup;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -55,13 +52,11 @@ public class HelixVcrPopulateToolTest {
     srcHelixAdmin = new HelixAdminFactory().getHelixAdmin(SRC_ZK_CONNECT_STRING);
 
     String resourceName = "1";
-    FullAutoModeISBuilder builder = new FullAutoModeISBuilder(resourceName);
-    builder.setStateModel(LeaderStandbySMD.name);
+    Set<String> partitionSet = new HashSet<>();
     for (int i = 0; i < 100; i++) {
-      builder.add(Integer.toString(i));
+      partitionSet.add(Integer.toString(i));
     }
-    builder.setRebalanceStrategy(CrushRebalanceStrategy.class.getName());
-    IdealState idealState = builder.build();
+    IdealState idealState = HelixVcrPopulateTool.buildIdealState(resourceName, partitionSet);
     srcHelixAdmin.addResource(SRC_CLUSTER_NAME, resourceName, idealState);
   }
 
@@ -94,20 +89,25 @@ public class HelixVcrPopulateToolTest {
     // add one more partition to src cluster resource 1 and add one more resource to src cluster
     srcHelixAdmin.dropResource(SRC_CLUSTER_NAME, "1");
     String[] resourceNames = {"1", "2"};
+    Set<String> partitionSet = new HashSet<>();
+    for (int i = 0; i < 101; i++) {
+      partitionSet.add(Integer.toString(i));
+    }
     for (String resourceName : resourceNames) {
-      FullAutoModeISBuilder builder = new FullAutoModeISBuilder(resourceName);
-      builder.setStateModel(LeaderStandbySMD.name);
-      for (int i = 0; i < 101; i++) {
-        builder.add(Integer.toString(i));
-      }
-      builder.setRebalanceStrategy(CrushRebalanceStrategy.class.getName());
-      srcHelixAdmin.addResource(SRC_CLUSTER_NAME, resourceName, builder.build());
+      IdealState idealState = HelixVcrPopulateTool.buildIdealState(resourceName, partitionSet);
+      srcHelixAdmin.addResource(SRC_CLUSTER_NAME, resourceName, idealState);
     }
 
     HelixVcrPopulateTool.updateResourceAndPartition(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString,
         destVcrClusterName, false);
     Assert.assertTrue("Dest and Src should be same",
         isSrcDestSync(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString, destVcrClusterName));
+
+    // Test the update-only option as well, make sure partitions are unchanged
+    HelixVcrPopulateTool.updateResourceIdealState(destZkConnectString, destVcrClusterName, false);
+    Assert.assertTrue("Dest and Src should be same",
+        isSrcDestSync(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString, destVcrClusterName));
+
     destZkInfo.shutdown();
   }
 
