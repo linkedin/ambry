@@ -200,8 +200,8 @@ public class HelixClusterManager implements ClusterMap {
     if (dcZkInfo.getReplicaType() == ReplicaType.CLOUD_BACKED) {
       return null;
     }
-    // For now, the first ZK endpoint (if there are more than one endpoints) will be adopted by default. We can update
-    // this if we really need to initialize multiple HelixManagers in local dc.
+    // For now, the first ZK endpoint (if there are more than one endpoints) will be adopted by default. Note that, Ambry
+    // doesn't support multiple HelixClusterManagers(spectators) on same node.
     String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
     HelixManager manager =
         helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
