@@ -769,7 +769,7 @@ class NonBlockingRouter implements Router {
             completeOperation(futureResult, callback, null, exception, false);
           } else if (result.getBlobResult != null) {
             exception = new RouterException(
-                "GET blob call returned the blob instead of just the store keys (before TTL update)",
+                "GET blob call returned the blob instead of just the store keys (before undelete)",
                 RouterErrorCode.UnexpectedInternalError);
             completeOperation(futureResult, callback, null, exception, false);
           } else {
@@ -788,11 +788,11 @@ class NonBlockingRouter implements Router {
             .getOption(GetOption.None)
             .build();
         GetBlobOptionsInternal optionsInternal =
-            new GetBlobOptionsInternal(options, true, routerMetrics.ageAtTtlUpdate);
+            new GetBlobOptionsInternal(options, true, routerMetrics.ageAtUndelete);
         try {
           getBlob(blobIdStr, optionsInternal, internalCallback);
         } catch (RouterException e) {
-          completeUpdateBlobTtlOperation(e, futureResult, callback);
+          completeUndeleteBlobOperation(e, futureResult, callback);
         }
       } else {
         // do undelete directly on single blobId

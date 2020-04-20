@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
- * Tracks callbacks for TtlUpdate operations over multiple chunks of a single blob
+ * Tracks callbacks for {@link TtlUpdateOperation} and {@link UndeleteOperation} over multiple chunks of a single blob
  */
 class BatchOperationCallbackTracker {
   static final FutureResult<Void> DUMMY_FUTURE = new FutureResult<>();
@@ -40,8 +40,7 @@ class BatchOperationCallbackTracker {
    * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs
    * @param callback the {@link Callback} to be triggered once acks are received for all blobs
    */
-  BatchOperationCallbackTracker(List<BlobId> blobIds, FutureResult<Void> futureResult,
-      Callback<Void> callback) {
+  BatchOperationCallbackTracker(List<BlobId> blobIds, FutureResult<Void> futureResult, Callback<Void> callback) {
     numBlobIds = blobIds.size();
     blobIds.forEach(blobId -> blobIdToAck.put(blobId, false));
     if (blobIdToAck.size() != numBlobIds) {
@@ -54,7 +53,7 @@ class BatchOperationCallbackTracker {
   /**
    * Gets a {@link Callback} personalized for {@code blobId}.
    * @param blobId the {@link BlobId} for which the
-   * @return the {@link Callback} to be used with the {@link TtlUpdateOperation} for {@code blobId}.
+   * @return the {@link Callback} to be used with the {@link TtlUpdateOperation} and {@link UndeleteOperation} for {@code blobId}.
    */
   Callback<Void> getCallback(final BlobId blobId) {
     return (result, exception) -> {

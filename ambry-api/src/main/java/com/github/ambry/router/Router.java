@@ -178,7 +178,8 @@ public interface Router extends Closeable {
   }
 
   /**
-   * Requests for a blob to be undeleted asynchronously and invokes the {@link Callback} when the request completes.
+   * Requests for a blob to be undeleted asynchronously and returns a future that will eventually contain information
+   * about whether the request succeeded or not.
    * @param blobId The ID of the blob that needs to be undeleted.
    * @param serviceId The service ID of the service undeleting the blob. This can be null if unknown.
    * @return A future that would contain information about whether the undelete succeeded or not, eventually.

@@ -203,6 +203,7 @@ public class NonBlockingRouterMetrics {
   // Workload characteristics
   public final AgeAtAccessMetrics ageAtGet;
   public final AgeAtAccessMetrics ageAtDelete;
+  public final AgeAtAccessMetrics ageAtUndelete;
   public final AgeAtAccessMetrics ageAtTtlUpdate;
 
   // Crypto job metrics
@@ -470,6 +471,7 @@ public class NonBlockingRouterMetrics {
     // Workload
     ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");
     ageAtDelete = new AgeAtAccessMetrics(metricRegistry, "OnDelete");
+    ageAtUndelete = new AgeAtAccessMetrics(metricRegistry, "OnUndelete");
     ageAtTtlUpdate = new AgeAtAccessMetrics(metricRegistry, "OnTtlUpdate");
 
     // Encrypt/Decrypt job metrics
