@@ -24,6 +24,7 @@ import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.HelixAdminOperation.*;
 
 
 /**
@@ -58,7 +59,7 @@ public class MockHelixCluster {
     dataCenterToZkAddress = parseDcJsonAndPopulateDcInfo(jsonString);
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
         "all", MAX_PARTITIONS_IN_ONE_RESOURCE, false, false, helixAdminFactory, false,
-        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, false);
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster);
     this.clusterName = clusterName;
   }
 
@@ -70,7 +71,7 @@ public class MockHelixCluster {
   void upgradeWithNewHardwareLayout(String hardwareLayoutPath) throws Exception {
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
         "all", MAX_PARTITIONS_IN_ONE_RESOURCE, false, false, helixAdminFactory, false,
-        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, false);
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster);
     triggerInstanceConfigChangeNotification();
   }
 
@@ -81,7 +82,7 @@ public class MockHelixCluster {
    */
   void upgradeWithNewPartitionLayout(String partitionLayoutPath) throws Exception {
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
-        "all", 3, false, false, helixAdminFactory, false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, false);
+        "all", 3, false, false, helixAdminFactory, false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster);
     triggerInstanceConfigChangeNotification();
   }
 

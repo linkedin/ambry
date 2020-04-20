@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.HelixAdminOperation;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.tools.util.ToolUtils;
 import java.util.ArrayList;
@@ -23,6 +24,9 @@ import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import joptsimple.OptionSpecBuilder;
+
+import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.*;
+import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.HelixAdminOperation.*;
 
 
 /**
@@ -66,8 +70,6 @@ import joptsimple.OptionSpecBuilder;
  *
  */
 public class HelixBootstrapUpgradeTool {
-  static final int DEFAULT_MAX_PARTITIONS_PER_RESOURCE = 100;
-
   /**
    * @param args takes in three mandatory arguments: the hardware layout path, the partition layout path and the zk
    *             layout path.
@@ -97,9 +99,6 @@ public class HelixBootstrapUpgradeTool {
     OptionSpec dropClusterOpt = parser.accepts("dropCluster",
         "Drops the given Ambry cluster from Helix. Use this option with care. If present, must be accompanied with and "
             + "only with the clusterName argument");
-
-    OptionSpec validateOnly = parser.accepts("validateOnly",
-        "Validates that the information in the given cluster map is consistent with the information in Helix");
 
     OptionSpec forceRemove = parser.accepts("forceRemove",
         "Specifies that any instances or partitions absent in the json files be removed from Helix. Use this with care");
@@ -173,15 +172,45 @@ public class HelixBootstrapUpgradeTool {
         .describedAs("admin_configs")
         .ofType(String.class);
 
+    ArgumentAcceptingOptionSpec<String> adminOperationOpt = parser.accepts("adminOperation",
+        "(Optional argument) Perform admin operations to manage resources in cluster. For example: "
+            + " '--adminOperation UpdateIdealState'  # Update IdealState based on static clustermap. This won't change InstanceConfig"
+            + " '--adminOperation DisablePartition'  # Disable partition on certain node. Usually used as first step to decommission replica(s)"
+            + " '--adminOperation EnablePartition'   # Enable partition on certain node (if partition is previously disabled)"
+            + " '--adminOperation ResetPartition'    # Reset partition on certain node (if partition is previously in error state)"
+            + " '--adminOperation ValidateCluster'   # Validates the information in static clustermap is consistent with the information in Helix"
+            + " '--adminOperation BootstrapCluster'  # (Default operation if not specified) Bootstrap cluster based on static clustermap")
+        .withRequiredArg()
+        .describedAs("admin_operation")
+        .ofType(String.class);
+
+    ArgumentAcceptingOptionSpec<String> hostnameOpt = parser.accepts("hostname",
+        "(Optional argument and is always accompanied with partition control operations, i.e EnablePartition, "
+            + "DisablePartition) The host on which admin operation should be performed")
+        .withRequiredArg()
+        .describedAs("hostname")
+        .ofType(String.class);
+
+    ArgumentAcceptingOptionSpec<String> portOpt = parser.accepts("port",
+        "(Optional argument and is always accompanied with partition control operations, i.e EnablePartition, "
+            + "DisablePartition) The port number associated with the host on which admin operation should be performed."
+            + "If not specified, the tool attempts to find host from static clustermap by searching hostname.")
+        .withRequiredArg()
+        .describedAs("port")
+        .ofType(String.class);
+
+    ArgumentAcceptingOptionSpec<String> partitionIdOpt = parser.accepts("partition",
+        "(Optional argument and is always accompanied with partition control operations, i.e EnablePartition, "
+            + "DisablePartition) The partition on which admin operation should be performed")
+        .withRequiredArg()
+        .describedAs("partition")
+        .ofType(String.class);
+
     OptionSpecBuilder dryRun =
         parser.accepts("dryRun", "(Optional argument) Dry run, do not modify the cluster map in Helix.");
 
     OptionSpecBuilder disableValidatingClusterManager = parser.accepts("disableVCM",
         "(Optional argument) whether to disable validating cluster manager(VCM) in Helix bootstrap tool.");
-
-    OptionSpecBuilder resourceChangeOnly = parser.accepts("resourceChangeOnly",
-        "(Optional argument) if specified, Helix bootstrap tool updates resource(IdealState) only without "
-            + "changing InstanceConfig. This is usually used for moving replicas.");
 
     OptionSet options = parser.parse(args);
     String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
@@ -191,9 +220,13 @@ public class HelixBootstrapUpgradeTool {
     String clusterName = options.valueOf(clusterNameOpt);
     String dcs = options.valueOf(dcsNameOpt);
     String adminConfigStr = options.valueOf(adminConfigsOpt);
+    String adminOpStr = options.valueOf(adminOperationOpt);
+    String hostname = options.valueOf(hostnameOpt);
+    String partitionName = options.valueOf(partitionIdOpt);
+    String portStr = options.valueOf(portOpt);
     int maxPartitionsInOneResource =
         options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
-            : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt));
+            : Integer.parseInt(options.valueOf(maxPartitionsInOneResourceOpt));
     String stateModelDef = options.valueOf(stateModelDefinitionOpt) == null ? ClusterMapConfig.DEFAULT_STATE_MODEL_DEF
         : options.valueOf(stateModelDefinitionOpt);
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
@@ -206,32 +239,47 @@ public class HelixBootstrapUpgradeTool {
       List<OptionSpec<?>> expectedOpts = Arrays.asList(dropClusterOpt, clusterNameOpt, zkLayoutPathOpt, dcsNameOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       HelixBootstrapUpgradeUtil.dropCluster(zkLayoutPath, clusterName, dcs, new HelixAdminFactory());
-    } else if (options.has(validateOnly)) {
-      List<OptionSpec<?>> expectedOpts =
-          Arrays.asList(validateOnly, clusterNamePrefixOpt, zkLayoutPathOpt, hardwareLayoutPathOpt,
-              partitionLayoutPathOpt, dcsNameOpt);
-      ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
-      HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-          new HelixAdminFactory(), stateModelDef);
     } else if (adminConfigStr != null) {
-      List<OptionSpec<?>> expectedOpts =
-          Arrays.asList(adminConfigsOpt, zkLayoutPathOpt, hardwareLayoutPathOpt, partitionLayoutPathOpt,
-              clusterNamePrefixOpt, dcsNameOpt);
-      ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
+      listOpt.add(adminConfigsOpt);
+      ToolUtils.ensureOrExit(listOpt, options, parser);
       String[] adminTypes = adminConfigStr.replaceAll("\\p{Space}", "").split(",");
-      HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix, dcs, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(), adminTypes);
+      HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          clusterNamePrefix, dcs, options.has(forceRemove), new HelixAdminFactory(), adminTypes);
     } else if (options.has(addStateModel)) {
       listOpt.add(stateModelDefinitionOpt);
       ToolUtils.ensureOrExit(listOpt, options, parser);
       HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix, dcs, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(), stateModelDef);
+          clusterNamePrefix, dcs, new HelixAdminFactory(), stateModelDef);
     } else {
+      // The default operation is BootstrapCluster (if not specified)
+      HelixAdminOperation operation = adminOpStr == null ? BootstrapCluster : HelixAdminOperation.valueOf(adminOpStr);
       ToolUtils.ensureOrExit(listOpt, options, parser);
-      HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix, dcs, maxPartitionsInOneResource, options.has(dryRun), options.has(forceRemove),
-          new HelixAdminFactory(), !options.has(disableValidatingClusterManager), stateModelDef,
-          options.has(resourceChangeOnly));
+      Integer portNum = portStr == null ? null : Integer.parseInt(portStr);
+      switch (operation) {
+        case ValidateCluster:
+          HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
+              dcs, new HelixAdminFactory(), stateModelDef);
+          break;
+        case ResetPartition:
+        case EnablePartition:
+          HelixBootstrapUpgradeUtil.controlPartitionState(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+              clusterNamePrefix, dcs, new HelixAdminFactory(), hostname, portNum, operation, partitionName);
+          break;
+        case DisablePartition:
+          // we allow users not to specify hostname and partition name if they would like to disable multiple partitions
+          // concurrently. Hence, if hostname and partition name are empty, the tool goes to default branch and extracts
+          // removed replicas in static clustermap to disable them automatically.
+          if (hostname != null && partitionName != null) {
+            HelixBootstrapUpgradeUtil.controlPartitionState(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+                clusterNamePrefix, dcs, new HelixAdminFactory(), hostname, portNum, operation, partitionName);
+            break;
+          }
+          // else go to default branch
+        default:
+          HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+              clusterNamePrefix, dcs, maxPartitionsInOneResource, options.has(dryRun), options.has(forceRemove),
+              new HelixAdminFactory(), !options.has(disableValidatingClusterManager), stateModelDef, operation);
+      }
     }
     System.out.println("======== HelixBootstrapUpgradeTool completed successfully! ========");
     System.out.println("( If program doesn't exit, please use Ctrl-c to terminate. )");

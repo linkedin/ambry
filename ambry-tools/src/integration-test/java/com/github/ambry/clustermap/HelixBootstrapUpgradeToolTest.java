@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
+import org.apache.helix.HelixException;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.model.IdealState;
@@ -47,7 +48,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.clustermap.HelixBootstrapUpgradeTool.*;
+import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.*;
+import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.HelixAdminOperation.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.hamcrest.CoreMatchers.*;
@@ -177,8 +179,7 @@ public class HelixBootstrapUpgradeToolTest {
     // test add state model to non-exist cluster, which should fail
     try {
       HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
-          ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
+          CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
       fail("should fail due to non-exist cluster");
     } catch (IllegalStateException e) {
       // expected
@@ -186,15 +187,13 @@ public class HelixBootstrapUpgradeToolTest {
     // bootstrap a cluster
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.OLD_STATE_MODEL_DEF, false);
+        ClusterMapConfig.OLD_STATE_MODEL_DEF, BootstrapCluster);
     // add new state model def
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
-        ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
+        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
     // add existing state model def should be no-op
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
-        ClusterMapConfig.OLD_STATE_MODEL_DEF);
+        CLUSTER_NAME_PREFIX, dcStr, new HelixAdminFactory(), ClusterMapConfig.OLD_STATE_MODEL_DEF);
     // ensure that active dcs have new state model def
     String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
     for (Datacenter dc : testHardwareLayout.getHardwareLayout().getDatacenters()) {
@@ -227,7 +226,7 @@ public class HelixBootstrapUpgradeToolTest {
       try {
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
-            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, false);
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster);
         fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
       } catch (IllegalArgumentException e) {
         // OK
@@ -392,11 +391,12 @@ public class HelixBootstrapUpgradeToolTest {
 
   /**
    * Test that new replicas can be correctly extracted from the diff between static clustermap and clustermap in Helix.
-   * Also test that new added replica infos are correct (i.e. partition class, replica size, data node and mount path)
+   * Verify that new added replica infos are correct (i.e. partition class, replica size, data node and mount path)
+   * Also, this method tests replica addition config can be deleted correctly.
    * @throws Exception
    */
   @Test
-  public void testReplicaAdditionConfigUpload() throws Exception {
+  public void testReplicaAdditionConfigUploadAndDelete() throws Exception {
     // Test bootstrap
     long expectedResourceCount =
         (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
@@ -430,17 +430,15 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // test invalid admin type
     try {
-      HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
-          new String[]{"invalid_admin_type"});
+      HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          CLUSTER_NAME_PREFIX, dcStr, false, new HelixAdminFactory(), new String[]{"invalid_admin_type"});
       fail("should fail because of invalid admin type");
     } catch (IllegalArgumentException e) {
       // expected
     }
     // upload replica addition admin config
-    HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
-        new String[]{ClusterMapUtils.REPLICA_ADDITION_STR});
+    HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, false, new HelixAdminFactory(), new String[]{ClusterMapUtils.REPLICA_ADDITION_STR});
     // verify replica addition znode in Helix PropertyStore
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
       HelixPropertyStore<ZNRecord> propertyStore =
@@ -472,14 +470,34 @@ public class HelixBootstrapUpgradeToolTest {
         assertEquals("Mount path is not expected", diskForNewReplica.getMountPath(), newReplicaMap.get(instanceName));
       }
     }
+    // test deleting replica addition config (failure case)
+    try {
+      HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          CLUSTER_NAME_PREFIX, dcStr, true, new HelixAdminFactory(), new String[]{"invalid_admin_type"});
+      fail("should fail because of invalid admin type");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+    // test deleting replica addition config (success case)
+    HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, true, new HelixAdminFactory(), new String[]{ClusterMapUtils.REPLICA_ADDITION_STR});
+    // verify config no longer exists
+    for (ZkInfo zkInfo : dcsToZkInfo.values()) {
+      HelixPropertyStore<ZNRecord> propertyStore =
+          CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
+              Collections.singletonList(propertyStoreConfig.rootPath));
+      String getPath = ClusterMapUtils.REPLICA_ADDITION_ZNODE_PATH;
+      ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
+      assertNull("ZNode associated with admin config should not exist", zNRecord);
+    }
   }
 
   /**
-   * Test that when resourceChangeOnly is specified, Helix bootstrap tool updates resource(IdealState) only without
+   * Test that when AdminOperation is specified to UpdateIdealState, Helix bootstrap tool updates IdealState only without
    * changing InstanceConfig.
    */
   @Test
-  public void testResourceChangeOnlyOption() throws Exception {
+  public void testUpdateIdealStateAdminOp() throws Exception {
     String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
     // Test regular bootstrap. This is to ensure InstanceConfig and IdealState are there before testing changing
     // IdealState (to trigger replica movement)
@@ -515,17 +533,16 @@ public class HelixBootstrapUpgradeToolTest {
     String dcName = replicaToAdd.getDataNodeId().getDatacenterName();
     ZkInfo zkInfo = dcsToZkInfo.get(dcName);
     ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
-    InstanceConfig instanceConfig =
-        admin.getInstanceConfig(clusterName, HelixBootstrapUpgradeUtil.getInstanceName(replicaToAdd.getDataNodeId()));
+    InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, getInstanceName(replicaToAdd.getDataNodeId()));
     // deep copy for subsequent verification
     InstanceConfig previousInstanceConfig = new InstanceConfig(instanceConfig.getRecord());
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-    // upgrade Helix by updating IdealState only (resourceChangeOnly = true)
+    // upgrade Helix by updating IdealState: AdminOperation = UpdateIdealState
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, true);
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, UpdateIdealState);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
 
     // verify IdealState has been updated
@@ -536,9 +553,159 @@ public class HelixBootstrapUpgradeToolTest {
 
     // verify the InstanceConfig stays unchanged
     InstanceConfig currentInstanceConfig =
-        admin.getInstanceConfig(clusterName, HelixBootstrapUpgradeUtil.getInstanceName(replicaToAdd.getDataNodeId()));
+        admin.getInstanceConfig(clusterName, getInstanceName(replicaToAdd.getDataNodeId()));
     assertEquals("InstanceConfig should stay unchanged", previousInstanceConfig.getRecord(),
         currentInstanceConfig.getRecord());
+  }
+
+  /**
+   * Test when AdminOperation is specified to DisablePartition, Helix bootstrap tool is able to disable certain partition
+   * only without changing IdealState and InstanceConfig. (In practice, this is first step to decommission a replica)
+   * @throws Exception
+   */
+  @Test
+  public void testDisablePartitionAdminOp() throws Exception {
+    String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+    // Test regular bootstrap. This is to ensure InstanceConfig and IdealState are there before testing disabling certain
+    // replica on specific node.
+    long expectedResourceCount =
+        (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
+    int totalPartitionCount = testPartitionLayout.getPartitionCount();
+    // Randomly pick a partition to remove one of its replicas
+    Partition testPartition = (Partition) testPartitionLayout.getPartitionLayout()
+        .getPartitions(null)
+        .get(RANDOM.nextInt(totalPartitionCount));
+
+    ReplicaId removedReplica = testPartition.getReplicaIds()
+        .stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals("DC1"))
+        .findFirst()
+        .get();
+    testPartition.getReplicas().remove(removedReplica);
+    ZkInfo zkInfo = dcsToZkInfo.get(removedReplica.getDataNodeId().getDatacenterName());
+    ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+    InstanceConfig instanceConfig =
+        admin.getInstanceConfig(clusterName, getInstanceName(removedReplica.getDataNodeId()));
+    // Deep copy the InstanceConfig for validation
+    InstanceConfig previousInstanceConfig = new InstanceConfig(instanceConfig.getRecord());
+    // Write changes to static files
+    Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    // Upgrade Helix by updating IdealState: AdminOperation = DisablePartition
+    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DisablePartition);
+    verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
+    // Verify that IdealState has no change
+    verifyIdealStateForPartition(removedReplica, true, 3, expectedResourceCount);
+    // Verify the InstanceConfig is changed only in MapFields (Disabled partitions are added to this field)
+    InstanceConfig currentInstanceConfig =
+        admin.getInstanceConfig(clusterName, getInstanceName(removedReplica.getDataNodeId()));
+    String disabledPartitionStr = currentInstanceConfig.getRecord()
+        .getMapFields()
+        .keySet()
+        .stream()
+        .filter(k -> !k.startsWith("/mnt"))
+        .findFirst()
+        .get();
+    // Deep copy the current InstanceConfig to remove disabled partitions entry and compare it with previous InstanceConfig
+    InstanceConfig currentCopy = new InstanceConfig(currentInstanceConfig.getRecord());
+    currentCopy.getRecord().getMapFields().remove(disabledPartitionStr);
+    assertEquals("InstanceConfig should stay unchanged after disabled partition entry is removed",
+        previousInstanceConfig.getRecord(), currentCopy.getRecord());
+    // Verify that replica has been disabled
+    String resourceName = null;
+    for (String rs : admin.getResourcesInCluster(clusterName)) {
+      IdealState is = admin.getResourceIdealState(clusterName, rs);
+      if (is.getPartitionSet().contains(removedReplica.getPartitionId().toPathString())) {
+        resourceName = rs;
+        break;
+      }
+    }
+    List<String> disabledPartition = currentInstanceConfig.getDisabledPartitions(resourceName);
+    assertEquals("Disabled partition is not expected",
+        Collections.singletonList(removedReplica.getPartitionId().toPathString()), disabledPartition);
+  }
+
+  /**
+   * Test that partition is correctly enabled on given node. The partition is first disabled and then enabled.
+   * @throws Exception
+   */
+  @Test
+  public void testEnablePartitionAdminOp() throws Exception {
+    assumeTrue(!dcStr.equals("DC1") && !dcStr.equals("DC0"));
+    String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+    // Test regular bootstrap.
+    long expectedResourceCount =
+        (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
+    int totalPartitionCount = testPartitionLayout.getPartitionCount();
+    // Randomly pick a partition to disable/enable
+    Partition testPartition = (Partition) testPartitionLayout.getPartitionLayout()
+        .getPartitions(null)
+        .get(RANDOM.nextInt(totalPartitionCount));
+    // Randomly pick a replica from this partition
+    List<ReplicaId> replicaIds = testPartition.getReplicaIds();
+    DataNodeId dataNodeId = replicaIds.get(RANDOM.nextInt(replicaIds.size())).getDataNodeId();
+    // Disable partition on chosen node
+    HelixBootstrapUpgradeUtil.controlPartitionState(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dataNodeId.getDatacenterName(), new HelixAdminFactory(), dataNodeId.getHostname(),
+        dataNodeId.getPort(), DisablePartition, testPartition.toPathString());
+    // Verify the InstanceConfig is changed only in MapFields (Disabled partition is added to this field)
+    ZkInfo zkInfo = dcsToZkInfo.get(dataNodeId.getDatacenterName());
+    ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+    InstanceConfig currentInstanceConfig = admin.getInstanceConfig(clusterName, getInstanceName(dataNodeId));
+    assertTrue("There should be additional string in InstanceConfig due to disabling partition",
+        currentInstanceConfig.getRecord().getMapFields().keySet().stream().anyMatch(k -> !k.startsWith("/mnt")));
+    // Verify given partition is indeed disabled on specified node
+    String resourceName = getResourceNameOfPartition(admin, clusterName, testPartition.toPathString());
+    List<String> disabledPartitions = currentInstanceConfig.getDisabledPartitions(resourceName);
+    assertEquals("Disabled partition is not expected", Collections.singletonList(testPartition.toPathString()),
+        disabledPartitions);
+    // Enable the same partition on same node
+    HelixBootstrapUpgradeUtil.controlPartitionState(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dataNodeId.getDatacenterName(), new HelixAdminFactory(), dataNodeId.getHostname(),
+        dataNodeId.getPort(), EnablePartition, testPartition.toPathString());
+    // Verify instanceConfig has been updated (disabled partition is removed)
+    currentInstanceConfig = admin.getInstanceConfig(clusterName, getInstanceName(dataNodeId));
+    assertFalse("There shouldn't be any additional string in InstanceConfig",
+        currentInstanceConfig.getRecord().getMapFields().keySet().stream().anyMatch(k -> !k.startsWith("/mnt")));
+    // Verify there is no disabled partition
+    assertNull("There shouldn't be any disabled partition", currentInstanceConfig.getDisabledPartitions(resourceName));
+  }
+
+  /**
+   * Test resetting partition on given node. For now, we only test the code path which would throw exception as node is
+   * not alive.
+   * @throws Exception
+   */
+  @Test
+  public void testResetPartitionAdminOp() throws Exception {
+    assumeTrue(!dcStr.equals("DC1") && !dcStr.equals("DC0"));
+    String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+    // Test regular bootstrap.
+    long expectedResourceCount =
+        (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
+    int totalPartitionCount = testPartitionLayout.getPartitionCount();
+    // Randomly pick a partition to disable/enable
+    Partition testPartition = (Partition) testPartitionLayout.getPartitionLayout()
+        .getPartitions(null)
+        .get(RANDOM.nextInt(totalPartitionCount));
+    // Randomly pick a replica from this partition
+    List<ReplicaId> replicaIds = testPartition.getReplicaIds();
+    DataNodeId dataNodeId = replicaIds.get(RANDOM.nextInt(replicaIds.size())).getDataNodeId();
+    // Reset partition on chosen node which should throw exception as the node hasn't participated
+    try {
+      HelixBootstrapUpgradeUtil.controlPartitionState(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          CLUSTER_NAME_PREFIX, dataNodeId.getDatacenterName(), new HelixAdminFactory(), dataNodeId.getHostname(),
+          dataNodeId.getPort(), ResetPartition, testPartition.toPathString());
+      fail("should fail on resetting partition");
+    } catch (HelixException e) {
+      // expected
+    }
   }
 
   /***
@@ -570,7 +737,7 @@ public class HelixBootstrapUpgradeToolTest {
           resourceFound = true;
           Set<String> instances = idealState.getInstanceSet(partitionName);
           assertEquals("Replica number is not expected", expectedReplicaCountForPartition, instances.size());
-          String instanceNameOfNewReplica = HelixBootstrapUpgradeUtil.getInstanceName(replica.getDataNodeId());
+          String instanceNameOfNewReplica = getInstanceName(replica.getDataNodeId());
           if (shouldExist) {
             assertTrue("Instance set doesn't include new instance that holds added replica",
                 instances.contains(instanceNameOfNewReplica));
@@ -600,13 +767,14 @@ public class HelixBootstrapUpgradeToolTest {
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, new HelixAdminFactory(),
-        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, false);
+        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 
   /**
    * Write the layout files out from the constructed in-memory hardware and partition layouts; use the upload cluster config
    * tool to upload the partition seal states onto Zookeeper; verify that the writable partitions are consistent between the two.
+   * After verification is done, partition override config will be safely deleted.
    * @throws IOException if a file read error is encountered.
    * @throws JSONException if a JSON parse error is encountered.
    */
@@ -617,8 +785,8 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-    HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
+    HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, false, new HelixAdminFactory(),
         new String[]{ClusterMapUtils.PARTITION_OVERRIDE_STR});
     // Check writable partitions in each datacenter
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
@@ -642,6 +810,19 @@ public class HelixBootstrapUpgradeToolTest {
         assertEquals("Mismatch in writable partitions for partitionLayout and propertyStore", writableInPartitionLayout,
             writableInDC);
       }
+    }
+    // delete partition override config
+    HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, true, new HelixAdminFactory(),
+        new String[]{ClusterMapUtils.PARTITION_OVERRIDE_STR});
+    // verify that the config is cleaned up
+    for (ZkInfo zkInfo : dcsToZkInfo.values()) {
+      HelixPropertyStore<ZNRecord> propertyStore =
+          CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
+              Collections.singletonList(propertyStoreConfig.rootPath));
+      String getPath = ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH;
+      ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
+      assertNull("Partition override config should no longer exist", zNRecord);
     }
   }
 
