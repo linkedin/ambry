@@ -251,7 +251,7 @@ public class NonBlockingRouterMetrics {
     deleteBlobOperationRate =
         metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationRate"));
     undeleteBlobOperationRate =
-        metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "UndeleteBlobOperationRate"));
+        metricRegistry.meter(MetricRegistry.name(UndeleteOperation.class, "UndeleteBlobOperationRate"));
     updateBlobTtlOperationRate =
         metricRegistry.meter(MetricRegistry.name(TtlUpdateOperation.class, "UpdateBlobTtlOperationRate"));
     operationQueuingRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationQueuingRate"));
@@ -261,8 +261,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobNotOriginateLocalOperationRate"));
     deleteBlobNotOriginateLocalOperationRate =
         metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobNotOriginateLocalOperationRate"));
-    undeleteBlobNotOriginateLocalOperationRate =
-        metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "UndeleteBlobNotOriginateLocalOperationRate"));
+    undeleteBlobNotOriginateLocalOperationRate = metricRegistry.meter(
+        MetricRegistry.name(UndeleteOperation.class, "UndeleteBlobNotOriginateLocalOperationRate"));
     ttlUpdateBlobNotOriginateLocalOperationRate = metricRegistry.meter(
         MetricRegistry.name(TtlUpdateOperation.class, "TtlUpdateBlobNotOriginateLocalOperationRate"));
 
@@ -294,7 +294,7 @@ public class NonBlockingRouterMetrics {
     deleteBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationLatencyMs"));
     undeleteBlobOperationLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(DeleteOperation.class, "UndeleteBlobOperationLatencyMs"));
+        metricRegistry.histogram(MetricRegistry.name(UndeleteOperation.class, "UndeleteBlobOperationLatencyMs"));
     updateBlobTtlOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(TtlUpdateOperation.class, "UpdateBlobTtlOperationLatencyMs"));
     routerRequestLatencyMs =
@@ -325,7 +325,8 @@ public class NonBlockingRouterMetrics {
     getEncryptedBlobWithSegmentErrorCount =
         metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobWithSegmentErrorCount"));
     deleteBlobErrorCount = metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobErrorCount"));
-    undeleteBlobErrorCount = metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "UndeleteBlobErrorCount"));
+    undeleteBlobErrorCount =
+        metricRegistry.counter(MetricRegistry.name(UndeleteOperation.class, "UndeleteBlobErrorCount"));
     updateBlobTtlErrorCount =
         metricRegistry.counter(MetricRegistry.name(TtlUpdateOperation.class, "UpdateBlobTtlErrorCount"));
     operationAbortCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationAbortCount"));
@@ -384,7 +385,7 @@ public class NonBlockingRouterMetrics {
     deleteManagerPollTimeMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "DeleteManagerPollTimeMs"));
     undeleteManagerPollTimeMs =
-        metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "UndeleteManagerPollTimeMs"));
+        metricRegistry.histogram(MetricRegistry.name(UndeleteManager.class, "UndeleteManagerPollTimeMs"));
     ttlUpdateManagerPollTimeMs =
         metricRegistry.histogram(MetricRegistry.name(TtlUpdateManager.class, "TtlUpdateManagerPollTimeMs"));
     putManagerHandleResponseTimeMs =
@@ -394,7 +395,7 @@ public class NonBlockingRouterMetrics {
     deleteManagerHandleResponseTimeMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "DeleteManagerHandleResponseTimeMs"));
     undeleteManagerHandleResponseTimeMs =
-        metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "UndeleteManagerHandleResponseTimeMs"));
+        metricRegistry.histogram(MetricRegistry.name(UndeleteManager.class, "UndeleteManagerHandleResponseTimeMs"));
     ttlUpdateManagerHandleResponseTimeMs =
         metricRegistry.histogram(MetricRegistry.name(TtlUpdateManager.class, "TtlUpdateManagerHandleResponseTimeMs"));
     chunkFillTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillTimeMs"));

@@ -151,7 +151,7 @@ public class UndeleteManager {
         RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
             UndeleteResponse::readFrom, UndeleteResponse::getError);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
-    int correlationId = ((UndeleteRequest) routerRequestInfo.getRequest()).getCorrelationId();
+    int correlationId = routerRequestInfo.getRequest().getCorrelationId();
     UndeleteOperation undeleteOperation = correlationIdToUndeleteOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
     if (undeleteOperations.contains(undeleteOperation)) {
