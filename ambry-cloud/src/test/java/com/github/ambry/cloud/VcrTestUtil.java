@@ -47,6 +47,7 @@ import org.apache.helix.tools.ClusterSetup;
 public class VcrTestUtil {
 
   public static String helixResource = "resource1";
+
   /**
    * Create a {@link VcrServer}.
    * @param properties the config properties to use.
@@ -127,6 +128,7 @@ public class VcrTestUtil {
     props.setProperty("clustermap.resolve.hostnames", "false");
     props.setProperty("clustermap.cluster.name", "thisIsClusterName");
     props.setProperty("clustermap.datacenter.name", datacenter);
+    props.setProperty("vcr.source.datacenters", datacenter);
     props.setProperty("clustermap.port", Integer.toString(clusterMapPort));
     props.setProperty("port", Integer.toString(clusterMapPort));
     if (vcrSSLProps == null) {
