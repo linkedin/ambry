@@ -82,23 +82,13 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel) throws IOException {
-    if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
-      writeHeader();
-      bufferToSend.putInt(replicaMetadataRequestInfoList.size());
-      for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
-        replicaMetadataRequestInfo.writeTo(bufferToSend);
-      }
-      bufferToSend.putLong(maxTotalSizeOfEntriesInBytes);
-      bufferToSend.flip();
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeInt(replicaMetadataRequestInfoList.size());
+    for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
+      replicaMetadataRequestInfo.writeTo(bufferToSend);
     }
-    return bufferToSend.remaining() > 0 ? channel.write(bufferToSend) : 0;
-  }
-
-  @Override
-  public boolean isSendComplete() {
-    return bufferToSend != null && bufferToSend.remaining() == 0;
+    bufferToSend.writeLong(maxTotalSizeOfEntriesInBytes);
   }
 
   @Override

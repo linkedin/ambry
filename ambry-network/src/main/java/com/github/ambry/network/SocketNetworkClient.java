@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
@@ -128,9 +129,6 @@ public class SocketNetworkClient implements NetworkClient {
     } catch (Exception e) {
       logger.error("Received an unexpected error during sendAndPoll(): ", e);
       networkMetrics.networkClientException.inc();
-      if (sends != null) {
-        sends.forEach(send -> send.getPayload().release());
-      }
     } finally {
       numPendingRequests.set(pendingRequests.size());
       networkMetrics.networkClientSendAndPollTime.update(time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
@@ -158,13 +156,19 @@ public class SocketNetworkClient implements NetworkClient {
       if (time.milliseconds() - requestMetadata.requestQueuedAtMs > checkoutTimeoutMs) {
         responseInfoList.add(
             new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.ConnectionUnavailable, null));
+        requestMetadata.requestInfo.getRequest().release();
         logger.trace("Failing request to host {} port {} due to connection unavailability",
             requestMetadata.requestInfo.getHost(), requestMetadata.requestInfo.getPort());
         iter.remove();
-        requestMetadata.requestInfo.getRequest().release();
         if (requestMetadata.pendingConnectionId != null) {
           pendingConnectionsToAssociatedRequests.remove(requestMetadata.pendingConnectionId);
           requestMetadata.pendingConnectionId = null;
+        }
+        String connId =
+            correlationIdInFlightToConnectionId.get(requestMetadata.requestInfo.getRequest().getCorrelationId());
+        if (connId != null) {
+          connectionTracker.checkInConnection(connId);
+          connectionIdToRequestInFlight.remove(connId);
         }
         networkMetrics.connectionCheckoutTimeoutError.inc();
       } else {
@@ -186,9 +190,9 @@ public class SocketNetworkClient implements NetworkClient {
           throw new IllegalStateException("ReplicaId in request is null.");
         }
         if (requestsToDrop.contains(requestMetadata.requestInfo.getRequest().getCorrelationId())) {
-          requestMetadata.requestInfo.getRequest().release();
           responseInfoList.add(
               new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.ConnectionUnavailable, null));
+          requestMetadata.requestInfo.getRequest().release();
           if (requestMetadata.pendingConnectionId != null) {
             pendingConnectionsToAssociatedRequests.remove(requestMetadata.pendingConnectionId);
             requestMetadata.pendingConnectionId = null;
@@ -223,7 +227,6 @@ public class SocketNetworkClient implements NetworkClient {
           }
         }
       } catch (IOException e) {
-        requestMetadata.requestInfo.getRequest().release();
         networkMetrics.networkClientIOError.inc();
         logger.error("Received exception while checking out a connection", e);
       }
@@ -358,6 +361,8 @@ public class SocketNetworkClient implements NetworkClient {
       networkMetrics.connectionDisconnected.inc();
     }
 
+    // We don't need to release the completed sends' resources here, since they are already released by selector.
+
     for (NetworkReceive recv : selector.completedReceives()) {
       String connId = recv.getConnectionId();
       logger.trace("Receive completed for connectionId {} and checking in the connection back to connection tracker",
@@ -377,19 +382,17 @@ public class SocketNetworkClient implements NetworkClient {
    */
   @Override
   public void close() {
+    Set<RequestMetadata> requestMetadataToRelease = new HashSet<>();
     if (pendingRequests != null) {
-      pendingRequests.forEach(requestMetadata -> {
-        requestMetadata.requestInfo.getRequest().release();
-      });
-    } if (connectionIdToRequestInFlight != null) {
-      connectionIdToRequestInFlight.values().forEach(requestMetadata -> {
-        requestMetadata.requestInfo.getRequest().release();
-      });
-    } if (pendingConnectionsToAssociatedRequests != null) {
-      pendingConnectionsToAssociatedRequests.values().forEach(requestMetadata -> {
-        requestMetadata.requestInfo.getRequest().release();
-      });
+      requestMetadataToRelease.addAll(pendingRequests);
     }
+    if (connectionIdToRequestInFlight != null) {
+      requestMetadataToRelease.addAll(connectionIdToRequestInFlight.values());
+    }
+    if (pendingConnectionsToAssociatedRequests != null) {
+      requestMetadataToRelease.addAll(pendingConnectionsToAssociatedRequests.values());
+    }
+    requestMetadataToRelease.forEach(requestMetadata -> requestMetadata.requestInfo.getRequest().release());
     logger.trace("Closing the SocketNetworkClient");
     selector.close();
     closed = true;

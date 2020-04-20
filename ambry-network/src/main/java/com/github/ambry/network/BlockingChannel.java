@@ -165,11 +165,15 @@ public class BlockingChannel implements ConnectedChannel {
 
   @Override
   public void send(Send request) throws IOException {
-    if (!connected) {
-      throw new ClosedChannelException();
-    }
-    while (!request.isSendComplete()) {
-      request.writeTo(writeChannel);
+    try {
+      if (!connected) {
+        throw new ClosedChannelException();
+      }
+      while (!request.isSendComplete()) {
+        request.writeTo(writeChannel);
+      }
+    } finally {
+      request.release();
     }
   }
 

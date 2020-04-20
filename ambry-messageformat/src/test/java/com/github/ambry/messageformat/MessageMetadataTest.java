@@ -13,8 +13,10 @@
  */
 package com.github.ambry.messageformat;
 
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.TestUtils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.nio.ByteBuffer;
 import org.junit.Assert;
@@ -30,11 +32,10 @@ public class MessageMetadataTest {
   public void testInstantiationAndSerDe() throws Exception {
     ByteBuffer encryptionKey = ByteBuffer.wrap(TestUtils.getRandomBytes(256));
     MessageMetadata messageMetadata = new MessageMetadata(encryptionKey.duplicate());
-    ByteBuffer serializedBuffer = ByteBuffer.allocate(messageMetadata.sizeInBytes());
-    messageMetadata.serializeMessageMetadata(serializedBuffer);
-    serializedBuffer.flip();
+    ByteBuf serializedBuf = Unpooled.buffer(messageMetadata.sizeInBytes());
+    messageMetadata.serializeMessageMetadata(serializedBuf);
     MessageMetadata deserialized =
-        MessageMetadata.deserializeMessageMetadata(new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
+        MessageMetadata.deserializeMessageMetadata(new DataInputStream(new ByteBufInputStream(serializedBuf)));
     Assert.assertEquals(encryptionKey, deserialized.getEncryptionKey());
   }
 }

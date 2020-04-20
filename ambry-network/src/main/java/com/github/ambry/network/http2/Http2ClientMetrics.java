@@ -46,6 +46,7 @@ public class Http2ClientMetrics {
   public final Counter http2StreamWriteAndFlushErrorCount;
   public final Counter http2NetworkErrorCount;
   public final Counter http2RequestsToDropCount;
+  public final Counter http2StreamNotWritableCount;
 
   public final Meter http2ClientSendRate;
   public final Meter http2ClientReceiveRate;
@@ -89,7 +90,10 @@ public class Http2ClientMetrics {
     http2StreamWriteAndFlushErrorCount =
         registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamWriteAndFlushErrorCount"));
     http2NetworkErrorCount = registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2NetworkErrorCount"));
-    http2RequestsToDropCount = registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2RequestsToDropCount"));
+    http2RequestsToDropCount =
+        registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2RequestsToDropCount"));
+    http2StreamNotWritableCount =
+        registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamNotWritableCount"));
     http2ClientSendRate = registry.meter(MetricRegistry.name(Http2NetworkClient.class, "Http2ClientSendRate"));
     http2ClientReceiveRate = registry.meter(MetricRegistry.name(Http2NetworkClient.class, "Http2ClientReceiveRate"));
 

@@ -23,11 +23,14 @@ import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.Iterator;
 
 
 /**
@@ -44,7 +47,7 @@ public class PutRequest extends RequestOrResponse {
 
   // Used to carry blob content in ambry-frontend when creating this PutRequest.
   protected ByteBuf blob;
-  protected ByteBuffer[] nioBuffersFromBlob;
+  protected ByteBuffer[] nioBuffers;
   // crc will cover all the fields associated with the blob, namely:
   // blob type
   // BlobId
@@ -54,7 +57,7 @@ public class PutRequest extends RequestOrResponse {
 
   // Used to calculate crc value in ambry-frontend.
   private final Crc32 crc;
-  private final ByteBuffer crcBuf;
+  private ByteBuf crcByteBuf;
   private boolean okayToWriteCrc = false;
   private int sizeExcludingBlobAndCrc = -1;
   private int bufferIndex = 0;
@@ -98,7 +101,7 @@ public class PutRequest extends RequestOrResponse {
     this.blobEncryptionKey = blobEncryptionKey;
     this.blob = materializedBlob;
     this.crc = new Crc32();
-    this.crcBuf = ByteBuffer.allocate(CRC_SIZE_IN_BYTES);
+    this.crcByteBuf = PooledByteBufAllocator.DEFAULT.ioBuffer(CRC_SIZE_IN_BYTES);
     this.blobStream = null;
     this.crcValue = null;
   }
@@ -128,7 +131,7 @@ public class PutRequest extends RequestOrResponse {
     this.blobEncryptionKey = blobEncryptionKey;
     this.blob = null;
     this.crc = null;
-    this.crcBuf = null;
+    this.crcByteBuf = null;
     this.blobStream = blobStream;
     this.crcValue = crc;
   }
@@ -175,93 +178,99 @@ public class PutRequest extends RequestOrResponse {
    * Construct the bufferToSend to serialize request metadata and other blob related information. The newly constructed
    * bufferToSend will not include the blob content as it's carried by the {@code blob} field in this class.
    */
-  private void prepareBuffer() {
-    bufferToSend = ByteBuffer.allocate(sizeExcludingBlobAndCrcSize());
+  @Override
+  protected void prepareBuffer() {
+    // bufferToSend now is the header ByteBuf, it will store serialized header, without blob content and crc
+    bufferToSend = PooledByteBufAllocator.DEFAULT.ioBuffer(sizeExcludingBlobAndCrcSize());
     writeHeader();
-    int crcStart = bufferToSend.position();
-    bufferToSend.put(blobId.toBytes());
+    int crcStart = bufferToSend.writerIndex();
+    bufferToSend.writeBytes(blobId.toBytes());
     BlobPropertiesSerDe.serializeBlobProperties(bufferToSend, properties);
-    bufferToSend.putInt(usermetadata.capacity());
-    bufferToSend.put(usermetadata);
-    bufferToSend.putShort((short) blobType.ordinal());
+    bufferToSend.writeInt(usermetadata.capacity());
+    bufferToSend.writeBytes(usermetadata);
+    bufferToSend.writeShort((short) blobType.ordinal());
     short keyLength = blobEncryptionKey == null ? 0 : (short) blobEncryptionKey.remaining();
-    bufferToSend.putShort(keyLength);
+    bufferToSend.writeShort(keyLength);
     if (keyLength > 0) {
-      bufferToSend.put(blobEncryptionKey);
+      bufferToSend.writeBytes(blobEncryptionKey);
     }
-    bufferToSend.putLong(blobSize);
-    crc.update(bufferToSend.array(), bufferToSend.arrayOffset() + crcStart, bufferToSend.position() - crcStart);
-    nioBuffersFromBlob = blob.nioBuffers();
-    for (ByteBuffer bb : nioBuffersFromBlob) {
+    bufferToSend.writeLong(blobSize);
+
+    // Now compute crc for the put request.
+    crc.update(bufferToSend.nioBuffer(crcStart, bufferToSend.writerIndex() - crcStart));
+    for (ByteBuffer bb : blob.nioBuffers()) {
       crc.update(bb);
       // change it back to 0 since we are going to write it to the channel later.
       bb.position(0);
     }
-    crcBuf.putLong(crc.getValue());
-    crcBuf.flip();
-    bufferToSend.flip();
+    crcByteBuf.writeLong(crc.getValue());
+
+    // Now construct the real bufferToSend, which should be a composite ByteBuf.
+    CompositeByteBuf compositeByteBuf = bufferToSend.alloc().compositeHeapBuffer(2 + blob.nioBufferCount());
+    compositeByteBuf.addComponent(true, bufferToSend);
+    if (blob instanceof CompositeByteBuf) {
+      Iterator<ByteBuf> iter = ((CompositeByteBuf) blob).iterator();
+      while (iter.hasNext()) {
+        compositeByteBuf.addComponent(true, iter.next());
+      }
+    } else {
+      compositeByteBuf.addComponent(true, blob);
+    }
+    compositeByteBuf.addComponent(true, crcByteBuf);
+    blob = null;
+    crcByteBuf = null;
+    bufferToSend = compositeByteBuf;
   }
 
   @Override
   public long writeTo(WritableByteChannel channel) throws IOException {
-    long written = 0;
-    try {
-      if (sentBytes < sizeInBytes()) {
-        if (bufferToSend == null) {
-          // this is the first time this method was called, prepare the buffer to send the header and other metadata
-          // (everything except the blob content).
-          prepareBuffer();
-        }
-        // If the header and metadata are not yet written out completely, try and write out as much of it now.
-        if (bufferToSend.hasRemaining()) {
-          written = channel.write(bufferToSend);
-        }
-
-        // If the header and metadata were written out completely (in this call or a previous call),
-        // try and write out as much of the blob now.
-        if (!bufferToSend.hasRemaining() && blob != null) {
-          int totalWrittenBytesForBlob = 0, currentWritten = -1;
-          while (bufferIndex < nioBuffersFromBlob.length && currentWritten != 0) {
-            currentWritten = -1;
-            ByteBuffer byteBuffer = nioBuffersFromBlob[bufferIndex];
-            if (!byteBuffer.hasRemaining()) {
-              // some bytebuffers are zero length, ignore those bytebuffers.
-              bufferIndex ++;
-            } else {
-              currentWritten = channel.write(byteBuffer);
-              totalWrittenBytesForBlob += currentWritten;
-            }
-          }
-          blob.skipBytes(totalWrittenBytesForBlob);
-          written += totalWrittenBytesForBlob;
-          okayToWriteCrc = !blob.isReadable();
-        }
-
-        if (okayToWriteCrc && crcBuf.hasRemaining()) {
-          if (blob != null) {
-            blob.release();
-            blob = null;
-          }
-          written += channel.write(crcBuf);
-        }
-
-        sentBytes += written;
-      }
-    } catch (Exception e) {
-      if (blob != null) {
-        blob.release();
-        blob = null;
-      }
+    if (bufferToSend == null) {
+      prepareBuffer();
     }
+    if (nioBuffers == null) {
+      nioBuffers = bufferToSend.nioBuffers();
+    }
+    long written = 0;
+    if (sentBytes < sizeInBytes()) {
+      int totalWrittenBytes = 0, currentWritten = -1;
+      while (bufferIndex < nioBuffers.length && currentWritten != 0) {
+        currentWritten = -1;
+        ByteBuffer byteBuffer = nioBuffers[bufferIndex];
+        if (!byteBuffer.hasRemaining()) {
+          // some bytebuffers are zero length, ignore those bytebuffers.
+          bufferIndex++;
+        } else {
+          currentWritten = channel.write(byteBuffer);
+          totalWrittenBytes += currentWritten;
+        }
+      }
+      bufferToSend.skipBytes(totalWrittenBytes);
+      written += totalWrittenBytes;
+    }
+    sentBytes += written;
     return written;
   }
 
+  /**
+   * Override release even if the {@link #content()}'s result is not null. When the {@link #prepareBuffer()} is
+   * not invoked, there will be {@link #blob} and {@link #crcByteBuf} created but not returned by {@link #content()},
+   * and we have to release them.
+   * @return
+   */
   @Override
-  public void release() {
+  public boolean release() {
     if (blob != null) {
       blob.release();
       blob = null;
     }
+    if (crcByteBuf != null) {
+      crcByteBuf.release();
+      crcByteBuf = null;
+    }
+    if (bufferToSend != null) {
+      bufferToSend.release();
+    }
+    return false;
   }
 
   @Override

@@ -14,7 +14,9 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.network.Send;
+import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.ByteBufferOutputStream;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
@@ -22,11 +24,12 @@ import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import org.apache.commons.math3.analysis.function.Abs;
 import org.junit.Assert;
 import org.junit.Test;
 
 
-class ByteArraySend implements Send {
+class ByteArraySend extends AbstractByteBufHolder<ByteArraySend> implements Send {
 
   private ByteBuffer bytesToSend;
 
@@ -47,6 +50,16 @@ class ByteArraySend implements Send {
   @Override
   public long sizeInBytes() {
     return bytesToSend.capacity();
+  }
+
+  @Override
+  public ByteBuf content() {
+    return null;
+  }
+
+  @Override
+  public ByteArraySend replace(ByteBuf content) {
+    return null;
   }
 }
 

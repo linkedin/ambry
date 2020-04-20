@@ -33,6 +33,8 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferChannel;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -46,13 +48,17 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
@@ -152,8 +158,16 @@ class InvalidVersionPutRequest extends PutRequest {
 /**
  * Tests for different requests and responses in the protocol.
  */
+@RunWith(Parameterized.class)
 public class RequestResponseTest {
   private static short versionSaved;
+  private final boolean useByteBufContent;
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
 
   @BeforeClass
   public static void saveVersionToUse() {
@@ -163,6 +177,20 @@ public class RequestResponseTest {
   @After
   public void resetVersionToUse() {
     GetResponse.CURRENT_VERSION = versionSaved;
+  }
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
+
+  public RequestResponseTest(boolean useByteBufContent) {
+    this.useByteBufContent = useByteBufContent;
   }
 
   /**
@@ -210,10 +238,11 @@ public class RequestResponseTest {
       BlobId blobId, BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize,
       byte[] blobKey, byte[] expectedKey) throws IOException {
     // This PutRequest is created just to get the size.
-    int sizeInBytes =
-        (int) new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-            Unpooled.wrappedBuffer(blob), blobSize, blobType,
-            blobKey == null ? null : ByteBuffer.wrap(blobKey)).sizeInBytes();
+    PutRequest putRequest =
+        new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
+            Unpooled.wrappedBuffer(blob), blobSize, blobType, blobKey == null ? null : ByteBuffer.wrap(blobKey));
+    int sizeInBytes = (int) putRequest.sizeInBytes();
+    putRequest.release();
     // Initialize channel write limits in such a way that writeTo() may or may not be able to write out all the
     // data at once.
     int channelWriteLimits[] =
@@ -233,6 +262,7 @@ public class RequestResponseTest {
               Assert.fail("Deserialization of PutRequest with invalid version should have thrown an exception.");
             } catch (IllegalStateException e) {
             }
+            request.release();
             break;
           default:
             if (request == null) {
@@ -251,9 +281,9 @@ public class RequestResponseTest {
                 ByteBuf blob3 = PooledByteBufAllocator.DEFAULT.heapBuffer(end - start);
                 blob3.writeBytes(blob, start, end - start);
                 blobBuf = PooledByteBufAllocator.DEFAULT.compositeHeapBuffer(3);
-                ((CompositeByteBuf)blobBuf).addComponent(true, blob1);
-                ((CompositeByteBuf)blobBuf).addComponent(true, blob2);
-                ((CompositeByteBuf)blobBuf).addComponent(true, blob3);
+                ((CompositeByteBuf) blobBuf).addComponent(true, blob1);
+                ((CompositeByteBuf) blobBuf).addComponent(true, blob2);
+                ((CompositeByteBuf) blobBuf).addComponent(true, blob3);
               }
               request = new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
                   blobBuf, blobSize, blobType, blobKey == null ? null : ByteBuffer.wrap(blobKey));
@@ -262,7 +292,10 @@ public class RequestResponseTest {
             PutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
             Assert.assertEquals(blobId, deserializedPutRequest.getBlobId());
             Assert.assertEquals(sizeInBlobProperties, deserializedPutRequest.getBlobProperties().getBlobSize());
-            Assert.assertArrayEquals(userMetadata, deserializedPutRequest.getUsermetadata().array());
+            Assert.assertEquals(userMetadata.length, deserializedPutRequest.getUsermetadata().remaining());
+            byte[] deserializedUserMetadata = new byte[userMetadata.length];
+            deserializedPutRequest.getUsermetadata().get(deserializedUserMetadata);
+            Assert.assertArrayEquals(userMetadata, deserializedUserMetadata);
             Assert.assertEquals(blobSize, deserializedPutRequest.getBlobSize());
             Assert.assertEquals(blobType, deserializedPutRequest.getBlobType());
             if (expectedKey == null) {
@@ -273,6 +306,7 @@ public class RequestResponseTest {
             byte[] blobRead = new byte[blobSize];
             deserializedPutRequest.getBlobStream().read(blobRead);
             Assert.assertArrayEquals(blob, blobRead);
+            request.release();
             break;
         }
       }
@@ -333,11 +367,14 @@ public class RequestResponseTest {
         blob, blobSize, blobKey);
 
     // Response test
-    PutResponse response = new PutResponse(1234, clientId, ServerErrorCode.No_Error);
-    DataInputStream responseStream = serAndPrepForRead(response, -1, false);
-    PutResponse deserializedPutResponse = PutResponse.readFrom(responseStream);
-    Assert.assertEquals(deserializedPutResponse.getCorrelationId(), 1234);
-    Assert.assertEquals(deserializedPutResponse.getError(), ServerErrorCode.No_Error);
+    for (boolean useByteBufContent : new boolean[]{true, false}) {
+      PutResponse response = new PutResponse(1234, clientId, ServerErrorCode.No_Error);
+      DataInputStream responseStream = serAndPrepForRead(response, -1, false);
+      PutResponse deserializedPutResponse = PutResponse.readFrom(responseStream);
+      Assert.assertEquals(deserializedPutResponse.getCorrelationId(), 1234);
+      Assert.assertEquals(deserializedPutResponse.getError(), ServerErrorCode.No_Error);
+      response.release();
+    }
   }
 
   @Test
@@ -377,6 +414,7 @@ public class RequestResponseTest {
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().size(), 1);
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().get(0).getBlobIds().size(), 1);
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().get(0).getBlobIds().get(0), id1);
+    getRequest.release();
 
     long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     byte[] encryptionKey = TestUtils.getRandomBytes(256);
@@ -431,6 +469,7 @@ public class RequestResponseTest {
       Assert.assertFalse(msgInfo.isUndeleted());
       Assert.assertEquals("LifeVersion mismatch", (short) 0, msgInfo.getLifeVersion());
     }
+    response.release();
   }
 
   @Test
@@ -466,11 +505,13 @@ public class RequestResponseTest {
         Assert.assertEquals("DeletionTime mismatch ", Utils.Infinite_Time,
             deserializedDeleteRequest.getDeletionTimeInMs());
       }
+      deleteRequest.release();
       DeleteResponse response = new DeleteResponse(correlationId, "client", ServerErrorCode.No_Error);
       requestStream = serAndPrepForRead(response, -1, false);
       DeleteResponse deserializedDeleteResponse = DeleteResponse.readFrom(requestStream);
       Assert.assertEquals(deserializedDeleteResponse.getCorrelationId(), correlationId);
       Assert.assertEquals(deserializedDeleteResponse.getError(), ServerErrorCode.No_Error);
+      response.release();
     }
   }
 
@@ -497,6 +538,7 @@ public class RequestResponseTest {
     Assert.assertEquals("AccountId mismatch ", id1.getAccountId(), deserializedUndeleteRequest.getAccountId());
     Assert.assertEquals("ContainerId mismatch ", id1.getContainerId(), deserializedUndeleteRequest.getContainerId());
     Assert.assertEquals("OperationTimeMs mismatch ", operationTimeMs, deserializedUndeleteRequest.getOperationTimeMs());
+    undeleteRequest.release();
     UndeleteResponse response = null;
     try {
       response = new UndeleteResponse(correlationId, "client", ServerErrorCode.No_Error);
@@ -510,6 +552,7 @@ public class RequestResponseTest {
     Assert.assertEquals(deserializedUndeleteResponse.getCorrelationId(), correlationId);
     Assert.assertEquals(deserializedUndeleteResponse.getError(), ServerErrorCode.Blob_Deleted);
     Assert.assertEquals(deserializedUndeleteResponse.getLifeVersion(), UndeleteResponse.INVALID_LIFE_VERSION);
+    response.release();
 
     try {
       response = new UndeleteResponse(correlationId, "client", UndeleteResponse.INVALID_LIFE_VERSION);
@@ -524,6 +567,7 @@ public class RequestResponseTest {
     Assert.assertEquals(deserializedUndeleteResponse.getCorrelationId(), correlationId);
     Assert.assertEquals(deserializedUndeleteResponse.getError(), ServerErrorCode.No_Error);
     Assert.assertEquals(deserializedUndeleteResponse.getLifeVersion(), lifeVersion);
+    response.release();
   }
 
   @Test
@@ -565,6 +609,7 @@ public class RequestResponseTest {
         ReplicaMetadataRequest.readFrom(requestStream, new MockClusterMap(), new MockFindTokenHelper());
     Assert.assertEquals(replicaMetadataRequestFromBytes.getMaxTotalSizeOfEntriesInBytes(), 1000);
     Assert.assertEquals(replicaMetadataRequestFromBytes.getReplicaMetadataRequestInfoList().size(), 1);
+    request.release();
 
     try {
       new ReplicaMetadataRequest(1, "id", null, 12, requestVersionToUse);
@@ -596,8 +641,8 @@ public class RequestResponseTest {
             clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
             BlobId.BlobDataType.DATACHUNK);
         MessageInfo messageInfo =
-            new MessageInfo(id, msgSize, false, false, true, Utils.Infinite_Time, null, accountId, containerId, operationTimeMs,
-                (short) 1);
+            new MessageInfo(id, msgSize, false, false, true, Utils.Infinite_Time, null, accountId, containerId,
+                operationTimeMs, (short) 1);
         messageInfoList.add(messageInfo);
         totalSizeOfAllMessages += msgSize;
       }
@@ -652,6 +697,7 @@ public class RequestResponseTest {
         }
       }
     }
+    response.release();
     // to ensure that the toString() representation does not go overboard, a random bound check is executed here.
     // a rough estimate is that each response info should contribute about 500 chars to the toString() representation
     int maxLength = 100 + numResponseInfos * 500;
@@ -666,6 +712,7 @@ public class RequestResponseTest {
     response = new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, Collections.emptyList(),
         responseVersionToUse);
     Assert.assertTrue("Length of toString() should be > 0", response.toString().length() > 0);
+    response.release();
   }
 
   /**
@@ -709,10 +756,12 @@ public class RequestResponseTest {
       AdminRequest adminRequest = new AdminRequest(type, id, correlationId, clientId);
       DataInputStream requestStream = serAndPrepForRead(adminRequest, -1, true);
       deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId, type, id);
+      adminRequest.release();
       // with a null partition id
       adminRequest = new AdminRequest(type, null, correlationId, clientId);
       requestStream = serAndPrepForRead(adminRequest, -1, true);
       deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId, type, null);
+      adminRequest.release();
       // response
       ServerErrorCode[] values = ServerErrorCode.values();
       int indexToPick = TestUtils.RANDOM.nextInt(values.length);
@@ -723,6 +772,7 @@ public class RequestResponseTest {
       Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
       Assert.assertEquals(deserializedAdminResponse.getClientId(), clientId);
       Assert.assertEquals(deserializedAdminResponse.getError(), responseErrorCode);
+      response.release();
     }
   }
 
@@ -764,6 +814,7 @@ public class RequestResponseTest {
         deserializedCatchupStatusRequest.getAcceptableLagInBytes());
     Assert.assertEquals("Num caught up per partition not as set", numCaughtUpPerPartition,
         deserializedCatchupStatusRequest.getNumReplicasCaughtUpPerPartition());
+    catchupStatusRequest.release();
     // response
     boolean isCaughtUp = TestUtils.RANDOM.nextBoolean();
     ServerErrorCode[] values = ServerErrorCode.values();
@@ -777,6 +828,7 @@ public class RequestResponseTest {
     Assert.assertEquals(deserializedCatchupStatusResponse.getClientId(), clientId);
     Assert.assertEquals(deserializedCatchupStatusResponse.getError(), responseErrorCode);
     Assert.assertEquals(deserializedCatchupStatusResponse.isCaughtUp(), isCaughtUp);
+    catchupStatusResponse.release();
   }
 
   /**
@@ -837,6 +889,7 @@ public class RequestResponseTest {
       Assert.assertEquals("ContainerId mismatch ", id1.getContainerId(), deserializedTtlUpdateRequest.getContainerId());
       Assert.assertEquals("ExpiresAtMs mismatch ", expiresAtMs, deserializedTtlUpdateRequest.getExpiresAtMs());
       Assert.assertEquals("DeletionTime mismatch ", opTimeMs, deserializedTtlUpdateRequest.getOperationTimeInMs());
+      ttlUpdateRequest.release();
 
       TtlUpdateResponse response = new TtlUpdateResponse(correlationId, "client", ServerErrorCode.No_Error);
       requestStream = serAndPrepForRead(response, -1, false);
@@ -847,6 +900,7 @@ public class RequestResponseTest {
       Assert.assertEquals("Client ID mismatch", "client", deserializedTtlUpdateResponse.getClientId());
       Assert.assertEquals("Server error code mismatch", ServerErrorCode.No_Error,
           deserializedTtlUpdateResponse.getError());
+      response.release();
     }
   }
 
@@ -884,6 +938,7 @@ public class RequestResponseTest {
         + deserializedBlobStoreControlRequest.getNumReplicasCaughtUpPerPartition() + ", PartitionId="
         + deserializedBlobStoreControlRequest.getPartitionId() + "]";
     Assert.assertEquals("The test of toString method fails", correctString, "" + deserializedBlobStoreControlRequest);
+    blobStoreControlAdminRequest.release();
   }
 
   /**
@@ -897,25 +952,30 @@ public class RequestResponseTest {
    */
   private DataInputStream serAndPrepForRead(RequestOrResponse requestOrResponse, int channelSize, boolean isRequest)
       throws IOException {
-    if (channelSize == -1) {
-      channelSize = (int) (requestOrResponse.sizeInBytes() / 3);
+    DataInputStream stream;
+    if (useByteBufContent && requestOrResponse.content() != null) {
+      stream = new NettyByteBufDataInputStream(requestOrResponse.content());
+    } else {
+      if (channelSize == -1) {
+        channelSize = (int) (requestOrResponse.sizeInBytes() / 3);
+      }
+      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+      int expectedWriteToCount = (int) ((requestOrResponse.sizeInBytes() + channelSize - 1) / channelSize);
+      int actualWriteToCount = 0;
+      do {
+        ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate(channelSize));
+        requestOrResponse.writeTo(channel);
+        ByteBuffer underlyingBuf = channel.getBuffer();
+        underlyingBuf.flip();
+        outputStream.write(underlyingBuf.array(), underlyingBuf.arrayOffset(), underlyingBuf.remaining());
+        actualWriteToCount++;
+      } while (!requestOrResponse.isSendComplete());
+      Assert.assertEquals("Should not have written anything", 0,
+          requestOrResponse.writeTo(new ByteBufferChannel(ByteBuffer.allocate(1))));
+      Assert.assertEquals("writeTo() should have written out as much as the channel could take in every call",
+          expectedWriteToCount, actualWriteToCount);
+      stream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
     }
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    int expectedWriteToCount = (int) ((requestOrResponse.sizeInBytes() + channelSize - 1) / channelSize);
-    int actualWriteToCount = 0;
-    do {
-      ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate(channelSize));
-      requestOrResponse.writeTo(channel);
-      ByteBuffer underlyingBuf = channel.getBuffer();
-      underlyingBuf.flip();
-      outputStream.write(underlyingBuf.array(), underlyingBuf.arrayOffset(), underlyingBuf.remaining());
-      actualWriteToCount++;
-    } while (!requestOrResponse.isSendComplete());
-    Assert.assertEquals("Should not have written anything", 0,
-        requestOrResponse.writeTo(new ByteBufferChannel(ByteBuffer.allocate(1))));
-    Assert.assertEquals("writeTo() should have written out as much as the channel could take in every call",
-        expectedWriteToCount, actualWriteToCount);
-    DataInputStream stream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
     // read length
     stream.readLong();
     if (isRequest) {
@@ -976,6 +1036,7 @@ public class RequestResponseTest {
         RequestControlAdminRequest.readFrom(requestStream, deserializedAdminRequest);
     Assert.assertEquals(requestOrResponseType, deserializedControlRequest.getRequestTypeToControl());
     Assert.assertEquals(enable, deserializedControlRequest.shouldEnable());
+    controlRequest.release();
   }
 
   /**
@@ -1001,6 +1062,7 @@ public class RequestResponseTest {
         ReplicationControlAdminRequest.readFrom(requestStream, deserializedAdminRequest);
     Assert.assertEquals(origins, deserializedControlRequest.getOrigins());
     Assert.assertEquals(enable, deserializedControlRequest.shouldEnable());
+    controlRequest.release();
   }
 
   /**

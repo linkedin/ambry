@@ -15,6 +15,7 @@ package com.github.ambry.network.http2;
 
 import com.github.ambry.network.Send;
 import com.github.ambry.utils.ByteBufChannel;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -72,15 +73,18 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
     }
     DefaultHttp2HeadersFrame headersFrame = new DefaultHttp2HeadersFrame(http2Headers, false);
     ctx.write(headersFrame);
-    // TODO: Use {@link RetainingAsyncWritableChannel} after writeTo(AsyncWritableChannel channel, Callback<Long> callback) is fully implemented.
-    ByteBufChannel byteBufChannel = new ByteBufChannel();
-    try {
-      send.writeTo(byteBufChannel);
-    } catch (IOException e) {
-      promise.setFailure(e);
-      return;
+    ByteBuf dataContent = send.content();
+    if (dataContent == null) {
+      ByteBufChannel byteBufChannel = new ByteBufChannel();
+      try {
+        send.writeTo(byteBufChannel);
+        dataContent = byteBufChannel.getBuf();
+      } catch (IOException e) {
+        promise.setFailure(e);
+        return;
+      }
     }
-    DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(byteBufChannel.getBuf(), true);
+    DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(dataContent, true);
     // Caller should call writeAndFlush().
     ctx.write(dataFrame, promise);
   }

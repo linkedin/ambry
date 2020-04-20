@@ -22,9 +22,12 @@ import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -100,23 +103,22 @@ public class MessageInfoAndMetadataListSerDeTest {
     // Serialize and then deserialize
     MessageInfoAndMetadataListSerde messageInfoAndMetadataListSerde =
         new MessageInfoAndMetadataListSerde(messageInfoList, messageMetadataList, serDeVersion);
-    ByteBuffer buffer = ByteBuffer.allocate(messageInfoAndMetadataListSerde.getMessageInfoAndMetadataListSize());
+    ByteBuf buffer = Unpooled.buffer(messageInfoAndMetadataListSerde.getMessageInfoAndMetadataListSize());
     messageInfoAndMetadataListSerde.serializeMessageInfoAndMetadataList(buffer);
-    buffer.flip();
     if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_5) {
       // should fail if the wrong version is provided
       try {
-        MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(
-            new DataInputStream(new ByteBufferInputStream(buffer)), mockMap, (short) (serDeVersion - 1));
+        MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(new NettyByteBufDataInputStream(buffer),
+            mockMap, (short) (serDeVersion - 1));
         Assert.fail("Should have failed to deserialize");
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do
       }
     }
-    buffer.rewind();
+    buffer.readerIndex(0);
     MessageInfoAndMetadataListSerde messageInfoAndMetadataList =
         MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(
-            new DataInputStream(new ByteBufferInputStream(buffer)), mockMap, serDeVersion);
+            new NettyByteBufDataInputStream(buffer), mockMap, serDeVersion);
 
     // Verify
     List<MessageInfo> responseMessageInfoList = messageInfoAndMetadataList.getMessageInfoList();

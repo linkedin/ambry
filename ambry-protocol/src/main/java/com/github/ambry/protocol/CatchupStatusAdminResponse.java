@@ -72,9 +72,9 @@ public class CatchupStatusAdminResponse extends AdminResponse {
   }
 
   @Override
-  protected void serializeIntoBuffer() {
-    super.serializeIntoBuffer();
-    bufferToSend.putShort(VERSION_V1);
-    bufferToSend.put(isCaughtUp ? (byte) 1 : 0);
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeShort(VERSION_V1);
+    bufferToSend.writeByte(isCaughtUp ? (byte) 1 : 0);
   }
 }

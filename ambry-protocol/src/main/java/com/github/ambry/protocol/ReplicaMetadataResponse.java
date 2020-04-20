@@ -91,26 +91,16 @@ public class ReplicaMetadataResponse extends Response {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel) throws IOException {
-    if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
-      writeHeader();
-      if (replicaMetadataResponseInfoList != null) {
-        bufferToSend.putInt(replicaMetadataResponseInfoList.size());
-        for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
-          replicaMetadataResponseInfo.writeTo(bufferToSend);
-        }
-      } else {
-        bufferToSend.putInt(0);
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    if (replicaMetadataResponseInfoList != null) {
+      bufferToSend.writeInt(replicaMetadataResponseInfoList.size());
+      for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
+        replicaMetadataResponseInfo.writeTo(bufferToSend);
       }
-      bufferToSend.flip();
+    } else {
+      bufferToSend.writeInt(0);
     }
-    return bufferToSend.remaining() > 0 ? channel.write(bufferToSend) : 0;
-  }
-
-  @Override
-  public boolean isSendComplete() {
-    return bufferToSend != null && bufferToSend.remaining() == 0;
   }
 
   @Override

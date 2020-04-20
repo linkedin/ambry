@@ -89,6 +89,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -109,6 +110,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Assume;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -142,6 +144,7 @@ public class AmbryServerRequestsTest {
   private final ReplicaStatusDelegate mockDelegate = Mockito.mock(ReplicaStatusDelegate.class);
   private final boolean validateRequestOnStoreState;
   private AmbryServerRequests ambryRequests;
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -195,12 +198,19 @@ public class AmbryServerRequestsTest {
     return properties;
   }
 
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
   /**
    * Close the storageManager created.
    */
   @After
   public void after() throws InterruptedException {
     storageManager.shutdown();
+    nettyByteBufLeakHelper.afterTest();
   }
 
   /**
@@ -873,6 +883,7 @@ public class AmbryServerRequestsTest {
             ServerErrorCode.No_Error, null, clientId);
     assertEquals("cross-colo metadata exchange bytes are not expected", responseList.get(0).sizeInBytes(),
         serverMetrics.crossColoMetadataExchangeBytesRate.get(remoteNode.getDatacenterName()).getCount());
+    responseList.forEach(Response::release);
     // send cross-colo get request and verify
     clientId =
         GetRequest.Replication_Client_Id_Prefix + remoteNode.getHostname() + "[" + remoteNode.getDatacenterName() + "]";
@@ -880,6 +891,7 @@ public class AmbryServerRequestsTest {
         ServerErrorCode.No_Error, null, clientId);
     assertEquals("cross-colo fetch bytes are not expected", responseList.get(0).sizeInBytes(),
         serverMetrics.crossColoFetchBytesRate.get(remoteNode.getDatacenterName()).getCount());
+    responseList.forEach(Response::release);
   }
 
   // helpers
@@ -971,6 +983,7 @@ public class AmbryServerRequestsTest {
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, storeControlRequestType, adminRequest);
     Response response = sendRequestGetResponse(blobStoreControlAdminRequest, expectedServerErrorCode);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    response.release();
   }
 
   /**
@@ -1061,21 +1074,25 @@ public class AmbryServerRequestsTest {
       idsToTest = Collections.singletonList(id);
     }
     // check that everything works
-    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null, null);
+    List<Response> responses = sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null, null);
+    responses.forEach(Response::release);
     // disable the request
     sendAndVerifyRequestControlRequest(toControl, false, id, ServerErrorCode.No_Error);
     // check that it is disabled
-    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.Temporarily_Disabled, false, null);
+    responses = sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.Temporarily_Disabled, false, null);
+    responses.forEach(Response::release);
     // ok to call disable again
     sendAndVerifyRequestControlRequest(toControl, false, id, ServerErrorCode.No_Error);
     // enable
     sendAndVerifyRequestControlRequest(toControl, true, id, ServerErrorCode.No_Error);
     // check that everything works
-    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null, null);
+    responses = sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null, null);
+    responses.forEach(Response::release);
     // ok to call enable again
     sendAndVerifyRequestControlRequest(toControl, true, id, ServerErrorCode.No_Error);
     // check that everything works
-    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null, null);
+    responses = sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null, null);
+    responses.forEach(Response::release);
   }
 
   /**
@@ -1104,8 +1121,9 @@ public class AmbryServerRequestsTest {
       for (PartitionResponseInfo info : ((GetResponse) response).getPartitionResponseInfoList()) {
         assertEquals("Error code does not match expected", expectedErrorCode, info.getErrorCode());
       }
+      response.release();
     } else {
-      sendRequestGetResponse(request, ServerErrorCode.Unknown_Error);
+      sendRequestGetResponse(request, ServerErrorCode.Unknown_Error).release();
     }
   }
 
@@ -1198,6 +1216,7 @@ public class AmbryServerRequestsTest {
     RequestControlAdminRequest controlRequest = new RequestControlAdminRequest(toControl, enable, adminRequest);
     Response response = sendRequestGetResponse(controlRequest, expectedServerErrorCode);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    response.release();
   }
 
   // controlReplicationSuccessTest() and controlReplicationFailureTest() helpers
@@ -1260,6 +1279,7 @@ public class AmbryServerRequestsTest {
       assertEquals("Ids not as provided in request", idsVal.size(), replicationManager.idsVal.size());
       assertTrue("Ids not as provided in request", replicationManager.idsVal.containsAll(idsVal));
     }
+    response.release();
   }
 
   // catchupStatusSuccessTest() helpers
@@ -1326,6 +1346,7 @@ public class AmbryServerRequestsTest {
     assertTrue("Response not of type CatchupStatusAdminResponse", response instanceof CatchupStatusAdminResponse);
     CatchupStatusAdminResponse adminResponse = (CatchupStatusAdminResponse) response;
     assertEquals("Catchup status not as expected", expectedIsCaughtUp, adminResponse.isCaughtUp());
+    response.release();
   }
 
   // ttlUpdateTest() helpers
@@ -1347,7 +1368,7 @@ public class AmbryServerRequestsTest {
       ServerErrorCode expectedErrorCode)
       throws InterruptedException, IOException, MessageFormatException, StoreException {
     TtlUpdateRequest request = new TtlUpdateRequest(correlationId, clientId, blobId, expiresAtMs, opTimeMs);
-    sendAndVerifyOperationRequest(request, expectedErrorCode, true);
+    sendAndVerifyOperationRequest(request, expectedErrorCode, true).release();
     if (expectedErrorCode == ServerErrorCode.No_Error) {
       verifyTtlUpdate(request.getBlobId(), expiresAtMs, opTimeMs, MockStorageManager.messageWriteSetReceived);
     }
@@ -1366,7 +1387,7 @@ public class AmbryServerRequestsTest {
   private void doUndelete(int correlationId, String clientId, BlobId blobId, long opTimeMs,
       ServerErrorCode expectedErrorCode) throws Exception {
     UndeleteRequest request = new UndeleteRequest(correlationId, clientId, blobId, opTimeMs);
-    sendAndVerifyOperationRequest(request, expectedErrorCode, true);
+    sendAndVerifyOperationRequest(request, expectedErrorCode, true).release();
     if (expectedErrorCode == ServerErrorCode.No_Error) {
       verifyUndelete(request.getBlobId(), opTimeMs, MockStorageManager.messageWriteSetReceived);
     }
@@ -1417,7 +1438,7 @@ public class AmbryServerRequestsTest {
     // store exceptions
     for (StoreErrorCodes code : StoreErrorCodes.values()) {
       MockStorageManager.storeException =
-          code == StoreErrorCodes.ID_Undeleted ? new IdUndeletedStoreException("expected", (short)1)
+          code == StoreErrorCodes.ID_Undeleted ? new IdUndeletedStoreException("expected", (short) 1)
               : new StoreException("expected", code);
       ServerErrorCode expectedErrorCode = ErrorMapping.getStoreErrorMapping(code);
       sendAndVerifyOperationRequest(RequestOrResponseType.UndeleteRequest, Collections.singletonList(id),
@@ -1521,6 +1542,7 @@ public class AmbryServerRequestsTest {
     static MockRequest fromRequest(RequestOrResponse request) throws IOException {
       ByteBuffer buffer = ByteBuffer.allocate((int) request.sizeInBytes());
       request.writeTo(new ByteBufferChannel(buffer));
+      request.release();
       buffer.flip();
       // read length (to bring it to a state where AmbryRequests can handle it).
       buffer.getLong();

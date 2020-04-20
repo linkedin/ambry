@@ -101,7 +101,7 @@ class MockSelector extends Selector {
    */
   @Override
   public void poll(long timeoutMs, List<NetworkSend> sends) throws IOException {
-    this.sends = sends;
+    this.sends = sends == null? null: new ArrayList<>(sends);
     disconnected.clear();
     if (state.get() == MockSelectorState.FailConnectionInitiationOnPoll) {
       disconnected.addAll(connected);
@@ -117,12 +117,15 @@ class MockSelector extends Selector {
         }
         if (state.get() == MockSelectorState.DisconnectOnSend) {
           disconnected.add(send.getConnectionId());
+          this.sends.remove(send);
         } else {
           MockServer server = connIdToServer.get(send.getConnectionId());
           BoundedNettyByteBufReceive receive = server.send(send.getPayload());
           if (receive != null) {
             receives.add(new NetworkReceive(send.getConnectionId(), receive, time));
           }
+          // Just like Selector, MockSelector needs to release the sends' resources after completed.
+          send.getPayload().release();
         }
       }
     }

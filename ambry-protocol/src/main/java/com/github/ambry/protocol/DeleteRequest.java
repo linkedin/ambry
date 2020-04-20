@@ -33,8 +33,6 @@ public class DeleteRequest extends RequestOrResponse {
   private final static short CURRENT_VERSION = DELETE_REQUEST_VERSION_2;
   protected static final int DELETION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
 
-  private int sizeSent;
-
   /**
    * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_2}
    * @param correlationId correlationId of the delete request
@@ -58,7 +56,6 @@ public class DeleteRequest extends RequestOrResponse {
     super(RequestOrResponseType.DeleteRequest, version, correlationId, clientId);
     this.blobId = blobId;
     this.deletionTimeInMs = deletionTimeInMs;
-    sizeSent = 0;
   }
 
   public static DeleteRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
@@ -74,27 +71,12 @@ public class DeleteRequest extends RequestOrResponse {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel) throws IOException {
-    long written = 0;
-    if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
-      writeHeader();
-      bufferToSend.put(blobId.toBytes());
-      if (versionId == DELETE_REQUEST_VERSION_2) {
-        bufferToSend.putLong(deletionTimeInMs);
-      }
-      bufferToSend.flip();
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeBytes(blobId.toBytes());
+    if (versionId == DELETE_REQUEST_VERSION_2) {
+      bufferToSend.writeLong(deletionTimeInMs);
     }
-    if (bufferToSend.remaining() > 0) {
-      written = channel.write(bufferToSend);
-      sizeSent += written;
-    }
-    return written;
-  }
-
-  @Override
-  public boolean isSendComplete() {
-    return sizeSent == sizeInBytes();
   }
 
   public BlobId getBlobId() {

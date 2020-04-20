@@ -29,7 +29,6 @@ public class UndeleteRequest extends RequestOrResponse {
   static final short UNDELETE_REQUEST_VERSION_1 = 1;
   private final static short CURRENT_VERSION = UNDELETE_REQUEST_VERSION_1;
 
-  private int sizeSent = 0;
   private final BlobId blobId;
   private final long operationTimeMs;
 
@@ -56,7 +55,6 @@ public class UndeleteRequest extends RequestOrResponse {
     super(RequestOrResponseType.UndeleteRequest, version, correlationId, clientId);
     this.blobId = blobId;
     this.operationTimeMs = operationTimeMs;
-    sizeSent = 0;
   }
 
   public static UndeleteRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
@@ -72,25 +70,10 @@ public class UndeleteRequest extends RequestOrResponse {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel) throws IOException {
-    long written = 0;
-    if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
-      writeHeader();
-      bufferToSend.put(blobId.toBytes());
-      bufferToSend.putLong(operationTimeMs);
-      bufferToSend.flip();
-    }
-    if (bufferToSend.remaining() > 0) {
-      written = channel.write(bufferToSend);
-      sizeSent += written;
-    }
-    return written;
-  }
-
-  @Override
-  public boolean isSendComplete() {
-    return sizeSent == sizeInBytes();
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeBytes(blobId.toBytes());
+    bufferToSend.writeLong(operationTimeMs);
   }
 
   @Override

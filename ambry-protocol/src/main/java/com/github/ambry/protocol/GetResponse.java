@@ -19,13 +19,18 @@ import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -33,6 +38,9 @@ import java.util.List;
  */
 public class GetResponse extends Response {
 
+  protected long sentBytes = 0;
+  private int bufferIndex = 0;
+  protected ByteBuffer[] nioBuffers;
   private Send toSend = null;
   private InputStream stream = null;
   private final List<PartitionResponseInfo> partitionResponseInfoList;
@@ -114,46 +122,107 @@ public class GetResponse extends Response {
    * {@link GetResponse#writeTo(AsyncWritableChannel, Callback)}.
    * This method allocate bufferToSend and write metadata to it if bufferToSend is null.
    */
-  private void prepareBufferToSend() {
-    if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate(
-          (int) super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize));
-      writeHeader();
-      if (partitionResponseInfoList != null) {
-        bufferToSend.putInt(partitionResponseInfoList.size());
-        for (PartitionResponseInfo partitionResponseInfo : partitionResponseInfoList) {
-          partitionResponseInfo.writeTo(bufferToSend);
-        }
+  @Override
+  protected void prepareBuffer() {
+    bufferToSend = PooledByteBufAllocator.DEFAULT.ioBuffer(
+        (int) super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize));
+    writeHeader();
+    if (partitionResponseInfoList != null) {
+      bufferToSend.writeInt(partitionResponseInfoList.size());
+      for (PartitionResponseInfo partitionResponseInfo : partitionResponseInfoList) {
+        partitionResponseInfo.writeTo(bufferToSend);
       }
-      bufferToSend.flip();
+    }
+    if (toSend != null) {
+      if (toSend.content() != null) {
+        // Since this composite blob will be a readonly blob, we don't really care about if it's allocated
+        // on a direct memory or not.
+        int maxNumComponent = 1 + toSend.content().nioBufferCount();
+        CompositeByteBuf compositeByteBuf = bufferToSend.alloc().compositeHeapBuffer(maxNumComponent);
+        compositeByteBuf.addComponent(true, bufferToSend);
+        if (toSend.content() instanceof CompositeByteBuf) {
+          Iterator<ByteBuf> iter = ((CompositeByteBuf) toSend.content()).iterator();
+          while (iter.hasNext()) {
+            compositeByteBuf.addComponent(true, iter.next());
+          }
+        } else {
+          compositeByteBuf.addComponent(true, toSend.content());
+        }
+        bufferToSend = compositeByteBuf;
+        toSend = null;
+      }
     }
   }
 
   @Override
   public long writeTo(WritableByteChannel channel) throws IOException {
-    prepareBufferToSend();
-    long written = 0;
-    if (bufferToSend.remaining() > 0) {
-      written = channel.write(bufferToSend);
+    if (bufferToSend == null) {
+      prepareBuffer();
     }
-    if (bufferToSend.remaining() == 0 && toSend != null && !toSend.isSendComplete()) {
-      written += toSend.writeTo(channel);
+    if (nioBuffers == null) {
+      nioBuffers = bufferToSend.nioBuffers();
     }
-    return written;
+    long totalWritten = 0;
+    if (bufferToSend.readableBytes() != 0) {
+      int currentWritten = -1;
+      while (bufferIndex < nioBuffers.length && currentWritten != 0) {
+        currentWritten = -1;
+        ByteBuffer byteBuffer = nioBuffers[bufferIndex];
+        if (!byteBuffer.hasRemaining()) {
+          // some bytebuffers are zero length, ignore those bytebuffers.
+          bufferIndex++;
+        } else {
+          currentWritten = channel.write(byteBuffer);
+          totalWritten += currentWritten;
+        }
+      }
+      bufferToSend.skipBytes((int) totalWritten);
+      sentBytes += totalWritten;
+    }
+    if (sentBytes >= bufferToSend.readableBytes() && toSend != null && !toSend.isSendComplete()) {
+      long written = toSend.writeTo(channel);
+      totalWritten += written;
+      sentBytes += written;
+    }
+    return totalWritten;
   }
 
   @Override
   public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
-    prepareBufferToSend();
+    if (bufferToSend == null) {
+      prepareBuffer();
+    }
     channel.write(bufferToSend, callback);
     if (toSend != null) {
       toSend.writeTo(channel, callback);
     }
   }
 
+  /**
+   * Return null as content to indicate that GetResponse doesn't support ByteBuf yet.
+   * @return ByteBuf
+   */
+  @Override
+  public ByteBuf content() {
+    return null;
+  }
+
+  /**
+   * Override the release method from {@link RequestOrResponse} since the {@link #content()}
+   * returns null but we still have {@link #bufferToSend} to release.
+   * @return
+   */
+  @Override
+  public boolean release() {
+    if (bufferToSend != null) {
+      return bufferToSend.release();
+    }
+    return false;
+  }
+
   @Override
   public boolean isSendComplete() {
-    return (super.isSendComplete()) && (toSend == null || toSend.isSendComplete());
+    return sizeInBytes() == sentBytes;
   }
 
   @Override

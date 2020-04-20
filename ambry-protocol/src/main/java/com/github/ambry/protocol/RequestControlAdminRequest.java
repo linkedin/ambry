@@ -87,10 +87,10 @@ public class RequestControlAdminRequest extends AdminRequest {
   }
 
   @Override
-  protected void serializeIntoBuffer() {
-    super.serializeIntoBuffer();
-    bufferToSend.putShort(VERSION_V1);
-    bufferToSend.putShort((short) requestTypeToControl.ordinal());
-    bufferToSend.put(enable ? (byte) 1 : 0);
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeShort(VERSION_V1);
+    bufferToSend.writeShort((short) requestTypeToControl.ordinal());
+    bufferToSend.writeByte(enable ? (byte) 1 : 0);
   }
 }

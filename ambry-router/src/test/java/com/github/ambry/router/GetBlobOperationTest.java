@@ -292,6 +292,7 @@ public class GetBlobOperationTest {
               blobEncryptionKey == null ? null : blobEncryptionKey.duplicate());
       // Make sure we release the BoundedNettyByteBufReceive.
       server.send(request).release();
+      request.release();
     }
     blobContent.release();
   }
@@ -1687,10 +1688,12 @@ public class GetBlobOperationTest {
         new GetRequest(1, "assertBlobReadSuccess", MessageFormatFlags.All, Collections.singletonList(requestInfo),
             GetOption.None);
     GetResponse getResponse = server.makeGetResponse(getRequest, ServerErrorCode.No_Error);
+    getRequest.release();
 
     // simulating server sending response over the wire
     ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate((int) getResponse.sizeInBytes()));
     getResponse.writeTo(channel);
+    getResponse.release();
 
     // simulating the Router receiving the data from the wire
     ByteBuffer data = channel.getBuffer();

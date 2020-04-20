@@ -119,6 +119,7 @@ class MockServer {
     }
     ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate((int) response.sizeInBytes()));
     response.writeTo(channel);
+    response.release();
     ByteBuffer payload = channel.getBuffer();
     payload.flip();
     BoundedNettyByteBufReceive receive = new BoundedNettyByteBufReceive();

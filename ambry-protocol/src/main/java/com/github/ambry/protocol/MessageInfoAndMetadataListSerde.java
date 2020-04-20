@@ -20,6 +20,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -139,55 +140,55 @@ class MessageInfoAndMetadataListSerde {
 
   /**
    * Serialize this object into the given buffer.
-   * @param outputBuffer the ByteBuffer to serialize into.
+   * @param outputBuf the {@link ByteBuf} to serialize into.
    */
-  void serializeMessageInfoAndMetadataList(ByteBuffer outputBuffer) {
+  void serializeMessageInfoAndMetadataList(ByteBuf outputBuf) {
     if (version >= VERSION_5) {
-      outputBuffer.putShort(version);
+      outputBuf.writeShort(version);
     }
-    outputBuffer.putInt(messageInfoList == null ? 0 : messageInfoList.size());
+    outputBuf.writeInt(messageInfoList == null ? 0 : messageInfoList.size());
     if (messageInfoList != null) {
       ListIterator<MessageInfo> infoListIterator = messageInfoList.listIterator();
       ListIterator<MessageMetadata> metadataListIterator = messageMetadataList.listIterator();
       while (infoListIterator.hasNext()) {
         MessageInfo messageInfo = infoListIterator.next();
         MessageMetadata messageMetadata = metadataListIterator.next();
-        outputBuffer.put(messageInfo.getStoreKey().toBytes());
-        outputBuffer.putLong(messageInfo.getSize());
-        outputBuffer.putLong(messageInfo.getExpirationTimeInMs());
-        outputBuffer.put(messageInfo.isDeleted() ? UPDATED : (byte) ~UPDATED);
+        outputBuf.writeBytes(messageInfo.getStoreKey().toBytes());
+        outputBuf.writeLong(messageInfo.getSize());
+        outputBuf.writeLong(messageInfo.getExpirationTimeInMs());
+        outputBuf.writeByte(messageInfo.isDeleted() ? UPDATED : (byte) ~UPDATED);
         if (version < VERSION_1 || version > VERSION_MAX) {
           throw new IllegalArgumentException("Unknown version in MessageInfoList " + version);
         }
         if (version >= VERSION_5) {
-          outputBuffer.put(messageInfo.isTtlUpdated() ? UPDATED : (byte) ~UPDATED);
+          outputBuf.writeByte(messageInfo.isTtlUpdated() ? UPDATED : (byte) ~UPDATED);
         }
         if (version >= VERSION_6) {
-          outputBuffer.put(messageInfo.isUndeleted() ? UPDATED : (byte) ~UPDATED);
+          outputBuf.writeByte(messageInfo.isUndeleted() ? UPDATED : (byte) ~UPDATED);
         }
         if (version > VERSION_1) {
           Long crc = messageInfo.getCrc();
           if (crc != null) {
-            outputBuffer.put(FIELD_PRESENT);
-            outputBuffer.putLong(crc);
+            outputBuf.writeByte(FIELD_PRESENT);
+            outputBuf.writeLong(crc);
           } else {
-            outputBuffer.put((byte) ~FIELD_PRESENT);
+            outputBuf.writeByte((byte) ~FIELD_PRESENT);
           }
         }
         if (version > VERSION_2) {
-          outputBuffer.putShort(messageInfo.getAccountId());
-          outputBuffer.putShort(messageInfo.getContainerId());
-          outputBuffer.putLong(messageInfo.getOperationTimeMs());
+          outputBuf.writeShort(messageInfo.getAccountId());
+          outputBuf.writeShort(messageInfo.getContainerId());
+          outputBuf.writeLong(messageInfo.getOperationTimeMs());
         }
         if (version >= VERSION_6) {
-          outputBuffer.putShort(messageInfo.getLifeVersion());
+          outputBuf.writeShort(messageInfo.getLifeVersion());
         }
         if (version > VERSION_3) {
           if (messageMetadata != null) {
-            outputBuffer.put(FIELD_PRESENT);
-            messageMetadata.serializeMessageMetadata(outputBuffer);
+            outputBuf.writeByte(FIELD_PRESENT);
+            messageMetadata.serializeMessageMetadata(outputBuf);
           } else {
-            outputBuffer.put((byte) ~FIELD_PRESENT);
+            outputBuf.writeByte((byte) ~FIELD_PRESENT);
           }
         }
       }

@@ -254,11 +254,14 @@ class Verifier implements Runnable {
               if (payload.blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
                 // ttl update, check and wait for replication
                 ServerTestUtil.updateBlobTtl(channel1, new BlobId(payload.blobId, clusterMap), time.milliseconds());
-                ServerTestUtil.checkTtlUpdateStatus(channel1, clusterMap, new BlobIdFactory(clusterMap), blobId, payload.blob, true, Utils.Infinite_Time);
+                ServerTestUtil.checkTtlUpdateStatus(channel1, clusterMap, new BlobIdFactory(clusterMap), blobId,
+                    payload.blob, true, Utils.Infinite_Time);
                 notificationSystem.awaitBlobUpdates(payload.blobId, UpdateType.TTL_UPDATE);
                 BlobProperties old = payload.blobProperties;
-                payload.blobProperties = new BlobProperties(old.getBlobSize(), old.getServiceId(), old.getOwnerId(), old.getContentType(),
-                    old.isEncrypted(), Utils.Infinite_Time, old.getCreationTimeInMs(), old.getAccountId(), old.getContainerId(), old.isEncrypted(), old.getExternalAssetTag());
+                payload.blobProperties =
+                    new BlobProperties(old.getBlobSize(), old.getServiceId(), old.getOwnerId(), old.getContentType(),
+                        old.isEncrypted(), Utils.Infinite_Time, old.getCreationTimeInMs(), old.getAccountId(),
+                        old.getContainerId(), old.isEncrypted(), old.getExternalAssetTag());
               }
             } catch (Exception e) {
               if (channel1 != null) {

@@ -16,6 +16,7 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -32,7 +33,6 @@ public class GetRequest extends RequestOrResponse {
   private MessageFormatFlags flags;
   private GetOption getOption;
   private List<PartitionRequestInfo> partitionRequestInfoList;
-  private int sizeSent;
   private int totalPartitionRequestInfoListSize;
 
   private static final int MessageFormat_Size_In_Bytes = 2;
@@ -54,7 +54,6 @@ public class GetRequest extends RequestOrResponse {
     for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
       totalPartitionRequestInfoListSize += partitionRequestInfo.sizeInBytes();
     }
-    this.sizeSent = 0;
   }
 
   public MessageFormatFlags getMessageFormatFlag() {
@@ -91,29 +90,14 @@ public class GetRequest extends RequestOrResponse {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel) throws IOException {
-    long written = 0;
-    if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
-      writeHeader();
-      bufferToSend.putShort((short) flags.ordinal());
-      bufferToSend.putInt(partitionRequestInfoList.size());
-      for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
-        partitionRequestInfo.writeTo(bufferToSend);
-      }
-      bufferToSend.putShort((short) getOption.ordinal());
-      bufferToSend.flip();
+  public void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeShort((short) flags.ordinal());
+    bufferToSend.writeInt(partitionRequestInfoList.size());
+    for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
+      partitionRequestInfo.writeTo(bufferToSend);
     }
-    if (bufferToSend.remaining() > 0) {
-      written = channel.write(bufferToSend);
-      sizeSent += written;
-    }
-    return written;
-  }
-
-  @Override
-  public boolean isSendComplete() {
-    return sizeSent == sizeInBytes();
+    bufferToSend.writeShort((short) getOption.ordinal());
   }
 
   @Override

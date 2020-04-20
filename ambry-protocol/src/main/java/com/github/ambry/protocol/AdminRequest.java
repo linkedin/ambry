@@ -71,17 +71,13 @@ public class AdminRequest extends RequestOrResponse {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel) throws IOException {
-    if (bufferToSend == null) {
-      serializeIntoBuffer();
-      bufferToSend.flip();
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeShort((short) type.ordinal());
+    bufferToSend.writeByte(partitionId == null ? (byte) 0 : 1);
+    if (partitionId != null) {
+      bufferToSend.writeBytes(partitionId.getBytes());
     }
-    return bufferToSend.hasRemaining() ? channel.write(bufferToSend) : 0;
-  }
-
-  @Override
-  public boolean isSendComplete() {
-    return bufferToSend != null && bufferToSend.remaining() == 0;
   }
 
   @Override
@@ -107,19 +103,6 @@ public class AdminRequest extends RequestOrResponse {
   public String toString() {
     return "AdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId + ", Type=" + type
         + ", PartitionId=" + partitionId + "]";
-  }
-
-  /**
-   * Serializes the request into bytes and loads into the buffer for sending.
-   */
-  protected void serializeIntoBuffer() {
-    bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
-    writeHeader();
-    bufferToSend.putShort((short) type.ordinal());
-    bufferToSend.put(partitionId == null ? (byte) 0 : 1);
-    if (partitionId != null) {
-      bufferToSend.put(partitionId.getBytes());
-    }
   }
 
   /**

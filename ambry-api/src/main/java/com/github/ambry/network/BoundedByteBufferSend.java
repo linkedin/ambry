@@ -13,7 +13,9 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.ByteBufferOutputStream;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
@@ -25,7 +27,7 @@ import java.nio.channels.WritableByteChannel;
  * This is mainly used to optimize serialization of response objects on the request handler
  * threads rather than the network threads.
  */
-public class BoundedByteBufferSend implements Send {
+public class BoundedByteBufferSend extends AbstractByteBufHolder<BoundedByteBufferSend> implements Send {
 
   private final ByteBuffer buffer;
 
@@ -64,6 +66,16 @@ public class BoundedByteBufferSend implements Send {
   @Override
   public long sizeInBytes() {
     return buffer.limit();
+  }
+
+  @Override
+  public ByteBuf content() {
+    return null;
+  }
+
+  @Override
+  public BoundedByteBufferSend replace(ByteBuf content) {
+    return null;
   }
 
   public BoundedByteBufferSend duplicate() {

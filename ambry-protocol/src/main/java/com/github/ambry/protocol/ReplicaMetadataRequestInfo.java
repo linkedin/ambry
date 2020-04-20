@@ -20,6 +20,7 @@ import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -77,14 +78,14 @@ public class ReplicaMetadataRequestInfo {
     return new ReplicaMetadataRequestInfo(partitionId, token, hostName, replicaPath, replicaType, requestVersion);
   }
 
-  public void writeTo(ByteBuffer buffer) {
-    Utils.serializeString(buffer, hostName, Charset.defaultCharset());
-    Utils.serializeString(buffer, replicaPath, Charset.defaultCharset());
+  public void writeTo(ByteBuf buf) {
+    Utils.serializeString(buf, hostName, Charset.defaultCharset());
+    Utils.serializeString(buf, replicaPath, Charset.defaultCharset());
     if (requestVersion == ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2) {
-      buffer.putShort((short) replicaType.ordinal());
+      buf.writeShort((short) replicaType.ordinal());
     }
-    buffer.put(partitionId.getBytes());
-    buffer.put(token.toBytes());
+    buf.writeBytes(partitionId.getBytes());
+    buf.writeBytes(token.toBytes());
   }
 
   public long sizeInBytes() {

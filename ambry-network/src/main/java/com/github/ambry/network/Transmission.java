@@ -177,9 +177,6 @@ public abstract class Transmission {
   }
 
   protected void release() {
-    if (networkSend != null) {
-      networkSend.getPayload().release();
-    }
     if (networkReceive != null) {
       networkReceive.getReceivedBytes().release();
     }
