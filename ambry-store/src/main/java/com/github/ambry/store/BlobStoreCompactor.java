@@ -1356,15 +1356,15 @@ class BlobStoreCompactor {
       // ----------------------------------------------------------------------------------------
       List<IndexEntry> validEntries = new ArrayList<>();
       Iterator<IndexEntry> iterator = indexSegment.getIterator();
-      StoreKey lastKey = null;
-      IndexValue lastFinalState = null;
+      StoreKey previousKey = null;
+      IndexValue previousLatestState = null;
       while (iterator.hasNext()) {
         IndexEntry entry = iterator.next();
         StoreKey currentKey = entry.getKey();
         IndexValue currentValue = entry.getValue();
-        IndexValue currentFinalState;
+        IndexValue currentLatestState;
 
-        if (lastKey == null) {
+        if (previousKey == null) {
           // save a token for restart (the key gets ignored but is required to be non null for construction)
           StoreFindToken safeToken =
               new StoreFindToken(currentKey, indexSegment.getStartOffset(), sessionId, incarnationId);
@@ -1373,42 +1373,43 @@ class BlobStoreCompactor {
         }
         // If an IndexSegment contains more than one IndexValue for the same StoreKey, then they must follow each other
         // since IndexSegment store IndexValues based on StoreKey. If the current key equals to the previous key, then
-        // we don't have to query the final state again.
-        if (currentKey.equals(lastKey)) {
-          currentFinalState = lastFinalState;
+        // we don't have to query the latest state again.
+        if (currentKey.equals(previousKey)) {
+          currentLatestState = previousLatestState;
         } else {
-          lastKey = currentKey;
-          lastFinalState = currentFinalState = srcIndex.findKey(currentKey);
+          previousKey = currentKey;
+          previousLatestState = currentLatestState = srcIndex.findKey(currentKey);
         }
 
         if (currentValue.isUndelete()) {
-          if (currentFinalState.isPut()) {
+          if (currentLatestState.isPut()) {
             throw new IllegalStateException(
-                "Undelete's final state can't be put for key" + currentKey + " in store " + dataDir);
+                "Undelete's latest state can't be put for key" + currentKey + " in store " + dataDir);
           }
-          if (currentFinalState.isUndelete() && currentFinalState.getLifeVersion() == currentValue.getLifeVersion()
+          if (currentLatestState.isUndelete() && currentLatestState.getLifeVersion() == currentValue.getLifeVersion()
               && !srcIndex.isExpired(currentValue)) {
             validEntries.add(entry);
           }
         } else if (currentValue.isDelete()) {
-          if (currentFinalState.isPut()) {
+          if (currentLatestState.isPut()) {
             throw new IllegalStateException(
-                "Delete's final state can't be put for key" + currentKey + " in store " + dataDir);
+                "Delete's latest state can't be put for key" + currentKey + " in store " + dataDir);
           }
-          if (currentFinalState.isDelete() && currentFinalState.getLifeVersion() == currentValue.getLifeVersion()) {
+          if (currentLatestState.isDelete() && currentLatestState.getLifeVersion() == currentValue.getLifeVersion()) {
             validEntries.add(entry);
           }
         } else if (currentValue.isTtlUpdate()) {
-          if (currentFinalState.isPut()) {
-            // If isPut returns true, when the final state doesn't carry ttl_update flag, this is wrong
+          if (currentLatestState.isPut()) {
+            // If isPut returns true, when the latest state doesn't carry ttl_update flag, this is wrong
             throw new IllegalStateException(
-                "TtlUpdate's final state can't be put for key" + currentKey + " in store " + dataDir);
+                "TtlUpdate's latest state can't be put for key" + currentKey + " in store " + dataDir);
           }
           // This is a TTL_UPDATE record, then the blob can't be expired. Only check if it's deleted or not.
-          if (currentFinalState.isDelete()) {
-            if (currentFinalState.getOperationTimeInMs() >= compactionLog.getCompactionDetails().getReferenceTimeMs()) {
+          if (currentLatestState.isDelete()) {
+            if (currentLatestState.getOperationTimeInMs() >= compactionLog.getCompactionDetails()
+                .getReferenceTimeMs()) {
               validEntries.add(entry);
-            } else if (isTtlUpdateEntryValidWhenFinalStateIsDeleteAndRetention(currentKey,
+            } else if (isTtlUpdateEntryValidWhenLatestStateIsDeleteAndRetention(currentKey,
                 indexSegment.getStartOffset())) {
               validEntries.add(entry);
             }
@@ -1416,19 +1417,20 @@ class BlobStoreCompactor {
             validEntries.add(entry);
           }
         } else {
-          if (srcIndex.isExpired(currentFinalState)) {
+          if (srcIndex.isExpired(currentLatestState)) {
             logger.trace("{} in index segment with start offset {} in {} is not valid because it is an expired PUT",
                 entry, indexSegment.getStartOffset(), storeId);
             continue;
           }
-          if (currentFinalState.isPut()) {
-            if (currentFinalState.getLifeVersion() != currentValue.getLifeVersion()) {
+          if (currentLatestState.isPut()) {
+            if (currentLatestState.getLifeVersion() != currentValue.getLifeVersion()) {
               throw new IllegalStateException(
                   "Two different lifeVersions  for puts key" + currentKey + " in store " + dataDir);
             }
             validEntries.add(entry);
-          } else if (currentFinalState.isDelete()) {
-            if (currentFinalState.getOperationTimeInMs() >= compactionLog.getCompactionDetails().getReferenceTimeMs()) {
+          } else if (currentLatestState.isDelete()) {
+            if (currentLatestState.getOperationTimeInMs() >= compactionLog.getCompactionDetails()
+                .getReferenceTimeMs()) {
               validEntries.add(entry);
             } else {
               logger.trace("{} in index segment with start offset {} in {} is not valid because it is a deleted PUT",
@@ -1450,7 +1452,7 @@ class BlobStoreCompactor {
      * @return {@code true} if the TTL update entry is valid
      * @throws StoreException if there are problems reading the index
      */
-    private boolean isTtlUpdateEntryValidWhenFinalStateIsDeleteAndRetention(StoreKey key,
+    private boolean isTtlUpdateEntryValidWhenLatestStateIsDeleteAndRetention(StoreKey key,
         Offset indexSegmentStartOffset) throws StoreException {
       boolean valid = false;
       //  A TTL update entry is "valid" if the corresponding PUT is still alive
@@ -1462,7 +1464,7 @@ class BlobStoreCompactor {
         logger.trace("TTL update of {} in segment with start offset {} in {} is not valid the corresponding PUT entry "
             + "does not exist anymore", key, indexSegmentStartOffset, storeId);
       } else {
-        // PUT exists in the source index even when the final state for this StoreKey is delete and delete already reaches
+        // PUT exists in the source index even when the latest state for this StoreKey is delete and delete already reaches
         // retention date. This can happen either because
         // 1. The log segment to which srcValue(PUT) belongs is not under compaction, thus PUT is not compacted.
         // 2. srcValue(PUT) will be compacted in this cycle (because it has been determined that the PUT is not valid. Since

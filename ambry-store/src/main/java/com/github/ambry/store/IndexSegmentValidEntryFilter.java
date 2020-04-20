@@ -33,14 +33,14 @@ public interface IndexSegmentValidEntryFilter {
       throws StoreException;
 
   /**
-   * Checks if a record already exists in {@code idx}.
-   * @param idx the {@link PersistentIndex} to search in
+   * Checks if a record already exists in {@code index}.
+   * @param index the {@link PersistentIndex} to search in
    * @param searchSpan the {@link FileSpan} to search
    * @param key the {@link StoreKey} of the record.
    * @param srcValue the {@link IndexValue} whose existence needs to be checked.
    * @return {@code true} if the record already exists in {@code idx}, {@code false} otherwise.
    * @throws StoreException if there is any problem with using the index.
    */
-  boolean alreadyExists(PersistentIndex idx, FileSpan searchSpan, StoreKey key, IndexValue srcValue)
+  boolean alreadyExists(PersistentIndex index, FileSpan searchSpan, StoreKey key, IndexValue srcValue)
       throws StoreException;
 }
