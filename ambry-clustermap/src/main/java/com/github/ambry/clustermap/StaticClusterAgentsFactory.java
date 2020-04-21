@@ -76,7 +76,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
   }
 
   @Override
-  public List<ClusterParticipant> getClusterParticipants() throws IOException {
+  public ClusterParticipant getClusterParticipant() throws IOException {
     if (clusterParticipant == null) {
       clusterParticipant = new ClusterParticipant() {
         private final Map<StateModelListenerType, PartitionStateChangeListener> listeners = new HashMap<>();
@@ -144,7 +144,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         }
       };
     }
-    return Collections.singletonList(clusterParticipant);
+    return clusterParticipant;
   }
 
   /**

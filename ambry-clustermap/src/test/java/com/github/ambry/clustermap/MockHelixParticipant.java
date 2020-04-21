@@ -25,7 +25,6 @@ import java.util.stream.Collectors;
 import org.mockito.Mockito;
 
 import static org.mockito.Mockito.*;
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 public class MockHelixParticipant extends HelixParticipant {
@@ -40,10 +39,8 @@ public class MockHelixParticipant extends HelixParticipant {
   private Set<ReplicaId> stoppedReplicas = new HashSet<>();
   private PartitionStateChangeListener mockReplicationManagerListener;
 
-  public MockHelixParticipant(ClusterMapConfig clusterMapConfig) {
-    super(clusterMapConfig, new MockHelixManagerFactory(), metricRegistry,
-        parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
-            clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0));
+  public MockHelixParticipant(ClusterMapConfig clusterMapConfig) throws IOException {
+    super(clusterMapConfig, new MockHelixManagerFactory(), metricRegistry);
     // create mock state change listener for ReplicationManager
     mockReplicationManagerListener = Mockito.mock(PartitionStateChangeListener.class);
     // mock Bootstrap-To-Standby change

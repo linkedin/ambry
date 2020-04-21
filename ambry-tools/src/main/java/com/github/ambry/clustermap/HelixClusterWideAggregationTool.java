@@ -129,69 +129,67 @@ public class HelixClusterWideAggregationTool {
    * @param args arguments specifying config file. For example: --propsFile /path/AggregationToolConfig
    * @throws Exception
    */
-  public static void main(String[] args) throws Exception {
+  public static void main(String args[]) throws Exception {
     VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
     AggregationToolConfig config = new AggregationToolConfig(verifiableProperties);
     Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZKAddress =
         ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(config.zkLayoutFilePath));
     String clusterName = config.clusterName;
     String workflowName = config.workflowName;
-    long recurrentIntervalInMinutes = config.recurrentIntervalInMinutes;
+    Long recurrentIntervalInMinutes = config.recurrentIntervalInMinutes;
     boolean isDelete = config.deleteSpecifiedWorkflow;
     boolean isRecurrentWorkflow = recurrentIntervalInMinutes != Utils.Infinite_Time;
     for (ClusterMapUtils.DcZkInfo zkInfo : dataCenterToZKAddress.values()) {
-      // If there are multiple ZK endpoints in same dc, we trigger stats aggregation for each of them.
-      for (String zkAddress : zkInfo.getZkConnectStrs()) {
-        ZkClient zkClient = new ZkClient(zkAddress, SESSION_TIMEOUT, CONNECTION_TIMEOUT, new ZNRecordSerializer());
-        TaskDriver taskDriver = new TaskDriver(zkClient, clusterName);
-        if (isDelete) {
-          try {
-            taskDriver.waitToStop(workflowName, TIME_OUT_MILLI_SEC);
-            taskDriver.delete(workflowName);
-            System.out.println(
-                String.format("Successfully deleted the workflow: %s in cluster %s at %s", workflowName, clusterName,
-                    zkAddress));
-          } catch (Exception | Error e) {
-            System.out.println(
-                String.format("Failed to delete %s. Workflow not found in cluster %s at %s", workflowName, clusterName,
-                    zkAddress));
+      String zkAddress = zkInfo.getZkConnectStr();
+      ZkClient zkClient = new ZkClient(zkAddress, SESSION_TIMEOUT, CONNECTION_TIMEOUT, new ZNRecordSerializer());
+      TaskDriver taskDriver = new TaskDriver(zkClient, clusterName);
+      if (isDelete) {
+        try {
+          taskDriver.waitToStop(workflowName, TIME_OUT_MILLI_SEC);
+          taskDriver.delete(workflowName);
+          System.out.println(
+              String.format("Successfully deleted the workflow: %s in cluster %s at %s", workflowName, clusterName,
+                  zkAddress));
+        } catch (Exception | Error e) {
+          System.out.println(
+              String.format("Failed to delete %s. Workflow not found in cluster %s at %s", workflowName, clusterName,
+                  zkAddress));
+        }
+      } else {
+        Workflow.Builder workflowBuilder = new Workflow.Builder(workflowName);
+        try {
+          // create separate job for each type of stats report
+          for (String report : config.statsReportsToAggregate) {
+            StatsReportType statsType = StatsReportType.valueOf(report);
+            String reportName =
+                AmbryStatsReport.convertStatsReportTypeToProperString(statsType) + AmbryStatsReport.REPORT_NAME_SUFFIX;
+            String jobId =
+                statsType.toString().toLowerCase() + (isRecurrentWorkflow ? RECURRENT_JOB_SUFFIX : ONE_TIME_JOB_SUFFIX);
+            String taskId = statsType.toString().toLowerCase() + TASK_SUFFIX;
+            String aggregationCommand =
+                String.format("%s_%s", HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, reportName);
+            // build task
+            List<TaskConfig> taskConfigs = new ArrayList<>();
+            taskConfigs.add(new TaskConfig.Builder().setTaskId(taskId).setCommand(aggregationCommand).build());
+            // build job
+            JobConfig.Builder jobConfigBuilder = new JobConfig.Builder();
+            jobConfigBuilder.addTaskConfigs(taskConfigs);
+            jobConfigBuilder.setCommand(aggregationCommand);
+            // add job into workflow
+            workflowBuilder.addJob(jobId, jobConfigBuilder);
           }
-        } else {
-          Workflow.Builder workflowBuilder = new Workflow.Builder(workflowName);
-          try {
-            // create separate job for each type of stats report
-            for (String report : config.statsReportsToAggregate) {
-              StatsReportType statsType = StatsReportType.valueOf(report);
-              String reportName = AmbryStatsReport.convertStatsReportTypeToProperString(statsType)
-                  + AmbryStatsReport.REPORT_NAME_SUFFIX;
-              String jobId = statsType.toString().toLowerCase() + (isRecurrentWorkflow ? RECURRENT_JOB_SUFFIX
-                  : ONE_TIME_JOB_SUFFIX);
-              String taskId = statsType.toString().toLowerCase() + TASK_SUFFIX;
-              String aggregationCommand =
-                  String.format("%s_%s", HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, reportName);
-              // build task
-              List<TaskConfig> taskConfigs = new ArrayList<>();
-              taskConfigs.add(new TaskConfig.Builder().setTaskId(taskId).setCommand(aggregationCommand).build());
-              // build job
-              JobConfig.Builder jobConfigBuilder = new JobConfig.Builder();
-              jobConfigBuilder.addTaskConfigs(taskConfigs);
-              jobConfigBuilder.setCommand(aggregationCommand);
-              // add job into workflow
-              workflowBuilder.addJob(jobId, jobConfigBuilder);
-            }
-            if (isRecurrentWorkflow) {
-              workflowBuilder.setScheduleConfig(
-                  ScheduleConfig.recurringFromNow(TimeUnit.MINUTES, recurrentIntervalInMinutes));
-              workflowBuilder.setExpiry(TimeUnit.MINUTES.toMillis(recurrentIntervalInMinutes));
-            }
-            Workflow workflow = workflowBuilder.build();
-            taskDriver.start(workflow);
-            System.out.println(
-                String.format("%s started successfully in cluster %s at %s", workflowName, clusterName, zkAddress));
-          } catch (Exception | Error e) {
-            System.out.println(
-                String.format("Failed to start %s in cluster %s at %s", workflowName, clusterName, zkAddress));
+          if (isRecurrentWorkflow) {
+            workflowBuilder.setScheduleConfig(
+                ScheduleConfig.recurringFromNow(TimeUnit.MINUTES, recurrentIntervalInMinutes));
+            workflowBuilder.setExpiry(TimeUnit.MINUTES.toMillis(recurrentIntervalInMinutes));
           }
+          Workflow workflow = workflowBuilder.build();
+          taskDriver.start(workflow);
+          System.out.println(
+              String.format("%s started successfully in cluster %s at %s", workflowName, clusterName, zkAddress));
+        } catch (Exception | Error e) {
+          System.out.println(
+              String.format("Failed to start %s in cluster %s at %s", workflowName, clusterName, zkAddress));
         }
       }
     }

@@ -1071,7 +1071,7 @@ public class TestUtils {
       JSONObject zkInfoJson = new JSONObject();
       zkInfoJson.put(ClusterMapUtils.DATACENTER_STR, zkInfo.getDcName());
       zkInfoJson.put(ClusterMapUtils.DATACENTER_ID_STR, zkInfo.getId());
-      zkInfoJson.put(ClusterMapUtils.ZKCONNECT_STR, "localhost:" + zkInfo.getPort());
+      zkInfoJson.put(ClusterMapUtils.ZKCONNECTSTR_STR, "localhost:" + zkInfo.getPort());
       zkInfosJson.put(zkInfoJson);
     }
     return new JSONObject().put(ClusterMapUtils.ZKINFO_STR, zkInfosJson);
