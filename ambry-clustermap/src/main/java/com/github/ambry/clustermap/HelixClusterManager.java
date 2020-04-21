@@ -197,10 +197,12 @@ public class HelixClusterManager implements ClusterMap {
   private HelixManager initializeHelixManagerAndPropertyStoreInLocalDC(Map<String, DcZkInfo> dataCenterToZkAddress,
       String instanceName, HelixFactory helixFactory) throws Exception {
     DcZkInfo dcZkInfo = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName);
-    String zkConnectStr = dcZkInfo.getZkConnectStr();
     if (dcZkInfo.getReplicaType() == ReplicaType.CLOUD_BACKED) {
       return null;
     }
+    // For now, the first ZK endpoint (if there are more than one endpoints) will be adopted by default. Note that, Ambry
+    // doesn't support multiple HelixClusterManagers(spectators) on same node.
+    String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
     HelixManager manager =
         helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
     logger.info("Connecting to Helix manager in local zookeeper at {}", zkConnectStr);

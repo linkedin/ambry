@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.network.Port;
+import com.github.ambry.utils.Utils;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
@@ -71,7 +72,8 @@ public class ClusterMapUtils {
   static final String AVAILABLE_STR = "AVAILABLE";
   static final String READ_ONLY_STR = "RO";
   static final String READ_WRITE_STR = "RW";
-  static final String ZKCONNECTSTR_STR = "zkConnectStr";
+  static final String ZKCONNECT_STR = "zkConnectStr";
+  static final String ZKCONNECT_STR_DELIMITER = ",";
   static final String ZKINFO_STR = "zkInfo";
   static final String DATACENTER_STR = "datacenter";
   static final String DATACENTER_ID_STR = "id";
@@ -93,20 +95,21 @@ public class ClusterMapUtils {
   public static class DcZkInfo {
     private final String dcName;
     private final byte dcId;
-    private final String zkConnectStr;
+    private final List<String> zkConnectStrs;
     private final ReplicaType replicaType;
 
     /**
      * Construct a DcInfo object with the given parameters.
      * @param dcName the associated datacenter name.
      * @param dcId the associated datacenter ID.
-     * @param zkConnectStr the associated ZK connect string for this datacenter.
+     * @param zkConnectStrs the associated ZK connect strings for this datacenter. (Usually there should be only one ZK
+     *                      endpoint but in special case we allow multiple ZK endpoints in same dc)
      * @param replicaType the type of replicas (cloud or disk backed) present in this datacenter.
      */
-    DcZkInfo(String dcName, byte dcId, String zkConnectStr, ReplicaType replicaType) {
+    DcZkInfo(String dcName, byte dcId, List<String> zkConnectStrs, ReplicaType replicaType) {
       this.dcName = dcName;
       this.dcId = dcId;
-      this.zkConnectStr = zkConnectStr;
+      this.zkConnectStrs = zkConnectStrs;
       this.replicaType = replicaType;
     }
 
@@ -118,8 +121,8 @@ public class ClusterMapUtils {
       return dcId;
     }
 
-    public String getZkConnectStr() {
-      return zkConnectStr;
+    public List<String> getZkConnectStrs() {
+      return zkConnectStrs;
     }
 
     public ReplicaType getReplicaType() {
@@ -152,9 +155,10 @@ public class ClusterMapUtils {
       String name = entry.getString(DATACENTER_STR);
       byte id = (byte) entry.getInt(DATACENTER_ID_STR);
       ReplicaType replicaType = entry.optEnum(ReplicaType.class, REPLICA_TYPE_STR, ReplicaType.DISK_BACKED);
-      String zkConnectStr = (replicaType == ReplicaType.DISK_BACKED) ? entry.getString(ZKCONNECTSTR_STR)
-          : entry.optString(ZKCONNECTSTR_STR);
-      DcZkInfo dcZkInfo = new DcZkInfo(name, id, zkConnectStr, replicaType);
+      ArrayList<String> zkConnectStrs =
+          (replicaType == ReplicaType.DISK_BACKED) ? Utils.splitString(entry.getString(ZKCONNECT_STR),
+              ZKCONNECT_STR_DELIMITER) : Utils.splitString(entry.optString(ZKCONNECT_STR), ZKCONNECT_STR_DELIMITER);
+      DcZkInfo dcZkInfo = new DcZkInfo(name, id, zkConnectStrs, replicaType);
       dataCenterToZkAddress.put(dcZkInfo.dcName, dcZkInfo);
     }
     return dataCenterToZkAddress;
@@ -168,7 +172,7 @@ public class ClusterMapUtils {
    */
   static int getSchemaVersion(InstanceConfig instanceConfig) {
     String schemaVersionStr = instanceConfig.getRecord().getSimpleField(SCHEMA_VERSION_STR);
-    return schemaVersionStr == null ? 0 : Integer.valueOf(schemaVersionStr);
+    return schemaVersionStr == null ? 0 : Integer.parseInt(schemaVersionStr);
   }
 
   /**
@@ -239,7 +243,7 @@ public class ClusterMapUtils {
    */
   static long getXid(InstanceConfig instanceConfig) {
     String xid = instanceConfig.getRecord().getSimpleField(XID_STR);
-    return xid == null ? DEFAULT_XID : Long.valueOf(xid);
+    return xid == null ? DEFAULT_XID : Long.parseLong(xid);
   }
 
   /**
