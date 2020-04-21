@@ -15,6 +15,7 @@
 package com.github.ambry.clustermap;
 
 import java.io.IOException;
+import java.util.List;
 
 
 /**
@@ -29,9 +30,12 @@ public interface ClusterAgentsFactory {
   ClusterMap getClusterMap() throws IOException;
 
   /**
-   * Construct and return the reference or return the reference to the previously constructed
-   * {@link ClusterParticipant}
+   * Construct and return the references or return the references to the previously constructed
+   * {@link ClusterParticipant}(s). We extend this method to support multiple participants on same node. In some special
+   * cases (i.e. migrating cluster to another Zookeeper), we require a data node to participate into multiple ZK clusters
+   * and each participant interacts with corresponding ZK independently.
+   * @return a list of {@link ClusterParticipant}(s) on current node.
    */
-  ClusterParticipant getClusterParticipant() throws IOException;
+  List<ClusterParticipant> getClusterParticipants() throws IOException;
 }
 

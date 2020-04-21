@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
+import java.util.List;
 import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,7 +30,7 @@ public class CompositeClusterAgentsFactory implements ClusterAgentsFactory {
   private final StaticClusterAgentsFactory staticClusterAgentsFactory;
   private final HelixClusterAgentsFactory helixClusterAgentsFactory;
   private CompositeClusterManager compositeClusterManager;
-  private ClusterParticipant clusterParticipant;
+  private List<ClusterParticipant> clusterParticipants;
 
   /**
    * Create an instance of this class.
@@ -83,11 +84,11 @@ public class CompositeClusterAgentsFactory implements ClusterAgentsFactory {
   }
 
   @Override
-  public ClusterParticipant getClusterParticipant() throws IOException {
-    if (clusterParticipant == null) {
-      clusterParticipant = helixClusterAgentsFactory.getClusterParticipant();
+  public List<ClusterParticipant> getClusterParticipants() throws IOException {
+    if (clusterParticipants == null) {
+      clusterParticipants = helixClusterAgentsFactory.getClusterParticipants();
     }
-    return clusterParticipant;
+    return clusterParticipants;
   }
 }
 

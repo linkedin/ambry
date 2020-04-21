@@ -16,6 +16,9 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import org.json.JSONException;
 
 
 /**
@@ -28,7 +31,7 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
   private final HelixFactory helixFactory;
   private final MetricRegistry metricRegistry;
   private HelixClusterManager helixClusterManager;
-  private HelixParticipant helixParticipant;
+  private List<ClusterParticipant> helixParticipants;
 
   /**
    * Construct an object of this factory.
@@ -49,6 +52,19 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
     this.metricRegistry = metricRegistry;
   }
 
+  /**
+   * Ctor exposed for testing purpose
+   * @param clusterMapConfig the {@link ClusterMapConfig} to specify cluster configuration parameters.
+   * @param helixFactory the {@link HelixFactory} that helps get reference of HelixManager and HelixAdmin.
+   */
+  HelixClusterAgentsFactory(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) {
+    this.clusterMapConfig = clusterMapConfig;
+    this.instanceName =
+        ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
+    this.helixFactory = helixFactory;
+    this.metricRegistry = new MetricRegistry();
+  }
+
   @Override
   public HelixClusterManager getClusterMap() throws IOException {
     if (helixClusterManager == null) {
@@ -58,11 +74,22 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
   }
 
   @Override
-  public HelixParticipant getClusterParticipant() throws IOException {
-    if (helixParticipant == null) {
-      helixParticipant = new HelixParticipant(clusterMapConfig, helixFactory, metricRegistry);
+  public List<ClusterParticipant> getClusterParticipants() throws IOException {
+    if (helixParticipants == null) {
+      helixParticipants = new ArrayList<>();
+      try {
+        List<String> zkConnectStrs =
+            ClusterMapUtils.parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings)
+                .get(clusterMapConfig.clusterMapDatacenterName)
+                .getZkConnectStrs();
+        for (String zkConnectStr : zkConnectStrs) {
+          helixParticipants.add(new HelixParticipant(clusterMapConfig, helixFactory, metricRegistry, zkConnectStr));
+        }
+      } catch (JSONException e) {
+        throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
+      }
     }
-    return helixParticipant;
+    return helixParticipants;
   }
 }
 

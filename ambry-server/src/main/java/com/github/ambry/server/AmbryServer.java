@@ -57,7 +57,6 @@ import com.github.ambry.rest.NioServerFactory;
 import com.github.ambry.rest.RestRequestHandler;
 import com.github.ambry.rest.RestRequestResponseHandlerFactory;
 import com.github.ambry.rest.RestRequestService;
-import com.github.ambry.rest.RestServerState;
 import com.github.ambry.rest.StorageServerNettyFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
@@ -98,7 +97,7 @@ public class AmbryServer {
   private final ClusterAgentsFactory clusterAgentsFactory;
   private final ClusterSpectatorFactory clusterSpectatorFactory;
   private ClusterMap clusterMap;
-  private ClusterParticipant clusterParticipant;
+  private List<ClusterParticipant> clusterParticipants;
   private ClusterSpectator vcrClusterSpectator;
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
@@ -134,7 +133,7 @@ public class AmbryServer {
       logger.info("starting");
       clusterMap = clusterAgentsFactory.getClusterMap();
       logger.info("Initialized clusterMap");
-      clusterParticipant = clusterAgentsFactory.getClusterParticipant();
+      clusterParticipants = clusterAgentsFactory.getClusterParticipants();
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
@@ -165,9 +164,11 @@ public class AmbryServer {
       }
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
+      // TODO make StorageManager, ReplicationManager, CloudToStoreReplicationManager and StatsManager support multiple participants
+      // For now, we assume there is only one element in clusterParticipants list.
       storageManager =
           new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
-              new BlobStoreHardDelete(), clusterParticipant, time, new BlobStoreRecovery());
+              new BlobStoreHardDelete(), clusterParticipants.get(0), time, new BlobStoreRecovery());
       storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
@@ -179,7 +180,7 @@ public class AmbryServer {
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
               clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
-              serverConfig.serverMessageTransformer, clusterParticipant);
+              serverConfig.serverMessageTransformer, clusterParticipants.get(0));
       replicationManager.start();
 
       if (replicationConfig.replicationEnabledWithVcrCluster) {
@@ -189,13 +190,13 @@ public class AmbryServer {
             new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
                 storeKeyFactory, clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem,
                 storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
-                clusterParticipant);
+                clusterParticipants.get(0));
         cloudToStoreReplicationManager.start();
       }
 
       logger.info("Creating StatsManager to publish stats");
       statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
-          clusterParticipant);
+          clusterParticipants.get(0));
       if (serverConfig.serverStatsPublishLocalEnabled) {
         statsManager.start();
       }
@@ -263,7 +264,9 @@ public class AmbryServer {
       if (vcrClusterSpectator != null) {
         vcrClusterSpectator.spectate();
       }
-      clusterParticipant.participate(ambryHealthReports);
+      for (ClusterParticipant clusterParticipant : clusterParticipants) {
+        clusterParticipant.participate(ambryHealthReports);
+      }
 
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
@@ -283,8 +286,8 @@ public class AmbryServer {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
-      if (clusterParticipant != null) {
-        clusterParticipant.close();
+      if (clusterParticipants != null) {
+        clusterParticipants.forEach(ClusterParticipant::close);
       }
       if (scheduler != null) {
         shutDownExecutorService(scheduler, 5, TimeUnit.MINUTES);

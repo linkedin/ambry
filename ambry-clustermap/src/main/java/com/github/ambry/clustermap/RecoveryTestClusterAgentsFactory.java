@@ -78,7 +78,7 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
   }
 
   @Override
-  public ClusterParticipant getClusterParticipant() throws IOException {
+  public List<ClusterParticipant> getClusterParticipants() throws IOException {
     if (clusterParticipantRef.get() == null) {
       // create a no op cluster participant that does nothing. Just sits idly by!!! ¯\_(ツ)_/¯
       ClusterParticipant clusterParticipant = new ClusterParticipant() {
@@ -132,6 +132,6 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
       };
       clusterParticipantRef.compareAndSet(null, clusterParticipant);
     }
-    return clusterParticipantRef.get();
+    return Collections.singletonList(clusterParticipantRef.get());
   }
 }
