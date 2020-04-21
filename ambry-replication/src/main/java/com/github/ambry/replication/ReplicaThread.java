@@ -110,6 +110,7 @@ public class ReplicaThread implements Runnable {
   private final ReentrantLock lock = new ReentrantLock();
   private final Condition pauseCondition = lock.newCondition();
   private final ReplicaSyncUpManager replicaSyncUpManager;
+  private final int maxReplicaCountPerRequest;
 
   private volatile boolean allDisabled = false;
 
@@ -149,6 +150,7 @@ public class ReplicaThread implements Runnable {
       idleCount = replicationMetrics.intraColoReplicaThreadIdleCount;
       throttleCount = replicationMetrics.intraColoReplicaThreadThrottleCount;
     }
+    this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
   }
 
   /**
@@ -331,19 +333,35 @@ public class ReplicaThread implements Runnable {
       logger.trace("Replicating from {} RemoteReplicaInfos.", activeReplicasPerNode.size());
       if (activeReplicasPerNode.size() > 0) {
         allCaughtUp = false;
+        // split remote replicas on same node into multiple lists
+        List<List<RemoteReplicaInfo>> activeReplicaSubLists = new ArrayList<>();
+        int fromIndex = 0;
+        while (fromIndex + maxReplicaCountPerRequest < activeReplicasPerNode.size()) {
+          activeReplicaSubLists.add(activeReplicasPerNode.subList(fromIndex, fromIndex + maxReplicaCountPerRequest));
+          fromIndex += maxReplicaCountPerRequest;
+        }
+        activeReplicaSubLists.add(activeReplicasPerNode.subList(fromIndex, activeReplicasPerNode.size()));
+        // use a variable to track current replica list to replicate (for logging purpose)
+        List<RemoteReplicaInfo> currentReplicaList = activeReplicasPerNode;
         try {
           connectedChannel =
               connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
                   replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
           checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-          startTimeInMs = SystemTime.getInstance().milliseconds();
-          List<ExchangeMetadataResponse> exchangeMetadataResponseList =
-              exchangeMetadata(connectedChannel, activeReplicasPerNode);
-          exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-
-          startTimeInMs = SystemTime.getInstance().milliseconds();
-          fixMissingStoreKeys(connectedChannel, activeReplicasPerNode, exchangeMetadataResponseList);
-          fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+          // we checkout ConnectedChannel once and replicate remote replicas in batch via same ConnectedChannel
+          for (List<RemoteReplicaInfo> replicaSubList : activeReplicaSubLists) {
+            exchangeMetadataTimeInMs = -1;
+            fixMissingStoreKeysTimeInMs = -1;
+            currentReplicaList = replicaSubList;
+            logger.debug("Exchanging metadata with {} remote replicas on {}", currentReplicaList.size(), remoteNode);
+            startTimeInMs = SystemTime.getInstance().milliseconds();
+            List<ExchangeMetadataResponse> exchangeMetadataResponseList =
+                exchangeMetadata(connectedChannel, replicaSubList);
+            exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+            startTimeInMs = SystemTime.getInstance().milliseconds();
+            fixMissingStoreKeys(connectedChannel, replicaSubList, exchangeMetadataResponseList);
+            fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+          }
         } catch (Throwable e) {
           if (checkoutConnectionTimeInMs == -1) {
             // throwable happened in checkout connection phase
@@ -356,9 +374,10 @@ public class ReplicaThread implements Runnable {
             // throwable happened in fix missing store phase
             fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
           }
-          logger.error("Error while talking to peer: Remote node: {}, Thread name: {}, Remote replicas: {}, Active "
-                  + "remote replicas: {}, Checkout connection time: {}, Exchange metadata time: {}, Fix missing store key "
-                  + "time {}", remoteNode, threadName, replicasToReplicatePerNode, activeReplicasPerNode,
+          logger.error(
+              "Error while talking to peer: Remote node: {}, Thread name: {}, Remote replicas: {}, Current active "
+                  + "remote replica list: {}, Checkout connection time: {}, Exchange metadata time: {}, Fix missing "
+                  + "store key time {}", remoteNode, threadName, replicasToReplicatePerNode, currentReplicaList,
               checkoutConnectionTimeInMs, exchangeMetadataTimeInMs, fixMissingStoreKeysTimeInMs, e);
           replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
           if (connectedChannel != null) {
