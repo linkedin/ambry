@@ -15,14 +15,17 @@
 package com.github.ambry.network.http2;
 
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.Http2ClientConfig;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.pool.AbstractChannelPoolHandler;
 import io.netty.channel.pool.ChannelPoolHandler;
 import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
+import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2MultiplexHandler;
 import io.netty.handler.codec.http2.Http2Settings;
+import io.netty.handler.logging.LogLevel;
 import io.netty.handler.ssl.SslHandler;
 
 
@@ -33,16 +36,19 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
   private final SSLFactory sslFactory;
   private final String host;
   private final int port;
+  private final Http2ClientConfig http2ClientConfig;
 
   /**
    * Construct a {@link Http2ChannelPoolHandler}.
    * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
    *                   or {@code null} if SSL is not enabled in this pipeline.
+   * @param http2ClientConfig the {@link Http2ClientConfig}
    */
-  public Http2ChannelPoolHandler(SSLFactory sslFactory, String host, int port) {
+  public Http2ChannelPoolHandler(SSLFactory sslFactory, String host, int port, Http2ClientConfig http2ClientConfig) {
     this.sslFactory = sslFactory;
     this.host = host;
     this.port = port;
+    this.http2ClientConfig = http2ClientConfig;
   }
 
   @Override
@@ -50,7 +56,12 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
     ChannelPipeline pipeline = ch.pipeline();
     SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(host, port, SSLFactory.Mode.CLIENT));
     pipeline.addLast(sslHandler);
-    pipeline.addLast(Http2FrameCodecBuilder.forClient().initialSettings(Http2Settings.defaultSettings()).build());
+    pipeline.addLast(Http2FrameCodecBuilder.forClient()
+        .initialSettings(Http2Settings.defaultSettings()
+            .maxFrameSize(http2ClientConfig.http2FrameMaxSize)
+            .initialWindowSize(http2ClientConfig.http2initialWindowSize))
+        .frameLogger(new Http2FrameLogger(LogLevel.DEBUG, "client"))
+        .build());
     pipeline.addLast(new Http2MultiplexHandler(new ChannelInboundHandlerAdapter()));
   }
 }

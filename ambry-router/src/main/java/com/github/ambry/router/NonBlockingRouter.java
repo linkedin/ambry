@@ -25,7 +25,6 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.network.http2.Http2NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
@@ -851,7 +850,7 @@ class NonBlockingRouter implements Router {
             DataNodeId dataNodeId = responseInfo.getDataNode();
             responseHandler.onConnectionTimeout(dataNodeId);
           } else {
-            long responseReceiveTime = requestInfo.getStreamReceiveTime();
+            long responseReceiveTime = requestInfo.getStreamHeaderFrameReceiveTime();
             if (responseReceiveTime != -1) {
               routerMetrics.responseReceiveToHandleLatencyMs.update(System.currentTimeMillis() - responseReceiveTime);
             }

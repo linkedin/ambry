@@ -135,6 +135,7 @@ public class NettyServer implements NioServer {
     ServerBootstrap b = new ServerBootstrap();
     Class<? extends ServerSocketChannel> channelClass =
         Epoll.isAvailable() ? EpollServerSocketChannel.class : NioServerSocketChannel.class;
+    // Note: ServerSocketChannel option doesn't apply to SocketChannel
     b.group(bossGroup, workerGroup)
         .channel(channelClass)
         .option(ChannelOption.SO_BACKLOG, nettyConfig.nettyServerSoBacklog)

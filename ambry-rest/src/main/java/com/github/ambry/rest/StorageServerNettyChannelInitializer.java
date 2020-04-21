@@ -21,10 +21,13 @@ import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
+import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2MultiplexHandler;
 import io.netty.handler.codec.http2.Http2Settings;
+import io.netty.handler.logging.LogLevel;
 import io.netty.handler.ssl.SslHandler;
 import java.net.InetSocketAddress;
 import java.util.Objects;
@@ -71,6 +74,13 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
 
   @Override
   protected void initChannel(SocketChannel ch) throws Exception {
+    // To honor http2 window size, WriteBufferWaterMark.high() should be greater or equal to http2 window size.
+    // Also see: https://github.com/netty/netty/issues/10193
+    ch.config()
+        .setSendBufferSize(http2ClientConfig.nettySendBufferSize)
+        .setReceiveBufferSize(http2ClientConfig.nettyReceiveBufferSize)
+        .setWriteBufferWaterMark(
+            new WriteBufferWaterMark(WriteBufferWaterMark.DEFAULT.low(), http2ClientConfig.http2initialWindowSize));
     // If channel handler implementations are not annotated with @Sharable, Netty creates a new instance of every class
     // in the pipeline for every connection.
     // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
@@ -82,7 +92,12 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     int peerPort = peerAddress.getPort();
     SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(peerHost, peerPort, SSLFactory.Mode.SERVER));
     pipeline.addLast("SslHandler", sslHandler);
-    pipeline.addLast(Http2FrameCodecBuilder.forServer().initialSettings(Http2Settings.defaultSettings()).build())
+    pipeline.addLast(Http2FrameCodecBuilder.forServer()
+        .initialSettings(Http2Settings.defaultSettings()
+            .maxFrameSize(http2ClientConfig.http2FrameMaxSize)
+            .initialWindowSize(http2ClientConfig.http2initialWindowSize))
+        .frameLogger(new Http2FrameLogger(LogLevel.DEBUG, "server"))
+        .build())
         .addLast("Http2MultiplexHandler", new Http2MultiplexHandler(
             new Http2StreamHandler(nettyMetrics, nettyConfig, performanceConfig, http2ClientConfig, requestHandler)));
   }

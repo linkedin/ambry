@@ -24,6 +24,8 @@ public class Http2ClientConfig {
   public static final String HTTP2_NETTY_EVENT_LOOP_GROUP_THREADS = "http2.netty.event.loop.group.threads";
   public static final String HTTP2_IDLE_CONNECTION_TIMEOUT_MS = "http2.idle.connection.timeout.ms";
   public static final String HTTP2_MAX_CONTENT_LENGTH = "http2.max.content.length";
+  public static final String HTTP2_FRAME_MAX_SIZE = "http2.frame.max.size";
+  public static final String HTTP2_INITIAL_WINDOW_SIZE = "http2.initial.window.size";
   public static final String NETTY_RECEIVE_BUFFER_SIZE = "netty.receive.buffer.size";
   public static final String NETTY_SEND_BUFFER_SIZE = "netty.send.buffer.size";
 
@@ -68,6 +70,23 @@ public class Http2ClientConfig {
   public final int http2MaxContentLength;
 
   /**
+   * The maximum allowed http2 frame size.This value is used to represent
+   * <a href="https://tools.ietf.org/html/rfc7540#section-6.5.2">SETTINGS_MAX_FRAME_SIZE</a>.
+   */
+  @Config(HTTP2_FRAME_MAX_SIZE)
+  @Default("5 * 1024 * 1024")
+  public final int http2FrameMaxSize;
+
+
+  /**
+   * The initial window size used in http streams. This allows sender send big frame.
+   */
+  @Config(HTTP2_INITIAL_WINDOW_SIZE)
+  @Default("5 * 1024 * 1024")
+  public final int http2initialWindowSize;
+
+
+  /**
    * The socket receive buffer size for netty http2 channel.
    */
   @Config(NETTY_RECEIVE_BUFFER_SIZE)
@@ -89,6 +108,8 @@ public class Http2ClientConfig {
             Integer.MAX_VALUE);
     http2NettyEventLoopGroupThreads = verifiableProperties.getInt(HTTP2_NETTY_EVENT_LOOP_GROUP_THREADS, 0);
     http2MaxContentLength = verifiableProperties.getInt(HTTP2_MAX_CONTENT_LENGTH, 25 * 1024 * 1024);
+    http2FrameMaxSize = verifiableProperties.getInt(HTTP2_FRAME_MAX_SIZE, 5 * 1024 * 1024);
+    http2initialWindowSize = verifiableProperties.getInt(HTTP2_INITIAL_WINDOW_SIZE, 5 * 1024 * 1024);
 
     nettyReceiveBufferSize = verifiableProperties.getInt(NETTY_RECEIVE_BUFFER_SIZE, 1024 * 1024);
     nettySendBufferSize = verifiableProperties.getInt(NETTY_SEND_BUFFER_SIZE, 1024 * 1024);

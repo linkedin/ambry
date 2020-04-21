@@ -165,6 +165,7 @@ class NettyResponseChannel implements RestResponseChannel {
       return future;
     }
     Chunk chunk = new Chunk(src, callback);
+    logger.debug("Netty Response Chunk size: " + src.readableBytes());
     chunksToWrite.add(chunk);
     if (HttpUtil.isContentLengthSet(finalResponseMetadata) && totalBytesReceived.get() > HttpUtil.getContentLength(
         finalResponseMetadata)) {

@@ -27,6 +27,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.pool.ChannelPool;
@@ -99,11 +100,16 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
             .option(ChannelOption.SO_KEEPALIVE, true)
             .option(ChannelOption.SO_RCVBUF, http2ClientConfig.nettyReceiveBufferSize)
             .option(ChannelOption.SO_SNDBUF, http2ClientConfig.nettySendBufferSize)
+            // To honor http2 window size, WriteBufferWaterMark.high() should be greater or equal to http2 window size.
+            // Also see: https://github.com/netty/netty/issues/10193
+            .option(ChannelOption.WRITE_BUFFER_WATER_MARK,
+                new WriteBufferWaterMark(WriteBufferWaterMark.DEFAULT.low(), http2ClientConfig.http2initialWindowSize))
             .remoteAddress(inetSocketAddress),
-            new Http2ChannelPoolHandler(sslFactory, inetSocketAddress.getHostName(), inetSocketAddress.getPort())),
-        eventLoopGroup, ConcurrentHashMap.newKeySet(), http2ClientConfig.idleConnectionTimeoutMs,
-        http2ClientConfig.http2MinConnectionPerPort, http2ClientConfig.http2MaxConcurrentStreamsPerConnection,
-        http2ClientConfig.http2MaxContentLength, http2ClientMetrics);
+            new Http2ChannelPoolHandler(sslFactory, inetSocketAddress.getHostName(), inetSocketAddress.getPort(),
+                http2ClientConfig)), eventLoopGroup, ConcurrentHashMap.newKeySet(),
+        http2ClientConfig.idleConnectionTimeoutMs, http2ClientConfig.http2MinConnectionPerPort,
+        http2ClientConfig.http2MaxConcurrentStreamsPerConnection, http2ClientConfig.http2MaxContentLength,
+        http2ClientMetrics);
   }
 
   /**

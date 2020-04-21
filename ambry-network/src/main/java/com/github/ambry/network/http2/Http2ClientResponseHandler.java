@@ -21,8 +21,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpResponse;
 import java.util.concurrent.LinkedBlockingQueue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -44,9 +42,8 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
     // Consume length
     dup.readLong();
     RequestInfo requestInfo = ctx.channel().attr(Http2NetworkClient.REQUEST_INFO).get();
-    http2NetworkClient.getHttp2ClientMetrics().http2StreamRoundTripTime.update(
-        System.currentTimeMillis() - requestInfo.getStreamSendTime());
-    requestInfo.setStreamReceiveTime(System.currentTimeMillis());
+    http2NetworkClient.getHttp2ClientMetrics().http2StreamFirstToAllFrameReadyTime.update(
+        System.currentTimeMillis() - requestInfo.getStreamHeaderFrameReceiveTime());
     ResponseInfo responseInfo = new ResponseInfo(requestInfo, null, dup);
     responseInfoQueue.offer(responseInfo);
     // TODO: is this a good place to release stream channel?
