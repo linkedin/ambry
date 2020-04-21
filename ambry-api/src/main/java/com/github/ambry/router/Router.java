@@ -89,6 +89,15 @@ public interface Router extends Closeable {
   Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback);
 
   /**
+   * Requests for a blob to be undeleted asynchronously and invokes the {@link Callback} when the request completes.
+   * @param blobId The ID of the blob that needs to be undeleted.
+   * @param serviceId The service ID of the service undeleting the blob. This can be null if unknown.
+   * @param callback The {@link Callback} which will be invoked on the completion of a request.
+   * @return A future that would contain information about whether the undelete succeeded or not, eventually.
+   */
+  Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback);
+
+  /**
    * Closes the router and releases any resources held by the router. If the router is already closed, then this
    * method has no effect.
    * <p/>
@@ -166,5 +175,16 @@ public interface Router extends Closeable {
    */
   default Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs) {
     return updateBlobTtl(blobId, serviceId, expiresAtMs, null);
+  }
+
+  /**
+   * Requests for a blob to be undeleted asynchronously and returns a future that will eventually contain information
+   * about whether the request succeeded or not.
+   * @param blobId The ID of the blob that needs to be undeleted.
+   * @param serviceId The service ID of the service undeleting the blob. This can be null if unknown.
+   * @return A future that would contain information about whether the undelete succeeded or not, eventually.
+   */
+  default Future<Void> undeleteBlob(String blobId, String serviceId) {
+    return undeleteBlob(blobId, serviceId, null);
   }
 }

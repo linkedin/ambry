@@ -188,6 +188,25 @@ class PerfRouter implements Router {
     return futureResult;
   }
 
+  /**
+   * Does nothing. Simply indicates success immediately.
+   * @param blobId (ignored).
+   * @param serviceId (ignored).
+   * @param callback the {@link Callback} to invoke on operation completion.
+   * @return a {@link FutureResult} that will eventually contain the result of the operation.
+   */
+  @Override
+  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+    logger.trace("Received undeleteBlob call");
+    FutureResult<Void> futureResult = new FutureResult<Void>();
+    if (!routerOpen) {
+      completeOperation(futureResult, callback, null, ROUTER_CLOSED_EXCEPTION);
+    } else {
+      completeOperation(futureResult, callback, null, null);
+    }
+    return futureResult;
+  }
+
   @Override
   public void close() {
     routerOpen = false;
