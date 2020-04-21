@@ -13,6 +13,11 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.utils.Utils;
+import java.util.HashSet;
+import java.util.Set;
+
+
 /**
  * The configs for cloud related configurations.
  */
@@ -45,6 +50,8 @@ public class CloudConfig {
   public static final String VCR_PROXY_HOST = "vcr.proxy.host";
   public static final String VCR_PROXY_PORT = "vcr.proxy.port";
   public static final String VCR_CLUSTER_SPECTATOR_FACTORY_CLASS = "vcr.cluster.spectator.factory.class";
+  // Comma separated names of datacenter(s) which the VCR replicate from.
+  public static final String VCR_SOURCE_DATACENTERS = "vcr.source.datacenters";
 
   public static final String DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS =
       "com.github.ambry.cloud.StaticVcrClusterFactory";
@@ -252,7 +259,7 @@ public class CloudConfig {
   /**
    * The request timeout in msec for cloud batch operations.
    */
-  @Config (CLOUD_BATCH_REQUEST_TIMEOUT)
+  @Config(CLOUD_BATCH_REQUEST_TIMEOUT)
   public final int cloudBatchRequestTimeout;
 
   /**
@@ -261,6 +268,13 @@ public class CloudConfig {
   @Config(VCR_CLUSTER_SPECTATOR_FACTORY_CLASS)
   @Default(DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS)
   public final String vcrClusterSpectatorFactoryClass;
+
+  /**
+   * Comma separated set of datacenters which can act as peer for cross colo replication.
+   */
+  @Config(VCR_SOURCE_DATACENTERS)
+  @Default("")
+  public final Set<String> vcrSourceDatacenters;
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
@@ -302,5 +316,8 @@ public class CloudConfig {
 
     vcrClusterSpectatorFactoryClass = verifiableProperties.getString(VCR_CLUSTER_SPECTATOR_FACTORY_CLASS,
         DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS);
+
+    vcrSourceDatacenters =
+        Utils.splitString(verifiableProperties.getString(VCR_SOURCE_DATACENTERS, ""), ",", HashSet::new);
   }
 }
