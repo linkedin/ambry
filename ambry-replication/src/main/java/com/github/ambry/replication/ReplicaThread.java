@@ -54,6 +54,7 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -334,13 +335,8 @@ public class ReplicaThread implements Runnable {
       if (activeReplicasPerNode.size() > 0) {
         allCaughtUp = false;
         // split remote replicas on same node into multiple lists
-        List<List<RemoteReplicaInfo>> activeReplicaSubLists = new ArrayList<>();
-        int fromIndex = 0;
-        while (fromIndex + maxReplicaCountPerRequest < activeReplicasPerNode.size()) {
-          activeReplicaSubLists.add(activeReplicasPerNode.subList(fromIndex, fromIndex + maxReplicaCountPerRequest));
-          fromIndex += maxReplicaCountPerRequest;
-        }
-        activeReplicaSubLists.add(activeReplicasPerNode.subList(fromIndex, activeReplicasPerNode.size()));
+        List<List<RemoteReplicaInfo>> activeReplicaSubLists =
+            Utils.partitionList(activeReplicasPerNode, maxReplicaCountPerRequest);
         // use a variable to track current replica list to replicate (for logging purpose)
         List<RemoteReplicaInfo> currentReplicaList = activeReplicasPerNode;
         try {

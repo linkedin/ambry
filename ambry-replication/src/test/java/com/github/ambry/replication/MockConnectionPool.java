@@ -166,6 +166,7 @@ public class MockConnectionPool implements ConnectionPool {
     public void send(Send request) {
       if (request instanceof ReplicaMetadataRequest) {
         metadataRequest = (ReplicaMetadataRequest) request;
+        host.replicaCountPerRequestTracker.add(metadataRequest.getReplicaMetadataRequestInfoList().size());
       } else if (request instanceof GetRequest) {
         getRequest = (GetRequest) request;
         buffersToReturn = new ArrayList<>();
@@ -237,8 +238,9 @@ public class MockConnectionPool implements ConnectionPool {
             }
             indexRequested = i;
           }
-          long bytesRead = allMessageInfos.subList(0, indexRequested + 1).stream().mapToLong(i -> i.getSize()).sum();
-          long total = allMessageInfos.stream().mapToLong(i -> i.getSize()).sum();
+          long bytesRead =
+              allMessageInfos.subList(0, indexRequested + 1).stream().mapToLong(MessageInfo::getSize).sum();
+          long total = allMessageInfos.stream().mapToLong(MessageInfo::getSize).sum();
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
               new ReplicaMetadataResponseInfo(requestInfo.getPartitionId(), requestInfo.getReplicaType(),
                   new MockFindToken(indexRequested, bytesRead), messageInfosToReturn, total - bytesRead,

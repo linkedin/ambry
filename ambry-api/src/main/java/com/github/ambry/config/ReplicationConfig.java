@@ -114,7 +114,7 @@ public class ReplicationConfig {
   public final long replicationFetchSizeInBytes;
 
   /**
-   * The maximum number of partitions on remote node can be replicated with in a single replication request. If local
+   * The maximum number of partitions on remote node can be replicated within a single replication request. If local
    * node shares more partitions than this number with peer node, the partitions will be split into several lists (with
    * size <= max partition count) and will be replicated sequentially in separate replication cycles.
    */

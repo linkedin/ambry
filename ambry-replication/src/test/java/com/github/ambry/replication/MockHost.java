@@ -41,6 +41,8 @@ public class MockHost {
   private final ClusterMap clusterMap;
 
   public final DataNodeId dataNodeId;
+  // creat a list to track number of replicas in each metadata request
+  final List<Integer> replicaCountPerRequestTracker = new ArrayList<>();
   final Map<PartitionId, List<MessageInfo>> infosByPartition = new HashMap<>();
   final Map<PartitionId, List<ByteBuffer>> buffersByPartition = new HashMap<>();
 
