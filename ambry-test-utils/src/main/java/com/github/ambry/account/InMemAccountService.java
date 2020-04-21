@@ -14,6 +14,7 @@
 
 package com.github.ambry.account;
 
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.Arrays;
@@ -109,6 +110,10 @@ public class InMemAccountService implements AccountService {
     // no op
   }
 
+  @Override
+  public Set<Pair<Short,Short>> getContainersByStatus(Container.ContainerStatus containerStatus) {
+    throw new UnsupportedOperationException("get Container by status is not supported");
+  }
   /**
    * Clears all the accounts in this {@code AccountService}.
    */

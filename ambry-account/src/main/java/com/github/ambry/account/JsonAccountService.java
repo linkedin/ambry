@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.github.ambry.config.JsonAccountConfig;
+import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -22,6 +23,7 @@ import java.nio.file.attribute.FileTime;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -112,6 +114,12 @@ final class JsonAccountService extends AbstractAccountService {
     if (!initialized.get()) {
       throw new IllegalStateException("AccountService is closed.");
     }
+  }
+
+
+  @Override
+  public Set<Pair<Short,Short>> getContainersByStatus(Container.ContainerStatus containerStatus) {
+    throw new UnsupportedOperationException("get Container by status is not supported");
   }
 
   /**

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
@@ -81,7 +82,7 @@ class BlobStoreCompactor {
   private final AtomicBoolean compactionInProgress = new AtomicBoolean(false);
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final IndexSegmentValidEntryFilter validEntryFilter;
-
+  private final AccountService helixAccountService;
   private volatile boolean isActive = false;
   private PersistentIndex srcIndex;
 
@@ -107,12 +108,14 @@ class BlobStoreCompactor {
    * @param time the {@link Time} instance to use.
    * @param sessionId the sessionID of the store.
    * @param incarnationId the incarnation ID of the store.
+   * @param helixAccountService the {@link AccountService} instance to use.
    * @throws IOException if the {@link CompactionLog} could not be created or if commit/cleanup failed during recovery.
    * @throws StoreException if the commit failed during recovery.
    */
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
       StoreMetrics srcMetrics, StoreMetrics tgtMetrics, DiskIOScheduler diskIOScheduler,
-      DiskSpaceAllocator diskSpaceAllocator, Log srcLog, Time time, UUID sessionId, UUID incarnationId)
+      DiskSpaceAllocator diskSpaceAllocator, Log srcLog, Time time, UUID sessionId, UUID incarnationId,
+      AccountService helixAccountService)
       throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.storeId = storeId;
@@ -123,6 +126,7 @@ class BlobStoreCompactor {
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
     this.diskSpaceAllocator = diskSpaceAllocator;
+    this.helixAccountService = helixAccountService;
     this.time = time;
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;

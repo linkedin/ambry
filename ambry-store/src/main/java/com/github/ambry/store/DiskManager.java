@@ -14,6 +14,7 @@
 
 package com.github.ambry.store;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -69,6 +70,7 @@ class DiskManager {
   private final MessageStoreRecovery recovery;
   private final MessageStoreHardDelete hardDelete;
   private final List<String> unexpectedDirs = new ArrayList<>();
+  private final AccountService helixAccountService;
   private boolean running = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -87,12 +89,13 @@ class DiskManager {
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
    * @param time the {@link Time} instance to use.
+   * @param helixAccountService the {@link AccountService} instance to use.
    */
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
       ScheduledExecutorService scheduler, StorageManagerMetrics metrics, StoreMetrics storeMainMetrics,
       StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, ReplicaStatusDelegate replicaStatusDelegate, List<String> stoppedReplicas,
-      Time time) {
+      Time time, AccountService helixAccountService) {
     this.disk = disk;
     this.storeConfig = storeConfig;
     this.scheduler = scheduler;
@@ -102,6 +105,7 @@ class DiskManager {
     this.keyFactory = keyFactory;
     this.recovery = recovery;
     this.hardDelete = hardDelete;
+    this.helixAccountService = helixAccountService;
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(storeConfig, time));
     longLivedTaskScheduler = Utils.newScheduler(1, true);
@@ -116,7 +120,7 @@ class DiskManager {
         BlobStore store =
             new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
                 storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
-                time);
+                time, helixAccountService);
         stores.put(replica.getPartitionId(), store);
         partitionToReplicaMap.put(replica.getPartitionId(), replica);
         expectedDirs.add(replica.getReplicaPath());
@@ -329,7 +333,7 @@ class DiskManager {
         BlobStore store =
             new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
                 storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
-                time);
+                time, helixAccountService);
         store.start();
         // collect store segment requirements and add into DiskSpaceAllocator
         List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());

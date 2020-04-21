@@ -19,6 +19,7 @@ import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Router;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
@@ -200,6 +201,51 @@ public class HelixAccountServiceTest {
     boolean res = accountService.updateAccounts(idToRefAccountMap.values());
     assertTrue("Failed to update accounts", res);
     assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
+  }
+
+  /**
+   * Tests generates a collection of reference {@link Account}s and {@link Container}s that can be referred
+   * from {@link #idToRefAccountMap} and {@link #idToRefContainerMap}. And it also generate a collection of
+   * the {@link Container}s through {@link HelixAccountService} with selected {@link ContainerStatus}
+   */
+  @Test
+  public void testGetContainerByStatus() throws Exception {
+    // a set that records the account ids that have already been taken.
+    Set accountIdSet = new HashSet<>();
+    // generate a single reference account and container that can be referenced by refAccount and refContainer respectively.
+    refAccountId = Utils.getRandomShort(random);
+    accountIdSet.add(refAccountId);
+    generateRefAccounts(idToRefAccountMap, idToRefContainerMap, accountIdSet, 5,
+        2);
+
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    accountService.updateAccounts(idToRefAccountMap.values());
+    assertAccountsInAccountService(idToRefAccountMap.values(), 5, accountService);
+
+    List<Account> accountsToUpdate = new ArrayList<>();
+    int cnt = 0;
+    for (Account account : accountService.getAllAccounts()) {
+      AccountBuilder accountBuilder = new AccountBuilder(account);
+      for (Container container : account.getAllContainers()) {
+        if (cnt%2 == 0) {
+          ContainerBuilder containerBuilder = new ContainerBuilder(container);
+          containerBuilder.setId((short) (-1 * (container.getId())));
+          containerBuilder.setName(container.getName() + "-extra");
+          containerBuilder.setStatus(ContainerStatus.DELETE_IN_PROGRESS);
+          containerBuilder.setDescription(container.getDescription() + "--extra");
+          containerBuilder.setReplicationPolicy(container.getReplicationPolicy() + "---extra");
+          containerBuilder.setTtlRequired(container.isTtlRequired());
+          accountBuilder.addOrUpdateContainer(containerBuilder.build());
+        }
+        cnt++;
+      }
+      accountsToUpdate.add(accountBuilder.build());
+    }
+
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 5, true);
+    Set<Pair<Short,Short>> containerList = accountService.getContainersByStatus(ContainerStatus.DELETE_IN_PROGRESS);
+    assertEquals("Wrong number of containers in containerList", 5,
+        containerList.size());
   }
 
   /**

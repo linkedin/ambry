@@ -17,6 +17,7 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.router.Router;
+import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -391,6 +392,23 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    */
   BackupFileManager getBackupFileManager() {
     return backupFileManager;
+  }
+
+  /**
+   * It gets a collection of {@link Account}s' and {@link Container}s' Id pairs selected by
+   * {@link com.github.ambry.account.Container.ContainerStatus}.
+   */
+  @Override
+  public Set<Pair<Short,Short>> getContainersByStatus(Container.ContainerStatus containerStatus) {
+    Set<Pair<Short,Short>> selectedContainers = new HashSet<>();
+    for (Account account : accountInfoMapRef.get().getAccounts()) {
+      for (Container container : account.getAllContainers()) {
+        if (container.getStatus().equals(containerStatus)) {
+          selectedContainers.add(new Pair<>(account.getId(), container.getId()));
+        }
+      }
+    }
+    return selectedContainers;
   }
 }
 

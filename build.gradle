@@ -248,6 +248,7 @@ project(':ambry-server') {
                 project(':ambry-store'),
                 project(':ambry-utils'),
                 project(':ambry-rest'),
+                project(':ambry-account'),
                 project(':ambry-replication')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
@@ -268,6 +269,7 @@ project(':ambry-store') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
+                project(':ambry-account'),
                 project(':ambry-messageformat')
         compile "net.smacke:jaydio:$jaydioVersion"
         testCompile project(':ambry-clustermap')
