@@ -76,11 +76,12 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
   protected void initChannel(SocketChannel ch) throws Exception {
     // To honor http2 window size, WriteBufferWaterMark.high() should be greater or equal to http2 window size.
     // Also see: https://github.com/netty/netty/issues/10193
+    // https://stackoverflow.com/questions/25281124/netty-4-high-and-low-write-watermarks
     ch.config()
         .setSendBufferSize(http2ClientConfig.nettySendBufferSize)
         .setReceiveBufferSize(http2ClientConfig.nettyReceiveBufferSize)
-        .setWriteBufferWaterMark(
-            new WriteBufferWaterMark(WriteBufferWaterMark.DEFAULT.low(), http2ClientConfig.http2initialWindowSize));
+        .setWriteBufferWaterMark(new WriteBufferWaterMark(http2ClientConfig.http2initialWindowSize,
+            2 * http2ClientConfig.http2initialWindowSize));
     // If channel handler implementations are not annotated with @Sharable, Netty creates a new instance of every class
     // in the pipeline for every connection.
     // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
