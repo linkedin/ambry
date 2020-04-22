@@ -136,7 +136,7 @@ public class UndeleteHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
       return buildCallback(metrics.undeleteBlobSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
-        // TODO: call undelete from router here.
+        router.undeleteBlob(blobId.getID(), serviceId, routerCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
