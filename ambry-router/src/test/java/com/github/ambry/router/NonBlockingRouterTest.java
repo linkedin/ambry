@@ -445,6 +445,57 @@ public class NonBlockingRouterTest {
   }
 
   /**
+   * Test undelete notification system when successfully undelete a blob.
+   * @throws Exception
+   */
+  @Test
+  public void testUndeleteWithNotificationSystem() throws Exception {
+    assumeTrue(!includeCloudDc);
+
+    final CountDownLatch undeletesDoneLatch = new CountDownLatch(2);
+    final Set<String> blobsThatAreUndeleted = new HashSet<>();
+    LoggingNotificationSystem undeleteTrackingNotificationSystem = new LoggingNotificationSystem() {
+      @Override
+      public void onBlobUndeleted(String blobId, String serviceId, Account account, Container container) {
+        blobsThatAreUndeleted.add(blobId);
+        undeletesDoneLatch.countDown();
+      }
+    };
+    setRouter(getNonBlockingRouterProperties("DC1"), mockServerLayout, undeleteTrackingNotificationSystem);
+
+    List<String> blobIds = new ArrayList<>();
+    for (int i = 0; i < 4; i++) {
+      setOperationParams();
+      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+      ensurePutInAllServers(blobId, mockServerLayout);
+      blobIds.add(blobId);
+    }
+    setOperationParams();
+    List<ChunkInfo> chunksToStitch = blobIds.stream()
+        .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
+        .collect(Collectors.toList());
+    String blobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch).get();
+    ensureStitchInAllServers(blobId, mockServerLayout, chunksToStitch, PUT_CONTENT_SIZE);
+    blobIds.add(blobId);
+    Set<String> blobsToBeUndeleted = getBlobsInServers(mockServerLayout);
+
+    router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+    router.deleteBlob(blobId, null).get();
+    for (String chunkBlobId : blobIds) {
+      ensureDeleteInAllServers(chunkBlobId, mockServerLayout);
+    }
+    router.undeleteBlob(blobId, "undelete_server_id").get();
+
+    Assert.assertTrue("Undelete should not take longer than " + AWAIT_TIMEOUT_MS,
+        undeletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    Assert.assertTrue("All blobs in server are deleted", blobsThatAreUndeleted.containsAll(blobsToBeUndeleted));
+    Assert.assertTrue("Only blobs in server are undeleted", blobsToBeUndeleted.containsAll(blobsThatAreUndeleted));
+
+    router.close();
+    assertClosed();
+  }
+
+  /**
    * Test failure cases of undelete.
    * @throws Exception
    */
