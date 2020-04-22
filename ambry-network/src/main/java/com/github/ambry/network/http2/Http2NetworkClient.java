@@ -29,6 +29,8 @@ import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.pool.ChannelPool;
 import io.netty.channel.pool.ChannelPoolMap;
+import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
 import io.netty.util.AttributeKey;
 import java.net.InetSocketAddress;
 import java.util.AbstractCollection;
@@ -55,6 +57,7 @@ public class Http2NetworkClient implements NetworkClient {
   private final EventLoopGroup eventLoopGroup;
   private final ChannelPoolMap<InetSocketAddress, ChannelPool> pools;
   private final Http2ClientResponseHandler http2ClientResponseHandler;
+  private final Http2ClientStreamStatsHandler http2ClientStreamStatsHandler;
   private final Http2ClientMetrics http2ClientMetrics;
   private final Http2ClientConfig http2ClientConfig;
   private static final ResponseInfo WAKEUP_MARKER = new ResponseInfo(null, null, null);
@@ -72,6 +75,7 @@ public class Http2NetworkClient implements NetworkClient {
     }
     this.pools = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics);
     this.http2ClientResponseHandler = new Http2ClientResponseHandler(this);
+    this.http2ClientStreamStatsHandler = new Http2ClientStreamStatsHandler(this);
     this.http2ClientMetrics = http2ClientMetrics;
   }
 
@@ -91,6 +95,10 @@ public class Http2NetworkClient implements NetworkClient {
               http2ClientMetrics.http2StreamAcquireTime.update(System.currentTimeMillis() - streamInitiateTime);
               long streamAcquiredTime = System.currentTimeMillis();
               Channel streamChannel = future.getNow();
+              streamChannel.pipeline().addLast(http2ClientStreamStatsHandler);
+              // TODO: implement ourselves' aggregator. Http2Streams to Response Object
+              streamChannel.pipeline().addLast(new Http2StreamFrameToHttpObjectCodec(false));
+              streamChannel.pipeline().addLast(new HttpObjectAggregator(http2ClientConfig.http2MaxContentLength));
               streamChannel.pipeline().addLast(http2ClientResponseHandler);
               streamChannel.pipeline().addLast(new AmbrySendToHttp2Adaptor());
               streamChannel.attr(REQUEST_INFO).set(requestInfo);
@@ -102,6 +110,7 @@ public class Http2NetworkClient implements NetworkClient {
                   if (future.isSuccess()) {
                     http2ClientMetrics.http2StreamWriteAndFlushTime.update(
                         System.currentTimeMillis() - streamAcquiredTime);
+                    requestInfo.setStreamSendTime(System.currentTimeMillis());
                   } else {
                     http2ClientMetrics.http2StreamWriteAndFlushErrorCount.inc();
                     logger.warn("Stream writeAndFlush fail: {}", future.cause());
@@ -110,7 +119,6 @@ public class Http2NetworkClient implements NetworkClient {
                   requestInfo.getRequest().release();
                 }
               });
-              requestInfo.setStreamSendTime(System.currentTimeMillis());
             } else {
               logger.error("Couldn't acquire stream channel to {}:{} . Cause: {}.", requestInfo.getHost(),
                   requestInfo.getPort().getPort(), future.cause());

@@ -26,7 +26,8 @@ public class RequestInfo {
   private final SendWithCorrelationId request;
   private final ReplicaId replicaId;
   private long streamSendTime = -1;
-  private long streamReceiveTime = -1;
+  private long streamHeaderFrameReceiveTime = -1;
+  public int responseFramesCount = 0;
 
   /**
    * Construct a RequestInfo with the given parameters
@@ -70,16 +71,16 @@ public class RequestInfo {
     return replicaId;
   }
 
-  public long getStreamReceiveTime() {
-    return streamReceiveTime;
+  public long getStreamHeaderFrameReceiveTime() {
+    return streamHeaderFrameReceiveTime;
+  }
+
+  public void setStreamHeaderFrameReceiveTime(long streamHeaderFrameReceiveTime) {
+    this.streamHeaderFrameReceiveTime = streamHeaderFrameReceiveTime;
   }
 
   public long getStreamSendTime() {
     return streamSendTime;
-  }
-
-  public void setStreamReceiveTime(long streamReceiveTime) {
-    this.streamReceiveTime = streamReceiveTime;
   }
 
   public void setStreamSendTime(long streamSendTime) {

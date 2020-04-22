@@ -31,8 +31,11 @@ public class Http2ClientMetrics {
   public final Histogram http2RegularStreamAcquireTime;
   public final Histogram http2StreamWriteAndFlushTime;
   public final Histogram http2StreamRoundTripTime;
+  public final Histogram http2StreamFirstToLastFrameTime;
+  public final Histogram http2StreamFirstToAllFrameReadyTime;
   public final Histogram http2ClientSendTime;
   public final Histogram http2ClientSendAndPollTime;
+  public final Histogram http2ResponseFrameCount;
 
   public final Counter http2NewPoolCount;
   public final Counter http2NewConnectionCount;
@@ -59,9 +62,15 @@ public class Http2ClientMetrics {
         registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamWriteAndFlushTime"));
     http2StreamRoundTripTime =
         registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamRoundTripTime"));
+    http2StreamFirstToLastFrameTime =
+        registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamFirstToLastFrameTime"));
+    http2StreamFirstToAllFrameReadyTime =
+        registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamFirstToAllFrameReadyTime"));
     http2ClientSendTime = registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2ClientSendTime"));
     http2ClientSendAndPollTime =
         registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2ClientSendAndPollTime"));
+    http2ResponseFrameCount =
+        registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2ResponseFrameCount"));
 
     http2NewPoolCount = registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2NewPoolCount"));
     http2NewConnectionCount =

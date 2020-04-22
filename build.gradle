@@ -232,6 +232,7 @@ project(':ambry-network') {
                 project(':ambry-clustermap')
         compile "io.netty:netty-all:$nettyVersion"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
+        compile "io.netty:netty-transport-native-epoll:$nettyVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-test-utils')
     }
@@ -344,6 +345,7 @@ project(':ambry-rest') {
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         compile "io.netty:netty-all:$nettyVersion"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
+        compile "io.netty:netty-transport-native-epoll:$nettyVersion"
         compile "javax.servlet:javax.servlet-api:$javaxVersion"
         runtimeOnly "log4j:log4j:$log4jVersion"
         runtimeOnly "org.slf4j:slf4j-log4j12:$slf4jVersion"

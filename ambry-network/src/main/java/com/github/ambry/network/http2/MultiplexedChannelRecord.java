@@ -107,14 +107,8 @@ public class MultiplexedChannelRecord {
       }
 
       Future<Http2StreamChannel> streamFuture =
-          new Http2StreamChannelBootstrap(parentChannel).handler(new ChannelInitializer<Channel>() {
-            @Override
-            protected void initChannel(Channel ch) throws Exception {
-              ChannelPipeline p = ch.pipeline();
-              p.addLast(new Http2StreamFrameToHttpObjectCodec(false));
-              p.addLast(new HttpObjectAggregator(maxContentLength));
-            }
-          }).open();
+          new Http2StreamChannelBootstrap(parentChannel).open();
+      // handler are added when stream is returned to claimer.
       streamFuture.addListener((GenericFutureListener<Future<Http2StreamChannel>>) future -> {
         NettyUtils.warnIfNotInEventLoop(parentChannel.eventLoop());
 
