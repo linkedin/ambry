@@ -1244,7 +1244,7 @@ public class StorageManagerTest {
     MockClusterParticipant() throws IOException {
       super(clusterMapConfig, new MockHelixManagerFactory(), new MetricRegistry(),
           parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
-              clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0));
+              clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
     }
 
     @Override

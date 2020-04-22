@@ -33,26 +33,27 @@ class HelixParticipantMetrics {
   final Counter partitionDroppedCount;
 
   HelixParticipantMetrics(MetricRegistry metricRegistry, String zkConnectStr) {
+    String zkSuffix = zkConnectStr == null ? "" : "-" + zkConnectStr;
     Gauge<Integer> bootstrapPartitionCount = bootstrapCount::get;
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "bootstrapPartitionCount-" + zkConnectStr),
+    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "bootstrapPartitionCount" + zkSuffix),
         bootstrapPartitionCount);
     Gauge<Integer> standbyPartitionCount = standbyCount::get;
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "standbyPartitionCount-" + zkConnectStr),
+    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "standbyPartitionCount" + zkSuffix),
         standbyPartitionCount);
     Gauge<Integer> leaderPartitionCount = leaderCount::get;
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "leaderPartitionCount-" + zkConnectStr),
+    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "leaderPartitionCount" + zkSuffix),
         leaderPartitionCount);
     Gauge<Integer> inactivePartitionCount = inactiveCount::get;
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "inactivePartitionCount-" + zkConnectStr),
+    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "inactivePartitionCount" + zkSuffix),
         inactivePartitionCount);
     Gauge<Integer> offlinePartitionCount = offlineCount::get;
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "offlinePartitionCount-" + zkConnectStr),
+    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "offlinePartitionCount" + zkSuffix),
         offlinePartitionCount);
     Gauge<Integer> errorStatePartitionCount = errorStateCount::get;
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "errorStatePartitionCount-" + zkConnectStr),
+    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "errorStatePartitionCount" + zkSuffix),
         errorStatePartitionCount);
     partitionDroppedCount =
-        metricRegistry.counter(MetricRegistry.name(HelixParticipant.class, "partitionDroppedCount-" + zkConnectStr));
+        metricRegistry.counter(MetricRegistry.name(HelixParticipant.class, "partitionDroppedCount" + zkSuffix));
   }
 
   /**

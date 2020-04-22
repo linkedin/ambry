@@ -105,7 +105,7 @@ public class ClusterMapConfig {
    *     {
    *       "datacenter":"dc1",
    *       "id": "1",
-   *       "zkConnectStr":"abc.example.com:2199",
+   *       "zkConnectStr":"abc.example.com:2199,xyz.example.com:2299",
    *     },
    *     {
    *       "datacenter":"dc2",

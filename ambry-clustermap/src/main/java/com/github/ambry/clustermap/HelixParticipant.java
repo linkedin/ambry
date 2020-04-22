@@ -69,12 +69,13 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param helixFactory the {@link HelixFactory} to use to get the {@link HelixManager}.
    * @param metricRegistry the {@link MetricRegistry} to instantiate {@link HelixParticipantMetrics}.
    * @param zkConnectStr the address identifying the zk service which this participant interacts with.
+   * @param isSoleParticipant whether this is the sole participant on current node.
    */
   public HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory, MetricRegistry metricRegistry,
-      String zkConnectStr) {
+      String zkConnectStr, boolean isSoleParticipant) {
     this.clusterMapConfig = clusterMapConfig;
     this.zkConnectStr = zkConnectStr;
-    participantMetrics = new HelixParticipantMetrics(metricRegistry, zkConnectStr);
+    participantMetrics = new HelixParticipantMetrics(metricRegistry, isSoleParticipant ? null : zkConnectStr);
     clusterName = clusterMapConfig.clusterMapClusterName;
     instanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);

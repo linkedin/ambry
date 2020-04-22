@@ -82,8 +82,10 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
             ClusterMapUtils.parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings)
                 .get(clusterMapConfig.clusterMapDatacenterName)
                 .getZkConnectStrs();
+        boolean isSoleParticipant = zkConnectStrs.size() == 1;
         for (String zkConnectStr : zkConnectStrs) {
-          helixParticipants.add(new HelixParticipant(clusterMapConfig, helixFactory, metricRegistry, zkConnectStr));
+          helixParticipants.add(
+              new HelixParticipant(clusterMapConfig, helixFactory, metricRegistry, zkConnectStr, isSoleParticipant));
         }
       } catch (JSONException e) {
         throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
