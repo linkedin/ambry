@@ -278,7 +278,7 @@ class IndexValue implements Comparable<IndexValue> {
 
   /**
    * Helper function to decide if this value is a put value or not.
-   * @return true when it's not a put record.
+   * @return true when it's a put record.
    */
   boolean isPut() {
     return flags == FLAGS_DEFAULT_VALUE;

@@ -17,6 +17,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -59,7 +60,10 @@ class PersistentIndex {
    * Represents the different types of index entries.
    */
   enum IndexEntryType {
-    TTL_UPDATE, PUT, DELETE, UNDELETE
+    TTL_UPDATE,
+    PUT,
+    DELETE,
+    UNDELETE
   }
 
   static final short VERSION_0 = 0;
@@ -665,7 +669,8 @@ class PersistentIndex {
    * @param fileSpan {@link FileSpan} which specifies the range within which search should be made.
    * @param types the types of {@link IndexEntryType} to look for.
    * @param indexSegments the map of index segment start {@link Offset} to {@link IndexSegment} instances
-   * @return The list of the {@link IndexValue}s for {@code key} conforming to one of the types {@code types}.
+   * @return The list of the {@link IndexValue}s for {@code key} conforming to one of the types {@code types} ordered
+   *         from most to least recent.
    * @throws StoreException any error.
    */
   List<IndexValue> findAllIndexValuesForKey(StoreKey key, FileSpan fileSpan, EnumSet<IndexEntryType> types,
@@ -1162,14 +1167,12 @@ class PersistentIndex {
                   + entries.size());
           Offset offsetEnd = offsetToStart;
           long currentTotalSizeOfEntries = 0;
+          Offset endOffsetOfSnapshot = getCurrentEndOffset(indexSegments);
           for (JournalEntry entry : entries) {
-            IndexValue value =
-                findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
-                    EnumSet.allOf(IndexEntryType.class), indexSegments);
-            messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), value.isDelete(), value.isTtlUpdate(),
-                value.isUndelete(), value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(),
-                value.getOperationTimeInMs(), value.getLifeVersion()));
-            currentTotalSizeOfEntries += value.getSize();
+            Pair<MessageInfo, Long> messageInfoAndSize =
+                getMessageInfoForJournalEntry(entry, endOffsetOfSnapshot, indexSegments);
+            messageEntries.add(messageInfoAndSize.getFirst());
+            currentTotalSizeOfEntries += messageInfoAndSize.getSecond();
             offsetEnd = entry.getOffset();
             if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries) {
               break;
@@ -1515,12 +1518,10 @@ class PersistentIndex {
             }
           }
           newTokenOffsetInJournal = entry.getOffset();
-          IndexValue value = findKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSnapshot),
-              EnumSet.allOf(IndexEntryType.class), indexSegments);
-          messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), value.isDelete(), value.isTtlUpdate(),
-              value.isUndelete(), value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(),
-              value.getOperationTimeInMs(), value.getLifeVersion()));
-          currentTotalSizeOfEntries.addAndGet(value.getSize());
+          Pair<MessageInfo, Long> messageInfoAndSize =
+              getMessageInfoForJournalEntry(entry, endOffsetOfSnapshot, indexSegments);
+          messageEntries.add(messageInfoAndSize.getFirst());
+          currentTotalSizeOfEntries.addAndGet(messageInfoAndSize.getSecond());
           if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
               currentSegment.getLastModifiedTimeSecs())) {
             break;
@@ -1572,6 +1573,41 @@ class PersistentIndex {
           : new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
               sessionId, incarnationId);
     }
+  }
+
+  /**
+   * Helper method for getting a {@link MessageInfo} and an estimate of fetch size corresponding to the provided
+   * {@link JournalEntry}. This size may include the size of the put record if the put record is at or past the offset
+   * in the journal entry and the latest value in the index is a delete or undelete. In this case, we can make a safe
+   * guess that the original blob also has to be fetched by a replicator anyways and should be counted towards the size
+   * limit.
+   * @param entry the {@link JournalEntry} to look up in the index.
+   * @param endOffsetOfSearchRange the end of the range to search in the index.
+   * @param indexSegments the index snapshot to search.
+   * @return a pair containing the {@link MessageInfo} of the most recent event for a key within the search and the
+   *         estimated size to be fetched.
+   * @throws StoreException on index search errors.
+   */
+  private Pair<MessageInfo, Long> getMessageInfoForJournalEntry(JournalEntry entry, Offset endOffsetOfSearchRange,
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
+    long estimatedFetchSize = 0L;
+    List<IndexValue> valuesInRange =
+        findAllIndexValuesForKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSearchRange),
+            EnumSet.allOf(IndexEntryType.class), indexSegments);
+
+    IndexValue latestValue = valuesInRange.get(0);
+    if (valuesInRange.size() > 1 && (latestValue.isTtlUpdate() || latestValue.isUndelete())) {
+      IndexValue earliestValue = valuesInRange.get(valuesInRange.size() - 1);
+      if (earliestValue.isPut() && earliestValue.getOffset().compareTo(entry.getOffset()) >= 0) {
+        estimatedFetchSize += earliestValue.getSize();
+      }
+    }
+    MessageInfo latestMessageInfo =
+        new MessageInfo(entry.getKey(), latestValue.getSize(), latestValue.isDelete(), latestValue.isTtlUpdate(),
+            latestValue.isUndelete(), latestValue.getExpiresAtMs(), null, latestValue.getAccountId(),
+            latestValue.getContainerId(), latestValue.getOperationTimeInMs(), latestValue.getLifeVersion());
+    estimatedFetchSize += latestValue.getSize();
+    return new Pair<>(latestMessageInfo, estimatedFetchSize);
   }
 
   /**
@@ -1871,9 +1907,9 @@ class PersistentIndex {
         // nothing to do.
         break;
       case JournalBased:
-        // An journal based token, but the previous index segment doesn't belong to the same log segment, might be caused
-        // by compaction, or blob stored added to many records so that the offset in the token is now pointing to the previous
-        // log segment.
+        // A journal based token, but the previous index segment doesn't belong to the same log segment, might be caused
+        // by compaction, or blob stored added to many records so that the offset in the token is now pointing to the
+        // previous log segment.
         Offset floorOffset = indexSegments.floorKey(offset);
         if (floorOffset == null || !floorOffset.getName().equals(offset.getName())) {
           revalidatedToken = new StoreFindToken();
