@@ -988,8 +988,7 @@ public class IndexSegmentTest {
           NavigableSet<IndexValue> values = referenceIndex.get(nextExpectedId);
           if (oneEntryPerKey) {
             IndexValue value = values.last();
-            if (values.size() > 1 && !value.isFlagSet(IndexValue.Flags.Delete_Index) && value.isFlagSet(
-                IndexValue.Flags.Ttl_Update_Index)) {
+            if (values.size() > 1 && !value.isDelete() && value.isTtlUpdate()) {
               value = values.first();
             }
             expectedEntries.add(new IndexEntry(nextExpectedId, value));
@@ -1101,9 +1100,9 @@ public class IndexSegmentTest {
         // create an index value with a random log segment name
         value = IndexValueTest.getIndexValue(1, new Offset(TestUtils.getRandomString(1), 0), Utils.Infinite_Time,
             time.milliseconds(), id.getAccountId(), id.getContainerId(), (short) 1, formatVersion);
-      } else if (values.last().isFlagSet(IndexValue.Flags.Delete_Index)) {
+      } else if (values.last().isDelete()) {
         throw new IllegalArgumentException(id + " is deleted");
-      } else if (values.last().isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+      } else if (values.last().isTtlUpdate()) {
         throw new IllegalArgumentException("TTL of " + id + " is already updated");
       } else {
         value = values.last();
@@ -1138,7 +1137,7 @@ public class IndexSegmentTest {
         value = IndexValueTest.getIndexValue(1, new Offset(TestUtils.getRandomString(1), 0), Utils.Infinite_Time,
             time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
             (short) 0, formatVersion);
-      } else if (values.last().isFlagSet(IndexValue.Flags.Delete_Index)) {
+      } else if (values.last().isDelete()) {
         throw new IllegalArgumentException(id + " is already deleted");
       } else {
         value = values.first();

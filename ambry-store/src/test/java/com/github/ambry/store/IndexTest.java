@@ -361,9 +361,8 @@ public class IndexTest {
    */
   private void undeleteKeyAndVerify(StoreKey targetKey, short expectedLifeVersion, boolean expectTtlUpdateSet)
       throws StoreException {
-    assertTrue("targetKey is not deleted", state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Delete_Index));
-    assertTrue("targetKey is undeleted early",
-        !state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Undelete_Index));
+    assertTrue("targetKey is not deleted", state.index.findKey(targetKey).isDelete());
+    assertTrue("targetKey is undeleted early", !state.index.findKey(targetKey).isUndelete());
     short actualLifeVersion = state.index.findKey(targetKey).getLifeVersion();
     assertEquals("Life version isn't " + (expectedLifeVersion - 1) + " but " + actualLifeVersion,
         expectedLifeVersion - 1, actualLifeVersion);
@@ -387,15 +386,15 @@ public class IndexTest {
    * @throws StoreException
    */
   private void deleteKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
-    assertTrue("targetKey is already deleted", !state.index.findKey(key).isFlagSet(IndexValue.Flags.Delete_Index));
+    assertTrue("targetKey is already deleted", !state.index.findKey(key).isDelete());
     short actualLifeVersion = state.index.findKey(key).getLifeVersion();
     assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
         actualLifeVersion);
     state.appendToLog(DELETE_RECORD_SIZE);
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), DELETE_RECORD_SIZE);
     state.index.markAsDeleted(key, fileSpan, System.currentTimeMillis());
-    assertTrue("targetKey is undeleted", !state.index.findKey(key).isFlagSet(IndexValue.Flags.Undelete_Index));
-    assertTrue("targetKey is not deleted", state.index.findKey(key).isFlagSet(IndexValue.Flags.Delete_Index));
+    assertTrue("targetKey is undeleted", !state.index.findKey(key).isUndelete());
+    assertTrue("targetKey is not deleted", state.index.findKey(key).isDelete());
     actualLifeVersion = state.index.findKey(key).getLifeVersion();
     assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
         actualLifeVersion);
@@ -409,14 +408,14 @@ public class IndexTest {
    */
   private void ttlUpdateKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
     assertTrue("targetKey is already ttlUpdated",
-        !state.index.findKey(key).isFlagSet(IndexValue.Flags.Ttl_Update_Index));
+        !state.index.findKey(key).isTtlUpdate());
     short actualLifeVersion = state.index.findKey(key).getLifeVersion();
     assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
         actualLifeVersion);
     state.appendToLog(TTL_UPDATE_RECORD_SIZE);
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), TTL_UPDATE_RECORD_SIZE);
     state.index.markAsPermanent(key, fileSpan, System.currentTimeMillis());
-    assertTrue("targetKey is not ttlUpdated", state.index.findKey(key).isFlagSet(IndexValue.Flags.Ttl_Update_Index));
+    assertTrue("targetKey is not ttlUpdated", state.index.findKey(key).isTtlUpdate());
     actualLifeVersion = state.index.findKey(key).getLifeVersion();
     assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
         actualLifeVersion);
@@ -433,11 +432,8 @@ public class IndexTest {
     //Get deleted key that hasn't been TTLUpdated
     StoreKey targetKey = null;
     for (StoreKey key : state.deletedKeys) {
-      if (state.deletedAndShouldBeCompactedKeys.contains(key)) {
-        continue;
-      }
       IndexValue value = state.index.findKey(key);
-      if (!value.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !state.index.isExpired(value)
+      if (!value.isTtlUpdate() && !state.index.isExpired(value)
           && state.getExpectedValue((MockId) key, true) != null) {
         targetKey = key;
         break;
@@ -532,14 +528,6 @@ public class IndexTest {
       fail("Should have failed because ID provided for udneleted is already undeleted.");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Undeleted, e.getErrorCode());
-    }
-
-    try {
-      MockId id = (MockId) state.deletedAndShouldBeCompactedKeys.iterator().next();
-      state.index.markAsUndeleted(id, fileSpan, state.time.milliseconds());
-      fail("Should have failed because ID " + id + " for udneleted is deleted permanently.");
-    } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted_Permanently, e.getErrorCode());
     }
   }
 
@@ -2196,13 +2184,13 @@ public class IndexTest {
       throw new IllegalStateException(e);
     }
     assertEquals("Inconsistent size", info.getSize(), value.getSize());
-    assertEquals("Inconsistent delete state ", info.isDeleted(), value.isFlagSet(IndexValue.Flags.Delete_Index));
+    assertEquals("Inconsistent delete state ", info.isDeleted(), value.isDelete());
     // if the info says ttl update is true, then the value must reflect that. vice versa need not be true because put
     // infos won't have it set but the value returned from the index will if a ttl update was applied later. Same
     // applies if the info is for a delete record in which case it won't have the ttl update set to true because it is
     // not known at the time of the info generation from the log that the id was previously updated
     if (info.isTtlUpdated()) {
-      assertTrue("Inconsistent ttl update state ", value.isFlagSet(IndexValue.Flags.Ttl_Update_Index));
+      assertTrue("Inconsistent ttl update state ", value.isTtlUpdate());
     }
     assertEquals("Inconsistent expiresAtMs", info.getExpirationTimeInMs(), value.getExpiresAtMs());
     assertEquals("Incorrect accountId", info.getAccountId(), value.getAccountId());
@@ -2483,7 +2471,7 @@ public class IndexTest {
           : deleteValue != null ? deleteValue.getOperationTimeInMs()
               : ttlUpdateValue != null ? ttlUpdateValue.getOperationTimeInMs() : putValue.getOperationTimeInMs();
       boolean isTtlUpdated = undeleteValue != null ? undeleteValue.isTtlUpdate()
-          : deleteValue != null ? deleteValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) : ttlUpdateValue != null;
+          : deleteValue != null ? deleteValue.isTtlUpdate() : ttlUpdateValue != null;
       // if a key is updated, it doesn't matter if we reached the update record or not, the updated state will be
       // the one that is returned.
       if (undeleteValue != null || deleteValue != null) {
@@ -2583,7 +2571,7 @@ public class IndexTest {
     for (Map.Entry<MockId, TreeSet<IndexValue>> segmentEntry : state.referenceIndex.get(secondIndexSegmentStartOffset)
         .entrySet()) {
       if (!segmentEntry.equals(firstSegmentEntry)) {
-        if (segmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index)
+        if (segmentEntry.getValue().last().isDelete()
             && state.getExpectedValue(segmentEntry.getKey(), EnumSet.of(PersistentIndex.IndexEntryType.UNDELETE), null)
             == null) {
           expectedKeys.add(segmentEntry.getKey());
@@ -2605,7 +2593,7 @@ public class IndexTest {
     for (Map.Entry<MockId, TreeSet<IndexValue>> segmentEntry : state.referenceIndex.firstEntry()
         .getValue()
         .entrySet()) {
-      if (segmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index)
+      if (segmentEntry.getValue().last().isDelete()
           && state.getExpectedValue(segmentEntry.getKey(), EnumSet.of(PersistentIndex.IndexEntryType.UNDELETE), null)
           == null) {
         expectedKeys.add(segmentEntry.getKey());
@@ -2614,7 +2602,7 @@ public class IndexTest {
     }
     // add size of value of firstIdInSegment
     maxTotalSizeOfEntries += getSizeOfAllValues(firstSegmentEntry.getValue());
-    if (firstSegmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index)
+    if (firstSegmentEntry.getValue().last().isDelete()
         && state.getExpectedValue(firstSegmentEntry.getKey(), EnumSet.of(PersistentIndex.IndexEntryType.UNDELETE), null)
         == null) {
       expectedKeys.add(firstSegmentEntry.getKey());
@@ -2669,7 +2657,7 @@ public class IndexTest {
     expectedKeys.clear();
     for (Map.Entry<Offset, Pair<MockId, CuratedLogIndexState.LogEntry>> entry : state.logOrder.tailMap(
         startToken.getOffset(), false).entrySet()) {
-      if (entry.getValue().getSecond().indexValue.isFlagSet(IndexValue.Flags.Delete_Index) &&
+      if (entry.getValue().getSecond().indexValue.isDelete() &&
           state.getExpectedValue(entry.getValue().getFirst(), EnumSet.of(PersistentIndex.IndexEntryType.UNDELETE), null)
               == null) {
         expectedKeys.add(entry.getValue().getFirst());
@@ -2701,7 +2689,7 @@ public class IndexTest {
       }
       for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : indexEntry.getValue().entrySet()) {
         MockId id = indexSegmentEntry.getKey();
-        boolean isDeleted = indexSegmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index) &&
+        boolean isDeleted = indexSegmentEntry.getValue().last().isDelete() &&
             state.getExpectedValue(indexSegmentEntry.getKey(), EnumSet.of(PersistentIndex.IndexEntryType.UNDELETE),
                 null) == null;
         StoreFindToken expectedEndToken =
@@ -2718,7 +2706,7 @@ public class IndexTest {
       Offset startOffset = logEntry.getKey();
       MockId id = logEntry.getValue().getFirst();
       IndexValue value = state.getExpectedValue(id, false);
-      boolean isDeleted = value.isFlagSet(IndexValue.Flags.Delete_Index)
+      boolean isDeleted = value.isDelete()
           && state.getExpectedValue(id, EnumSet.of(PersistentIndex.IndexEntryType.UNDELETE), null) == null;
       ;
       // size returned is the size of the delete if the key has been deleted.
@@ -2747,7 +2735,7 @@ public class IndexTest {
     Set<MockId> expectedKeys = new HashSet<>();
     for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : indexEntry.getValue().entrySet()) {
       if (!firstIdInSegment.equals(indexSegmentEntry.getKey())) {
-        if (indexSegmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index)) {
+        if (indexSegmentEntry.getValue().last().isDelete()) {
           expectedKeys.add(indexSegmentEntry.getKey());
         }
         maxSize += getSizeOfAllValues(indexSegmentEntry.getValue());
@@ -2801,7 +2789,7 @@ public class IndexTest {
     MockId deletedId = null;
     for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : state.referenceIndex.get(indexSegmentStartOffset)
         .entrySet()) {
-      if (indexSegmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index)) {
+      if (indexSegmentEntry.getValue().last().isDelete()) {
         deletedId = indexSegmentEntry.getKey();
         break;
       }

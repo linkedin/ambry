@@ -102,8 +102,6 @@ class CuratedLogIndexState {
   final Set<MockId> ttlUpdatedKeys = new HashSet<>();
   // Set of all deleted keys
   final Set<MockId> deletedKeys = new HashSet<>();
-  // Set of all deleted and should be compacted keys
-  final Set<MockId> deletedAndShouldBeCompactedKeys = new HashSet<>();
   // Set of all undeleted keys
   final Set<MockId> undeletedKeys = new HashSet<>();
   // Set of all expired keys
@@ -292,9 +290,9 @@ class CuratedLogIndexState {
     boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
     if (!forcePut && value == null) {
       throw new IllegalArgumentException(id + " does not exist in the index");
-    } else if (expiredKeys.contains(id) || (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index))) {
+    } else if (expiredKeys.contains(id) || (value != null && value.isDelete())) {
       throw new IllegalArgumentException(id + " is deleted or expired");
-    } else if (value != null && value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+    } else if (value != null && value.isTtlUpdate()) {
       throw new IllegalArgumentException(id + " ttl has already been updated");
     }
 
@@ -369,8 +367,14 @@ class CuratedLogIndexState {
     //check if we should reject this delete entry
     if (value == null && !allKeys.containsKey(idToDelete) && info == null) {
       throw new IllegalArgumentException(idToDelete + " does not exist in the index");
-    } else if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-      throw new IllegalArgumentException(idToDelete + " is already deleted");
+    } else if (value != null && value.isDelete()) {
+      if (lifeVersion == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
+        throw new IllegalArgumentException(idToDelete + " is already deleted");
+      } else {
+        if (value.getLifeVersion() >= lifeVersion) {
+          throw new IllegalArgumentException(idToDelete + " lifeVersion Conflict");
+        }
+      }
     }
 
     //add delete to the log
@@ -423,7 +427,7 @@ class CuratedLogIndexState {
     if (forceDeleteEntry) {
       index.addToIndex(new IndexEntry(idToDelete, newValue), fileSpan);
     } else {
-      index.markAsDeleted(idToDelete, fileSpan, newValue.getOperationTimeInMs());
+      index.markAsDeleted(idToDelete, fileSpan, null, newValue.getOperationTimeInMs(), newValue.getLifeVersion());
     }
     markAsDeleted(idToDelete);
     logOrder.put(startOffset, new Pair<>(idToDelete, new LogEntry(dataWritten, newValue)));
@@ -766,7 +770,7 @@ class CuratedLogIndexState {
    * Gets the expected size of the valid data at {@code deleteReferenceTimeMs} in {@code segment}.
    * @param segment the {@link LogSegment} whose valid size is required.
    * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
-   * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
+   * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant
    * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
    *                                cleaned up. All other use cases should use {@code null}.
    * @return the expected size of the valid data at {@code deleteReferenceTimeMs} in {@code segment}.
@@ -787,7 +791,7 @@ class CuratedLogIndexState {
    * Gets all the valid index entries (taking into account different reference times) in the {@code segment}.
    * @param segment the {@link LogSegment} from which valid index entries are required.
    * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
-   * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
+   * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant
    * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
    *                                cleaned up. All other use cases should use {@code null}.
    * @return all the valid index entries in the {@code segment}.
@@ -836,8 +840,7 @@ class CuratedLogIndexState {
    */
   boolean isDeletedAt(MockId id, long referenceTimeMs) {
     IndexValue value = getExpectedValue(id, false);
-    Offset deleteIndexSegmentStartOffset =
-        value.isFlagSet(IndexValue.Flags.Delete_Index) ? referenceIndex.floorKey(value.getOffset()) : null;
+    Offset deleteIndexSegmentStartOffset = value.isDelete() ? referenceIndex.floorKey(value.getOffset()) : null;
     return deleteIndexSegmentStartOffset != null
         && lastModifiedTimesInSecs.get(deleteIndexSegmentStartOffset) * Time.MsPerSec < referenceTimeMs;
   }
@@ -890,11 +893,11 @@ class CuratedLogIndexState {
         IndexValue value = entry.getValue();
         Boolean deleteSeen = keyToDeleteSeenMap.get(id);
         Boolean ttlUpdateSeen = keyToTtlUpdateSeenMap.get(id);
-        if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+        if (value.isDelete()) {
           // should not be repeated
           assertTrue("Duplicated DELETE record for " + id, deleteSeen == null || !deleteSeen);
           keyToDeleteSeenMap.put(id, true);
-        } else if (value.isFlagSet(IndexValue.Flags.Undelete_Index)) {
+        } else if (value.isUndelete()) {
           short prevLifeVersion = keyToLifeVersionMap.put(id, value.getLifeVersion());
           short currentLifeVersion = value.getLifeVersion();
           if (PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3) {
@@ -902,7 +905,7 @@ class CuratedLogIndexState {
                 + " Previous: " + prevLifeVersion, prevLifeVersion < currentLifeVersion);
           }
           keyToDeleteSeenMap.put(id, false);
-        } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        } else if (value.isTtlUpdate()) {
           // should not be repeated
           assertTrue("Duplicated TTL update record for " + id, ttlUpdateSeen == null || !ttlUpdateSeen);
           // should not after a delete record
@@ -1111,7 +1114,6 @@ class CuratedLogIndexState {
         addDeleteEntry(idToDelete);
       }
       if (addUndeletes) {
-        addDeleteAndShouldCompactEntry();
         addCuratedUndeleteToLogSegment();
       }
       // 1 PUT entry that spans the rest of the data in the segment (upto a third of the segment size)
@@ -1131,22 +1133,6 @@ class CuratedLogIndexState {
     assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
     assertEquals("Used capacity reported not as expected", expectedUsedCapacity, index.getLogUsedCapacity());
     assertFalse("Expected nonempty index", index.isEmpty());
-  }
-
-  /**
-   * Add a blob that will be deleted right away, the the deletes' operation time will be set to 0 so the delete would
-   * be fallen out of retention time.
-   * @throws StoreException
-   */
-  private void addDeleteAndShouldCompactEntry() throws StoreException {
-    // 1 Put entry and 1 delete that should be compacted
-    addPutEntries(1, CuratedLogIndexState.DELETE_RECORD_SIZE, Infinite_Time);
-    MockId idToDelete = getIdToDeleteFromIndexSegment(referenceIndex.lastKey(), false);
-    addDeleteEntry(idToDelete,
-        new MessageInfo(idToDelete, Integer.MAX_VALUE, Utils.Infinite_Time, idToDelete.getAccountId(),
-            idToDelete.getContainerId(), 0));
-    liveKeys.remove(idToDelete);
-    deletedAndShouldBeCompactedKeys.add(idToDelete);
   }
 
   /**
@@ -1496,8 +1482,8 @@ class CuratedLogIndexState {
    * @param indexSegmentStartOffset the start offset of the {@link IndexSegment} from which valid index entries are
    *                                required.
    * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
-   * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
-   * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
+   * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant
+   * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will
    *                                cleaned up. All other use cases should use {@code null}.
    * @return all the valid index entries valid in the index segment with start offset {@code indexSegmentStartOffset}.
    */
@@ -1509,37 +1495,46 @@ class CuratedLogIndexState {
           .entrySet()) {
         MockId key = indexSegmentEntry.getKey();
         NavigableSet<IndexValue> values = indexSegmentEntry.getValue();
-        if (values.last().isFlagSet(IndexValue.Flags.Delete_Index)) {
-          IndexValue putValue = getExpectedValue(key, EnumSet.of(PersistentIndex.IndexEntryType.PUT), null);
-          if (putValue != null) {
-            if (isDeletedAt(key, deleteReferenceTimeMs) || isExpiredAt(key, expiryReferenceTimeMs)) {
-              IndexValue secondVal = values.lower(values.last());
-              if (secondVal != null && secondVal.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && isTtlUpdateEntryValid(
-                  key, secondVal, deleteReferenceTimeMs, expiryReferenceTimeMs, fileSpanUnderCompaction)) {
-                // ttl update entry associated is valid
-                validEntries.add(new IndexEntry(key, secondVal));
+        IndexValue latestValue = getExpectedValue(key, false);
+        Iterator<IndexValue> iter = values.iterator();
+        while (iter.hasNext()) {
+          IndexValue currentValue = iter.next();
+          IndexEntry currentEntry = new IndexEntry(key, currentValue);
+          if (currentValue.isUndelete()) {
+            if (latestValue.isUndelete() && latestValue.getLifeVersion() == currentValue.getLifeVersion()) {
+              validEntries.add(currentEntry);
+            }
+          } else if (currentValue.isDelete()) {
+            if (latestValue.isDelete() && latestValue.getLifeVersion() == currentValue.getLifeVersion()) {
+              validEntries.add(currentEntry);
+            }
+          } else if (currentValue.isTtlUpdate()) {
+            IndexValue putValue = getExpectedValue(key, EnumSet.of(PersistentIndex.IndexEntryType.PUT), null);
+            if (putValue == null) {
+              continue;
+            }
+            if (latestValue.isDelete()) {
+              if (latestValue.getOperationTimeInMs() >= deleteReferenceTimeMs
+                  || isTtlUpdateEntryValidWhenFinalStateIsDeleteAndRetention(key, currentValue,
+                  fileSpanUnderCompaction)) {
+                validEntries.add(currentEntry);
               }
-              // delete record is always valid
-              validEntries.add(new IndexEntry(key, values.last()));
             } else {
-              // the associated PUT is not expired or it is not considered "deleted" because of the ref time
-              // all entries in this segment have to be added
-              values.forEach(value -> validEntries.add(new IndexEntry(key, value)));
+              validEntries.add(currentEntry);
             }
           } else {
-            // delete record is always valid
-            validEntries.add(new IndexEntry(key, values.last()));
+            if (!isExpiredAt(key, expiryReferenceTimeMs)) {
+              if (latestValue.isPut()) {
+                validEntries.add(new IndexEntry(key, currentValue));
+              } else if (latestValue.isDelete()) {
+                if (latestValue.getOperationTimeInMs() >= deleteReferenceTimeMs) {
+                  validEntries.add(currentEntry);
+                }
+              } else {
+                validEntries.add(currentEntry);
+              }
+            }
           }
-        } else if (values.size() == 1 && values.last().isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
-          // this index segment contains ONLY the TTL update entry
-          if (isTtlUpdateEntryValid(key, values.last(), deleteReferenceTimeMs, expiryReferenceTimeMs,
-              fileSpanUnderCompaction)) {
-            validEntries.add(new IndexEntry(key, values.last()));
-          }
-        } else if (!isExpiredAt(key, expiryReferenceTimeMs) && (!deletedKeys.contains(key) || !isDeletedAt(key,
-            deleteReferenceTimeMs))) {
-          // add all the entries in this index segment
-          values.forEach(value -> validEntries.add(new IndexEntry(key, value)));
         }
       }
     }
@@ -1550,33 +1545,22 @@ class CuratedLogIndexState {
    * Determines whether a TTL update entry is valid
    * @param key the {@link MockId} being examined
    * @param ttlUpdateValue the {@link IndexValue} associated with the TTL update entry of {@code key}.
-   * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
-   * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
    * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
    *                                cleaned up. All other use cases should use {@code null}.
    * @return {@code true} if the TTL update entry is valid
    */
-  private boolean isTtlUpdateEntryValid(MockId key, IndexValue ttlUpdateValue, long deleteReferenceTimeMs,
-      long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction) {
+  private boolean isTtlUpdateEntryValidWhenFinalStateIsDeleteAndRetention(MockId key, IndexValue ttlUpdateValue,
+      FileSpan fileSpanUnderCompaction) {
     // valid if the original put is valid
     IndexValue putValue = getExpectedValue(key, EnumSet.of(PersistentIndex.IndexEntryType.PUT), null);
-    boolean valid =
-        putValue != null && !isExpiredAt(key, expiryReferenceTimeMs) && (!deletedKeys.contains(key) || !isDeletedAt(key,
-            deleteReferenceTimeMs));
-    if (!valid) {
-      // valid if the original put is not already cleaned up or is not going to be cleaned up in this cycle of
-      // compaction
-      if (putValue != null) {
-        if (fileSpanUnderCompaction == null) {
-          // valid if putValue exists in the index and is in a different log segment from the ttlUpdateValue
-          valid = !putValue.getOffset().getName().equals(ttlUpdateValue.getOffset().getName());
-        } else {
-          // valid if putValue exists in the index and is not under compaction
-          valid = !fileSpanUnderCompaction.inSpan(putValue.getOffset());
-        }
+    if (putValue != null) {
+      if (fileSpanUnderCompaction != null) {
+        return !fileSpanUnderCompaction.inSpan(putValue.getOffset());
+      } else {
+        return !putValue.getOffset().getName().equals(ttlUpdateValue.getOffset().getName());
       }
     }
-    return valid;
+    return false;
   }
 
   /**

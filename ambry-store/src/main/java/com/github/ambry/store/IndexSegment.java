@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -525,7 +526,7 @@ class IndexSegment {
    * @throws StoreException
    */
   void addEntry(IndexEntry entry, Offset fileEndOffset) throws StoreException {
-    rwLock.readLock().lock();
+    rwLock.writeLock().lock();
     try {
       if (sealed.get()) {
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " cannot add to a sealed index ",
@@ -574,7 +575,7 @@ class IndexSegment {
             indexFile.getAbsolutePath(), persistedEntrySize, key.getLongForm(), startOffset);
       }
     } finally {
-      rwLock.readLock().unlock();
+      rwLock.writeLock().unlock();
     }
   }
 
@@ -602,7 +603,8 @@ class IndexSegment {
     rwLock.readLock().lock();
     try {
       if (sealed.get()) {
-        throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed");
+        throw new UnsupportedOperationException(
+            "Operation supported only on index segments that are not sealed: " + getStartOffset());
       }
       return numberOfItems.get();
     } finally {
@@ -970,8 +972,7 @@ class IndexSegment {
           logger.info(
               "IndexSegment : {} ignoring index entry outside the log end offset that was not synced logEndOffset "
                   + "{} key {} entryOffset {} entrySize {} entryDeleteState {}", indexFile.getAbsolutePath(),
-              logEndOffset, key, blobValue.getOffset(), blobValue.getSize(),
-              blobValue.isDelete());
+              logEndOffset, key, blobValue.getOffset(), blobValue.getSize(), blobValue.isDelete());
         }
       }
       endOffset.set(new Offset(startOffset.getName(), maxEndOffset));
@@ -1018,6 +1019,18 @@ class IndexSegment {
       entries.add(info);
     }
     return areNewEntriesAdded;
+  }
+
+  /**
+   * Return an {@link Iterator<IndexEntry>} from a sealed IndexSegment.
+   * @return an {@link Iterator<IndexEntry>}.
+   */
+  Iterator<IndexEntry> getIterator() {
+    if (!sealed.get()) {
+      throw new IllegalStateException(
+          "IndexSegment at " + indexFile.getAbsolutePath() + " is not sealed to get iterator");
+    }
+    return new SealedIndexSegmentEntryIterator();
   }
 
   /**
@@ -1169,6 +1182,37 @@ class IndexSegment {
       startOffsetValue = filename.substring(lastButOneSepIdx + 1, lastSepIdx);
     }
     return new Offset(logSegmentName, Long.parseLong(startOffsetValue));
+  }
+
+  /**
+   * An {@link IndexEntry} {@link Iterator} for a sealed {@link IndexSegment}. This {@link Iterator} should
+   * only be used in the compaction so that the {@link IndexSegment} should be sealed already.
+   */
+  class SealedIndexSegmentEntryIterator implements Iterator<IndexEntry> {
+    private int currentIdx = 0;
+    private ByteBuffer mmap = serEntries.duplicate();
+    private int numberOfEntries = numberOfEntries(mmap);
+    private byte[] valueBuf = new byte[valueSize];
+
+    @Override
+    public boolean hasNext() {
+      return currentIdx < numberOfEntries;
+    }
+
+    @Override
+    public IndexEntry next() {
+      try {
+        StoreKey key = getKeyAt(mmap, currentIdx);
+        mmap.get(valueBuf);
+        return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
+      } catch (Exception e) {
+        String message = "Failed to read index entry at " + currentIdx;
+        logger.error(message, e);
+        throw new IllegalStateException(message, e);
+      } finally {
+        currentIdx++;
+      }
+    }
   }
 }
 

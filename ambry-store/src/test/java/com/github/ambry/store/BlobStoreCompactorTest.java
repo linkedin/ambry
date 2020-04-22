@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
@@ -62,6 +63,7 @@ public class BlobStoreCompactorTest {
   private final File tempDir;
   private final String tempDirStr;
   private final boolean doDirectIO;
+  private final boolean withUndelete;
   private final StoreConfig config;
 
   private CuratedLogIndexState state = null;
@@ -85,18 +87,19 @@ public class BlobStoreCompactorTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{true}, {false}});
+    return Arrays.asList(new Object[][]{{true, false}, {false, false}, {false, true}});
   }
 
   /**
    * Creates a temporary directory for the store.
    * @throws Exception
    */
-  public BlobStoreCompactorTest(boolean doDirectIO) throws Exception {
+  public BlobStoreCompactorTest(boolean doDirectIO, boolean withUndelete) throws Exception {
     tempDir = StoreTestUtils.createTempDirectory("compactorDir-" + TestUtils.getRandomString(10));
     tempDirStr = tempDir.getAbsolutePath();
     config = new StoreConfig(new VerifiableProperties(new Properties()));
     this.doDirectIO = doDirectIO;
+    this.withUndelete = withUndelete;
     if (doDirectIO) {
       Assume.assumeTrue(Utils.isLinux());
     }
@@ -183,7 +186,7 @@ public class BlobStoreCompactorTest {
     // compaction range contains segments in the wrong order
     details = new CompactionDetails(state.time.milliseconds() + Time.MsPerSec,
         Arrays.asList(secondLogSegmentName, firstLogSegmentName));
-    ensureArgumentFailure(details, "Should have failed because compaction range contains offsets still in the journal");
+    ensureArgumentFailure(details, "Should have failed because segments are in the wrong order");
 
     // compaction contains segments that don't exist
     details = new CompactionDetails(0,
@@ -870,8 +873,7 @@ public class BlobStoreCompactorTest {
 
     // check all delete records to make sure they remain
     for (MockId deletedKey : state.deletedKeys) {
-      assertTrue(deletedKey + " should be deleted",
-          state.index.findKey(deletedKey).isFlagSet(IndexValue.Flags.Delete_Index));
+      assertTrue(deletedKey + " should be deleted", state.index.findKey(deletedKey).isDelete());
       checkIndexValue(deletedKey);
     }
 
@@ -880,7 +882,7 @@ public class BlobStoreCompactorTest {
     otherPuts.add(p2);
     for (IndexEntry entry : otherPuts) {
       MockId id = (MockId) entry.getKey();
-      assertFalse(id + " should not be deleted", state.index.findKey(id).isFlagSet(IndexValue.Flags.Delete_Index));
+      assertFalse(id + " should not be deleted", state.index.findKey(id).isDelete());
       checkIndexValue(id);
       try (BlobReadOptions options = state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class))) {
         checkRecord(id, options);
@@ -896,7 +898,7 @@ public class BlobStoreCompactorTest {
       MockId id = (MockId) entry.getKey();
       IndexValue value = state.index.findKey(id);
       // the delete record should remain
-      assertTrue(id + " should be deleted", value.isFlagSet(IndexValue.Flags.Delete_Index));
+      assertTrue(id + " should be deleted", value.isDelete());
       // the put record should be cleaned up
       assertEquals("There should no original message offset", IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET,
           value.getOriginalMessageOffset());
@@ -914,7 +916,7 @@ public class BlobStoreCompactorTest {
       MockId id = (MockId) entry.getKey();
       IndexValue value = state.index.findKey(id);
       // the delete record should remain
-      assertTrue(id + " should be deleted", value.isFlagSet(IndexValue.Flags.Delete_Index));
+      assertTrue(id + " should be deleted", value.isDelete());
       // the put record however should not be cleaned up
       if (value.getOriginalMessageOffset() == IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET) {
         // PUT record should exist
@@ -1017,7 +1019,7 @@ public class BlobStoreCompactorTest {
       segment.getIndexEntriesSince(null, condition, indexEntries, currentTotalSize, false);
     }
     indexEntries.forEach(entry -> {
-      assertTrue("There cannot be a non-delete entry", entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index));
+      assertTrue("There cannot be a non-delete entry", entry.getValue().isDelete());
       assertTrue("Every key should be seen only once", seenIds.add((MockId) entry.getKey()));
     });
     assertEquals("All ids not present", ids, seenIds);
@@ -1039,6 +1041,239 @@ public class BlobStoreCompactorTest {
     doTtlUpdateTgtDupTest();
   }
 
+  /**
+   * Tests when the PUT, TTL_UPDATE, DELETE AND UNDELETE of the same key are in the same index segment.
+   * @throws Exception
+   */
+  @Test
+  public void undeleteSameIndexSegmentTest() throws Exception {
+    Assume.assumeTrue(withUndelete);
+    refreshState(false, false);
+    state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
+    state.initIndex(null);
+
+    // Log Segment 0
+    // Index Segment 0.1 P T D U -> P T U
+    long p1Expiration = state.time.milliseconds() + 10000;
+    IndexEntry p1 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, p1Expiration).get(0);
+    state.makePermanent((MockId) p1.getKey(), false);
+    state.addDeleteEntry((MockId) p1.getKey());
+    state.addUndeleteEntry((MockId) p1.getKey());
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+
+    // Index Segment 0.2 P D U -> P U
+    IndexEntry p2 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    state.addDeleteEntry((MockId) p2.getKey());
+    state.addUndeleteEntry((MockId) p2.getKey());
+    state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+
+    // Index Segment 0.3 P(expired) D U -> []
+    IndexEntry p3 =
+        state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, state.time.milliseconds() + 10000).get(0);
+    state.addDeleteEntry((MockId) p3.getKey());
+    state.addUndeleteEntry((MockId) p3.getKey());
+    state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+
+    // Index Segment 0.4 P D U D U -> P U
+    IndexEntry p4 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    state.addDeleteEntry((MockId) p4.getKey());
+    state.addUndeleteEntry((MockId) p4.getKey());
+    state.addDeleteEntry((MockId) p4.getKey());
+    state.addUndeleteEntry((MockId) p4.getKey());
+
+    // Index Segment 0.5 P D D U -> P U
+    IndexEntry p5 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    state.addDeleteEntry((MockId) p5.getKey());
+    state.addDeleteEntry((MockId) p5.getKey(), null, (short) 3);
+    state.addUndeleteEntry((MockId) p5.getKey());
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+
+    // Index Segment 0.6 P D U D -> D
+    IndexEntry p6 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    state.addDeleteEntry((MockId) p6.getKey());
+    state.addUndeleteEntry((MockId) p6.getKey());
+    state.addDeleteEntry((MockId) p6.getKey());
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+
+    // Index Segment 0.7 P D D -> D
+    IndexEntry p7 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    state.addDeleteEntry((MockId) p7.getKey());
+    state.addDeleteEntry((MockId) p7.getKey(), null, (short) 3);
+    state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+
+    // Index Segment 0.8 P U -> P U
+    IndexEntry p8 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    state.addUndeleteEntry((MockId) p8.getKey(), (short) 2);
+    state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+
+    // Index Segment 0.9 P D U U-> P U
+    IndexEntry p9 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    state.addDeleteEntry((MockId) p9.getKey());
+    state.addUndeleteEntry((MockId) p9.getKey());
+    state.addUndeleteEntry((MockId) p9.getKey(), (short) 2);
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    // Make sure we have two log segments
+    writeDataToMeetRequiredSegmentCount(2, null);
+    state.reloadIndex(true, false);
+
+    String logSegmentName = p1.getValue().getOffset().getName();
+    List<String> segmentsUnderCompaction = Collections.singletonList(logSegmentName);
+    long deleteReferenceTimeMs = state.time.milliseconds() + 10000;
+    long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
+    int indexSegmentCountBeforeCompaction = state.index.getIndexSegments().size();
+    CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
+    compactor.initialize(state.index);
+
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+    // Before compaction, the records in the log are
+    // P1 T1 D1 U1 P| P2 D2 U2 P P| P3 D3 U3 P P| P4 D4 U4 D4 U4| P5 D5 D5 U5 P| P6 D6 U6 D6 P| P7 D7 D7 P P| P8 U8 P P P | P9 D9 U9 U9 P
+    // After compaction, the records in the log are
+    // P1 T1 U1 P P2| U2 P P P P| P4 U4 P5 U5 P| D6 P D7 P P| P8 U8 P P P| P9 U9 P
+
+    long ds = CuratedLogIndexState.DELETE_RECORD_SIZE;
+    long ps = CuratedLogIndexState.PUT_RECORD_SIZE;
+    long us = CuratedLogIndexState.UNDELETE_RECORD_SIZE;
+    long ts = CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE;
+    long cleanedUpSize = ds + ds + (ps + ds + us) + (2 * ds + us) + 2 * ds + (ps + ds + us) + (ps + ds) + 0 + (ds + us);
+    int indexSegmentDiff = 3;
+    String compactedLogSegmentName = LogSegmentNameHelper.getNextGenerationName(logSegmentName);
+    assertEquals("End offset of log segment not as expected after compaction",
+        endOffsetOfSegmentBeforeCompaction - cleanedUpSize,
+        state.log.getSegment(compactedLogSegmentName).getEndOffset());
+    assertEquals("Index Segment not as expected after compaction", indexSegmentCountBeforeCompaction - indexSegmentDiff,
+        state.index.getIndexSegments().size());
+
+    LogSegment compactedLogSegment = state.log.getSegment(compactedLogSegmentName);
+    ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = state.index.getIndexSegments();
+    FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE);
+    long currentExpectedOffset = compactedLogSegment.getStartOffset();
+
+    // Get the entries in the first segment
+    IndexSegment segment = indexSegments.get(new Offset(compactedLogSegmentName, compactedLogSegment.getStartOffset()));
+    List<IndexEntry> indexEntries = new ArrayList<>();
+    assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+    verifyIndexEntry(indexEntries.get(0), (MockId) p1.getKey(), currentExpectedOffset, ps, p1Expiration, false, false,
+        false, (short) 0);
+    currentExpectedOffset += ps;
+    verifyIndexEntry(indexEntries.get(1), (MockId) p1.getKey(), currentExpectedOffset, ts, Utils.Infinite_Time, false,
+        true, false, (short) 0);
+    currentExpectedOffset += ts;
+    verifyIndexEntry(indexEntries.get(2), (MockId) p1.getKey(), currentExpectedOffset, us, Utils.Infinite_Time, false,
+        true, true, (short) 1);
+    currentExpectedOffset += us + ps; // skip one put
+    verifyIndexEntry(indexEntries.get(4), (MockId) p2.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
+        false, false, (short) 0);
+    currentExpectedOffset += ps; // skip one put
+
+    // Get the entries in the second segment
+    segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
+    indexEntries.clear();
+    assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+    verifyIndexEntry(indexEntries.get(0), (MockId) p2.getKey(), currentExpectedOffset, us, Utils.Infinite_Time, false,
+        false, true, (short) 1);
+    currentExpectedOffset += us + 4 * ps; // skip 4 puts
+
+    // Get the entries in the third segment
+    segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
+    indexEntries.clear();
+    assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+    verifyIndexEntry(indexEntries.get(0), (MockId) p4.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
+        false, false, (short) 0);
+    currentExpectedOffset += ps;
+    verifyIndexEntry(indexEntries.get(1), (MockId) p4.getKey(), currentExpectedOffset, us, Utils.Infinite_Time, false,
+        false, true, (short) 2);
+    currentExpectedOffset += us;
+    verifyIndexEntry(indexEntries.get(2), (MockId) p5.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
+        false, false, (short) 0);
+    currentExpectedOffset += ps;
+    verifyIndexEntry(indexEntries.get(3), (MockId) p5.getKey(), currentExpectedOffset, us, Utils.Infinite_Time, false,
+        false, true, (short) 4);
+    currentExpectedOffset += us + ps; // skip one put
+
+    // Get the entries in the fourth segment
+    segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
+    indexEntries.clear();
+    assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+    verifyIndexEntry(indexEntries.get(0), (MockId) p6.getKey(), currentExpectedOffset, ds, Utils.Infinite_Time, true,
+        false, false, (short) 1);
+    currentExpectedOffset += ds + ps; // skip one put
+    verifyIndexEntry(indexEntries.get(2), (MockId) p7.getKey(), currentExpectedOffset, ds, Utils.Infinite_Time, true,
+        false, false, (short) 3);
+    currentExpectedOffset += ds + 2 * ps; // skip two puts
+
+    // Get the entries in the fifth segment
+    segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
+    indexEntries.clear();
+    assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+    verifyIndexEntry(indexEntries.get(0), (MockId) p8.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
+        false, false, (short) 0);
+    currentExpectedOffset += ps;
+    verifyIndexEntry(indexEntries.get(1), (MockId) p8.getKey(), currentExpectedOffset, us, Utils.Infinite_Time, false,
+        false, true, (short) 2);
+    currentExpectedOffset += us + 3 * ps; // skip 3 puts
+
+    // Get the entries in the sixth segment
+    segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
+    indexEntries.clear();
+    assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+    verifyIndexEntry(indexEntries.get(0), (MockId) p9.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
+        false, false, (short) 0);
+    currentExpectedOffset += ps;
+    verifyIndexEntry(indexEntries.get(1), (MockId) p9.getKey(), currentExpectedOffset, us, Utils.Infinite_Time, false,
+        false, true, (short) 2);
+
+    // no clean shutdown file should exist
+    assertFalse("Clean shutdown file not deleted",
+        new File(tempDirStr, BlobStoreCompactor.TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME).exists());
+    // there should be no temp files
+    assertEquals("There are some temp log segments", 0,
+        tempDir.listFiles(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length);
+  }
+
+  /**
+   * Tests when the PUT DELETE and UNDELETE are located in different log segments.
+   * @throws Exception
+   */
+  @Test
+  public void undeleteCrossLogSegmentTest() throws Exception {
+    Assume.assumeTrue(withUndelete);
+    refreshState(false, false);
+    int numPuts = (int) Math.floorDiv(state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE,
+        CuratedLogIndexState.PUT_RECORD_SIZE + (CuratedLogIndexState.DELETE_RECORD_SIZE) / 2) - 1;
+    List<IndexEntry> entries = state.addPutEntries(numPuts, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    for (IndexEntry entry : entries) {
+      state.addDeleteEntry((MockId) entry.getKey());
+    }
+    writeDataToMeetRequiredSegmentCount(2, null);
+    for (IndexEntry entry : entries) {
+      state.addUndeleteEntry((MockId) entry.getKey());
+    }
+    writeDataToMeetRequiredSegmentCount(4, null);
+    state.reloadIndex(true, false);
+
+    // Here we have several PUTs in the first log segments and half of the DELETEs in the first log segment
+    // and the other half in the second. Then we have all the UNDELETEs in the third log segment.
+    List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+  }
+
   // helpers
 
   // general
@@ -1053,7 +1288,7 @@ public class BlobStoreCompactorTest {
     if (state != null) {
       state.destroy();
     }
-    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true, false);
+    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true, withUndelete);
   }
 
   /**
@@ -1068,6 +1303,9 @@ public class BlobStoreCompactorTest {
     closeOrExceptionInduced = false;
     if (doDirectIO) {
       state.properties.put("store.compaction.enable.direct.io", "true");
+    }
+    if (withUndelete) {
+      state.properties.put("store.compaction.filter", "IndexSegmentValidEntryWithUndelete");
     }
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     metricRegistry = new MetricRegistry();
@@ -1133,11 +1371,9 @@ public class BlobStoreCompactorTest {
    * @param countRequired the number of log segments required.
    * @param expiryTimes the expiry times desired. A fraction of the blobs written will contain those expiry times in
    *                    round robin order
-   * @throws IOException
    * @throws StoreException
    */
-  private void writeDataToMeetRequiredSegmentCount(long countRequired, List<Long> expiryTimes)
-      throws IOException, StoreException {
+  private void writeDataToMeetRequiredSegmentCount(long countRequired, List<Long> expiryTimes) throws StoreException {
     long capacityLimit = countRequired * state.log.getSegmentCapacity();
     int blobsPut = 0;
     int expiredBlobsCount = 0;
@@ -1282,7 +1518,7 @@ public class BlobStoreCompactorTest {
     long savedBytesReported = metricRegistry.getCounters()
         .get(MetricRegistry.name(BlobStoreCompactor.class, "CompactionBytesReclaimedCount"))
         .getCount();
-    // have to reload log since the instance changed by the old compactor compactor is different.
+    // have to reload log since the instance changed by the old compactor is different.
     state.reloadLog(false);
     // use the "real" log, index and disk IO schedulers this time.
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
@@ -1349,6 +1585,8 @@ public class BlobStoreCompactorTest {
   private void checkVitals(boolean changeExpected, long originalLogSegmentSizeSum, long originalLogSegmentCount,
       long originalIndexSegmentCount) {
     if (changeExpected) {
+      // Compaction remove some of the records in the log, so the end of the compacted log should be less than the
+      // original one.
       assertTrue("Compaction did not cause in change in sum of log segment sizes",
           originalLogSegmentSizeSum > getSumOfLogSegmentEndOffsets());
     } else {
@@ -1512,9 +1750,9 @@ public class BlobStoreCompactorTest {
           assertEquals(id + " failed with error code " + e.getErrorCode(), expectedErrorCode, e.getErrorCode());
         }
       } else if (state.deletedKeys.contains(id)) {
-        boolean shouldBeAbsent =
-            state.getExpectedValue(id, true) == null || (idsInCompactedLogSegments.contains(id) && state.isDeletedAt(id,
-                deleteReferenceTimeMs));
+        IndexValue latestValue = state.getExpectedValue(id, false);
+        boolean shouldBeAbsent = state.getExpectedValue(id, true) == null || (idsInCompactedLogSegments.contains(id)
+            && latestValue.getOperationTimeInMs() < deleteReferenceTimeMs);
         try {
           state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class));
           fail("Should not be able to GET " + id);
@@ -1610,9 +1848,11 @@ public class BlobStoreCompactorTest {
     for (IndexEntry entry : indexEntries) {
       MockId id = (MockId) entry.getKey();
       PersistentIndex.IndexEntryType entryType = PersistentIndex.IndexEntryType.PUT;
-      if (entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+      if (entry.getValue().isDelete()) {
         entryType = PersistentIndex.IndexEntryType.DELETE;
-      } else if (entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+      } else if (entry.getValue().isUndelete()) {
+        entryType = PersistentIndex.IndexEntryType.UNDELETE;
+      } else if (entry.getValue().isTtlUpdate()) {
         entryType = PersistentIndex.IndexEntryType.TTL_UPDATE;
       }
       logEntriesInOrder.add(new LogEntry(id, entryType, entry.getValue().getSize()));
@@ -1818,8 +2058,21 @@ public class BlobStoreCompactorTest {
     assertEquals("Offset not as expected", offset, value.getOffset().getOffset());
     assertEquals("Size not as expected", size, value.getSize());
     assertEquals("ExpiresAtMs not as expected", expiresAtMs, value.getExpiresAtMs());
-    assertEquals("Entry type not as expected", isDeleted, value.isFlagSet(IndexValue.Flags.Delete_Index));
+    assertEquals("Entry type not as expected", isDeleted, value.isDelete());
     assertEquals("Original message offset not as expected", origMsgOffset, value.getOriginalMessageOffset());
+  }
+
+  private void verifyIndexEntry(IndexEntry entry, MockId id, long offset, long size, long expiresAtMs,
+      boolean isDeleted, boolean isTtlUpdate, boolean isUndelete, short lifeVersion) {
+    assertEquals("Key not as expected", id, entry.getKey());
+    IndexValue value = entry.getValue();
+    assertEquals("Offset not as expected", offset, value.getOffset().getOffset());
+    assertEquals("Size not as expected", size, value.getSize());
+    assertEquals("ExpiresAtMs not as expected", expiresAtMs, value.getExpiresAtMs());
+    assertEquals("Entry type not as expected", isDeleted, value.isDelete());
+    assertEquals("Entry type not as expected", isUndelete, value.isUndelete());
+    assertEquals("Entry type not as expected", isTtlUpdate, value.isTtlUpdate());
+    assertEquals("LifeVersion mismatch", lifeVersion, value.getLifeVersion());
   }
 
   // interruptionDuringLogCommitAndCleanupTest() helpers.
