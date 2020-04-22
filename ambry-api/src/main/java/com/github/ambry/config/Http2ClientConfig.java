@@ -70,7 +70,7 @@ public class Http2ClientConfig {
   public final int http2MaxContentLength;
 
   /**
-   * The maximum allowed http2 frame size.This value is used to represent
+   * The maximum allowed http2 frame size. This value is used to represent
    * <a href="https://tools.ietf.org/html/rfc7540#section-6.5.2">SETTINGS_MAX_FRAME_SIZE</a>.
    */
   @Config(HTTP2_FRAME_MAX_SIZE)
@@ -83,7 +83,7 @@ public class Http2ClientConfig {
    */
   @Config(HTTP2_INITIAL_WINDOW_SIZE)
   @Default("5 * 1024 * 1024")
-  public final int http2initialWindowSize;
+  public final int http2InitialWindowSize;
 
 
   /**
@@ -109,7 +109,7 @@ public class Http2ClientConfig {
     http2NettyEventLoopGroupThreads = verifiableProperties.getInt(HTTP2_NETTY_EVENT_LOOP_GROUP_THREADS, 0);
     http2MaxContentLength = verifiableProperties.getInt(HTTP2_MAX_CONTENT_LENGTH, 25 * 1024 * 1024);
     http2FrameMaxSize = verifiableProperties.getInt(HTTP2_FRAME_MAX_SIZE, 5 * 1024 * 1024);
-    http2initialWindowSize = verifiableProperties.getInt(HTTP2_INITIAL_WINDOW_SIZE, 5 * 1024 * 1024);
+    http2InitialWindowSize = verifiableProperties.getInt(HTTP2_INITIAL_WINDOW_SIZE, 5 * 1024 * 1024);
 
     nettyReceiveBufferSize = verifiableProperties.getInt(NETTY_RECEIVE_BUFFER_SIZE, 1024 * 1024);
     nettySendBufferSize = verifiableProperties.getInt(NETTY_SEND_BUFFER_SIZE, 1024 * 1024);

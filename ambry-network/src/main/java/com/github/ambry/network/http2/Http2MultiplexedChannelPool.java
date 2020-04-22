@@ -103,8 +103,8 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
             // To honor http2 window size, WriteBufferWaterMark.high() should be greater or equal to http2 window size.
             // Also see: https://github.com/netty/netty/issues/10193
             .option(ChannelOption.WRITE_BUFFER_WATER_MARK,
-                new WriteBufferWaterMark(http2ClientConfig.http2initialWindowSize,
-                    2 * http2ClientConfig.http2initialWindowSize))
+                new WriteBufferWaterMark(http2ClientConfig.http2InitialWindowSize,
+                    2 * http2ClientConfig.http2InitialWindowSize))
             .remoteAddress(inetSocketAddress),
             new Http2ChannelPoolHandler(sslFactory, inetSocketAddress.getHostName(), inetSocketAddress.getPort(),
                 http2ClientConfig)), eventLoopGroup, ConcurrentHashMap.newKeySet(),

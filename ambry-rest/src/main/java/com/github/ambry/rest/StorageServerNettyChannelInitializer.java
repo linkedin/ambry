@@ -80,8 +80,8 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     ch.config()
         .setSendBufferSize(http2ClientConfig.nettySendBufferSize)
         .setReceiveBufferSize(http2ClientConfig.nettyReceiveBufferSize)
-        .setWriteBufferWaterMark(new WriteBufferWaterMark(http2ClientConfig.http2initialWindowSize,
-            2 * http2ClientConfig.http2initialWindowSize));
+        .setWriteBufferWaterMark(new WriteBufferWaterMark(http2ClientConfig.http2InitialWindowSize,
+            2 * http2ClientConfig.http2InitialWindowSize));
     // If channel handler implementations are not annotated with @Sharable, Netty creates a new instance of every class
     // in the pipeline for every connection.
     // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
@@ -96,7 +96,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     pipeline.addLast(Http2FrameCodecBuilder.forServer()
         .initialSettings(Http2Settings.defaultSettings()
             .maxFrameSize(http2ClientConfig.http2FrameMaxSize)
-            .initialWindowSize(http2ClientConfig.http2initialWindowSize))
+            .initialWindowSize(http2ClientConfig.http2InitialWindowSize))
         .frameLogger(new Http2FrameLogger(LogLevel.DEBUG, "server"))
         .build())
         .addLast("Http2MultiplexHandler", new Http2MultiplexHandler(

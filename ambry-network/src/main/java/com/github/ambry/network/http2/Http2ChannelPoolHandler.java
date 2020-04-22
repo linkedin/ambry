@@ -59,7 +59,7 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
     pipeline.addLast(Http2FrameCodecBuilder.forClient()
         .initialSettings(Http2Settings.defaultSettings()
             .maxFrameSize(http2ClientConfig.http2FrameMaxSize)
-            .initialWindowSize(http2ClientConfig.http2initialWindowSize))
+            .initialWindowSize(http2ClientConfig.http2InitialWindowSize))
         .frameLogger(new Http2FrameLogger(LogLevel.DEBUG, "client"))
         .build());
     pipeline.addLast(new Http2MultiplexHandler(new ChannelInboundHandlerAdapter()));

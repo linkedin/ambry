@@ -47,17 +47,16 @@ class Http2ClientStreamStatsHandler extends SimpleChannelInboundHandler<Http2Fra
       requestInfo.setStreamHeaderFrameReceiveTime(System.currentTimeMillis());
       http2NetworkClient.getHttp2ClientMetrics().http2StreamRoundTripTime.update(
           System.currentTimeMillis() - requestInfo.getStreamSendTime());
-      logger.debug("Header Frame received. Request: {}", requestInfo.toString());
+      logger.debug("Header Frame received. Request: {}", requestInfo);
     } else if (frame instanceof Http2DataFrame) {
-      logger.debug("Data Frame size: {}. Request: {}", ((Http2DataFrame) frame).content().readableBytes(),
-          requestInfo.toString());
+      logger.debug("Data Frame size: {}. Request: {}", ((Http2DataFrame) frame).content().readableBytes(), requestInfo);
     }
 
     if (frame instanceof Http2DataFrame && ((Http2DataFrame) frame).isEndStream()) {
       long time = System.currentTimeMillis() - requestInfo.getStreamHeaderFrameReceiveTime();
       http2NetworkClient.getHttp2ClientMetrics().http2StreamFirstToLastFrameTime.update(time);
       http2NetworkClient.getHttp2ClientMetrics().http2ResponseFrameCount.update(requestInfo.responseFramesCount);
-      logger.debug("All Frame received. Time: {}ms. Request: {}", time, requestInfo.toString());
+      logger.debug("All Frame received. Time: {}ms. Request: {}", time, requestInfo);
     }
     ctx.fireChannelRead(frame);
   }
