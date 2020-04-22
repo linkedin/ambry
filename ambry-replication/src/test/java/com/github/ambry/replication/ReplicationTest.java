@@ -126,6 +126,7 @@ public class ReplicationTest {
   private static final short VERSION_2 = 2;
   private static final short VERSION_5 = 5;
   private final MockTime time = new MockTime();
+  private Properties properties;
   private VerifiableProperties verifiableProperties;
   private ReplicationConfig replicationConfig;
 
@@ -150,7 +151,7 @@ public class ReplicationTest {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
-    Properties properties = new Properties();
+    properties = new Properties();
     properties.setProperty("replication.metadata.request.version", Short.toString(requestVersion));
     properties.setProperty("replication.metadataresponse.version", Short.toString(responseVersion));
     properties.setProperty("replication.cloud.token.factory", "com.github.ambry.replication.MockFindTokenFactory");
@@ -164,6 +165,7 @@ public class ReplicationTest {
     properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "200");
     properties.setProperty("replication.replica.thread.idle.sleep.duration.ms", "1000");
     properties.setProperty("replication.track.per.partition.lag.from.remote", "true");
+    properties.setProperty("replication.max.partition.count.per.request", Integer.toString(0));
     properties.put("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 2L));
     verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
@@ -648,9 +650,9 @@ public class ReplicationTest {
         "Partition is not present in the map of partition to peer leader replicas after it moved from standby to leader",
         peerLeaderReplicasByPartition.containsKey(existingPartition.toPathString()));
     mockHelixParticipant.onPartitionBecomeStandbyFromLeader(existingPartition.toPathString());
-    assertTrue(
+    assertFalse(
         "Partition is still present in the map of partition to peer leader replicas after it moved from leader to standby",
-        !peerLeaderReplicasByPartition.containsKey(existingPartition.toPathString()));
+        peerLeaderReplicasByPartition.containsKey(existingPartition.toPathString()));
     storageManager.shutdown();
   }
 
@@ -848,7 +850,7 @@ public class ReplicationTest {
 
     List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     for (PartitionId partitionId : partitionIds) {
-      // add  10 messages to the remote host only
+      // add 10 messages into each partition and place it on remote host only
       addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 10);
     }
 
@@ -920,6 +922,67 @@ public class ReplicationTest {
     for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
       assertEquals("No buffers should be missing", 0, entry.getValue().size());
     }
+  }
+
+  /**
+   * Test that max partition count per request is honored in {@link ReplicaThread} if there are too many partitions to
+   * replicate from the remote node.
+   * @throws Exception
+   */
+  @Test
+  public void limitMaxPartitionCountPerRequestTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+
+    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
+    for (PartitionId partitionId : partitionIds) {
+      // add 5 messages into each partition and place it on remote host only
+      addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 5);
+    }
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    MockStoreKeyConverterFactory mockStoreKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    mockStoreKeyConverterFactory.setReturnInputIfAbsent(true);
+    mockStoreKeyConverterFactory.setConversionMap(new HashMap<>());
+    // we set batchSize to 10 in order to get all messages from one partition within single replication cycle
+    int batchSize = 10;
+    StoreKeyConverter storeKeyConverter = mockStoreKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
+    // we set max partition count per request to 5, which forces thread to replicate replicas in two cycles. (Note that
+    // number of partition to replicate is 10, they will be replicated in two batches)
+    ReplicationConfig initialReplicationConfig = replicationConfig;
+    properties.setProperty("replication.max.partition.count.per.request", String.valueOf(5));
+    replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));
+    CountDownLatch replicationCompleted = new CountDownLatch(partitionIds.size());
+    AtomicReference<Exception> exception = new AtomicReference<>();
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            (store, messageInfos) -> {
+              try {
+                replicationCompleted.countDown();
+                // for each partition, replication should complete within single cycle (fetch once should suffice), so
+                // we shut down local store once blobs are written. This can avoid unnecessary metadata requests sent to
+                // remote host.
+                store.shutdown();
+              } catch (Exception e) {
+                exception.set(e);
+              }
+            }, null);
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+    Thread thread = Utils.newThread(replicaThread, false);
+    thread.start();
+    assertTrue("Replication didn't complete within 10 secs", replicationCompleted.await(10, TimeUnit.SECONDS));
+    // verify the # of replicas per metadata request is limited to 5 (note that there are 10 replicas to replicate, they
+    // are split into to 2 small batches and get replicated in separate requests)
+    assertEquals("There should be 2 metadata requests and each has 5 replicas to replicate", Arrays.asList(5, 5),
+        remoteHost.replicaCountPerRequestTracker);
+    // shutdown
+    replicaThread.shutdown();
+    if (exception.get() != null) {
+      throw exception.get();
+    }
+    replicationConfig = initialReplicationConfig;
   }
 
   /**
@@ -1127,7 +1190,6 @@ public class ReplicationTest {
     assertTrue(missingBuffers.isEmpty());
     missingBuffers = localHost.getMissingBuffers(expectedLocalHost.buffersByPartition);
     assertTrue(missingBuffers.isEmpty());
-
     /*
         BEFORE
         Local   Remote
@@ -1147,7 +1209,6 @@ public class ReplicationTest {
         delete B0 gets converted
         to delete B0' in Local
         Missing Keys: 0
-
      */
     //delete blob
     for (int i = 0; i < partitionIds.size(); i++) {
