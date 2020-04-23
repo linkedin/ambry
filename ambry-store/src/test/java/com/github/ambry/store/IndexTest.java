@@ -2457,7 +2457,6 @@ public class IndexTest {
       StoreFindToken expectedEndToken) throws StoreException {
     FindInfo findInfo = state.index.findEntriesSince(startToken, maxTotalSizeOfEntries);
     StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
-    System.out.println("GOT token: " + token);
     compareTokens(expectedEndToken, token);
     assertEquals("Returned token should have the right number of bytes read", expectedEndToken.getBytesRead(),
         token.getBytesRead());

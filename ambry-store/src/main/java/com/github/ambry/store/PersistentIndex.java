@@ -30,6 +30,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -1142,7 +1143,7 @@ class PersistentIndex {
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
       storeToken = revalidateStoreFindToken(storeToken, indexSegments);
 
-      List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
+      List<MessageInfo> messageEntries = new ArrayList<>();
       if (!storeToken.getType().equals(FindTokenType.IndexBased)) {
         startTimeInMs = time.milliseconds();
         Offset offsetToStart = storeToken.getOffset();
@@ -1166,15 +1167,14 @@ class PersistentIndex {
               "Index : " + dataDir + " retrieving from journal from offset " + offsetToStart + " total entries "
                   + entries.size());
           Offset offsetEnd = offsetToStart;
-          long currentTotalSizeOfEntries = 0;
+          AtomicLong currentTotalSizeOfEntries = new AtomicLong(0);
           Offset endOffsetOfSnapshot = getCurrentEndOffset(indexSegments);
+          Map<StoreKey, MessageInfo> messageInfoCache = new HashMap<>();
           for (JournalEntry entry : entries) {
-            Pair<MessageInfo, Long> messageInfoAndSize =
-                getMessageInfoForJournalEntry(entry, endOffsetOfSnapshot, indexSegments);
-            messageEntries.add(messageInfoAndSize.getFirst());
-            currentTotalSizeOfEntries += messageInfoAndSize.getSecond();
+            addMessageInfoForJournalEntry(entry, endOffsetOfSnapshot, indexSegments, messageInfoCache, messageEntries,
+                currentTotalSizeOfEntries);
             offsetEnd = entry.getOffset();
-            if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries) {
+            if (currentTotalSizeOfEntries.get() >= maxTotalSizeOfEntries) {
               break;
             }
           }
@@ -1498,6 +1498,7 @@ class PersistentIndex {
         logger.trace("Index : " + dataDir + " findEntriesFromOffset journal offset " + segmentStartOffset
             + " total entries received " + entries.size());
         IndexSegment currentSegment = segmentToProcess;
+        Map<StoreKey, MessageInfo> messageInfoCache = new HashMap<>();
         for (JournalEntry entry : entries) {
           if (entry.getOffset().compareTo(currentSegment.getEndOffset()) > 0) {
             Offset nextSegmentStartOffset = indexSegments.higherKey(currentSegment.getStartOffset());
@@ -1518,10 +1519,8 @@ class PersistentIndex {
             }
           }
           newTokenOffsetInJournal = entry.getOffset();
-          Pair<MessageInfo, Long> messageInfoAndSize =
-              getMessageInfoForJournalEntry(entry, endOffsetOfSnapshot, indexSegments);
-          messageEntries.add(messageInfoAndSize.getFirst());
-          currentTotalSizeOfEntries.addAndGet(messageInfoAndSize.getSecond());
+          addMessageInfoForJournalEntry(entry, endOffsetOfSnapshot, indexSegments, messageInfoCache, messageEntries,
+              currentTotalSizeOfEntries);
           if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
               currentSegment.getLastModifiedTimeSecs())) {
             break;
@@ -1577,37 +1576,48 @@ class PersistentIndex {
 
   /**
    * Helper method for getting a {@link MessageInfo} and an estimate of fetch size corresponding to the provided
-   * {@link JournalEntry}. This size may include the size of the put record if the put record is at or past the offset
-   * in the journal entry and the latest value in the index is a delete or undelete. In this case, we can make a safe
-   * guess that the original blob also has to be fetched by a replicator anyways and should be counted towards the size
-   * limit.
+   * {@link JournalEntry} and adding it to the list of messages. This size added to currentTotalSizeOfEntries may
+   * include the size of the put record if the put record is at or past the offset in the journal entry and the latest
+   * value in the index is a ttlUpdate or undelete. In this case, we can make a safe guess that the original blob also
+   * has to be fetched by a replicator anyways and should be counted towards the size limit.
    * @param entry the {@link JournalEntry} to look up in the index.
    * @param endOffsetOfSearchRange the end of the range to search in the index.
    * @param indexSegments the index snapshot to search.
-   * @return a pair containing the {@link MessageInfo} of the most recent event for a key within the search and the
-   *         estimated size to be fetched.
+   * @param messageInfoCache a cache to store previous find results for a key. Queries from an earlier offset will
+   *                         return the same latest value, so there is no need to search the index a second time for
+   *                         keys with multiple journal entries.
+   * @param messageEntries the list of {@link MessageInfo} being constructed. This list will be added to.
+   * @param currentTotalSizeOfEntries a counter for the size in bytes of the entries returned in the query.
    * @throws StoreException on index search errors.
    */
-  private Pair<MessageInfo, Long> getMessageInfoForJournalEntry(JournalEntry entry, Offset endOffsetOfSearchRange,
-      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
-    long estimatedFetchSize = 0L;
-    List<IndexValue> valuesInRange =
-        findAllIndexValuesForKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSearchRange),
-            EnumSet.allOf(IndexEntryType.class), indexSegments);
+  private void addMessageInfoForJournalEntry(JournalEntry entry, Offset endOffsetOfSearchRange,
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments, Map<StoreKey, MessageInfo> messageInfoCache,
+      List<MessageInfo> messageEntries, AtomicLong currentTotalSizeOfEntries) throws StoreException {
+    MessageInfo messageInfo = messageInfoCache.get(entry.getKey());
+    if (messageInfo == null) {
+      // we only need to do an index lookup once per key since the following method will honor any index
+      // values for the key past entry.getOffset()
+      List<IndexValue> valuesInRange =
+          findAllIndexValuesForKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSearchRange),
+              EnumSet.allOf(IndexEntryType.class), indexSegments);
 
-    IndexValue latestValue = valuesInRange.get(0);
-    if (valuesInRange.size() > 1 && (latestValue.isTtlUpdate() || latestValue.isUndelete())) {
-      IndexValue earliestValue = valuesInRange.get(valuesInRange.size() - 1);
-      if (earliestValue.isPut() && earliestValue.getOffset().compareTo(entry.getOffset()) >= 0) {
-        estimatedFetchSize += earliestValue.getSize();
+      IndexValue latestValue = valuesInRange.get(0);
+      if (valuesInRange.size() > 1 && (latestValue.isTtlUpdate() || latestValue.isUndelete())) {
+        IndexValue earliestValue = valuesInRange.get(valuesInRange.size() - 1);
+        if (earliestValue.isPut() && earliestValue.getOffset().compareTo(entry.getOffset()) >= 0) {
+          currentTotalSizeOfEntries.addAndGet(earliestValue.getSize());
+        }
       }
+      messageInfo =
+          new MessageInfo(entry.getKey(), latestValue.getSize(), latestValue.isDelete(), latestValue.isTtlUpdate(),
+              latestValue.isUndelete(), latestValue.getExpiresAtMs(), null, latestValue.getAccountId(),
+              latestValue.getContainerId(), latestValue.getOperationTimeInMs(), latestValue.getLifeVersion());
+      messageInfoCache.put(entry.getKey(), messageInfo);
     }
-    MessageInfo latestMessageInfo =
-        new MessageInfo(entry.getKey(), latestValue.getSize(), latestValue.isDelete(), latestValue.isTtlUpdate(),
-            latestValue.isUndelete(), latestValue.getExpiresAtMs(), null, latestValue.getAccountId(),
-            latestValue.getContainerId(), latestValue.getOperationTimeInMs(), latestValue.getLifeVersion());
-    estimatedFetchSize += latestValue.getSize();
-    return new Pair<>(latestMessageInfo, estimatedFetchSize);
+    // We may add duplicate MessageInfos to the list here since the ordering of the list is used to calculate
+    // bytes read for the token. The duplicates will be cleaned up by eliminateDuplicates.
+    currentTotalSizeOfEntries.addAndGet(messageInfo.getSize());
+    messageEntries.add(messageInfo);
   }
 
   /**
