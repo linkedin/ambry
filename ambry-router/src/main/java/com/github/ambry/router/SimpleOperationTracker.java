@@ -122,10 +122,11 @@ class SimpleOperationTracker implements OperationTracker {
    * |     PUT          |           N                     |       N - 1      |
    * |    DELETE        |          3~N                    |         2        |
    * |   TTLUpdate      |          3~N                    |         2        |
-   * |   UNDELETE       |          3~N                    |         2        |
+   * |   UNDELETE       |          3~N                    |  Global Quorum   |
    *  -----------------------------------------------------------------------
    *  Note: for now, we still use 3 as parallelism for DELETE/TTLUpdate/UNDELETE even though there are N eligible replicas, this
    *        can be adjusted to any number between 3 and N (inclusive)
+   *        For Undelete, it needs to reach global quorum to succeed. A dedicated operation tracker is created to check that.
    * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
    * @param routerOperation The {@link RouterOperation} which {@link SimpleOperationTracker} is associated with.
    * @param partitionId The partition on which the operation is performed.
