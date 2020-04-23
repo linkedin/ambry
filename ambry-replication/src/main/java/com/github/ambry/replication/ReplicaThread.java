@@ -524,12 +524,10 @@ public class ReplicaThread implements Runnable {
    * @param exchangeMetadataResponseList The missing keys in the local stores whose message needs to be retrieved
    *                                     from the remote stores
    * @throws IOException
-   * @throws MessageFormatException
    * @throws ReplicationException
    */
   void fixMissingStoreKeys(ConnectedChannel connectedChannel, List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<ExchangeMetadataResponse> exchangeMetadataResponseList)
-      throws IOException, MessageFormatException, ReplicationException {
+      List<ExchangeMetadataResponse> exchangeMetadataResponseList) throws IOException, ReplicationException {
     long fixMissingStoreKeysStartTimeInMs = SystemTime.getInstance().milliseconds();
     try {
       if (exchangeMetadataResponseList.size() != replicasToReplicatePerNode.size()

@@ -22,14 +22,14 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LongSummaryStatistics;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 
 /**
@@ -130,19 +130,16 @@ public class ReplicationMetrics {
   public final Counter cloudTokenReloadWarnCount;
 
   private MetricRegistry registry;
-  private Map<String, Counter> metadataRequestErrorMap;
-  private Map<String, Counter> getRequestErrorMap;
-  private Map<String, Counter> localStoreErrorMap;
-  private Map<PartitionId, Counter> partitionIdToInvalidMessageStreamErrorCounter;
-  private Map<PartitionId, Map<DataNodeId, Long>> partitionLags;
+  private final Map<String, Counter> metadataRequestErrorMap = new ConcurrentHashMap<>();
+  private final Map<String, Counter> getRequestErrorMap = new HashMap<>();
+  private final Map<String, Counter> localStoreErrorMap = new HashMap<>();
+  private final Map<PartitionId, Counter> partitionIdToInvalidMessageStreamErrorCounter = new HashMap<>();
+  // ConcurrentHashMap is used to avoid cache incoherence.
+  private final Map<PartitionId, Map<DataNodeId, Long>> partitionLags = new ConcurrentHashMap<>();
+  private final Map<String, Set<RemoteReplicaInfo>> remoteReplicaInfosByDc = new ConcurrentHashMap<>();
+  private final Map<String, LongSummaryStatistics> dcToReplicaLagStats = new ConcurrentHashMap<>();
 
   public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds) {
-    // ConcurrentHashMap is used to avoid cache incoherence.
-    partitionLags = new ConcurrentHashMap<>();
-    metadataRequestErrorMap = new ConcurrentHashMap<>();
-    getRequestErrorMap = new HashMap<>();
-    localStoreErrorMap = new HashMap<>();
-    partitionIdToInvalidMessageStreamErrorCounter = new HashMap<>();
     intraColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesRate"));
     plainTextIntraColoReplicationBytesRate =
@@ -445,7 +442,13 @@ public class ReplicationMetrics {
     }
   }
 
-  public void addMetricsForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
+  /**
+   * Add metrics for given remote replica.
+   * @param remoteReplicaInfo the {@link RemoteReplicaInfo} that contains all infos associated with remote replica
+   * @param trackPerDatacenterLag whether to track remote replicas' lag from local by each datacenter. Specifically, it
+   *                              tracks min/max/avg remote replica lag from each datacenter.
+   */
+  public void addMetricsForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo, boolean trackPerDatacenterLag) {
     String metricNamePrefix = generateRemoteReplicaMetricPrefix(remoteReplicaInfo);
 
     String metadataRequestErrorMetricName = metricNamePrefix + "-metadataRequestError";
@@ -464,10 +467,34 @@ public class ReplicationMetrics {
     String localStoreErrorMetricName = metricNamePrefix + "-localStoreError";
     Counter localStoreError = registry.counter(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
     localStoreErrorMap.put(localStoreErrorMetricName, localStoreError);
-
     Gauge<Long> replicaLag = remoteReplicaInfo::getRemoteLagFromLocalInBytes;
     registry.register(MetricRegistry.name(ReplicationMetrics.class, metricNamePrefix + "-remoteLagInBytes"),
         replicaLag);
+    if (trackPerDatacenterLag) {
+      String remoteReplicaDc = remoteReplicaInfo.getReplicaId().getDataNodeId().getDatacenterName();
+      remoteReplicaInfosByDc.computeIfAbsent(remoteReplicaDc, k -> {
+        Gauge<Double> avgReplicaLag = () -> getAvgLagFromDc(remoteReplicaDc);
+        registry.register(
+            MetricRegistry.name(ReplicationMetrics.class, remoteReplicaDc + "-avgReplicaLagFromLocalInBytes"),
+            avgReplicaLag);
+        Gauge<Long> maxReplicaLag =
+            () -> dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics()).getMax();
+        registry.register(
+            MetricRegistry.name(ReplicationMetrics.class, remoteReplicaDc + "-maxReplicaLagFromLocalInBytes"),
+            maxReplicaLag);
+        Gauge<Long> minReplicaLag =
+            () -> dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics()).getMin();
+        registry.register(
+            MetricRegistry.name(ReplicationMetrics.class, remoteReplicaDc + "-minReplicaLagFromLocalInBytes"),
+            minReplicaLag);
+        Gauge<Long> totalReplicaLag =
+            () -> dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics()).getSum();
+        registry.register(
+            MetricRegistry.name(ReplicationMetrics.class, remoteReplicaDc + "-totalReplicaLagFromLocalInBytes"),
+            totalReplicaLag);
+        return ConcurrentHashMap.newKeySet();
+      }).add(remoteReplicaInfo);
+    }
   }
 
   public void removeMetricsForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
@@ -659,7 +686,8 @@ public class ReplicationMetrics {
   }
 
   /**
-   * Update the lag between local and {@link RemoteReplicaInfo}.
+   * Update the lag between local and {@link RemoteReplicaInfo}. The lag indicates how far local replica is behind remote
+   * peer replica.
    * @param remoteReplicaInfo the remote replica
    * @param lag the new lag
    */
@@ -678,12 +706,22 @@ public class ReplicationMetrics {
    */
   public long getMaxLagForPartition(PartitionId partitionId) {
     Map<DataNodeId, Long> perDataNodeLag = partitionLags.get(partitionId);
-    if (perDataNodeLag == null || perDataNodeLag.size() == 0) {
+    if (perDataNodeLag == null || perDataNodeLag.isEmpty()) {
       return -1;
     }
-    Optional<Map.Entry<DataNodeId, Long>> maxEntry =
-        perDataNodeLag.entrySet().stream().max(Comparator.comparing(Map.Entry::getValue));
-    return maxEntry.get().getValue();
+    Map.Entry<DataNodeId, Long> maxEntry = perDataNodeLag.entrySet().stream().max(Map.Entry.comparingByValue()).get();
+    return maxEntry.getValue();
+  }
+
+  double getAvgLagFromDc(String dcName) {
+    Set<RemoteReplicaInfo> replicaInfos = remoteReplicaInfosByDc.get(dcName);
+    if (replicaInfos == null || replicaInfos.isEmpty()) {
+      return -1.0;
+    }
+    LongSummaryStatistics longSummaryStatistics =
+        replicaInfos.stream().collect(Collectors.summarizingLong(RemoteReplicaInfo::getRemoteLagFromLocalInBytes));
+    dcToReplicaLagStats.put(dcName, longSummaryStatistics);
+    return longSummaryStatistics.getAverage();
   }
 
   private String generateRemoteReplicaMetricPrefix(RemoteReplicaInfo remoteReplicaInfo) {

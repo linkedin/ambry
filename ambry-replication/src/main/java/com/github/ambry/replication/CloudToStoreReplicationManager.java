@@ -71,6 +71,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   private AtomicReference<ConcurrentHashMap<String, CloudDataNode>> instanceNameToCloudDataNode;
   private AtomicReference<ConcurrentSkipListSet<CloudDataNode>> vcrNodes;
   private final Object notificationLock = new Object();
+  private final boolean trackPerPartitionLagInMetric;
 
   /**
    * Constructor for {@link CloudToStoreReplicationManager}
@@ -109,6 +110,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     this.persistor =
         new DiskTokenPersistor(cloudReplicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, storeManager);
+    trackPerPartitionLagInMetric = replicationConfig.replicationTrackRemoteFromLocalPerDatacenterLag;
   }
 
   @Override
@@ -176,7 +178,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         new RemoteReplicaInfo(peerCloudReplica, localReplica, store, findTokenFactory.getNewFindToken(),
             storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
             SystemTime.getInstance(), peerCloudReplica.getDataNodeId().getPortToConnectTo());
-    replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
+    replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerPartitionLagInMetric);
 
     // Note that for each replica on a Ambry server node, there is only one cloud replica that it will be replicating from.
     List<RemoteReplicaInfo> remoteReplicaInfos = Collections.singletonList(remoteReplicaInfo);
@@ -191,7 +193,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
 
     // Add remoteReplicaInfos to {@link ReplicaThread}.
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
-    if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
+    if (replicationConfig.replicationTrackLocalFromRemotePerPartitionLag) {
       replicationMetrics.addLagMetricForPartition(partitionId);
     }
   }
