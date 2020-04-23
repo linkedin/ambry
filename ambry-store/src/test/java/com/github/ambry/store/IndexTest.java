@@ -50,6 +50,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -985,6 +986,7 @@ public class IndexTest {
 
     findEntriesSinceInEmptyIndexTest(false);
     findEntriesSinceTtlUpdateCornerCaseTest();
+    findEntriesSinceTtlUpdateAndPutInJournalTest();
   }
 
   /**
@@ -2531,10 +2533,9 @@ public class IndexTest {
   /**
    * Tests the case where the PUT and TTL update entries are in different index segments and journal has the TTL update
    * entry (immaterial whether it has the PUT or not).
-   * @throws IOException
    * @throws StoreException
    */
-  private void findEntriesSinceTtlUpdateCornerCaseTest() throws IOException, StoreException {
+  private void findEntriesSinceTtlUpdateCornerCaseTest() throws StoreException {
     state.closeAndClearIndex();
     state.properties.setProperty("store.index.max.number.of.inmem.elements", "1");
     state.reloadIndex(false, false);
@@ -2546,6 +2547,63 @@ public class IndexTest {
     expectedEndToken.setBytesRead(state.index.getLogUsedCapacity());
     doFindEntriesSinceTest(new StoreFindToken(), Long.MAX_VALUE, Collections.singleton(id), expectedEndToken);
     findEntriesSinceOneByOneTest();
+  }
+
+  /**
+   * Test the refinements to the size limit logic for cases where a journal query returns both a put entry and a TTL
+   * update entry. In these cases, the put entry size will be counted against the size limit since the index assumes
+   * that the replicator probably wants to fetch the original blob as well as the TTL update.
+   * @throws StoreException
+   */
+  private void findEntriesSinceTtlUpdateAndPutInJournalTest() throws StoreException {
+    state.closeAndClearIndex();
+    state.properties.setProperty("store.index.max.number.of.inmem.elements", "10");
+    state.reloadIndex(false, false);
+    long expiresAtMs = state.time.milliseconds() + TimeUnit.HOURS.toMillis(1);
+    List<IndexEntry> putEntries = state.addPutEntries(4, PUT_RECORD_SIZE, expiresAtMs);
+    state.makePermanent((MockId) putEntries.get(0).getKey(), false);
+    state.makePermanent((MockId) putEntries.get(1).getKey(), false);
+
+    StoreFindToken startToken = new StoreFindToken();
+    Offset tokenOffset = putEntries.get(0).getValue().getOffset();
+    StoreFindToken expectedEndToken = getExpectedJournalEndToken(tokenOffset, putEntries.get(0).getKey());
+    Set<MockId> expectedKeys = Collections.singleton((MockId) putEntries.get(0).getKey());
+    // only one ID should be returned since the put size should be counted against the size limit
+    doFindEntriesSinceTest(startToken, TTL_UPDATE_RECORD_SIZE * 2, expectedKeys, expectedEndToken);
+
+    startToken = expectedEndToken;
+    tokenOffset = putEntries.get(1).getValue().getOffset();
+    expectedEndToken = getExpectedJournalEndToken(tokenOffset, putEntries.get(1).getKey());
+    expectedKeys = Collections.singleton((MockId) putEntries.get(1).getKey());
+    // only one ID should be returned since the put size should be counted against the size limit
+    doFindEntriesSinceTest(startToken, TTL_UPDATE_RECORD_SIZE * 2, expectedKeys, expectedEndToken);
+
+    startToken = expectedEndToken;
+    // the last key is the TTL update for the second blob
+    expectedEndToken = getExpectedJournalEndToken(state.logOrder.lastKey(), putEntries.get(1).getKey());
+    expectedKeys = putEntries.stream().map(entry -> (MockId) entry.getKey()).collect(Collectors.toSet());
+    // expect the last two put entries and the two TTL update journal entries to be processed
+    doFindEntriesSinceTest(startToken, 2 * PUT_RECORD_SIZE + 2 * TTL_UPDATE_RECORD_SIZE, expectedKeys,
+        expectedEndToken);
+  }
+
+  /**
+   * Create a journal-based find token that can be compared against a token returned by
+   * {@link PersistentIndex#findEntriesSince}.
+   * @param tokenOffset the offset to include in the token
+   * @param lastKey the {@link StoreKey} of the last message that will be returned in the query.
+   * @return a {@link StoreFindToken} with bytes read set.
+   */
+  private StoreFindToken getExpectedJournalEndToken(Offset tokenOffset, StoreKey lastKey) {
+    StoreFindToken expectedEndToken = new StoreFindToken(tokenOffset, state.sessionId, state.incarnationId, false);
+    // the last message's size will be the size of the most recent log entry for its key, not necessarily the entry at
+    // tokenOffset. This size is used to calculate bytes read. even if it is not strictly the entry at the log offset
+    // of the last journal entry processed.
+    long lastMessageSize =
+        state.getExpectedValue((MockId) lastKey, EnumSet.allOf(PersistentIndex.IndexEntryType.class), null).getSize();
+    Offset endOffset = state.log.getFileSpanForMessage(tokenOffset, lastMessageSize).getEndOffset();
+    expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(endOffset));
+    return expectedEndToken;
   }
 
   // findDeletedEntriesSinceTest() helpers
