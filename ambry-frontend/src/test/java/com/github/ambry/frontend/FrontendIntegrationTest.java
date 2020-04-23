@@ -104,6 +104,7 @@ import org.junit.runners.Parameterized;
 
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 
 
 /**
@@ -123,6 +124,7 @@ public class FrontendIntegrationTest {
   private static final String DATA_CENTER_NAME = "Datacenter-Name";
   private static final String HOST_NAME = "localhost";
   private static final String CLUSTER_NAME = "Cluster-name";
+  private static boolean enableUndeleteTested = false;
 
   static {
     try {
@@ -145,6 +147,7 @@ public class FrontendIntegrationTest {
 
   private final NettyClient nettyClient;
   private final boolean addClusterPrefix;
+  private final boolean useSSL;
 
   /**
    * Running it many times so that keep-alive bugs are caught.
@@ -197,8 +200,42 @@ public class FrontendIntegrationTest {
    * @param useSSL {@code true} if SSL should be tested.
    */
   public FrontendIntegrationTest(boolean useSSL, boolean addClusterPrefix) {
+    this.useSSL = useSSL;
     nettyClient = useSSL ? sslNettyClient : plaintextNettyClient;
     this.addClusterPrefix = addClusterPrefix;
+  }
+
+  /**
+   * Test when the undelete is disabled.
+   */
+  @Test
+  public void disableUndeleteTest() throws Exception {
+    assumeTrue(!enableUndeleteTested);
+    enableUndeleteTested = true;
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    trustStoreFile.deleteOnExit();
+    VerifiableProperties vprop = buildFrontendVProps(trustStoreFile, false, PLAINTEXT_SERVER_PORT + 100, SSL_SERVER_PORT + 100);
+
+    RestServer ambryRestServer = new RestServer(vprop, CLUSTER_MAP, new LoggingNotificationSystem(),
+        SSLFactory.getNewInstance(new SSLConfig(vprop)));
+    ambryRestServer.start();
+    NettyClient plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT + 100, null);
+    NettyClient sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT + 100,
+        SSLFactory.getNewInstance(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
+    NettyClient nettyClient = useSSL ? sslNettyClient : plaintextNettyClient;
+
+    String blobId = "randomblobid";
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.set(RestUtils.Headers.BLOB_ID, addClusterPrefix ? "/" + CLUSTER_NAME + blobId : blobId);
+    headers.set(RestUtils.Headers.SERVICE_ID, "updateBlobTtlAndVerify");
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.PUT, "/" + Operations.UNDELETE, headers, null);
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.status());
+
+    plaintextNettyClient.close();
+    sslNettyClient.close();
+    ambryRestServer.shutdown();
   }
 
   /**
@@ -206,7 +243,7 @@ public class FrontendIntegrationTest {
    * @throws Exception
    */
   @Test
-  public void postGetHeadUpdateDeleteTest() throws Exception {
+  public void postGetHeadUpdateDeleteUndeleteTest() throws Exception {
     // add some accounts
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
     Container publicContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
@@ -217,22 +254,22 @@ public class FrontendIntegrationTest {
     for (int i = 0; i < 2; i++) {
       Account account = ACCOUNT_SERVICE.createAndAddRandomAccount();
       for (Container container : account.getAllContainers()) {
-        doPostGetHeadUpdateDeleteTest(refContentSize, account, container, account.getName(), !container.isCacheable(),
-            account.getName(), container.getName(), false);
+        doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, account, container, account.getName(),
+            !container.isCacheable(), account.getName(), container.getName(), false);
       }
     }
     // valid account and container names but only serviceId passed as part of POST
-    doPostGetHeadUpdateDeleteTest(refContentSize, null, null, refAccount.getName(), false, refAccount.getName(),
+    doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, null, null, refAccount.getName(), false, refAccount.getName(),
         publicContainer.getName(), false);
-    doPostGetHeadUpdateDeleteTest(refContentSize, null, null, refAccount.getName(), true, refAccount.getName(),
+    doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, null, null, refAccount.getName(), true, refAccount.getName(),
         privateContainer.getName(), false);
     // unrecognized serviceId
-    doPostGetHeadUpdateDeleteTest(refContentSize, null, null, "unknown_service_id", false, null, null, false);
-    doPostGetHeadUpdateDeleteTest(refContentSize, null, null, "unknown_service_id", true, null, null, false);
+    doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, null, null, "unknown_service_id", false, null, null, false);
+    doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, null, null, "unknown_service_id", true, null, null, false);
     // different sizes
     for (int contentSize : new int[]{0, FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1,
         FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes, refContentSize}) {
-      doPostGetHeadUpdateDeleteTest(contentSize, refAccount, publicContainer, refAccount.getName(),
+      doPostGetHeadUpdateDeleteUndeleteTest(contentSize, refAccount, publicContainer, refAccount.getName(),
           !publicContainer.isCacheable(), refAccount.getName(), publicContainer.getName(), false);
     }
   }
@@ -242,13 +279,14 @@ public class FrontendIntegrationTest {
    * @throws Exception
    */
   @Test
-  public void multipartPostGetHeadUpdateDeleteTest() throws Exception {
+  public void multipartPostGetHeadUpdateDeleteUndeleteTest() throws Exception {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
     Container refContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
-    doPostGetHeadUpdateDeleteTest(0, refAccount, refContainer, refAccount.getName(), !refContainer.isCacheable(),
-        refAccount.getName(), refContainer.getName(), true);
-    doPostGetHeadUpdateDeleteTest(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3, refAccount, refContainer,
-        refAccount.getName(), !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(), true);
+    doPostGetHeadUpdateDeleteUndeleteTest(0, refAccount, refContainer, refAccount.getName(),
+        !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(), true);
+    doPostGetHeadUpdateDeleteUndeleteTest(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3, refAccount,
+        refContainer, refAccount.getName(), !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(),
+        true);
 
     // failure case
     // size of content being POSTed is higher than what is allowed via multipart/form-data
@@ -546,13 +584,26 @@ public class FrontendIntegrationTest {
    */
   private static VerifiableProperties buildFrontendVProps(File trustStoreFile)
       throws IOException, GeneralSecurityException {
+    return buildFrontendVProps(trustStoreFile, true, PLAINTEXT_SERVER_PORT, SSL_SERVER_PORT);
+  }
+
+  /**
+   * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
+   * @param trustStoreFile the trust store file to add certificates to for SSL testing.
+   * @param enableUndelete enable undelete in frontend when it's true.
+   * @param plaintextServerPort server port number to support plaintext protocol
+   * @param sslServerPort server port number to support ssl protocol
+   * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
+   */
+  private static VerifiableProperties buildFrontendVProps(File trustStoreFile, boolean enableUndelete,
+      int plaintextServerPort, int sslServerPort) throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.put("rest.server.rest.request.service.factory",
         "com.github.ambry.frontend.FrontendRestRequestServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
     properties.put("rest.server.account.service.factory", "com.github.ambry.account.InMemAccountServiceFactory");
-    properties.put("netty.server.port", Integer.toString(PLAINTEXT_SERVER_PORT));
-    properties.put("netty.server.ssl.port", Integer.toString(SSL_SERVER_PORT));
+    properties.put("netty.server.port", Integer.toString(plaintextServerPort));
+    properties.put("netty.server.ssl.port", Integer.toString(sslServerPort));
     properties.put("netty.server.enable.ssl", "true");
     properties.put(NettyConfig.SSL_FACTORY_KEY, NettySslFactory.class.getName());
     // to test that backpressure does not impede correct operation.
@@ -566,9 +617,9 @@ public class FrontendIntegrationTest {
     properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
     properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
     properties.setProperty("clustermap.host.name", HOST_NAME);
+    properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(enableUndelete));
     return new VerifiableProperties(properties);
   }
-
   // postGetHeadUpdateDeleteTest() and multipartPostGetHeadUpdateDeleteTest() helpers
 
   /**
@@ -583,7 +634,7 @@ public class FrontendIntegrationTest {
    * @param multipartPost {@code true} if multipart POST is desired, {@code false} otherwise.
    * @throws Exception
    */
-  private void doPostGetHeadUpdateDeleteTest(int contentSize, Account toPostAccount, Container toPostContainer,
+  private void doPostGetHeadUpdateDeleteUndeleteTest(int contentSize, Account toPostAccount, Container toPostContainer,
       String serviceId, boolean isPrivate, String expectedAccountName, String expectedContainerName,
       boolean multipartPost) throws Exception {
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentSize));
@@ -632,6 +683,8 @@ public class FrontendIntegrationTest {
     // check GET, HEAD, TTL update and DELETE after delete.
     verifyOperationsAfterDelete(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, content,
         usermetadata);
+    // Undelete it
+    undeleteBlobAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
   }
 
   /**
@@ -1061,6 +1114,39 @@ public class FrontendIntegrationTest {
   private void deleteBlobAndVerify(String blobId) throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.DELETE, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.ACCEPTED);
+  }
+
+  /**
+   * Undelete given {@code blobId} and verifies it by doing a BlobInfo.
+   * @param blobId the blob ID of the blob to update and verify.
+   * @param getExpectedHeaders the expected headers in the getBlobInfo response after the TTL update.
+   * @param isPrivate {@code true} if the blob is expected to be private
+   * @param accountName the expected account name in the response.
+   * @param containerName the expected container name in response.
+   * @param usermetadata if non-null, this is expected to come as the body.
+   * @throws ExecutionException
+   * @throws InterruptedException
+   */
+  private void undeleteBlobAndVerify(String blobId, HttpHeaders getExpectedHeaders, boolean isPrivate,
+      String accountName, String containerName, byte[] usermetadata) throws ExecutionException, InterruptedException {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.set(RestUtils.Headers.BLOB_ID, addClusterPrefix ? "/" + CLUSTER_NAME + blobId : blobId);
+    headers.set(RestUtils.Headers.SERVICE_ID, "updateBlobTtlAndVerify");
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.PUT, "/" + Operations.UNDELETE, headers, null);
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    verifyUndeleteBlobResponse(responseParts);
+    getBlobInfoAndVerify(blobId, GetOption.None, getExpectedHeaders, isPrivate, accountName, containerName,
+        usermetadata);
+  }
+
+  private void verifyUndeleteBlobResponse(ResponseParts responseParts) {
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
+    assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
+    assertNoContent(responseParts.queue, 1);
+    assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**

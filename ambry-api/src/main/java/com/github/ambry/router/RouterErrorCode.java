@@ -108,5 +108,20 @@ public enum RouterErrorCode {
   /**
    * ContainerId or AccountId from blobId doesn't match these in store server.
    */
-  BlobAuthorizationFailure
+  BlobAuthorizationFailure,
+
+  /**
+   * Blob already undeleted so it can't not be undeleted again. Should delete this blob before undelete.
+   */
+  BlobUndeleted,
+
+  /**
+   * LifeVersions from two responses are different. eg, undelete responses returns two different lifeVersions.
+   */
+  LifeVersionConflict,
+
+  /**
+   * Blob is not yet deleted. For undelete, a blob needs to be deleted first.
+   */
+  BlobNotDeleted,
 }

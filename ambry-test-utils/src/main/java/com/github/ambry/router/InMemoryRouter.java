@@ -59,6 +59,7 @@ public class InMemoryRouter implements Router {
       EnumSet.of(GetOption.Include_All, GetOption.Include_Deleted_Blobs);
   private final ConcurrentHashMap<String, InMemoryBlob> blobs = new ConcurrentHashMap<>();
   private final ConcurrentSkipListSet<String> deletedBlobs = new ConcurrentSkipListSet<>();
+  private final ConcurrentSkipListSet<String> undeletedBlobs = new ConcurrentSkipListSet<>();
   private final AtomicBoolean routerOpen = new AtomicBoolean(true);
   private final ExecutorService operationPool;
   private final NotificationSystem notificationSystem;
@@ -105,6 +106,7 @@ public class InMemoryRouter implements Router {
     private final byte[] userMetadata;
     private final ByteBuffer blob;
     private final List<ChunkInfo> stitchedChunks;
+    private short lifeVersion;
 
     public InMemoryBlob(BlobProperties blobProperties, byte[] userMetadata, ByteBuffer blob,
         List<ChunkInfo> stitchedChunks) {
@@ -116,6 +118,7 @@ public class InMemoryRouter implements Router {
       this.userMetadata = userMetadata;
       this.blob = blob;
       this.stitchedChunks = stitchedChunks;
+      this.lifeVersion = 0;
     }
 
     public BlobProperties getBlobProperties() {
@@ -163,6 +166,24 @@ public class InMemoryRouter implements Router {
         buf = ByteBuffer.wrap(bytes);
       }
       return buf;
+    }
+
+    /**
+     * @return the lifeVersion of this blob.
+     */
+    public short getLifeVersion() {
+      return lifeVersion;
+    }
+
+    /**
+     * Set the lifeVersion of this blob.
+     * @param lifeVersion The lifeVersion to set.
+     */
+    public void setLifeVersion(short lifeVersion) {
+      if (lifeVersion < 0) {
+        throw new IllegalArgumentException("Invalid lifeVersion " + lifeVersion);
+      }
+      this.lifeVersion = lifeVersion;
     }
   }
 
@@ -253,6 +274,7 @@ public class InMemoryRouter implements Router {
       checkBlobId(blobId);
       if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
         deletedBlobs.add(blobId);
+        undeletedBlobs.remove(blobId);
         if (notificationSystem != null) {
           notificationSystem.onBlobDeleted(blobId, serviceId, null, null);
         }
@@ -304,7 +326,33 @@ public class InMemoryRouter implements Router {
 
   @Override
   public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback) {
-    throw new UnsupportedOperationException("Undelete is currently unsupported");
+    FutureResult<Void> futureResult = new FutureResult<>();
+    if (!handlePrechecks(futureResult, callback)) {
+      return futureResult;
+    }
+    Exception exception = null;
+    try {
+      checkBlobId(blobId);
+      if (!blobs.containsKey(blobId)) {
+        exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+      } else if (undeletedBlobs.contains(blobId)) {
+        exception = new RouterException("Blob already undeleted", RouterErrorCode.BlobUndeleted);
+      } else if (!deletedBlobs.contains(blobId)) {
+        exception = new RouterException("Blob not deleted", RouterErrorCode.BlobNotDeleted);
+      }
+      undeletedBlobs.add(blobId);
+      deletedBlobs.remove(blobId);
+      if (notificationSystem != null) {
+        notificationSystem.onBlobDeleted(blobId, serviceId, null, null);
+      }
+    } catch (RouterException e) {
+      exception = e;
+    } catch (Exception e) {
+      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+    } finally {
+      completeOperation(futureResult, callback, null, exception);
+    }
+    return futureResult;
   }
 
   @Override
