@@ -56,19 +56,20 @@ public class HelixClusterSpectator implements ClusterSpectator {
     Map<String, DcZkInfo> dataCenterToZkAddress =
         parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
     HelixFactory helixFactory = new HelixFactory();
-    String selfInstanceName = ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
+    String selfInstanceName =
+        ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
 
     // Should we fail here if even one of the remote zk connection fails? If we have just one datacenter, then this will not be a problem.
     // If we have two data centers, then its not clear if we should pass the startup with one remote zk connection failure. Because if remote
     // zk connection fails on both data centers, then things like replication between data centers might just stop.
     // For now, since we have only one fabric in cloud, and the spectator is being used for only cloud to store replication, this will work.
     // Once we add more fabrics, we should revisit this.
-    for (DcZkInfo dcZkInfo: dataCenterToZkAddress.values()) {
+    for (DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
       // only handle vcr clusters for now
       if (dcZkInfo.getReplicaType() == ReplicaType.CLOUD_BACKED) {
         HelixManager helixManager =
             helixFactory.getZKHelixManager(cloudConfig.vcrClusterName, selfInstanceName, InstanceType.SPECTATOR,
-                dcZkInfo.getZkConnectStr());
+                dcZkInfo.getZkConnectStrs().get(0));
         helixManager.connect();
 
         helixManager.addInstanceConfigChangeListener(this);

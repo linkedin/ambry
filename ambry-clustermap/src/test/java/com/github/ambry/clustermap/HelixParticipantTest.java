@@ -32,6 +32,7 @@ import java.util.TreeSet;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.model.InstanceConfig;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -41,6 +42,7 @@ import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -63,8 +65,8 @@ public class HelixParticipantTest {
   }
 
   public HelixParticipantTest(String stateModelDef) throws Exception {
-    List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
-    zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", (byte) 0, 2199, false));
+    List<ZkInfo> zkInfoList = new ArrayList<>();
+    zkInfoList.add(new ZkInfo(null, "DC0", (byte) 0, 2199, false));
     zkJson = constructZkLayoutJSON(zkInfoList);
     props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
@@ -91,9 +93,10 @@ public class HelixParticipantTest {
     String hostname = "localhost";
     int port = 2200;
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant helixParticipant =
-        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory,
-            new MetricRegistry());
+        new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+            getDefaultZkConnectStr(clusterMapConfig), true);
     helixParticipant.participate(Collections.emptyList());
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
@@ -181,12 +184,14 @@ public class HelixParticipantTest {
     int port = 2200;
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
     String instanceNameDummy = ClusterMapUtils.getInstanceName("dummyHost", 2200);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    ClusterMapConfig clusterMapConfigDummy = new ClusterMapConfig(new VerifiableProperties(propsDummy));
     HelixParticipant helixParticipant =
-        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory,
-            new MetricRegistry());
+        new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+            getDefaultZkConnectStr(clusterMapConfig), true);
     HelixParticipant helixParticipantDummy =
-        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(propsDummy)), helixManagerFactory,
-            new MetricRegistry());
+        new HelixParticipant(clusterMapConfigDummy, helixManagerFactory, new MetricRegistry(),
+            getDefaultZkConnectStr(clusterMapConfigDummy), true);
     HelixParticipant helixParticipantSpy = Mockito.spy(helixParticipant);
     helixParticipant.participate(Collections.emptyList());
     helixParticipantDummy.participate(Collections.emptyList());
@@ -262,10 +267,9 @@ public class HelixParticipantTest {
 
   /**
    * Test bad instantiation and initialization scenarios of the {@link HelixParticipant}
-   * @throws IOException
    */
   @Test
-  public void testBadCases() throws IOException {
+  public void testBadCases() {
     // Invalid state model def
     props.setProperty("clustermap.state.model.definition", "InvalidStateModelDef");
     try {
@@ -279,7 +283,8 @@ public class HelixParticipantTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     helixManagerFactory.getHelixManager().beBad = true;
     HelixParticipant helixParticipant =
-        new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
+        new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+            getDefaultZkConnectStr(clusterMapConfig), true);
     try {
       helixParticipant.participate(Collections.emptyList());
       fail("Participation should have failed");
@@ -291,7 +296,8 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.cluster.name", "");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
-      new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
+      new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+          getDefaultZkConnectStr(clusterMapConfig), true);
       fail("Instantiation should have failed");
     } catch (IllegalStateException e) {
       // OK
@@ -301,10 +307,38 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", "");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
-      new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
+      new HelixClusterAgentsFactory(clusterMapConfig, new MetricRegistry()).getClusterParticipants();
       fail("Instantiation should have failed");
     } catch (IOException e) {
       // OK
+    }
+  }
+
+  /**
+   * Test instantiating multiple {@link HelixParticipant}(s) in {@link HelixClusterAgentsFactory}
+   * @throws Exception
+   */
+  @Test
+  public void testMultiParticipants() throws Exception {
+    JSONArray zkInfosJson = new JSONArray();
+    // create a new zkJson which contains two zk endpoints in the same data center.
+    JSONObject zkInfoJson = new JSONObject();
+    zkInfoJson.put(ClusterMapUtils.DATACENTER_STR, "DC0");
+    zkInfoJson.put(ClusterMapUtils.DATACENTER_ID_STR, (byte) 0);
+    zkInfoJson.put(ClusterMapUtils.ZKCONNECT_STR, "localhost:2199" + ZKCONNECT_STR_DELIMITER + "localhost:2299");
+    zkInfosJson.put(zkInfoJson);
+    JSONObject jsonObject = new JSONObject().put(ClusterMapUtils.ZKINFO_STR, zkInfosJson);
+    props.setProperty("clustermap.dcs.zk.connect.strings", jsonObject.toString(2));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    try {
+      List<ClusterParticipant> participants =
+          new HelixClusterAgentsFactory(clusterMapConfig, helixManagerFactory).getClusterParticipants();
+      assertEquals("Number of participants is not expected", 2, participants.size());
+    } catch (Exception e) {
+      throw e;
+    } finally {
+      // restore previous setup
+      props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     }
   }
 
@@ -315,7 +349,8 @@ public class HelixParticipantTest {
   @Test
   public void testHelixParticipant() throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
+    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+        getDefaultZkConnectStr(clusterMapConfig), true);
     participant.participate(Collections.emptyList());
     MockHelixManagerFactory.MockHelixManager helixManager = helixManagerFactory.getHelixManager();
     assertTrue(helixManager.isConnected());
@@ -340,7 +375,8 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(true));
     props.setProperty("clustermap.port", String.valueOf(localNode.getPort()));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry());
+    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+        getDefaultZkConnectStr(clusterMapConfig), true);
     // create InstanceConfig for local node. Also, put existing replica into sealed list
     List<String> sealedList = new ArrayList<>();
     sealedList.add(existingReplica.getPartitionId().toPathString());
@@ -393,6 +429,17 @@ public class HelixParticipantTest {
     // reset props
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(false));
     props.setProperty("clustermap.port", "2200");
+  }
+
+  /**
+   * Get the default zk connect string in current dc. The default zk connect string is the first one (if there are
+   * multiple strings associated with same dc) specified in clustermap config.
+   * @param clusterMapConfig the {@link ClusterMapConfig} to parse default zk connect string associated with current dc.
+   * @return the zk connection string representing the ZK service endpoint.
+   */
+  private String getDefaultZkConnectStr(ClusterMapConfig clusterMapConfig) {
+    return parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
+        clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0);
   }
 
   /**

@@ -105,7 +105,7 @@ public class ClusterMapConfig {
    *     {
    *       "datacenter":"dc1",
    *       "id": "1",
-   *       "zkConnectStr":"abc.example.com:2199",
+   *       "zkConnectStr":"abc.example.com:2199,xyz.example.com:2299",
    *     },
    *     {
    *       "datacenter":"dc2",
@@ -120,6 +120,9 @@ public class ClusterMapConfig {
    *   ]
    * }
    * </pre>
+   * Also, there could be multiple zk connection strings within same datacenter(except for cloud-dc). The intention is to
+   * allow ambry server to participate into multiple clusters for special case like migrating ambry to another ZK. For
+   * ambry frontend, if there are multiple zk connection strings, only the first one will be adopted.
    */
   @Config("clustermap.dcs.zk.connect.strings")
   @Default("")

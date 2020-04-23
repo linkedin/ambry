@@ -38,6 +38,7 @@ import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.store.HelixPropertyStore;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
@@ -231,6 +232,34 @@ public class HelixBootstrapUpgradeToolTest {
       } catch (IllegalArgumentException e) {
         // OK
       }
+    }
+  }
+
+  /**
+   * Test that dropping cluster fails because of invalid zk endpoints count. (HelixBootstrapTool should perform operation
+   * against one ZK endpoint in certain dc at a time. Bootstrapping multiple clusters concurrently is not allowed)
+   * @throws Exception
+   */
+  @Test
+  public void testInvalidZKEndpointCount() throws Exception {
+    JSONArray zkInfosJson = new JSONArray();
+    for (ZkInfo zkInfo : dcsToZkInfo.values()) {
+      JSONObject zkInfoJson = new JSONObject();
+      zkInfoJson.put(ClusterMapUtils.DATACENTER_STR, zkInfo.getDcName());
+      zkInfoJson.put(ClusterMapUtils.DATACENTER_ID_STR, zkInfo.getId());
+      zkInfoJson.put(ClusterMapUtils.ZKCONNECT_STR,
+          "localhost1:" + zkInfo.getPort() + ClusterMapUtils.ZKCONNECT_STR_DELIMITER + "localhost2:"
+              + zkInfo.getPort());
+      zkInfosJson.put(zkInfoJson);
+    }
+    JSONObject jsonObject = new JSONObject().put(ClusterMapUtils.ZKINFO_STR, zkInfosJson);
+    Utils.writeJsonObjectToFile(jsonObject, zkLayoutPath);
+    try {
+      HelixBootstrapUpgradeUtil.dropCluster(zkLayoutPath, CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP,
+          dcStr, new HelixAdminFactory());
+      fail("should fail because of invalid zk endpoint count");
+    } catch (IllegalArgumentException e) {
+      // expected
     }
   }
 

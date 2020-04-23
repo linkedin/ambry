@@ -64,6 +64,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
@@ -1241,7 +1242,9 @@ public class StorageManagerTest {
     Set<ReplicaId> stoppedReplicas = new HashSet<>();
 
     MockClusterParticipant() throws IOException {
-      super(clusterMapConfig, new MockHelixManagerFactory(), new MetricRegistry());
+      super(clusterMapConfig, new MockHelixManagerFactory(), new MetricRegistry(),
+          parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
+              clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
     }
 
     @Override
