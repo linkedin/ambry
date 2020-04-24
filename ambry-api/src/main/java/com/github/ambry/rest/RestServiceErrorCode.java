@@ -168,7 +168,12 @@ public enum RestServiceErrorCode {
   /**
    * Action not allowed
    */
-  NotAllowed;
+  NotAllowed,
+
+  /**
+   * Request conflicts with the current state of the server.
+   */
+  Conflict;
 
   /**
    * Gets the RestServiceErrorCode that corresponds to the {@code routerErrorCode}.
@@ -199,8 +204,12 @@ public enum RestServiceErrorCode {
         return ServiceUnavailable;
       case InsufficientCapacity:
         return InsufficientCapacity;
+      case BlobUndeleted:
+      case BlobNotDeleted:
+        return Conflict;
       case UnexpectedInternalError:
       case ChannelClosed:
+      case LifeVersionConflict:
       default:
         return InternalServerError;
     }

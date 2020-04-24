@@ -624,6 +624,10 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.notFoundCount.inc();
         status = HttpResponseStatus.NOT_FOUND;
         break;
+      case Conflict:
+        nettyMetrics.conflictCount.inc();
+        status = HttpResponseStatus.CONFLICT;
+        break;
       case Gone:
         nettyMetrics.goneCount.inc();
         status = HttpResponseStatus.GONE;

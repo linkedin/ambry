@@ -134,17 +134,17 @@ public class NettyResponseChannelTest {
       channel.writeInbound(createContent(lastContent, true));
       verifyCallbacks(processor);
       // first outbound has to be response.
-      HttpResponse response = (HttpResponse) channel.readOutbound();
+      HttpResponse response = channel.readOutbound();
       assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
       assertTrue("Response must say 'Transfer-Encoding : chunked'", HttpUtil.isTransferEncodingChunked(response));
       // content echoed back.
       for (String srcOfTruth : contents) {
-        HttpContent responseContent = (HttpContent) channel.readOutbound();
+        HttpContent responseContent = channel.readOutbound();
         String returnedContent = RestTestUtils.getContentString(responseContent);
         responseContent.release();
         assertEquals("Content does not match with expected content", srcOfTruth, returnedContent);
       }
-      HttpContent responseContent = (HttpContent) channel.readOutbound();
+      HttpContent responseContent = channel.readOutbound();
       // last content echoed back.
       String returnedContent = RestTestUtils.getContentString(responseContent);
       responseContent.release();
@@ -216,7 +216,7 @@ public class NettyResponseChannelTest {
       verifyCallbacks(processor);
 
       // first outbound has to be response.
-      HttpResponse response = (HttpResponse) channel.readOutbound();
+      HttpResponse response = channel.readOutbound();
       assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
       long contentLength = HttpUtil.getContentLength(response, -1);
       assertEquals("Unexpected Content-Length", MockNettyMessageProcessor.CHUNK.length * i, contentLength);
@@ -226,7 +226,7 @@ public class NettyResponseChannelTest {
       } else {
         HttpContent httpContent = null;
         for (int j = 0; j < i; j++) {
-          httpContent = (HttpContent) channel.readOutbound();
+          httpContent = channel.readOutbound();
           byte[] returnedContent = new byte[httpContent.content().readableBytes()];
           httpContent.content().readBytes(returnedContent);
           httpContent.release();
@@ -254,7 +254,7 @@ public class NettyResponseChannelTest {
         RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ImmediateResponseComplete.toString(), null);
     channel.writeInbound(httpRequest);
     // There should be a response.
-    HttpResponse response = (HttpResponse) channel.readOutbound();
+    HttpResponse response = channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     assertTrue("Response must say 'Transfer-Encoding : chunked'", HttpUtil.isTransferEncodingChunked(response));
     // since this is Transfer-Encoding:chunked, there should be a LastHttpContent
@@ -268,7 +268,7 @@ public class NettyResponseChannelTest {
     HttpUtil.setKeepAlive(httpRequest, false);
     channel.writeInbound(httpRequest);
     // There should be a response.
-    response = (HttpResponse) channel.readOutbound();
+    response = channel.readOutbound();
     assertEquals("Response must have Content-Length set to 0", 0, HttpUtil.getContentLength(response, -1));
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     // since Content-Length is set, the response should be an instance of FullHttpResponse.
@@ -387,12 +387,12 @@ public class NettyResponseChannelTest {
     channel.writeInbound(createContent(lastContent, true));
 
     // first outbound has to be response.
-    HttpResponse response = (HttpResponse) channel.readOutbound();
+    HttpResponse response = channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     // content echoed back.
     StringBuilder returnedContent = new StringBuilder();
     while (returnedContent.length() < content.length()) {
-      HttpContent responseContent = (HttpContent) channel.readOutbound();
+      HttpContent responseContent = channel.readOutbound();
       returnedContent.append(RestTestUtils.getContentString(responseContent));
       responseContent.release();
     }
@@ -400,7 +400,7 @@ public class NettyResponseChannelTest {
     // last content echoed back.
     StringBuilder returnedLastContent = new StringBuilder();
     while (returnedLastContent.length() < lastContent.length()) {
-      HttpContent responseContent = (HttpContent) channel.readOutbound();
+      HttpContent responseContent = channel.readOutbound();
       returnedLastContent.append(RestTestUtils.getContentString(responseContent));
       responseContent.release();
     }
@@ -420,7 +420,7 @@ public class NettyResponseChannelTest {
     EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(request);
 
-    HttpResponse response = (HttpResponse) channel.readOutbound();
+    HttpResponse response = channel.readOutbound();
     assertFalse("Channel not closed on the server", channel.isActive());
 
     checkHeaders(request, response);
@@ -437,7 +437,7 @@ public class NettyResponseChannelTest {
     EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(request);
 
-    HttpResponse response = (HttpResponse) channel.readOutbound();
+    HttpResponse response = channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.status());
     assertFalse("Channel not closed on the server", channel.isActive());
   }
@@ -452,7 +452,7 @@ public class NettyResponseChannelTest {
     EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(request);
 
-    HttpResponse response = (HttpResponse) channel.readOutbound();
+    HttpResponse response = channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.status());
     assertFalse("Channel not closed on the server", channel.isActive());
   }
@@ -723,6 +723,8 @@ public class NettyResponseChannelTest {
     switch (code) {
       case RequestTooLarge:
         return HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE;
+      case Conflict:
+        return HttpResponseStatus.CONFLICT;
       case Deleted:
         return HttpResponseStatus.GONE;
       case NotFound:
