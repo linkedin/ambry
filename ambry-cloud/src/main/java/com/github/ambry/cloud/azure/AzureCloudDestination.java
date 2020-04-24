@@ -15,6 +15,7 @@ package com.github.ambry.cloud.azure;
 
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatchClient;
+import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
@@ -248,7 +249,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param blobId The {@link BlobId} to update.
    * @param fieldName The metadata field to modify.
    * @param value The new value.
-   * @return {@code true} if the udpate succeeded, {@code false} if the metadata record was not found.
+   * @return {@code true} if the udpate succeeded, {@code false} if no update was needed.
    * @throws CloudStorageException if the update fails.
    */
   private boolean updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws CloudStorageException {
@@ -259,11 +260,41 @@ class AzureCloudDestination implements CloudDestination {
     // 1) the blob storage entry metadata (so GET's can be served entirely from ABS)
     // 2) the CosmosDB metadata collection
     try {
-      AzureBlobDataAccessor.UpdateResponse updateResponse =
-          azureBlobDataAccessor.updateBlobMetadata(blobId, fieldName, value);
-      // Note: if blob does not exist will throw exception with NOT_FOUND status
-      Map<String, String> metadataMap = updateResponse.metadata;
-      boolean updatedStorage = updateResponse.wasUpdated;
+      boolean updatedStorage = false;
+      Map<String, String> metadataMap = null;
+      try {
+        AzureBlobDataAccessor.UpdateResponse updateResponse =
+            azureBlobDataAccessor.updateBlobMetadata(blobId, fieldName, value);
+        // Note: if blob does not exist will throw exception with NOT_FOUND status
+        metadataMap = updateResponse.metadata;
+        updatedStorage = updateResponse.wasUpdated;
+      } catch (BlobStorageException bex) {
+        if (bex.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+          // There is a corner case where compaction of this partition hit partial failure leaving the record
+          // in Cosmos but not ABS.  If that happens, a late arriving update event can get stuck in a loop
+          // where findMissingKeys says the blob exists (because Cosmos has it), but the subsequent update
+          // attempt fails.  So we check for that case here.
+          CloudBlobMetadata cosmosMetadata = cosmosDataAccessor.getMetadataOrNull(blobId);
+          if (cosmosMetadata != null) {
+            if (cosmosMetadata.isDeletedOrExpired()) {
+              logger.warn("Inconsistency: Cosmos contains record for inactive blob {}, removing it.", blobId.getID());
+              cosmosDataAccessor.deleteMetadata(cosmosMetadata);
+              azureMetrics.blobUpdateRecoverCount.inc();
+              return false;
+            } else {
+              // If the blob is still active but ABS does not have it, we are in deeper trouble.
+              logger.error("Inconsistency: Cosmos contains record for active blob {} that is missing from ABS!", blobId.getID());
+              throw bex;
+            }
+          } else {
+            // Blob is not in Cosmos either, so simple NOT_FOUND error.
+            throw bex;
+          }
+        } else {
+          // Other type of error, just throw.
+          throw bex;
+        }
+      }
 
       // Note: even if nothing changed in blob storage, still attempt to update Cosmos since this could be a retry
       // of a request where ABS was updated but Cosmos update failed.

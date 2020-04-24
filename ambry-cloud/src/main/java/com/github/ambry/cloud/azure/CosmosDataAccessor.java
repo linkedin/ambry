@@ -146,6 +146,29 @@ public class CosmosDataAccessor {
   }
 
   /**
+   * Get the metadata record for a single blob.
+   * @param blobId the blob to read.
+   * @return the {@link CloudBlobMetadata} for the blob if it is found, otherwise null.
+   * @throws DocumentClientException on any other error.
+   */
+  CloudBlobMetadata getMetadataOrNull(BlobId blobId) throws DocumentClientException {
+    String docLink = getDocumentLink(blobId.getID());
+    RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
+    try {
+      ResourceResponse<Document> readResponse =
+          executeCosmosAction(() -> asyncDocumentClient.readDocument(docLink, options).toBlocking().single(),
+              azureMetrics.documentReadTime);
+      return createMetadataFromDocument(readResponse.getResource());
+    } catch (DocumentClientException dex) {
+      if (dex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
+        return null;
+      } else {
+        throw dex;
+      }
+    }
+  }
+
+  /**
    * Update the blob metadata document in the CosmosDB collection.
    * @param blobId the {@link BlobId} for which metadata is replaced.
    * @param fieldName the metadata field to update.

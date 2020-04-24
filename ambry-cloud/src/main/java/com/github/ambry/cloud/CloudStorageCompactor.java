@@ -21,7 +21,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,10 +34,13 @@ public class CloudStorageCompactor implements Runnable {
   private final CloudDestination cloudDestination;
   private final Set<PartitionId> partitions;
   private final int queryLimit;
+  private final int shutDownTimeoutSecs;
   private final long retentionPeriodMs;
   private final long compactionTimeLimitMs;
   private final VcrMetrics vcrMetrics;
   private final CloudRequestAgent requestAgent;
+  private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+  private final AtomicReference<CountDownLatch> doneLatch = new AtomicReference<>();
 
   /**
    * Public constructor.
@@ -49,8 +55,10 @@ public class CloudStorageCompactor implements Runnable {
     this.vcrMetrics = vcrMetrics;
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
     this.queryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
+    this.shutDownTimeoutSecs = cloudConfig.cloudBlobCompactionShutDownTimeoutSecs;
     compactionTimeLimitMs = TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours);
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
+    doneLatch.set(new CountDownLatch(0));
   }
 
   @Override
@@ -66,6 +74,29 @@ public class CloudStorageCompactor implements Runnable {
   }
 
   /**
+   * Shut down the compactor waiting for in progress operations to complete.
+   */
+  public void shutdown() {
+    shuttingDown.set(true);
+    logger.info("Compactor received shutdown request, waiting up to {} seconds for in-flight operations to finish",
+        shutDownTimeoutSecs);
+    try {
+      doneLatch.get().await(shutDownTimeoutSecs, TimeUnit.SECONDS);
+      logger.info("Compactor shut down successfully.");
+    } catch (InterruptedException ex) {
+      logger.warn("Timed out waiting for operations to finish.  If cloud provider uses separate stores for "
+          + "data and metadata, some inconsistencies may be present.");
+    }
+  }
+
+  /**
+   * @return whether the compactor is shutting down.
+   */
+  boolean isShuttingDown() {
+    return shuttingDown.get();
+  }
+
+  /**
    * Purge the inactive blobs in all managed partitions.
    * @return the total number of blobs purged.
    */
@@ -74,6 +105,14 @@ public class CloudStorageCompactor implements Runnable {
       logger.info("Skipping compaction as no partitions are assigned.");
       return 0;
     }
+    if (isShuttingDown()) {
+      logger.info("Skipping compaction due to shut down.");
+      return 0;
+    }
+
+    // TODO: adjust count when compaction uses multiple threads
+    doneLatch.set(new CountDownLatch(1));
+
     Set<PartitionId> partitionsSnapshot = new HashSet<>(partitions);
     logger.info("Beginning dead blob compaction for {} partitions", partitions.size());
     long now = System.currentTimeMillis();
@@ -81,6 +120,9 @@ public class CloudStorageCompactor implements Runnable {
     long timeToQuit = now + compactionTimeLimitMs;
     long queryEndTime = now - retentionPeriodMs;
     // TODO: we can cache the latest timestamp that we know we have cleared and use that on subsequent calls
+    // Starting from beginning of time is too expensive
+    // Order partitions by earliest time at which dead blob exists
+    // Can start with retention period and go back additional retention periods until no more found
     long queryStartTime = 1;
     int totalBlobsPurged = 0;
     for (PartitionId partitionId : partitionsSnapshot) {
@@ -91,6 +133,7 @@ public class CloudStorageCompactor implements Runnable {
       }
       logger.info("Running compaction on partition {}", partitionPath);
       try {
+        // TODO: before compacting, call getOldestBlob to get queryStartTime
         int numPurged =
             compactPartition(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, queryStartTime, queryEndTime,
                 timeToQuit);
@@ -102,13 +145,19 @@ public class CloudStorageCompactor implements Runnable {
         logger.info("Purged {} expired blobs in partition {}", numPurged, partitionPath);
         totalBlobsPurged += numPurged;
       } catch (CloudStorageException ex) {
+        // TODO: vcrMetrics.compactionFailureCount
         logger.error("Compaction failed for partition {}", partitionPath, ex);
       }
       if (System.currentTimeMillis() >= timeToQuit) {
         logger.info("Compaction terminated due to time limit exceeded.");
         break;
       }
+      if (isShuttingDown()) {
+        logger.info("Compaction terminated due to shut down.");
+        break;
+      }
     }
+    doneLatch.get().countDown();
     long compactionTime = (System.currentTimeMillis() - compactionStartTime) / 1000;
     logger.info("Purged {} blobs in {} partitions taking {} seconds", totalBlobsPurged, partitionsSnapshot.size(),
         compactionTime);
@@ -122,6 +171,8 @@ public class CloudStorageCompactor implements Runnable {
    * @throws CloudStorageException
    */
   public CloudBlobMetadata getOldestExpiredBlob(String partitionPath) throws CloudStorageException {
+    // TODO: break this up into sequence of queries starting with current retention period and
+    // moving backwards until no more blobs are found
     List<CloudBlobMetadata> deadBlobs = requestAgent.doWithRetries(
         () -> cloudDestination.getExpiredBlobs(partitionPath, 1, System.currentTimeMillis(), 1), "GetDeadBlobs",
         partitionPath);
@@ -154,14 +205,14 @@ public class CloudStorageCompactor implements Runnable {
   public int compactPartition(String partitionPath, String fieldName, long queryStartTime, long queryEndTime,
       long timeToQuit) throws CloudStorageException {
 
-    // Iterate until returned list size < limit or time runs out
+    // Iterate until returned list size < limit, time runs out or we get shut down
     int totalPurged = 0;
-    while (System.currentTimeMillis() < timeToQuit) {
+    while (System.currentTimeMillis() < timeToQuit && !isShuttingDown()) {
 
       Callable<List<CloudBlobMetadata>> deadBlobsLambda =
           getCallable(partitionPath, fieldName, queryStartTime, queryEndTime);
       List<CloudBlobMetadata> deadBlobs = requestAgent.doWithRetries(deadBlobsLambda, "GetDeadBlobs", partitionPath);
-      if (deadBlobs.isEmpty()) {
+      if (deadBlobs.isEmpty() || isShuttingDown()) {
         break;
       }
       totalPurged +=

@@ -14,7 +14,6 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -50,7 +49,6 @@ import static org.mockito.Mockito.*;
 @RunWith(MockitoJUnitRunner.class)
 public class CosmosDataAccessorTest {
 
-  private final ObjectMapper objectMapper = new ObjectMapper();
   private CosmosDataAccessor cosmosAccessor;
   private AsyncDocumentClient mockumentClient;
   private AzureMetrics azureMetrics;
@@ -79,7 +77,7 @@ public class CosmosDataAccessorTest {
    */
   @Test
   public void testUpsertNormal() throws Exception {
-    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource();
+    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource(blobMetadata);
     when(mockumentClient.upsertDocument(anyString(), any(), any(RequestOptions.class), anyBoolean())).thenReturn(
         mockResponse);
     cosmosAccessor.upsertMetadata(blobMetadata);
@@ -89,7 +87,7 @@ public class CosmosDataAccessorTest {
   /** Test update. */
   @Test
   public void testUpdateNormal() throws Exception {
-    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource();
+    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource(blobMetadata);
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
     when(mockumentClient.replaceDocument(any(), any())).thenReturn(mockResponse);
     cosmosAccessor.updateMetadata(blobId, CloudBlobMetadata.FIELD_DELETION_TIME, System.currentTimeMillis());
@@ -100,10 +98,10 @@ public class CosmosDataAccessorTest {
   /** Test update with conflict. */
   @Test
   public void testUpdateConflict() throws Exception {
-    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource();
+    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource(blobMetadata);
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
-    when(mockumentClient.replaceDocument(any(), any())).thenThrow(new RuntimeException(new DocumentClientException(
-        HttpConstants.StatusCodes.PRECONDITION_FAILED)));
+    when(mockumentClient.replaceDocument(any(), any())).thenThrow(
+        new RuntimeException(new DocumentClientException(HttpConstants.StatusCodes.PRECONDITION_FAILED)));
     try {
       cosmosAccessor.updateMetadata(blobId, CloudBlobMetadata.FIELD_DELETION_TIME, System.currentTimeMillis());
       fail("Expected exception");
@@ -120,7 +118,7 @@ public class CosmosDataAccessorTest {
   public void testQueryNormal() throws Exception {
     Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
     List<Document> docList =
-        Collections.singletonList(AzureTestUtils.createDocumentFromCloudBlobMetadata(blobMetadata, objectMapper));
+        Collections.singletonList(AzureTestUtils.createDocumentFromCloudBlobMetadata(blobMetadata));
     mockObservableForQuery(docList, mockResponse);
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
         mockResponse);
@@ -137,7 +135,7 @@ public class CosmosDataAccessorTest {
   public void testQueryChangeFeedNormal() throws Exception {
     Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
     List<Document> docList =
-        Collections.singletonList(AzureTestUtils.createDocumentFromCloudBlobMetadata(blobMetadata, objectMapper));
+        Collections.singletonList(AzureTestUtils.createDocumentFromCloudBlobMetadata(blobMetadata));
     mockObservableForChangeFeedQuery(docList, mockResponse);
     when(mockumentClient.queryDocumentChangeFeed(anyString(), any(ChangeFeedOptions.class))).thenReturn(mockResponse);
     // test with non null requestContinuationToken
