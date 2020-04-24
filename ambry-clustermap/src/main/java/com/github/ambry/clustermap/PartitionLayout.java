@@ -74,7 +74,8 @@ class PartitionLayout {
     validate();
     partitionSelectionHelper =
         new ClusterMapUtils.PartitionSelectionHelper(new StaticClusterManagerCallback(), localDatacenterName,
-            clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
+            clusterMapConfig.clustermapWritablePartitionMinReplicaCount,
+            clusterMapConfig.clusterMapDefaultPartitionClass);
   }
 
   /**
@@ -95,7 +96,8 @@ class PartitionLayout {
     validate();
     partitionSelectionHelper =
         new ClusterMapUtils.PartitionSelectionHelper(new StaticClusterManagerCallback(), localDatacenterName,
-            clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
+            clusterMapConfig.clustermapWritablePartitionMinReplicaCount,
+            clusterMapConfig.clusterMapDefaultPartitionClass);
   }
 
   public HardwareLayout getHardwareLayout() {

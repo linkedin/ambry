@@ -846,13 +846,13 @@ public class PutManagerTest {
       }
     }
 
-    // exception if there is no partition class that conforms to the replication policy
+    // if there is no partition class that conforms to the replication policy, the default should be used.
     String nonExistentClass = TestUtils.getRandomString(3);
     accountService.addReplicationPolicyToContainer(container, nonExistentClass);
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize, container, PutBlobOptions.DEFAULT, null));
     mockClusterMap.clearLastNRequestedPartitionClasses();
-    submitPutsAndAssertFailure(new RouterException("", RouterErrorCode.UnexpectedInternalError), true, false, false);
+    submitPutsAndAssertSuccess(true);
     // because of how the non-encrypted flow is, prepareForSending() may be called twice. So not checking for count
     checkLastRequestPartitionClasses(-1, nonExistentClass);
   }

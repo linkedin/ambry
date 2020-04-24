@@ -177,7 +177,8 @@ public class HelixClusterManager implements ClusterMap {
     localDatacenterId = dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
     partitionSelectionHelper =
         new PartitionSelectionHelper(helixClusterManagerCallback, clusterMapConfig.clusterMapDatacenterName,
-            clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
+            clusterMapConfig.clustermapWritablePartitionMinReplicaCount,
+            clusterMapConfig.clusterMapDefaultPartitionClass);
     // register partition selection helper as a listener of cluster map changes.
     registerClusterMapListener(partitionSelectionHelper);
   }

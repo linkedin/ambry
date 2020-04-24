@@ -92,7 +92,8 @@ public class ClusterMapUtilsTest {
     ClusterManagerCallback mockClusterManagerCallback = Mockito.mock(ClusterManagerCallback.class);
     doReturn(allPartitionIdsMain).when(mockClusterManagerCallback).getPartitions();
     ClusterMapUtils.PartitionSelectionHelper psh =
-        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, null, minimumLocalReplicaCount);
+        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, null, minimumLocalReplicaCount,
+            maxReplicasAllSites);
 
     String[] dcsToTry = {null, "", dc1, dc2};
     for (String dc : dcsToTry) {
@@ -110,12 +111,9 @@ public class ClusterMapUtilsTest {
           Arrays.asList(everywhere1, everywhere2));
       checkCaseInsensitivityForPartitionSelectionHelper(psh, true, maxLocalOneRemote,
           Arrays.asList(majorDc11, majorDc12, majorDc21, majorDc22));
-      try {
-        psh.getPartitions(getRandomString(3));
-        fail("partition class is invalid, should have thrown");
-      } catch (IllegalArgumentException e) {
-        // expected. Nothing to do.
-      }
+
+      assertCollectionEquals("Default partition class should be used if partition class is unrecognized",
+          Arrays.asList(everywhere1, everywhere2), psh.getPartitions(getRandomString(3)));
 
       // getWritablePartitions()
       Set<MockPartitionId> expectedWritableForMaxLocalOneRemote = null;
@@ -135,19 +133,12 @@ public class ClusterMapUtilsTest {
             break;
         }
       }
-      // invalid class
-      try {
-        psh.getWritablePartitions(getRandomString(3));
-        fail("partition class is invalid, should have thrown");
-      } catch (IllegalArgumentException e) {
-        // expected. Nothing to do.
-      }
-      try {
-        psh.getRandomWritablePartition(getRandomString(3), null);
-        fail("partition class is invalid, should have thrown");
-      } catch (IllegalArgumentException e) {
-        // expected. Nothing to do.
-      }
+      // invalid class should fall back to default partition class
+      verifyGetWritablePartition(psh, allPartitionIds, getRandomString(3),
+          new HashSet<>(Arrays.asList(everywhere1, everywhere2)), dc);
+      verifyGetRandomWritablePartition(psh, allPartitionIds, getRandomString(3),
+          new HashSet<>(Arrays.asList(everywhere1, everywhere2)), dc);
+
       verifyWritablePartitionsReturned(psh, allPartitionIds, maxReplicasAllSites, everywhere1, everywhere2,
           maxLocalOneRemote, expectedWritableForMaxLocalOneRemote, dc);
       if (candidate1 != null && candidate2 != null) {
@@ -178,7 +169,8 @@ public class ClusterMapUtilsTest {
     doReturn(allPartitions).when(mockClusterManagerCallback).getPartitions();
     int minimumLocalReplicaCount = 3;
     ClusterMapUtils.PartitionSelectionHelper psh =
-        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, dc1, minimumLocalReplicaCount);
+        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, dc1, minimumLocalReplicaCount,
+            partitionClass);
     // verify get all partitions return correct result
     assertEquals("Returned partitions are not expected", allPartitions, psh.getPartitions(null));
     // verify get writable partitions return partition2 and partition3 only
@@ -189,7 +181,8 @@ public class ClusterMapUtilsTest {
 
     // create another partition selection helper with minimumLocalReplicaCount = 4
     minimumLocalReplicaCount = 4;
-    psh = new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, dc1, minimumLocalReplicaCount);
+    psh = new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, dc1, minimumLocalReplicaCount,
+        partitionClass);
     assertEquals("Returned writable partitions are not expected", Arrays.asList(partition3),
         psh.getWritablePartitions(partitionClass));
     assertEquals("Get random writable partition should return partition3 only", partition3,
