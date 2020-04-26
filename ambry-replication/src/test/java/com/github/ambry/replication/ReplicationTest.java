@@ -1963,6 +1963,56 @@ public class ReplicationTest {
   }
 
   /**
+   * Test that metrics that track remote replicas lag behind local replicas in each dc.
+   * @throws Exception
+   */
+  @Test
+  public void dcLevelReplicationLagMetricsTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, null);
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    Set<String> remoteDcNames = new HashSet<>(Arrays.asList("DC1", "DC2", "DC3"));
+    String localDcName = clusterMap.getDataNodeIds().get(0).getDatacenterName();
+    remoteDcNames.remove(localDcName);
+
+    // before updating replication lag, make sure avg lag in each dc is 0
+    MetricRegistry metricRegistry = replicationManager.getMetricRegistry();
+    String prefix = ReplicaThread.class.getName() + ".";
+    String avgMetricSuffix = "-avgReplicaLagFromLocalInBytes";
+    assertEquals("Average replication lag in local dc is not expected", 18.0,
+        metricRegistry.getGauges().get(prefix + localDcName + avgMetricSuffix).getValue());
+    for (String remoteDc : remoteDcNames) {
+      assertEquals("Average replication lag in remote dc is not expected", 18.0,
+          metricRegistry.getGauges().get(prefix + remoteDc + avgMetricSuffix).getValue());
+    }
+
+    // iterate over all partitions on current node and make sure all their peer replicas in local dc have fully caught up
+    for (Map.Entry<PartitionId, PartitionInfo> entry : replicationManager.partitionToPartitionInfo.entrySet()) {
+      PartitionId localPartition = entry.getKey();
+      PartitionInfo partitionInfo = entry.getValue();
+      List<RemoteReplicaInfo> remoteReplicaInfos = partitionInfo.getRemoteReplicaInfos()
+          .stream()
+          .filter(info -> info.getReplicaId().getDataNodeId().getDatacenterName().equals(localDcName))
+          .collect(Collectors.toList());
+      for (RemoteReplicaInfo remoteReplicaInfoInLocalDc : remoteReplicaInfos) {
+        ReplicaId peerReplicaInLocalDc = remoteReplicaInfoInLocalDc.getReplicaId();
+        replicationManager.updateTotalBytesReadByRemoteReplica(localPartition,
+            peerReplicaInLocalDc.getDataNodeId().getHostname(), peerReplicaInLocalDc.getReplicaPath(), 18);
+      }
+    }
+    // verify that after updating replication lag for all peer replicas in local dc, the avg lag in local dc has updated
+    assertEquals("Average replication lag in local dc is not expected", 0.0,
+        metricRegistry.getGauges().get(prefix + localDcName + avgMetricSuffix).getValue());
+    // for remote dc, the avg lag is still 18.0
+    for (String remoteDc : remoteDcNames) {
+      assertEquals("Average replication lag in remote dc is not expected", 18.0,
+          metricRegistry.getGauges().get(prefix + remoteDc + avgMetricSuffix).getValue());
+    }
+  }
+
+  /**
    * Tests {@link ReplicationMetrics#getMaxLagForPartition(PartitionId)}
    * @throws Exception
    */
@@ -1987,7 +2037,7 @@ public class ReplicationTest {
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
     for (int i = 0; i < partitionIds.size(); i++) {
       PartitionId partitionId = partitionIds.get(i);
-      // add batchSize + 1 messages to the remoteHost1 so that two round of replication is needed.
+      // add batchSize + 1 messages to the remoteHost1 so that two rounds of replication is needed.
       addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost1), batchSize + 1);
     }
     // add batchSize - 1 messages to the remoteHost2 so that localHost can catch up during one cycle of replication
@@ -2016,7 +2066,7 @@ public class ReplicationTest {
     for (PartitionId partitionId : partitionIds) {
       List<MessageInfo> allMessageInfos = localAndRemoteHosts.getSecond().infosByPartition.get(partitionId);
       long expectedLag =
-          allMessageInfos.subList(batchSize, allMessageInfos.size()).stream().mapToLong(i -> i.getSize()).sum();
+          allMessageInfos.subList(batchSize, allMessageInfos.size()).stream().mapToLong(MessageInfo::getSize).sum();
       assertEquals("Replication lag doesn't match expected value", expectedLag,
           replicaThread1.getReplicationMetrics().getMaxLagForPartition(partitionId));
     }

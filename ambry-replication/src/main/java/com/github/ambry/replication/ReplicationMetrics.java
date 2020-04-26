@@ -468,30 +468,21 @@ public class ReplicationMetrics {
     Counter localStoreError = registry.counter(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
     localStoreErrorMap.put(localStoreErrorMetricName, localStoreError);
     Gauge<Long> replicaLag = remoteReplicaInfo::getRemoteLagFromLocalInBytes;
-    registry.register(MetricRegistry.name(ReplicationMetrics.class, metricNamePrefix + "-remoteLagInBytes"),
-        replicaLag);
+    registry.register(MetricRegistry.name(ReplicaThread.class, metricNamePrefix + "-remoteLagInBytes"), replicaLag);
     if (trackPerDatacenterLag) {
       String remoteReplicaDc = remoteReplicaInfo.getReplicaId().getDataNodeId().getDatacenterName();
       remoteReplicaInfosByDc.computeIfAbsent(remoteReplicaDc, k -> {
         Gauge<Double> avgReplicaLag = () -> getAvgLagFromDc(remoteReplicaDc);
-        registry.register(
-            MetricRegistry.name(ReplicationMetrics.class, remoteReplicaDc + "-avgReplicaLagFromLocalInBytes"),
+        registry.register(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-avgReplicaLagFromLocalInBytes"),
             avgReplicaLag);
         Gauge<Long> maxReplicaLag =
             () -> dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics()).getMax();
-        registry.register(
-            MetricRegistry.name(ReplicationMetrics.class, remoteReplicaDc + "-maxReplicaLagFromLocalInBytes"),
+        registry.register(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-maxReplicaLagFromLocalInBytes"),
             maxReplicaLag);
         Gauge<Long> minReplicaLag =
             () -> dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics()).getMin();
-        registry.register(
-            MetricRegistry.name(ReplicationMetrics.class, remoteReplicaDc + "-minReplicaLagFromLocalInBytes"),
+        registry.register(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-minReplicaLagFromLocalInBytes"),
             minReplicaLag);
-        Gauge<Long> totalReplicaLag =
-            () -> dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics()).getSum();
-        registry.register(
-            MetricRegistry.name(ReplicationMetrics.class, remoteReplicaDc + "-totalReplicaLagFromLocalInBytes"),
-            totalReplicaLag);
         return ConcurrentHashMap.newKeySet();
       }).add(remoteReplicaInfo);
     }
@@ -511,7 +502,7 @@ public class ReplicationMetrics {
     String localStoreErrorMetricName = metricNamePrefix + "-localStoreError";
     localStoreErrorMap.remove(localStoreErrorMetricName);
     registry.remove(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
-    registry.remove(MetricRegistry.name(ReplicationMetrics.class, metricNamePrefix + "-remoteLagInBytes"));
+    registry.remove(MetricRegistry.name(ReplicaThread.class, metricNamePrefix + "-remoteLagInBytes"));
   }
 
   public void updateMetadataRequestError(ReplicaId remoteReplica) {
@@ -713,6 +704,11 @@ public class ReplicationMetrics {
     return maxEntry.getValue();
   }
 
+  /**
+   * Get tha average replication lag of remote replicas in given datacenter
+   * @param dcName the name of dc where remote replicas sit
+   * @return the average replication lag
+   */
   double getAvgLagFromDc(String dcName) {
     Set<RemoteReplicaInfo> replicaInfos = remoteReplicaInfosByDc.get(dcName);
     if (replicaInfos == null || replicaInfos.isEmpty()) {
