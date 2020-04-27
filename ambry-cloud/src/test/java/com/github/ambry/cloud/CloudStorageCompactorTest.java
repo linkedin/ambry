@@ -105,6 +105,12 @@ public class CloudStorageCompactorTest {
     verify(mockDest, times(1)).getDeletedBlobs(eq(partitionPath2), anyLong(), anyLong(), anyInt());
     assertNull(compactor.getOldestExpiredBlob(partitionPath1));
     assertNull(compactor.getOldestDeletedBlob(partitionPath2));
+
+    // Test shutdown
+    assertFalse("Should not be shutting down yet", compactor.isShuttingDown());
+    compactor.shutdown();
+    assertTrue("Should be shutting down now", compactor.isShuttingDown());
+    // TODO: test shutting down with compaction still in progress (more involved)
   }
 
   /**

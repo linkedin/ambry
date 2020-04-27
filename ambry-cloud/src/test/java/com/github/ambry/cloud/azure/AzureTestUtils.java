@@ -52,13 +52,14 @@ class AzureTestUtils {
   static final short accountId = 101;
   static final short containerId = 5;
   static final long partition = 666;
+  static final ObjectMapper objectMapper = new ObjectMapper();
 
   /**
    * Create {@link Document} object from {@link CloudBlobMetadata} object.
    * @param cloudBlobMetadata {@link CloudBlobMetadata} object.
    * @return {@link Document} object.
    */
-  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, ObjectMapper objectMapper)
+  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata)
       throws IOException {
     Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
     document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, System.currentTimeMillis());
@@ -71,8 +72,7 @@ class AzureTestUtils {
    * @param uploadTime specified upload time.
    * @return {@link Document} object.
    */
-  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, long uploadTime,
-      ObjectMapper objectMapper) throws JsonProcessingException {
+  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, long uploadTime) throws JsonProcessingException {
     Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
     document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, uploadTime);
     return document;
@@ -110,15 +110,17 @@ class AzureTestUtils {
 
   /**
    * Utility to mock the call chain to get mocked {@link Observable} for single resource from {@link AsyncDocumentClient}.
+   * @param metadata the {@link CloudBlobMetadata} to return as a document.
    * @return {@link Observable< ResourceResponse <Document>>} object.
    */
-  static Observable<ResourceResponse<Document>> getMockedObservableForSingleResource() {
+  static Observable<ResourceResponse<Document>> getMockedObservableForSingleResource(CloudBlobMetadata metadata)
+      throws IOException {
     Observable<ResourceResponse<Document>> mockResponse = mock(Observable.class);
     BlockingObservable<ResourceResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
     when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
     ResourceResponse<Document> mockResourceResponse = mock(ResourceResponse.class);
     when(mockBlockingObservable.single()).thenReturn(mockResourceResponse);
-    Document metadataDoc = new Document();
+    Document metadataDoc = createDocumentFromCloudBlobMetadata(metadata);
     when(mockResourceResponse.getResource()).thenReturn(metadataDoc);
     return mockResponse;
   }

@@ -29,8 +29,10 @@ public class VcrMetrics {
   public final Counter blobDecryptionErrorCount;
   public final Timer blobEncryptionTime;
   public final Timer blobDecryptionTime;
-  // Time to run compaction task
+  // Compaction metrics
   public final Timer blobCompactionTime;
+  public final Counter compactionFailureCount;
+  public final Counter compactionShutdownTimeoutCount;
   // Cache counters
   public final Counter blobCacheLookupCount;
   public final Counter blobCacheHitCount;
@@ -57,16 +59,19 @@ public class VcrMetrics {
     blobDecryptionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobDecryptionTime"));
     blobUploadSkippedCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobUploadSkippedCount"));
     updateTtlNotSetError = registry.counter(MetricRegistry.name(CloudBlobStore.class, "UpdateTtlNotSetError"));
-    blobCompactionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobCompactionTime"));
     blobCacheLookupCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobCacheLookupCount"));
     blobCacheHitCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobCacheHitCount"));
+    retryCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryCount"));
+    retryWaitTimeMsec = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryWaitTimeMsec"));
+    blobCompactionTime = registry.timer(MetricRegistry.name(CloudStorageCompactor.class, "BlobCompactionTime"));
+    compactionFailureCount = registry.counter(MetricRegistry.name(CloudStorageCompactor.class, "CompactionFailureCount"));
+    compactionShutdownTimeoutCount =
+        registry.counter(MetricRegistry.name(CloudStorageCompactor.class, "CompactionShutdownTimeoutCount"));
     addPartitionErrorCount =
         registry.counter(MetricRegistry.name(VcrReplicationManager.class, "AddPartitionErrorCount"));
     removePartitionErrorCount =
         registry.counter(MetricRegistry.name(VcrReplicationManager.class, "RemovePartitionErrorCount"));
     tokenReloadWarnCount = registry.counter(MetricRegistry.name(VcrReplicationManager.class, "TokenReloadWarnCount"));
-    retryCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryCount"));
-    retryWaitTimeMsec = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryWaitTimeMsec"));
   }
 
   /**

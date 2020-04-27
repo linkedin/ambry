@@ -23,7 +23,6 @@ import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.codahale.metrics.MetricRegistry;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudDestinationFactory;
@@ -85,7 +84,6 @@ public class AzureCloudDestinationTest {
   private final String storageConnection =
       "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
   private final String clusterName = "main";
-  private final ObjectMapper objectMapper = new ObjectMapper();
   private Properties configProps = new Properties();
   private AzureCloudDestination azureDest;
   private BlobServiceClient mockServiceClient;
@@ -106,23 +104,25 @@ public class AzureCloudDestinationTest {
 
   @Before
   public void setup() throws Exception {
+    long partition = 666;
+    PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+        BlobDataType.DATACHUNK);
+    CloudBlobMetadata blobMetadata =
+        new CloudBlobMetadata(blobId, 0, Utils.Infinite_Time, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE);
+
     mockServiceClient = mock(BlobServiceClient.class);
     mockBlobBatchClient = mock(BlobBatchClient.class);
     mockBlockBlobClient = AzureBlobDataAccessorTest.setupMockBlobClient(mockServiceClient);
     mockBlobExistence(false);
 
     mockumentClient = mock(AsyncDocumentClient.class);
-    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource();
+    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource(blobMetadata);
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
     when(mockumentClient.upsertDocument(anyString(), any(Object.class), any(RequestOptions.class),
         anyBoolean())).thenReturn(mockResponse);
     when(mockumentClient.replaceDocument(any(Document.class), any(RequestOptions.class))).thenReturn(mockResponse);
     when(mockumentClient.deleteDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
-
-    long partition = 666;
-    PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
-        BlobDataType.DATACHUNK);
 
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com:443");
@@ -335,6 +335,22 @@ public class AzureCloudDestinationTest {
     assertEquals("Expected two recoveries", 2, azureMetrics.blobUpdateRecoverCount.getCount());
   }
 
+  /** Test delete when record is in Cosmos but not ABS. */
+  @Test
+  public void testDeleteAfterPartialCompaction() throws Exception {
+    BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
+    when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
+    // Rig Cosmos to return us a deleted blob on read request
+    long deletionTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10);
+    CloudBlobMetadata deletedMetadata = new CloudBlobMetadata().setId(blobId.getID()).setDeletionTime(deletionTime);
+    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource(deletedMetadata);
+    when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
+    // Now delete the puppy, Cosmos record should get purged.
+    assertFalse("Expected update to recover and return false", azureDest.deleteBlob(blobId, deletionTime));
+    assertEquals("Expected recovery", 1, azureMetrics.blobUpdateRecoverCount.getCount());
+    verify(mockumentClient).deleteDocument(anyString(), any());
+  }
+
   /** Test update methods when Cosmos throws other exception. */
   @Test
   public void testUpdateCosmosException() {
@@ -395,7 +411,7 @@ public class AzureCloudDestinationTest {
     azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
         azureMetrics, defaultAzureReplicationFeedType, true);
     // Existing blob
-    List<Document> docList = Collections.singletonList(createDocumentFromCloudBlobMetadata(blobMetadata, objectMapper));
+    List<Document> docList = Collections.singletonList(createDocumentFromCloudBlobMetadata(blobMetadata));
     Observable<FeedResponse<Document>> feedResponse = mock(Observable.class);
     mockObservableForQuery(docList, feedResponse);
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
@@ -436,7 +452,7 @@ public class AzureCloudDestinationTest {
         blobIdList.add(blobId);
         CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
             CloudBlobMetadata.EncryptionOrigin.NONE);
-        docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, objectMapper));
+        docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata));
       }
 
       Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
@@ -665,7 +681,7 @@ public class AzureCloudDestinationTest {
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       inputMetadata.setUploadTime(startTime + j);
-      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + j, objectMapper));
+      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + j));
     }
 
     Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
@@ -717,13 +733,13 @@ public class AzureCloudDestinationTest {
       blobIdList.add(blobId.getID());
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
-      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime, objectMapper));
+      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime));
     }
     BlobId blobId = generateBlobId();
     blobIdList.add(blobId.getID());
     CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
         CloudBlobMetadata.EncryptionOrigin.NONE);
-    docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + 1, objectMapper));
+    docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + 1));
 
     Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
     mockObservableForQuery(docList, mockResponse);

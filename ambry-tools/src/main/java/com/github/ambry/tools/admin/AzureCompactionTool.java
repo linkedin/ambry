@@ -19,25 +19,31 @@ import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageCompactor;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionState;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
  * Tool to purge dead blobs for an Ambry partition from Azure storage.
- * Usage: java -cp /path/to/ambry.jar com.github.ambry.tools.admin.AzureCompactionTool <-propsFile <property-file-path> [-purge] partitionPath
+ * Usage: java -cp /path/to/ambry.jar AzureCompactionTool <-propsFile <property-file-path> [-purge] partitionPath
  */
 public class AzureCompactionTool {
 
@@ -68,18 +74,28 @@ public class AzureCompactionTool {
       printHelpAndExit(parser);
     }
 
-    String partitionPath = partitions.get(0);
+    Set<PartitionId> partitionIdSet =
+        partitions.stream().map(path -> new PartitionPathId(path)).collect(Collectors.toSet());
+
     // User needs to specify this option to actually delete blobs
     boolean testMode = !optionSet.has(PURGE_OPTION);
-    long now = System.currentTimeMillis();
 
     CloudDestination azureDest = null;
     try {
       azureDest = new AzureCloudDestinationFactory(verifiableProperties, new MetricRegistry()).getCloudDestination();
       CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
-      CloudStorageCompactor compactor = new CloudStorageCompactor(azureDest, cloudConfig, Collections.emptySet(),
-          new VcrMetrics(new MetricRegistry()));
+      CloudStorageCompactor compactor =
+          new CloudStorageCompactor(azureDest, cloudConfig, partitionIdSet, new VcrMetrics(new MetricRegistry()));
+
+      // Attempt clean shutdown if someone Ctrl-C's us.
+      Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+        logger.info("Received shutdown signal. Shutting down compactor.");
+        compactor.shutdown();
+      }));
+
       if (testMode) {
+        String partitionPath = partitions.get(0);
+        long now = System.currentTimeMillis();
         CloudBlobMetadata blobMetadata = compactor.getOldestDeletedBlob(partitionPath);
         if (blobMetadata == null) {
           logger.info("No deleted blobs need purging");
@@ -94,19 +110,9 @@ public class AzureCompactionTool {
           int daysOld = (int) ((now - blobMetadata.getExpirationTime()) / TimeUnit.DAYS.toMillis(1));
           logger.info("Oldest expired blob was expired about {} days ago: {}", daysOld, blobMetadata.toMap());
         }
-        System.exit(0);
+      } else {
+        compactor.compactPartitions();
       }
-
-      long queryStartTime = 1;
-      long queryEndTime = now - TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
-      long timeToQuit = now + TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours);
-      int result =
-          compactor.compactPartition(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, queryStartTime, queryEndTime,
-              timeToQuit);
-      logger.info("In partition {}: {} deleted blobs purged", partitionPath, result);
-      result = compactor.compactPartition(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, queryStartTime,
-          queryEndTime, timeToQuit);
-      logger.info("In partition {}: {} expired blobs purged", partitionPath, result);
       System.exit(0);
     } catch (Exception ex) {
       logger.error("Command {} failed", commandName, ex);
@@ -115,6 +121,62 @@ public class AzureCompactionTool {
       if (azureDest != null) {
         azureDest.close();
       }
+    }
+  }
+
+  /**
+   * PartitionId implementation that returns only its path.
+   */
+  private static class PartitionPathId implements PartitionId {
+    private final String path;
+
+    private PartitionPathId(String path) {
+      this.path = path;
+    }
+
+    @Override
+    public byte[] getBytes() {
+      return new byte[0];
+    }
+
+    @Override
+    public List<? extends ReplicaId> getReplicaIds() {
+      return null;
+    }
+
+    @Override
+    public List<? extends ReplicaId> getReplicaIdsByState(ReplicaState state, String dcName) {
+      return null;
+    }
+
+    @Override
+    public PartitionState getPartitionState() {
+      return null;
+    }
+
+    @Override
+    public boolean isEqual(String partitionId) {
+      return false;
+    }
+
+    @Override
+    public String toPathString() {
+      return path;
+    }
+
+    @Override
+    public String getPartitionClass() {
+      return null;
+    }
+
+    @Override
+    public JSONObject getSnapshot() {
+      return null;
+    }
+
+    @Override
+    public int compareTo(PartitionId o) {
+      return 0;
     }
   }
 

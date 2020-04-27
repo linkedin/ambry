@@ -412,6 +412,13 @@ public class CloudBlobMetadata {
     return cappedList;
   }
 
+  /**
+   * @return true if this blob is deleted or expired, otherwise false.
+   */
+  public boolean isDeletedOrExpired() {
+    return (expirationTime != Utils.Infinite_Time && expirationTime < System.currentTimeMillis()) || deletionTime != Utils.Infinite_Time;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (!(o instanceof CloudBlobMetadata)) {

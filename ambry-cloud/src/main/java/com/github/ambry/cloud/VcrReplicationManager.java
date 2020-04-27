@@ -216,6 +216,15 @@ public class VcrReplicationManager extends ReplicationEngine {
     // remoteReplicaInfo which needs CloudBlobStore.
   }
 
+  @Override
+  public void shutdown() throws ReplicationException {
+    // TODO: can do these in parallel
+    if (cloudStorageCompactor != null) {
+      cloudStorageCompactor.shutdown();
+    }
+    super.shutdown();
+  }
+
   public VcrMetrics getVcrMetrics() {
     return vcrMetrics;
   }
