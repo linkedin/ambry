@@ -249,7 +249,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param blobId The {@link BlobId} to update.
    * @param fieldName The metadata field to modify.
    * @param value The new value.
-   * @return {@code true} if the udpate succeeded, {@code false} if no update was needed.
+   * @return {@code true} if the update succeeded, {@code false} if no update was needed.
    * @throws CloudStorageException if the update fails.
    */
   private boolean updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws CloudStorageException {

@@ -80,12 +80,17 @@ public class CloudStorageCompactor implements Runnable {
     shuttingDown.set(true);
     logger.info("Compactor received shutdown request, waiting up to {} seconds for in-flight operations to finish",
         shutDownTimeoutSecs);
+    boolean success = false;
     try {
-      doneLatch.get().await(shutDownTimeoutSecs, TimeUnit.SECONDS);
-      logger.info("Compactor shut down successfully.");
+      success = doneLatch.get().await(shutDownTimeoutSecs, TimeUnit.SECONDS);
     } catch (InterruptedException ex) {
-      logger.warn("Timed out waiting for operations to finish.  If cloud provider uses separate stores for "
-          + "data and metadata, some inconsistencies may be present.");
+    }
+    if (success) {
+      logger.info("Compactor shut down successfully.");
+    } else {
+      logger.warn("Timed out or interrupted waiting for operations to finish.  If cloud provider uses separate stores"
+          + " for data and metadata, some inconsistencies may be present.");
+      vcrMetrics.compactionShutdownTimeoutCount.inc();
     }
   }
 
@@ -145,8 +150,8 @@ public class CloudStorageCompactor implements Runnable {
         logger.info("Purged {} expired blobs in partition {}", numPurged, partitionPath);
         totalBlobsPurged += numPurged;
       } catch (CloudStorageException ex) {
-        // TODO: vcrMetrics.compactionFailureCount
         logger.error("Compaction failed for partition {}", partitionPath, ex);
+        vcrMetrics.compactionFailureCount.inc();
       }
       if (System.currentTimeMillis() >= timeToQuit) {
         logger.info("Compaction terminated due to time limit exceeded.");
