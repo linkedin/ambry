@@ -22,9 +22,12 @@ public class BlobInfo {
 
   private byte[] userMetadata;
 
+  private short lifeVersion;
+
   public BlobInfo(BlobProperties blobProperties, byte[] userMetadata) {
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
+    this.lifeVersion = 0;
   }
 
   public BlobProperties getBlobProperties() {
@@ -33,5 +36,20 @@ public class BlobInfo {
 
   public byte[] getUserMetadata() {
     return userMetadata;
+  }
+
+  /**
+   * Set the lifeVersion of this blob.
+   * @param lifeVersion The lifeVersion to set.
+   */
+  public void setLifeVersion(short lifeVersion) {
+    this.lifeVersion = lifeVersion;
+  }
+
+  /**
+   * @return The lifeVersion of this blob.
+   */
+  public short getLifeVersion() {
+    return lifeVersion;
   }
 }

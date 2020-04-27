@@ -796,7 +796,7 @@ class GetBlobOperation extends GetOperation {
      * @param getResponse the {@link GetResponse} associated with this response.
      */
     void handleResponse(ResponseInfo responseInfo, GetResponse getResponse) {
-      int correlationId = ((GetRequest) responseInfo.getRequestInfo().getRequest()).getCorrelationId();
+      int correlationId = responseInfo.getRequestInfo().getRequest().getCorrelationId();
       // Get the GetOperation that generated the request.
       GetRequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
       if (getRequestInfo == null) {
@@ -1100,6 +1100,7 @@ class GetBlobOperation extends GetOperation {
     private BlobType blobType;
     private List<CompositeBlobInfo.ChunkMetadata> chunkMetadataList;
     private BlobProperties serverBlobProperties;
+    private MessageInfo serverMessageInfo;
 
     /**
      * Construct a FirstGetChunk and initialize it with the {@link BlobId} of the overall operation.
@@ -1154,6 +1155,7 @@ class GetBlobOperation extends GetOperation {
             initializeDataChunks();
             blobInfo =
                 new BlobInfo(serverBlobProperties, decryptCallbackResultInfo.result.getDecryptedUserMetadata().array());
+            blobInfo.setLifeVersion(serverMessageInfo.getLifeVersion());
             progressTracker.setCryptoJobSuccess();
             logger.trace("BlobContent available to process for Metadata blob {}", blobId);
           } else {
@@ -1163,6 +1165,7 @@ class GetBlobOperation extends GetOperation {
             if (decryptCallbackResultInfo.result.getDecryptedUserMetadata() != null) {
               blobInfo = new BlobInfo(serverBlobProperties,
                   decryptCallbackResultInfo.result.getDecryptedUserMetadata().array());
+              blobInfo.setLifeVersion(serverMessageInfo.getLifeVersion());
             }
             totalSize = decryptCallbackResultInfo.result.getDecryptedBlobContent().remaining();
             if (!resolveRange(totalSize)) {
@@ -1221,8 +1224,10 @@ class GetBlobOperation extends GetOperation {
             // set blobInfo only if decryption is not required. If not, maybeProcessCallbackAndComplete() will set appropriate
             // value
             blobInfo = serverBlobInfo;
+            blobInfo.setLifeVersion(messageInfo.getLifeVersion());
           } else {
             serverBlobProperties = serverBlobInfo.getBlobProperties();
+            serverMessageInfo = messageInfo;
             userMetadata = serverBlobInfo.getUserMetadata();
           }
         }

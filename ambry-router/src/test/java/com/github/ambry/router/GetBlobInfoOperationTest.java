@@ -239,38 +239,47 @@ public class GetBlobInfoOperationTest {
    */
   @Test
   public void testPollAndResponseHandling() throws Exception {
-    NonBlockingRouter.currentOperationsCount.incrementAndGet();
-    GetBlobInfoOperation op =
-        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
-            routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
-    ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
-    requestRegistrationCallback.setRequestsToSend(requestListToFill);
-    op.poll(requestRegistrationCallback);
-    Assert.assertEquals("There should only be as many requests at this point as requestParallelism", requestParallelism,
-        correlationIdToGetOperation.size());
-
-    CountDownLatch onPollLatch = new CountDownLatch(1);
-    if (testEncryption) {
-      routerCallback.setOnPollLatch(onPollLatch);
-    }
-    List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
-    for (ResponseInfo responseInfo : responses) {
-      GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
-          new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
-      op.handleResponse(responseInfo, getResponse);
-      if (op.isOperationComplete()) {
-        break;
+    for (short expectedLifeVersion : new short[]{0, 1}) {
+      NonBlockingRouter.currentOperationsCount.incrementAndGet();
+      // Now set the lifeVersion
+      for (MockServer mockServer : mockServerLayout.getMockServers()) {
+        if (mockServer.getBlobs().containsKey(blobId.getID())) {
+          mockServer.getBlobs().get(blobId.getID()).lifeVersion = expectedLifeVersion;
+        }
       }
-    }
-    responses.forEach(ResponseInfo::release);
-    if (testEncryption) {
-      Assert.assertTrue("Latch should have been zeroed ", onPollLatch.await(500, TimeUnit.MILLISECONDS));
+      GetBlobInfoOperation op =
+          new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
+              routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
+      ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
+      requestRegistrationCallback.setRequestsToSend(requestListToFill);
       op.poll(requestRegistrationCallback);
+      Assert.assertEquals("There should only be as many requests at this point as requestParallelism",
+          requestParallelism, correlationIdToGetOperation.size());
+
+      CountDownLatch onPollLatch = new CountDownLatch(1);
+      if (testEncryption) {
+        routerCallback.setOnPollLatch(onPollLatch);
+      }
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
+      for (ResponseInfo responseInfo : responses) {
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+            new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+        op.handleResponse(responseInfo, getResponse);
+        if (op.isOperationComplete()) {
+          break;
+        }
+      }
+      responses.forEach(ResponseInfo::release);
+      if (testEncryption) {
+        Assert.assertTrue("Latch should have been zeroed ", onPollLatch.await(500, TimeUnit.MILLISECONDS));
+        op.poll(requestRegistrationCallback);
+      }
+      Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
+      assertSuccess(op, expectedLifeVersion);
+      // poll again to make sure that counters aren't triggered again (check in @After)
+      op.poll(requestRegistrationCallback);
+      correlationIdToGetOperation.clear();
     }
-    Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
-    assertSuccess(op);
-    // poll again to make sure that counters aren't triggered again (check in @After)
-    op.poll(requestRegistrationCallback);
   }
 
   /**
@@ -701,7 +710,7 @@ public class GetBlobInfoOperationTest {
       }
     }
     completeOp(op);
-    assertSuccess(op);
+    assertSuccess(op, (short) 0);
   }
 
   /**
@@ -768,8 +777,9 @@ public class GetBlobInfoOperationTest {
    * happens outside of the GetOperation, so those are not checked here. But at this point, the operation result should
    * be ready.
    * @param op the {@link GetBlobInfoOperation} that should have completed.
+   * @param expectedLifeVersion the expected lifeVersion.
    */
-  private void assertSuccess(GetBlobInfoOperation op) {
+  private void assertSuccess(GetBlobInfoOperation op, short expectedLifeVersion) {
     Assert.assertNull("Null expected", op.getOperationException());
     BlobInfo blobInfo = op.getOperationResult().getBlobResult.getBlobInfo();
     Assert.assertNull("Unexpected blob data channel in operation result",
@@ -779,6 +789,7 @@ public class GetBlobInfoOperationTest {
     Assert.assertEquals("Blob size should in received blobProperties should be the same as actual", BLOB_SIZE,
         blobInfo.getBlobProperties().getBlobSize());
     Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());
+    Assert.assertEquals("LifeVersion mismatch", expectedLifeVersion, blobInfo.getLifeVersion());
   }
 
   /**

@@ -217,6 +217,11 @@ public class RestUtils {
      */
     public final static String NON_COMPLIANCE_WARNING = "x-ambry-non-compliance-warning";
 
+    /**
+     * The lifeVersion of the blob.
+     */
+    public final static String LIFE_VERSION = "x-ambry-life-version";
+
   }
 
   public static final class TrackingHeaders {

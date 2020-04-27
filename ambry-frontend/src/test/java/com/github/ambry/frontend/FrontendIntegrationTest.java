@@ -424,6 +424,7 @@ public class FrontendIntegrationTest {
 
     // verify POST
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
+    headers.add(RestUtils.Headers.LIFE_VERSION, "0");
     getBlobAndVerify(blobId, null, GetOption.None, headers, !container.isCacheable(), content, account.getName(),
         container.getName());
     getBlobInfoAndVerify(blobId, GetOption.None, headers, !container.isCacheable(), account.getName(),
@@ -656,6 +657,7 @@ public class FrontendIntegrationTest {
       blobId = postBlobAndVerify(headers, content, contentSize);
     }
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
+    headers.add(RestUtils.Headers.LIFE_VERSION, "0");
     getBlobAndVerify(blobId, null, null, headers, isPrivate, content, expectedAccountName, expectedContainerName);
     getHeadAndVerify(blobId, null, null, headers, isPrivate, expectedAccountName, expectedContainerName);
     getBlobAndVerify(blobId, null, GetOption.None, headers, isPrivate, content, expectedAccountName,
@@ -684,6 +686,7 @@ public class FrontendIntegrationTest {
     verifyOperationsAfterDelete(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, content,
         usermetadata);
     // Undelete it
+    headers.add(RestUtils.Headers.LIFE_VERSION, "1");
     undeleteBlobAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
   }
 
@@ -816,6 +819,8 @@ public class FrontendIntegrationTest {
     assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match", expectedHeaders.get(RestUtils.Headers.BLOB_SIZE),
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     assertEquals("Accept-Ranges not set correctly", "bytes", response.headers().get(RestUtils.Headers.ACCEPT_RANGES));
+    assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match", expectedHeaders.get(RestUtils.Headers.LIFE_VERSION),
+        response.headers().get(RestUtils.Headers.LIFE_VERSION));
     byte[] expectedContentArray = expectedContent.array();
     if (range != null) {
       long blobSize = Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE));
@@ -863,6 +868,7 @@ public class FrontendIntegrationTest {
     assertNull("Content-Length should not be set", response.headers().get(RestUtils.Headers.CONTENT_LENGTH));
     assertNull("Accept-Ranges should not be set", response.headers().get(RestUtils.Headers.ACCEPT_RANGES));
     assertNull("Content-Range header should not be set", response.headers().get(RestUtils.Headers.CONTENT_RANGE));
+    assertNull("Life-Version header should not be set", response.headers().get(RestUtils.Headers.LIFE_VERSION));
     assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     assertNull("Content-Type should have been null", response.headers().get(RestUtils.Headers.CONTENT_TYPE));
@@ -934,6 +940,8 @@ public class FrontendIntegrationTest {
       assertNoContent(responseParts.queue, 1);
     }
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match", expectedHeaders.get(RestUtils.Headers.LIFE_VERSION),
+        response.headers().get(RestUtils.Headers.LIFE_VERSION));
   }
 
   /**
@@ -979,6 +987,8 @@ public class FrontendIntegrationTest {
     assertEquals(RestUtils.Headers.CONTENT_TYPE + " does not match " + RestUtils.Headers.AMBRY_CONTENT_TYPE,
         expectedHeaders.get(RestUtils.Headers.AMBRY_CONTENT_TYPE),
         response.headers().get(HttpHeaderNames.CONTENT_TYPE));
+    assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match", expectedHeaders.get(RestUtils.Headers.LIFE_VERSION),
+        response.headers().get(RestUtils.Headers.LIFE_VERSION));
     verifyBlobProperties(expectedHeaders, isPrivate, response);
     verifyAccountAndContainerHeaders(accountName, containerName, response);
     assertNoContent(responseParts.queue, 1);
@@ -1359,6 +1369,7 @@ public class FrontendIntegrationTest {
       expectedGetHeaders.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
       // Blob TTL for chunk upload is fixed
       expectedGetHeaders.set(RestUtils.Headers.TTL, FRONTEND_CONFIG.chunkUploadInitialChunkTtlSecs);
+      expectedGetHeaders.set(RestUtils.Headers.LIFE_VERSION, "0");
       for (String id : new String[]{signedId, idAndMetadata.getFirst()}) {
         getBlobAndVerify(id, null, GetOption.None, expectedGetHeaders, !container.isCacheable(), content,
             account.getName(), container.getName());
@@ -1393,6 +1404,7 @@ public class FrontendIntegrationTest {
     // Test different request types on stitched blob ID
     // (getBlobInfo, getBlob, getBlob w/ range, head, updateBlobTtl, deleteBlob)
     expectedGetHeaders.add(RestUtils.Headers.BLOB_SIZE, fullContentArray.length);
+    expectedGetHeaders.set(RestUtils.Headers.LIFE_VERSION, "0");
     getBlobInfoAndVerify(stitchedBlobId, GetOption.None, expectedGetHeaders, !container.isCacheable(),
         account.getName(), container.getName(), null);
     List<ByteRange> ranges = new ArrayList<>();

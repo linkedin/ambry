@@ -81,6 +81,8 @@ public class AmbrySecurityServiceTest {
   private static final Container REF_CONTAINER;
   private static final Map<String, Object> USER_METADATA = new HashMap<>();
   private static final BlobInfo DEFAULT_INFO;
+  private static final BlobInfo LIFEVERSION_INFO;
+  private static final short DEFAULT_LIFEVERSION = 3;
   private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
           Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
@@ -109,6 +111,11 @@ public class AmbrySecurityServiceTest {
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
               false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null),
           RestUtils.buildUserMetadata(USER_METADATA));
+      LIFEVERSION_INFO = new BlobInfo(
+          new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
+              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null),
+          RestUtils.buildUserMetadata(USER_METADATA));
+      LIFEVERSION_INFO.setLifeVersion(DEFAULT_LIFEVERSION);
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
     } catch (Exception e) {
       throw new IllegalStateException(e);
@@ -280,6 +287,8 @@ public class AmbrySecurityServiceTest {
     // HEAD
     // normal
     testHeadBlobWithVariousRanges(DEFAULT_INFO);
+    // with lifeVersion
+    testHeadBlobWithVariousRanges(LIFEVERSION_INFO);
     // unknown account
     testHeadBlobWithVariousRanges(UNKNOWN_INFO);
     // encrypted unknown account
@@ -302,6 +311,7 @@ public class AmbrySecurityServiceTest {
 
     // GET BlobInfo
     testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.BlobInfo);
+    testGetSubResource(LIFEVERSION_INFO, RestUtils.SubResource.BlobInfo);
     testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo);
     testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo);
     testGetSubResource(UNKNOWN_INFO_ENC, RestUtils.SubResource.BlobInfo);
@@ -315,6 +325,7 @@ public class AmbrySecurityServiceTest {
     testPostBlob();
 
     // GET Blob
+    testGetBlobWithVariousRanges(LIFEVERSION_INFO);
     // less than chunk threshold size
     blobInfo = new BlobInfo(
         new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID, "image/gif",
@@ -605,6 +616,8 @@ public class AmbrySecurityServiceTest {
     verifyHeadersForHead(blobInfo.getBlobProperties(), range, restResponseChannel);
     verifyAccountAndContainerHeaders(restResponseChannel, accountAndContainer.getFirst(),
         accountAndContainer.getSecond());
+    Assert.assertEquals("LifeVersion mismatch", Short.toString(blobInfo.getLifeVersion()),
+        restResponseChannel.getHeader(RestUtils.Headers.LIFE_VERSION));
   }
 
   /**
@@ -628,11 +641,13 @@ public class AmbrySecurityServiceTest {
       verifyBlobPropertiesHeaders(blobInfo.getBlobProperties(), restResponseChannel);
       verifyAccountAndContainerHeaders(restResponseChannel, accountAndContainer.getFirst(),
           accountAndContainer.getSecond());
+      Assert.assertEquals("LifeVersion mismatch", Short.toString(blobInfo.getLifeVersion()),
+          restResponseChannel.getHeader(RestUtils.Headers.LIFE_VERSION));
     } else {
       verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.PRIVATE, RestUtils.Headers.TTL,
           RestUtils.Headers.SERVICE_ID, RestUtils.Headers.OWNER_ID, RestUtils.Headers.AMBRY_CONTENT_TYPE,
           RestUtils.Headers.CREATION_TIME, RestUtils.Headers.BLOB_SIZE, RestUtils.Headers.ACCEPT_RANGES,
-          RestUtils.Headers.CONTENT_RANGE);
+          RestUtils.Headers.CONTENT_RANGE, RestUtils.Headers.LIFE_VERSION);
     }
     Map<String, String> userMetadata =
         blobInfo.getUserMetadata() != null ? RestUtils.buildUserMetadata(blobInfo.getUserMetadata()) : null;
@@ -739,7 +754,7 @@ public class AmbrySecurityServiceTest {
       Assert.assertEquals("Content Type mismatch", blobProperties.getContentType(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
       if (blobProperties.getContentType().equals("text/html")) {
-        Assert.assertEquals("Content disposition not set for text/html Cotnent type", "attachment",
+        Assert.assertEquals("Content disposition not set for text/html Content type", "attachment",
             restResponseChannel.getHeader("Content-Disposition"));
       } else {
         Assert.assertNull("Content disposition should not have been set",
@@ -770,6 +785,8 @@ public class AmbrySecurityServiceTest {
     verifyBlobPropertiesHeaders(blobInfo.getBlobProperties(), restResponseChannel);
     verifyAccountAndContainerHeaders(restResponseChannel, accountAndContainer.getFirst(),
         accountAndContainer.getSecond());
+    Assert.assertEquals("LifeVersion mismatch", Short.toString(blobInfo.getLifeVersion()),
+        restResponseChannel.getHeader(RestUtils.Headers.LIFE_VERSION));
     Map<String, String> userMetadata =
         blobInfo.getUserMetadata() != null ? RestUtils.buildUserMetadata(blobInfo.getUserMetadata()) : null;
     if (blobInfo.getUserMetadata().length == 0 || userMetadata == null) {
@@ -799,7 +816,8 @@ public class AmbrySecurityServiceTest {
     Assert.assertNull("Content-Range header should not be set",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
     verifyCacheHeaders(cacheable, restResponseChannel);
-    verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.BLOB_SIZE, RestUtils.Headers.CONTENT_TYPE);
+    verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.BLOB_SIZE, RestUtils.Headers.CONTENT_TYPE,
+        RestUtils.Headers.LIFE_VERSION);
   }
 
   /**
