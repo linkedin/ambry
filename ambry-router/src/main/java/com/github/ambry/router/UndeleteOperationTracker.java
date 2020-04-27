@@ -31,9 +31,9 @@ import java.util.Map;
  * any datacenter see failure requests reach the quorum, it return true for failure.
  */
 public class UndeleteOperationTracker extends SimpleOperationTracker {
-  private Map<String, Integer> numReplicasInDcs = new HashMap<>();
-  private Map<String, Integer> numSuccessInDcs = new HashMap<>();
-  private Map<String, Integer> numFailureInDcs = new HashMap<>();
+  private final Map<String, Integer> numReplicasInDcs = new HashMap<>();
+  private final Map<String, Integer> numSuccessInDcs = new HashMap<>();
+  private final Map<String, Integer> numFailureInDcs = new HashMap<>();
 
   /**
    * Constructs an {@link UndeleteOperationTracker}
@@ -61,12 +61,8 @@ public class UndeleteOperationTracker extends SimpleOperationTracker {
     // Consider not-eligible hosts as failure
     for (String dcName : numReplicasInDcs.keySet()) {
       int totalNum = numReplicasInDcs.get(dcName);
-      if (numEligibleReplicasInDcs.containsKey(dcName)) {
-        int eligibleNum = numEligibleReplicasInDcs.get(dcName);
-        if (eligibleNum != totalNum) {
-          numFailureInDcs.put(dcName, totalNum - eligibleNum);
-        }
-      }
+      int eligibleNum = numEligibleReplicasInDcs.getOrDefault(dcName, 0);
+      numFailureInDcs.put(dcName, totalNum - eligibleNum);
     }
   }
 
@@ -92,7 +88,7 @@ public class UndeleteOperationTracker extends SimpleOperationTracker {
   }
 
   /**
-   * Return true if the {@code currentNumberInDcs}'s each value has reaches the quorum of corresponding value
+   * Return true if the {@code currentNumberInDcs}'s each value has reached the quorum of corresponding value
    * in {@code totalNumberInDcs}.
    * @param totalNumberInDcs The total number of members in each datacenter.
    * @param currentNumberInDcs The current number of members in each datacenter.
@@ -104,8 +100,8 @@ public class UndeleteOperationTracker extends SimpleOperationTracker {
     if (totalNumberInDcs.size() == currentNumberInDcs.size()) {
       for (String dcName : totalNumberInDcs.keySet()) {
         int totalNum = totalNumberInDcs.get(dcName);
-        int currentNum = currentNumberInDcs.get(dcName);
-        if (totalNum != 1 && currentNum <= totalNum / 2) {
+        int currentNum = currentNumberInDcs.getOrDefault(dcName, 0);
+        if (currentNum <= totalNum / 2) {
           hasReached = false;
           break;
         }
@@ -117,7 +113,7 @@ public class UndeleteOperationTracker extends SimpleOperationTracker {
   }
 
   /**
-   * Return true if any of the {@code currentNumberInDcs}'s value has reaches the quorum of corresponding value
+   * Return true if any of the {@code currentNumberInDcs}'s value has reached the quorum of corresponding value
    * in {@code totalNumberInDcs}.
    * @param totalNumberInDcs The total number of members in each datacenter.
    * @param currentNumberInDcs The current number of members in each datacenter.
@@ -129,7 +125,7 @@ public class UndeleteOperationTracker extends SimpleOperationTracker {
       int totalNum = totalNumberInDcs.get(dcName);
       if (currentNumberInDcs.containsKey(dcName)) {
         int currentNum = currentNumberInDcs.get(dcName);
-        if (totalNum != 1 && currentNum > totalNum / 2) {
+        if (currentNum > totalNum / 2) {
           return true;
         }
       }
