@@ -255,15 +255,16 @@ public class CosmosDataAccessor {
       Iterator<FeedResponse<Document>> iterator =
           executeCosmosQuery(partitionPath, querySpec, feedOptions, azureMetrics.deadBlobsQueryTime).getIterator();
       List<CloudBlobMetadata> deadBlobsList = new ArrayList<>();
-      // TODO: Tally request charge per partition and log on 429
       double requestCharge = 0.0;
       while (iterator.hasNext()) {
         FeedResponse<Document> response = iterator.next();
         requestCharge += response.getRequestCharge();
         response.getResults().iterator().forEachRemaining(doc -> deadBlobsList.add(createMetadataFromDocument(doc)));
       }
-      logger.info("Dead blobs query on partition {} got request charge {} for {} records", partitionPath, requestCharge,
-          deadBlobsList.size());
+      if (requestCharge >= requestChargeThreshold) {
+        logger.info("Dead blobs query on partition {} got request charge {} for {} records", partitionPath,
+            requestCharge, deadBlobsList.size());
+      }
       return deadBlobsList;
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
@@ -320,7 +321,6 @@ public class CosmosDataAccessor {
       Iterator<FeedResponse<Document>> iterator =
           executeCosmosQuery(partitionPath, querySpec, feedOptions, timer).getIterator();
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
-      // TODO: Tally request charge per partition and log on 429
       double requestCharge = 0.0;
       while (iterator.hasNext()) {
         FeedResponse<Document> response = iterator.next();
