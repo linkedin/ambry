@@ -129,6 +129,10 @@ public class AzureBlobDataAccessor {
     batchTimeout = null;
   }
 
+  /**
+   * Visible for testing.
+   * @return the underlying {@link BlobServiceClient}.
+   */
   public BlobServiceClient getStorageClient() {
     return storageClient;
   }

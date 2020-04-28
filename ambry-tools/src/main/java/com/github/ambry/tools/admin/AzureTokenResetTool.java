@@ -70,7 +70,12 @@ public class AzureTokenResetTool {
     }
   }
 
-  // Reset the offset token by deleting the blob from the container
+  /**
+   * Reset the offset token by deleting the blob from the container.
+   * @param containerPrefix the prefix used to filter on Azure containers
+   *                       (in case the storage account hosts multiple Ambry clusters).
+   * @return the number of tokens successfully reset.
+   */
   public static int resetTokens(String containerPrefix) throws BlobStorageException {
     AtomicInteger tokensDeleted = new AtomicInteger(0);
     ListBlobContainersOptions listOptions = new ListBlobContainersOptions().setPrefix(containerPrefix);
