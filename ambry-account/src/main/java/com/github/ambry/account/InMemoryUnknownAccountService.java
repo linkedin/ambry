@@ -13,7 +13,6 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.utils.Pair;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -82,10 +81,6 @@ class InMemoryUnknownAccountService implements AccountService {
     isOpen = false;
   }
 
-
-  public Set<Container> getContainersByStatus(Container.ContainerStatus containerStatus) {
-    throw new UnsupportedOperationException("get Container by status is not supported");
-  }
   /**
    * Checks if the service is open.
    */

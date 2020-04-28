@@ -109,10 +109,6 @@ public class InMemAccountService implements AccountService {
     // no op
   }
 
-  @Override
-  public Set<Container> getContainersByStatus(Container.ContainerStatus containerStatus) {
-    throw new UnsupportedOperationException("get Container by status is not supported");
-  }
   /**
    * Clears all the accounts in this {@code AccountService}.
    */

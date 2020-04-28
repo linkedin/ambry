@@ -116,11 +116,6 @@ final class JsonAccountService extends AbstractAccountService {
   }
 
 
-  @Override
-  public Set<Container> getContainersByStatus(Container.ContainerStatus containerStatus) {
-    throw new UnsupportedOperationException("get Container by status is not supported");
-  }
-
   /**
    * Since the JSON file account service gets all it's data from a local JSON file it can't update account data
    * for all nodes. Therefor calling this method will always throw an {@link UnsupportedOperationException}.
