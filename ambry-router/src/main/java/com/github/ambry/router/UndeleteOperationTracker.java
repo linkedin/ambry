@@ -90,11 +90,11 @@ public class UndeleteOperationTracker extends SimpleOperationTracker {
   /**
    * Return true if the {@code currentNumberInDcs}'s each value has reached the quorum of corresponding value
    * in {@code totalNumberInDcs}.
-   * @param totalNumberInDcs The total number of members in each datacenter.
-   * @param currentNumberInDcs The current number of members in each datacenter.
+   * @param totalNumberInDcs The total number of replicas in each datacenter.
+   * @param currentNumberInDcs The current number of replicas in each datacenter.
    * @return true if current numbers reach the global quorum.
    */
-  private static boolean hasReachedGlobalQuorum(Map<String, Integer> totalNumberInDcs,
+  static boolean hasReachedGlobalQuorum(Map<String, Integer> totalNumberInDcs,
       Map<String, Integer> currentNumberInDcs) {
     boolean hasReached = true;
     if (totalNumberInDcs.size() == currentNumberInDcs.size()) {
@@ -115,11 +115,11 @@ public class UndeleteOperationTracker extends SimpleOperationTracker {
   /**
    * Return true if any of the {@code currentNumberInDcs}'s value has reached the quorum of corresponding value
    * in {@code totalNumberInDcs}.
-   * @param totalNumberInDcs The total number of members in each datacenter.
-   * @param currentNumberInDcs The current number of members in each datacenter.
+   * @param totalNumberInDcs The total number of replicas in each datacenter.
+   * @param currentNumberInDcs The current number of replicas in each datacenter.
    * @return true if any number reaches the quorum.
    */
-  private static boolean hasReachedAnyLocalQuorum(Map<String, Integer> totalNumberInDcs,
+  static boolean hasReachedAnyLocalQuorum(Map<String, Integer> totalNumberInDcs,
       Map<String, Integer> currentNumberInDcs) {
     for (String dcName : totalNumberInDcs.keySet()) {
       int totalNum = totalNumberInDcs.get(dcName);

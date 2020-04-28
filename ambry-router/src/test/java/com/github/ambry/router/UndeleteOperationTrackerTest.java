@@ -26,10 +26,12 @@ import com.github.ambry.network.PortType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import org.junit.Test;
@@ -63,6 +65,63 @@ public class UndeleteOperationTrackerTest {
 
   public UndeleteOperationTrackerTest(boolean replicasStateEnabled) {
     this.replicasStateEnabled = replicasStateEnabled;
+  }
+
+  /**
+   * Tests for the functions that determine if global quorum or local quorum is reached.
+   */
+  @Test
+  public void quorumFunctionTest() {
+    Map<String, Integer> totalNums = new HashMap<>();
+    totalNums.put("DC1", 1);
+    totalNums.put("DC2", 2);
+    totalNums.put("DC3", 3);
+    totalNums.put("DC4", 4);
+    totalNums.put("DC5", 5);
+    Map<String, Integer> currentNums = new HashMap<>();
+
+    assertFalse(UndeleteOperationTracker.hasReachedGlobalQuorum(totalNums, currentNums));
+
+    int[] quorums = new int[]{1, 2, 2, 3, 3};
+    for (int i = 0; i < quorums.length; i++) {
+      currentNums.put("DC" + (i + 1), quorums[i]);
+    }
+
+    for (int dc = 1; dc <= quorums.length; dc++) {
+      int currentQuorum = quorums[dc - 1];
+      for (int i = 0; i < currentQuorum; i++) {
+        currentNums.put("DC" + dc, i);
+        assertFalse("Expect global quorum not reached when DC" + dc + " only has " + i,
+            UndeleteOperationTracker.hasReachedGlobalQuorum(totalNums, currentNums));
+      }
+      int currentTotal = totalNums.get("DC" + dc);
+      for (int i = currentQuorum; i <= currentTotal; i++) {
+        currentNums.put("DC" + dc, i);
+        assertTrue("Expect global quorum reached when DC" + dc + " has " + i,
+            UndeleteOperationTracker.hasReachedGlobalQuorum(totalNums, currentNums));
+      }
+      currentNums.put("DC" + dc, currentQuorum);
+    }
+
+    for (int i = 0; i < quorums.length; i++) {
+      currentNums.put("DC" + (i + 1), 0);
+    }
+
+    for (int dc = 1; dc <= quorums.length; dc++) {
+      int currentQuorum = quorums[dc - 1];
+      for (int i = 0; i < currentQuorum; i++) {
+        currentNums.put("DC" + dc, i);
+        assertFalse("Expect any local quorum not reached when DC" + dc + " only has " + i,
+            UndeleteOperationTracker.hasReachedAnyLocalQuorum(totalNums, currentNums));
+      }
+      int currentTotal = totalNums.get("DC" + dc);
+      for (int i = currentQuorum; i <= currentTotal; i++) {
+        currentNums.put("DC" + dc, i);
+        assertTrue("Expect any loocal quorum reached when DC" + dc + " has " + i,
+            UndeleteOperationTracker.hasReachedAnyLocalQuorum(totalNums, currentNums));
+      }
+      currentNums.put("DC" + dc, 0);
+    }
   }
 
   /**
