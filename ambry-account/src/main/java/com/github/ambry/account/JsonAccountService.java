@@ -22,7 +22,6 @@ import java.nio.file.attribute.FileTime;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -114,7 +113,6 @@ final class JsonAccountService extends AbstractAccountService {
       throw new IllegalStateException("AccountService is closed.");
     }
   }
-
 
   /**
    * Since the JSON file account service gets all it's data from a local JSON file it can't update account data
