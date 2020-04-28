@@ -66,6 +66,7 @@ public class ValidatingTransformer implements Transformer {
       msgStream.read(headerBuffer.array(), Version_Field_Size_In_Bytes, headerSize - Version_Field_Size_In_Bytes);
       headerBuffer.rewind();
       MessageHeader_Format header = getMessageHeader(version, headerBuffer);
+      header.verifyHeader();
       StoreKey keyInStream = storeKeyFactory.getStoreKey(new DataInputStream(msgStream));
       if (header.isPutRecord()) {
         if (header.hasLifeVersion() && header.getLifeVersion() != msgInfo.getLifeVersion()) {

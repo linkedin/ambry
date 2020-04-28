@@ -97,10 +97,8 @@ public class MessageSievingInputStream extends InputStream {
     List<InputStream> msgStreamList = new ArrayList<>();
     long batchStartTime = SystemTime.getInstance().milliseconds();
     logger.trace("Starting to validate message stream ");
-    int i = 0;
     for (MessageInfo msgInfo : messageInfoList) {
       int msgSize = (int) msgInfo.getSize();
-      System.out.println("Dealing with " + i + "th message " + msgInfo);
       // @todo: We can use a BoundedInputStream for each message and then empty it out in case all of it was not read
       // @todo: (say, due to corruption). This can help avoid a copy.
       if (msgInfo.isDeleted()) {
@@ -120,7 +118,6 @@ public class MessageSievingInputStream extends InputStream {
         validateAndTransform(msg, msgStreamList, bytesRead);
       }
       bytesRead += msgSize;
-      i++;
     }
     if (bytesRead != totalMessageListSize) {
       logger.error(
