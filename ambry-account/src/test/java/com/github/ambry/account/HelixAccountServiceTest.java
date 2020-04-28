@@ -19,7 +19,6 @@ import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Router;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
@@ -204,9 +203,7 @@ public class HelixAccountServiceTest {
   }
 
   /**
-   * Tests generates a collection of reference {@link Account}s and {@link Container}s that can be referred
-   * from {@link #idToRefAccountMap} and {@link #idToRefContainerMap}. And it also generate a collection of
-   * the {@link Container}s through {@link HelixAccountService} with selected {@link ContainerStatus}
+   * Tests {@link AccountService#getContainersByStatus(ContainerStatus)} with generated {@links Container}s
    */
   @Test
   public void testGetContainerByStatus() throws Exception {
@@ -215,8 +212,7 @@ public class HelixAccountServiceTest {
     // generate a single reference account and container that can be referenced by refAccount and refContainer respectively.
     refAccountId = Utils.getRandomShort(random);
     accountIdSet.add(refAccountId);
-    generateRefAccounts(idToRefAccountMap, idToRefContainerMap, accountIdSet, 5,
-        2);
+    generateRefAccounts(idToRefAccountMap, idToRefContainerMap, accountIdSet, 5, 2);
 
     accountService = mockHelixAccountServiceFactory.getAccountService();
     accountService.updateAccounts(idToRefAccountMap.values());
@@ -227,7 +223,7 @@ public class HelixAccountServiceTest {
     for (Account account : accountService.getAllAccounts()) {
       AccountBuilder accountBuilder = new AccountBuilder(account);
       for (Container container : account.getAllContainers()) {
-        if (cnt%2 == 0) {
+        if (cnt % 2 == 0) {
           ContainerBuilder containerBuilder = new ContainerBuilder(container);
           containerBuilder.setId((short) (-1 * (container.getId())));
           containerBuilder.setName(container.getName() + "-extra");
@@ -243,9 +239,11 @@ public class HelixAccountServiceTest {
     }
 
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 5, true);
-    Set<Pair<Short,Short>> containerList = accountService.getContainersByStatus(ContainerStatus.DELETE_IN_PROGRESS);
-    assertEquals("Wrong number of containers in containerList", 5,
-        containerList.size());
+    Set<Container> containerList = accountService.getContainersByStatus(ContainerStatus.DELETE_IN_PROGRESS);
+    assertEquals("Wrong number of containers in containerList", 5, containerList.size());
+    for (Container container : containerList) {
+      assertSame("Container status mismatch", container.getStatus(), ContainerStatus.DELETE_IN_PROGRESS);
+    }
   }
 
   /**

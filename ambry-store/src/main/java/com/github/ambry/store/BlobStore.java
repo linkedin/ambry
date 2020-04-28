@@ -81,7 +81,7 @@ public class BlobStore implements Store {
   private final long thresholdBytesLow;
   private final long ttlUpdateBufferTimeMs;
   private final AtomicInteger errorCount;
-  private final AccountService helixAccountService;
+  private final AccountService accountService;
 
   private Log log;
   private BlobStoreCompactor compactor;
@@ -121,16 +121,16 @@ public class BlobStore implements Store {
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
    * @param replicaStatusDelegate delegate used to communicate BlobStore write status (sealed/unsealed, stopped/started)
    * @param time the {@link Time} instance to use.
-   * @param helixAccountService  the {@link AccountService} instance to use.
+   * @param accountService  the {@link AccountService} instance to use.
    */
   BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      ReplicaStatusDelegate replicaStatusDelegate, Time time, AccountService helixAccountService) {
+      ReplicaStatusDelegate replicaStatusDelegate, Time time, AccountService accountService) {
     this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler,
         diskIOScheduler, diskSpaceAllocator, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
-        replicaId.getCapacityInBytes(), factory, recovery, hardDelete, replicaStatusDelegate, time, helixAccountService);
+        replicaId.getCapacityInBytes(), factory, recovery, hardDelete, replicaStatusDelegate, time, accountService);
   }
 
   /**
@@ -164,7 +164,7 @@ public class BlobStore implements Store {
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, ReplicaStatusDelegate replicaStatusDelegate, Time time,
-      AccountService helixAccountService) {
+      AccountService accountService) {
     this.replicaId = replicaId;
     this.storeId = storeId;
     this.dataDir = dataDir;
@@ -179,7 +179,7 @@ public class BlobStore implements Store {
     this.factory = factory;
     this.recovery = recovery;
     this.hardDelete = hardDelete;
-    this.helixAccountService = helixAccountService;
+    this.accountService = accountService;
     this.replicaStatusDelegate = config.storeReplicaStatusDelegateEnable ? replicaStatusDelegate : null;
     this.time = time;
     long threshold = config.storeReadOnlyEnableSizeThresholdPercentage;
@@ -230,7 +230,8 @@ public class BlobStore implements Store {
         StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir, config);
         log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics);
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
-            diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(), helixAccountService);
+            diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
+            accountService);
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);

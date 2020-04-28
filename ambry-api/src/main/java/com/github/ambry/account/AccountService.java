@@ -13,9 +13,9 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.utils.Pair;
 import java.io.Closeable;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -107,8 +107,18 @@ public interface AccountService extends Closeable {
   public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
 
   /**
-   * It gets a collection of {@link Account}s' and {@link Container}s' Id pairs selected by
+   * Gets a collection of {@link Container}s' selected by
    * {@link com.github.ambry.account.Container.ContainerStatus}.
    */
-  public Set<Pair<Short,Short>> getContainersByStatus(Container.ContainerStatus containerStatus);
+  default Set<Container> getContainersByStatus(Container.ContainerStatus containerStatus) {
+    Set<Container> selectedContainers = new HashSet<>();
+    for (Account account : getAllAccounts()) {
+      for (Container container : account.getAllContainers()) {
+        if (container.getStatus().equals(containerStatus)) {
+          selectedContainers.add(container);
+        }
+      }
+    }
+    return selectedContainers;
+  }
 }

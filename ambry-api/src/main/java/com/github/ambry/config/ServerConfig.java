@@ -92,13 +92,20 @@ public class ServerConfig {
   @Config("server.validate.request.based.on.store.state")
   @Default("false")
   public final boolean serverValidateRequestBasedOnStoreState;
-  
+
   /**
    * True to enable ambry server handling undelete requests.
    */
   @Config("server.handle.undelete.request.enabled")
   @Default("false")
   public final boolean serverHandleUndeleteRequestEnabled;
+
+  /**
+   * Implementation class for HelixAccountServiceFactory
+   */
+  @Config("server.helix.account.service.factory")
+  @Default("com.github.ambry.account.HelixAccountServiceFactory")
+  public final String HelixAccountServiceFactory;
 
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
@@ -119,5 +126,6 @@ public class ServerConfig {
         verifiableProperties.getBoolean("server.validate.request.based.on.store.state", false);
     serverHandleUndeleteRequestEnabled =
         verifiableProperties.getBoolean("server.handle.undelete.request.enabled", false);
+    HelixAccountServiceFactory = verifiableProperties.getString("server.helix.account.service.factory", "com.github.ambry.account.HelixAccountServiceFactory");
   }
 }

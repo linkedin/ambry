@@ -83,7 +83,7 @@ class InMemoryUnknownAccountService implements AccountService {
   }
 
 
-  public Set<Pair<Short,Short>> getContainersByStatus(Container.ContainerStatus containerStatus) {
+  public Set<Container> getContainersByStatus(Container.ContainerStatus containerStatus) {
     throw new UnsupportedOperationException("get Container by status is not supported");
   }
   /**

@@ -14,7 +14,6 @@
 package com.github.ambry.account;
 
 import com.github.ambry.config.JsonAccountConfig;
-import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -118,7 +117,7 @@ final class JsonAccountService extends AbstractAccountService {
 
 
   @Override
-  public Set<Pair<Short,Short>> getContainersByStatus(Container.ContainerStatus containerStatus) {
+  public Set<Container> getContainersByStatus(Container.ContainerStatus containerStatus) {
     throw new UnsupportedOperationException("get Container by status is not supported");
   }
 
