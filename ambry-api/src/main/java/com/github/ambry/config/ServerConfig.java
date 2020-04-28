@@ -101,10 +101,10 @@ public class ServerConfig {
   public final boolean serverHandleUndeleteRequestEnabled;
 
   /**
-   * Implementation class for HelixAccountServiceFactory
+   * Implementation class for accountServiceFactory
    */
   @Config("server.account.service.factory")
-  @Default("com.github.ambry.account.InMemAccountServiceFactory")
+  @Default("com.github.ambry.account.InMemoryUnknownAccountServiceFactory")
   public final String accountServiceFactory;
 
   public ServerConfig(VerifiableProperties verifiableProperties) {
@@ -127,6 +127,6 @@ public class ServerConfig {
     serverHandleUndeleteRequestEnabled =
         verifiableProperties.getBoolean("server.handle.undelete.request.enabled", false);
     accountServiceFactory =
-        verifiableProperties.getString("server.account.service.factory", "com.github.ambry.account.InMemAccountServiceFactory");
+        verifiableProperties.getString("server.account.service.factory", "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
   }
 }

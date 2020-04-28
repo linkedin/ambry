@@ -107,8 +107,7 @@ public interface AccountService extends Closeable {
   public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
 
   /**
-   * Gets a collection of {@link Container}s' selected by
-   * {@link com.github.ambry.account.Container.ContainerStatus}.
+   * Gets a collection of {@link Container}s in the given status.
    */
   default Set<Container> getContainersByStatus(Container.ContainerStatus containerStatus) {
     Set<Container> selectedContainers = new HashSet<>();
