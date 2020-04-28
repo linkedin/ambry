@@ -166,7 +166,7 @@ public class AmbryServer {
       }
 
       AccountServiceFactory accountServiceFactory =
-          Utils.getObj(serverConfig.HelixAccountServiceFactory, properties,
+          Utils.getObj(serverConfig.accountServiceFactory, properties,
               registry);
       AccountService accountService = accountServiceFactory.getAccountService();
 
