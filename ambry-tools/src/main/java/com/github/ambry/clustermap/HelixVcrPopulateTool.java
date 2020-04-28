@@ -25,6 +25,7 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.controller.rebalancer.DelayedAutoRebalancer;
 import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
@@ -45,9 +46,13 @@ import org.apache.helix.tools.ClusterSetup;
  */
 public class HelixVcrPopulateTool {
 
-  private static String SEPARATOR = "/";
+  private static final String SEPARATOR = "/";
   static List<String> ignoreResourceKeyWords = Arrays.asList("aggregation", "trigger", "stats");
-  private static int replicaNumber = 3;
+  private static final int REPLICA_NUMBER = 3;
+  private static final ZNRecordSerializer ZN_RECORD_SERIALIZER = new ZNRecordSerializer();
+  // TODO: get from properties file
+  private static final int MAX_OFFLINE_INSTANCES_ALLOWED = 4;
+  private static final int NUM_OFFLINE_INSTANCES_FOR_AUTO_EXIT = 2;
 
   public static void main(String[] args) {
     OptionParser parser = new OptionParser();
@@ -56,7 +61,7 @@ public class HelixVcrPopulateTool {
 
     OptionSpec updateClusterOpt = parser.accepts("updateCluster",
         "Update resources in dest by copying from src to dest. --updateCluster"
-            + " --src srcZkEndpoint/srcClusterName --dest destZkEndpoint/destClusterName");
+            + " [--src srcZkEndpoint/srcClusterName] --dest destZkEndpoint/destClusterName");
     OptionSpec dryRunOpt = parser.accepts("dryRun", "Do dry run.");
 
     OptionSpec controlResourceOpt = parser.accepts("controlResource",
@@ -70,20 +75,24 @@ public class HelixVcrPopulateTool {
         .ofType(Boolean.class);
 
     // Some shared options.
+    // VCR cluster argument is always required
+    ArgumentAcceptingOptionSpec<String> destOpt =
+        parser.accepts("dest").withRequiredArg().required().describedAs("vcr zk and cluster name").ofType(String.class);
     ArgumentAcceptingOptionSpec<String> srcOpt =
         parser.accepts("src").withRequiredArg().describedAs("src zk and cluster name").ofType(String.class);
-    ArgumentAcceptingOptionSpec<String> destOpt =
-        parser.accepts("dest").withRequiredArg().describedAs("dest zk and cluster name").ofType(String.class);
     ArgumentAcceptingOptionSpec<Boolean> enableOpt =
         parser.accepts("enable").withRequiredArg().describedAs("enable/disable").ofType(Boolean.class);
 
     OptionSet options = parser.parse(args);
 
-    String destZkString = options.valueOf(destOpt).split(SEPARATOR)[0];
-    String destClusterName = options.valueOf(destOpt).split(SEPARATOR)[1];
+    String[] destZkAndCluster = options.valueOf(destOpt).split(SEPARATOR);
+    if (destZkAndCluster.length != 2) {
+      errorAndExit("dest argument must have form 'zkString/clusterName'");
+    }
+    String destZkString = destZkAndCluster[0];
+    String destClusterName = destZkAndCluster[1];
     if (!destClusterName.contains("VCR")) {
-      System.err.println("dest should be a VCR cluster.(VCR string should be included)");
-      return;
+      errorAndExit("dest should be a VCR cluster.(VCR string should be included)");
     }
 
     if (options.has(createClusterOpt)) {
@@ -92,11 +101,25 @@ public class HelixVcrPopulateTool {
     }
 
     if (options.has(updateClusterOpt)) {
-      String srcZkString = options.valueOf(srcOpt).split(SEPARATOR)[0];
-      String srcClusterName = options.valueOf(srcOpt).split(SEPARATOR)[1];
-      System.out.println("Updating cluster: " + destClusterName + "by checking " + srcClusterName);
       boolean dryRun = options.has(dryRunOpt);
-      updateResourceAndPartition(srcZkString, srcClusterName, destZkString, destClusterName, dryRun);
+      if (options.has(srcOpt)) {
+        String[] srcZkAndCluster = options.valueOf(srcOpt).split(SEPARATOR);
+        if (srcZkAndCluster.length != 2) {
+          errorAndExit("src argument must have form 'zkString/clusterName'");
+        }
+        String srcZkString = srcZkAndCluster[0];
+        String srcClusterName = srcZkAndCluster[1];
+        System.out.println("Updating cluster: " + destClusterName + "by checking " + srcClusterName);
+        updateResourceAndPartition(srcZkString, srcClusterName, destZkString, destClusterName, dryRun);
+      } else {
+        System.out.println("Updating cluster config for: " + destClusterName);
+        // Update the cluster config and resources to the latest settings.
+        setClusterConfig(getHelixZkClient(destZkString), destClusterName, dryRun);
+        updateResourceIdealState(destZkString, destClusterName, dryRun);
+        if (!dryRun) {
+          System.out.println("Cluster " + destClusterName + " is updated successfully!");
+        }
+      }
     }
 
     if (options.has(controlResourceOpt)) {
@@ -120,13 +143,10 @@ public class HelixVcrPopulateTool {
    * @param destClusterName the cluster's name
    */
   static void createCluster(String destZkString, String destClusterName) {
-    HelixZkClient destZkClient =
-        DedicatedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(destZkString));
-    destZkClient.setZkSerializer(new ZNRecordSerializer());
+    HelixZkClient destZkClient = getHelixZkClient(destZkString);
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
     if (destAdmin.getClusters().contains(destClusterName)) {
-      System.err.println("Failed to create cluster becuase " + destClusterName + " already exist.");
-      return;
+      errorAndExit("Failed to create cluster becuase " + destClusterName + " already exist.");
     }
     ClusterSetup clusterSetup = new ClusterSetup(destZkString);
     clusterSetup.addCluster(destClusterName, true);
@@ -137,17 +157,67 @@ public class HelixVcrPopulateTool {
     Map<String, String> helixClusterProperties = new HashMap<>();
     helixClusterProperties.put(ZKHelixManager.ALLOW_PARTICIPANT_AUTO_JOIN, String.valueOf(true));
     destAdmin.setConfig(configScope, helixClusterProperties);
-    // set PersistBestPossibleAssignment
+
+    setClusterConfig(destZkClient, destClusterName, false);
+    System.out.println("Cluster " + destClusterName + " is created successfully!");
+  }
+
+  /**
+   * Set the cluster config in the destination cluster using the latest settings.
+   * @param destZkClient the {@link HelixZkClient} for the cluster.
+   * @param destClusterName the cluster name.
+   * @param dryRun run without actual change.
+   */
+  static void setClusterConfig(HelixZkClient destZkClient, String destClusterName, boolean dryRun) {
     ConfigAccessor configAccessor = new ConfigAccessor(destZkClient);
     ClusterConfig clusterConfig = configAccessor.getClusterConfig(destClusterName);
-    // if offline instances >= 4, helix enters maintenance mode.
     clusterConfig.setPersistBestPossibleAssignment(true);
-    clusterConfig.setMaxOfflineInstancesAllowed(4);
+    // if offline instances >= 4, helix enters maintenance mode.
+    clusterConfig.setMaxOfflineInstancesAllowed(MAX_OFFLINE_INSTANCES_ALLOWED);
     // if offline instances <= 2, helix exit maintenance mode.
-    clusterConfig.setNumOfflineInstancesForAutoExit(2);
+    clusterConfig.setNumOfflineInstancesForAutoExit(NUM_OFFLINE_INSTANCES_FOR_AUTO_EXIT);
+    if (dryRun) {
+      System.out.println("Will update cluster config to: " + clusterConfig.toString());
+    }
     configAccessor.setClusterConfig(destClusterName, clusterConfig);
-    System.out.println("Cluster " + destClusterName + " is created successfully!");
-    return;
+  }
+
+  /**
+   * Update the resources in the destination cluster with the new IdealState settings.
+   * @param destZkString the destination Zookeeper server string.
+   * @param destClusterName the destination cluster name.
+   * @param dryRun run without actual change.
+   */
+  static void updateResourceIdealState(String destZkString, String destClusterName, boolean dryRun) {
+    HelixAdmin destAdmin = new ZKHelixAdmin(destZkString);
+    Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
+
+    for (String resource : destResources) {
+      IdealState currentIdealState = destAdmin.getResourceIdealState(destClusterName, resource);
+      IdealState newIdealState = buildIdealState(resource, currentIdealState.getPartitionSet());
+      if (dryRun) {
+        System.out.println("Will update " + resource + " to new ideal state " + newIdealState.toString());
+      } else {
+        destAdmin.setResourceIdealState(destClusterName, resource, newIdealState);
+      }
+    }
+  }
+
+  /**
+   * Build the IdealState for the specified resource.
+   * @param resource the Helix resource name.
+   * @param partitionSet the set of partitions managed by the resource.
+   * @return the {@link IdealState}.
+   */
+  static IdealState buildIdealState(String resource, Set<String> partitionSet) {
+    FullAutoModeISBuilder builder = new FullAutoModeISBuilder(resource);
+    builder.setStateModel(LeaderStandbySMD.name);
+    for (String partition : partitionSet) {
+      builder.add(partition);
+    }
+    builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
+    builder.setRebalancerClass(DelayedAutoRebalancer.class.getName());
+    return builder.build();
   }
 
   /**
@@ -203,18 +273,12 @@ public class HelixVcrPopulateTool {
       if (createNewResource) {
         // add new resource
         Set<String> srcPartitions = srcAdmin.getResourceIdealState(srcClusterName, resource).getPartitionSet();
-        FullAutoModeISBuilder builder = new FullAutoModeISBuilder(resource);
-        builder.setStateModel(LeaderStandbySMD.name);
-        for (String partition : srcPartitions) {
-          builder.add(partition);
-        }
-        builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
-        IdealState idealState = builder.build();
+        IdealState idealState = buildIdealState(resource, srcPartitions);
         if (dryRun) {
           System.out.println("DryRun: Add Resource " + resource + " with partition " + srcPartitions);
         } else {
           destAdmin.addResource(destClusterName, resource, idealState);
-          destAdmin.rebalance(destClusterName, resource, replicaNumber, "", "");
+          destAdmin.rebalance(destClusterName, resource, REPLICA_NUMBER, "", "");
           System.out.println("Added Resource " + resource + " with partition " + srcPartitions);
         }
       }
@@ -230,12 +294,9 @@ public class HelixVcrPopulateTool {
    * @param enable enable the resource if true
    */
   static void controlResource(String destZkString, String destClusterName, String resourceName, boolean enable) {
-    HelixZkClient destZkClient =
-        DedicatedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(destZkString));
-    destZkClient.setZkSerializer(new ZNRecordSerializer());
+    HelixZkClient destZkClient = getHelixZkClient(destZkString);
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
     destAdmin.enableResource(destClusterName, resourceName, enable);
-    return;
   }
 
   /**
@@ -245,12 +306,25 @@ public class HelixVcrPopulateTool {
    * @param enable enter maintenance mode if true
    */
   static void maintainCluster(String destZkString, String destClusterName, boolean enable) {
-    HelixZkClient destZkClient =
-        DedicatedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(destZkString));
-    destZkClient.setZkSerializer(new ZNRecordSerializer());
+    HelixZkClient destZkClient = getHelixZkClient(destZkString);
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
     destAdmin.enableMaintenanceMode(destClusterName, enable);
-    return;
+  }
+
+  /**
+   * @return the {@link HelixZkClient} from the zookeeper connection string.
+   * @param zkString the zookeeper connection string.
+   */
+  static HelixZkClient getHelixZkClient(String zkString) {
+    HelixZkClient zkClient =
+        DedicatedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(zkString));
+    zkClient.setZkSerializer(ZN_RECORD_SERIALIZER);
+    return zkClient;
+  }
+
+  static void errorAndExit(String error) {
+    System.err.println(error);
+    System.exit(1);
   }
 }
 
