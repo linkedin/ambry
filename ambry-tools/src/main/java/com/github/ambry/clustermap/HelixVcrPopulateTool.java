@@ -112,7 +112,6 @@ public class HelixVcrPopulateTool {
         System.out.println("Updating cluster: " + destClusterName + "by checking " + srcClusterName);
         updateResourceAndPartition(srcZkString, srcClusterName, destZkString, destClusterName, dryRun);
       } else {
-        // Just update cluster config, not resources
         System.out.println("Updating cluster config for: " + destClusterName);
         // Update the cluster config and resources to the latest settings.
         setClusterConfig(getHelixZkClient(destZkString), destClusterName, dryRun);
