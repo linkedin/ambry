@@ -263,9 +263,7 @@ class AzureCloudDestination implements CloudDestination {
    * @throws CloudStorageException if the update fails.
    */
   private boolean updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws CloudStorageException {
-    Map<String, Object> updateFields = new HashMap<>();
-    updateFields.put(fieldName, value);
-    return updateBlobMetadata(blobId, updateFields);
+    return updateBlobMetadata(blobId, Collections.singletonMap(fieldName, value));
   }
 
   /**

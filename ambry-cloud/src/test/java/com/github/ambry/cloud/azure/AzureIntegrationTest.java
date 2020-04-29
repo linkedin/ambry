@@ -401,8 +401,8 @@ public class AzureIntegrationTest {
 
     // Case 1: concurrent modification to blob metadata.
     azureDest.getAzureBlobDataAccessor()
-        .setUpdateCallback(
-            () -> concurrentUpdater.getAzureBlobDataAccessor().updateBlobMetadata(blobId, fieldName, newUploadTime));
+        .setUpdateCallback(() -> concurrentUpdater.getAzureBlobDataAccessor()
+            .updateBlobMetadata(blobId, Collections.singletonMap(fieldName, newUploadTime)));
     try {
       azureDest.updateBlobExpiration(blobId, ++now);
       fail("Expected 412 error");
@@ -412,8 +412,8 @@ public class AzureIntegrationTest {
     }
     // Case 2: concurrent modification to Cosmos record.
     azureDest.getCosmosDataAccessor()
-        .setUpdateCallback(
-            () -> concurrentUpdater.getCosmosDataAccessor().updateMetadata(blobId, fieldName, newUploadTime));
+        .setUpdateCallback(() -> concurrentUpdater.getCosmosDataAccessor()
+            .updateMetadata(blobId, Collections.singletonMap(fieldName, newUploadTime)));
     try {
       azureDest.updateBlobExpiration(blobId, ++now);
       fail("Expected 412 error");
