@@ -88,6 +88,7 @@ public class Http2ClientConfig {
 
   /**
    * The socket receive buffer size for netty http2 channel.
+   * If -1 is provided, code will not set socket buffer size explicitly. Linux kernel will do TCP buffer auto tune.
    */
   @Config(NETTY_RECEIVE_BUFFER_SIZE)
   @Default("1024 * 1024")
@@ -95,6 +96,7 @@ public class Http2ClientConfig {
 
   /**
    * The socket send buffer size for netty http2 channel.
+   * If -1 is provided, code will not set socket buffer size explicitly. Linux kernel will do TCP buffer auto tune.
    */
   @Config(NETTY_SEND_BUFFER_SIZE)
   @Default("1024 * 1024")

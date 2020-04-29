@@ -43,20 +43,20 @@ class Http2ClientStreamStatsHandler extends SimpleChannelInboundHandler<Http2Fra
     ReferenceCountUtil.retain(frame);
     RequestInfo requestInfo = ctx.channel().attr(Http2NetworkClient.REQUEST_INFO).get();
     requestInfo.responseFramesCount++;
+    long time = System.currentTimeMillis() - requestInfo.getStreamSendTime();
     if (frame instanceof Http2HeadersFrame) {
+      http2NetworkClient.getHttp2ClientMetrics().http2StreamRoundTripTime.update(time);
       requestInfo.setStreamHeaderFrameReceiveTime(System.currentTimeMillis());
-      http2NetworkClient.getHttp2ClientMetrics().http2StreamRoundTripTime.update(
-          System.currentTimeMillis() - requestInfo.getStreamSendTime());
-      logger.debug("Header Frame received. Request: {}", requestInfo);
+      logger.debug("Header Frame received. Time from send: {}ms. Request: {}", time, requestInfo);
     } else if (frame instanceof Http2DataFrame) {
-      logger.debug("Data Frame size: {}. Request: {}", ((Http2DataFrame) frame).content().readableBytes(), requestInfo);
+      logger.debug("Data Frame size: {}. Time from send: {}ms. Request: {}",
+          ((Http2DataFrame) frame).content().readableBytes(), time, requestInfo);
     }
 
     if (frame instanceof Http2DataFrame && ((Http2DataFrame) frame).isEndStream()) {
-      long time = System.currentTimeMillis() - requestInfo.getStreamHeaderFrameReceiveTime();
       http2NetworkClient.getHttp2ClientMetrics().http2StreamFirstToLastFrameTime.update(time);
       http2NetworkClient.getHttp2ClientMetrics().http2ResponseFrameCount.update(requestInfo.responseFramesCount);
-      logger.debug("All Frame received. Time: {}ms. Request: {}", time, requestInfo);
+      logger.debug("All Frame received. Time from send: {}ms. Request: {}", time, requestInfo);
     }
     ctx.fireChannelRead(frame);
   }

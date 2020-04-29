@@ -32,6 +32,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollSocketChannel;
@@ -74,6 +75,9 @@ public class Http2BlockingChannel implements ConnectedChannel {
   private static final Logger logger = LoggerFactory.getLogger(Http2BlockingChannel.class);
   private final static AttributeKey<Promise<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
   private final String hostName;
+  private final int readBufferSize;
+  private final int writeBufferSize;
+  private final int http2InitialWindowSize;
   private final SSLFactory sslFactory;
   private final int port;
   private EventLoopGroup workerGroup;
@@ -81,9 +85,13 @@ public class Http2BlockingChannel implements ConnectedChannel {
   private Promise<ByteBuf> responsePromise;
   private Http2StreamChannelBootstrap http2StreamChannelBootstrap;
 
-  public Http2BlockingChannel(String hostName, int port, SSLConfig sslConfig) {
+  public Http2BlockingChannel(String hostName, int port, SSLConfig sslConfig, int readBufferSize, int writeBufferSize,
+      int http2InitialWindowSize) {
     this.hostName = hostName;
     this.port = port;
+    this.readBufferSize = readBufferSize;
+    this.writeBufferSize = writeBufferSize;
+    this.http2InitialWindowSize = http2InitialWindowSize;
     try {
       sslFactory = new NettySslHttp2Factory(sslConfig);
     } catch (GeneralSecurityException | IOException e) {
@@ -97,7 +105,17 @@ public class Http2BlockingChannel implements ConnectedChannel {
     Bootstrap b = new Bootstrap();
     b.group(workerGroup);
     b.channel(Epoll.isAvailable() ? EpollSocketChannel.class : NioSocketChannel.class);
-    b.option(ChannelOption.SO_KEEPALIVE, true);
+    b.option(ChannelOption.SO_KEEPALIVE, true)
+        // To honor http2 window size, WriteBufferWaterMark.high() should be greater or equal to http2 window size.
+        // Also see: https://github.com/netty/netty/issues/10193
+        .option(ChannelOption.WRITE_BUFFER_WATER_MARK,
+            new WriteBufferWaterMark(http2InitialWindowSize, 2 * http2InitialWindowSize));
+    if (readBufferSize != -1) {
+      b.option(ChannelOption.SO_RCVBUF, readBufferSize);
+    }
+    if (writeBufferSize != -1) {
+      b.option(ChannelOption.SO_SNDBUF, writeBufferSize);
+    }
     b.remoteAddress(hostName, port);
     b.handler(new ChannelInitializer<SocketChannel>() {
       @Override
@@ -105,7 +123,9 @@ public class Http2BlockingChannel implements ConnectedChannel {
         ChannelPipeline pipeline = ch.pipeline();
         SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(hostName, port, SSLFactory.Mode.CLIENT));
         pipeline.addLast(sslHandler);
-        pipeline.addLast(Http2FrameCodecBuilder.forClient().initialSettings(Http2Settings.defaultSettings()).build());
+        pipeline.addLast(Http2FrameCodecBuilder.forClient()
+            .initialSettings(Http2Settings.defaultSettings().initialWindowSize(http2InitialWindowSize))
+            .build());
         pipeline.addLast(new Http2MultiplexHandler(new ChannelInboundHandlerAdapter()));
       }
     });
