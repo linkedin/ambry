@@ -17,6 +17,7 @@ package com.github.ambry.rest;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.NettyConfig;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.socket.SocketChannel;
@@ -25,6 +26,7 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import java.net.InetSocketAddress;
+import java.util.List;
 
 
 /**
@@ -40,6 +42,7 @@ public class FrontendNettyChannelInitializer extends ChannelInitializer<SocketCh
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
   private final SSLFactory sslFactory;
+  private final List<ChannelHandler> addedChannelHandlers;
 
   /**
    * Construct a {@link FrontendNettyChannelInitializer}.
@@ -52,10 +55,13 @@ public class FrontendNettyChannelInitializer extends ChannelInitializer<SocketCh
    * @param restServerState the {@link RestServerState} object to use.
    * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
    *                   or {@code null} if SSL is not enabled in this pipeline.
+   * @param addedChannelHandlers a list of {@link ChannelHandler} to add to the {@link io.netty.channel.ChannelInitializer} before
+   *                             the final handler.
    */
-  public FrontendNettyChannelInitializer(NettyConfig nettyConfig, PerformanceConfig performanceConfig, NettyMetrics nettyMetrics,
-      ConnectionStatsHandler connectionStatsHandler, RestRequestHandler requestHandler,
-      PublicAccessLogger publicAccessLogger, RestServerState restServerState, SSLFactory sslFactory) {
+  public FrontendNettyChannelInitializer(NettyConfig nettyConfig, PerformanceConfig performanceConfig,
+      NettyMetrics nettyMetrics, ConnectionStatsHandler connectionStatsHandler, RestRequestHandler requestHandler,
+      PublicAccessLogger publicAccessLogger, RestServerState restServerState, SSLFactory sslFactory,
+      List<ChannelHandler> addedChannelHandlers) {
     this.nettyConfig = nettyConfig;
     this.performanceConfig = performanceConfig;
     this.nettyMetrics = nettyMetrics;
@@ -64,6 +70,7 @@ public class FrontendNettyChannelInitializer extends ChannelInitializer<SocketCh
     this.publicAccessLogger = publicAccessLogger;
     this.restServerState = restServerState;
     this.sslFactory = sslFactory;
+    this.addedChannelHandlers = addedChannelHandlers;
   }
 
   @Override
@@ -94,8 +101,12 @@ public class FrontendNettyChannelInitializer extends ChannelInitializer<SocketCh
         // for detecting connections that have been idle too long - probably because of an error.
         .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
         // for safe writing of chunks for responses
-        .addLast("chunker", new ChunkedWriteHandler())
-        // custom processing class that interfaces with a RestRequestService.
-        .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, performanceConfig, requestHandler));
+        .addLast("chunker", new ChunkedWriteHandler());
+    if (addedChannelHandlers != null) {
+      pipeline.addLast(addedChannelHandlers.toArray(new ChannelHandler[0]));
+    }
+    // custom processing class that interfaces with a RestRequestService.
+    pipeline.addLast("processor",
+        new NettyMessageProcessor(nettyMetrics, nettyConfig, performanceConfig, requestHandler));
   }
 }
