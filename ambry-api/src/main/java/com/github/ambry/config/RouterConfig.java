@@ -70,6 +70,7 @@ public class RouterConfig {
   public static final String ROUTER_CRYPTO_JOBS_WORKER_COUNT = "router.crypto.jobs.worker.count";
   public static final String ROUTER_TTL_UPDATE_REQUEST_PARALLELISM = "router.ttl.update.request.parallelism";
   public static final String ROUTER_TTL_UPDATE_SUCCESS_TARGET = "router.ttl.update.success.target";
+  public static final String ROUTER_UNDELETE_REQUEST_PARALLELISM = "router.undelete.request.parallelism";
   public static final String ROUTER_USE_GET_BLOB_OPERATION_FOR_BLOB_INFO =
       "router.use.get.blob.operation.for.blob.info";
   public static final String ROUTER_OPERATION_TRACKER_CUSTOM_PERCENTILES =
@@ -325,6 +326,13 @@ public class RouterConfig {
   public final int routerTtlUpdateSuccessTarget;
 
   /**
+   * The maximum number of parallel requests issued at a time by the undelete manager for a blob.
+   */
+  @Config(ROUTER_UNDELETE_REQUEST_PARALLELISM)
+  @Default("3")
+  public final int routerUndeleteRequestParallelism;
+
+  /**
    * If this config is set to {@code true} the router will use {@code GetBlobOperation} instead of
    * {@code GetBlobInfoOperation} for {@code getBlobInfo} calls. This allows the router to correct some blob size
    * corruptions that may have arisen from using older versions of {@code BlobIdTransformer} with the downside of
@@ -541,6 +549,8 @@ public class RouterConfig {
         verifiableProperties.getIntInRange(ROUTER_TTL_UPDATE_REQUEST_PARALLELISM, 3, 1, Integer.MAX_VALUE);
     routerTtlUpdateSuccessTarget =
         verifiableProperties.getIntInRange(ROUTER_TTL_UPDATE_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
+    routerUndeleteRequestParallelism =
+        verifiableProperties.getIntInRange(ROUTER_UNDELETE_REQUEST_PARALLELISM, 3, 1, Integer.MAX_VALUE);
     routerUseGetBlobOperationForBlobInfo =
         verifiableProperties.getBoolean(ROUTER_USE_GET_BLOB_OPERATION_FOR_BLOB_INFO, false);
     List<String> customPercentiles =

@@ -851,6 +851,7 @@ public class NonBlockingRouterMetrics {
     public final Meter getBlobInfoRequestRate;
     public final Meter getRequestRate;
     public final Meter deleteRequestRate;
+    public final Meter undeleteRequestRate;
     public final Meter ttlUpdateRequestRate;
 
     // Request latency. For each operation type, this metrics tracks the round-trip time between the NonBlockingRouter
@@ -859,6 +860,7 @@ public class NonBlockingRouterMetrics {
     public final Histogram getBlobInfoRequestLatencyMs;
     public final Histogram getRequestLatencyMs;
     public final Histogram deleteRequestLatencyMs;
+    public final Histogram undeleteRequestLatencyMs;
     public final Histogram ttlUpdateRequestLatencyMs;
 
     // Request error count. For each operation type, this metrics tracks the total error count seen by the
@@ -867,6 +869,7 @@ public class NonBlockingRouterMetrics {
     public final Counter getBlobInfoRequestErrorCount;
     public final Counter getRequestErrorCount;
     public final Counter deleteRequestErrorCount;
+    public final Counter undeleteRequestErrorCount;
     public final Counter ttlUpdateRequestErrorCount;
 
     NodeLevelMetrics(MetricRegistry registry, String dataNodeName) {
@@ -876,6 +879,8 @@ public class NonBlockingRouterMetrics {
           registry.meter(MetricRegistry.name(GetBlobInfoOperation.class, dataNodeName, "GetBlobInfoRequestRate"));
       getRequestRate = registry.meter(MetricRegistry.name(GetBlobOperation.class, dataNodeName, "GetRequestRate"));
       deleteRequestRate = registry.meter(MetricRegistry.name(DeleteOperation.class, dataNodeName, "DeleteRequestRate"));
+      undeleteRequestRate =
+          registry.meter(MetricRegistry.name(UndeleteOperation.class, dataNodeName, "UndeleteRequestRate"));
       ttlUpdateRequestRate =
           registry.meter(MetricRegistry.name(TtlUpdateOperation.class, dataNodeName, "TtlUpdateRequestRate"));
 
@@ -888,6 +893,8 @@ public class NonBlockingRouterMetrics {
           registry.histogram(MetricRegistry.name(GetBlobOperation.class, dataNodeName, "GetRequestLatencyMs"));
       deleteRequestLatencyMs =
           registry.histogram(MetricRegistry.name(DeleteOperation.class, dataNodeName, "DeleteRequestLatencyMs"));
+      undeleteRequestLatencyMs =
+          registry.histogram(MetricRegistry.name(UndeleteOperation.class, dataNodeName, "UndeleteRequestLatencyMs"));
       ttlUpdateRequestLatencyMs =
           registry.histogram(MetricRegistry.name(TtlUpdateOperation.class, dataNodeName, "TtlUpdateRequestLatencyMs"));
 
@@ -900,6 +907,8 @@ public class NonBlockingRouterMetrics {
           registry.counter(MetricRegistry.name(GetBlobOperation.class, dataNodeName, "GetRequestErrorCount"));
       deleteRequestErrorCount =
           registry.counter(MetricRegistry.name(DeleteOperation.class, dataNodeName, "DeleteRequestErrorCount"));
+      undeleteRequestErrorCount =
+          registry.counter(MetricRegistry.name(UndeleteOperation.class, dataNodeName, "UndeleteRequestErrorCount"));
       ttlUpdateRequestErrorCount =
           registry.counter(MetricRegistry.name(TtlUpdateOperation.class, dataNodeName, "TtlUpdateRequestErrorCount"));
     }

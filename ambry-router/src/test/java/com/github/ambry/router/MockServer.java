@@ -37,6 +37,8 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
+import com.github.ambry.protocol.UndeleteRequest;
+import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
@@ -108,6 +110,9 @@ class MockServer {
         break;
       case TtlUpdateRequest:
         response = makeTtlUpdateResponse((TtlUpdateRequest) send, serverError);
+        break;
+      case UndeleteRequest:
+        response = makeUndeleteResponse((UndeleteRequest) send, serverError);
         break;
       default:
         throw new IOException("Unknown request type received");
@@ -350,8 +355,8 @@ class MockServer {
       List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
       if (partitionError == ServerErrorCode.No_Error) {
         messageInfoList.add(
-            new MessageInfo(key, byteBufferSize, false, blob.isTtlUpdated(), blob.expiresAt, accountId, containerId,
-                operationTimeMs));
+            new MessageInfo(key, byteBufferSize, false, blob.isTtlUpdated(), blob.isUndeleted(), blob.expiresAt, null,
+                accountId, containerId, operationTimeMs, blob.lifeVersion));
         messageMetadataList.add(msgMetadata);
       }
       PartitionResponseInfo partitionResponseInfo =
@@ -383,7 +388,6 @@ class MockServer {
   }
 
   /**
-   *
    * Make a {@link DeleteResponse} for the given {@link DeleteRequest} for which the given {@link ServerErrorCode} was
    * encountered.
    * @param deleteRequest the {@link DeleteRequest} for which the response is being constructed.
@@ -418,6 +422,28 @@ class MockServer {
   }
 
   /**
+   * Make a {@link UndeleteResponse} for the given {@link UndeleteRequest} for which the given {@link ServerErrorCode} was
+   * encountered.
+   * @param undeleteRequest the {@link UndeleteRequest} for which the response is being constructed.
+   * @param undeleteError the {@link ServerErrorCode} that was encountered.
+   * @return the constructed {@link UndeleteResponse}
+   */
+  private UndeleteResponse makeUndeleteResponse(UndeleteRequest undeleteRequest, ServerErrorCode undeleteError) {
+    if (undeleteError == ServerErrorCode.No_Error) {
+      undeleteError = errorCodeForBlobs.getOrDefault(undeleteRequest.getBlobId().getID(), ServerErrorCode.No_Error);
+    }
+    if (undeleteError == ServerErrorCode.No_Error) {
+      undeleteError = updateBlobMap(undeleteRequest);
+    }
+    if (undeleteError == ServerErrorCode.No_Error) {
+      short lifeVersion = blobs.get(undeleteRequest.getBlobId().getID()).lifeVersion;
+      return new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), lifeVersion);
+    } else {
+      return new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), undeleteError);
+    }
+  }
+
+  /**
    * Serialize contents of the PutRequest and update the blob map with the serialized content.
    * @param putRequest the PutRequest
    * @throws IOException if there was an error reading the contents of the given PutRequest.
@@ -434,7 +460,7 @@ class MockServer {
   private void updateBlobMap(DeleteRequest deleteRequest) {
     StoredBlob blob = blobs.get(deleteRequest.getBlobId().getID());
     if (blob != null) {
-      blob.markAsDeleted();
+      blob.markAsDeleted(deleteRequest.getDeletionTimeInMs());
     }
   }
 
@@ -457,6 +483,27 @@ class MockServer {
       errorCode = ServerErrorCode.Blob_Already_Updated;
     } else {
       throw new IllegalStateException("Could not recognize blob state");
+    }
+    return errorCode;
+  }
+
+  /**
+   * Updates the blob map based on the {@code undeleteRequest}.
+   * @param undeleteRequest the {@link TtlUpdateRequest} that needs to be processed
+   */
+  private ServerErrorCode updateBlobMap(UndeleteRequest undeleteRequest) {
+    ServerErrorCode errorCode = ServerErrorCode.No_Error;
+    StoredBlob blob = blobs.get(undeleteRequest.getBlobId().getID());
+    if (blob == null) {
+      errorCode = ServerErrorCode.Blob_Not_Found;
+    } else if (blob.isUndeleted()) {
+      errorCode = ServerErrorCode.Blob_Already_Undeleted;
+    } else if (!blob.isDeleted()) {
+      errorCode = ServerErrorCode.Blob_Not_Deleted;
+    } else if (blob.hasExpired()) {
+      errorCode = ServerErrorCode.Blob_Expired;
+    } else {
+      blob.updateLifeVersion();
     }
     return errorCode;
   }
@@ -564,8 +611,11 @@ class StoredBlob {
   final BlobProperties properties;
   final ByteBuffer serializedSentPutRequest;
   long expiresAt;
+  long deleteAt;
+  short lifeVersion = (short) 0;
   private boolean deleted = false;
   private boolean ttlUpdated = false;
+  private boolean undeleted = false;
 
   StoredBlob(PutRequest putRequest, ClusterMap clusterMap) throws IOException {
     serializedSentPutRequest = ByteBuffer.allocate((int) putRequest.sizeInBytes());
@@ -593,16 +643,28 @@ class StoredBlob {
     return ttlUpdated;
   }
 
+  boolean isUndeleted() {
+    return undeleted;
+  }
+
   boolean hasExpired() {
     return expiresAt != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > expiresAt;
   }
 
-  void markAsDeleted() {
+  void markAsDeleted(long deleteAt) {
     deleted = true;
+    undeleted = false;
+    this.deleteAt = deleteAt;
   }
 
   void updateExpiry(long expiresAtMs) {
     ttlUpdated = true;
     expiresAt = expiresAtMs;
+  }
+
+  void updateLifeVersion() {
+    deleted = false;
+    undeleted = true;
+    lifeVersion++;
   }
 }
