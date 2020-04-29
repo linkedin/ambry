@@ -39,6 +39,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -161,6 +162,15 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
+  public short updateBlobLifeVersion(BlobId blobId, Short lifeVersion) throws CloudStorageException {
+    Map<String, Object> updateFields = new HashMap<>();
+    updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
+    updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, Utils.Infinite_Time);
+    updateBlobMetadata(blobId, updateFields);
+    return lifeVersion; // TODO return the real value of life version
+  }
+
+  @Override
   public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
     Objects.requireNonNull(blobIds, "blobIds cannot be null");
     if (blobIds.isEmpty()) {
@@ -253,8 +263,21 @@ class AzureCloudDestination implements CloudDestination {
    * @throws CloudStorageException if the update fails.
    */
   private boolean updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws CloudStorageException {
+    Map<String, Object> updateFields = new HashMap<>();
+    updateFields.put(fieldName, value);
+    return updateBlobMetadata(blobId, updateFields);
+  }
+
+  /**
+   * Update the metadata for the specified blob.
+   * @param blobId The {@link BlobId} to update.
+   * @param updateFields map of fields and new values to update.
+   * @return {@code true} if the update succeeded, {@code false} if no update was needed.
+   * @throws CloudStorageException if the update fails.
+   */
+  private boolean updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields) throws CloudStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
-    Objects.requireNonNull(fieldName, "Field name cannot be null");
+    updateFields.keySet().stream().forEach(field -> Objects.requireNonNull(updateFields.get(field)));
 
     // We update the blob metadata value in two places:
     // 1) the blob storage entry metadata (so GET's can be served entirely from ABS)
@@ -264,7 +287,7 @@ class AzureCloudDestination implements CloudDestination {
       Map<String, String> metadataMap = null;
       try {
         AzureBlobDataAccessor.UpdateResponse updateResponse =
-            azureBlobDataAccessor.updateBlobMetadata(blobId, fieldName, value);
+            azureBlobDataAccessor.updateBlobMetadata(blobId, updateFields);
         // Note: if blob does not exist will throw exception with NOT_FOUND status
         metadataMap = updateResponse.metadata;
         updatedStorage = updateResponse.wasUpdated;
@@ -283,7 +306,8 @@ class AzureCloudDestination implements CloudDestination {
               return false;
             } else {
               // If the blob is still active but ABS does not have it, we are in deeper trouble.
-              logger.error("Inconsistency: Cosmos contains record for active blob {} that is missing from ABS!", blobId.getID());
+              logger.error("Inconsistency: Cosmos contains record for active blob {} that is missing from ABS!",
+                  blobId.getID());
               throw bex;
             }
           } else {
@@ -300,7 +324,7 @@ class AzureCloudDestination implements CloudDestination {
       // of a request where ABS was updated but Cosmos update failed.
       boolean updatedCosmos = false;
       try {
-        ResourceResponse<Document> response = cosmosDataAccessor.updateMetadata(blobId, fieldName, value);
+        ResourceResponse<Document> response = cosmosDataAccessor.updateMetadata(blobId, updateFields);
         updatedCosmos = response != null;
       } catch (DocumentClientException dex) {
         if (dex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
@@ -315,11 +339,13 @@ class AzureCloudDestination implements CloudDestination {
       }
 
       if (updatedStorage || updatedCosmos) {
-        logger.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
+        logger.debug("Updated blob {} metadata set fields {} to values {}.", blobId, updateFields.keySet(),
+            updateFields.values());
         azureMetrics.blobUpdatedCount.inc();
         return true;
       } else {
-        logger.debug("Blob {} already has {} = {} in ABS and Cosmos", blobId, fieldName, value);
+        logger.debug("Blob {} already has keys {} with values {} in ABS and Cosmos", blobId, updateFields.keySet(),
+            updateFields.values());
         return false;
       }
     } catch (Exception e) {

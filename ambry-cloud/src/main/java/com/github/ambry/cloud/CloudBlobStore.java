@@ -398,7 +398,18 @@ class CloudBlobStore implements Store {
 
   @Override
   public short undelete(MessageInfo info) throws StoreException {
-    throw new UnsupportedOperationException("Undelete not supported in cloud store");
+    // TODO: Currently this is implemented for undeletes via replication only for DR.
+    checkStarted();
+    try {
+      BlobId blobId = (BlobId) info.getStoreKey();
+      return requestAgent.doWithRetries(() -> cloudDestination.updateBlobLifeVersion(blobId, info.getLifeVersion()),
+          "Undelete", partitionId.toPathString());
+    } catch (CloudStorageException ex) {
+      // TODO check the appropriate error code for InvalidABSOperation exception
+      StoreErrorCodes errorCode =
+          (ex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
+      throw new StoreException(ex, errorCode);
+    }
   }
 
   /**
@@ -561,7 +572,7 @@ class CloudBlobStore implements Store {
 
     // TODO: isKeyDeleted isn't reliable for determining if the blob is deleted or not. Fix it later.
     return new MessageInfo(key, 0, isKeyDeleted(key), false, false, Utils.Infinite_Time, null,
-        ((BlobId) key).getAccountId(), ((BlobId) key).getContainerId(), (long) 0, (short) 0);
+        ((BlobId) key).getAccountId(), ((BlobId) key).getContainerId(), 0, (short) 0);
   }
 
   @Override

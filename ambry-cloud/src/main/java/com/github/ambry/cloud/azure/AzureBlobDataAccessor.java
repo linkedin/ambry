@@ -52,6 +52,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -292,15 +293,15 @@ public class AzureBlobDataAccessor {
   /**
    * Update the metadata for the specified blob.
    * @param blobId The {@link BlobId} to update.
-   * @param fieldName The metadata field to modify.
-   * @param value The new value.
+   * @param updateFields Map of field names and new values to modify.
    * @return a {@link UpdateResponse} with the updated metadata.
    * @throws BlobStorageException if the blob does not exist or an error occurred.
    * @throws IllegalStateException on request timeout.
    */
-  public UpdateResponse updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws BlobStorageException {
+  public UpdateResponse updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields)
+      throws BlobStorageException, InvalidMetadataUpdateException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
-    Objects.requireNonNull(fieldName, "Field name cannot be null");
+    updateFields.keySet().stream().forEach(field -> Objects.requireNonNull(updateFields.get(field)));
 
     try {
       BlockBlobClient blobClient = getBlockBlobClient(blobId, false);
@@ -311,10 +312,13 @@ public class AzureBlobDataAccessor {
         // Note: above throws 404 exception if blob does not exist.
         String etag = blobProperties.getETag();
         Map<String, String> metadata = blobProperties.getMetadata();
-        // Update only if value has changed
-        String textValue = String.valueOf(value);
-        if (!textValue.equals(metadata.get(fieldName))) {
-          metadata.put(fieldName, textValue);
+        // Update only if any of the values have changed
+        Map<String, String> fieldsToUpdate = updateFields.entrySet()
+            .stream()
+            .filter(map -> !String.valueOf(updateFields.get(map.getKey())).equals(metadata.get(map.getKey())))
+            .collect(Collectors.toMap(map -> map.getKey(), map -> String.valueOf(map.getValue())));
+        if (fieldsToUpdate.size() > 0) {
+          validateSanityAndUpdateMetadata(metadata, blobId, fieldsToUpdate);
           if (updateCallback != null) {
             try {
               updateCallback.call();
@@ -334,12 +338,59 @@ public class AzureBlobDataAccessor {
       }
     } catch (BlobStorageException e) {
       if (isNotFoundError(e.getErrorCode())) {
-        logger.warn("Blob {} not found, cannot update {}.", blobId, fieldName);
+        logger.warn("Blob {} not found, cannot update {}.", blobId, updateFields.keySet());
       }
       if (e.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
         azureMetrics.blobUpdateConflictCount.inc();
       }
       throw e;
+    }
+  }
+
+  /**
+   * Validate if an update should be allowed, and then update the metadata if allowed.
+   * @param metadata Metadata to update.
+   * @param blobId {@link BlobId} of the blob to be updated.
+   * @param fieldsToUpdate Map of field names and new values to modify.
+   * @throws InvalidMetadataUpdateException if the update is invalid.
+   */
+  private void validateSanityAndUpdateMetadata(Map<String, String> metadata, BlobId blobId,
+      Map<String, String> fieldsToUpdate) throws InvalidMetadataUpdateException {
+    if (fieldsToUpdate.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME)) {
+      validateUpdateTtlSanity(metadata, blobId);
+    } else if (fieldsToUpdate.containsKey(CloudBlobMetadata.FIELD_LIFE_VERSION)) {
+      validateUndeleteSanity(metadata, blobId, fieldsToUpdate.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+    }
+    fieldsToUpdate.forEach((field, value) -> metadata.put(field, value));
+  }
+
+  /**
+   * Validate the sanity of update ttl operation.
+   * @param metadata Metadata to validate against.
+   * @param blobId {@link BlobId} of the blob being validated.
+   * @throws InvalidMetadataUpdateException if the update is invalid.
+   */
+  private void validateUpdateTtlSanity(Map<String, String> metadata, BlobId blobId)
+      throws InvalidMetadataUpdateException {
+    if (metadata.get(CloudBlobMetadata.FIELD_DELETION_TIME) != null
+        && Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_DELETION_TIME)) > 0) {
+      throw new InvalidMetadataUpdateException(String.format("Cannot update ttl for deleted blob %s ", blobId.getID()));
+    }
+  }
+
+  /**
+   * Validate the sanity of undelete operation.
+   * @param metadata Metadata to validate against.
+   * @param blobId {@link BlobId} of the blob being validated.
+   * @param newLifeVersion new value of life version.
+   * @throws InvalidMetadataUpdateException if the update is invalid.
+   */
+  private void validateUndeleteSanity(Map<String, String> metadata, BlobId blobId, String newLifeVersion)
+      throws InvalidMetadataUpdateException {
+    if (metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION) != null
+        && Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION)) < Short.parseShort(newLifeVersion)) {
+      throw new InvalidMetadataUpdateException(
+          String.format("Cannot decrease life version of blob %s ", blobId.getID()));
     }
   }
 
@@ -461,5 +512,14 @@ public class AzureBlobDataAccessor {
       this.wasUpdated = wasUpdated;
       this.metadata = metadata;
     }
+  }
+}
+
+/**
+ * Exception thrown on an invalid update operation in Azure Blob Storage.
+ */
+class InvalidMetadataUpdateException extends Exception {
+  public InvalidMetadataUpdateException(String message) {
+    super(message);
   }
 }
