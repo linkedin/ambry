@@ -57,8 +57,6 @@ class TtlUpdateOperation {
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
-  // RouterErrorCode that is resolved from all the received ServerErrorCode for this operation.
-  private RouterErrorCode resolvedRouterErrorCode;
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
   private static final Logger LOGGER = LoggerFactory.getLogger(TtlUpdateOperation.class);

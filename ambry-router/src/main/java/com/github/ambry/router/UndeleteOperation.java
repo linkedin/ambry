@@ -55,8 +55,6 @@ public class UndeleteOperation {
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
-  // RouterErrorCode that is resolved from all the received ServerErrorCode for this operation.
-  private RouterErrorCode resolvedRouterErrorCode;
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
   private static final Logger LOGGER = LoggerFactory.getLogger(UndeleteOperation.class);
@@ -88,9 +86,8 @@ public class UndeleteOperation {
     this.callback = callback;
     this.time = time;
     this.operationTimeMs = operationTimeMs;
-    byte blobDcId = blobId.getDatacenterId();
-    String originatingDcName = clusterMap.getDatacenterName(blobDcId);
-    this.operationTracker = new UndeleteOperationTracker(routerConfig, blobId.getPartition(), originatingDcName);
+    this.operationTracker = new UndeleteOperationTracker(routerConfig, blobId.getPartition(),
+        clusterMap.getDatacenterName(blobId.getDatacenterId()));
   }
 
   /**
@@ -199,7 +196,7 @@ public class UndeleteOperation {
               lifeVersion = undeleteResponse.getLifeVersion();
               firstResponseReplicaId = replica;
             } else {
-              if (lifeVersion.shortValue() != undeleteResponse.getLifeVersion()) {
+              if (lifeVersion != undeleteResponse.getLifeVersion()) {
                 String message = String.format(
                     "LifeVersion from Replica {} is different than the lifeVersion from replica {}, {} != {}",
                     firstResponseReplicaId, replica, lifeVersion, undeleteResponse.getLifeVersion());
@@ -211,15 +208,15 @@ public class UndeleteOperation {
               }
             }
           } else if (serverError == ServerErrorCode.Disk_Unavailable) {
-            LOGGER.trace("Replica {} returned Disk_Unavailable for a delete request with correlationId : {} ", replica,
-                undeleteRequest.getCorrelationId());
+            LOGGER.trace("Replica {} returned Disk_Unavailable for an undelete request with correlationId : {} ",
+                replica, undeleteRequest.getCorrelationId());
             operationTracker.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
             setOperationException(
                 new RouterException("Server returned: " + serverError, RouterErrorCode.AmbryUnavailable));
             routerMetrics.routerRequestErrorCount.inc();
             routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).undeleteRequestErrorCount.inc();
           } else {
-            LOGGER.trace("Replica {} returned an error {} for a delete request with response correlationId : {} ",
+            LOGGER.trace("Replica {} returned an error {} for an undelete request with response correlationId : {} ",
                 replica, serverError, undeleteRequest.getCorrelationId());
             RouterErrorCode routerErrorCode = processServerError(serverError);
             if (serverError == ServerErrorCode.Blob_Authorization_Failure) {
