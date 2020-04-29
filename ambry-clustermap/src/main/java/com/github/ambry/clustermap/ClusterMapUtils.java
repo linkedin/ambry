@@ -559,7 +559,8 @@ public class ClusterMapUtils {
           }
           if (partitionsByReplicaCount == null) {
             throw new IllegalArgumentException(
-                "No partitions for default partition class " + partitionClass + " found");
+                "No partitions for partition class = '" + partitionClass + "' or default partition class = '"
+                    + defaultPartitionClass + "' found");
           }
           if (minimumReplicaCountRequired) {
             // get partitions with replica count >= min replica count specified in ClusterMapConfig
