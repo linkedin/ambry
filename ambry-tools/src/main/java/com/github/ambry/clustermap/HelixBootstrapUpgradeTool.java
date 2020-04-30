@@ -13,7 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.HelixAdminOperation;
+import com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.*;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.tools.util.ToolUtils;
 import java.util.ArrayList;
@@ -212,9 +212,17 @@ public class HelixBootstrapUpgradeTool {
     OptionSpecBuilder disableValidatingClusterManager = parser.accepts("disableVCM",
         "(Optional argument) whether to disable validating cluster manager(VCM) in Helix bootstrap tool.");
 
+    ArgumentAcceptingOptionSpec<String> adminConfigFilePathOpt = parser.accepts("adminConfigFilePath",
+        "The path to a static admin config file. For example, it can be a file that holds a list of partitions"
+            + "(comma separated) that should be overridden to ReadOnly")
+        .withRequiredArg()
+        .describedAs("admin_config_file_path")
+        .ofType(String.class);
+
     OptionSet options = parser.parse(args);
     String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
     String partitionLayoutPath = options.valueOf(partitionLayoutPathOpt);
+    String adminConfigFilePath = options.valueOf(adminConfigFilePathOpt);
     String zkLayoutPath = options.valueOf(zkLayoutPathOpt);
     String clusterNamePrefix = options.valueOf(clusterNamePrefixOpt);
     String clusterName = options.valueOf(clusterNameOpt);
@@ -244,7 +252,7 @@ public class HelixBootstrapUpgradeTool {
       ToolUtils.ensureOrExit(listOpt, options, parser);
       String[] adminTypes = adminConfigStr.replaceAll("\\p{Space}", "").split(",");
       HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix, dcs, options.has(forceRemove), new HelixAdminFactory(), adminTypes);
+          clusterNamePrefix, dcs, options.has(forceRemove), new HelixAdminFactory(), adminTypes, adminConfigFilePath);
     } else if (options.has(addStateModel)) {
       listOpt.add(stateModelDefinitionOpt);
       ToolUtils.ensureOrExit(listOpt, options, parser);

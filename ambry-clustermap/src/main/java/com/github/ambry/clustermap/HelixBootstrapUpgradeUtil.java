@@ -55,6 +55,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -231,12 +232,14 @@ public class HelixBootstrapUpgradeUtil {
    * @param forceRemove whether to remove admin configs from cluster.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @param adminTypes types of admin operation that requires to generate config and upload it to Helix PropertyStore.
+   * @param adminConfigFilePath if not null, use this file to generate admin config infos. If null, use the standard
+   *                               HardwareLayout and PartitionLayout files to generate admin configs to upload.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void uploadOrDeleteAdminConfigs(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, String dcs, boolean forceRemove, HelixAdminFactory helixAdminFactory,
-      String[] adminTypes) throws Exception {
+      String[] adminTypes, String adminConfigFilePath) throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, helixAdminFactory,
@@ -247,7 +250,7 @@ public class HelixBootstrapUpgradeUtil {
       }
     } else {
       for (String adminType : adminTypes) {
-        generateAdminInfosAndUpload(clusterMapToHelixMapper, adminType);
+        generateAdminInfosAndUpload(clusterMapToHelixMapper, adminType, adminConfigFilePath);
       }
     }
   }
@@ -350,12 +353,15 @@ public class HelixBootstrapUpgradeUtil {
    * Generate cluster admin configs based on admin type and upload them to Helix PropertyStore
    * @param clusterMapToHelixMapper {@link HelixBootstrapUpgradeUtil} to use.
    * @param adminType the type of admin operation.
+   * @param adminConfigFilePath if not null, use this file to generate admin config infos to upload to Helix.
    */
-  private static void generateAdminInfosAndUpload(HelixBootstrapUpgradeUtil clusterMapToHelixMapper, String adminType) {
+  private static void generateAdminInfosAndUpload(HelixBootstrapUpgradeUtil clusterMapToHelixMapper, String adminType,
+      String adminConfigFilePath) throws IOException {
     switch (adminType) {
       case PARTITION_OVERRIDE_STR:
         Map<String, Map<String, Map<String, String>>> partitionOverrideInfosByDc =
-            clusterMapToHelixMapper.generatePartitionOverrideFromAllDCs();
+            adminConfigFilePath == null ? clusterMapToHelixMapper.generatePartitionOverrideFromClusterMap()
+                : clusterMapToHelixMapper.generatePartitionOverrideFromConfigFile(adminConfigFilePath);
         clusterMapToHelixMapper.uploadClusterAdminInfos(partitionOverrideInfosByDc, PARTITION_OVERRIDE_STR,
             PARTITION_OVERRIDE_ZNODE_PATH);
         break;
@@ -478,13 +484,58 @@ public class HelixBootstrapUpgradeUtil {
    *    }
    * }
    */
-  private Map<String, Map<String, Map<String, String>>> generatePartitionOverrideFromAllDCs() {
+  private Map<String, Map<String, Map<String, String>>> generatePartitionOverrideFromClusterMap() {
     Map<String, Map<String, String>> partitionOverrideInfos = new HashMap<>();
     for (PartitionId partitionId : staticClusterMap.getAllPartitionIds(null)) {
       String partitionName = partitionId.toPathString();
       Map<String, String> partitionProperties = new HashMap<>();
       partitionProperties.put(PARTITION_STATE,
           partitionId.getPartitionState() == PartitionState.READ_WRITE ? READ_WRITE_STR : READ_ONLY_STR);
+      partitionOverrideInfos.put(partitionName, partitionProperties);
+    }
+    Map<String, Map<String, Map<String, String>>> partitionOverrideByDc = new HashMap<>();
+    for (String dc : dataCenterToZkAddress.keySet()) {
+      partitionOverrideByDc.put(dc, partitionOverrideInfos);
+    }
+    return partitionOverrideByDc;
+  }
+
+  /**
+   * Generate partition override map a static config file. It requires file to be a list of partition ids (separated by
+   * comma). These partitions will overridden to READ_ONLY state.
+   * @param adminConfigFilePath the path to config file
+   * @return the constructed partitionOverrideInfos by dc. The format is as follows.
+   * "mapFields": {
+   *    "0": {
+   *      "state": "RO"
+   *    },
+   *    "1": {
+   *      "state": "RO"
+   *    }
+   * }
+   * @throws IOException
+   */
+  private Map<String, Map<String, Map<String, String>>> generatePartitionOverrideFromConfigFile(
+      String adminConfigFilePath) throws IOException {
+    Map<String, Map<String, String>> partitionOverrideInfos = new HashMap<>();
+    long maxPartitionId = staticClusterMap.getAllPartitionIds(null)
+        .stream()
+        .map(p -> Long.parseLong(p.toPathString()))
+        .max(Comparator.comparing(Long::valueOf))
+        .get();
+    String partitionStr = readStringFromFile(adminConfigFilePath);
+    for (String partitionName : partitionStr.split(",")) {
+      partitionName = partitionName.trim();
+      if (partitionName.isEmpty()) {
+        continue;
+      }
+      // if it is not numeric, it should throw exception when parsing long.
+      long id = Long.parseLong(partitionName);
+      if (id < 0 || id > maxPartitionId) {
+        throw new IllegalArgumentException("Partition id is not in valid range: 0 - " + maxPartitionId);
+      }
+      Map<String, String> partitionProperties = new HashMap<>();
+      partitionProperties.put(PARTITION_STATE, READ_ONLY_STR);
       partitionOverrideInfos.put(partitionName, partitionProperties);
     }
     Map<String, Map<String, Map<String, String>>> partitionOverrideByDc = new HashMap<>();
