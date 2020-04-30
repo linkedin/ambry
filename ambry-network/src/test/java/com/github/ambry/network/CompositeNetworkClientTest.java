@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.Test;
@@ -107,6 +108,8 @@ public class CompositeNetworkClientTest {
         Collections.emptySet(), pollTimeoutMs);
     verify(cloudMocks.client).sendAndPoll(Collections.singletonList(requestsToSendOne.get(1)), Collections.emptySet(),
         pollTimeoutMs);
+    verify(cloudMocks.client, atMost(1)).wakeup();
+    verify(diskMocks.client, atMost(1)).wakeup();
     verifyNoMoreInteractions(diskMocks.client);
     verifyNoMoreInteractions(cloudMocks.client);
 
@@ -130,6 +133,34 @@ public class CompositeNetworkClientTest {
         Collections.singleton(requestsToSendOne.get(2).getRequest().getCorrelationId()), pollTimeoutMs);
     verify(cloudMocks.client).sendAndPoll(requestsToSendTwo,
         Collections.singleton(requestsToSendTwo.get(0).getRequest().getCorrelationId()), pollTimeoutMs);
+    verify(cloudMocks.client, atMost(1)).wakeup();
+    verify(diskMocks.client, atMost(1)).wakeup();
+    verifyNoMoreInteractions(diskMocks.client);
+    verifyNoMoreInteractions(cloudMocks.client);
+
+    // test a scenario where one client has a delayed response. wakeup() should be called so that client can return
+    // once the other client returns responses to process.
+    diskMocks.resetMocks();
+    cloudMocks.resetMocks();
+    cloudResponses = Collections.singletonList(
+        new ResponseInfo(getRequestInfo(ReplicaType.CLOUD_BACKED), null, Unpooled.EMPTY_BUFFER));
+    CountDownLatch diskClientWakeupCalled = new CountDownLatch(1);
+    when(diskMocks.client.sendAndPoll(any(), any(), anyInt())).thenAnswer(invocation -> {
+      // only respond once wakeup is called to ensure that the cloud client returns first
+      TestUtils.awaitLatchOrTimeout(diskClientWakeupCalled, 5000);
+      return Collections.emptyList();
+    });
+    doAnswer(invocation -> {
+      diskClientWakeupCalled.countDown();
+      return null;
+    }).when(diskMocks.client).wakeup();
+    when(cloudMocks.client.sendAndPoll(any(), any(), anyInt())).thenReturn(cloudResponses);
+    responses = compositeClient.sendAndPoll(Collections.emptyList(), Collections.emptySet(), pollTimeoutMs);
+    assertEquals("Unexpected response list", cloudResponses, responses);
+    verify(diskMocks.client).sendAndPoll(Collections.emptyList(), Collections.emptySet(), pollTimeoutMs);
+    verify(cloudMocks.client).sendAndPoll(Collections.emptyList(), Collections.emptySet(), pollTimeoutMs);
+    verify(cloudMocks.client, never()).wakeup();
+    verify(diskMocks.client).wakeup();
     verifyNoMoreInteractions(diskMocks.client);
     verifyNoMoreInteractions(cloudMocks.client);
   }
@@ -161,7 +192,8 @@ public class CompositeNetworkClientTest {
    */
   @Test
   public void testReplicaTypeNotFound() throws Exception {
-    NetworkClient compositeClient = new CompositeNetworkClient(new EnumMap<>(ReplicaType.class));
+    NetworkClient compositeClient =
+        new CompositeNetworkClient(new EnumMap<>(Collections.singletonMap(ReplicaType.DISK_BACKED, diskMocks.client)));
     TestUtils.assertException(IllegalStateException.class,
         () -> compositeClient.sendAndPoll(Collections.singletonList(getRequestInfo(ReplicaType.CLOUD_BACKED)),
             Collections.emptySet(), 1000), null);
