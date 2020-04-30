@@ -126,7 +126,7 @@ public class CloudBlobMetadata {
   public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
       EncryptionOrigin encryptionOrigin, String vcrKmsContext, String cryptoAgentFactory, long encryptedSize) {
     this(blobId, creationTime, expirationTime, size, encryptionOrigin, vcrKmsContext, cryptoAgentFactory, encryptedSize,
-        (short) -1);
+        (short) 0);
   }
 
   /**

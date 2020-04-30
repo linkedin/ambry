@@ -258,6 +258,35 @@ public class CloudBlobStoreTest {
     verifyCacheHits(count * 2, count);
   }
 
+  /** Test the CloudBlobStore undelete method. */
+  @Test
+  public void testStoreUndeletes() throws Exception {
+    setupCloudStore(false, true, defaultCacheLimit, true);
+    long now = System.currentTimeMillis();
+    MessageInfo messageInfo =
+        new MessageInfo(getUniqueId(refAccountId, refContainerId, true), SMALL_BLOB_SIZE, refAccountId, refContainerId,
+            now, (short) 1);
+    store.undelete(messageInfo);
+    verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort());
+    verifyCacheHits(0, 0);
+
+    // undelete for a non existent blob.
+    setupCloudStore(true, true, defaultCacheLimit, true);
+    try {
+      store.undelete(messageInfo);
+      fail("Undelete for a non existent blob should throw exception");
+    } catch (StoreException ex) {
+      assertTrue(ex.getErrorCode() == StoreErrorCodes.ID_Not_Found);
+    }
+
+    // add blob and then undelete should pass
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(SMALL_BLOB_SIZE));
+    messageWriteSet.add(messageInfo, buffer);
+    store.put(messageWriteSet);
+    assertEquals(store.undelete(messageInfo), 1);
+  }
+
   /** Test the CloudBlobStore findMissingKeys method. */
   @Test
   public void testFindMissingKeys() throws Exception {

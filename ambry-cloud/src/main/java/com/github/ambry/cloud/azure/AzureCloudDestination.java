@@ -162,12 +162,13 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public short updateBlobLifeVersion(BlobId blobId, Short lifeVersion) throws CloudStorageException {
+  public short undeleteBlob(BlobId blobId, Short lifeVersion) throws CloudStorageException {
     Map<String, Object> updateFields = new HashMap<>();
     updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, Utils.Infinite_Time);
     updateBlobMetadata(blobId, updateFields);
-    return lifeVersion; // TODO return the real value of life version
+    // We either update lifeVersion or throw error. So this should work for now.
+    return lifeVersion; // TODO return the real value of life version.
   }
 
   @Override

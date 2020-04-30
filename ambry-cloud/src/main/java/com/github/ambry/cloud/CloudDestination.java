@@ -57,12 +57,13 @@ public interface CloudDestination extends Closeable {
   boolean deleteBlob(BlobId blobId, long deletionTime) throws CloudStorageException;
 
   /**
-   * Update life version of blob in the cloud destination.
+   * Undelete the blob from cloud destination, and update the new life version.
    * @param blobId id of the Ambry blob.
-   * @return live version of the undeleted blob.
+   * @param lifeVersion new life version to update.
+   * @return final live version of the undeleted blob.
    * @throws CloudStorageException if the undelete encounters an error.
    */
-  short updateBlobLifeVersion(BlobId blobId, Short lifeVersion) throws CloudStorageException;
+  short undeleteBlob(BlobId blobId, Short lifeVersion) throws CloudStorageException;
 
   /**
    * Update expiration time of blob in the cloud destination.

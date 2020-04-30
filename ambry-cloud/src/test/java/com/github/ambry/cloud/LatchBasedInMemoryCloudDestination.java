@@ -19,6 +19,7 @@ import com.github.ambry.cloud.azure.CosmosUpdateTimeFindToken;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -211,6 +212,21 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       return true;
     } else {
       return false;
+    }
+  }
+
+  @Override
+  public short undeleteBlob(BlobId blobId, Short lifeVersion) throws CloudStorageException {
+    if (map.containsKey(blobId)) {
+      map.get(blobId).getFirst().setLifeVersion(lifeVersion);
+      map.get(blobId).getFirst().setDeletionTime(Utils.Infinite_Time);
+      map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
+      changeFeed.add(blobId);
+      return map.get(blobId).getFirst().getLifeVersion();
+    } else {
+      throw new CloudStorageException(
+          String.format("Cannot update lifeversion as blob %s is not found.", blobId.getID()), null,
+          CloudBlobStore.STATUS_NOT_FOUND, false, null);
     }
   }
 

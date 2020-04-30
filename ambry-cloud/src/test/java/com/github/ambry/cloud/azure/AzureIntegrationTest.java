@@ -33,6 +33,7 @@ import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.microsoft.azure.cosmosdb.internal.HttpConstants;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -135,6 +136,15 @@ public class AzureIntegrationTest {
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, now, now + 60000, blobSize, CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext,
             cryptoAgentFactory, blobSize);
+
+    // attempt undelete before uploading blob
+    try {
+      undeleteBlobWithRetry(blobId, (short) 1);
+      fail("Undelete of a non existent blob should fail.");
+    } catch (CloudStorageException cex) {
+      assertEquals(cex.getStatusCode(), HttpConstants.StatusCodes.NOTFOUND);
+    }
+
     assertTrue("Expected upload to return true", uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, inputStream));
 
     // Get blob should return the same data
@@ -143,12 +153,16 @@ public class AzureIntegrationTest {
     // Try to upload same blob again
     assertFalse("Expected duplicate upload to return false",
         uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, new ByteArrayInputStream(uploadData)));
+
+    // ttl update
     long expirationTime = Utils.Infinite_Time;
     assertTrue("Expected update to return true", updateBlobExpirationWithRetry(blobId, expirationTime));
     CloudBlobMetadata metadata =
         getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).
             get(blobId.getID());
     assertEquals(expirationTime, metadata.getExpirationTime());
+
+    // delete blob
     long deletionTime = now + 10000;
     assertTrue("Expected deletion to return true",
         cloudRequestAgent.doWithRetries(() -> azureDest.deleteBlob(blobId, deletionTime), "DeleteBlob",
@@ -157,6 +171,14 @@ public class AzureIntegrationTest {
         getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).get(blobId.getID());
     assertEquals(deletionTime, metadata.getDeletionTime());
 
+    // undelete blob
+    assertEquals(undeleteBlobWithRetry(blobId, (short) 1), 1);
+    metadata =
+        getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).get(blobId.getID());
+    assertEquals(metadata.getDeletionTime(), Utils.Infinite_Time);
+    assertEquals(metadata.getLifeVersion(), 1);
+
+    // purge blobs
     purgeBlobsWithRetry(Collections.singletonList(metadata), partitionId.toPathString());
     assertTrue("Expected empty set after purge",
         getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).isEmpty());
@@ -572,6 +594,18 @@ public class AzureIntegrationTest {
     return cloudRequestAgent.doWithRetries(
         () -> azureDest.findEntriesSince(partitionPath, findToken, maxTotalSizeOfEntries), "FindEntriesSince",
         partitionPath);
+  }
+
+  /**
+   * do {@link AzureCloudDestination#undeleteBlob} with retry.
+   * @param blobId blobid to update.
+   * @param lifeVersion new lifeversion value.
+   * @return final lifeversion of the blob.
+   * @throws CloudStorageException if updating life version fails.
+   */
+  private short undeleteBlobWithRetry(BlobId blobId, short lifeVersion) throws CloudStorageException {
+    return cloudRequestAgent.doWithRetries(() -> azureDest.undeleteBlob(blobId, lifeVersion), "Undelete",
+        blobId.getPartition().toPathString());
   }
 
   /**

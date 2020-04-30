@@ -67,7 +67,7 @@ class CloudBlobStore implements Store {
   private static final Logger logger = LoggerFactory.getLogger(CloudBlobStore.class);
   private static final int cacheInitialCapacity = 1000;
   private static final float cacheLoadFactor = 0.75f;
-  private static final int STATUS_NOT_FOUND = 404;
+  static final int STATUS_NOT_FOUND = 404;
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
   private final ClusterMap clusterMap;
@@ -402,10 +402,16 @@ class CloudBlobStore implements Store {
     checkStarted();
     try {
       BlobId blobId = (BlobId) info.getStoreKey();
-      return requestAgent.doWithRetries(() -> cloudDestination.updateBlobLifeVersion(blobId, info.getLifeVersion()),
-          "Undelete", partitionId.toPathString());
+      // We do not have enough information in cache to check life version.
+      // It is expected that un-deletes will be very rare, so its ok to trade off occasional hits to azure,
+      // in lieu of maintaining live version along with blob id in cache.
+      short newLifeVersion =
+          requestAgent.doWithRetries(() -> cloudDestination.undeleteBlob(blobId, info.getLifeVersion()), "Undelete",
+              partitionId.toPathString());
+      // But we do need to update the cache.
+      addToCache(blobId.getID(), BlobState.CREATED);
+      return newLifeVersion;
     } catch (CloudStorageException ex) {
-      // TODO check the appropriate error code for InvalidABSOperation exception
       StoreErrorCodes errorCode =
           (ex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
       throw new StoreException(ex, errorCode);
