@@ -301,7 +301,9 @@ public class AzureBlobDataAccessor {
   public UpdateResponse updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields)
       throws BlobStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
-    updateFields.keySet().stream().forEach(field -> Objects.requireNonNull(updateFields.get(field)));
+    updateFields.keySet()
+        .stream()
+        .forEach(field -> Objects.requireNonNull(updateFields.get(field), String.format("%s cannot be null", field)));
 
     try {
       BlockBlobClient blobClient = getBlockBlobClient(blobId, false);

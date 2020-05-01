@@ -193,11 +193,12 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean deleteBlob(BlobId blobId, long deletionTime) {
+  public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVerion) {
     if (!map.containsKey(blobId)) {
       return false;
     }
     map.get(blobId).getFirst().setDeletionTime(deletionTime);
+    map.get(blobId).getFirst().setLifeVersion(lifeVerion);
     map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
     changeFeed.add(blobId);
     return true;
@@ -216,7 +217,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public short undeleteBlob(BlobId blobId, Short lifeVersion) throws CloudStorageException {
+  public short undeleteBlob(BlobId blobId, short lifeVersion) throws CloudStorageException {
     if (map.containsKey(blobId)) {
       map.get(blobId).getFirst().setLifeVersion(lifeVersion);
       map.get(blobId).getFirst().setDeletionTime(Utils.Infinite_Time);

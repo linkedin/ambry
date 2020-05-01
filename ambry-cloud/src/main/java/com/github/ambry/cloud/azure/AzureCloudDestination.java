@@ -152,8 +152,12 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean deleteBlob(BlobId blobId, long deletionTime) throws CloudStorageException {
-    return updateBlobMetadata(blobId, CloudBlobMetadata.FIELD_DELETION_TIME, deletionTime);
+  public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion) throws CloudStorageException {
+    Map<String, Object> updateFields = new HashMap<>();
+    // TODO Frontend support needs to handle the special case of life version = MessageInfo.LIFE_VERSION_FROM_FRONTEND
+    updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
+    updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, deletionTime);
+    return updateBlobMetadata(blobId, updateFields);
   }
 
   @Override
@@ -162,12 +166,14 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public short undeleteBlob(BlobId blobId, Short lifeVersion) throws CloudStorageException {
+  public short undeleteBlob(BlobId blobId, short lifeVersion) throws CloudStorageException {
     Map<String, Object> updateFields = new HashMap<>();
     updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, Utils.Infinite_Time);
     updateBlobMetadata(blobId, updateFields);
     // We either update lifeVersion or throw error. So this should work for now.
+    // Note that lifeVersion from frontend request can be -1 (MessageInfo.LIFE_VERSION_FROM_FRONTEND).
+    // TODO Frontend support needs to increment and return the current life version in azure.
     return lifeVersion; // TODO return the real value of life version.
   }
 

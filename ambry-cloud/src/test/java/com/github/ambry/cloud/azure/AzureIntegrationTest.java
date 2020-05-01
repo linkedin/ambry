@@ -164,8 +164,9 @@ public class AzureIntegrationTest {
 
     // delete blob
     long deletionTime = now + 10000;
+    //TODO add a test case here to verify life version after delete.
     assertTrue("Expected deletion to return true",
-        cloudRequestAgent.doWithRetries(() -> azureDest.deleteBlob(blobId, deletionTime), "DeleteBlob",
+        cloudRequestAgent.doWithRetries(() -> azureDest.deleteBlob(blobId, deletionTime, (short) 0), "DeleteBlob",
             partitionId.toPathString()));
     metadata =
         getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).get(blobId.getID());

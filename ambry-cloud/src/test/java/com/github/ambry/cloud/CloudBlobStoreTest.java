@@ -227,13 +227,13 @@ public class CloudBlobStoreTest {
       addBlobToSet(messageWriteSet, SMALL_BLOB_SIZE, Utils.Infinite_Time, refAccountId, refContainerId, true);
     }
     store.delete(messageWriteSet.getMessageSetInfo());
-    verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(operationTime));
+    verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(operationTime), eq((short) 0));
     verifyCacheHits(count, 0);
 
     // Call second time.  If isVcr, should be cached causing deletions to be skipped.
     store.delete(messageWriteSet.getMessageSetInfo());
     int expectedCount = isVcr ? count : count * 2;
-    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(operationTime));
+    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(operationTime), eq((short) 0));
     verifyCacheHits(count * 2, count);
   }
 
@@ -268,7 +268,7 @@ public class CloudBlobStoreTest {
             now, (short) 1);
     store.undelete(messageInfo);
     verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort());
-    verifyCacheHits(0, 0);
+    verifyCacheHits(1, 0);
 
     // undelete for a non existent blob.
     setupCloudStore(true, true, defaultCacheLimit, true);
@@ -316,7 +316,7 @@ public class CloudBlobStoreTest {
     if (isVcr) {
       // Add keys to cache and rerun (should be cached)
       for (StoreKey storeKey : keys) {
-        store.addToCache(storeKey.getID(), CloudBlobStore.BlobState.CREATED);
+        store.addToCache(storeKey.getID(), (short) 0, CloudBlobStore.BlobState.CREATED);
       }
       missingKeys = store.findMissingKeys(keys);
       assertTrue("Expected no missing keys", missingKeys.isEmpty());
@@ -387,7 +387,7 @@ public class CloudBlobStoreTest {
     List<StoreKey> blobIdList = new ArrayList<>();
     for (int j = 0; j < cacheSize; j++) {
       blobIdList.add(getUniqueId());
-      store.addToCache(blobIdList.get(j).getID(), CloudBlobStore.BlobState.CREATED);
+      store.addToCache(blobIdList.get(j).getID(), (short) 0, CloudBlobStore.BlobState.CREATED);
     }
 
     // findMissingKeys should stay in cache
@@ -410,7 +410,7 @@ public class CloudBlobStoreTest {
     // put 5 more blobs
     for (int j = cacheSize; j < cacheSize + delta; j++) {
       blobIdList.add(getUniqueId());
-      store.addToCache(blobIdList.get(j).getID(), CloudBlobStore.BlobState.CREATED);
+      store.addToCache(blobIdList.get(j).getID(), (short) 0, CloudBlobStore.BlobState.CREATED);
     }
     // get same 1-5 which should be still cached.
     store.findMissingKeys(blobIdList.subList(0, delta));
@@ -474,7 +474,7 @@ public class CloudBlobStoreTest {
     CloudDestination exDest = mock(CloudDestination.class);
     when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(
         new CloudStorageException("ouch"));
-    when(exDest.deleteBlob(any(BlobId.class), anyLong())).thenThrow(new CloudStorageException("ouch"));
+    when(exDest.deleteBlob(any(BlobId.class), anyLong(), anyShort())).thenThrow(new CloudStorageException("ouch"));
     when(exDest.getBlobMetadata(anyList())).thenThrow(new CloudStorageException("ouch"));
     Properties props = new Properties();
     setBasicProperties(props);
@@ -522,7 +522,7 @@ public class CloudBlobStoreTest {
         new CloudStorageException("Server unavailable", null, 500, true, retryDelay);
     when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(retryableException)
         .thenReturn(true);
-    when(exDest.deleteBlob(any(BlobId.class), anyLong())).thenThrow(retryableException).thenReturn(true);
+    when(exDest.deleteBlob(any(BlobId.class), anyLong(), anyShort())).thenThrow(retryableException).thenReturn(true);
     when(exDest.updateBlobExpiration(any(BlobId.class), anyLong())).thenThrow(retryableException).thenReturn(true);
     when(exDest.getBlobMetadata(anyList())).thenThrow(retryableException)
         .thenReturn(Collections.singletonMap(metadata.getId(), metadata));

@@ -54,7 +54,7 @@ public interface CloudDestination extends Closeable {
    * @return flag indicating whether the blob was deleted
    * @throws CloudStorageException if the deletion encounters an error.
    */
-  boolean deleteBlob(BlobId blobId, long deletionTime) throws CloudStorageException;
+  boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion) throws CloudStorageException;
 
   /**
    * Undelete the blob from cloud destination, and update the new life version.
@@ -63,7 +63,7 @@ public interface CloudDestination extends Closeable {
    * @return final live version of the undeleted blob.
    * @throws CloudStorageException if the undelete encounters an error.
    */
-  short undeleteBlob(BlobId blobId, Short lifeVersion) throws CloudStorageException;
+  short undeleteBlob(BlobId blobId, short lifeVersion) throws CloudStorageException;
 
   /**
    * Update expiration time of blob in the cloud destination.
