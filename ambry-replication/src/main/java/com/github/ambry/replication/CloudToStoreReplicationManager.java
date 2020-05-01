@@ -110,7 +110,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     this.persistor =
         new DiskTokenPersistor(cloudReplicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, storeManager);
-    trackPerPartitionLagInMetric = replicationConfig.replicationTrackRemoteFromLocalPerDatacenterLag;
+    trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
   }
 
   @Override
@@ -193,7 +193,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
 
     // Add remoteReplicaInfos to {@link ReplicaThread}.
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
-    if (replicationConfig.replicationTrackLocalFromRemotePerPartitionLag) {
+    if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
       replicationMetrics.addLagMetricForPartition(partitionId);
     }
   }

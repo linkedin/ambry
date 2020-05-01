@@ -75,7 +75,7 @@ public class ReplicationManager extends ReplicationEngine {
         storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager);
     this.storeConfig = storeConfig;
     this.currentNode = dataNode;
-    trackPerPartitionLagInMetric = replicationConfig.replicationTrackRemoteFromLocalPerDatacenterLag;
+    trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
     // initialize all partitions
@@ -192,7 +192,7 @@ public class ReplicationManager extends ReplicationEngine {
         return v;
       });
       partitionToPartitionInfo.remove(replicaId.getPartitionId());
-      if (replicationConfig.replicationTrackLocalFromRemotePerPartitionLag) {
+      if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
         replicationMetrics.removeLagMetricForPartition(replicaId.getPartitionId());
       }
       logger.info("{} is successfully removed from replication manager", replicaId.getPartitionId());
@@ -225,7 +225,7 @@ public class ReplicationManager extends ReplicationEngine {
       replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerPartitionLagInMetric);
       remoteReplicaInfos.add(remoteReplicaInfo);
     }
-    if (replicationConfig.replicationTrackLocalFromRemotePerPartitionLag) {
+    if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
       replicationMetrics.addLagMetricForPartition(partition);
     }
     return remoteReplicaInfos;

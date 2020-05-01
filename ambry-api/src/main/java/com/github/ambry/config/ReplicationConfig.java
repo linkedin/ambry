@@ -146,18 +146,18 @@ public class ReplicationConfig {
    * If true, replication will register metric for each partition to track lag between local and remote replicas. This
    * metric indicates how far local replica is behind remote peer replica.
    */
-  @Config("replication.track.local.from.remote.per.partition.lag")
+  @Config("replication.track.per.partition.lag.from.remote")
   @Default("false")
-  public final boolean replicationTrackLocalFromRemotePerPartitionLag;
+  public final boolean replicationTrackPerPartitionLagFromRemote;
 
   /**
    * If true, register metrics that track remote replica's lag from local at datacenter level. These metrics indicate how
    * far remote replicas (in certain dc) are behind local replicas (on current node). If enabled, it records max/min/avg
    * remote replica lag separately in each datacenter.
    */
-  @Config("replication.track.remote.from.local.per.datacenter.lag")
+  @Config("replication.track.per.datacenter.lag.from.local")
   @Default("true")
-  public final boolean replicationTrackRemoteFromLocalPerDatacenterLag;
+  public final boolean replicationTrackPerDatacenterLagFromLocal;
 
   /**
    * The version of metadata request to be used for replication.
@@ -214,10 +214,10 @@ public class ReplicationConfig {
     replicationIncludeAll = verifiableProperties.getBoolean("replication.include.all", true);
     replicationPersistTokenOnShutdownOrReplicaRemove =
         verifiableProperties.getBoolean("replication.persist.token.on.shutdown.or.replica.remove", true);
-    replicationTrackLocalFromRemotePerPartitionLag =
-        verifiableProperties.getBoolean("replication.track.local.from.remote.per.partition.lag", false);
-    replicationTrackRemoteFromLocalPerDatacenterLag =
-        verifiableProperties.getBoolean("replication.track.remote.from.local.per.datacenter.lag", true);
+    replicationTrackPerPartitionLagFromRemote =
+        verifiableProperties.getBoolean("replication.track.per.partition.lag.from.remote", false);
+    replicationTrackPerDatacenterLagFromLocal =
+        verifiableProperties.getBoolean("replication.track.per.datacenter.lag.from.local", true);
     replicaMetadataRequestVersion =
         verifiableProperties.getShortInRange("replication.metadata.request.version", (short) 1, (short) 1, (short) 2);
     replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);
