@@ -221,20 +221,44 @@ public class CloudBlobStoreTest {
   @Test
   public void testStoreDeletes() throws Exception {
     setupCloudStore(false, true, defaultCacheLimit, true);
-    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
+    long now = System.currentTimeMillis();
+    Map<BlobId, MessageInfo> messageInfoMap = new HashMap<>();
     for (int j = 0; j < count; j++) {
-      addBlobToSet(messageWriteSet, SMALL_BLOB_SIZE, Utils.Infinite_Time, refAccountId, refContainerId, true);
+      BlobId blobId = getUniqueId(refAccountId, refContainerId, true);
+      messageInfoMap.put(blobId,
+          new MessageInfo(blobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) 1));
     }
-    store.delete(messageWriteSet.getMessageSetInfo());
-    verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(operationTime), eq((short) 0));
+    store.delete(new ArrayList<>(messageInfoMap.values()));
+    verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(now), anyShort());
     verifyCacheHits(count, 0);
 
-    // Call second time.  If isVcr, should be cached causing deletions to be skipped.
-    store.delete(messageWriteSet.getMessageSetInfo());
+    // Call second time with same life version.  If isVcr, should be cached causing deletions to be skipped.
+    store.delete(new ArrayList<>(messageInfoMap.values()));
     int expectedCount = isVcr ? count : count * 2;
-    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(operationTime), eq((short) 0));
+    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(now), anyShort());
     verifyCacheHits(count * 2, count);
+
+    // Call again with a smaller life version. If isVcr, should hit the cache again.
+    Map<BlobId, MessageInfo> newMessageInfoMap = new HashMap<>();
+    for (BlobId blobId : messageInfoMap.keySet()) {
+      newMessageInfoMap.put(blobId,
+          new MessageInfo(blobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) 0));
+    }
+    store.delete(new ArrayList<>(newMessageInfoMap.values()));
+    expectedCount = isVcr ? count : count * 3;
+    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(now), anyShort());
+    verifyCacheHits(count * 3, count * 2);
+
+    // Call again with a larger life version. Should not hit cache again.
+    for (BlobId blobId : messageInfoMap.keySet()) {
+      newMessageInfoMap.put(blobId,
+          new MessageInfo(blobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) 2));
+    }
+    store.delete(new ArrayList<>(newMessageInfoMap.values()));
+    expectedCount = isVcr ? count * 2 : count * 4;
+    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(now), anyShort());
+    verifyCacheHits(count * 4, count * 2);
   }
 
   /** Test the CloudBlobStore updateTtl method. */
@@ -256,6 +280,17 @@ public class CloudBlobStoreTest {
     int expectedCount = isVcr ? count : count * 2;
     verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong());
     verifyCacheHits(count * 2, count);
+
+    // test that if a blob is deleted and then undeleted, the ttlupdate status is preserved in cache.
+    MessageInfo messageInfo = messageWriteSet.getMessageSetInfo().get(0);
+    store.delete(Collections.singletonList(messageInfo));
+    verify(dest, times(1)).deleteBlob(any(BlobId.class), anyLong(), anyShort());
+    store.undelete(messageInfo);
+    verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort());
+    store.updateTtl(Collections.singletonList(messageInfo));
+    expectedCount = isVcr ? expectedCount : expectedCount + 1;
+    verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong());
+    verifyCacheHits((count * 2) + 3, count + 1);
   }
 
   /** Test the CloudBlobStore undelete method. */
@@ -266,9 +301,34 @@ public class CloudBlobStoreTest {
     MessageInfo messageInfo =
         new MessageInfo(getUniqueId(refAccountId, refContainerId, true), SMALL_BLOB_SIZE, refAccountId, refContainerId,
             now, (short) 1);
+    when(dest.undeleteBlob(any(BlobId.class), anyShort())).thenReturn((short) 1);
     store.undelete(messageInfo);
     verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort());
     verifyCacheHits(1, 0);
+
+    // Call second time with same life version. If isVcr, should hit cache this time.
+    store.undelete(messageInfo);
+    int expectedCount = isVcr ? 1 : 2;
+    verify(dest, times(expectedCount)).undeleteBlob(any(BlobId.class), eq((short) 1));
+    verifyCacheHits(2, 1);
+
+    // Call again with a smaller life version. If isVcr, should hit cache again.
+    when(dest.undeleteBlob(any(BlobId.class), anyShort())).thenReturn((short) 0);
+    messageInfo =
+        new MessageInfo(messageInfo.getStoreKey(), SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) 0);
+    store.undelete(messageInfo);
+    expectedCount = isVcr ? 1 : 3;
+    verify(dest, times(expectedCount)).undeleteBlob(any(BlobId.class), anyShort());
+    verifyCacheHits(3, 2);
+
+    // Call again with a higher life version. Should not hit cache this time.
+    when(dest.undeleteBlob(any(BlobId.class), anyShort())).thenReturn((short) 2);
+    messageInfo =
+        new MessageInfo(messageInfo.getStoreKey(), SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) 2);
+    store.undelete(messageInfo);
+    expectedCount = isVcr ? 2 : 4;
+    verify(dest, times(expectedCount)).undeleteBlob(any(BlobId.class), anyShort());
+    verifyCacheHits(4, 2);
 
     // undelete for a non existent blob.
     setupCloudStore(true, true, defaultCacheLimit, true);
@@ -284,7 +344,7 @@ public class CloudBlobStoreTest {
     ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(SMALL_BLOB_SIZE));
     messageWriteSet.add(messageInfo, buffer);
     store.put(messageWriteSet);
-    assertEquals(store.undelete(messageInfo), 1);
+    assertEquals(store.undelete(messageInfo), 2);
   }
 
   /** Test the CloudBlobStore findMissingKeys method. */
