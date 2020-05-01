@@ -661,4 +661,42 @@ class NettyRequest implements RestRequest {
       }
     }
   }
+
+  /**
+   * The {@link NettyRequest}'s implementation of {@link com.github.ambry.rest.RestRequest.RestRequestContext}. It carries
+   * {@link Channel} and {@link HttpRequest}.
+   */
+  public class NettyRequestContext implements RestRequestContext {
+    private final Channel channel;
+    private final HttpRequest httpRequest;
+
+    /**
+     * Constructor to create a {@link NettyRequestContext}.
+     * @param channel The netty {@link Channel}
+     * @param httpRequest The netty {@link HttpRequest}.
+     */
+    NettyRequestContext(final Channel channel, final HttpRequest httpRequest) {
+      this.channel = channel;
+      this.httpRequest = httpRequest;
+    }
+
+    /**
+     * @return the netty {@link Channel}.
+     */
+    public Channel getChannel() {
+      return channel;
+    }
+
+    /**
+     * @return the netty {@link HttpRequest}.
+     */
+    public HttpRequest getHttpRequest() {
+      return httpRequest;
+    }
+  }
+
+  @Override
+  public NettyRequestContext getRestRequestContext() {
+    return new NettyRequestContext(channel, request);
+  }
 }

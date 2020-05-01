@@ -312,6 +312,11 @@ class PerfNioServer implements NioServer {
       return 0;
     }
 
+    @Override
+    public RestRequestContext getRestRequestContext() {
+      return null;
+    }
+
     /**
      * Adds a value for a header.
      * @param toAddTo the map to add the {@code key} with value {@code value} to.
