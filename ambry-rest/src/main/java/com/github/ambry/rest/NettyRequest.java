@@ -58,7 +58,7 @@ import org.slf4j.LoggerFactory;
  * <p/>
  * A wrapper over {@link HttpRequest} and all the {@link HttpContent} associated with the request.
  */
-class NettyRequest implements RestRequest {
+public class NettyRequest implements RestRequest {
   // If the write of at least {@code bufferWatermark} amount of data is unacknowledged, reading from the channel will be
   // temporarily suspended. It will be resumed when the amount of data unacknowledged drops below this number. If this
   // is <=0, it is assumed that there is no limit on the size of unacknowledged data.
