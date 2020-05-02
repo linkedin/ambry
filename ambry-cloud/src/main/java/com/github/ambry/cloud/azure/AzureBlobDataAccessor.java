@@ -302,7 +302,6 @@ public class AzureBlobDataAccessor {
       throws BlobStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     updateFields.keySet()
-        .stream()
         .forEach(field -> Objects.requireNonNull(updateFields.get(field), String.format("%s cannot be null", field)));
 
     try {
@@ -319,9 +318,9 @@ public class AzureBlobDataAccessor {
         Map<String, String> changedFields = updateFields.entrySet()
             .stream()
             .filter(entry -> !String.valueOf(entry.getValue()).equals(metadata.get(entry.getKey())))
-            .collect(Collectors.toMap(entry -> entry.getKey(), entry -> String.valueOf(entry.getValue())));
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> String.valueOf(entry.getValue())));
         if (changedFields.size() > 0) {
-          changedFields.forEach((key, value) -> metadata.put(key, value));
+          changedFields.forEach(metadata::put);
           if (updateCallback != null) {
             try {
               updateCallback.call();

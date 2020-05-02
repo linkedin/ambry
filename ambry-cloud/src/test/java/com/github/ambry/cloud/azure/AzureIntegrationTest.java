@@ -179,6 +179,25 @@ public class AzureIntegrationTest {
     assertEquals(metadata.getDeletionTime(), Utils.Infinite_Time);
     assertEquals(metadata.getLifeVersion(), 1);
 
+    // undelete with a higher life version updates life version.
+    assertEquals(undeleteBlobWithRetry(blobId, (short) 2), 2);
+    metadata =
+        getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).get(blobId.getID());
+    assertEquals(metadata.getDeletionTime(), Utils.Infinite_Time);
+    assertEquals(metadata.getLifeVersion(), 2);
+
+    // delete after undelete.
+    long newDeletionTime = now + 20000;
+    //TODO add a test case here to verify life version after delete.
+    assertTrue("Expected deletion to return true",
+        cloudRequestAgent.doWithRetries(() -> azureDest.deleteBlob(blobId, newDeletionTime, (short) 3), "DeleteBlob",
+            partitionId.toPathString()));
+    metadata =
+        getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).get(blobId.getID());
+    assertEquals(newDeletionTime, metadata.getDeletionTime());
+    // delete changes life version.
+    assertEquals(metadata.getLifeVersion(), 3);
+
     // purge blobs
     purgeBlobsWithRetry(Collections.singletonList(metadata), partitionId.toPathString());
     assertTrue("Expected empty set after purge",

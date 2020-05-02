@@ -51,6 +51,7 @@ public interface CloudDestination extends Closeable {
    * Mark a blob as deleted in the cloud destination.
    * @param blobId id of the Ambry blob
    * @param deletionTime time of blob deletion
+   * @param lifeVersion life version of the blob to be deleted.
    * @return flag indicating whether the blob was deleted
    * @throws CloudStorageException if the deletion encounters an error.
    */

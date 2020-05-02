@@ -162,7 +162,8 @@ class AzureCloudDestination implements CloudDestination {
 
   @Override
   public boolean updateBlobExpiration(BlobId blobId, long expirationTime) throws CloudStorageException {
-    return updateBlobMetadata(blobId, CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime);
+    return updateBlobMetadata(blobId,
+        Collections.singletonMap(CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime));
   }
 
   @Override
@@ -264,25 +265,13 @@ class AzureCloudDestination implements CloudDestination {
   /**
    * Update the metadata for the specified blob.
    * @param blobId The {@link BlobId} to update.
-   * @param fieldName The metadata field to modify.
-   * @param value The new value.
-   * @return {@code true} if the update succeeded, {@code false} if no update was needed.
-   * @throws CloudStorageException if the update fails.
-   */
-  private boolean updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws CloudStorageException {
-    return updateBlobMetadata(blobId, Collections.singletonMap(fieldName, value));
-  }
-
-  /**
-   * Update the metadata for the specified blob.
-   * @param blobId The {@link BlobId} to update.
    * @param updateFields map of fields and new values to update.
    * @return {@code true} if the update succeeded, {@code false} if no update was needed.
    * @throws CloudStorageException if the update fails.
    */
   private boolean updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields) throws CloudStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
-    updateFields.keySet().stream().forEach(field -> Objects.requireNonNull(updateFields.get(field)));
+    updateFields.keySet().forEach(field -> Objects.requireNonNull(updateFields.get(field)));
 
     // We update the blob metadata value in two places:
     // 1) the blob storage entry metadata (so GET's can be served entirely from ABS)
@@ -470,7 +459,7 @@ class AzureCloudDestination implements CloudDestination {
    */
   private CloudStorageException toCloudStorageException(String message, Exception e) {
     Long retryDelayMs = null;
-    int statusCode = -1;
+    int statusCode;
     if (e instanceof BlobStorageException) {
       azureMetrics.storageErrorCount.inc();
       statusCode = ((BlobStorageException) e).getStatusCode();

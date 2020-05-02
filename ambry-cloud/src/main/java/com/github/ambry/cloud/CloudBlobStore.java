@@ -382,6 +382,7 @@ class CloudBlobStore implements Store {
    * Delete the specified blob if needed depending on the cache state.
    * @param blobId the blob to delete
    * @param deletionTime the deletion time
+   * @param lifeVersion life version of the blob.
    * @return whether the deletion was performed
    * @throws CloudStorageException
    */
@@ -402,7 +403,7 @@ class CloudBlobStore implements Store {
     checkStarted();
     try {
       return requestAgent.doWithRetries(() -> undeleteIfNeeded((BlobId) info.getStoreKey(), info.getLifeVersion()),
-          "Delete", partitionId.toPathString());
+          "Undelete", partitionId.toPathString());
     } catch (CloudStorageException cex) {
       StoreErrorCodes errorCode =
           (cex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
@@ -526,8 +527,10 @@ class CloudBlobStore implements Store {
   /**
    * Add a blob state mapping to the recent blob cache.
    * @param blobKey the blob key to cache.
+   * @param lifeVersion life version to cache.
    * @param blobState the state of the blob.
    */
+  // Visible for test.
   void addToCache(String blobKey, short lifeVersion, BlobState blobState) {
     if (isVcr) {
       if (blobState == BlobState.TTL_UPDATED) {
@@ -749,14 +752,23 @@ class CloudBlobStore implements Store {
           (blobState == BlobState.TTL_UPDATED) || (previousBlobLifeState != null && previousBlobLifeState.isTtlUpdated);
     }
 
+    /**
+     * @return {@link BlobState} of the blob.
+     */
     public BlobState getBlobState() {
       return blobState;
     }
 
+    /**
+     * @return life version of the blob.
+     */
     public short getLifeVersion() {
       return lifeVersion;
     }
 
+    /**
+     * @return ttl update status.
+     */
     public boolean isTtlUpdated() {
       return isTtlUpdated;
     }

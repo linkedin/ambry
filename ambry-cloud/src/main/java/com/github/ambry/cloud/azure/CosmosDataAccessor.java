@@ -193,7 +193,7 @@ public class CosmosDataAccessor {
     Map<String, String> fieldsToUpdate = updateFields.entrySet()
         .stream()
         .filter(map -> !String.valueOf(updateFields.get(map.getKey())).equals(doc.get(map.getKey())))
-        .collect(Collectors.toMap(map -> map.getKey(), map -> String.valueOf(map.getValue())));
+        .collect(Collectors.toMap(Map.Entry::getKey, map -> String.valueOf(map.getValue())));
     if (fieldsToUpdate.size() == 0) {
       logger.debug("No change in value for {} in blob {}", updateFields.keySet(), blobId.getID());
       return null;
@@ -209,7 +209,7 @@ public class CosmosDataAccessor {
     }
 
     // Perform the update
-    fieldsToUpdate.entrySet().forEach(map -> doc.set(map.getKey(), map.getValue()));
+    fieldsToUpdate.forEach((key, value) -> doc.set(key, value));
     // Set condition to ensure we don't clobber a concurrent update
     AccessCondition accessCondition = new AccessCondition();
     accessCondition.setCondition(doc.getETag());
@@ -372,7 +372,7 @@ public class CosmosDataAccessor {
     }
     try {
       FeedResponse<Document> feedResponse = executeCosmosChangeFeedQuery(changeFeedOptions, timer);
-      feedResponse.getResults().stream().map(doc -> createMetadataFromDocument(doc)).forEach(changeFeed::add);
+      feedResponse.getResults().stream().map(this::createMetadataFromDocument).forEach(changeFeed::add);
       return feedResponse.getResponseContinuation();
     } catch (RuntimeException rex) {
       azureMetrics.changeFeedQueryFailureCount.inc();

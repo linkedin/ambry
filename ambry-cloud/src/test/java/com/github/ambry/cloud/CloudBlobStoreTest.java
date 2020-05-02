@@ -336,7 +336,7 @@ public class CloudBlobStoreTest {
       store.undelete(messageInfo);
       fail("Undelete for a non existent blob should throw exception");
     } catch (StoreException ex) {
-      assertTrue(ex.getErrorCode() == StoreErrorCodes.ID_Not_Found);
+      assertSame(ex.getErrorCode(), StoreErrorCodes.ID_Not_Found);
     }
 
     // add blob and then undelete should pass
@@ -394,10 +394,8 @@ public class CloudBlobStoreTest {
     setupCloudStore(false, true, defaultCacheLimit, true);
     long maxTotalSize = 1000000;
     // 1) start with empty token, call find, return some data
-    long startTime = System.currentTimeMillis();
     long blobSize = 200000;
     int numBlobsFound = 5;
-    List<CloudBlobMetadata> metadataList = generateMetadataList(startTime, blobSize, numBlobsFound);
     CosmosChangeFeedFindToken cosmosChangeFeedFindToken =
         new CosmosChangeFeedFindToken(blobSize * numBlobsFound, "start", "end", 0, numBlobsFound,
             UUID.randomUUID().toString());
@@ -412,8 +410,6 @@ public class CloudBlobStoreTest {
     assertEquals(0, outputToken.getIndex());
 
     // 2) call find with new token, return more data including lastBlob, verify token updated
-    startTime += 1000;
-    metadataList = generateMetadataList(startTime, blobSize, numBlobsFound);
     cosmosChangeFeedFindToken =
         new CosmosChangeFeedFindToken(blobSize * 2 * numBlobsFound, "start2", "end2", 0, numBlobsFound,
             UUID.randomUUID().toString());
@@ -426,7 +422,6 @@ public class CloudBlobStoreTest {
     assertEquals(0, outputToken.getIndex());
 
     // 3) call find with new token, no more data, verify token unchanged
-    metadataList = Collections.emptyList();
     when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong())).thenReturn(
         new FindResult(Collections.emptyList(), outputToken));
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
@@ -779,26 +774,6 @@ public class CloudBlobStoreTest {
       assertEquals("Blob ttl should be infinite now.", Utils.Infinite_Time,
           map.get(blobId.toString()).getExpirationTime());
     }
-  }
-
-  /**
-   * Utility method to generate a list of {@link CloudBlobMetadata} with a range of upload times.
-   * @param startTime the base time for the upload time range.
-   * @param blobSize the blob size.
-   * @param count the list size.
-   * @return the constructed list.
-   */
-  private List<CloudBlobMetadata> generateMetadataList(long startTime, long blobSize, int count) {
-    List<CloudBlobMetadata> metadataList = new ArrayList<>();
-    for (int j = 0; j < count; j++) {
-      BlobId blobId = getUniqueId();
-      CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.NONE);
-      metadata.setUploadTime(startTime + j);
-      metadata.setLastUpdateTime(startTime + j);
-      metadataList.add(metadata);
-    }
-    return metadataList;
   }
 
   /**
