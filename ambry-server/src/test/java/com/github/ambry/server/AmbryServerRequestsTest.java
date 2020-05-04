@@ -322,7 +322,7 @@ public class AmbryServerRequestsTest {
    * @throws InterruptedException
    * @throws IOException
    */
-  //@Test
+  @Test
   public void controlRequestSuccessTest() throws InterruptedException, IOException {
     RequestOrResponseType[] requestOrResponseTypes =
         {RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.GetRequest,
