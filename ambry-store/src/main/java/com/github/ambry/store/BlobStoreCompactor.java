@@ -14,10 +14,12 @@
 package com.github.ambry.store;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import com.google.common.base.Preconditions;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
@@ -85,6 +87,7 @@ class BlobStoreCompactor {
   private final AccountService accountService;
   private volatile boolean isActive = false;
   private PersistentIndex srcIndex;
+  private Set<Pair<Short,Short>> selectedContainers;
 
   private Log tgtLog;
   private PersistentIndex tgtIndex;
@@ -126,11 +129,13 @@ class BlobStoreCompactor {
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
     this.diskSpaceAllocator = diskSpaceAllocator;
+    Preconditions.checkNotNull(accountService, "Account Service should not be null");
     this.accountService = accountService;
     this.time = time;
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
     this.useDirectIO = Utils.isLinux() && config.storeCompactionEnableDirectIO;
+    this.selectedContainers = new HashSet<>();
     if (config.storeCompactionFilter.equals(IndexSegmentValidEntryFilterWithoutUndelete.class.getSimpleName())) {
       validEntryFilter = new IndexSegmentValidEntryFilterWithoutUndelete();
     } else {
@@ -195,6 +200,17 @@ class BlobStoreCompactor {
   }
 
   /**
+   * Converts the set of {@link Container}s to the set of accountId & ContainerId pairs for easy detection.
+   */
+  private void getAllContainersByStatus(Container.ContainerStatus containerStatus) {
+    Set<Pair<Short, Short>> selectedContainerPairSet = new HashSet<>();
+    for (Container container : accountService.getContainersByStatus(containerStatus)) {
+      selectedContainerPairSet.add(new Pair<>(container.getParentAccountId(), container.getId()));
+    }
+    selectedContainers.addAll(selectedContainerPairSet);
+  }
+
+  /**
    * Resumes compaction from where it was left off.
    * @throws IllegalStateException if the compactor has not been initialized or if there is no compaction to resume.
    * @throws StoreException if there were exceptions reading to writing to store components.
@@ -222,6 +238,8 @@ class BlobStoreCompactor {
     logger.trace("resumeCompaction() started for {}", storeId);
     runningLatch = new CountDownLatch(1);
     compactionInProgress.set(true);
+    getAllContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS);
+    getAllContainersByStatus(Container.ContainerStatus.INACTIVE);
     try {
       while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         CompactionLog.Phase phase = compactionLog.getCompactionPhase();
@@ -555,6 +573,16 @@ class BlobStoreCompactor {
     // persist
     tgtIndex.persistIndex();
     return copiedAll;
+  }
+
+  /**
+   * Determines if {@code copyCandidate} belongs to the DELETED_IN_PROGRESS {@link Container}s.
+   * @param copyCandidate the {@link IndexEntry} to check
+   * @param selectedContainerPairSet the collection of AccountId and ContainerId pairs in the given status.
+   */
+  private boolean isDeleteRequested(IndexEntry copyCandidate, Set<Pair<Short,Short>> selectedContainerPairSet) {
+    IndexValue copyCandidateValue = copyCandidate.getValue();
+    return selectedContainerPairSet.contains(new Pair<>(copyCandidateValue.getAccountId(), copyCandidateValue.getContainerId()));
   }
 
   /**
@@ -1024,6 +1052,8 @@ class BlobStoreCompactor {
       copyCandidates.removeIf(
           copyCandidate -> isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(),
               checkAlreadyCopied));
+      copyCandidates.removeIf(
+          copyCandidate -> isDeleteRequested(copyCandidate, selectedContainers));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),
@@ -1311,6 +1341,8 @@ class BlobStoreCompactor {
       copyCandidates.removeIf(
           copyCandidate -> isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(),
               checkAlreadyCopied));
+      copyCandidates.removeIf(
+          copyCandidate -> isDeleteRequested(copyCandidate, selectedContainers));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of entries, {} are valid and {} will be copied in this round", validEntriesSize,
