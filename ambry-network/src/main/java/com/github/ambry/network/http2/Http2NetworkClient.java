@@ -32,19 +32,13 @@ import io.netty.channel.pool.ChannelPoolMap;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
 import io.netty.util.AttributeKey;
-import java.net.InetSocketAddress;
-import java.util.AbstractCollection;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,7 +54,6 @@ public class Http2NetworkClient implements NetworkClient {
   private final Http2ClientStreamStatsHandler http2ClientStreamStatsHandler;
   private final Http2ClientMetrics http2ClientMetrics;
   private final Http2ClientConfig http2ClientConfig;
-  private static final ResponseInfo WAKEUP_MARKER = new ResponseInfo(null, null, null);
   static final AttributeKey<RequestInfo> REQUEST_INFO = AttributeKey.newInstance("RequestInfo");
 
   public Http2NetworkClient(Http2ClientMetrics http2ClientMetrics, Http2ClientConfig http2ClientConfig,
@@ -131,22 +124,8 @@ public class Http2NetworkClient implements NetworkClient {
     http2ClientMetrics.http2ClientSendTime.update(System.currentTimeMillis() - startTime);
     // TODO: close stream channel for requestsToDrop. Need a hashmap from corelationId to streamChannel
 
-    ResponseInfo firstResponse = null;
-    try {
-      firstResponse = http2ClientResponseHandler.getResponseInfoQueue().poll(pollTimeoutMs, TimeUnit.MILLISECONDS);
-    } catch (InterruptedException ie) {
-      logger.debug("Interrupted polling responses");
-    }
-    if (firstResponse == null) {
-      return Collections.emptyList();
-    }
-    // add responseInfo to readyResponseInfos
-    FilteredInserter<ResponseInfo> filteredInserter =
-        new FilteredInserter<>(readyResponseInfos, r -> r != WAKEUP_MARKER);
-    filteredInserter.add(firstResponse);
-    http2ClientResponseHandler.getResponseInfoQueue().drainTo(filteredInserter);
+    http2ClientResponseHandler.getResponseInfoQueue().poll(readyResponseInfos, pollTimeoutMs);
 
-    // wakeup markers will be detected in NonBlockingRouter#onResponse()
     http2ClientMetrics.http2ClientSendRate.mark(readyResponseInfos.size());
 
     http2ClientMetrics.http2ClientSendAndPollTime.update(System.currentTimeMillis() - startTime);
@@ -204,13 +183,7 @@ public class Http2NetworkClient implements NetworkClient {
 
   @Override
   public void wakeup() {
-    // if sendAndPoll is currently executing a timed poll on the blocking queue, we need to put WAKEUP_MARKER
-    // to wake it up before a response comes
-    try {
-      http2ClientResponseHandler.getResponseInfoQueue().put(WAKEUP_MARKER);
-    } catch (InterruptedException e) {
-      logger.warn("Interrupted while waking up", e);
-    }
+    http2ClientResponseHandler.getResponseInfoQueue().wakeup();
   }
 
   @Override
@@ -220,36 +193,5 @@ public class Http2NetworkClient implements NetworkClient {
 
   public Http2ClientMetrics getHttp2ClientMetrics() {
     return http2ClientMetrics;
-  }
-
-  /**
-   * An implementation of AbstractCollection to be used for non-{@link Http2NetworkClient#WAKEUP_MARKER} insertion.
-   */
-  private static class FilteredInserter<T> extends AbstractCollection<T> {
-    private final Collection<T> data;
-    private final Predicate<T> shouldAdd;
-
-    FilteredInserter(Collection<T> data, Predicate<T> shouldAdd) {
-      this.data = data;
-      this.shouldAdd = shouldAdd;
-    }
-
-    @Override
-    public boolean add(T t) {
-      if (shouldAdd.test(t)) {
-        return data.add(t);
-      }
-      return false;
-    }
-
-    @Override
-    public Iterator<T> iterator() {
-      return data.iterator();
-    }
-
-    @Override
-    public int size() {
-      return data.size();
-    }
   }
 }

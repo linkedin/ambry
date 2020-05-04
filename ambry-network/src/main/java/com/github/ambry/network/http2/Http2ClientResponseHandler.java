@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network.http2;
 
+import com.github.ambry.utils.BatchBlockingQueue;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import io.netty.buffer.ByteBuf;
@@ -20,7 +21,6 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpResponse;
-import java.util.concurrent.LinkedBlockingQueue;
 
 
 /**
@@ -28,7 +28,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 @ChannelHandler.Sharable
 class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
-  private LinkedBlockingQueue<ResponseInfo> responseInfoQueue = new LinkedBlockingQueue<>();
+  private static final ResponseInfo WAKEUP_MARKER = new ResponseInfo(null, null, null);
+  private BatchBlockingQueue<ResponseInfo> responseInfoQueue = new BatchBlockingQueue<>(WAKEUP_MARKER);
   private Http2NetworkClient http2NetworkClient;
 
   public Http2ClientResponseHandler(Http2NetworkClient http2NetworkClient) {
@@ -36,7 +37,7 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
   }
 
   @Override
-  protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
+  protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) {
 
     ByteBuf dup = msg.content().retainedDuplicate();
     // Consume length
@@ -45,7 +46,7 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
     http2NetworkClient.getHttp2ClientMetrics().http2StreamFirstToAllFrameReadyTime.update(
         System.currentTimeMillis() - requestInfo.getStreamHeaderFrameReceiveTime());
     ResponseInfo responseInfo = new ResponseInfo(requestInfo, null, dup);
-    responseInfoQueue.offer(responseInfo);
+    responseInfoQueue.put(responseInfo);
     // TODO: is this a good place to release stream channel?
     ctx.channel()
         .parent()
@@ -55,11 +56,12 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
   }
 
   /**
-   * Get the queue that are not being used by {@link Http2ClientResponseHandler#channelRead0}.
+   * Get the queue of responses received by {@link Http2ClientResponseHandler#channelRead0}.
    * {@link Http2NetworkClient} consumes {@link ResponseInfo} from this queue.
    * from this queue.
+   * @return the queue of responses received by this handler
    */
-  public LinkedBlockingQueue<ResponseInfo> getResponseInfoQueue() {
+  public BatchBlockingQueue<ResponseInfo> getResponseInfoQueue() {
     return responseInfoQueue;
   }
 }
