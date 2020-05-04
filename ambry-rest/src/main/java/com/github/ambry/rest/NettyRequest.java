@@ -663,8 +663,8 @@ public class NettyRequest implements RestRequest {
   }
 
   /**
-   * The {@link NettyRequest}'s implementation of {@link com.github.ambry.rest.RestRequest.RestRequestContext}. It carries
-   * {@link Channel} and {@link HttpRequest}.
+   * The {@link NettyRequest}'s implementation of {@link com.github.ambry.rest.RestRequest.RestRequestContext}.
+   * It carries the netty {@link Channel} instance.
    */
   public static class NettyRequestContext implements RestRequestContext {
     private final Channel channel;
