@@ -936,4 +936,9 @@ class BadRestRequest implements RestRequest {
   public long getBytesReceived() {
     return 0;
   }
+
+  @Override
+  public RestRequestContext getRestRequestContext() {
+    return null;
+  }
 }

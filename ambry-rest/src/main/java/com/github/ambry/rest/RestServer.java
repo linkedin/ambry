@@ -34,7 +34,9 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
 import com.github.ambry.utils.Utils;
+import io.netty.channel.ChannelHandler;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -158,6 +160,21 @@ public class RestServer {
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem, SSLFactory sslFactory) throws Exception {
+    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, null);
+  }
+
+  /**
+   * Creates an instance of RestServer.
+   * @param verifiableProperties the properties that define the behavior of the RestServer and its components.
+   * @param clusterMap the {@link ClusterMap} instance that needs to be used.
+   * @param notificationSystem the {@link NotificationSystem} instance that needs to be used.
+   * @param sslFactory the {@link SSLFactory} to be used. This can be {@code null} if no components require SSL support.
+   * @param addedChannelHandlers a list of {@link ChannelHandler} to add to the {@link io.netty.channel.ChannelInitializer} before
+   *                             the final handler.
+   * @throws InstantiationException if there is any error instantiating an instance of RestServer.
+   */
+  public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      NotificationSystem notificationSystem, SSLFactory sslFactory, List<ChannelHandler> addedChannelHandlers) throws Exception {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of RestServer");
     }
@@ -210,7 +227,7 @@ public class RestServer {
 
     NioServerFactory nioServerFactory =
         Utils.getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, metricRegistry,
-            restRequestHandler, publicAccessLogger, restServerState, sslFactory);
+            restRequestHandler, publicAccessLogger, restServerState, sslFactory, addedChannelHandlers);
     nioServer = nioServerFactory.getNioServer();
 
     if (accountService == null || router == null || restResponseHandler == null || restRequestHandler == null

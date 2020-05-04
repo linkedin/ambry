@@ -157,4 +157,15 @@ public interface RestRequest extends ReadableStreamChannel {
   default boolean isSslUsed() {
     return getSSLSession() != null;
   }
+
+  /**
+   * @return The {@link RestRequestContext}.
+   */
+  RestRequestContext getRestRequestContext();
+
+  /**
+   * The RestRequestContext that carries some of the internal states of different implementation.
+   */
+  interface RestRequestContext {
+  }
 }
