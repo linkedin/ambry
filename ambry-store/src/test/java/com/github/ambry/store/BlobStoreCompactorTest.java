@@ -14,6 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferOutputStream;
@@ -45,6 +47,9 @@ import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.ArgumentMatcher;
+import org.mockito.ArgumentMatchers;
+import org.mockito.Mockito;
 
 import static com.github.ambry.store.StoreTestUtils.*;
 import static org.junit.Assert.*;
@@ -68,6 +73,7 @@ public class BlobStoreCompactorTest {
 
   private CuratedLogIndexState state = null;
   private BlobStoreCompactor compactor = null;
+  private AccountService accountService = null;
 
   // indicates whether any of InterruptionInducers induced the close/crash.
   private boolean closeOrExceptionInduced = false;
@@ -103,6 +109,7 @@ public class BlobStoreCompactorTest {
     if (doDirectIO) {
       Assume.assumeTrue(Utils.isLinux());
     }
+    accountService = Mockito.mock(AccountService.class);
   }
 
   /**
@@ -931,6 +938,119 @@ public class BlobStoreCompactorTest {
   }
 
   /**
+   * Tests compaction on a log that contains a PUT record which the corresponding container marked as INACTIVE/DELETE_IN_PROGRESS
+   * @throws Exception
+   */
+  @Test
+  public void containerDeletionTest() throws Exception {
+    refreshState(false, false);
+    state.properties.setProperty("store.index.max.number.of.inmem.elements", "5");
+    state.initIndex(null);
+    long notExpiredMs = state.time.milliseconds() + TimeUnit.SECONDS.toMillis(Short.MAX_VALUE);
+
+    // LS (Log Segment) 0
+    // IS (Index Segment) 0.1
+    // p1 DeleteInProgress
+    // p2 Inactive
+    IndexEntry p1 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
+    IndexEntry p2 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
+    // IS (Index Segment) 0.2
+    // p3 DeleteInProgress
+    // p4 Inactive
+    IndexEntry p3 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
+    IndexEntry p4 = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
+    long lastRecSize = state.log.getSegmentCapacity() - state.index.getCurrentEndOffset().getOffset();
+    state.addPutEntries(1, lastRecSize, notExpiredMs).get(0);
+
+    // LS 1
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
+
+    // Make sure we have two log segments
+    writeDataToMeetRequiredSegmentCount(2, null);
+
+    //add to be deleted index entries into indexEntriesDeleteInProgress list.
+    List<IndexEntry> indexEntriesDeleteInProgress = new ArrayList<>();
+    indexEntriesDeleteInProgress.add(p1);
+    indexEntriesDeleteInProgress.add(p3);
+    //add invalid index entries into indexEntriesInvalid list.
+    List<IndexEntry> indexEntriesInactive = new ArrayList<>();
+    indexEntriesInactive.add(p2);
+    indexEntriesInactive.add(p4);
+
+    // Mock indexEntries' corresponding container as INACTIVE/DELETE_IN_PROGRESS.
+    Set<Container> deleteInProgressSet = new HashSet<>();
+    Set<MockId> deletedInProgressKeys = new HashSet<>();
+    Set<Container> InactiveSet = new HashSet<>();
+    Set<MockId> InactiveKeys = new HashSet<>();
+    long cleanedUpSize = 0;
+
+    for (IndexEntry indexEntry : indexEntriesDeleteInProgress) {
+      Container container = Mockito.mock(Container.class);
+      Mockito.when(container.getParentAccountId()).thenReturn(indexEntry.getValue().getAccountId());
+      Mockito.when(container.getId()).thenReturn(indexEntry.getValue().getContainerId());
+      deleteInProgressSet.add(container);
+      deletedInProgressKeys.add((MockId) indexEntry.getKey());
+      cleanedUpSize += indexEntry.getValue().getSize();
+    }
+
+    for (IndexEntry indexEntry : indexEntriesInactive) {
+      Container container = Mockito.mock(Container.class);
+      Mockito.when(container.getParentAccountId()).thenReturn(indexEntry.getValue().getAccountId());
+      Mockito.when(container.getId()).thenReturn(indexEntry.getValue().getContainerId());
+      InactiveSet.add(container);
+      InactiveKeys.add((MockId) indexEntry.getKey());
+      cleanedUpSize += indexEntry.getValue().getSize();
+    }
+
+    Mockito.when(accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS))
+        .thenReturn(deleteInProgressSet);
+    Mockito.when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(InactiveSet);
+
+    // get everything except the last log segment entries out of the journal
+    state.reloadIndex(true, false);
+    List<String> segmentsUnderCompaction = getLogSegments(0, 1);
+    long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
+    CompactionDetails details = new CompactionDetails(notExpiredMs, segmentsUnderCompaction);
+
+    String logSegmentName = p1.getValue().getOffset().getName();
+    String compactedLogSegmentName = LogSegmentNameHelper.getNextGenerationName(logSegmentName);
+    long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
+
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
+    compactor.initialize(state.index);
+    int indexSegmentCountBeforeCompaction = state.index.getIndexSegments().size();
+
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+
+    assertFalse("Sum of size of log segments did not change after compaction",
+        logSegmentSizeSumBeforeCompaction == getSumOfLogSegmentEndOffsets());
+
+    // inactive/deleted indexEntries should not be found
+    for (MockId deletedKey : deletedInProgressKeys) {
+      assertNull("There should be no record of " + deletedKey, state.index.findKey(deletedKey));
+    }
+
+    for (MockId inactiveKey : InactiveKeys) {
+      assertNull("There should be no record of " + inactiveKey, state.index.findKey(inactiveKey));
+    }
+
+    assertEquals("End offset of log segment not as expected after compaction",
+        endOffsetOfSegmentBeforeCompaction - cleanedUpSize,
+        state.log.getSegment(compactedLogSegmentName).getEndOffset());
+
+    int indexSegmentDiff = 1;
+    assertEquals("Index Segment not as expected after compaction", indexSegmentCountBeforeCompaction - indexSegmentDiff,
+        state.index.getIndexSegments().size());
+  }
+
+  /**
    * Tests compaction on a log that contains a PUT record that has no corresponding entry in the index (this can happen
    * due to recovery corner cases - refer to recovery code in PersistentIndex.java).
    * @throws Exception
@@ -1312,7 +1432,7 @@ public class BlobStoreCompactorTest {
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
     return new BlobStoreCompactor(tempDirStr, STORE_ID, CuratedLogIndexState.STORE_KEY_FACTORY, config, metrics,
         metrics, ioScheduler, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, log, state.time, state.sessionId,
-        state.incarnationId, null);
+        state.incarnationId, accountService);
   }
 
   /**
