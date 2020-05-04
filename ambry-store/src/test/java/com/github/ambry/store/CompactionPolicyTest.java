@@ -312,7 +312,7 @@ class MockBlobStore extends BlobStore {
   MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, long capacityInBytes, long segmentCapacity,
       long segmentHeaderSize, long usedCapacity, MockBlobStoreStats mockBlobStoreStats) {
     super(StoreTestUtils.createMockReplicaId("", 0, null), config, null, null, null, null, metrics, metrics, null, null,
-        null, null, time);
+        null, null, time, null);
     this.capacityInBytes = capacityInBytes;
     this.segmentCapacity = segmentCapacity;
     this.segmentHeaderSize = segmentHeaderSize;

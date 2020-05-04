@@ -15,6 +15,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
@@ -78,6 +79,7 @@ public class StorageManager implements StoreManager {
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final Set<String> unexpectedDirs = new HashSet<>();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
+  private final AccountService accountService;
 
   /**
    * Constructs a {@link StorageManager}
@@ -93,11 +95,12 @@ public class StorageManager implements StoreManager {
    *                           manager (i.e Helix)
    * @param time the {@link Time} instance to use.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
+   * @param accountService the {@link AccountService} instance to use.
    */
   public StorageManager(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
       ScheduledExecutorService scheduler, MetricRegistry registry, StoreKeyFactory keyFactory, ClusterMap clusterMap,
       DataNodeId dataNodeId, MessageStoreHardDelete hardDelete, ClusterParticipant clusterParticipant, Time time,
-      MessageStoreRecovery recovery) throws StoreException {
+      MessageStoreRecovery recovery, AccountService accountService) throws StoreException {
     verifyConfigs(storeConfig, diskManagerConfig);
     this.storeConfig = storeConfig;
     this.diskManagerConfig = diskManagerConfig;
@@ -106,6 +109,7 @@ public class StorageManager implements StoreManager {
     this.keyFactory = keyFactory;
     this.recovery = recovery;
     this.hardDelete = hardDelete;
+    this.accountService = accountService;
     this.clusterMap = clusterMap;
     this.clusterParticipant = clusterParticipant;
     currentNode = dataNodeId;
@@ -128,7 +132,7 @@ public class StorageManager implements StoreManager {
       DiskManager diskManager =
           new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, scheduler, metrics, storeMainMetrics,
               storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate, stoppedReplicas,
-              time);
+              time, accountService);
       diskToDiskManager.put(disk, diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);
@@ -308,7 +312,7 @@ public class StorageManager implements StoreManager {
       DiskManager newDiskManager =
           new DiskManager(disk, Collections.emptyList(), storeConfig, diskManagerConfig, scheduler, metrics,
               storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
-              stoppedReplicas, time);
+              stoppedReplicas, time, accountService);
       logger.info("Creating new DiskManager on {} for new added store", replica.getDiskId().getMountPath());
       try {
         newDiskManager.start();

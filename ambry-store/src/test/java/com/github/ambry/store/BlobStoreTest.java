@@ -1419,7 +1419,7 @@ public class BlobStoreTest {
     BlobStore testStore2 =
         new BlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), scheduler,
             storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics, mockStoreKeyFactory, recovery,
-            hardDelete, mock(ReplicaStatusDelegate.class), time);
+            hardDelete, mock(ReplicaStatusDelegate.class), time, null);
 
     testStore2.start();
     assertTrue("Store should start up", testStore2.isStarted());
@@ -1534,7 +1534,7 @@ public class BlobStoreTest {
     StoreMetrics metrics = new StoreMetrics(registry);
     BlobStore testStore =
         new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
-            diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time);
+            diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time, null);
     testStore.start();
     DiskSpaceRequirements diskSpaceRequirements = testStore.getDiskSpaceRequirements();
     diskAllocator.initializePool(diskSpaceRequirements == null ? Collections.emptyList()
@@ -2690,7 +2690,7 @@ public class BlobStoreTest {
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
     return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator,
-        metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegate, time);
+        metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegate, time, null);
   }
 
   private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
@@ -2750,7 +2750,7 @@ public class BlobStoreTest {
     MockBlobStore(ReplicaId replicaId, StoreConfig config, ReplicaStatusDelegate replicaStatusDelegate,
         StoreMetrics metrics) {
       super(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics,
-          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegate, time);
+          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegate, time, null);
     }
 
     /**

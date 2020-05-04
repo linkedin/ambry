@@ -549,7 +549,7 @@ public class StatsManagerTest {
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(currentNode);
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, currentNode, null, clusterParticipant, new MockTime(), null);
+            new MetricRegistry(), null, clusterMap, currentNode, null, clusterParticipant, new MockTime(), null, null);
     storageManager.start();
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());

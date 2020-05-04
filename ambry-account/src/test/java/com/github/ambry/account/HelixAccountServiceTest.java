@@ -203,6 +203,50 @@ public class HelixAccountServiceTest {
   }
 
   /**
+   * Tests {@link AccountService#getContainersByStatus(ContainerStatus)} with generated {@links Container}s
+   */
+  @Test
+  public void testGetContainerByStatus() throws Exception {
+    // a set that records the account ids that have already been taken.
+    Set accountIdSet = new HashSet<>();
+    // generate a single reference account and container that can be referenced by refAccount and refContainer respectively.
+    refAccountId = Utils.getRandomShort(random);
+    accountIdSet.add(refAccountId);
+    generateRefAccounts(idToRefAccountMap, idToRefContainerMap, accountIdSet, 5, 2);
+
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    accountService.updateAccounts(idToRefAccountMap.values());
+    assertAccountsInAccountService(idToRefAccountMap.values(), 5, accountService);
+
+    List<Account> accountsToUpdate = new ArrayList<>();
+    int cnt = 0;
+    for (Account account : accountService.getAllAccounts()) {
+      AccountBuilder accountBuilder = new AccountBuilder(account);
+      for (Container container : account.getAllContainers()) {
+        if (cnt % 2 == 0) {
+          ContainerBuilder containerBuilder = new ContainerBuilder(container);
+          containerBuilder.setId((short) (-1 * (container.getId())));
+          containerBuilder.setName(container.getName() + "-extra");
+          containerBuilder.setStatus(ContainerStatus.DELETE_IN_PROGRESS);
+          containerBuilder.setDescription(container.getDescription() + "--extra");
+          containerBuilder.setReplicationPolicy(container.getReplicationPolicy() + "---extra");
+          containerBuilder.setTtlRequired(container.isTtlRequired());
+          accountBuilder.addOrUpdateContainer(containerBuilder.build());
+        }
+        cnt++;
+      }
+      accountsToUpdate.add(accountBuilder.build());
+    }
+
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 5, true);
+    Set<Container> containerList = accountService.getContainersByStatus(ContainerStatus.DELETE_IN_PROGRESS);
+    assertEquals("Wrong number of containers in containerList", 5, containerList.size());
+    for (Container container : containerList) {
+      assertSame("Container status mismatch", container.getStatus(), ContainerStatus.DELETE_IN_PROGRESS);
+    }
+  }
+
+  /**
    * Tests creating and updating accounts through {@link HelixAccountService} in various situations:
    * 0. {@link Account}s already exists on ZooKeeper.
    * 1. add a new {@link Account};

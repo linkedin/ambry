@@ -1312,7 +1312,7 @@ public class BlobStoreCompactorTest {
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
     return new BlobStoreCompactor(tempDirStr, STORE_ID, CuratedLogIndexState.STORE_KEY_FACTORY, config, metrics,
         metrics, ioScheduler, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, log, state.time, state.sessionId,
-        state.incarnationId);
+        state.incarnationId, null);
   }
 
   /**
