@@ -135,7 +135,7 @@ public class AzureIntegrationTest {
     long now = System.currentTimeMillis();
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, now, now + 60000, blobSize, CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext,
-            cryptoAgentFactory, blobSize);
+            cryptoAgentFactory, blobSize, (short) 0);
 
     // attempt undelete before uploading blob
     try {
@@ -395,7 +395,7 @@ public class AzureIntegrationTest {
               BlobDataType.DATACHUNK);
       InputStream inputStream = getBlobInputStream(chunkSize);
       CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, chunkSize,
-          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, chunkSize);
+          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, chunkSize, (short) 0);
       cloudBlobMetadata.setUploadTime(startTime + j * 1000);
       assertTrue("Expected upload to return true",
           uploadBlobWithRetry(blobId, chunkSize, cloudBlobMetadata, inputStream));
