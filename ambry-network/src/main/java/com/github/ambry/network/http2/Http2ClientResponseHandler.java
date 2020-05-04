@@ -30,10 +30,10 @@ import io.netty.handler.codec.http.FullHttpResponse;
 class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
   private static final ResponseInfo WAKEUP_MARKER = new ResponseInfo(null, null, null);
   private BatchBlockingQueue<ResponseInfo> responseInfoQueue = new BatchBlockingQueue<>(WAKEUP_MARKER);
-  private Http2NetworkClient http2NetworkClient;
+  private Http2ClientMetrics http2ClientMetrics;
 
-  public Http2ClientResponseHandler(Http2NetworkClient http2NetworkClient) {
-    this.http2NetworkClient = http2NetworkClient;
+  public Http2ClientResponseHandler(Http2ClientMetrics http2ClientMetrics) {
+    this.http2ClientMetrics = http2ClientMetrics;
   }
 
   @Override
@@ -43,7 +43,7 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
     // Consume length
     dup.readLong();
     RequestInfo requestInfo = ctx.channel().attr(Http2NetworkClient.REQUEST_INFO).get();
-    http2NetworkClient.getHttp2ClientMetrics().http2StreamFirstToAllFrameReadyTime.update(
+    http2ClientMetrics.http2StreamFirstToAllFrameReadyTime.update(
         System.currentTimeMillis() - requestInfo.getStreamHeaderFrameReceiveTime());
     ResponseInfo responseInfo = new ResponseInfo(requestInfo, null, dup);
     responseInfoQueue.put(responseInfo);

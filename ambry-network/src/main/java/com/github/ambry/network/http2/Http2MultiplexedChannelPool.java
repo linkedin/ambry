@@ -76,6 +76,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
 
   // HTTP/2 physical connection pool.
   private final ChannelPool parentConnectionPool;
+  private final InetSocketAddress inetSocketAddress;
   private final EventLoopGroup eventLoopGroup;
   private final Set<MultiplexedChannelRecord> parentConnections;
   private final Long idleConnectionTimeoutMs;
@@ -87,26 +88,27 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
   private AtomicBoolean closed = new AtomicBoolean(false);
 
   /**
-   * @param inetSocketAddress IP Socket Address (IP address + port number).
+   * @param inetSocketAddress Remote Socket Address (IP address + port number).
    * @param sslFactory {@link SSLFactory} used for SSL connection.
    * @param eventLoopGroup The event loop group.
    * @param http2ClientConfig http2 client configs.
    * @param http2ClientMetrics http2 client metrics.
    */
-  Http2MultiplexedChannelPool(InetSocketAddress inetSocketAddress, SSLFactory sslFactory, EventLoopGroup eventLoopGroup,
-      Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics) {
+  public Http2MultiplexedChannelPool(InetSocketAddress inetSocketAddress, SSLFactory sslFactory,
+      EventLoopGroup eventLoopGroup, Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics) {
     this(new SimpleChannelPool(createBootStrap(eventLoopGroup, http2ClientConfig, inetSocketAddress),
             new Http2ChannelPoolHandler(sslFactory, inetSocketAddress.getHostName(), inetSocketAddress.getPort(),
                 http2ClientConfig)), eventLoopGroup, ConcurrentHashMap.newKeySet(),
         http2ClientConfig.idleConnectionTimeoutMs, http2ClientConfig.http2MinConnectionPerPort,
         http2ClientConfig.http2MaxConcurrentStreamsPerConnection, http2ClientConfig.http2MaxContentLength,
-        http2ClientMetrics);
+        http2ClientMetrics, inetSocketAddress);
   }
 
   /**
    * @param inetSocketAddress IP Socket Address (IP address + port number).
    * @param eventLoopGroup The event loop group.
    * @param http2ClientConfig http2 client configs.
+   * @param inetSocketAddress Remote Socket Address (IP address + port number).
    * @return {@link Bootstrap}
    */
   static private Bootstrap createBootStrap(EventLoopGroup eventLoopGroup, Http2ClientConfig http2ClientConfig,
@@ -137,10 +139,12 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
    * @param maxConcurrentStreamsAllowed The maximum streams allowed per parent channel.
    * @param maxContentLength Maximum content length for a full HTTP/2 content. Used in HttpObjectAggregator.
    * @param http2ClientMetrics Http2 client metrics.
+   * @param inetSocketAddress Remote Socket Address (IP address + port number).
    */
   Http2MultiplexedChannelPool(ChannelPool connectionPool, EventLoopGroup eventLoopGroup,
       Set<MultiplexedChannelRecord> connections, Long idleConnectionTimeoutMs, int minParentConnections,
-      int maxConcurrentStreamsAllowed, int maxContentLength, Http2ClientMetrics http2ClientMetrics) {
+      int maxConcurrentStreamsAllowed, int maxContentLength, Http2ClientMetrics http2ClientMetrics,
+      InetSocketAddress inetSocketAddress) {
     this.parentConnectionPool = connectionPool;
     this.eventLoopGroup = eventLoopGroup;
     this.parentConnections = connections;
@@ -149,6 +153,21 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
     this.maxConcurrentStreamsAllowed = maxConcurrentStreamsAllowed;
     this.maxContentLength = maxContentLength;
     this.http2ClientMetrics = http2ClientMetrics;
+    this.inetSocketAddress = inetSocketAddress;
+  }
+
+  /**
+   * Get remote socket address (IP address + port number) of this pool.
+   */
+  public InetSocketAddress getInetSocketAddress() {
+    return inetSocketAddress;
+  }
+
+  /**
+   * Get max http content length.
+   */
+  public int getMaxContentLength() {
+    return maxContentLength;
   }
 
   @Override

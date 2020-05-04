@@ -67,7 +67,7 @@ public class Http2NetworkClient implements NetworkClient {
       this.eventLoopGroup = new NioEventLoopGroup(http2ClientConfig.http2NettyEventLoopGroupThreads);
     }
     this.pools = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics);
-    this.http2ClientResponseHandler = new Http2ClientResponseHandler(this);
+    this.http2ClientResponseHandler = new Http2ClientResponseHandler(http2ClientMetrics);
     this.http2ClientStreamStatsHandler = new Http2ClientStreamStatsHandler(this);
     this.http2ClientMetrics = http2ClientMetrics;
   }

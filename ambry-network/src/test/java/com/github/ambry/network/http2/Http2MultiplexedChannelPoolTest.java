@@ -89,7 +89,7 @@ public class Http2MultiplexedChannelPoolTest {
 
       Http2MultiplexedChannelPool h2Pool =
           new Http2MultiplexedChannelPool(connectionPool, loopGroup, new HashSet<>(), null, 1,
-              maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()));
+              maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()), null);
 
       Channel streamChannel1 = h2Pool.acquire().awaitUninterruptibly().getNow();
       assertTrue(streamChannel1 instanceof Http2StreamChannel);
@@ -137,7 +137,7 @@ public class Http2MultiplexedChannelPoolTest {
 
       Http2MultiplexedChannelPool h2Pool =
           new Http2MultiplexedChannelPool(connectionPool, loopGroup, new HashSet<>(), null, minConnections,
-              maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()));
+              maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()), null);
 
       List<Channel> toRelease = new ArrayList<>();
 
@@ -176,7 +176,7 @@ public class Http2MultiplexedChannelPoolTest {
     when(connectionPool.acquire()).thenReturn(new FailedFuture<>(loopGroup.next(), exception));
 
     ChannelPool pool = new Http2MultiplexedChannelPool(connectionPool, loopGroup.next(), new HashSet<>(), null, 1,
-        maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()));
+        maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()), null);
 
     Future<Channel> acquirePromise = pool.acquire().await();
     assertFalse(acquirePromise.isSuccess());
@@ -203,7 +203,7 @@ public class Http2MultiplexedChannelPoolTest {
       MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, 8, null, maxContentLength);
       Http2MultiplexedChannelPool h2Pool =
           new Http2MultiplexedChannelPool(connectionPool, loopGroup, Collections.singleton(record), null, 1,
-              maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()));
+              maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()), null);
 
       h2Pool.close();
 
@@ -223,7 +223,7 @@ public class Http2MultiplexedChannelPoolTest {
     ChannelPool connectionPool = mock(ChannelPool.class);
     Http2MultiplexedChannelPool h2Pool =
         new Http2MultiplexedChannelPool(connectionPool, loopGroup.next(), new HashSet<>(), null, 1,
-            maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()));
+            maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()), null);
 
     h2Pool.close();
 
@@ -252,7 +252,7 @@ public class Http2MultiplexedChannelPoolTest {
       MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, 8, null, maxContentLength);
       Http2MultiplexedChannelPool h2Pool =
           new Http2MultiplexedChannelPool(connectionPool, loopGroup, Collections.singleton(record), null, 1,
-              maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()));
+              maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()), null);
 
       h2Pool.close();
 
@@ -283,7 +283,7 @@ public class Http2MultiplexedChannelPoolTest {
       MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, 8, null, maxContentLength);
       Http2MultiplexedChannelPool h2Pool =
           new Http2MultiplexedChannelPool(connectionPool, loopGroup, Collections.singleton(record), null, 1,
-              maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()));
+              maxConcurrentStreamsPerConnection, maxContentLength, new Http2ClientMetrics(new MetricRegistry()), null);
 
       CompletableFuture<Boolean> interrupteFlagPreserved = new CompletableFuture<>();
 

@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,53 +13,32 @@
  */
 package com.github.ambry.network.http2;
 
-import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Send;
 import com.github.ambry.commons.NettySslHttp2Factory;
-import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
-import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
-import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpObjectAggregator;
-import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
-import io.netty.handler.codec.http2.DefaultHttp2Headers;
-import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
-import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
-import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.handler.codec.http2.Http2MultiplexHandler;
-import io.netty.handler.codec.http2.Http2Settings;
-import io.netty.handler.codec.http2.Http2StreamChannel;
-import io.netty.handler.codec.http2.Http2StreamChannelBootstrap;
 import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
-import io.netty.handler.codec.http2.HttpConversionUtil;
-import io.netty.handler.ssl.SslHandler;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Promise;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
+import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -68,118 +47,78 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * A HTTP2 implementation of {@link ConnectedChannel}. This implementation is for test now. It will be imporved to
- * to support replication in the future.
+ * A HTTP2 implementation of {@link ConnectedChannel} used in replication and test.
+ * This implementation reuses connections maintained by {@link Http2MultiplexedChannelPool}(a pool for a single host:port) and creates a stream channel for each send.
  */
 public class Http2BlockingChannel implements ConnectedChannel {
   private static final Logger logger = LoggerFactory.getLogger(Http2BlockingChannel.class);
   private final static AttributeKey<Promise<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
-  private final String hostName;
-  private final int readBufferSize;
-  private final int writeBufferSize;
-  private final int http2InitialWindowSize;
-  private final SSLFactory sslFactory;
-  private final int port;
-  private EventLoopGroup workerGroup;
-  private Channel channel;
   private Promise<ByteBuf> responsePromise;
-  private Http2StreamChannelBootstrap http2StreamChannelBootstrap;
+  private Http2MultiplexedChannelPool http2MultiplexedChannelPool;
 
-  public Http2BlockingChannel(String hostName, int port, SSLConfig sslConfig, int readBufferSize, int writeBufferSize,
-      int http2InitialWindowSize) {
-    this.hostName = hostName;
-    this.port = port;
-    this.readBufferSize = readBufferSize;
-    this.writeBufferSize = writeBufferSize;
-    this.http2InitialWindowSize = http2InitialWindowSize;
+  public Http2BlockingChannel(Http2MultiplexedChannelPool http2MultiplexedChannelPool) {
+    this.http2MultiplexedChannelPool = http2MultiplexedChannelPool;
+  }
+
+  /**
+   * Constructor for test purpose.
+   */
+  public Http2BlockingChannel(String hostName, int port, SSLConfig sslConfig, Http2ClientConfig http2ClientConfig,
+      Http2ClientMetrics http2ClientMetrics) {
+    NettySslHttp2Factory nettySslHttp2Factory;
     try {
-      sslFactory = new NettySslHttp2Factory(sslConfig);
+      nettySslHttp2Factory = new NettySslHttp2Factory(sslConfig);
     } catch (GeneralSecurityException | IOException e) {
-      throw new IllegalStateException(e);
+      throw new IllegalStateException("Can't create NettySslHttp2Factory: ", e);
     }
+    this.http2MultiplexedChannelPool =
+        new Http2MultiplexedChannelPool(new InetSocketAddress(hostName, port), nettySslHttp2Factory,
+            Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup(), http2ClientConfig,
+            http2ClientMetrics);
   }
 
   @Override
   public void connect() throws IOException {
-    workerGroup = Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup();
-    Bootstrap b = new Bootstrap();
-    b.group(workerGroup);
-    b.channel(Epoll.isAvailable() ? EpollSocketChannel.class : NioSocketChannel.class);
-    b.option(ChannelOption.SO_KEEPALIVE, true)
-        // To honor http2 window size, WriteBufferWaterMark.high() should be greater or equal to http2 window size.
-        // Also see: https://github.com/netty/netty/issues/10193
-        .option(ChannelOption.WRITE_BUFFER_WATER_MARK,
-            new WriteBufferWaterMark(http2InitialWindowSize, 2 * http2InitialWindowSize));
-    if (readBufferSize != -1) {
-      b.option(ChannelOption.SO_RCVBUF, readBufferSize);
-    }
-    if (writeBufferSize != -1) {
-      b.option(ChannelOption.SO_SNDBUF, writeBufferSize);
-    }
-    b.remoteAddress(hostName, port);
-    b.handler(new ChannelInitializer<SocketChannel>() {
-      @Override
-      protected void initChannel(SocketChannel ch) throws Exception {
-        ChannelPipeline pipeline = ch.pipeline();
-        SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(hostName, port, SSLFactory.Mode.CLIENT));
-        pipeline.addLast(sslHandler);
-        pipeline.addLast(Http2FrameCodecBuilder.forClient()
-            .initialSettings(Http2Settings.defaultSettings().initialWindowSize(http2InitialWindowSize))
-            .build());
-        pipeline.addLast(new Http2MultiplexHandler(new ChannelInboundHandlerAdapter()));
-      }
-    });
 
-    // Start the client.
-    channel = b.connect().syncUninterruptibly().channel();
-    logger.info("Connected to remote host");
-    http2StreamChannelBootstrap = new Http2StreamChannelBootstrap(channel).handler(new ChannelInitializer<Channel>() {
-      @Override
-      protected void initChannel(Channel ch) throws Exception {
-        ChannelPipeline p = ch.pipeline();
-        p.addLast(new Http2StreamFrameToHttpObjectCodec(false));
-        p.addLast(new HttpObjectAggregator(1024 * 1024));
-        p.addLast(new SimpleChannelInboundHandler<FullHttpResponse>() {
-          @Override
-          protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
-            Integer streamId = msg.headers().getInt(HttpConversionUtil.ExtensionHeaderNames.STREAM_ID.text());
-            if (streamId == null) {
-              logger.error("Http2ResponseHandler unexpected message received: " + msg);
-              return;
-            }
-            ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null).setSuccess(msg.content().retainedDuplicate());
-            logger.trace("Stream response received.");
-          }
-        });
-      }
-    });
   }
 
   @Override
   public void disconnect() throws IOException {
-    channel.disconnect().syncUninterruptibly();
-    workerGroup.shutdownGracefully();
+
   }
 
+  /**
+   * A new stream channel is created for each send.
+   */
   @Override
   public void send(Send request) throws IOException {
-    ByteBufferChannel byteBufferChannel = new ByteBufferChannel(ByteBuffer.allocate((int) request.sizeInBytes()));
-    while (!request.isSendComplete()) {
-      request.writeTo(byteBufferChannel);
+    Channel streamChannel;
+    try {
+      streamChannel = http2MultiplexedChannelPool.acquire().get(500, TimeUnit.MILLISECONDS);
+    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      throw new IOException("Can't acquire stream channel: ", e);
     }
-    byteBufferChannel.getBuffer().position(0);
-    ByteBuf byteBuf = Unpooled.wrappedBuffer(byteBufferChannel.getBuffer());
 
-    Http2StreamChannel childChannel = http2StreamChannelBootstrap.open().syncUninterruptibly().getNow();
-    Http2Headers http2Headers = new DefaultHttp2Headers().method(HttpMethod.POST.asciiName()).scheme("https").path("/");
-    responsePromise = childChannel.eventLoop().newPromise();
-    childChannel.attr(RESPONSE_PROMISE).set(responsePromise);
+    ChannelPipeline p = streamChannel.pipeline();
+    p.addLast(new Http2StreamFrameToHttpObjectCodec(false));
+    p.addLast(new HttpObjectAggregator(http2MultiplexedChannelPool.getMaxContentLength()));
+    p.addLast(new SimpleChannelInboundHandler<FullHttpResponse>() {
+      @Override
+      protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
+        ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null).setSuccess(msg.content().retainedDuplicate());
+        // TODO: is this a good place to release stream channel?
+        ctx.channel()
+            .parent()
+            .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
+            .get()
+            .release(ctx.channel());
+      }
+    });
+    streamChannel.pipeline().addLast(new AmbrySendToHttp2Adaptor());
 
-    DefaultHttp2HeadersFrame headersFrame = new DefaultHttp2HeadersFrame(http2Headers, false);
-    DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(byteBuf, true);
-    childChannel.write(headersFrame);
-    childChannel.write(dataFrame);
-    childChannel.flush();
+    responsePromise = streamChannel.eventLoop().newPromise();
+    streamChannel.attr(RESPONSE_PROMISE).set(responsePromise);
+    streamChannel.writeAndFlush(request).awaitUninterruptibly(3, TimeUnit.SECONDS);
   }
 
   @Override
@@ -196,11 +135,11 @@ public class Http2BlockingChannel implements ConnectedChannel {
 
   @Override
   public String getRemoteHost() {
-    return hostName;
+    return http2MultiplexedChannelPool.getInetSocketAddress().getHostName();
   }
 
   @Override
   public int getRemotePort() {
-    return port;
+    return http2MultiplexedChannelPool.getInetSocketAddress().getPort();
   }
 }

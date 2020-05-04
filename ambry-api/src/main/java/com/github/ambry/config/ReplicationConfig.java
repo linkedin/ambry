@@ -193,6 +193,13 @@ public class ReplicationConfig {
   @Default("ALL_TO_ALL")
   public final ReplicationModelType replicationModelType;
 
+  /**
+   * Use http2 connection for replication if this is true.
+   */
+  @Config("replication.enable.http2")
+  @Default("false")
+  public final boolean replicationEnableHttp2;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationStoreTokenFactory =
@@ -237,5 +244,6 @@ public class ReplicationConfig {
     replicationVcrRecoveryPartitions = Utils.splitString(vcrRecoveryPartitions, ",", HashSet::new);
     replicationModelType = ReplicationModelType.valueOf(
         verifiableProperties.getString("replication.model.across.datacenters", ReplicationModelType.ALL_TO_ALL.name()));
+    replicationEnableHttp2 = verifiableProperties.getBoolean("replication.enable.http2", false);
   }
 }
