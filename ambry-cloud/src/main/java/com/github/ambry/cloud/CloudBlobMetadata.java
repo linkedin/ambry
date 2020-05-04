@@ -107,7 +107,7 @@ public class CloudBlobMetadata {
    */
   public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
       EncryptionOrigin encryptionOrigin) {
-    this(blobId, creationTime, expirationTime, size, encryptionOrigin, null, null, 0);
+    this(blobId, creationTime, expirationTime, size, encryptionOrigin, null, null, 0, (short) 0);
   }
 
   /**
@@ -122,26 +122,6 @@ public class CloudBlobMetadata {
    *                         Only used when encryptionOrigin = VCR.
    * @param encryptedSize The size of the uploaded blob if it was encrypted and then uploaded.
    *                      Only used when encryptionOrigin = VCR.
-   */
-  public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
-      EncryptionOrigin encryptionOrigin, String vcrKmsContext, String cryptoAgentFactory, long encryptedSize) {
-    this(blobId, creationTime, expirationTime, size, encryptionOrigin, vcrKmsContext, cryptoAgentFactory, encryptedSize,
-        (short) 0);
-  }
-
-  /**
-   * Constructor from {@link BlobId}.
-   * @param blobId The BlobId for metadata record.
-   * @param creationTime The blob creation time.
-   * @param expirationTime The blob expiration time.
-   * @param size The blob size.
-   * @param encryptionOrigin The blob's encryption origin.
-   * @param vcrKmsContext The KMS context used to encrypt the blob.  Only used when encryptionOrigin = VCR.
-   * @param cryptoAgentFactory The class name of the {@link CloudBlobCryptoAgentFactory} used to encrypt the blob.
-   *                         Only used when encryptionOrigin = VCR.
-   * @param encryptedSize The size of the uploaded blob if it was encrypted and then uploaded.
-   *                      Only used when encryptionOrigin = VCR.
-   * @param lifeVersion The life version number of the blob.
    */
   public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
       EncryptionOrigin encryptionOrigin, String vcrKmsContext, String cryptoAgentFactory, long encryptedSize,

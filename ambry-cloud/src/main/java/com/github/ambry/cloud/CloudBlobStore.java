@@ -301,7 +301,7 @@ class CloudBlobStore implements Store {
         CloudBlobMetadata blobMetadata =
             new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
                 messageInfo.getSize(), EncryptionOrigin.VCR, cryptoAgent.getEncryptionContext(),
-                cryptoAgentFactory.getClass().getName(), encryptedSize);
+                cryptoAgentFactory.getClass().getName(), encryptedSize, messageInfo.getLifeVersion());
         // If buffer was encrypted, we no longer know its size
         long bufferLen = (encryptedSize == -1) ? size : encryptedSize;
         InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
@@ -494,10 +494,10 @@ class CloudBlobStore implements Store {
   /**
    * Check the blob state in the recent blob cache against one or more desired states and life version.
    * @param blobKey the blob key to lookup.
-   * @param lifeVersion the desired state(s) to check.  If empty, any cached state is accepted.
-   * @param desiredStates true if the blob key is in the cache in one of the desired states and has appropriate life
-   *                      version, otherwise false.
-   * @return true if the blob key is in the cache in one of the desired states, otherwise false.
+   * @param lifeVersion the life version to check.
+   * @param desiredStates the desired state(s) to check. If empty, any cached state is accepted.
+   * @return true if the blob key is in the cache in one of the desired states and has appropriate life
+   * version, otherwise false.
    */
   private boolean checkCacheState(String blobKey, short lifeVersion, BlobState... desiredStates) {
     if (isVcr) {
@@ -537,8 +537,7 @@ class CloudBlobStore implements Store {
         // In case of ttl update we update the ttl without taking into account the life version.
         // So make sure that we do not decrease the lifeVersion in cache due to an incoming ttl update.
         if (recentBlobCache.containsKey(blobKey)) {
-          lifeVersion = (lifeVersion > recentBlobCache.get(blobKey).getLifeVersion()) ? lifeVersion
-              : recentBlobCache.get(blobKey).getLifeVersion();
+          lifeVersion = (short) Math.max(lifeVersion, recentBlobCache.get(blobKey).getLifeVersion());
         }
       }
       recentBlobCache.put(blobKey, new BlobLifeState(blobState, lifeVersion, recentBlobCache.get(blobKey)));
