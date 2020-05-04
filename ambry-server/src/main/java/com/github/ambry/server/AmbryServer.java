@@ -208,10 +208,9 @@ public class AmbryServer {
       }
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
-      ServerMetrics serverMetrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class, clusterMap);
       requests = new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId,
-          registry, serverMetrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory,
-          serverConfig, storeKeyConverterFactory, statsManager);
+          registry, metrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
+          storeKeyConverterFactory, statsManager);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
@@ -225,7 +224,7 @@ public class AmbryServer {
         RestRequestService restRequestService = new StorageRestRequestService(requestResponseChannel);
 
         AmbryServerRequests ambryServerRequestsForHttp2 =
-            new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics,
+            new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
                 findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
                 storeKeyConverterFactory, statsManager);
         requestHandlerPoolForHttp2 =
