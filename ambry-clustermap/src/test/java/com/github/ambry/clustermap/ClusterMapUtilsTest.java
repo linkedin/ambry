@@ -155,6 +155,18 @@ public class ClusterMapUtilsTest {
             maxReplicasAllSites, new HashSet<>(Arrays.asList(everywhere1, everywhere2)), dc);
       }
     }
+    // additional test: ensure getRandomWritablePartition now honors replica state for PUT request
+    psh = new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, dc1, minimumLocalReplicaCount);
+    ReplicaId replicaId = everywhere1.getReplicaIds()
+        .stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(dc1))
+        .findFirst()
+        .get();
+    // make one of local replicas OFFLINE for everywhere1
+    everywhere1.setReplicaState(replicaId, ReplicaState.OFFLINE);
+    // remove some partitions that have 3 eligible replicas in DC1
+    assertEquals("The partition selection helper should choose everywhere2", everywhere2,
+        psh.getRandomWritablePartition(maxReplicasAllSites, null));
   }
 
   /**
@@ -321,15 +333,15 @@ public class ClusterMapUtilsTest {
    * @param classBeingTested the partition class being tested
    * @param testedPart1 a partition in {@code classBeingTested}
    * @param testedPart2 another partition in {@code classBeingTested}
-   * @param classsNotBeingTested a partition class is not being tested (to check that changes to partitions in
+   * @param classNotBeingTested a partition class is not being tested (to check that changes to partitions in
    * {@code classBeingTested} aren't affected).
    * @param expectedReturnForClassNotBeingTested the list of partitions that can expected to be returned for
-   *                                             {@code classsNotBeingTested}.
+   *                                             {@code classNotBeingTested}.
    * @param localDc the local dc name.
    */
   private void verifyWritablePartitionsReturned(ClusterMapUtils.PartitionSelectionHelper psh,
       Set<MockPartitionId> allPartitionIds, String classBeingTested, MockPartitionId testedPart1,
-      MockPartitionId testedPart2, String classsNotBeingTested,
+      MockPartitionId testedPart2, String classNotBeingTested,
       Set<MockPartitionId> expectedReturnForClassNotBeingTested, String localDc) {
     Set<MockPartitionId> expectedReturnForClassBeingTested = new HashSet<>(Arrays.asList(testedPart1, testedPart2));
     // no problematic scenarios
@@ -366,7 +378,7 @@ public class ClusterMapUtilsTest {
 
     if (expectedReturnForClassNotBeingTested != null) {
       assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassNotBeingTested,
-          psh.getWritablePartitions(classsNotBeingTested));
+          psh.getWritablePartitions(classNotBeingTested));
     }
 
     ((MockReplicaId) testedPart1.getReplicaIds().get(0)).markReplicaDownStatus(false);
@@ -391,7 +403,7 @@ public class ClusterMapUtilsTest {
 
     if (expectedReturnForClassNotBeingTested != null) {
       assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassNotBeingTested,
-          psh.getWritablePartitions(classsNotBeingTested));
+          psh.getWritablePartitions(classNotBeingTested));
     }
 
     //cleanup the cluster map
