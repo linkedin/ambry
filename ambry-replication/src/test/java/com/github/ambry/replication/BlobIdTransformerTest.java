@@ -54,6 +54,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
@@ -656,6 +657,10 @@ public class BlobIdTransformerTest {
 
     public String getDatacenterName(byte b) {
       return null;
+    }
+
+    public Set<String> getAllDatacenterNames() {
+      return Collections.emptySet();
     }
 
     public DataNodeId getDataNodeId(String s, int i) {

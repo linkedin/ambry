@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
+import java.util.Set;
 import org.json.JSONObject;
 
 
@@ -44,7 +45,7 @@ public interface ClusterMap extends AutoCloseable {
   /**
    * Get a writable partition chosen at random that belongs to given partitionclass.
    * @param partitionClass the partition class whose writable partitions are required. Can be {@code null}
-   * @param partitionsToExclude list of partitions that shouldnt be considered as a possible partition returned
+   * @param partitionsToExclude list of partitions that shouldn't be considered as a possible partition returned
    * @return chosen random partition. Can be {@code null}
    */
   PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude);
@@ -78,6 +79,11 @@ public interface ClusterMap extends AutoCloseable {
    * @return name of the datacenter from the ID or null if not found.
    */
   String getDatacenterName(byte id);
+
+  /**
+   * @return all datacenter names in the cluster.
+   */
+  Set<String> getAllDatacenterNames();
 
   /**
    * Gets a specific DataNodeId by its hostname and port.

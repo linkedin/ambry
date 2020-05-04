@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,6 +101,11 @@ public class RecoveryTestClusterManager implements ClusterMap {
   public String getDatacenterName(byte id) {
     String dcName = staticClusterManager.getDatacenterName(id);
     return (dcName != null) ? dcName : helixClusterManager.getDatacenterName(id);
+  }
+
+  @Override
+  public Set<String> getAllDatacenterNames() {
+    return staticClusterManager.getAllDatacenterNames();
   }
 
   /**

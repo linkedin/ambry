@@ -272,6 +272,11 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   @Override
+  public Set<String> getAllDatacenterNames() {
+    return dcToDcInfo.keySet();
+  }
+
+  @Override
   public AmbryDataNode getDataNodeId(String hostname, int port) {
     String instanceName = getInstanceName(hostname, port);
     AmbryDataNode dataNode = null;

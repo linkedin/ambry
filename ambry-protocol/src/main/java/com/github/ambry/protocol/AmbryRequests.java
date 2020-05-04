@@ -266,9 +266,8 @@ public class AmbryRequests implements RequestAPI {
     long startTime = SystemTime.getInstance().milliseconds();
     GetResponse response = null;
     try {
-      List<Send> messagesToSendList = new ArrayList<Send>(getRequest.getPartitionInfoList().size());
-      List<PartitionResponseInfo> partitionResponseInfoList =
-          new ArrayList<PartitionResponseInfo>(getRequest.getPartitionInfoList().size());
+      List<Send> messagesToSendList = new ArrayList<>(getRequest.getPartitionInfoList().size());
+      List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<>(getRequest.getPartitionInfoList().size());
       for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
         ServerErrorCode error =
             validateRequest(partitionRequestInfo.getPartition(), RequestOrResponseType.GetRequest, false);
@@ -368,6 +367,14 @@ public class AmbryRequests implements RequestAPI {
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
         if (isReplicaRequest) {
           metrics.getBlobAllByReplicaProcessingTimeInMs.update(processingTime);
+          // client id now has dc name at the end, for example: ClientId=replication-fetch-abc.example.com[dc1]
+          String[] clientStrs = getRequest.getClientId().split("\\[");
+          if (clientStrs.length > 1) {
+            String clientDc = clientStrs[1].substring(0, clientStrs[1].length() - 1);
+            if (!currentNode.getDatacenterName().equals(clientDc)) {
+              metrics.crossColoFetchBytesRate.get(clientDc).mark(response.sizeInBytes());
+            }
+          }
         } else {
           metrics.getBlobAllProcessingTimeInMs.update(processingTime);
           metrics.updateGetBlobProcessingTimeBySize(response.sizeInBytes(), processingTime);
@@ -540,8 +547,7 @@ public class AmbryRequests implements RequestAPI {
     long startTimeInMs = SystemTime.getInstance().milliseconds();
     ReplicaMetadataResponse response = null;
     try {
-      List<ReplicaMetadataResponseInfo> replicaMetadataResponseList =
-          new ArrayList<ReplicaMetadataResponseInfo>(partitionCnt);
+      List<ReplicaMetadataResponseInfo> replicaMetadataResponseList = new ArrayList<>(partitionCnt);
       for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
         long partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
         PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
@@ -625,6 +631,14 @@ public class AmbryRequests implements RequestAPI {
       publicAccessLogger.info("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
       logger.trace("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
       metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);
+      // client id now has dc name at the end, for example: ClientId=replication-metadata-abc.example.com[dc1]
+      String[] clientStrs = replicaMetadataRequest.getClientId().split("\\[");
+      if (clientStrs.length > 1) {
+        String clientDc = clientStrs[1].substring(0, clientStrs[1].length() - 1);
+        if (!currentNode.getDatacenterName().equals(clientDc)) {
+          metrics.crossColoMetadataExchangeBytesRate.get(clientDc).mark(response.sizeInBytes());
+        }
+      }
     }
 
     requestResponseChannel.sendResponse(response, request,

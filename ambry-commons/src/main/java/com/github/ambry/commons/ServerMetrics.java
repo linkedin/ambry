@@ -17,6 +17,10 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -211,12 +215,14 @@ public class ServerMetrics {
   public final Counter ttlAlreadyUpdatedError;
   public final Counter ttlUpdateRejectedError;
   public final Counter replicationResponseMessageSizeTooHigh;
+  public final Map<String, Meter> crossColoFetchBytesRate = new HashMap<>();
+  public final Map<String, Meter> crossColoMetadataExchangeBytesRate = new HashMap<>();
 
   public ServerMetrics(MetricRegistry registry, Class<?> requestClass) {
-    this(registry, requestClass, null);
+    this(registry, requestClass, null, null);
   }
 
-  public ServerMetrics(MetricRegistry registry, Class<?> requestClass, Class<?> serverClass) {
+  public ServerMetrics(MetricRegistry registry, Class<?> requestClass, Class<?> serverClass, ClusterMap clusterMap) {
     putBlobRequestQueueTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobRequestQueueTime"));
     putBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobProcessingTime"));
     putBlobResponseQueueTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobResponseQueueTime"));
@@ -473,6 +479,17 @@ public class ServerMetrics {
     ttlUpdateRejectedError = registry.counter(MetricRegistry.name(requestClass, "TtlUpdateRejectedError"));
     replicationResponseMessageSizeTooHigh =
         registry.counter(MetricRegistry.name(requestClass, "ReplicationResponseMessageSizeTooHigh"));
+    if (clusterMap != null) {
+      Set<String> dcNames = clusterMap.getAllDatacenterNames();
+      String localDc = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+      dcNames.remove(localDc);
+      for (String dcName : dcNames) {
+        crossColoFetchBytesRate.put(dcName,
+            registry.meter(MetricRegistry.name(requestClass, dcName + "-CrossColoFetchBytesRate")));
+        crossColoMetadataExchangeBytesRate.put(dcName,
+            registry.meter(MetricRegistry.name(requestClass, dcName + "-CrossColoMetadataExchangeBytesRate")));
+      }
+    }
   }
 
   /**

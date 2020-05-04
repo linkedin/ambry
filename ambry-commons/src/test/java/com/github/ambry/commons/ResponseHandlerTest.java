@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -90,6 +91,11 @@ public class ResponseHandlerTest {
     @Override
     public String getDatacenterName(byte id) {
       return null;
+    }
+
+    @Override
+    public Set<String> getAllDatacenterNames() {
+      return Collections.emptySet();
     }
 
     @Override

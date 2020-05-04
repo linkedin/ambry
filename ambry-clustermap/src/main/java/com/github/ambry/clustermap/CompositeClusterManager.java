@@ -178,6 +178,11 @@ class CompositeClusterManager implements ClusterMap {
     return dcName;
   }
 
+  @Override
+  public Set<String> getAllDatacenterNames() {
+    return staticClusterManager.getAllDatacenterNames();
+  }
+
   /**
    * Return the {@link DataNodeId} associated with the given hostname and port in the underlying
    * {@link StaticClusterManager}.

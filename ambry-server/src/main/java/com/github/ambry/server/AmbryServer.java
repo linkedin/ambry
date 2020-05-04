@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.ClusterSpectator;
 import com.github.ambry.clustermap.ClusterSpectatorFactory;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
@@ -51,7 +52,6 @@ import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
-import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
 import com.github.ambry.rest.RestRequestHandler;
@@ -137,7 +137,7 @@ public class AmbryServer {
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
-      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
+      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class, clusterMap);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 
@@ -208,7 +208,7 @@ public class AmbryServer {
       }
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
-      ServerMetrics serverMetrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
+      ServerMetrics serverMetrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class, clusterMap);
       requests = new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId,
           registry, serverMetrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory,
           serverConfig, storeKeyConverterFactory, statsManager);
