@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
-import java.util.Set;
 import org.json.JSONObject;
 
 
@@ -79,11 +78,6 @@ public interface ClusterMap extends AutoCloseable {
    * @return name of the datacenter from the ID or null if not found.
    */
   String getDatacenterName(byte id);
-
-  /**
-   * @return all datacenter names in the cluster.
-   */
-  Set<String> getAllDatacenterNames();
 
   /**
    * Gets a specific DataNodeId by its hostname and port.

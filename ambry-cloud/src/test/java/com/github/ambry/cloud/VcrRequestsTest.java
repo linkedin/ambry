@@ -68,7 +68,7 @@ public class VcrRequestsTest {
     FindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
     StoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     ServerMetrics serverMetrics =
-        new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, this.getClass(), null);
+        new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, this.getClass());
 
     CloudDestination cloudDestination = new LatchBasedInMemoryCloudDestination(Collections.emptyList());
     StoreManager storeManager =

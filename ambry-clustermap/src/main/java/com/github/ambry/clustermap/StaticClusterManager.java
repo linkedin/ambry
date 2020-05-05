@@ -117,13 +117,6 @@ class StaticClusterManager implements ClusterMap {
   }
 
   @Override
-  public Set<String> getAllDatacenterNames() {
-    Set<String> dcNames = new HashSet<>();
-    hardwareLayout.getDatacenters().forEach(dc -> dcNames.add(dc.getName()));
-    return dcNames;
-  }
-
-  @Override
   public DataNodeId getDataNodeId(String hostname, int port) {
     return hardwareLayout.findDataNode(hostname, port);
   }

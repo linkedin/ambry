@@ -31,7 +31,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -94,11 +93,6 @@ public class ResponseHandlerTest {
     }
 
     @Override
-    public Set<String> getAllDatacenterNames() {
-      return Collections.emptySet();
-    }
-
-    @Override
     public DataNodeId getDataNodeId(String hostname, int port) {
       return null;
     }
@@ -145,10 +139,6 @@ public class ResponseHandlerTest {
     public void reset() {
       lastReplicaID = null;
       lastReplicaEvents.clear();
-    }
-
-    public ReplicaId getLastReplicaID() {
-      return lastReplicaID;
     }
 
     public Set<ReplicaEventType> getLastReplicaEvents() {

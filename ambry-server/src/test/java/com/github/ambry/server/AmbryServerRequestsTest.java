@@ -171,7 +171,7 @@ public class AmbryServerRequestsTest {
         new MockStatsManager(storageManager, clusterMap.getReplicaIds(dataNodeId), clusterMap.getMetricRegistry(),
             statsManagerConfig, null);
     serverMetrics =
-        new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class, clusterMap);
+        new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
         storeKeyConverterFactory, statsManager);
@@ -801,7 +801,7 @@ public class AmbryServerRequestsTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     ServerConfig serverConfig = new ServerConfig(verifiableProperties);
     ServerMetrics serverMetrics =
-        new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class, null);
+        new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     AmbryServerRequests other = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
         storeKeyConverterFactory, statsManager);

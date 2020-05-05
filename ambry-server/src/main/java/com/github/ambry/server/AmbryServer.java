@@ -137,7 +137,7 @@ public class AmbryServer {
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
-      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class, clusterMap);
+      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 

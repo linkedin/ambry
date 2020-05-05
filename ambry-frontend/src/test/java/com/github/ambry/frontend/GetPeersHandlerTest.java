@@ -339,11 +339,6 @@ class TailoredPeersClusterMap implements ClusterMap {
   }
 
   @Override
-  public Set<String> getAllDatacenterNames() {
-    return Collections.singleton(DC_NAME);
-  }
-
-  @Override
   public DataNodeId getDataNodeId(String hostname, int port) {
     if (exceptionToThrow != null) {
       throw exceptionToThrow;

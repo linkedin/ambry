@@ -372,7 +372,7 @@ public class AmbryRequests implements RequestAPI {
           if (clientStrs.length > 1) {
             String clientDc = clientStrs[1].substring(0, clientStrs[1].length() - 1);
             if (!currentNode.getDatacenterName().equals(clientDc)) {
-              metrics.crossColoFetchBytesRate.get(clientDc).mark(response.sizeInBytes());
+              metrics.updateCrossColoFetchBytesRate(clientDc, response.sizeInBytes());
             }
           }
         } else {
@@ -636,7 +636,7 @@ public class AmbryRequests implements RequestAPI {
       if (clientStrs.length > 1) {
         String clientDc = clientStrs[1].substring(0, clientStrs[1].length() - 1);
         if (!currentNode.getDatacenterName().equals(clientDc)) {
-          metrics.crossColoMetadataExchangeBytesRate.get(clientDc).mark(response.sizeInBytes());
+          metrics.updateCrossColoMetadataExchangeBytesRate(clientDc, response.sizeInBytes());
         }
       }
     }
