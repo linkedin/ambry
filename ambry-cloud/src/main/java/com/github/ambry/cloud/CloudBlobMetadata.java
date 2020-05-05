@@ -53,6 +53,7 @@ public class CloudBlobMetadata {
   public static final String FIELD_CRYPTO_AGENT_FACTORY = "cryptoAgentFactory";
   public static final String FIELD_ENCRYPTED_SIZE = "encryptedSize";
   public static final String FIELD_NAME_SCHEME_VERSION = "nameSchemeVersion";
+  public static final String FIELD_LIFE_VERSION = "lifeVersion";
 
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -70,6 +71,7 @@ public class CloudBlobMetadata {
   private String vcrKmsContext;
   private String cryptoAgentFactory;
   private long encryptedSize;
+  private short lifeVersion;
   // this field is derived from the system generated last Update Time in the cloud db
   // and hence shouldn't be serializable.
   @JsonIgnore
@@ -105,7 +107,7 @@ public class CloudBlobMetadata {
    */
   public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
       EncryptionOrigin encryptionOrigin) {
-    this(blobId, creationTime, expirationTime, size, encryptionOrigin, null, null, 0);
+    this(blobId, creationTime, expirationTime, size, encryptionOrigin, null, null, 0, (short) 0);
   }
 
   /**
@@ -122,7 +124,8 @@ public class CloudBlobMetadata {
    *                      Only used when encryptionOrigin = VCR.
    */
   public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
-      EncryptionOrigin encryptionOrigin, String vcrKmsContext, String cryptoAgentFactory, long encryptedSize) {
+      EncryptionOrigin encryptionOrigin, String vcrKmsContext, String cryptoAgentFactory, long encryptedSize,
+      short lifeVersion) {
     this.id = blobId.getID();
     this.partitionId = blobId.getPartition().toPathString();
     this.accountId = blobId.getAccountId();
@@ -137,6 +140,7 @@ public class CloudBlobMetadata {
     this.cryptoAgentFactory = cryptoAgentFactory;
     this.encryptedSize = encryptedSize;
     this.lastUpdateTime = System.currentTimeMillis();
+    this.lifeVersion = lifeVersion;
   }
 
   /**
@@ -388,6 +392,21 @@ public class CloudBlobMetadata {
   }
 
   /**
+   * @return the life version of the blob.
+   */
+  public short getLifeVersion() {
+    return lifeVersion;
+  }
+
+  /**
+   * Sets the life version of the blob.
+   * @param lifeVersion life version.
+   */
+  public void setLifeVersion(short lifeVersion) {
+    this.lifeVersion = lifeVersion;
+  }
+
+  /**
    * Utility to cap specified {@link CloudBlobMetadata} list by specified size of its blobs.
    * Always returns at least one metadata object irrespective of size.
    * @param originalList List of {@link CloudBlobMetadata}.
@@ -416,7 +435,8 @@ public class CloudBlobMetadata {
    * @return true if this blob is deleted or expired, otherwise false.
    */
   public boolean isDeletedOrExpired() {
-    return (expirationTime != Utils.Infinite_Time && expirationTime < System.currentTimeMillis()) || deletionTime != Utils.Infinite_Time;
+    return (expirationTime != Utils.Infinite_Time && expirationTime < System.currentTimeMillis())
+        || deletionTime != Utils.Infinite_Time;
   }
 
   @Override
@@ -430,7 +450,7 @@ public class CloudBlobMetadata {
         && uploadTime == om.uploadTime && expirationTime == om.expirationTime && deletionTime == om.deletionTime
         && nameSchemeVersion == om.nameSchemeVersion && encryptionOrigin == om.encryptionOrigin && Objects.equals(
         vcrKmsContext, om.vcrKmsContext) && Objects.equals(cryptoAgentFactory, om.cryptoAgentFactory)
-        && encryptedSize == om.encryptedSize);
+        && encryptedSize == om.encryptedSize && lifeVersion == om.lifeVersion);
   }
 
   /**
@@ -482,6 +502,9 @@ public class CloudBlobMetadata {
       }
       if (value.nameSchemeVersion > 0) {
         gen.writeNumberField(FIELD_NAME_SCHEME_VERSION, value.nameSchemeVersion);
+      }
+      if (value.lifeVersion > 0) {
+        gen.writeNumberField(FIELD_LIFE_VERSION, value.lifeVersion);
       }
       // Encryption fields that may or may not apply
       if (value.encryptionOrigin != null && value.encryptionOrigin != EncryptionOrigin.NONE) {

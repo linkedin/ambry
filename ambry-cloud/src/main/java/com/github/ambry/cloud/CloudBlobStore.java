@@ -67,7 +67,8 @@ class CloudBlobStore implements Store {
   private static final Logger logger = LoggerFactory.getLogger(CloudBlobStore.class);
   private static final int cacheInitialCapacity = 1000;
   private static final float cacheLoadFactor = 0.75f;
-  private static final int STATUS_NOT_FOUND = 404;
+  static final int STATUS_NOT_FOUND = 404;
+  private static final short IGNORE_LIFE_VERSION = -2;
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
   private final ClusterMap clusterMap;
@@ -77,7 +78,7 @@ class CloudBlobStore implements Store {
   private final VcrMetrics vcrMetrics;
 
   // Map blobId to state (created, ttlUpdated, deleted)
-  private final Map<String, BlobState> recentBlobCache;
+  private final Map<String, BlobLifeState> recentBlobCache;
   private final long minTtlMillis;
   private final boolean requireEncryption;
   // For live serving mode, implement retries and disable caching
@@ -300,7 +301,7 @@ class CloudBlobStore implements Store {
         CloudBlobMetadata blobMetadata =
             new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
                 messageInfo.getSize(), EncryptionOrigin.VCR, cryptoAgent.getEncryptionContext(),
-                cryptoAgentFactory.getClass().getName(), encryptedSize);
+                cryptoAgentFactory.getClass().getName(), encryptedSize, messageInfo.getLifeVersion());
         // If buffer was encrypted, we no longer know its size
         long bufferLen = (encryptedSize == -1) ? size : encryptedSize;
         InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
@@ -316,7 +317,7 @@ class CloudBlobStore implements Store {
         requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, size, blobMetadata, uploadInputStream),
             "Upload", partitionId.toPathString());
       }
-      addToCache(blobId.getID(), BlobState.CREATED);
+      addToCache(blobId.getID(), (short) 0, BlobState.CREATED);
     } else {
       logger.trace("Blob is skipped: {}", messageInfo);
       vcrMetrics.blobUploadSkippedCount.inc();
@@ -367,8 +368,8 @@ class CloudBlobStore implements Store {
       for (MessageInfo msgInfo : infos) {
         BlobId blobId = (BlobId) msgInfo.getStoreKey();
         // If the cache has been updated by another thread, retry may be avoided
-        requestAgent.doWithRetries(() -> deleteIfNeeded(blobId, msgInfo.getOperationTimeMs()), "Delete",
-            partitionId.toPathString());
+        requestAgent.doWithRetries(() -> deleteIfNeeded(blobId, msgInfo.getOperationTimeMs(), msgInfo.getLifeVersion()),
+            "Delete", partitionId.toPathString());
       }
     } catch (CloudStorageException ex) {
       StoreErrorCodes errorCode =
@@ -381,16 +382,17 @@ class CloudBlobStore implements Store {
    * Delete the specified blob if needed depending on the cache state.
    * @param blobId the blob to delete
    * @param deletionTime the deletion time
+   * @param lifeVersion life version of the blob.
    * @return whether the deletion was performed
    * @throws CloudStorageException
    */
-  private boolean deleteIfNeeded(BlobId blobId, long deletionTime) throws CloudStorageException {
+  private boolean deleteIfNeeded(BlobId blobId, long deletionTime, short lifeVersion) throws CloudStorageException {
     String blobKey = blobId.getID();
     // Note: always check cache before operation attempt, since this could be a retry after a CONFLICT error,
     // in which case the cache may have been updated by another thread.
-    if (!checkCacheState(blobKey, BlobState.DELETED)) {
-      boolean deleted = cloudDestination.deleteBlob(blobId, deletionTime);
-      addToCache(blobKey, BlobState.DELETED);
+    if (!checkCacheState(blobKey, lifeVersion, BlobState.DELETED)) {
+      boolean deleted = cloudDestination.deleteBlob(blobId, deletionTime, lifeVersion);
+      addToCache(blobKey, lifeVersion, BlobState.DELETED);
       return deleted;
     }
     return false;
@@ -398,7 +400,34 @@ class CloudBlobStore implements Store {
 
   @Override
   public short undelete(MessageInfo info) throws StoreException {
-    throw new UnsupportedOperationException("Undelete not supported in cloud store");
+    checkStarted();
+    try {
+      return requestAgent.doWithRetries(() -> undeleteIfNeeded((BlobId) info.getStoreKey(), info.getLifeVersion()),
+          "Undelete", partitionId.toPathString());
+    } catch (CloudStorageException cex) {
+      StoreErrorCodes errorCode =
+          (cex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
+      throw new StoreException(cex, errorCode);
+    }
+  }
+
+  /**
+   * Undelete the specified blob if needed depending on the cache state.
+   * @param blobId the blob to delete.
+   * @param lifeVersion life version of the deleted blob.
+   * @return final updated life version of the blob.
+   * @throws CloudStorageException in case any exception happens during undelete.
+   */
+  private short undeleteIfNeeded(BlobId blobId, short lifeVersion) throws CloudStorageException {
+    // TODO: Currently this is implemented for undeletes via replication only for DR.
+    // See note in deleteIfNeeded.
+    if (!checkCacheState(blobId.getID(), lifeVersion, BlobState.CREATED)) {
+      short newLifeVersion = cloudDestination.undeleteBlob(blobId, lifeVersion);
+      addToCache(blobId.getID(), newLifeVersion, BlobState.CREATED);
+      return newLifeVersion;
+    }
+    // this means we found a blob in the cache in correct state and with the same lifeVersion as requested.
+    return lifeVersion;
   }
 
   /**
@@ -442,7 +471,10 @@ class CloudBlobStore implements Store {
     // See note in deleteIfNeeded.
     if (!checkCacheState(blobKey, BlobState.TTL_UPDATED, BlobState.DELETED)) {
       boolean updated = cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time);
-      addToCache(blobKey, BlobState.TTL_UPDATED);
+      // We do not have the definitive value of life version here. So we add to cache with minimum valid value.
+      // If the key is present in cache, then correct life version will be updated. (see method {@link addToCache}).
+      // If not then in worst case, the cache might let some operations with higher life version go through again.
+      addToCache(blobKey, (short) 0, BlobState.TTL_UPDATED);
       return updated;
     }
     return false;
@@ -450,13 +482,26 @@ class CloudBlobStore implements Store {
 
   /**
    * Check the blob state in the recent blob cache against one or more desired states.
+   * Note that this check ignores the life version of the blob.
    * @param blobKey the blob key to lookup.
    * @param desiredStates the desired state(s) to check.  If empty, any cached state is accepted.
    * @return true if the blob key is in the cache in one of the desired states, otherwise false.
    */
   private boolean checkCacheState(String blobKey, BlobState... desiredStates) {
+    return checkCacheState(blobKey, IGNORE_LIFE_VERSION, desiredStates);
+  }
+
+  /**
+   * Check the blob state in the recent blob cache against one or more desired states and life version.
+   * @param blobKey the blob key to lookup.
+   * @param lifeVersion the life version to check.
+   * @param desiredStates the desired state(s) to check. If empty, any cached state is accepted.
+   * @return true if the blob key is in the cache in one of the desired states and has appropriate life
+   * version, otherwise false.
+   */
+  private boolean checkCacheState(String blobKey, short lifeVersion, BlobState... desiredStates) {
     if (isVcr) {
-      BlobState cachedState = recentBlobCache.get(blobKey);
+      BlobLifeState cachedState = recentBlobCache.get(blobKey);
       vcrMetrics.blobCacheLookupCount.inc();
       if (cachedState == null) {
         return false;
@@ -466,7 +511,9 @@ class CloudBlobStore implements Store {
         return true;
       }
       for (BlobState desiredState : desiredStates) {
-        if (desiredState == cachedState) {
+        if ((desiredState == cachedState.getBlobState() && (lifeVersion == IGNORE_LIFE_VERSION
+            || lifeVersion <= cachedState.getLifeVersion()))
+            || desiredState == BlobState.TTL_UPDATED && cachedState.isTtlUpdated()) {
           vcrMetrics.blobCacheHitCount.inc();
           return true;
         }
@@ -480,12 +527,20 @@ class CloudBlobStore implements Store {
   /**
    * Add a blob state mapping to the recent blob cache.
    * @param blobKey the blob key to cache.
+   * @param lifeVersion life version to cache.
    * @param blobState the state of the blob.
    */
-  // Visible for test
-  void addToCache(String blobKey, BlobState blobState) {
+  // Visible for test.
+  void addToCache(String blobKey, short lifeVersion, BlobState blobState) {
     if (isVcr) {
-      recentBlobCache.put(blobKey, blobState);
+      if (blobState == BlobState.TTL_UPDATED) {
+        // In case of ttl update we update the ttl without taking into account the life version.
+        // So make sure that we do not decrease the lifeVersion in cache due to an incoming ttl update.
+        if (recentBlobCache.containsKey(blobKey)) {
+          lifeVersion = (short) Math.max(lifeVersion, recentBlobCache.get(blobKey).getLifeVersion());
+        }
+      }
+      recentBlobCache.put(blobKey, new BlobLifeState(blobState, lifeVersion, recentBlobCache.get(blobKey)));
     }
   }
 
@@ -561,7 +616,7 @@ class CloudBlobStore implements Store {
 
     // TODO: isKeyDeleted isn't reliable for determining if the blob is deleted or not. Fix it later.
     return new MessageInfo(key, 0, isKeyDeleted(key), false, false, Utils.Infinite_Time, null,
-        ((BlobId) key).getAccountId(), ((BlobId) key).getContainerId(), (long) 0, (short) 0);
+        ((BlobId) key).getAccountId(), ((BlobId) key).getContainerId(), 0, (short) 0);
   }
 
   @Override
@@ -671,8 +726,52 @@ class CloudBlobStore implements Store {
     return "PartitionId: " + partitionId.toPathString() + " in the cloud";
   }
 
-  /** The lifecycle state of a recently seen blob. */
+  /** The state of a blob. */
   enum BlobState {CREATED, TTL_UPDATED, DELETED}
+
+  /** The lifecycle state of a recently seen blob. */
+  class BlobLifeState {
+
+    private final BlobState blobState;
+    private final short lifeVersion;
+    // this helps with duplicate ttl update requests for same blob.
+    private final boolean isTtlUpdated;
+
+    /**
+     * Constructor for {@link BlobLifeState}.
+     * @param blobState {@link BlobState} of the blob.
+     * @param lifeVersion life version of the blob.
+     * @param previousBlobLifeState previous life state of the blob to check is blob's ttl was updated previously.
+     *                              can be null.
+     */
+    BlobLifeState(BlobState blobState, short lifeVersion, BlobLifeState previousBlobLifeState) {
+      this.blobState = blobState;
+      this.lifeVersion = lifeVersion;
+      this.isTtlUpdated =
+          (blobState == BlobState.TTL_UPDATED) || (previousBlobLifeState != null && previousBlobLifeState.isTtlUpdated);
+    }
+
+    /**
+     * @return {@link BlobState} of the blob.
+     */
+    public BlobState getBlobState() {
+      return blobState;
+    }
+
+    /**
+     * @return life version of the blob.
+     */
+    public short getLifeVersion() {
+      return lifeVersion;
+    }
+
+    /**
+     * @return ttl update status.
+     */
+    public boolean isTtlUpdated() {
+      return isTtlUpdated;
+    }
+  }
 
   /** A {@link Write} implementation used by this store to write data. */
   private class CloudWriteChannel implements Write {
@@ -721,7 +820,7 @@ class CloudBlobStore implements Store {
   /**
    * A local LRA cache of recent blobs processed by this store.
    */
-  private class RecentBlobCache extends LinkedHashMap<String, BlobState> {
+  private class RecentBlobCache extends LinkedHashMap<String, BlobLifeState> {
     private final int maxEntries;
 
     public RecentBlobCache(int maxEntries) {
@@ -731,7 +830,7 @@ class CloudBlobStore implements Store {
     }
 
     @Override
-    protected boolean removeEldestEntry(Map.Entry<String, BlobState> eldest) {
+    protected boolean removeEldestEntry(Map.Entry<String, BlobLifeState> eldest) {
       return (this.size() > maxEntries);
     }
   }
