@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Callback;
@@ -658,7 +659,8 @@ public class NettyResponseChannelTest {
     EmbeddedChannel channel = new EmbeddedChannel(chunkedWriteHandler);
     NettyResponseChannel nettyResponseChannel =
         new NettyResponseChannel(new MockChannelHandlerContext(channel), new NettyMetrics(new MetricRegistry()),
-            new PerformanceConfig(new VerifiableProperties(new Properties())));
+            new PerformanceConfig(new VerifiableProperties(new Properties())),
+            new NettyConfig(new VerifiableProperties(new Properties())));
     channel.disconnect().awaitUninterruptibly();
     assertFalse("Channel should be closed", channel.isOpen());
     Future<Long> future = nettyResponseChannel.write(Unpooled.buffer(1), null);
@@ -1082,6 +1084,34 @@ public class NettyResponseChannelTest {
       assertFalse(httpRequest.method() + " request should be unsatisfied", MockNettyRequest.mockTracker.isSatisfied());
     }
   }
+
+  /**
+   * Tests the invocation of DELAYED_CLOSE when post failures happen in {@link NettyResponseChannel}.
+   */
+  @Test
+  public void completeRequestWithDelayedCloseTest() throws Exception {
+    Properties properties = new Properties();
+    properties.setProperty(NettyConfig.NETTY_SERVER_CLOSE_DELAY_TIMEOUT_MS, "500");
+    NettyConfig nettyConfig  = new NettyConfig(new VerifiableProperties(properties));
+    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+    processor.setNettyConfig(nettyConfig);
+    ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
+    EmbeddedChannel channel = new EmbeddedChannel(chunkedWriteHandler, processor);
+
+    RestServiceErrorCode REST_ERROR_CODE = RestServiceErrorCode.BadRequest;
+    String content = "@@randomContent@@@";
+    HttpHeaders httpHeaders = new DefaultHttpHeaders();
+    httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, REST_ERROR_CODE);
+    httpHeaders.set(MockNettyMessageProcessor.INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME, "true");
+    HttpRequest httpRequest = RestTestUtils.createFullRequest(HttpMethod.POST,
+        TestingUri.OnResponseCompleteWithRestException.toString(), httpHeaders, content.getBytes());
+    channel.writeInbound(httpRequest);
+    HttpResponse response = (HttpResponse) channel.readOutbound();
+    assertEquals("Unexpected response status", getExpectedHttpResponseStatus(REST_ERROR_CODE), response.status());
+    //channel should not be closed right away.
+    Thread.sleep(1000);
+    assertTrue("Channel closed on the server", channel.isActive());
+  }
 }
 
 /**
@@ -1234,6 +1264,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   static final byte[] CHUNK = TestUtils.getRandomBytes(1024);
   static final String CHUNK_COUNT_HEADER_NAME = "chunkCount";
   static PerformanceConfig PERFORMANCE_CONFIG = new PerformanceConfig(new VerifiableProperties(new Properties()));
+  static NettyConfig NETTY_CONFIG  = new NettyConfig(new VerifiableProperties(new Properties()));
   static boolean useMockNettyRequest = false;
 
   // the write callbacks to verify if any. This is reset at the beginning of every request.
@@ -1243,6 +1274,11 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   private NettyRequest request;
   private NettyResponseChannel restResponseChannel;
   private NettyMetrics nettyMetrics;
+  private NettyConfig nettyConfig = NETTY_CONFIG;
+
+  public void setNettyConfig(NettyConfig nettyConfig) {
+    this.nettyConfig = nettyConfig;
+  }
 
   @Override
   public void channelActive(ChannelHandlerContext ctx) {
@@ -1278,7 +1314,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     request =
         useMockNettyRequest ? new MockNettyRequest(httpRequest, ctx.channel(), nettyMetrics, Collections.emptySet())
             : new NettyRequest(httpRequest, ctx.channel(), nettyMetrics, Collections.emptySet());
-    restResponseChannel = new NettyResponseChannel(ctx, nettyMetrics, PERFORMANCE_CONFIG);
+    restResponseChannel = new NettyResponseChannel(ctx, nettyMetrics, PERFORMANCE_CONFIG, this.nettyConfig);
     restResponseChannel.setRequest(request);
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
     TestingUri uri = TestingUri.getTestingURI(request.getUri());
@@ -1591,7 +1627,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
    */
   private void setRequestTest() throws RestServiceException {
     ResponseStatus status = ResponseStatus.Accepted;
-    restResponseChannel = new NettyResponseChannel(ctx, new NettyMetrics(new MetricRegistry()), PERFORMANCE_CONFIG);
+    restResponseChannel = new NettyResponseChannel(ctx, new NettyMetrics(new MetricRegistry()), PERFORMANCE_CONFIG, this.nettyConfig);
     try {
       try {
         restResponseChannel.setRequest(null);
