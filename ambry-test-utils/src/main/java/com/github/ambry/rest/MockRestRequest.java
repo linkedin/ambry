@@ -261,6 +261,11 @@ public class MockRestRequest implements RestRequest {
   }
 
   @Override
+  public RestRequestContext getRestRequestContext() {
+    return null;
+  }
+
+  @Override
   public boolean isOpen() {
     onEventComplete(Event.IsOpen);
     return channelOpen.get();

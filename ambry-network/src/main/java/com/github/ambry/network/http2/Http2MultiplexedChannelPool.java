@@ -95,22 +95,38 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
    */
   Http2MultiplexedChannelPool(InetSocketAddress inetSocketAddress, SSLFactory sslFactory, EventLoopGroup eventLoopGroup,
       Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics) {
-    this(new SimpleChannelPool(new Bootstrap().group(eventLoopGroup)
-            .channel(Epoll.isAvailable() ? EpollSocketChannel.class : NioSocketChannel.class)
-            .option(ChannelOption.SO_KEEPALIVE, true)
-            .option(ChannelOption.SO_RCVBUF, http2ClientConfig.nettyReceiveBufferSize)
-            .option(ChannelOption.SO_SNDBUF, http2ClientConfig.nettySendBufferSize)
-            // To honor http2 window size, WriteBufferWaterMark.high() should be greater or equal to http2 window size.
-            // Also see: https://github.com/netty/netty/issues/10193
-            .option(ChannelOption.WRITE_BUFFER_WATER_MARK,
-                new WriteBufferWaterMark(http2ClientConfig.http2InitialWindowSize,
-                    2 * http2ClientConfig.http2InitialWindowSize))
-            .remoteAddress(inetSocketAddress),
+    this(new SimpleChannelPool(createBootStrap(eventLoopGroup, http2ClientConfig, inetSocketAddress),
             new Http2ChannelPoolHandler(sslFactory, inetSocketAddress.getHostName(), inetSocketAddress.getPort(),
                 http2ClientConfig)), eventLoopGroup, ConcurrentHashMap.newKeySet(),
         http2ClientConfig.idleConnectionTimeoutMs, http2ClientConfig.http2MinConnectionPerPort,
         http2ClientConfig.http2MaxConcurrentStreamsPerConnection, http2ClientConfig.http2MaxContentLength,
         http2ClientMetrics);
+  }
+
+  /**
+   * @param inetSocketAddress IP Socket Address (IP address + port number).
+   * @param eventLoopGroup The event loop group.
+   * @param http2ClientConfig http2 client configs.
+   * @return {@link Bootstrap}
+   */
+  static private Bootstrap createBootStrap(EventLoopGroup eventLoopGroup, Http2ClientConfig http2ClientConfig,
+      InetSocketAddress inetSocketAddress) {
+    Bootstrap b = new Bootstrap().group(eventLoopGroup)
+        .channel(Epoll.isAvailable() ? EpollSocketChannel.class : NioSocketChannel.class)
+        .option(ChannelOption.SO_KEEPALIVE, true)
+        // To honor http2 window size, WriteBufferWaterMark.high() should be greater or equal to http2 window size.
+        // Also see: https://github.com/netty/netty/issues/10193
+        .option(ChannelOption.WRITE_BUFFER_WATER_MARK,
+            new WriteBufferWaterMark(http2ClientConfig.http2InitialWindowSize,
+                2 * http2ClientConfig.http2InitialWindowSize))
+        .remoteAddress(inetSocketAddress);
+    if (http2ClientConfig.nettyReceiveBufferSize != -1) {
+      b.option(ChannelOption.SO_RCVBUF, http2ClientConfig.nettyReceiveBufferSize);
+    }
+    if (http2ClientConfig.nettySendBufferSize != -1) {
+      b.option(ChannelOption.SO_SNDBUF, http2ClientConfig.nettySendBufferSize);
+    }
+    return b;
   }
 
   /**

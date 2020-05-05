@@ -17,6 +17,7 @@ package com.github.ambry.network;
 
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaType;
+import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -24,6 +25,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,17 +46,20 @@ public class CompositeNetworkClient implements NetworkClient {
    */
   private final Map<Integer, ReplicaType> correlationIdToReplicaType = new HashMap<>();
   private final EnumMap<ReplicaType, NetworkClient> childNetworkClients;
+  private final ExecutorService executor;
 
   /**
    * @param childNetworkClients a map from {@link ReplicaType} to {@link NetworkClient} to use for that type.
    */
   CompositeNetworkClient(EnumMap<ReplicaType, NetworkClient> childNetworkClients) {
     this.childNetworkClients = childNetworkClients;
+    this.executor = Executors.newFixedThreadPool(childNetworkClients.size());
   }
 
   @Override
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> allRequestsToSend, Set<Integer> allRequestsToDrop,
       int pollTimeoutMs) {
+    // prepare lists of requests to send and drop
     EnumMap<ReplicaType, List<RequestInfo>> requestsToSendByType = new EnumMap<>(ReplicaType.class);
     EnumMap<ReplicaType, Set<Integer>> requestsToDropByType = new EnumMap<>(ReplicaType.class);
     for (ReplicaType replicaType : childNetworkClients.keySet()) {
@@ -71,7 +81,11 @@ public class CompositeNetworkClient implements NetworkClient {
         requestsToDropByType.get(replicaType).add(correlationId);
       }
     }
-    List<ResponseInfo> responses = new ArrayList<>();
+
+    // send requests using child clients from background threads so that inactive clients do not block the other client
+    // from making progress.
+    AtomicBoolean wakeupCalled = new AtomicBoolean(false);
+    ArrayList<Future<List<ResponseInfo>>> sendAndPollFutures = new ArrayList<>(childNetworkClients.size());
     childNetworkClients.forEach((replicaType, client) -> {
       List<RequestInfo> requestsToSend = requestsToSendByType.get(replicaType);
       Set<Integer> requestsToDrop = requestsToDropByType.get(replicaType);
@@ -79,15 +93,34 @@ public class CompositeNetworkClient implements NetworkClient {
         logger.trace("replicaType={}, requestsToSend={}, requestsToDrop={}", replicaType, requestsToSend,
             requestsToDrop);
       }
-      List<ResponseInfo> childClientResponses = client.sendAndPoll(requestsToSend, requestsToDrop, pollTimeoutMs);
-      childClientResponses.forEach(responseInfo -> {
-        // clean up correlation ids for completed requests
-        if (responseInfo.getRequestInfo() != null) {
-          correlationIdToReplicaType.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
+      sendAndPollFutures.add(executor.submit(() -> {
+        List<ResponseInfo> childClientResponses = client.sendAndPoll(requestsToSend, requestsToDrop, pollTimeoutMs);
+        if (wakeupCalled.compareAndSet(false, true)) {
+          // the client that gets a response first can wake up the other clients so that they do not waste time waiting
+          // for the poll timeout to expire. This helps when one child client is very active and the others have very
+          // little activity.
+          childNetworkClients.values().stream().filter(c -> c != client).forEach(NetworkClient::wakeup);
         }
-        responses.add(responseInfo);
-      });
+        return childClientResponses;
+      }));
     });
+
+    // process responses returned by each child client
+    List<ResponseInfo> responses = new ArrayList<>();
+    for (Future<List<ResponseInfo>> future : sendAndPollFutures) {
+      try {
+        List<ResponseInfo> responseInfoList = future.get();
+        for (ResponseInfo responseInfo : responseInfoList) {
+          // clean up correlation ids for completed requests
+          if (responseInfo.getRequestInfo() != null) {
+            correlationIdToReplicaType.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
+          }
+          responses.add(responseInfo);
+        }
+      } catch (InterruptedException | ExecutionException e) {
+        logger.error("Hit unexpected exception on parallel sendAndPoll.", e);
+      }
+    }
     return responses;
   }
 
@@ -109,5 +142,6 @@ public class CompositeNetworkClient implements NetworkClient {
   @Override
   public void close() {
     childNetworkClients.values().forEach(NetworkClient::close);
+    Utils.shutDownExecutorService(executor, 1, TimeUnit.MINUTES);
   }
 }

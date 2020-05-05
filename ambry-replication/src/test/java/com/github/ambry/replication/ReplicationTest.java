@@ -233,7 +233,7 @@ public class ReplicationTest {
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null);
+            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null, null);
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
@@ -322,7 +322,7 @@ public class ReplicationTest {
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, currentNode, null, null, new MockTime(), null);
+            new MetricRegistry(), null, clusterMap, currentNode, null, null, new MockTime(), null, null);
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
@@ -2761,7 +2761,7 @@ public class ReplicationTest {
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, dataNodeId, null, clusterParticipant, new MockTime(), null);
+            new MetricRegistry(), null, clusterMap, dataNodeId, null, clusterParticipant, new MockTime(), null, null);
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,

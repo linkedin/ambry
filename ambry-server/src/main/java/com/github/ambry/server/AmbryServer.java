@@ -15,6 +15,8 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.jmx.JmxReporter;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -163,12 +165,17 @@ public class AmbryServer {
             + "is not present in the clustermap. Failing to start the datanode");
       }
 
+      AccountServiceFactory accountServiceFactory =
+          Utils.getObj(serverConfig.accountServiceFactory, properties,
+              registry);
+      AccountService accountService = accountServiceFactory.getAccountService();
+
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       // TODO make StorageManager, ReplicationManager, CloudToStoreReplicationManager and StatsManager support multiple participants
       // For now, we assume there is only one element in clusterParticipants list.
       storageManager =
           new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
-              new BlobStoreHardDelete(), clusterParticipants.get(0), time, new BlobStoreRecovery());
+              new BlobStoreHardDelete(), clusterParticipants.get(0), time, new BlobStoreRecovery(), accountService);
       storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);

@@ -24,7 +24,6 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
@@ -35,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
@@ -51,6 +51,7 @@ public class UndeleteManager {
   private final RouterConfig routerConfig;
   private final Set<UndeleteOperation> undeleteOperations = ConcurrentHashMap.newKeySet();
   private final Map<Integer, UndeleteOperation> correlationIdToUndeleteOperation = new HashMap<>();
+  private final AtomicBoolean isOpen = new AtomicBoolean(true);
   private final RequestRegistrationCallback<UndeleteOperation> requestRegistrationCallback =
       new RequestRegistrationCallback<>(correlationIdToUndeleteOperation);
 
@@ -85,6 +86,9 @@ public class UndeleteManager {
    */
   void submitUndeleteOperation(Collection<String> blobIdStrs, String serviceId, FutureResult<Void> futureResult,
       Callback<Void> callback) throws RouterException {
+    if (!isOpen()) {
+      throw new IllegalStateException("UndeleteManager is closed");
+    }
     List<BlobId> blobIds = new ArrayList<>();
     for (String blobIdStr : blobIdStrs) {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
@@ -198,20 +202,30 @@ public class UndeleteManager {
   }
 
   /**
+   * Check if the UndeleteManager is open.
+   */
+  boolean isOpen() {
+    return isOpen.get();
+  }
+
+  /**
    * Closes the {@link UndeleteManager}. A {@link UndeleteManager} can be closed for only once. Any further close action
    * will have no effect.
    */
   void close() {
-    for (UndeleteOperation op : undeleteOperations) {
-      // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
-      // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
-      // from happening twice, complete it here only if the remove was successful.
-      if (undeleteOperations.remove(op)) {
-        Exception e = new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
-        routerMetrics.operationDequeuingRate.mark();
-        routerMetrics.operationAbortCount.inc();
-        routerMetrics.onUndeleteBlobError(e);
-        NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
+    if (isOpen.compareAndSet(true, false)) {
+      for (UndeleteOperation op : undeleteOperations) {
+        // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
+        // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
+        // from happening twice, complete it here only if the remove was successful.
+        if (undeleteOperations.remove(op)) {
+          Exception e =
+              new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
+          routerMetrics.operationDequeuingRate.mark();
+          routerMetrics.operationAbortCount.inc();
+          routerMetrics.onUndeleteBlobError(e);
+          NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
+        }
       }
     }
   }

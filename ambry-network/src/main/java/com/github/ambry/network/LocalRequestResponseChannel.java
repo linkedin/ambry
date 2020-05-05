@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.utils.BatchBlockingQueue;
 import com.github.ambry.utils.ByteBufferChannel;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufOutputStream;
@@ -22,14 +23,11 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
-import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +40,7 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
 
   private static final Logger logger = LoggerFactory.getLogger(LocalRequestResponseChannel.class);
   private BlockingQueue<NetworkRequest> requestQueue = new LinkedBlockingQueue<>();
-  private Map<Integer, BlockingQueue<ResponseInfo>> responseMap = new ConcurrentHashMap<>();
+  private Map<Integer, BatchBlockingQueue<ResponseInfo>> responseMap = new ConcurrentHashMap<>();
   // buffer to hold size header that we strip off payloads. Only use this array to discard bytes since it is shared.
   private static final byte[] SIZE_BYTE_ARRAY = new byte[Long.BYTES];
   private static final ResponseInfo WAKEUP_MARKER = new ResponseInfo(null, null, null);
@@ -71,10 +69,10 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
     try {
       LocalChannelRequest localRequest = (LocalChannelRequest) originalRequest;
       ResponseInfo responseInfo = new ResponseInfo(localRequest.requestInfo, null, byteBufFromPayload(payloadToSend));
-      BlockingQueue<ResponseInfo> responseQueue = getResponseQueue(localRequest.processorId);
+      BatchBlockingQueue<ResponseInfo> responseQueue = getResponseQueue(localRequest.processorId);
       responseQueue.put(responseInfo);
       logger.debug("Added response for {}, size now {}", localRequest.processorId, responseQueue.size());
-    } catch (IOException | InterruptedException ex) {
+    } catch (IOException ex) {
       logger.error("Could not extract response", ex);
     }
   }
@@ -86,21 +84,7 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
    * @return the applicable responses.
    */
   public List<ResponseInfo> receiveResponses(int processorId, int pollTimeoutMs) {
-    BlockingQueue<ResponseInfo> responseQueue = getResponseQueue(processorId);
-    ResponseInfo firstResponse = null;
-    try {
-      firstResponse = responseQueue.poll(pollTimeoutMs, TimeUnit.MILLISECONDS);
-    } catch (InterruptedException ie) {
-      logger.debug("Interrupted polling responses for {}", processorId);
-    }
-    if (firstResponse == null) {
-      return Collections.emptyList();
-    }
-    List<ResponseInfo> responseList = new LinkedList<>();
-    responseList.add(firstResponse);
-    responseQueue.drainTo(responseList);
-    // remove any wakeup markers since they are only there to stop a timed poll early
-    responseList.removeIf(responseInfo -> responseInfo == WAKEUP_MARKER);
+    List<ResponseInfo> responseList = getResponseQueue(processorId).poll(pollTimeoutMs);
     logger.debug("Returning {} responses for {}", responseList.size(), processorId);
     return responseList;
   }
@@ -109,12 +93,12 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
    * @return the response list corresponding to a processor id.
    * @param processorId the processor id to match.
    */
-  private BlockingQueue<ResponseInfo> getResponseQueue(int processorId) {
-    return responseMap.computeIfAbsent(processorId, p -> new LinkedBlockingQueue<>());
+  private BatchBlockingQueue<ResponseInfo> getResponseQueue(int processorId) {
+    return responseMap.computeIfAbsent(processorId, p -> new BatchBlockingQueue<>(WAKEUP_MARKER));
   }
 
   @Override
-  public void closeConnection(NetworkRequest request) throws InterruptedException {
+  public void closeConnection(NetworkRequest request) {
   }
 
   @Override
@@ -127,8 +111,7 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
    * @param processorId the processor ID to wake up.
    */
   public void wakeup(int processorId) {
-    // add a marker object to the queue to guarantee that a timed poll returns before the timeout
-    getResponseQueue(processorId).add(WAKEUP_MARKER);
+    getResponseQueue(processorId).wakeup();
   }
 
   /**

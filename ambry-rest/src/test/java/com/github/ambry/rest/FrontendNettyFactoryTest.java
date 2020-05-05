@@ -71,7 +71,7 @@ public class FrontendNettyFactoryTest {
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     FrontendNettyFactory nettyServerFactory =
         new FrontendNettyFactory(verifiableProperties, new MetricRegistry(), REST_REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER,
-            REST_SERVER_STATE, defaultSslFactory);
+            REST_SERVER_STATE, defaultSslFactory, null);
     NioServer nioServer = nettyServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
@@ -123,7 +123,7 @@ public class FrontendNettyFactoryTest {
       SSLFactory sslFactory) throws Exception {
     try {
       new FrontendNettyFactory(verifiableProperties, metricRegistry, restRequestHandler, publicAccessLogger,
-          restServerState, sslFactory);
+          restServerState, sslFactory, null);
       fail("Instantiation should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
