@@ -475,12 +475,18 @@ public class ReplicationMetrics {
         Gauge<Double> avgReplicaLag = () -> getAvgLagFromDc(remoteReplicaDc);
         registry.register(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-avgReplicaLagFromLocalInBytes"),
             avgReplicaLag);
-        Gauge<Long> maxReplicaLag =
-            () -> dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics()).getMax();
+        Gauge<Long> maxReplicaLag = () -> {
+          LongSummaryStatistics statistics =
+              dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics());
+          return statistics.getMax() == Long.MIN_VALUE ? -1 : statistics.getMax();
+        };
         registry.register(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-maxReplicaLagFromLocalInBytes"),
             maxReplicaLag);
-        Gauge<Long> minReplicaLag =
-            () -> dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics()).getMin();
+        Gauge<Long> minReplicaLag = () -> {
+          LongSummaryStatistics statistics =
+              dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics());
+          return statistics.getMin() == Long.MAX_VALUE ? -1 : statistics.getMin();
+        };
         registry.register(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-minReplicaLagFromLocalInBytes"),
             minReplicaLag);
         return ConcurrentHashMap.newKeySet();
