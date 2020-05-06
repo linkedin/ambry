@@ -49,6 +49,9 @@ public class Http2ClientMetrics {
   public final Meter http2ClientSendRate;
   public final Meter http2ClientReceiveRate;
 
+  public final Counter http2ParentExceptionCount;
+  public final Counter http2StreamExceptionCount;
+
   public Http2ClientMetrics(MetricRegistry registry) {
     http2ConnectionAcquireTime =
         registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2ConnectionAcquireTime"));
@@ -87,5 +90,10 @@ public class Http2ClientMetrics {
     http2NetworkErrorCount = registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2NetworkErrorCount"));
     http2ClientSendRate = registry.meter(MetricRegistry.name(Http2NetworkClient.class, "Http2ClientSendRate"));
     http2ClientReceiveRate = registry.meter(MetricRegistry.name(Http2NetworkClient.class, "Http2ClientReceiveRate"));
+
+    http2ParentExceptionCount =
+        registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2ParentExceptionCount"));
+    http2StreamExceptionCount =
+        registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamExceptionCount"));
   }
 }

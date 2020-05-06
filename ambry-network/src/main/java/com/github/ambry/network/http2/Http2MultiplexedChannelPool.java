@@ -170,6 +170,13 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
     return maxContentLength;
   }
 
+  /**
+   * Get Http2ClientMetrics.
+   */
+  Http2ClientMetrics getHttp2ClientMetrics() {
+    return http2ClientMetrics;
+  }
+
   @Override
   public Future<Channel> acquire() {
     return acquire(eventLoopGroup.next().newPromise());
@@ -463,6 +470,8 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+      Http2MultiplexedChannelPool pool = ctx.channel().attr(HTTP2_MULTIPLEXED_CHANNEL_POOL).get();
+      pool.getHttp2ClientMetrics().http2ParentExceptionCount.inc();
       closeAndReleaseParent(ctx, cause);
     }
 
