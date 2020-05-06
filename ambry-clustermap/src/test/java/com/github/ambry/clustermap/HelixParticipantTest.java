@@ -211,7 +211,7 @@ public class HelixParticipantTest {
     //Check that invoking setReplicaStoppedState with a non-AmbryReplica ReplicaId throws an IllegalArgumentException
     ReplicaId nonAmbryReplica = createMockNotAmbryReplica(partitionId1);
     try {
-      helixParticipant.setReplicaStoppedState(Arrays.asList(nonAmbryReplica), true);
+      helixParticipant.setReplicaStoppedState(Collections.singletonList(nonAmbryReplica), true);
       fail("Expected an IllegalArgumentException here");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -219,7 +219,7 @@ public class HelixParticipantTest {
 
     //Check that invoking setReplicaStoppedState with null instanceConfig
     try {
-      helixParticipantDummy.setReplicaStoppedState(Arrays.asList(replicaId1), true);
+      helixParticipantDummy.setReplicaStoppedState(Collections.singletonList(replicaId1), true);
       fail("Expected an IllegalStateException here");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
@@ -534,7 +534,7 @@ public class HelixParticipantTest {
     return replicaId;
   }
 
-  private void listIsExpectedSize(List list, int expectedSize, String listName) {
+  private void listIsExpectedSize(List<String> list, int expectedSize, String listName) {
     assertNotNull(listName + " is null", list);
     assertEquals(listName + " doesn't have the expected size " + expectedSize, expectedSize, list.size());
   }

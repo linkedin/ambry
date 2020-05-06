@@ -509,7 +509,7 @@ public class AmbryServerRequestsTest {
     BlobStore mockStore = Mockito.mock(BlobStore.class);
     storageManager.overrideStoreToReturn = mockStore;
     doNothing().when(mockStore).deleteStoreFiles();
-    Mockito.when(mockStore.getReplicaStatusDelegate()).thenReturn(mockDelegate);
+    Mockito.when(mockStore.getReplicaStatusDelegates()).thenReturn(Collections.singletonList(mockDelegate));
     sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.No_Error);
     storageManager.overrideStoreToReturn = null;
@@ -573,7 +573,7 @@ public class AmbryServerRequestsTest {
         ServerErrorCode.Unknown_Error);
     // test store removal success case
     doNothing().when(mockStore).deleteStoreFiles();
-    Mockito.when(mockStore.getReplicaStatusDelegate()).thenReturn(mockDelegate);
+    Mockito.when(mockStore.getReplicaStatusDelegates()).thenReturn(Collections.singletonList(mockDelegate));
     sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, (short) 0,
         ServerErrorCode.No_Error);
     storageManager.overrideStoreToReturn = null;

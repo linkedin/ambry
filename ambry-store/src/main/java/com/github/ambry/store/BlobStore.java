@@ -76,7 +76,7 @@ public class BlobStore implements Store {
   private final Time time;
   private final UUID sessionId = UUID.randomUUID();
   private final ReplicaId replicaId;
-  private final ReplicaStatusDelegate replicaStatusDelegate;
+  private final List<ReplicaStatusDelegate> replicaStatusDelegates;
   private final long thresholdBytesHigh;
   private final long thresholdBytesLow;
   private final long ttlUpdateBufferTimeMs;
@@ -119,7 +119,7 @@ public class BlobStore implements Store {
    * @param factory the {@link StoreKeyFactory} for parsing store keys.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
-   * @param replicaStatusDelegate delegate used to communicate BlobStore write status (sealed/unsealed, stopped/started)
+   * @param replicaStatusDelegates delegates used to communicate BlobStore write status(sealed/unsealed, stopped/started)
    * @param time the {@link Time} instance to use.
    * @param accountService  the {@link AccountService} instance to use.
    */
@@ -127,10 +127,10 @@ public class BlobStore implements Store {
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      ReplicaStatusDelegate replicaStatusDelegate, Time time, AccountService accountService) {
+      List<ReplicaStatusDelegate> replicaStatusDelegates, Time time, AccountService accountService) {
     this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler,
         diskIOScheduler, diskSpaceAllocator, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
-        replicaId.getCapacityInBytes(), factory, recovery, hardDelete, replicaStatusDelegate, time, accountService);
+        replicaId.getCapacityInBytes(), factory, recovery, hardDelete, replicaStatusDelegates, time, accountService);
   }
 
   /**
@@ -163,7 +163,7 @@ public class BlobStore implements Store {
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, ReplicaStatusDelegate replicaStatusDelegate, Time time,
+      MessageStoreHardDelete hardDelete, List<ReplicaStatusDelegate> replicaStatusDelegates, Time time,
       AccountService accountService) {
     this.replicaId = replicaId;
     this.storeId = storeId;
@@ -180,7 +180,7 @@ public class BlobStore implements Store {
     this.recovery = recovery;
     this.hardDelete = hardDelete;
     this.accountService = accountService;
-    this.replicaStatusDelegate = config.storeReplicaStatusDelegateEnable ? replicaStatusDelegate : null;
+    this.replicaStatusDelegates = config.storeReplicaStatusDelegateEnable ? replicaStatusDelegates : null;
     this.time = time;
     long threshold = config.storeReadOnlyEnableSizeThresholdPercentage;
     long delta = config.storeReadWriteEnableSizeThresholdPercentageDelta;
@@ -355,28 +355,32 @@ public class BlobStore implements Store {
    * should be read-only or read-write
    */
   private void checkCapacityAndUpdateReplicaStatusDelegate() {
-    if (replicaStatusDelegate != null) {
+    if (replicaStatusDelegates != null) {
       logger.debug("The current used capacity is {} bytes on store {}", index.getLogUsedCapacity(),
           replicaId.getPartitionId());
       if (index.getLogUsedCapacity() > thresholdBytesHigh && !replicaId.isSealed()) {
-        if (!replicaStatusDelegate.seal(replicaId)) {
-          metrics.sealSetError.inc();
-          logger.warn("Could not set the partition as read-only status on {}", replicaId);
-        } else {
-          metrics.sealDoneCount.inc();
-          logger.info(
-              "Store is successfully sealed for partition : {} because current used capacity : {} bytes exceeds ReadOnly threshold : {} bytes",
-              replicaId.getPartitionId(), index.getLogUsedCapacity(), thresholdBytesHigh);
+        for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
+          if (!replicaStatusDelegate.seal(replicaId)) {
+            metrics.sealSetError.inc();
+            logger.warn("Could not set the partition as read-only status on {}", replicaId);
+          } else {
+            metrics.sealDoneCount.inc();
+            logger.info(
+                "Store is successfully sealed for partition : {} because current used capacity : {} bytes exceeds ReadOnly threshold : {} bytes",
+                replicaId.getPartitionId(), index.getLogUsedCapacity(), thresholdBytesHigh);
+          }
         }
       } else if (index.getLogUsedCapacity() <= thresholdBytesLow && replicaId.isSealed()) {
-        if (!replicaStatusDelegate.unseal(replicaId)) {
-          metrics.unsealSetError.inc();
-          logger.warn("Could not set the partition as read-write status on {}", replicaId);
-        } else {
-          metrics.unsealDoneCount.inc();
-          logger.info(
-              "Store is successfully unsealed for partition : {} because current used capacity : {} bytes is below ReadWrite threshold : {} bytes",
-              replicaId.getPartitionId(), index.getLogUsedCapacity(), thresholdBytesLow);
+        for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
+          if (!replicaStatusDelegate.unseal(replicaId)) {
+            metrics.unsealSetError.inc();
+            logger.warn("Could not set the partition as read-write status on {}", replicaId);
+          } else {
+            metrics.unsealDoneCount.inc();
+            logger.info(
+                "Store is successfully unsealed for partition : {} because current used capacity : {} bytes is below ReadWrite threshold : {} bytes",
+                replicaId.getPartitionId(), index.getLogUsedCapacity(), thresholdBytesLow);
+          }
         }
       }
       //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
@@ -941,8 +945,8 @@ public class BlobStore implements Store {
   /**
    * @return {@link ReplicaStatusDelegate} associated with this store
    */
-  public ReplicaStatusDelegate getReplicaStatusDelegate() {
-    return replicaStatusDelegate;
+  public List<ReplicaStatusDelegate> getReplicaStatusDelegates() {
+    return replicaStatusDelegates;
   }
 
   @Override

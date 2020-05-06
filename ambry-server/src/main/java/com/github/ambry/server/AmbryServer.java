@@ -166,16 +166,15 @@ public class AmbryServer {
       }
 
       AccountServiceFactory accountServiceFactory =
-          Utils.getObj(serverConfig.serverAccountServiceFactory, properties,
-              registry);
+          Utils.getObj(serverConfig.serverAccountServiceFactory, properties, registry);
       AccountService accountService = accountServiceFactory.getAccountService();
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
-      // TODO make StorageManager, ReplicationManager, CloudToStoreReplicationManager and StatsManager support multiple participants
-      // For now, we assume there is only one element in clusterParticipants list.
+      // In most cases, there should be only on participant in the clusterParticipants list. If there are more than one
+      // participants and some components require sole participant, the first one in the list will be primary participant.
       storageManager =
           new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
-              new BlobStoreHardDelete(), clusterParticipants.get(0), time, new BlobStoreRecovery(), accountService);
+              new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
       storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);

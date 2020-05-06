@@ -264,7 +264,8 @@ public class StorageManagerTest {
     List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
-    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
     storageManager.start();
     // 1. get listeners from Helix participant and verify there is a storageManager listener.
     Map<StateModelListenerType, PartitionStateChangeListener> listeners =
@@ -330,7 +331,8 @@ public class StorageManagerTest {
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
-    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
     storageManager.start();
     // 1. get listeners from Helix participant and verify there is a storageManager listener.
     Map<StateModelListenerType, PartitionStateChangeListener> listeners =
@@ -364,7 +366,8 @@ public class StorageManagerTest {
 
     // 5. mock disable compaction failure
     mockHelixParticipant = new MockClusterParticipant();
-    MockStorageManager mockStorageManager = new MockStorageManager(localNode, mockHelixParticipant);
+    MockStorageManager mockStorageManager =
+        new MockStorageManager(localNode, Collections.singletonList(mockHelixParticipant));
     mockStorageManager.start();
     try {
       mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
@@ -386,7 +389,8 @@ public class StorageManagerTest {
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     ReplicaId testReplica = localReplicas.get(0);
     MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
-    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
     storageManager.start();
     // test shutdown store failure (this is induced by shutting down disk manager)
     storageManager.getDiskManager(testReplica.getPartitionId()).shutdown();
@@ -419,11 +423,13 @@ public class StorageManagerTest {
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
     // create first storage manager and start
-    StorageManager storageManager1 = createStorageManager(localNode, new MetricRegistry(), mockHelixParticipant);
+    StorageManager storageManager1 =
+        createStorageManager(localNode, new MetricRegistry(), Collections.singletonList(mockHelixParticipant));
     storageManager1.start();
     shutdownAndAssertStoresInaccessible(storageManager1, localReplicas);
     // create second storage manager with same mock helix participant
-    StorageManager storageManager2 = createStorageManager(localNode, new MetricRegistry(), mockHelixParticipant);
+    StorageManager storageManager2 =
+        createStorageManager(localNode, new MetricRegistry(), Collections.singletonList(mockHelixParticipant));
     try {
       storageManager2.start();
       fail("should fail because offline partition count is non-zero before initialization");
@@ -443,7 +449,8 @@ public class StorageManagerTest {
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
-    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
     storageManager.start();
     // create a new partition and get its replica on local node
     PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
@@ -492,7 +499,8 @@ public class StorageManagerTest {
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
-    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
     storageManager.start();
     // create a new partition and get its replica on local node
     PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
@@ -688,6 +696,33 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
+  @Test
+  public void setBlobStoreStoppedStateWithMultiDelegatesTest() throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    MockClusterParticipant mockClusterParticipant1 = new MockClusterParticipant();
+    MockClusterParticipant mockClusterParticipant2 = new MockClusterParticipant(null, false);
+    List<ClusterParticipant> participants = Arrays.asList(mockClusterParticipant1, mockClusterParticipant2);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, participants);
+    storageManager.start();
+    PartitionId id = replicas.get(0).getPartitionId();
+    // test that any delegate fails to update stop state, then the whole operation fails
+    List<PartitionId> failToUpdateList = storageManager.setBlobStoreStoppedState(Arrays.asList(id), true);
+    assertEquals("Set store stopped state should fail because one of delegates returns false", id,
+        failToUpdateList.get(0));
+    // test the success case, both delegates succeed in updating stop state of replica
+    mockClusterParticipant2.setStopStateReturnVal = null;
+    failToUpdateList = storageManager.setBlobStoreStoppedState(Arrays.asList(id), true);
+    assertTrue("Set store stopped state should succeed", failToUpdateList.isEmpty());
+    // verify both delegates have the correct stopped replica list.
+    List<String> expectedStoppedReplicas = Collections.singletonList(id.toPathString());
+    assertEquals("Stopped replica list from participant 1 is not expected", expectedStoppedReplicas,
+        mockClusterParticipant1.getStoppedReplicas());
+    assertEquals("Stopped replica list from participant 2 is not expected", expectedStoppedReplicas,
+        mockClusterParticipant2.getStoppedReplicas());
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
+  }
+
   /**
    * Test set stopped state of blobstore with given list of {@link PartitionId} in failure cases.
    */
@@ -730,7 +765,8 @@ public class StorageManagerTest {
     // test setting the state of store via instantiated MockClusterParticipant
     ClusterParticipant participant = new MockClusterParticipant();
     ClusterParticipant participantSpy = Mockito.spy(participant);
-    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, participantSpy);
+    StorageManager storageManager =
+        createStorageManager(dataNode, metricRegistry, Collections.singletonList(participantSpy));
     storageManager.start();
     assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     for (ReplicaId replica : replicas) {
@@ -1003,7 +1039,8 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     ClusterParticipant mockParticipant = new MockClusterParticipant();
     mockParticipant.setReplicaStoppedState(Collections.singletonList(replicas.get(0)), true);
-    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, mockParticipant);
+    StorageManager storageManager =
+        createStorageManager(dataNode, metricRegistry, Collections.singletonList(mockParticipant));
     storageManager.start();
     assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     for (int i = 0; i < replicas.size(); ++i) {
@@ -1061,7 +1098,8 @@ public class StorageManagerTest {
     String extraPartitionName = "1000";
     File extraStoreDir = new File(mountPath, extraPartitionName);
     assertTrue("Can't create an extra store dir", extraStoreDir.mkdir());
-    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
     storageManager.start();
     // failure case: IOException when deleting store dir
     File invalidDir = new File(extraStoreDir.getAbsolutePath(), "invalidDir");
@@ -1087,14 +1125,14 @@ public class StorageManagerTest {
    * Construct a {@link StorageManager} for the passed in set of replicas.
    * @param currentNode the list of replicas for the {@link StorageManager} to use.
    * @param metricRegistry the {@link MetricRegistry} instance to use to instantiate {@link StorageManager}
-   * @param clusterParticipant the {@link ClusterParticipant} to use in storage manager
+   * @param clusterParticipants a list of {@link ClusterParticipant}(s) to use in storage manager
    * @return a started {@link StorageManager}
    * @throws StoreException
    */
   private StorageManager createStorageManager(DataNodeId currentNode, MetricRegistry metricRegistry,
-      ClusterParticipant clusterParticipant) throws StoreException {
+      List<ClusterParticipant> clusterParticipants) throws StoreException {
     return new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
-        new MockIdFactory(), clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipant,
+        new MockIdFactory(), clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipants,
         SystemTime.getInstance(), new DummyMessageStoreRecovery(), null);
   }
 
@@ -1178,7 +1216,7 @@ public class StorageManagerTest {
    * @param segmentedLog {@code true} to set a segment capacity lower than total store capacity
    * @param updateInstanceConfig whether to update InstanceConfig in Helix
    */
-  private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig) throws IOException {
+  private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig) {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -1236,15 +1274,30 @@ public class StorageManagerTest {
   /**
    * An extension of {@link HelixParticipant} to help with tests.
    */
-  private class MockClusterParticipant extends HelixParticipant {
+  class MockClusterParticipant extends HelixParticipant {
     Boolean updateNodeInfoReturnVal = null;
     Set<ReplicaId> sealedReplicas = new HashSet<>();
     Set<ReplicaId> stoppedReplicas = new HashSet<>();
+    private Boolean setSealStateReturnVal;
+    private Boolean setStopStateReturnVal;
 
     MockClusterParticipant() throws IOException {
+      this(null, null);
+    }
+
+    /**
+     * Ctor for MockClusterParticipant with arguments to override return value of some methods.
+     * @param setSealStateReturnVal if not null, use this value to override result of setReplicaSealedState(). If null,
+     *                              go through standard workflow in the method.
+     * @param setStopStateReturnVal if not null, use this value to override result of setReplicaStoppedState(). If null,
+     *                              go through standard workflow in the method.
+     */
+    MockClusterParticipant(Boolean setSealStateReturnVal, Boolean setStopStateReturnVal) {
       super(clusterMapConfig, new MockHelixManagerFactory(), new MetricRegistry(),
           parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
               clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
+      this.setSealStateReturnVal = setSealStateReturnVal;
+      this.setStopStateReturnVal = setStopStateReturnVal;
     }
 
     @Override
@@ -1254,6 +1307,9 @@ public class StorageManagerTest {
 
     @Override
     public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+      if (setSealStateReturnVal != null) {
+        return setSealStateReturnVal;
+      }
       if (isSealed) {
         sealedReplicas.add(replicaId);
       } else {
@@ -1264,6 +1320,9 @@ public class StorageManagerTest {
 
     @Override
     public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean markStop) {
+      if (setStopStateReturnVal != null) {
+        return setStopStateReturnVal;
+      }
       if (markStop) {
         stoppedReplicas.addAll(replicaIds);
       } else {
@@ -1300,9 +1359,9 @@ public class StorageManagerTest {
   private class MockStorageManager extends StorageManager {
     boolean controlCompactionReturnVal = false;
 
-    MockStorageManager(DataNodeId currentNode, ClusterParticipant clusterParticipant) throws Exception {
+    MockStorageManager(DataNodeId currentNode, List<ClusterParticipant> clusterParticipants) throws Exception {
       super(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, new MockIdFactory(),
-          clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipant, SystemTime.getInstance(),
+          clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipants, SystemTime.getInstance(),
           new DummyMessageStoreRecovery(), null);
     }
 
