@@ -36,9 +36,7 @@ import io.netty.util.concurrent.Promise;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
-import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -106,7 +104,7 @@ public class Http2BlockingChannel implements ConnectedChannel {
       @Override
       protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
         ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null).setSuccess(msg.content().retainedDuplicate());
-        // TODO: is this a good place to release stream channel?
+        // Stream channel can't be reused. Release it here.
         ctx.channel()
             .parent()
             .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)

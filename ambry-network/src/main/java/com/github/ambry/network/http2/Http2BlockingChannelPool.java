@@ -25,20 +25,20 @@ import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
- * A connection pool that uses Http2BlockingChannel as the underlying connection.
- * Physical connections to a host:port is maintained by {@link Http2MultiplexedChannelPool}.
+ * A connection pool that uses {@link Http2MultiplexedChannelPool} as the underlying channel for communication.
+ * {@link Http2MultiplexedChannelPool} maintains physical connections to a host:port.
  * A stream channel represented by {@link Http2BlockingChannel} is checked out when checkOutConnection() is invoked.
  */
 public class Http2BlockingChannelPool implements ConnectionPool {
   private static final Logger logger = LoggerFactory.getLogger(Http2BlockingChannelPool.class);
-  private Map<InetSocketAddress, Http2MultiplexedChannelPool> map;
+  private Map<InetSocketAddress, Http2MultiplexedChannelPool> http2ChannelPoolMap;
   private SSLFactory sslFactory;
   private EventLoopGroup eventLoopGroup;
   private Http2ClientConfig http2ClientConfig;
@@ -46,7 +46,7 @@ public class Http2BlockingChannelPool implements ConnectionPool {
 
   public Http2BlockingChannelPool(SSLFactory sslFactory, Http2ClientConfig http2ClientConfig,
       Http2ClientMetrics http2ClientMetrics) {
-    map = new HashMap<>();
+    http2ChannelPoolMap = new ConcurrentHashMap<>();
     this.sslFactory = sslFactory;
     if (Epoll.isAvailable()) {
       logger.info("Using EpollEventLoopGroup in Http2BlockingChannelPool.");
@@ -73,7 +73,7 @@ public class Http2BlockingChannelPool implements ConnectionPool {
   public ConnectedChannel checkOutConnection(String host, Port port, long timeout)
       throws IOException, InterruptedException, ConnectionPoolTimeoutException {
     InetSocketAddress inetSocketAddress = new InetSocketAddress(host, port.getPort());
-    return new Http2BlockingChannel(map.computeIfAbsent(inetSocketAddress,
+    return new Http2BlockingChannel(http2ChannelPoolMap.computeIfAbsent(inetSocketAddress,
         key -> new Http2MultiplexedChannelPool(inetSocketAddress, sslFactory, eventLoopGroup, http2ClientConfig,
             http2ClientMetrics)));
   }

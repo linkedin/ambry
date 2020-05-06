@@ -195,6 +195,7 @@ public class ReplicationConfig {
 
   /**
    * Use http2 connection for replication if this is true.
+   * DO NOT enable http2 replication. Not ready.
    */
   @Config("replication.enable.http2")
   @Default("false")
