@@ -121,7 +121,7 @@ class NettyResponseChannel implements RestResponseChannel {
   public final ChannelFutureListener DELAYED_CLOSE = new ChannelFutureListener() {
     @Override
     public void operationComplete(ChannelFuture future) {
-      logger.trace("scheduling closeure of channel {}", future.channel());
+      logger.trace("scheduling closure of channel {}", future.channel());
       future.channel().eventLoop().schedule(() -> {
         if (future.channel().isActive()) {
           logger.trace("closing channel {}", future.channel());
@@ -710,11 +710,12 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private void completeRequest(boolean closeNetworkChannel, boolean shouldDelay) {
     if ((closeNetworkChannel || forceClose) && ctx.channel().isOpen()) {
-      if (!shouldDelay || (request != null && !request.getRestMethod().equals(RestMethod.POST)) || (this.nettyConfig.nettyServerCloseDelayTimeoutMs == 0)) {
-        writeFuture.addListener(ChannelFutureListener.CLOSE);
-      } else {
-        writeFuture.addListener(DELAYED_CLOSE);
+      if (shouldDelay && (request != null && request.getRestMethod().equals(RestMethod.POST))
+          && this.nettyConfig.nettyServerCloseDelayTimeoutMs > 0) {
         nettyMetrics.delayedCloseScheduledCount.inc();
+        writeFuture.addListener(DELAYED_CLOSE);
+      } else {
+        writeFuture.addListener(ChannelFutureListener.CLOSE);
       }
       logger.trace("Requested closing of channel {}", ctx.channel());
     }
