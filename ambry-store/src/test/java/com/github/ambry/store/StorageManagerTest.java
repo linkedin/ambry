@@ -16,6 +16,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
@@ -684,7 +685,7 @@ public class StorageManagerTest {
     storageManager =
         new StorageManager(new StoreConfig(vProps), diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
             new MockIdFactory(), clusterMap, dataNode, new DummyMessageStoreHardDelete(), null,
-            SystemTime.getInstance(), new DummyMessageStoreRecovery(), null);
+            SystemTime.getInstance(), new DummyMessageStoreRecovery(), new InMemAccountService(false, false));
     storageManager.start();
     for (ReplicaId replica : replicas) {
       id = replica.getPartitionId();
@@ -1133,7 +1134,7 @@ public class StorageManagerTest {
       List<ClusterParticipant> clusterParticipants) throws StoreException {
     return new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
         new MockIdFactory(), clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipants,
-        SystemTime.getInstance(), new DummyMessageStoreRecovery(), null);
+        SystemTime.getInstance(), new DummyMessageStoreRecovery(), new InMemAccountService(false, false));
   }
 
   /**
@@ -1362,7 +1363,7 @@ public class StorageManagerTest {
     MockStorageManager(DataNodeId currentNode, List<ClusterParticipant> clusterParticipants) throws Exception {
       super(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, new MockIdFactory(),
           clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipants, SystemTime.getInstance(),
-          new DummyMessageStoreRecovery(), null);
+          new DummyMessageStoreRecovery(), new InMemAccountService(false, false));
     }
 
     @Override

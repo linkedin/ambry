@@ -14,6 +14,7 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.AmbryReplicaSyncUpManager;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
@@ -260,7 +261,8 @@ public class ReplicationTest {
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null, null);
+            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null,
+            new InMemAccountService(false, false));
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
@@ -349,7 +351,8 @@ public class ReplicationTest {
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, currentNode, null, null, new MockTime(), null, null);
+            new MetricRegistry(), null, clusterMap, currentNode, null, null, new MockTime(), null,
+            new InMemAccountService(false, false));
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
@@ -2840,7 +2843,7 @@ public class ReplicationTest {
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
             new MetricRegistry(), null, clusterMap, dataNodeId, null,
             clusterParticipant == null ? null : Collections.singletonList(clusterParticipant), new MockTime(), null,
-            null);
+            new InMemAccountService(false, false));
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,

@@ -14,6 +14,7 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockClusterSpectator;
@@ -132,7 +133,8 @@ public class CloudToStoreReplicationManagerTest {
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
             clusterMap.getMetricRegistry(), null, clusterMap, currentNode, null,
-            Collections.singletonList(mockHelixParticipant), new MockTime(), null, null);
+            Collections.singletonList(mockHelixParticipant), new MockTime(), null,
+            new InMemAccountService(false, false));
     CloudToStoreReplicationManager cloudToStoreReplicationManager =
         new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
             storeKeyFactory, clusterMap, mockScheduler, currentNode, null, clusterMap.getMetricRegistry(), null,
@@ -172,7 +174,8 @@ public class CloudToStoreReplicationManagerTest {
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
             clusterMap.getMetricRegistry(), null, clusterMap, currentNode, null,
-            Collections.singletonList(mockHelixParticipant), new MockTime(), null, null);
+            Collections.singletonList(mockHelixParticipant), new MockTime(), null,
+            new InMemAccountService(false, false));
     CloudToStoreReplicationManager cloudToStoreReplicationManager =
         new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
             storeKeyFactory, clusterMap, mockScheduler, currentNode, null, clusterMap.getMetricRegistry(), null,
