@@ -15,6 +15,9 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.FutureResult;
+import java.util.concurrent.Future;
 
 
 /**
@@ -38,9 +41,21 @@ public interface UrlSigningService {
   boolean isRequestSigned(RestRequest restRequest);
 
   /**
-   * Verifies that the signature in {@code restRequest} is valid.
+   * Verifies that the signature in {@code restRequest} is valid. Any remote calls in the implementation should be made
+   * asynchronously.
    * @param restRequest the {@link RestRequest} to check.
-   * @throws RestServiceException if there are problems verifying the URL.
+   * @param callback the {@link Callback} that will be called after signature verification.
    */
-  void verifySignedRequest(RestRequest restRequest) throws RestServiceException;
+  void verifySignedRequest(RestRequest restRequest, Callback<Void> callback);
+
+  /**
+   * Similar to {@link #verifySignedRequest(RestRequest, Callback)}, but returns a future.
+   * @param restRequest the {@link RestRequest} to check.
+   * @return a {@link Future} that will be completed when signature verification is complete.
+   */
+  default Future<Void> verifySignedRequest(RestRequest restRequest) {
+    FutureResult<Void> futureResult = new FutureResult<>();
+    verifySignedRequest(restRequest, futureResult::done);
+    return futureResult;
+  }
 }

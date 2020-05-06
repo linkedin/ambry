@@ -2965,10 +2965,8 @@ class FrontendTestUrlSigningServiceFactory implements UrlSigningServiceFactory {
       }
 
       @Override
-      public void verifySignedRequest(RestRequest restRequest) throws RestServiceException {
-        if (verifySignedRequestException != null) {
-          throw verifySignedRequestException;
-        }
+      public void verifySignedRequest(RestRequest restRequest, Callback<Void> callback) {
+        callback.onCompletion(null, verifySignedRequestException);
       }
     };
   }

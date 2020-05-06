@@ -38,6 +38,7 @@ import java.util.GregorianCalendar;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import jdk.nashorn.internal.codegen.CompilerConstants;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.router.GetBlobOptions.*;
@@ -82,16 +83,17 @@ class AmbrySecurityService implements SecurityService {
     } else if (restRequest.getArgs().containsKey(InternalKeys.KEEP_ALIVE_ON_ERROR_HINT)) {
       exception = new RestServiceException(InternalKeys.KEEP_ALIVE_ON_ERROR_HINT + " is not allowed in the request",
           RestServiceErrorCode.BadRequest);
-    } else if (urlSigningService.isRequestSigned(restRequest)) {
-      try {
-        urlSigningService.verifySignedRequest(restRequest);
-      } catch (RestServiceException e) {
-        exception = e;
-      }
     }
-    restRequest.setArg(InternalKeys.SEND_TRACKING_INFO, new Boolean(frontendConfig.attachTrackingInfo));
-    frontendMetrics.securityServicePreProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
-    callback.onCompletion(null, exception);
+    restRequest.setArg(InternalKeys.SEND_TRACKING_INFO, frontendConfig.attachTrackingInfo);
+    if (exception == null && urlSigningService.isRequestSigned(restRequest)) {
+      urlSigningService.verifySignedRequest(restRequest, (r, e) -> {
+        frontendMetrics.securityServicePreProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+        callback.onCompletion(r, e);
+      });
+    } else {
+      frontendMetrics.securityServicePreProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+      callback.onCompletion(null, exception);
+    }
   }
 
   @Override
