@@ -30,7 +30,6 @@ import com.github.ambry.utils.Utils;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -248,7 +247,7 @@ public class AmbryUrlSigningServiceTest {
       long maxUploadSize, long blobTtl, boolean chunkUploadSet) throws Exception {
     RestRequest signedRequest = getRequestFromUrl(restMethod, url);
     assertTrue("Request should be declared as signed", signer.isRequestSigned(signedRequest));
-    signer.verifySignedRequest(signedRequest).get();
+    signer.verifySignedRequest(signedRequest);
     Map<String, Object> args = signedRequest.getArgs();
     assertEquals("URL type not as expected", restMethod.name(), args.get(RestUtils.Headers.URL_TYPE).toString());
     assertEquals("Random header value is not as expected", randomHeaderVal, args.get(RANDOM_AMBRY_HEADER).toString());
@@ -283,23 +282,18 @@ public class AmbryUrlSigningServiceTest {
    * @param request the {@link RestRequest} which contains the url to check
    * @param errorCode the {@link RestServiceErrorCode} expected on verification. If {@code null}, it is assumed that a
    *                  {@link IllegalArgumentException} is expected.
-   * @throws Exception if an unexpected type of exception was thrown.
+   * @throws Exception
    */
   private void ensureVerificationFailure(AmbryUrlSigningService signer, RestRequest request,
       RestServiceErrorCode errorCode) throws Exception {
     try {
-      signer.verifySignedRequest(request).get();
+      signer.verifySignedRequest(request);
       fail("Verification of request should have failed");
     } catch (IllegalArgumentException e) {
       assertNull("Did not encounter a RestServiceException with given error code", errorCode);
       assertFalse("URL should have been declared as not signed", signer.isRequestSigned(request));
-    } catch (ExecutionException e) {
-      Exception cause = Utils.extractExecutionExceptionCause(e);
-      if (cause instanceof RestServiceException) {
-        assertEquals("Unexpected RestServiceErrorCode", errorCode, ((RestServiceException) cause).getErrorCode());
-      } else {
-        throw cause;
-      }
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", errorCode, e.getErrorCode());
     }
   }
 

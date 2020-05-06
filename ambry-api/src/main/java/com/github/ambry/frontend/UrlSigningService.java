@@ -16,8 +16,6 @@ package com.github.ambry.frontend;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.Callback;
-import com.github.ambry.router.FutureResult;
-import java.util.concurrent.Future;
 
 
 /**
@@ -41,21 +39,28 @@ public interface UrlSigningService {
   boolean isRequestSigned(RestRequest restRequest);
 
   /**
+   * Verifies that the signature in {@code restRequest} is valid. If the implementation does not require any blocking
+   * remote calls, this method can be simpler to implement. If remote calls are required, it is preferred to implement
+   * both this method and {@link #verifySignedRequest(RestRequest, Callback)}.
+   * @param restRequest the {@link RestRequest} to check.
+   * @throws RestServiceException if there are problems verifying the URL.
+   */
+  void verifySignedRequest(RestRequest restRequest) throws RestServiceException;
+
+  /**
    * Verifies that the signature in {@code restRequest} is valid. Any remote calls in the implementation should be made
    * asynchronously.
    * @param restRequest the {@link RestRequest} to check.
    * @param callback the {@link Callback} that will be called after signature verification.
    */
-  void verifySignedRequest(RestRequest restRequest, Callback<Void> callback);
-
-  /**
-   * Similar to {@link #verifySignedRequest(RestRequest, Callback)}, but returns a future.
-   * @param restRequest the {@link RestRequest} to check.
-   * @return a {@link Future} that will be completed when signature verification is complete.
-   */
-  default Future<Void> verifySignedRequest(RestRequest restRequest) {
-    FutureResult<Void> futureResult = new FutureResult<>();
-    verifySignedRequest(restRequest, futureResult::done);
-    return futureResult;
+  default void verifySignedRequest(RestRequest restRequest, Callback<Void> callback) {
+    Exception exception = null;
+    try {
+      verifySignedRequest(restRequest);
+    } catch (Exception e) {
+      exception = e;
+    } finally {
+      callback.onCompletion(null, exception);
+    }
   }
 }

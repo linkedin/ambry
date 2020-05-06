@@ -18,7 +18,6 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Time;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
@@ -164,27 +163,20 @@ public class AmbryUrlSigningService implements UrlSigningService {
   }
 
   @Override
-  public void verifySignedRequest(RestRequest restRequest, Callback<Void> callback) {
-    Exception exception = null;
-    try {
-      if (!isRequestSigned(restRequest)) {
-        throw new RestServiceException("Request is not signed - method should not have been called",
-            RestServiceErrorCode.InternalServerError);
-      }
-      Map<String, Object> args = restRequest.getArgs();
-      long expiryTimeSecs = RestUtils.getLongHeader(args, LINK_EXPIRY_TIME, true);
-      if (time.seconds() > expiryTimeSecs) {
-        throw new RestServiceException("Signed URL has expired", RestServiceErrorCode.Unauthorized);
-      }
-      RestMethod restMethodInUrl = RestMethod.valueOf(RestUtils.getHeader(args, RestUtils.Headers.URL_TYPE, true));
-      if (!restRequest.getRestMethod().equals(restMethodInUrl)) {
-        throw new RestServiceException("Type of request being made not compatible with signed URL",
-            RestServiceErrorCode.Unauthorized);
-      }
-    } catch (Exception e) {
-      exception = e;
-    } finally {
-      callback.onCompletion(null, exception);
+  public void verifySignedRequest(RestRequest restRequest) throws RestServiceException {
+    if (!isRequestSigned(restRequest)) {
+      throw new RestServiceException("Request is not signed - method should not have been called",
+          RestServiceErrorCode.InternalServerError);
+    }
+    Map<String, Object> args = restRequest.getArgs();
+    long expiryTimeSecs = RestUtils.getLongHeader(args, LINK_EXPIRY_TIME, true);
+    if (time.seconds() > expiryTimeSecs) {
+      throw new RestServiceException("Signed URL has expired", RestServiceErrorCode.Unauthorized);
+    }
+    RestMethod restMethodInUrl = RestMethod.valueOf(RestUtils.getHeader(args, RestUtils.Headers.URL_TYPE, true));
+    if (!restRequest.getRestMethod().equals(restMethodInUrl)) {
+      throw new RestServiceException("Type of request being made not compatible with signed URL",
+          RestServiceErrorCode.Unauthorized);
     }
   }
 

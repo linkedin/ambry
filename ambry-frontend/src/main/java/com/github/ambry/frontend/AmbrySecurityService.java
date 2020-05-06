@@ -38,7 +38,6 @@ import java.util.GregorianCalendar;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
-import jdk.nashorn.internal.codegen.CompilerConstants;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.router.GetBlobOptions.*;
