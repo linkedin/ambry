@@ -105,7 +105,7 @@ public class ServerConfig {
    */
   @Config("server.account.service.factory")
   @Default("com.github.ambry.account.InMemoryUnknownAccountServiceFactory")
-  public final String accountServiceFactory;
+  public final String serverAccountServiceFactory;
 
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
@@ -126,7 +126,7 @@ public class ServerConfig {
         verifiableProperties.getBoolean("server.validate.request.based.on.store.state", false);
     serverHandleUndeleteRequestEnabled =
         verifiableProperties.getBoolean("server.handle.undelete.request.enabled", false);
-    accountServiceFactory =
+    serverAccountServiceFactory =
         verifiableProperties.getString("server.account.service.factory", "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
   }
 }

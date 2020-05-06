@@ -165,10 +165,10 @@ public class AmbryServer {
             + "is not present in the clustermap. Failing to start the datanode");
       }
 
-      AccountServiceFactory accountServiceFactory =
+      AccountServiceFactory serverAccountServiceFactory =
           Utils.getObj(serverConfig.accountServiceFactory, properties,
               registry);
-      AccountService accountService = accountServiceFactory.getAccountService();
+      AccountService accountService = serverAccountServiceFactory.getAccountService();
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       // TODO make StorageManager, ReplicationManager, CloudToStoreReplicationManager and StatsManager support multiple participants
