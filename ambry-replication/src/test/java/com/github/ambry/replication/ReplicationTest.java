@@ -2811,8 +2811,9 @@ public class ReplicationTest {
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, dataNodeId, null, Collections.singletonList(clusterParticipant),
-            new MockTime(), null, null);
+            new MetricRegistry(), null, clusterMap, dataNodeId, null,
+            clusterParticipant == null ? null : Collections.singletonList(clusterParticipant), new MockTime(), null,
+            null);
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
