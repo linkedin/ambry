@@ -56,6 +56,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final VirtualReplicatorCluster virtualReplicatorCluster;
   private final CloudStorageCompactor cloudStorageCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
+  private final boolean trackPerDatacenterLagInMetric;
 
   public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
@@ -77,6 +78,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudStorageCompactor =
         cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
             partitionToPartitionInfo.keySet(), vcrMetrics) : null;
+    trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     // We need a datacenter to replicate from, which should be specified in the cloud config.
     if (cloudConfig.vcrSourceDatacenters.isEmpty()) {
       throw new IllegalStateException("One or more VCR cross colo replication peer datacenter should be specified");
@@ -169,7 +171,7 @@ public class VcrReplicationManager extends ReplicationEngine {
             new RemoteReplicaInfo(peerReplica, cloudReplica, store, findTokenFactory.getNewFindToken(),
                 storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
                 SystemTime.getInstance(), peerReplica.getDataNodeId().getPortToConnectTo());
-        replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
+        replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerDatacenterLagInMetric);
         remoteReplicaInfos.add(remoteReplicaInfo);
       }
       PartitionInfo partitionInfo = new PartitionInfo(remoteReplicaInfos, partitionId, store, cloudReplica);
@@ -239,7 +241,6 @@ public class VcrReplicationManager extends ReplicationEngine {
       long totalBytesRead) {
     // Since replica metadata request for a single partition can goto multiple vcr nodes, totalBytesReadByRemoteReplica
     // cannot be  populated locally on any vcr node.
-    return;
   }
 
   @Override

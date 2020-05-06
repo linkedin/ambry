@@ -90,7 +90,8 @@ public class CloudBlobMetadataTest {
     CloudBlobMetadata blobMetadata = new CloudBlobMetadata(blobId, now, -1, 1024, EncryptionOrigin.ROUTER);
     verifySerde(blobMetadata, ArrayUtils.addAll(FIELDS_ALWAYS_SET, FIELD_ENCRYPTION_ORIGIN),
         ArrayUtils.removeElement(FIELDS_RARELY_SET, FIELD_ENCRYPTION_ORIGIN));
-    blobMetadata = new CloudBlobMetadata(blobId, now, -1, 1024, EncryptionOrigin.VCR, "context", "factory", 1056);
+    blobMetadata =
+        new CloudBlobMetadata(blobId, now, -1, 1024, EncryptionOrigin.VCR, "context", "factory", 1056, (short) 0);
     verifySerde(blobMetadata, ArrayUtils.addAll(FIELDS_ALWAYS_SET, ENCRYPTION_FIELDS),
         new String[]{FIELD_DELETION_TIME, FIELD_EXPIRATION_TIME});
   }

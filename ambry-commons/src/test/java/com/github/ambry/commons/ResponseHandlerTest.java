@@ -141,10 +141,6 @@ public class ResponseHandlerTest {
       lastReplicaEvents.clear();
     }
 
-    public ReplicaId getLastReplicaID() {
-      return lastReplicaID;
-    }
-
     public Set<ReplicaEventType> getLastReplicaEvents() {
       return lastReplicaEvents;
     }

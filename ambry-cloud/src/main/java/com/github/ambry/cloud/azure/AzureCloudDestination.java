@@ -39,6 +39,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -151,13 +152,30 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean deleteBlob(BlobId blobId, long deletionTime) throws CloudStorageException {
-    return updateBlobMetadata(blobId, CloudBlobMetadata.FIELD_DELETION_TIME, deletionTime);
+  public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion) throws CloudStorageException {
+    Map<String, Object> updateFields = new HashMap<>();
+    // TODO Frontend support needs to handle the special case of life version = MessageInfo.LIFE_VERSION_FROM_FRONTEND
+    updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
+    updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, deletionTime);
+    return updateBlobMetadata(blobId, updateFields);
   }
 
   @Override
   public boolean updateBlobExpiration(BlobId blobId, long expirationTime) throws CloudStorageException {
-    return updateBlobMetadata(blobId, CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime);
+    return updateBlobMetadata(blobId,
+        Collections.singletonMap(CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime));
+  }
+
+  @Override
+  public short undeleteBlob(BlobId blobId, short lifeVersion) throws CloudStorageException {
+    Map<String, Object> updateFields = new HashMap<>();
+    updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
+    updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, Utils.Infinite_Time);
+    updateBlobMetadata(blobId, updateFields);
+    // We either update lifeVersion or throw error. So this should work for now.
+    // Note that lifeVersion from frontend request can be -1 (MessageInfo.LIFE_VERSION_FROM_FRONTEND).
+    // TODO Frontend support needs to increment and return the current life version in azure.
+    return lifeVersion; // TODO return the real value of life version.
   }
 
   @Override
@@ -247,14 +265,13 @@ class AzureCloudDestination implements CloudDestination {
   /**
    * Update the metadata for the specified blob.
    * @param blobId The {@link BlobId} to update.
-   * @param fieldName The metadata field to modify.
-   * @param value The new value.
+   * @param updateFields map of fields and new values to update.
    * @return {@code true} if the update succeeded, {@code false} if no update was needed.
    * @throws CloudStorageException if the update fails.
    */
-  private boolean updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws CloudStorageException {
+  private boolean updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields) throws CloudStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
-    Objects.requireNonNull(fieldName, "Field name cannot be null");
+    updateFields.keySet().forEach(field -> Objects.requireNonNull(updateFields.get(field)));
 
     // We update the blob metadata value in two places:
     // 1) the blob storage entry metadata (so GET's can be served entirely from ABS)
@@ -264,7 +281,7 @@ class AzureCloudDestination implements CloudDestination {
       Map<String, String> metadataMap = null;
       try {
         AzureBlobDataAccessor.UpdateResponse updateResponse =
-            azureBlobDataAccessor.updateBlobMetadata(blobId, fieldName, value);
+            azureBlobDataAccessor.updateBlobMetadata(blobId, updateFields);
         // Note: if blob does not exist will throw exception with NOT_FOUND status
         metadataMap = updateResponse.metadata;
         updatedStorage = updateResponse.wasUpdated;
@@ -283,7 +300,8 @@ class AzureCloudDestination implements CloudDestination {
               return false;
             } else {
               // If the blob is still active but ABS does not have it, we are in deeper trouble.
-              logger.error("Inconsistency: Cosmos contains record for active blob {} that is missing from ABS!", blobId.getID());
+              logger.error("Inconsistency: Cosmos contains record for active blob {} that is missing from ABS!",
+                  blobId.getID());
               throw bex;
             }
           } else {
@@ -300,7 +318,7 @@ class AzureCloudDestination implements CloudDestination {
       // of a request where ABS was updated but Cosmos update failed.
       boolean updatedCosmos = false;
       try {
-        ResourceResponse<Document> response = cosmosDataAccessor.updateMetadata(blobId, fieldName, value);
+        ResourceResponse<Document> response = cosmosDataAccessor.updateMetadata(blobId, updateFields);
         updatedCosmos = response != null;
       } catch (DocumentClientException dex) {
         if (dex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
@@ -315,11 +333,13 @@ class AzureCloudDestination implements CloudDestination {
       }
 
       if (updatedStorage || updatedCosmos) {
-        logger.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
+        logger.debug("Updated blob {} metadata set fields {} to values {}.", blobId, updateFields.keySet(),
+            updateFields.values());
         azureMetrics.blobUpdatedCount.inc();
         return true;
       } else {
-        logger.debug("Blob {} already has {} = {} in ABS and Cosmos", blobId, fieldName, value);
+        logger.debug("Blob {} already has keys {} with values {} in ABS and Cosmos", blobId, updateFields.keySet(),
+            updateFields.values());
         return false;
       }
     } catch (Exception e) {
@@ -439,7 +459,7 @@ class AzureCloudDestination implements CloudDestination {
    */
   private CloudStorageException toCloudStorageException(String message, Exception e) {
     Long retryDelayMs = null;
-    int statusCode = -1;
+    int statusCode;
     if (e instanceof BlobStorageException) {
       azureMetrics.storageErrorCount.inc();
       statusCode = ((BlobStorageException) e).getStatusCode();

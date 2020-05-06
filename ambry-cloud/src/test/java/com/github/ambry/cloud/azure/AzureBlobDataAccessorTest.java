@@ -34,6 +34,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -128,7 +129,7 @@ public class AzureBlobDataAccessorTest {
   public void testDelete() throws Exception {
     mockBlobExistence(true);
     AzureBlobDataAccessor.UpdateResponse response =
-        dataAccessor.updateBlobMetadata(blobId, "deletionTime", deletionTime);
+        dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("deletionTime", deletionTime));
     assertTrue("Expected was updated", response.wasUpdated);
     assertNotNull("Expected metadata", response.metadata);
   }
@@ -138,7 +139,7 @@ public class AzureBlobDataAccessorTest {
   public void testExpire() throws Exception {
     mockBlobExistence(true);
     AzureBlobDataAccessor.UpdateResponse response =
-        dataAccessor.updateBlobMetadata(blobId, "expirationTime", expirationTime);
+        dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("expirationTime", expirationTime));
     assertTrue("Expected was updated", response.wasUpdated);
     assertNotNull("Expected metadata", response.metadata);
   }
@@ -227,7 +228,8 @@ public class AzureBlobDataAccessorTest {
     BlobStorageException ex = mock(BlobStorageException.class);
     when(ex.getErrorCode()).thenReturn(BlobErrorCode.BLOB_NOT_FOUND);
     when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
-    expectBlobStorageException(() -> dataAccessor.updateBlobMetadata(blobId, "expirationTime", expirationTime));
+    expectBlobStorageException(
+        () -> dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("expirationTime", expirationTime)));
   }
 
   private void mockBlobExistence(boolean exists) {
