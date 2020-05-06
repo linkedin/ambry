@@ -17,6 +17,8 @@ package com.github.ambry.config;
  * Configuration parameters required by RestServer and Rest infrastructure
  */
 public class RestServerConfig {
+  public final static String CONFIG_PREFIX = "rest.server.";
+  public final static String ENABLE_ADDED_CHANNEL_HANDLERS = CONFIG_PREFIX + "enable.added.channel.handlers";
   /**
    * The RestRequestServiceFactory that needs to be used by the RestServer
    * for bootstrapping the RestRequestService.
@@ -90,6 +92,13 @@ public class RestServerConfig {
   @Default("/healthCheck")
   public final String restServerHealthCheckUri;
 
+  /**
+   * Set true to enable added channel handlers in RestServer.
+   */
+  @Config(ENABLE_ADDED_CHANNEL_HANDLERS)
+  @Default("false")
+  public final boolean restServerEnableAddedChannelHandlers;
+
   public RestServerConfig(VerifiableProperties verifiableProperties) {
     restServerRestRequestServiceFactory = verifiableProperties.getString("rest.server.rest.request.service.factory");
     restServerNioServerFactory =
@@ -110,5 +119,6 @@ public class RestServerConfig {
     restServerPublicAccessLogResponseHeaders =
         verifiableProperties.getString("rest.server.public.access.log.response.headers", "Location,x-ambry-blob-size");
     restServerHealthCheckUri = verifiableProperties.getString("rest.server.health.check.uri", "/healthCheck");
+    restServerEnableAddedChannelHandlers = verifiableProperties.getBoolean(ENABLE_ADDED_CHANNEL_HANDLERS, false);
   }
 }

@@ -174,7 +174,8 @@ public class RestServer {
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, SSLFactory sslFactory, List<ChannelHandler> addedChannelHandlers) throws Exception {
+      NotificationSystem notificationSystem, SSLFactory sslFactory, List<ChannelHandler> addedChannelHandlers)
+      throws Exception {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of RestServer");
     }
@@ -227,7 +228,8 @@ public class RestServer {
 
     NioServerFactory nioServerFactory =
         Utils.getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, metricRegistry,
-            restRequestHandler, publicAccessLogger, restServerState, sslFactory, addedChannelHandlers);
+            restRequestHandler, publicAccessLogger, restServerState, sslFactory,
+            restServerConfig.restServerEnableAddedChannelHandlers ? addedChannelHandlers : null);
     nioServer = nioServerFactory.getNioServer();
 
     if (accountService == null || router == null || restResponseHandler == null || restRequestHandler == null
