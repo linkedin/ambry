@@ -384,7 +384,6 @@ public class AzureBlobDataAccessor {
           }
         }
         deletedBlobs.add(blobMetadata);
-        break;
       }
     }
     return deletedBlobs;

@@ -503,13 +503,13 @@ public class AzureIntegrationTest {
 
     // Mark it deleted in the past
     long deletionTime = now - TimeUnit.DAYS.toMillis(7);
-    assertTrue("Expected delete to return true", azureDest.deleteBlob(blobId, deletionTime));
+    assertTrue("Expected delete to return true", azureDest.deleteBlob(blobId, deletionTime, (short) 0));
 
     // Simulate incomplete compaction by purging it from ABS only
     azureDest.getAzureBlobDataAccessor().purgeBlobs(Collections.singletonList(cloudBlobMetadata));
 
     // Try to delete again (to trigger recovery), verify removed from Cosmos
-    assertFalse("Expected delete to return false", azureDest.deleteBlob(blobId, deletionTime));
+    assertFalse("Expected delete to return false", azureDest.deleteBlob(blobId, deletionTime, (short) 0));
     assertNull("Expected record to be purged from Cosmos", azureDest.getCosmosDataAccessor().getMetadataOrNull(blobId));
   }
 
