@@ -443,10 +443,32 @@ public class AzureIntegrationTest {
 
     // Now update the blob and see if it gets fixed
     azureDest.updateBlobExpiration(blobId, Utils.Infinite_Time);
-    List<CloudBlobMetadata> resultList = azureDest.getCosmosDataAccessor()
-        .queryMetadata(partitionId.toPathString(), "SELECT * FROM c WHERE c.id = '" + blobId.getID() + "'",
-            azureDest.getAzureMetrics().missingKeysQueryTime);
-    assertEquals("Expected record to exist", 1, resultList.size());
+    assertNotNull("Expected Cosmos to have record", azureDest.getCosmosDataAccessor().getMetadataOrNull(blobId));
+  }
+
+  /** Test that incomplete compaction get fixed on update. */
+  @Test
+  public void testRepairAfterIncompleteCompaction() throws Exception {
+    // Upload a blob
+    PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    BlobId blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+        BlobDataType.DATACHUNK);
+    InputStream inputStream = getBlobInputStream(blobSize);
+    long now = System.currentTimeMillis();
+    CloudBlobMetadata cloudBlobMetadata =
+        new CloudBlobMetadata(blobId, now, -1, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE);
+    uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, inputStream);
+
+    // Mark it deleted in the past
+    long deletionTime = now - TimeUnit.DAYS.toMillis(7);
+    assertTrue("Expected delete to return true", azureDest.deleteBlob(blobId, deletionTime));
+
+    // Simulate incomplete compaction by purging it from ABS only
+    azureDest.getAzureBlobDataAccessor().purgeBlobs(Collections.singletonList(cloudBlobMetadata));
+
+    // Try to delete again (to trigger recovery), verify removed from Cosmos
+    assertFalse("Expected delete to return false", azureDest.deleteBlob(blobId, deletionTime));
+    assertNull("Expected record to be purged from Cosmos", azureDest.getCosmosDataAccessor().getMetadataOrNull(blobId));
   }
 
   /** Persist tokens to Azure, then read them back and verify they match. */

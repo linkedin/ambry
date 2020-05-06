@@ -34,6 +34,8 @@ public class CloudStorageCompactor implements Runnable {
   private final CloudDestination cloudDestination;
   private final Set<PartitionId> partitions;
   private final int queryLimit;
+  private final int queryBucketDays;
+  private final int lookbackDays;
   private final int shutDownTimeoutSecs;
   private final long retentionPeriodMs;
   private final long compactionTimeLimitMs;
@@ -55,7 +57,9 @@ public class CloudStorageCompactor implements Runnable {
     this.vcrMetrics = vcrMetrics;
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
     this.queryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
-    this.shutDownTimeoutSecs = cloudConfig.cloudBlobCompactionShutDownTimeoutSecs;
+    this.queryBucketDays = cloudConfig.cloudCompactionQueryBucketTimeDays;
+    this.lookbackDays = cloudConfig.cloudCompactionLookbackDays;
+    this.shutDownTimeoutSecs = cloudConfig.cloudBlobCompactionShutdownTimeoutSecs;
     compactionTimeLimitMs = TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours);
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
     doneLatch.set(new CountDownLatch(0));
@@ -124,11 +128,12 @@ public class CloudStorageCompactor implements Runnable {
     long compactionStartTime = now;
     long timeToQuit = now + compactionTimeLimitMs;
     long queryEndTime = now - retentionPeriodMs;
-    // TODO: we can cache the latest timestamp that we know we have cleared and use that on subsequent calls
+    // TODO: checkpoint the latest timestamp and use that on subsequent compactions
     // Starting from beginning of time is too expensive
     // Order partitions by earliest time at which dead blob exists
-    // Can start with retention period and go back additional retention periods until no more found
-    long queryStartTime = 1;
+    long queryStartTime = now - TimeUnit.DAYS.toMillis(lookbackDays);
+    Date queryStartDate = new Date(queryStartTime);
+    Date queryEndDate = new Date(queryEndTime);
     int totalBlobsPurged = 0;
     for (PartitionId partitionId : partitionsSnapshot) {
       String partitionPath = partitionId.toPathString();
@@ -136,18 +141,17 @@ public class CloudStorageCompactor implements Runnable {
         // Looks like partition was reassigned since the loop started, so skip it
         continue;
       }
-      logger.info("Running compaction on partition {}", partitionPath);
+      logger.info("Compacting partition {} over time range {} - {}", partitionPath, queryStartDate, queryEndDate);
       try {
-        // TODO: before compacting, call getOldestBlob to get queryStartTime
         int numPurged =
             compactPartition(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, queryStartTime, queryEndTime,
                 timeToQuit);
-        logger.info("Purged {} deleted blobs in partition {}", numPurged, partitionPath);
+        logger.info("Purged {} deleted blobs in partition {} up to {}", numPurged, partitionPath, queryEndDate);
         totalBlobsPurged += numPurged;
         numPurged =
             compactPartition(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, queryStartTime, queryEndTime,
                 timeToQuit);
-        logger.info("Purged {} expired blobs in partition {}", numPurged, partitionPath);
+        logger.info("Purged {} expired blobs in partition {} up to {}", numPurged, partitionPath, queryEndDate);
         totalBlobsPurged += numPurged;
       } catch (CloudStorageException ex) {
         logger.error("Compaction failed for partition {}", partitionPath, ex);
@@ -176,8 +180,6 @@ public class CloudStorageCompactor implements Runnable {
    * @throws CloudStorageException
    */
   public CloudBlobMetadata getOldestExpiredBlob(String partitionPath) throws CloudStorageException {
-    // TODO: break this up into sequence of queries starting with current retention period and
-    // moving backwards until no more blobs are found
     List<CloudBlobMetadata> deadBlobs = requestAgent.doWithRetries(
         () -> cloudDestination.getExpiredBlobs(partitionPath, 1, System.currentTimeMillis(), 1), "GetDeadBlobs",
         partitionPath);
@@ -212,6 +214,28 @@ public class CloudStorageCompactor implements Runnable {
 
     // Iterate until returned list size < limit, time runs out or we get shut down
     int totalPurged = 0;
+    long chunkTimeRange = TimeUnit.DAYS.toMillis(queryBucketDays);
+    if (queryEndTime - queryStartTime > chunkTimeRange) {
+      logger.debug("Dividing compaction query for {} into buckets of {} days", partitionPath, queryBucketDays);
+      long chunkedStartTime = queryStartTime;
+      while (chunkedStartTime < queryEndTime) {
+        long chunkedEndTime = Math.min(chunkedStartTime + chunkTimeRange, queryEndTime);
+        int numPurged = compactPartition(partitionPath, fieldName, chunkedStartTime, chunkedEndTime, timeToQuit);
+        totalPurged += numPurged;
+        chunkedStartTime += chunkTimeRange;
+        if (isShuttingDown() || System.currentTimeMillis() >= timeToQuit) {
+          break;
+        }
+        if (numPurged == 0) {
+          // TODO: Back off since the last index scan might have been expensive
+        } else {
+          logger.info("Purged {} blobs in partition {} up to {} {}", totalPurged, partitionPath, fieldName,
+              new Date(chunkedEndTime));
+        }
+      }
+      return totalPurged;
+    }
+
     while (System.currentTimeMillis() < timeToQuit && !isShuttingDown()) {
 
       Callable<List<CloudBlobMetadata>> deadBlobsLambda =
@@ -229,8 +253,7 @@ public class CloudStorageCompactor implements Runnable {
       CloudBlobMetadata lastBlob = deadBlobs.get(deadBlobs.size() - 1);
       long latestTime = fieldName.equals(CloudBlobMetadata.FIELD_DELETION_TIME) ? lastBlob.getDeletionTime()
           : lastBlob.getExpirationTime();
-      logger.info("Purged {} blobs in partition {} up to {} {}", totalPurged, partitionPath, fieldName,
-          new Date(latestTime));
+      logger.info("Purged partition {} up to {} {}", partitionPath, fieldName, new Date(latestTime));
       queryStartTime = latestTime;
     }
     return totalPurged;
