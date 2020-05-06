@@ -705,11 +705,11 @@ class NettyResponseChannel implements RestResponseChannel {
    * </p>
    * May also close the channel if the class internally is forcing a close (i.e. if {@link #close()} is called.
    * @param closeNetworkChannel network channel is closed if {@code true}.
-   * @param delayed network channel will be closed after certain delay if {@code true}.
+   * @param shouldDelay network channel may be closed after certain delay if {@code true}.
    */
-  private void completeRequest(boolean closeNetworkChannel, boolean delayed) {
+  private void completeRequest(boolean closeNetworkChannel, boolean shouldDelay) {
     if ((closeNetworkChannel || forceClose) && ctx.channel().isOpen()) {
-      if (!delayed || (request != null && !request.getRestMethod().equals(RestMethod.POST)) || (this.nettyConfig.nettyServerCloseDelayTimeoutMs == 0)) {
+      if (!shouldDelay || (request != null && !request.getRestMethod().equals(RestMethod.POST)) || (this.nettyConfig.nettyServerCloseDelayTimeoutMs == 0)) {
         writeFuture.addListener(ChannelFutureListener.CLOSE);
       } else {
         writeFuture.addListener(DELAYED_CLOSE);
