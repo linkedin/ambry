@@ -502,7 +502,7 @@ public class HelixBootstrapUpgradeUtil {
 
   /**
    * Generate partition override map a static config file. It requires file to be a list of partition ids (separated by
-   * comma). These partitions will overridden to READ_ONLY state.
+   * comma). These partitions will be overridden to READ_ONLY state.
    * @param adminConfigFilePath the path to config file
    * @return the constructed partitionOverrideInfos by dc. The format is as follows.
    * "mapFields": {
