@@ -136,6 +136,8 @@ public class AmbryServerRequestsTest {
   private final MockStoreKeyConverterFactory storeKeyConverterFactory;
   private final ReplicationConfig replicationConfig;
   private final ServerConfig serverConfig;
+  private final ServerMetrics serverMetrics;
+  private final String localDc;
   private final ReplicaStatusDelegate mockDelegate = Mockito.mock(ReplicaStatusDelegate.class);
   private final boolean validateRequestOnStoreState;
   private AmbryServerRequests ambryRequests;
@@ -149,12 +151,14 @@ public class AmbryServerRequestsTest {
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
     this.validateRequestOnStoreState = validateRequestOnStoreState;
     clusterMap = new MockClusterMap();
+    localDc = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
     Properties properties = createProperties(validateRequestOnStoreState, true);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
     serverConfig = new ServerConfig(verifiableProperties);
     StatsManagerConfig statsManagerConfig = new StatsManagerConfig(verifiableProperties);
-    dataNodeId = clusterMap.getDataNodeIds().get(0);
+    dataNodeId =
+        clusterMap.getDataNodeIds().stream().filter(node -> node.getDatacenterName().equals(localDc)).findFirst().get();
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
     findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
     storageManager = new MockStorageManager(validKeysInStore, clusterMap, dataNodeId, findTokenHelper);
@@ -166,7 +170,7 @@ public class AmbryServerRequestsTest {
     statsManager =
         new MockStatsManager(storageManager, clusterMap.getReplicaIds(dataNodeId), clusterMap.getMetricRegistry(),
             statsManagerConfig, null);
-    ServerMetrics serverMetrics =
+    serverMetrics =
         new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
@@ -848,6 +852,36 @@ public class AmbryServerRequestsTest {
     miscUndeleteFailuresTest();
   }
 
+  /**
+   * Test that cross-colo metrics are updated correctly when {@link AmbryRequests} handles {@link GetRequest} and
+   * {@link ReplicaMetadataRequest}
+   * @throws Exception
+   */
+  @Test
+  public void crossColoMetricsUpdateTest() throws Exception {
+    // find a node in remote dc
+    DataNodeId remoteNode = clusterMap.getDataNodeIds()
+        .stream()
+        .filter(node -> !node.getDatacenterName().equals(localDc))
+        .findFirst()
+        .get();
+    PartitionId id = clusterMap.getReplicaIds(remoteNode).get(0).getPartitionId();
+    // send cross-colo metadata request and verify
+    String clientId = "replication-metadata-" + remoteNode.getHostname() + "[" + remoteNode.getDatacenterName() + "]";
+    List<Response> responseList =
+        sendAndVerifyOperationRequest(RequestOrResponseType.ReplicaMetadataRequest, Collections.singletonList(id),
+            ServerErrorCode.No_Error, null, clientId);
+    assertEquals("cross-colo metadata exchange bytes are not expected", responseList.get(0).sizeInBytes(),
+        serverMetrics.crossColoMetadataExchangeBytesRate.get(remoteNode.getDatacenterName()).getCount());
+    // send cross-colo get request and verify
+    clientId =
+        GetRequest.Replication_Client_Id_Prefix + remoteNode.getHostname() + "[" + remoteNode.getDatacenterName() + "]";
+    responseList = sendAndVerifyOperationRequest(RequestOrResponseType.GetRequest, Collections.singletonList(id),
+        ServerErrorCode.No_Error, null, clientId);
+    assertEquals("cross-colo fetch bytes are not expected", responseList.get(0).sizeInBytes(),
+        serverMetrics.crossColoFetchBytesRate.get(remoteNode.getDatacenterName()).getCount());
+  }
+
   // helpers
 
   // general
@@ -888,8 +922,9 @@ public class AmbryServerRequestsTest {
    *                             {@link ServerErrorCode#No_Error}. Skips the check otherwise.
    * @throws InterruptedException
    * @throws IOException
+   * @return the response associated with given request.
    */
-  private void sendAndVerifyOperationRequest(RequestOrResponse request, ServerErrorCode expectedErrorCode,
+  private Response sendAndVerifyOperationRequest(RequestOrResponse request, ServerErrorCode expectedErrorCode,
       Boolean forceCheckOpReceived) throws InterruptedException, IOException {
     storageManager.resetStore();
     RequestOrResponseType requestType = request.getRequestType();
@@ -912,6 +947,7 @@ public class AmbryServerRequestsTest {
         assertEquals("Error code does not match expected", expectedErrorCode, info.getError());
       }
     }
+    return response;
   }
 
   /**
@@ -1025,21 +1061,21 @@ public class AmbryServerRequestsTest {
       idsToTest = Collections.singletonList(id);
     }
     // check that everything works
-    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null);
+    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null, null);
     // disable the request
     sendAndVerifyRequestControlRequest(toControl, false, id, ServerErrorCode.No_Error);
     // check that it is disabled
-    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.Temporarily_Disabled, false);
+    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.Temporarily_Disabled, false, null);
     // ok to call disable again
     sendAndVerifyRequestControlRequest(toControl, false, id, ServerErrorCode.No_Error);
     // enable
     sendAndVerifyRequestControlRequest(toControl, true, id, ServerErrorCode.No_Error);
     // check that everything works
-    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null);
+    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null, null);
     // ok to call enable again
     sendAndVerifyRequestControlRequest(toControl, true, id, ServerErrorCode.No_Error);
     // check that everything works
-    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null);
+    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null, null);
   }
 
   /**
@@ -1083,14 +1119,18 @@ public class AmbryServerRequestsTest {
    * @param forceCheckOpReceived if {@code true}, checks the operation received at the {@link Store} even if
    *                             there is an error expected. Always checks op received if {@code expectedErrorCode} is
    *                             {@link ServerErrorCode#No_Error}. Skips the check otherwise.
+   * @param clientIdStr the clientId string to construct request. if null, generate a random string as clientId.
    * @throws InterruptedException
    * @throws IOException
+   * @return a list of {@link Response}(s) associated with given partition ids.
    */
-  private void sendAndVerifyOperationRequest(RequestOrResponseType requestType, List<? extends PartitionId> ids,
-      ServerErrorCode expectedErrorCode, Boolean forceCheckOpReceived) throws InterruptedException, IOException {
+  private List<Response> sendAndVerifyOperationRequest(RequestOrResponseType requestType,
+      List<? extends PartitionId> ids, ServerErrorCode expectedErrorCode, Boolean forceCheckOpReceived,
+      String clientIdStr) throws InterruptedException, IOException {
+    List<Response> responses = new ArrayList<>();
     for (PartitionId id : ids) {
       int correlationId = TestUtils.RANDOM.nextInt();
-      String clientId = TestUtils.getRandomString(10);
+      String clientId = clientIdStr == null ? TestUtils.getRandomString(10) : clientIdStr;
       BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
           Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
@@ -1134,8 +1174,9 @@ public class AmbryServerRequestsTest {
         default:
           throw new IllegalArgumentException(requestType + " not supported by this function");
       }
-      sendAndVerifyOperationRequest(request, expectedErrorCode, forceCheckOpReceived);
+      responses.add(sendAndVerifyOperationRequest(request, expectedErrorCode, forceCheckOpReceived));
     }
+    return responses;
   }
 
   /**
@@ -1343,18 +1384,18 @@ public class AmbryServerRequestsTest {
       MockStorageManager.storeException = new StoreException("expected", code);
       ServerErrorCode expectedErrorCode = ErrorMapping.getStoreErrorMapping(code);
       sendAndVerifyOperationRequest(RequestOrResponseType.TtlUpdateRequest, Collections.singletonList(id),
-          expectedErrorCode, true);
+          expectedErrorCode, true, null);
       MockStorageManager.storeException = null;
     }
     // runtime exception
     MockStorageManager.runtimeException = new RuntimeException("expected");
     sendAndVerifyOperationRequest(RequestOrResponseType.TtlUpdateRequest, Collections.singletonList(id),
-        ServerErrorCode.Unknown_Error, true);
+        ServerErrorCode.Unknown_Error, true, null);
     MockStorageManager.runtimeException = null;
     // store is not started/is stopped/otherwise unavailable - Replica_Unavailable
     storageManager.returnNullStore = true;
     sendAndVerifyOperationRequest(RequestOrResponseType.TtlUpdateRequest, Collections.singletonList(id),
-        ServerErrorCode.Replica_Unavailable, false);
+        ServerErrorCode.Replica_Unavailable, false, null);
     storageManager.returnNullStore = false;
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
 
@@ -1362,7 +1403,7 @@ public class AmbryServerRequestsTest {
     ReplicaId replicaId = findReplica(id);
     clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Error);
     sendAndVerifyOperationRequest(RequestOrResponseType.TtlUpdateRequest, Collections.singletonList(id),
-        ServerErrorCode.Disk_Unavailable, false);
+        ServerErrorCode.Disk_Unavailable, false, null);
     clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Ok);
     // request disabled is checked in request control tests
   }
@@ -1378,18 +1419,18 @@ public class AmbryServerRequestsTest {
       MockStorageManager.storeException = new StoreException("expected", code);
       ServerErrorCode expectedErrorCode = ErrorMapping.getStoreErrorMapping(code);
       sendAndVerifyOperationRequest(RequestOrResponseType.UndeleteRequest, Collections.singletonList(id),
-          expectedErrorCode, true);
+          expectedErrorCode, true, null);
       MockStorageManager.storeException = null;
     }
     // runtime exception
     MockStorageManager.runtimeException = new RuntimeException("expected");
     sendAndVerifyOperationRequest(RequestOrResponseType.UndeleteRequest, Collections.singletonList(id),
-        ServerErrorCode.Unknown_Error, true);
+        ServerErrorCode.Unknown_Error, true, null);
     MockStorageManager.runtimeException = null;
     // store is not started/is stopped/otherwise unavailable - Replica_Unavailable
     storageManager.returnNullStore = true;
     sendAndVerifyOperationRequest(RequestOrResponseType.UndeleteRequest, Collections.singletonList(id),
-        ServerErrorCode.Replica_Unavailable, false);
+        ServerErrorCode.Replica_Unavailable, false, null);
     storageManager.returnNullStore = false;
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
 
@@ -1397,7 +1438,7 @@ public class AmbryServerRequestsTest {
     ReplicaId replicaId = findReplica(id);
     clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Error);
     sendAndVerifyOperationRequest(RequestOrResponseType.UndeleteRequest, Collections.singletonList(id),
-        ServerErrorCode.Disk_Unavailable, false);
+        ServerErrorCode.Disk_Unavailable, false, null);
     clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Ok);
     // request disabled is checked in request control tests
   }

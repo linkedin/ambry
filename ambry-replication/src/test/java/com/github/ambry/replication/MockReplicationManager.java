@@ -13,6 +13,7 @@
  */
 package com.github.ambry.replication;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
@@ -169,6 +170,13 @@ public class MockReplicationManager extends ReplicationManager {
    */
   Map<String, Set<PartitionInfo>> getMountPathToPartitionInfosMap() {
     return mountPathToPartitionInfos;
+  }
+
+  /**
+   * @return the MetricRegistry that used in ReplicationMetrics.
+   */
+  MetricRegistry getMetricRegistry() {
+    return metricRegistry;
   }
 
   /**

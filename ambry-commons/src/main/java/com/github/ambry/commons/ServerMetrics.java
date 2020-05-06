@@ -17,6 +17,8 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -211,12 +213,19 @@ public class ServerMetrics {
   public final Counter ttlAlreadyUpdatedError;
   public final Counter ttlUpdateRejectedError;
   public final Counter replicationResponseMessageSizeTooHigh;
+  public final Map<String, Meter> crossColoFetchBytesRate = new ConcurrentHashMap<>();
+  public final Map<String, Meter> crossColoMetadataExchangeBytesRate = new ConcurrentHashMap<>();
+
+  private final MetricRegistry registry;
+  private final Class<?> requestClass;
 
   public ServerMetrics(MetricRegistry registry, Class<?> requestClass) {
     this(registry, requestClass, null);
   }
 
   public ServerMetrics(MetricRegistry registry, Class<?> requestClass, Class<?> serverClass) {
+    this.registry = registry;
+    this.requestClass = requestClass;
     putBlobRequestQueueTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobRequestQueueTime"));
     putBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobProcessingTime"));
     putBlobResponseQueueTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobResponseQueueTime"));
@@ -473,6 +482,17 @@ public class ServerMetrics {
     ttlUpdateRejectedError = registry.counter(MetricRegistry.name(requestClass, "TtlUpdateRejectedError"));
     replicationResponseMessageSizeTooHigh =
         registry.counter(MetricRegistry.name(requestClass, "ReplicationResponseMessageSizeTooHigh"));
+  }
+
+  public void updateCrossColoFetchBytesRate(String dcName, long bytes) {
+    crossColoFetchBytesRate.computeIfAbsent(dcName,
+        dc -> registry.meter(MetricRegistry.name(requestClass, dcName + "-CrossColoFetchBytesRate"))).mark(bytes);
+  }
+
+  public void updateCrossColoMetadataExchangeBytesRate(String dcName, long bytes) {
+    crossColoMetadataExchangeBytesRate.computeIfAbsent(dcName,
+        dc -> registry.meter(MetricRegistry.name(requestClass, dcName + "-CrossColoMetadataExchangeBytesRate")))
+        .mark(bytes);
   }
 
   /**
