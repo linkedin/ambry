@@ -125,6 +125,7 @@ class NettyResponseChannel implements RestResponseChannel {
       future.channel().eventLoop().schedule(() -> {
         if (future.channel().isActive()) {
           logger.trace("closing channel {}", future.channel());
+          nettyMetrics.delayedCloseExecutedCount.inc();
           future.channel().close();
         }
       }, nettyConfig.nettyServerCloseDelayTimeoutMs, TimeUnit.MILLISECONDS);
@@ -713,7 +714,7 @@ class NettyResponseChannel implements RestResponseChannel {
         writeFuture.addListener(ChannelFutureListener.CLOSE);
       } else {
         writeFuture.addListener(DELAYED_CLOSE);
-        nettyMetrics.delayedCloseCount.inc();
+        nettyMetrics.delayedCloseScheduledCount.inc();
       }
       logger.trace("Requested closing of channel {}", ctx.channel());
     }

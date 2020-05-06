@@ -135,7 +135,8 @@ public class NettyMetrics {
   public final Counter throwableCount;
   public final Counter unknownResponseStatusCount;
   public final Counter channelStatusInconsistentCount;
-  public final Counter delayedCloseCount;
+  public final Counter delayedCloseScheduledCount;
+  public final Counter delayedCloseExecutedCount;
   // NettyServer
   public final Histogram nettyServerShutdownTimeInMs;
   public final Histogram nettyServerStartTimeInMs;
@@ -322,8 +323,10 @@ public class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "UnknownResponseStatusCount"));
     channelStatusInconsistentCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ChannelStatusInconsistentCount"));
-    delayedCloseCount =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "DelayedCloseCount"));
+    delayedCloseScheduledCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "DelayedCloseScheduledCount"));
+    delayedCloseExecutedCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "DelayedCloseExecutedCount"));
 
     // NettyServer
     nettyServerShutdownTimeInMs = metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "ShutdownTimeInMs"));
