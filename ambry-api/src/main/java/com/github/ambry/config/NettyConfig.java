@@ -163,7 +163,7 @@ public class NettyConfig {
   public final int nettyMetricsStopWaitTimeoutSeconds;
 
   /**
-   * The duration to wait for netty metrics collector to stop before forcelly shutting it down.
+   * The duration to wait for before closing the netty channel in case of failures.
    */
   @Config(NETTY_SERVER_CLOSE_DELAY_TIMEOUT_MS)
   @Default("0")

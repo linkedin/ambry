@@ -1109,7 +1109,6 @@ public class NettyResponseChannelTest {
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", getExpectedHttpResponseStatus(REST_ERROR_CODE), response.status());
     //channel should not be closed right away.
-    Thread.sleep(1000);
     assertTrue("Channel closed on the server", channel.isActive());
   }
 }
