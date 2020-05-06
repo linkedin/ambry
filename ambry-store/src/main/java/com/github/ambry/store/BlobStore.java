@@ -943,7 +943,7 @@ public class BlobStore implements Store {
   }
 
   /**
-   * @return {@link ReplicaStatusDelegate} associated with this store
+   * @return a {@link ReplicaStatusDelegate}(s) associated with this store
    */
   public List<ReplicaStatusDelegate> getReplicaStatusDelegates() {
     return replicaStatusDelegates;
