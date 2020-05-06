@@ -676,7 +676,7 @@ public class StorageManagerTest {
     storageManager =
         new StorageManager(new StoreConfig(vProps), diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
             new MockIdFactory(), clusterMap, dataNode, new DummyMessageStoreHardDelete(), null,
-            SystemTime.getInstance(), new DummyMessageStoreRecovery());
+            SystemTime.getInstance(), new DummyMessageStoreRecovery(), null);
     storageManager.start();
     for (ReplicaId replica : replicas) {
       id = replica.getPartitionId();
@@ -1095,7 +1095,7 @@ public class StorageManagerTest {
       ClusterParticipant clusterParticipant) throws StoreException {
     return new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
         new MockIdFactory(), clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipant,
-        SystemTime.getInstance(), new DummyMessageStoreRecovery());
+        SystemTime.getInstance(), new DummyMessageStoreRecovery(), null);
   }
 
   /**
@@ -1303,7 +1303,7 @@ public class StorageManagerTest {
     MockStorageManager(DataNodeId currentNode, ClusterParticipant clusterParticipant) throws Exception {
       super(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, new MockIdFactory(),
           clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipant, SystemTime.getInstance(),
-          new DummyMessageStoreRecovery());
+          new DummyMessageStoreRecovery(), null);
     }
 
     @Override

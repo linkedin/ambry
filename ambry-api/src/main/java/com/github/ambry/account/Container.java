@@ -667,10 +667,11 @@ public class Container {
   }
 
   /**
-   * Status of the container. {@code ACTIVE} means this container is in operational state, and {@code INACTIVE} means
-   * the container has been deactivated.
+   * Status of the container. {@code ACTIVE} means this container is in operational state, {@code INACTIVE} means
+   * the container has been deactivated, and {@code DELETE_IN_PROGRESS} means blobs in this container are being
+   * deleted and no active ACL.
    */
   public enum ContainerStatus {
-    ACTIVE, INACTIVE
+    ACTIVE, INACTIVE, DELETE_IN_PROGRESS
   }
 }

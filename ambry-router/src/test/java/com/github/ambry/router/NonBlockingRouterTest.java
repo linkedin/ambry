@@ -20,7 +20,6 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -30,7 +29,9 @@ import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.NetworkClientFactory;
@@ -38,16 +39,23 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -60,6 +68,7 @@ import java.util.PrimitiveIterator;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -83,7 +92,7 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.router.RouterTestHelpers.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
 
 
@@ -117,8 +126,11 @@ public class NonBlockingRouterTest {
   protected final String singleKeyForKMS;
   protected final CryptoService cryptoService;
   protected final MockClusterMap mockClusterMap;
+  protected final MockServerLayout mockServerLayout;
+  protected RouterConfig routerConfig;
   protected final boolean testEncryption;
   protected final int metadataContentVersion;
+  protected final boolean includeCloudDc;
   protected final InMemAccountService accountService;
   protected CryptoJobHandler cryptoJobHandler;
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterTest.class);
@@ -163,8 +175,10 @@ public class NonBlockingRouterTest {
       throws Exception {
     this.testEncryption = testEncryption;
     this.metadataContentVersion = metadataContentVersion;
+    this.includeCloudDc = includeCloudDc;
     mockTime = new MockTime();
     mockClusterMap = new MockClusterMap(false, 9, 3, 3, false, includeCloudDc);
+    mockServerLayout = new MockServerLayout(mockClusterMap);
     NonBlockingRouter.currentOperationsCount.set(0);
     VerifiableProperties vProps = new VerifiableProperties(new Properties());
     singleKeyForKMS = TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS);
@@ -219,24 +233,23 @@ public class NonBlockingRouterTest {
    * router with them.
    */
   protected void setRouter() throws Exception {
-    setRouter(getNonBlockingRouterProperties("DC1"), new MockServerLayout(mockClusterMap),
-        new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterProperties("DC1"), mockServerLayout, new LoggingNotificationSystem());
   }
 
   /**
    * Initialize and set the router with the given {@link Properties} and {@link MockServerLayout}
    * @param props the {@link Properties}
-   * @param mockServerLayout the {@link MockServerLayout}
+   * @param serverLayout the {@link MockServerLayout}.
    * @param notificationSystem the {@link NotificationSystem} to use.
    */
-  protected void setRouter(Properties props, MockServerLayout mockServerLayout, NotificationSystem notificationSystem)
+  protected void setRouter(Properties props, MockServerLayout serverLayout, NotificationSystem notificationSystem)
       throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-    RouterConfig routerConfig = new RouterConfig(verifiableProperties);
+    routerConfig = new RouterConfig(verifiableProperties);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     router = new NonBlockingRouter(routerConfig, routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
+            CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
         cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
   }
 
@@ -333,6 +346,250 @@ public class NonBlockingRouterTest {
   }
 
   /**
+   * Test undelete with Router with a single scaling unit.
+   * @throws Exception
+   */
+  @Test
+  public void testUndeleteBasic() throws Exception {
+    assumeTrue(!testEncryption && !includeCloudDc);
+    setRouter();
+    assertExpectedThreadCounts(2, 1);
+
+    // 1. Test undelete a composite blob
+    List<String> blobIds = new ArrayList<>();
+    for (int i = 0; i < 2; i++) {
+      setOperationParams();
+      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+      ensurePutInAllServers(blobId, mockServerLayout);
+      logger.debug("Put blob {}", blobId);
+      blobIds.add(blobId);
+    }
+    setOperationParams();
+    List<ChunkInfo> chunksToStitch = blobIds.stream()
+        .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
+        .collect(Collectors.toList());
+    String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch).get();
+    ensureStitchInAllServers(stitchedBlobId, mockServerLayout, chunksToStitch, PUT_CONTENT_SIZE);
+    blobIds.add(stitchedBlobId);
+
+    for (String blobId : blobIds) {
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+      router.deleteBlob(blobId, null).get();
+      ensureDeleteInAllServers(blobId, mockServerLayout);
+      try {
+        router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+      } catch (ExecutionException e) {
+        RouterException r = (RouterException) e.getCause();
+        Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+      }
+      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build()).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build()).get();
+    }
+    // StitchedBlob is a composite blob
+    router.undeleteBlob(stitchedBlobId, "undelete_server_id").get();
+    for (String blobId : blobIds) {
+      ensureUndeleteInAllServers(blobId, mockServerLayout);
+    }
+    // Now we should be able to fetch all the blobs
+    for (String blobId : blobIds) {
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+    }
+
+    // 2. Test undelete a simple blob
+    setOperationParams();
+    String simpleBlobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+    ensurePutInAllServers(simpleBlobId, mockServerLayout);
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build()).get();
+    router.deleteBlob(simpleBlobId, null).get();
+    ensureDeleteInAllServers(simpleBlobId, mockServerLayout);
+
+    try {
+      router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build()).get();
+    } catch (ExecutionException e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+    }
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build()).get();
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build()).get();
+    router.undeleteBlob(simpleBlobId, "undelete_server_id").get();
+    ensureUndeleteInAllServers(simpleBlobId, mockServerLayout);
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build()).get();
+
+    // 3. Test delete after undelete
+    router.deleteBlob(simpleBlobId, null).get();
+    ensureDeleteInAllServers(simpleBlobId, mockServerLayout);
+
+    try {
+      router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build()).get();
+    } catch (ExecutionException e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+    }
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build()).get();
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build()).get();
+
+    // 4. Test undelete more than once
+    router.undeleteBlob(simpleBlobId, "undelete_server_id").get();
+    ensureUndeleteInAllServers(simpleBlobId, mockServerLayout);
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build()).get();
+
+    // 5. Test ttl update after undelete
+    router.updateBlobTtl(simpleBlobId, null, Utils.Infinite_Time);
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build()).get();
+
+    router.close();
+    assertExpectedThreadCounts(0, 0);
+
+    //submission after closing should return a future that is already done.
+    assertClosed();
+  }
+
+  /**
+   * Test undelete notification system when successfully undelete a blob.
+   * @throws Exception
+   */
+  @Test
+  public void testUndeleteWithNotificationSystem() throws Exception {
+    assumeTrue(!includeCloudDc);
+
+    final CountDownLatch undeletesDoneLatch = new CountDownLatch(2);
+    final Set<String> blobsThatAreUndeleted = new HashSet<>();
+    LoggingNotificationSystem undeleteTrackingNotificationSystem = new LoggingNotificationSystem() {
+      @Override
+      public void onBlobUndeleted(String blobId, String serviceId, Account account, Container container) {
+        blobsThatAreUndeleted.add(blobId);
+        undeletesDoneLatch.countDown();
+      }
+    };
+    setRouter(getNonBlockingRouterProperties("DC1"), mockServerLayout, undeleteTrackingNotificationSystem);
+
+    List<String> blobIds = new ArrayList<>();
+    for (int i = 0; i < 4; i++) {
+      setOperationParams();
+      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+      ensurePutInAllServers(blobId, mockServerLayout);
+      blobIds.add(blobId);
+    }
+    setOperationParams();
+    List<ChunkInfo> chunksToStitch = blobIds.stream()
+        .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
+        .collect(Collectors.toList());
+    String blobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch).get();
+    ensureStitchInAllServers(blobId, mockServerLayout, chunksToStitch, PUT_CONTENT_SIZE);
+    blobIds.add(blobId);
+    Set<String> blobsToBeUndeleted = getBlobsInServers(mockServerLayout);
+
+    router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+    router.deleteBlob(blobId, null).get();
+    for (String chunkBlobId : blobIds) {
+      ensureDeleteInAllServers(chunkBlobId, mockServerLayout);
+    }
+    router.undeleteBlob(blobId, "undelete_server_id").get();
+
+    Assert.assertTrue("Undelete should not take longer than " + AWAIT_TIMEOUT_MS,
+        undeletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    Assert.assertTrue("All blobs in server are deleted", blobsThatAreUndeleted.containsAll(blobsToBeUndeleted));
+    Assert.assertTrue("Only blobs in server are undeleted", blobsToBeUndeleted.containsAll(blobsThatAreUndeleted));
+
+    router.close();
+    assertClosed();
+  }
+
+  /**
+   * Test failure cases of undelete.
+   * @throws Exception
+   */
+  @Test
+  public void testUndeleteFailure() throws Exception {
+    assumeTrue(!testEncryption && !includeCloudDc);
+    setRouter();
+    assertExpectedThreadCounts(2, 1);
+
+    // 1. Test undelete a non-exist blob
+    setOperationParams();
+    String nonExistBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+        mockClusterMap.getLocalDatacenterId(), putBlobProperties.getAccountId(), putBlobProperties.getContainerId(),
+        mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK).getID();
+    try {
+      router.getBlob(nonExistBlobId, new GetBlobOptionsBuilder().build()).get();
+    } catch (ExecutionException e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobDoesNotExist error is expected", RouterErrorCode.BlobDoesNotExist, r.getErrorCode());
+    }
+    try {
+      router.undeleteBlob(nonExistBlobId, "undelete_server_id").get();
+    } catch (ExecutionException e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobDoesNotExist error is expected", RouterErrorCode.BlobDoesNotExist, r.getErrorCode());
+    }
+
+    // 2. Test not-deleted blob
+    setOperationParams();
+    String notDeletedBlobId =
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+    ensurePutInAllServers(notDeletedBlobId, mockServerLayout);
+    router.getBlob(notDeletedBlobId, new GetBlobOptionsBuilder().build()).get();
+    try {
+      router.undeleteBlob(notDeletedBlobId, "undelete_server_id").get();
+    } catch (ExecutionException e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobNotDeleted error is expected", RouterErrorCode.BlobNotDeleted, r.getErrorCode());
+    }
+
+    // 3. Test already undeleted blob
+    setOperationParams();
+    String undeletedBlobId =
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+    ensurePutInAllServers(undeletedBlobId, mockServerLayout);
+    router.getBlob(undeletedBlobId, new GetBlobOptionsBuilder().build()).get();
+    router.deleteBlob(undeletedBlobId, null).get();
+    ensureDeleteInAllServers(undeletedBlobId, mockServerLayout);
+    router.undeleteBlob(undeletedBlobId, "undelete_server_id").get();
+    ensureUndeleteInAllServers(undeletedBlobId, mockServerLayout);
+    router.getBlob(undeletedBlobId, new GetBlobOptionsBuilder().build()).get();
+    try {
+      router.undeleteBlob(undeletedBlobId, "undelete_server_id").get();
+    } catch (ExecutionException e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobUndeleted error is expected", RouterErrorCode.BlobUndeleted, r.getErrorCode());
+    }
+
+    // 4. Test lifeVersion conflict blob
+    setOperationParams();
+    String conflictBlobId =
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+    ensurePutInAllServers(conflictBlobId, mockServerLayout);
+    router.getBlob(conflictBlobId, new GetBlobOptionsBuilder().build()).get();
+    router.deleteBlob(conflictBlobId, null).get();
+    ensureDeleteInAllServers(conflictBlobId, mockServerLayout); // All lifeVersion should be 0
+    int count = 0;
+    for (MockServer server : mockServerLayout.getMockServers()) {
+      server.getBlobs().get(conflictBlobId).lifeVersion = 3;
+      count++;
+      if (count == 4) {
+        // Only change 4 servers, since they are 3 datacenters and 9 servers. If we chang less than 4 servers, eg 3, then
+        // this 3 changes might be distributed to 3 datacenters and undelete can still reach global quorum.
+        break;
+      }
+    }
+
+    try {
+      router.undeleteBlob(conflictBlobId, "undelete_server_id").get();
+    } catch (ExecutionException e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("LifeVersionConflict error is expected", RouterErrorCode.LifeVersionConflict,
+          r.getErrorCode());
+    }
+
+    router.close();
+    assertExpectedThreadCounts(0, 0);
+
+    //submission after closing should return a future that is already done.
+    assertClosed();
+  }
+
+  /**
    * Test behavior with various null inputs to router methods.
    * @throws Exception
    */
@@ -369,6 +626,12 @@ public class NonBlockingRouterTest {
     }
     try {
       router.updateBlobTtl(null, null, Utils.Infinite_Time);
+      Assert.fail("null blobId should have resulted in IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+
+    try {
+      router.undeleteBlob(null, null);
       Assert.fail("null blobId should have resulted in IllegalArgumentException");
     } catch (IllegalArgumentException expected) {
     }
@@ -1027,6 +1290,96 @@ public class NonBlockingRouterTest {
     putManager.close();
     getManager.close();
     deleteManager.close();
+  }
+
+  /**
+   * Ensure that Put request for given blob id reaches to all the mock servers in the {@link MockServerLayout}.
+   * @param blobId The blob id of which Put request will be created.
+   * @param serverLayout The mock server layout.
+   * @throws IOException
+   */
+  private void ensurePutInAllServers(String blobId, MockServerLayout serverLayout) throws IOException {
+    // Make sure all the mock servers have this put
+    BlobId id = new BlobId(blobId, mockClusterMap);
+    for (MockServer server : serverLayout.getMockServers()) {
+      if (!server.getBlobs().containsKey(blobId)) {
+        server.send(
+            new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, id,
+                putBlobProperties, ByteBuffer.wrap(putUserMetadata), Unpooled.wrappedBuffer(putContent),
+                putContent.length, BlobType.DataBlob, null)).release();
+      }
+    }
+  }
+
+  /**
+   * Ensure that Stitch requests for given blob id reaches to all the mock servees in the {@link MockServerLayout}.
+   * @param blobId The blob id of which stitch request will be created.
+   * @param serverLayout The mock server layout.
+   * @param chunksToStitch The list of {@link ChunkInfo} to stitch.
+   * @param singleBlobSize The size of each chunk
+   * @throws IOException
+   */
+  private void ensureStitchInAllServers(String blobId, MockServerLayout serverLayout, List<ChunkInfo> chunksToStitch,
+      int singleBlobSize) throws IOException {
+    TreeMap<Integer, Pair<StoreKey, Long>> indexToChunkIdsAndChunkSizes = new TreeMap<>();
+    int i = 0;
+    for (ChunkInfo chunkInfo : chunksToStitch) {
+      indexToChunkIdsAndChunkSizes.put(i,
+          new Pair<>(new BlobId(chunkInfo.getBlobId(), mockClusterMap), chunkInfo.getChunkSizeInBytes()));
+      i++;
+    }
+    ByteBuffer serializedContent;
+    int totalSize = singleBlobSize * chunksToStitch.size();
+    if (routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2) {
+      serializedContent = MetadataContentSerDe.serializeMetadataContentV2(singleBlobSize, totalSize,
+          indexToChunkIdsAndChunkSizes.values().stream().map(Pair::getFirst).collect(Collectors.toList()));
+    } else {
+      List<Pair<StoreKey, Long>> orderedChunkIdList = new ArrayList<>(indexToChunkIdsAndChunkSizes.values());
+      serializedContent = MetadataContentSerDe.serializeMetadataContentV3(totalSize, orderedChunkIdList);
+    }
+    BlobId id = new BlobId(blobId, mockClusterMap);
+    for (MockServer server : serverLayout.getMockServers()) {
+      if (!server.getBlobs().containsKey(blobId)) {
+        server.send(
+            new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, id,
+                putBlobProperties, ByteBuffer.wrap(putUserMetadata), Unpooled.wrappedBuffer(serializedContent),
+                serializedContent.remaining(), BlobType.MetadataBlob, null)).release();
+      }
+    }
+  }
+
+  /**
+   * Ensure that Delete request for given blob is reaches to all the  mock servers in the {@link MockServerLayout}.
+   * @param blobId The blob id of which Delete request will be created.
+   * @param serverLayout The mock server layout.
+   * @throws IOException
+   */
+  private void ensureDeleteInAllServers(String blobId, MockServerLayout serverLayout) throws IOException {
+    BlobId id = new BlobId(blobId, mockClusterMap);
+    for (MockServer server : serverLayout.getMockServers()) {
+      if (!server.getBlobs().get(blobId).isDeleted()) {
+        server.send(
+            new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
+                id, mockTime.milliseconds())).release();
+      }
+    }
+  }
+
+  /**
+   * Ensure that Undelete request for given blob is reaches to all the  mock servers in the {@link MockServerLayout}.
+   * @param blobId The blob id of which Undelete request will be created.
+   * @param serverLayout The mock server layout.
+   * @throws IOException
+   */
+  private void ensureUndeleteInAllServers(String blobId, MockServerLayout serverLayout) throws IOException {
+    BlobId id = new BlobId(blobId, mockClusterMap);
+    for (MockServer server : serverLayout.getMockServers()) {
+      if (!server.getBlobs().get(blobId).isUndeleted()) {
+        server.send(
+            new UndeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
+                id, mockTime.milliseconds())).release();
+      }
+    }
   }
 
   /**

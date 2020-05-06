@@ -62,6 +62,7 @@ public class ReplicationManager extends ReplicationEngine {
   private final StoreConfig storeConfig;
   private final DataNodeId currentNode;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+  private final boolean trackPerPartitionLagInMetric;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
@@ -74,6 +75,7 @@ public class ReplicationManager extends ReplicationEngine {
         storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager);
     this.storeConfig = storeConfig;
     this.currentNode = dataNode;
+    trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
     // initialize all partitions
@@ -220,7 +222,7 @@ public class ReplicationManager extends ReplicationEngine {
       RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(remoteReplica, replicaId, store, findToken,
           TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
           SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
-      replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
+      replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerPartitionLagInMetric);
       remoteReplicaInfos.add(remoteReplicaInfo);
     }
     if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
@@ -305,7 +307,7 @@ public class ReplicationManager extends ReplicationEngine {
             logger.info("Adding remote replica {} on {} to partition info.", remoteReplica.getReplicaPath(),
                 remoteReplica.getDataNodeId());
             if (partitionInfo.addReplicaInfoIfAbsent(remoteReplicaInfo)) {
-              replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
+              replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerPartitionLagInMetric);
               replicaInfosToAdd.add(remoteReplicaInfo);
             }
           }

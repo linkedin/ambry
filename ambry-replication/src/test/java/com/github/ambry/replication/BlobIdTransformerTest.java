@@ -617,10 +617,6 @@ public class BlobIdTransformerTest {
     public MockReadingClusterMap() {
     }
 
-    public void setThrowException(boolean bool) {
-      this.throwException = bool;
-    }
-
     public PartitionId getPartitionIdFromStream(InputStream inputStream) throws IOException {
       if (this.throwException) {
         throw new IOException();

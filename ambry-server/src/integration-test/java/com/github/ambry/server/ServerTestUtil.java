@@ -1275,10 +1275,10 @@ final class ServerTestUtil {
     assertEquals(0, blobsChecked.size());
 
     short expectedLifeVersion = 1;
-    for (int i = 0; i < 2; i ++) {
+    for (int i = 0; i < 2; i++) {
       expectedLifeVersion += i;
       // First undelete all deleted blobs
-      for (BlobId deletedId: blobsDeleted){
+      for (BlobId deletedId : blobsDeleted) {
         UndeleteRequest undeleteRequest = new UndeleteRequest(2, "reptest", deletedId, System.currentTimeMillis());
         channel3.send(undeleteRequest);
         InputStream undeleteResponseStream = channel3.receive().getInputStream();
@@ -1289,7 +1289,7 @@ final class ServerTestUtil {
 
       Thread.sleep(5000);
       // Then use get request to get all the data back and make sure the lifeVersion is correct
-      for (BlobId id: blobsDeleted) {
+      for (BlobId id : blobsDeleted) {
         // We don't need to wait for blob undeletes, since one of the hosts has Put Record deleted
         // from disk, so undelete this blob would end up replicating Put Record instead of undelete.
         // notificationSystem.awaitBlobUndeletes(id.toString());
@@ -1329,7 +1329,7 @@ final class ServerTestUtil {
         }
       }
 
-      for (BlobId id: blobsDeleted) {
+      for (BlobId id : blobsDeleted) {
         DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", id, System.currentTimeMillis());
         channel3.send(deleteRequest);
         InputStream deleteResponseStream = channel.receive().getInputStream();
@@ -1338,7 +1338,7 @@ final class ServerTestUtil {
       }
 
       Thread.sleep(1000);
-      for (BlobId id: blobsDeleted) {
+      for (BlobId id : blobsDeleted) {
         ArrayList<BlobId> ids = new ArrayList<>();
         ids.add(id);
         partitionRequestInfoList.clear();
@@ -2357,7 +2357,8 @@ final class ServerTestUtil {
       channel = new SSLBlockingChannel(hostName, targetPort.getPort(), new MetricRegistry(), 10000, 10000, 10000, 4000,
           sslSocketFactory, sslConfig);
     } else if (targetPort.getPortType() == PortType.HTTP2) {
-      channel = new Http2BlockingChannel(hostName, targetPort.getPort(), sslConfig);
+      channel = new Http2BlockingChannel(hostName, targetPort.getPort(), sslConfig, 1024 * 1024, 1024 * 1024,
+          5 * 1024 * 1024);
     }
     return channel;
   }

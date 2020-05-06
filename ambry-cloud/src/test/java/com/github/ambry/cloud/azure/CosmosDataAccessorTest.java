@@ -90,7 +90,8 @@ public class CosmosDataAccessorTest {
     Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource(blobMetadata);
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
     when(mockumentClient.replaceDocument(any(), any())).thenReturn(mockResponse);
-    cosmosAccessor.updateMetadata(blobId, CloudBlobMetadata.FIELD_DELETION_TIME, System.currentTimeMillis());
+    cosmosAccessor.updateMetadata(blobId,
+        Collections.singletonMap(CloudBlobMetadata.FIELD_DELETION_TIME, System.currentTimeMillis()));
     assertEquals(1, azureMetrics.documentReadTime.getCount());
     assertEquals(1, azureMetrics.documentUpdateTime.getCount());
   }
@@ -103,7 +104,8 @@ public class CosmosDataAccessorTest {
     when(mockumentClient.replaceDocument(any(), any())).thenThrow(
         new RuntimeException(new DocumentClientException(HttpConstants.StatusCodes.PRECONDITION_FAILED)));
     try {
-      cosmosAccessor.updateMetadata(blobId, CloudBlobMetadata.FIELD_DELETION_TIME, System.currentTimeMillis());
+      cosmosAccessor.updateMetadata(blobId,
+          Collections.singletonMap(CloudBlobMetadata.FIELD_DELETION_TIME, System.currentTimeMillis()));
       fail("Expected exception");
     } catch (DocumentClientException ex) {
       // expected

@@ -25,7 +25,6 @@ import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
@@ -58,7 +57,6 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -524,12 +522,10 @@ public class ReplicaThread implements Runnable {
    * @param exchangeMetadataResponseList The missing keys in the local stores whose message needs to be retrieved
    *                                     from the remote stores
    * @throws IOException
-   * @throws MessageFormatException
    * @throws ReplicationException
    */
   void fixMissingStoreKeys(ConnectedChannel connectedChannel, List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<ExchangeMetadataResponse> exchangeMetadataResponseList)
-      throws IOException, MessageFormatException, ReplicationException {
+      List<ExchangeMetadataResponse> exchangeMetadataResponseList) throws IOException, ReplicationException {
     long fixMissingStoreKeysStartTimeInMs = SystemTime.getInstance().milliseconds();
     try {
       if (exchangeMetadataResponseList.size() != replicasToReplicatePerNode.size()
@@ -577,8 +573,9 @@ public class ReplicaThread implements Runnable {
 
     try {
       ReplicaMetadataRequest request = new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
-          "replication-metadata-" + dataNodeId.getHostname(), replicaMetadataRequestInfoList,
-          replicationConfig.replicationFetchSizeInBytes, replicationConfig.replicaMetadataRequestVersion);
+          "replication-metadata-" + dataNodeId.getHostname() + "[" + dataNodeId.getDatacenterName() + "]",
+          replicaMetadataRequestInfoList, replicationConfig.replicationFetchSizeInBytes,
+          replicationConfig.replicaMetadataRequestVersion);
       connectedChannel.send(request);
       ChannelOutput channelOutput = connectedChannel.receive();
       ByteBufferInputStream byteBufferInputStream =
@@ -840,8 +837,9 @@ public class ReplicaThread implements Runnable {
     GetResponse getResponse = null;
     if (!partitionRequestInfoList.isEmpty()) {
       GetRequest getRequest = new GetRequest(correlationIdGenerator.incrementAndGet(),
-          GetRequest.Replication_Client_Id_Prefix + dataNodeId.getHostname(), MessageFormatFlags.All,
-          partitionRequestInfoList, replicationConfig.replicationIncludeAll ? GetOption.Include_All : GetOption.None);
+          GetRequest.Replication_Client_Id_Prefix + dataNodeId.getHostname() + "[" + dataNodeId.getDatacenterName()
+              + "]", MessageFormatFlags.All, partitionRequestInfoList,
+          replicationConfig.replicationIncludeAll ? GetOption.Include_All : GetOption.None);
       long startTime = SystemTime.getInstance().milliseconds();
       try {
         connectedChannel.send(getRequest);

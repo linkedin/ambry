@@ -48,13 +48,24 @@ public interface CloudDestination extends Closeable {
   void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException;
 
   /**
-   * Mark a blob as deleted in the cloud destination.
+   * Mark a blob as deleted in the cloud destination, if {@code lifeVersion} is less than or equal to life version of
+   * the existing blob.
    * @param blobId id of the Ambry blob
    * @param deletionTime time of blob deletion
+   * @param lifeVersion life version of the blob to be deleted.
    * @return flag indicating whether the blob was deleted
    * @throws CloudStorageException if the deletion encounters an error.
    */
-  boolean deleteBlob(BlobId blobId, long deletionTime) throws CloudStorageException;
+  boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion) throws CloudStorageException;
+
+  /**
+   * Undelete the blob from cloud destination, and update the new life version.
+   * @param blobId id of the Ambry blob.
+   * @param lifeVersion new life version to update.
+   * @return final live version of the undeleted blob.
+   * @throws CloudStorageException if the undelete encounters an error.
+   */
+  short undeleteBlob(BlobId blobId, short lifeVersion) throws CloudStorageException;
 
   /**
    * Update expiration time of blob in the cloud destination.

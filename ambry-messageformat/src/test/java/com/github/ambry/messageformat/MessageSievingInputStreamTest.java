@@ -474,11 +474,13 @@ public class MessageSievingInputStreamTest {
     MessageInfo msgInfo2 =
         new MessageInfo(key2, messageFormatStream2.getSize(), accountId2, containerId2, prop2.getCreationTimeInMs());
 
-    // corrupt the message stream
-    byte[] corruptMessageStream = new byte[(int) messageFormatStream2.getSize()];
-    RANDOM.nextBytes(corruptMessageStream);
+    // corrupt the message stream but make sure this header version is still valid
+    byte[] corruptMessageStream2 = new byte[(int) messageFormatStream2.getSize()];
+    RANDOM.nextBytes(corruptMessageStream2);
+    corruptMessageStream2[0] = (byte) 0;
+    corruptMessageStream2[1] = (byte) headerVersionToUse;
 
-    InputStream corruptStream = new ByteBufferInputStream(ByteBuffer.wrap(corruptMessageStream));
+    InputStream corruptStream2 = new ByteBufferInputStream(ByteBuffer.wrap(corruptMessageStream2));
 
     // create message stream for blob 3 that is deleted.
     StoreKey key3 = new MockId("id3");
@@ -563,13 +565,48 @@ public class MessageSievingInputStreamTest {
     MessageInfo msgInfo5 =
         new MessageInfo(key5, messageFormatStream5.getSize(), accountId5, containerId5, prop5.getCreationTimeInMs());
 
+    // create message stream for blob 6
+    StoreKey key6 = new MockId("id6");
+    short accountId6 = Utils.getRandomShort(RANDOM);
+    short containerId6 = Utils.getRandomShort(RANDOM);
+    BlobProperties prop6 = new BlobProperties(10, "servid6", accountId6, containerId6, false);
+    byte[] encryptionKey6 = new byte[100];
+    RANDOM.nextBytes(encryptionKey6);
+    byte[] usermetadata6 = new byte[1000];
+    RANDOM.nextBytes(usermetadata6);
+    blobContentSize = 2000;
+    byte[] data6 = new byte[blobContentSize];
+    RANDOM.nextBytes(data6);
+    if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+      ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
+      data2 = byteBufferBlob.array();
+      blobContentSize = data6.length;
+    }
+    ByteBufferInputStream stream6 = new ByteBufferInputStream(ByteBuffer.wrap(data2));
+
+    MessageFormatInputStream messageFormatStream6 =
+        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key6, ByteBuffer.wrap(encryptionKey6), prop6,
+            ByteBuffer.wrap(usermetadata6), stream6, blobContentSize, blobType)
+            : new PutMessageFormatBlobV1InputStream(key6, prop6, ByteBuffer.wrap(usermetadata6), stream6,
+                blobContentSize, blobType);
+
+    MessageInfo msgInfo6 =
+        new MessageInfo(key6, messageFormatStream6.getSize(), accountId6, containerId6, prop6.getCreationTimeInMs());
+
+    // corrupt the message stream but make sure this header version is not valid
+    byte[] corruptMessageStream6 = new byte[(int) messageFormatStream6.getSize()];
+    RANDOM.nextBytes(corruptMessageStream6);
+    corruptMessageStream6[1] = (byte) 100;
+
+    InputStream corruptStream6 = new ByteBufferInputStream(ByteBuffer.wrap(corruptMessageStream6));
+
     //create input stream for all blob messages together
     byte[] totalMessageStreamContent =
         new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
             + (int) messageFormatStream3.getSize() + (int) messageFormatStream4.getSize()
-            + (int) messageFormatStream5.getSize()];
+            + (int) messageFormatStream5.getSize() + (int) messageFormatStream6.getSize()];
     messageFormatStream1.read(totalMessageStreamContent, 0, (int) messageFormatStream1.getSize());
-    corruptStream.read(totalMessageStreamContent, (int) messageFormatStream1.getSize(),
+    corruptStream2.read(totalMessageStreamContent, (int) messageFormatStream1.getSize(),
         (int) messageFormatStream2.getSize());
     messageFormatStream3.read(totalMessageStreamContent,
         (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
@@ -581,6 +618,10 @@ public class MessageSievingInputStreamTest {
         (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
             + (int) messageFormatStream3.getSize() + (int) messageFormatStream4.getSize(),
         (int) messageFormatStream5.getSize());
+    corruptStream6.read(totalMessageStreamContent,
+        (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
+            + (int) messageFormatStream3.getSize() + (int) messageFormatStream4.getSize()
+            + (int) messageFormatStream5.getSize(), (int) messageFormatStream6.getSize());
 
     InputStream inputStream = new ByteBufferInputStream(ByteBuffer.wrap(totalMessageStreamContent));
 
@@ -590,13 +631,15 @@ public class MessageSievingInputStreamTest {
     msgInfoList.add(msgInfo3);
     msgInfoList.add(msgInfo4);
     msgInfoList.add(msgInfo5);
+    msgInfoList.add(msgInfo6);
 
     MessageSievingInputStream sievedStream =
         new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry());
 
-    Map<StoreKey, StoreKey> convertedMap = randomKeyConverter.convert(Arrays.asList(key1, key2, key3, key4, key5));
+    Map<StoreKey, StoreKey> convertedMap =
+        randomKeyConverter.convert(Arrays.asList(key1, key2, key3, key4, key5, key6));
 
-    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(headerVersionToUse);
+    int headerSize = getHeaderSizeForVersion(headerVersionToUse);
     int blobPropertiesRecordSize = BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
     int userMetadataSize = UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata1));
 
@@ -631,13 +674,14 @@ public class MessageSievingInputStreamTest {
     } else {
       // even if there are no transformers, deleted and expired messages should be dropped by the MessageSievingInputStream.
       byte[] expectedBytes = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
-          + (int) messageFormatStream5.getSize()];
+          + (int) messageFormatStream5.getSize() + (int) messageFormatStream6.getSize()];
       System.arraycopy(totalMessageStreamContent, 0, expectedBytes, 0,
           (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize());
       System.arraycopy(totalMessageStreamContent,
-          totalMessageStreamContent.length - (int) messageFormatStream5.getSize(), expectedBytes,
+          totalMessageStreamContent.length - (int) messageFormatStream5.getSize()
+              - (int) messageFormatStream6.getSize(), expectedBytes,
           (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
-          (int) messageFormatStream5.getSize());
+          (int) messageFormatStream5.getSize() + (int) messageFormatStream6.getSize());
       Assert.assertEquals(expectedBytes.length, sievedStream.getSize());
       byte[] sievedBytes = Utils.readBytesFromStream(sievedStream, sievedStream.getSize());
       Assert.assertArrayEquals(expectedBytes, sievedBytes);
@@ -1073,6 +1117,7 @@ class ValidatingKeyConvertingTransformer implements Transformer {
       msgStream.read(headerBuffer.array(), Version_Field_Size_In_Bytes, headerSize - Version_Field_Size_In_Bytes);
       headerBuffer.rewind();
       MessageHeader_Format header = getMessageHeader(version, headerBuffer);
+      header.verifyHeader();
       StoreKey originalKey = storeKeyFactory.getStoreKey(new DataInputStream(msgStream));
       if (header.isPutRecord()) {
         encryptionKey = header.hasEncryptionKeyRecord() ? deserializeBlobEncryptionKey(msgStream) : null;

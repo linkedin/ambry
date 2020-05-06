@@ -107,7 +107,7 @@ public class Utils {
   public static String readShortString(DataInputStream input) throws IOException {
     Short size = input.readShort();
     if (size < 0) {
-      throw new IllegalArgumentException("readShortString : the size cannot be negative");
+      throw new IllegalArgumentException("readShortString : the size " + size + " cannot be negative");
     }
     byte[] bytes = new byte[size];
     int read = 0;
@@ -119,7 +119,7 @@ public class Utils {
       read += readBytes;
     }
     if (read != size) {
-      throw new IllegalArgumentException("readShortString : the size of the input does not match the actual data size");
+      throw new IllegalArgumentException("readShortString : the size of the input does not match the actual data size: " + read + " != " + size);
     }
     return new String(bytes, StandardCharsets.UTF_8);
   }

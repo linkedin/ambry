@@ -41,7 +41,9 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.observables.BlockingObservable;
@@ -172,13 +174,12 @@ public class CosmosDataAccessor {
   /**
    * Update the blob metadata document in the CosmosDB collection.
    * @param blobId the {@link BlobId} for which metadata is replaced.
-   * @param fieldName the metadata field to update.
-   * @param value the new value for the field.
+   * @param updateFields Map of field names and new values to update.
    * @return the {@link ResourceResponse} returned by the operation, if successful.
    * Returns {@Null} if the field already has the specified value.
    * @throws DocumentClientException if the record was not found or if the operation failed.
    */
-  ResourceResponse<Document> updateMetadata(BlobId blobId, String fieldName, Object value)
+  ResourceResponse<Document> updateMetadata(BlobId blobId, Map<String, Object> updateFields)
       throws DocumentClientException {
 
     // Read the existing record
@@ -190,8 +191,12 @@ public class CosmosDataAccessor {
     Document doc = readResponse.getResource();
 
     // Update only if value has changed
-    if (value.equals(doc.get(fieldName))) {
-      logger.debug("No change in value for {} in blob {}", fieldName, blobId.getID());
+    Map<String, String> fieldsToUpdate = updateFields.entrySet()
+        .stream()
+        .filter(map -> !String.valueOf(updateFields.get(map.getKey())).equals(doc.get(map.getKey())))
+        .collect(Collectors.toMap(Map.Entry::getKey, map -> String.valueOf(map.getValue())));
+    if (fieldsToUpdate.size() == 0) {
+      logger.debug("No change in value for {} in blob {}", updateFields.keySet(), blobId.getID());
       return null;
     }
 
@@ -205,7 +210,7 @@ public class CosmosDataAccessor {
     }
 
     // Perform the update
-    doc.set(fieldName, value);
+    fieldsToUpdate.forEach((key, value) -> doc.set(key, value));
     // Set condition to ensure we don't clobber a concurrent update
     AccessCondition accessCondition = new AccessCondition();
     accessCondition.setCondition(doc.getETag());
@@ -368,7 +373,7 @@ public class CosmosDataAccessor {
     }
     try {
       FeedResponse<Document> feedResponse = executeCosmosChangeFeedQuery(changeFeedOptions, timer);
-      feedResponse.getResults().stream().map(doc -> createMetadataFromDocument(doc)).forEach(changeFeed::add);
+      feedResponse.getResults().stream().map(this::createMetadataFromDocument).forEach(changeFeed::add);
       return feedResponse.getResponseContinuation();
     } catch (RuntimeException rex) {
       azureMetrics.changeFeedQueryFailureCount.inc();

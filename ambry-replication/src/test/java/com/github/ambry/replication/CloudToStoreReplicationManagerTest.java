@@ -132,7 +132,7 @@ public class CloudToStoreReplicationManagerTest {
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
             clusterMap.getMetricRegistry(), null, clusterMap, currentNode, null, mockHelixParticipant, new MockTime(),
-            null);
+            null, null);
     CloudToStoreReplicationManager cloudToStoreReplicationManager =
         new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
             storeKeyFactory, clusterMap, mockScheduler, currentNode, null, clusterMap.getMetricRegistry(), null,
@@ -172,7 +172,7 @@ public class CloudToStoreReplicationManagerTest {
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
             clusterMap.getMetricRegistry(), null, clusterMap, currentNode, null, mockHelixParticipant, new MockTime(),
-            null);
+            null, null);
     CloudToStoreReplicationManager cloudToStoreReplicationManager =
         new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
             storeKeyFactory, clusterMap, mockScheduler, currentNode, null, clusterMap.getMetricRegistry(), null,

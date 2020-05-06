@@ -695,6 +695,10 @@ public class NettyRequestTest {
     assertEquals("Mismatch in uri", uri, nettyRequest.getUri());
     assertNotNull("There should have been a RestRequestMetricsTracker", nettyRequest.getMetricsTracker());
     assertFalse("Should not have been a multipart request", nettyRequest.isMultipart());
+    RestRequest.RestRequestContext context = nettyRequest.getRestRequestContext();
+    assertNotNull("Should have RestRequestContext", context);
+    assertTrue(context instanceof NettyRequest.NettyRequestContext);
+    assertSame(((NettyRequest.NettyRequestContext) context).getChannel(), channel);
     SSLSession sslSession = nettyRequest.getSSLSession();
     if (channel.pipeline().get(SslHandler.class) == null) {
       assertNull("Non-null SSLSession when pipeline does not contain an SslHandler", sslSession);

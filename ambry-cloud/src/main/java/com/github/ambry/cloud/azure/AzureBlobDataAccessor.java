@@ -52,6 +52,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -293,15 +294,16 @@ public class AzureBlobDataAccessor {
   /**
    * Update the metadata for the specified blob.
    * @param blobId The {@link BlobId} to update.
-   * @param fieldName The metadata field to modify.
-   * @param value The new value.
+   * @param updateFields Map of field names and new values to modify.
    * @return a {@link UpdateResponse} with the updated metadata.
    * @throws BlobStorageException if the blob does not exist or an error occurred.
    * @throws IllegalStateException on request timeout.
    */
-  public UpdateResponse updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws BlobStorageException {
+  public UpdateResponse updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields)
+      throws BlobStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
-    Objects.requireNonNull(fieldName, "Field name cannot be null");
+    updateFields.keySet()
+        .forEach(field -> Objects.requireNonNull(updateFields.get(field), String.format("%s cannot be null", field)));
 
     try {
       BlockBlobClient blobClient = getBlockBlobClient(blobId, false);
@@ -312,10 +314,14 @@ public class AzureBlobDataAccessor {
         // Note: above throws 404 exception if blob does not exist.
         String etag = blobProperties.getETag();
         Map<String, String> metadata = blobProperties.getMetadata();
-        // Update only if value has changed
-        String textValue = String.valueOf(value);
-        if (!textValue.equals(metadata.get(fieldName))) {
-          metadata.put(fieldName, textValue);
+
+        // Update only if any of the values have changed
+        Map<String, String> changedFields = updateFields.entrySet()
+            .stream()
+            .filter(entry -> !String.valueOf(entry.getValue()).equals(metadata.get(entry.getKey())))
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> String.valueOf(entry.getValue())));
+        if (changedFields.size() > 0) {
+          changedFields.forEach(metadata::put);
           if (updateCallback != null) {
             try {
               updateCallback.call();
@@ -335,7 +341,7 @@ public class AzureBlobDataAccessor {
       }
     } catch (BlobStorageException e) {
       if (isNotFoundError(e.getErrorCode())) {
-        logger.warn("Blob {} not found, cannot update {}.", blobId, fieldName);
+        logger.warn("Blob {} not found, cannot update {}.", blobId, updateFields.keySet());
       }
       if (e.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
         azureMetrics.blobUpdateConflictCount.inc();
