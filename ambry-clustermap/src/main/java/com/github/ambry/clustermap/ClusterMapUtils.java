@@ -488,7 +488,7 @@ public class ClusterMapUtils {
               selected)) {
             if (selected.getPartitionState() == PartitionState.READ_WRITE) {
               anyWritablePartition = selected;
-              if (hasEnoughEligibleReplicasForPut(selected)) {
+              if (hasEnoughEligibleWritableReplicas(selected)) {
                 return selected;
               }
             }
@@ -507,13 +507,13 @@ public class ClusterMapUtils {
 
     /**
      * Check whether the partition has enough eligible replicas for write operations to try. Here, "eligible" means
-     * replica is up and in required states for PUT request. Enough replicas is considered to be all local replicas if
-     * such information is available. In case localDatacenterName is not available, all of the partition's replicas
-     * should be up.
+     * replica is up and in required states for PUT request (i.e LEADER or STANDBY). Enough replicas is considered to be
+     * all local replicas if such information is available. In case localDatacenterName is not available, all of the
+     * partition's replicas should be up.
      * @param partitionId the {@link PartitionId} to check.
      * @return true if enough replicas are eligible; false otherwise.
      */
-    private boolean hasEnoughEligibleReplicasForPut(PartitionId partitionId) {
+    private boolean hasEnoughEligibleWritableReplicas(PartitionId partitionId) {
       if (localDatacenterName != null && !localDatacenterName.isEmpty()) {
         return areAllLocalReplicasForPartitionUp(partitionId) && areAllReplicaStatesEligibleForPut(partitionId,
             localDatacenterName);
