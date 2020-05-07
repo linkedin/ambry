@@ -19,7 +19,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.google.common.base.Preconditions;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
@@ -129,7 +128,6 @@ class BlobStoreCompactor {
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
     this.diskSpaceAllocator = diskSpaceAllocator;
-    Preconditions.checkNotNull(accountService, "Account Service should not be null");
     this.accountService = accountService;
     this.time = time;
     this.sessionId = sessionId;
@@ -204,8 +202,10 @@ class BlobStoreCompactor {
    */
   private void getAllContainersByStatus(Container.ContainerStatus containerStatus) {
     Set<Pair<Short, Short>> selectedContainerPairSet = new HashSet<>();
-    for (Container container : accountService.getContainersByStatus(containerStatus)) {
-      selectedContainerPairSet.add(new Pair<>(container.getParentAccountId(), container.getId()));
+    if (accountService != null) {
+      for (Container container : accountService.getContainersByStatus(containerStatus)) {
+        selectedContainerPairSet.add(new Pair<>(container.getParentAccountId(), container.getId()));
+      }
     }
     selectedContainers.addAll(selectedContainerPairSet);
   }

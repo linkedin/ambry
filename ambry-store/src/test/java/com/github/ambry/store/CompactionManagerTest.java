@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
@@ -520,7 +521,7 @@ public class CompactionManagerTest {
     MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, CountDownLatch compactCallsCountdown,
         CompactionDetails details) {
       super(StoreTestUtils.createMockReplicaId("", 0, null), config, null, null, null, null, metrics, metrics, null,
-          null, null, null, time, null);
+          null, null, null, time, new InMemAccountService(false, false));
       this.compactCallsCountdown = compactCallsCountdown;
       this.details = details;
     }
