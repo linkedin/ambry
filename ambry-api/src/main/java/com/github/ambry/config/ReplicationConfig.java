@@ -181,6 +181,17 @@ public class ReplicationConfig {
   @Default("")
   public final Set<String> replicationVcrRecoveryPartitions;
 
+  /**
+   * To specify the type of replication to be used for inter colo replication.
+   * It has two values - "all-to-all" or "leader-based". Default value is "all-to-all".
+   * If set to "leader-based", inter colo replication between will be limited to the leaders(as elected by Helix) of the partition of each datacenter.
+   * If set to "all-to-all", inter colo replication will be in an all-to-all fashion, i.e. each replica talks to all other replicas irrespective of their state.
+   * Intra colo replication will continue as all-to-all fashion in both the models.
+   */
+  @Config("replication.inter.colo.datacenter.model")
+  @Default("all-to-all")
+  public final String replicationModelForInterColoDatacenters;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationStoreTokenFactory =
@@ -223,5 +234,7 @@ public class ReplicationConfig {
     replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);
     String vcrRecoveryPartitions = verifiableProperties.getString("replication.vcr.recovery.partitions", "");
     replicationVcrRecoveryPartitions = Utils.splitString(vcrRecoveryPartitions, ",", HashSet::new);
+    replicationModelForInterColoDatacenters =
+        verifiableProperties.getString("replication.inter.colo.datacenter.model", "all-to-all");
   }
 }

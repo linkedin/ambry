@@ -255,6 +255,14 @@ public class ReplicationManager extends ReplicationEngine {
   }
 
   /**
+   * Get a replication model type being used for inter colo replication
+   * @return replication model type {@link ReplicationEngine#replicationModelType}
+   */
+  ReplicationModelType  getReplicationModelType(){
+    return replicationModelType;
+  }
+
+  /**
    * Implementation of {@link ClusterMapChangeListener} that helps replication manager react to cluster map changes.
    */
   class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {

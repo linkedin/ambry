@@ -172,6 +172,38 @@ public class ReplicationTest {
   }
 
   /**
+   * Tests replication model is correct obtained from properties
+   * @throws Exception
+   */
+  @Test
+  public void verifyReplicationTypeFromConfig() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
+    DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    StorageManager storageManager =
+        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
+            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null, null);
+    storageManager.start();
+
+    ReplicationConfig initialReplicationConfig = replicationConfig;
+    properties.setProperty("replication.inter.colo.datacenter.model", "leader-based");
+    replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));
+
+    MockReplicationManager replicationManager =
+        new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
+            dataNodeId, storeKeyConverterFactory, null);
+
+    assertEquals("Replication model mismatch from the value present in config",
+        replicationManager.getReplicationModelType(), ReplicationModelType.LEADER_BASED);
+
+    replicationConfig = initialReplicationConfig;
+    storageManager.shutdown();
+  }
+
+  /**
    * Tests add/remove replicaInfo to {@link ReplicaThread}
    * @throws Exception
    */

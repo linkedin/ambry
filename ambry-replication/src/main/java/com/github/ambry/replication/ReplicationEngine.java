@@ -87,6 +87,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
 
   protected static final short Replication_Delay_Multiplier = 5;
   protected static final String replicaTokenFileName = "replicaTokens";
+  protected final ReplicationModelType replicationModelType;
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, ScheduledExecutorService scheduler, DataNodeId dataNode,
@@ -121,6 +122,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.storeManager = storeManager;
     replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
     peerLeaderReplicasByPartition = new ConcurrentHashMap<>();
+    replicationModelType = replicationConfig.replicationModelForInterColoDatacenters.equals("leader-based")
+        ? ReplicationModelType.LEADER_BASED : ReplicationModelType.ALL_TO_ALL;
   }
 
   /**
