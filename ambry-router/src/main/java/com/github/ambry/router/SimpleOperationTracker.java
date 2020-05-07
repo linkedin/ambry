@@ -25,9 +25,11 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -201,6 +203,21 @@ class SimpleOperationTracker implements OperationTracker {
     // then the remote healthy ones, and finally the possibly down ones.
     List<? extends ReplicaId> replicas =
         routerConfig.routerGetEligibleReplicasByStateEnabled ? eligibleReplicas : partitionId.getReplicaIds();
+    // In a case where a certain dc is decommissioned and blobs uploaded to this dc now have a unrecognizable dc id.
+    // Clustermap will treat originating dc as null. To improve success rate of cross-colo requests(GET/DELETE/TTLUpdate),
+    // operation tracker should be allowed to try remote dc with most replicas first. This is useful in cluster with
+    // "unbalanced" replica distribution (i.e. 3 replicas in local dc and 1 replica per remote dc)
+    if (originatingDcName == null && routerConfig.routerCrossColoRequestToDcWithMostReplicas) {
+      Map<String, Long> dcToReplicaCnt = replicas.stream()
+          .collect(Collectors.groupingBy(e -> e.getDataNodeId().getDatacenterName(), Collectors.counting()));
+      List<Map.Entry<String, Long>> entryList = new ArrayList<>(dcToReplicaCnt.entrySet());
+      entryList.sort(Map.Entry.comparingByValue());
+      // we assign a dc with most replicas to "originatingDcName", which only takes effect when populating replica pool
+      // (replicas in that colo have higher priority than other remote colos). Note that, "this.originatingDcName" still
+      // keeps the actual originating dc name, which is null in this case. This value is forces operation track to go
+      // through replicas in all dc(s) rather than terminating on not found in originating dc.
+      originatingDcName = entryList.get(entryList.size() - 1).getKey();
+    }
     LinkedList<ReplicaId> backupReplicas = new LinkedList<>();
     LinkedList<ReplicaId> downReplicas = new LinkedList<>();
     if (shuffleReplicas) {
@@ -241,7 +258,7 @@ class SimpleOperationTracker implements OperationTracker {
     }
     List<ReplicaId> backupReplicasToCheck = new ArrayList<>(backupReplicas);
     List<ReplicaId> downReplicasToCheck = new ArrayList<>(downReplicas);
-    if (includeNonOriginatingDcReplicas || originatingDcName == null) {
+    if (includeNonOriginatingDcReplicas || this.originatingDcName == null) {
       backupReplicas.forEach(this::addToEndOfPool);
       downReplicas.forEach(this::addToEndOfPool);
     } else {
