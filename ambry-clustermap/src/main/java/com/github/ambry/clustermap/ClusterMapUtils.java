@@ -20,6 +20,7 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -487,7 +488,7 @@ public class ClusterMapUtils {
               selected)) {
             if (selected.getPartitionState() == PartitionState.READ_WRITE) {
               anyWritablePartition = selected;
-              if (areEnoughReplicasForPartitionUp(selected)) {
+              if (hasEnoughEligibleWritableReplicas(selected)) {
                 return selected;
               }
             }
@@ -505,17 +506,19 @@ public class ClusterMapUtils {
     }
 
     /**
-     * Check whether the parition has has enough replicas up for write operations to try. Enough replicas is considered
-     * to be all local replicas if such information is available. In case localDatacenterName is not available, all of
-     * the partition's replicas should be up.
+     * Check whether the partition has enough eligible replicas for write operations to try. Here, "eligible" means
+     * replica is up and in required states for PUT request (i.e LEADER or STANDBY). Enough replicas is considered to be
+     * all local replicas if such information is available. In case localDatacenterName is not available, all of the
+     * partition's replicas should be up.
      * @param partitionId the {@link PartitionId} to check.
-     * @return true if enough replicas are up; false otherwise.
+     * @return true if enough replicas are eligible; false otherwise.
      */
-    private boolean areEnoughReplicasForPartitionUp(PartitionId partitionId) {
+    private boolean hasEnoughEligibleWritableReplicas(PartitionId partitionId) {
       if (localDatacenterName != null && !localDatacenterName.isEmpty()) {
-        return areAllLocalReplicasForPartitionUp(partitionId);
+        return areAllLocalReplicasForPartitionUp(partitionId) && areAllReplicaStatesEligibleForPut(partitionId,
+            localDatacenterName);
       } else {
-        return areAllReplicasForPartitionUp(partitionId);
+        return areAllReplicasForPartitionUp(partitionId) && areAllReplicaStatesEligibleForPut(partitionId, null);
       }
     }
 
@@ -531,6 +534,23 @@ public class ClusterMapUtils {
         }
       }
       return true;
+    }
+
+    /**
+     * Check if all replicas from given partition are in eligible states for PUT request. (That is, replica state should
+     * be either LEADER or STANDBY.)
+     * @param partitionId the {@link PartitionId} to check.
+     * @param dcName the datacenter which replicas come from. If null, replicas from all datacenters should be checked.
+     * @return true if all replicas are eligible for put.
+     */
+    private boolean areAllReplicaStatesEligibleForPut(PartitionId partitionId, String dcName) {
+      Set<ReplicaId> eligibleReplicas = new HashSet<>();
+      EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)
+          .forEach(state -> eligibleReplicas.addAll(partitionId.getReplicaIdsByState(state, dcName)));
+      if (dcName != null) {
+        return partitionIdToLocalReplicas.get(partitionId).size() == eligibleReplicas.size();
+      }
+      return partitionId.getReplicaIds().size() == eligibleReplicas.size();
     }
 
     /**
