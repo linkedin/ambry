@@ -134,7 +134,7 @@ class MockStorageManager extends StorageManager {
     public void delete(List<MessageInfo> infos) throws StoreException {
       operationReceived = RequestOrResponseType.DeleteRequest;
       List<MessageInfo> infosToDelete = new ArrayList<>(infos.size());
-      List<InputStream> inputStreams = new ArrayList();
+      List<InputStream> inputStreams = new ArrayList<>();
       MessageWriteSet writeSet;
       try {
         for (MessageInfo info : infos) {
@@ -163,7 +163,7 @@ class MockStorageManager extends StorageManager {
     public void updateTtl(List<MessageInfo> infos) throws StoreException {
       operationReceived = RequestOrResponseType.TtlUpdateRequest;
       List<MessageInfo> infosToUpdate = new ArrayList<>(infos.size());
-      List<InputStream> inputStreams = new ArrayList();
+      List<InputStream> inputStreams = new ArrayList<>();
       MessageFormatWriteSet writeSet;
       try {
         for (MessageInfo info : infos) {

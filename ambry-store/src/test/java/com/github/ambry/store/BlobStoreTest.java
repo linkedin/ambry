@@ -358,7 +358,7 @@ public class BlobStoreTest {
     when(replicaStatusDelegate.seal(any())).thenReturn(true);
 
     //Restart store
-    reloadStore(defaultConfig, replicaId, replicaStatusDelegate);
+    reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
 
     //Check that after start, because ReplicaId defaults to non-sealed, delegate is not called
     verifyZeroInteractions(replicaStatusDelegate);
@@ -377,16 +377,16 @@ public class BlobStoreTest {
     replicaId.setSealedState(true);
 
     //Change config threshold but with delegate disabled, verify that nothing happens
-    reloadStore(changeThreshold(99, 1, false), replicaId, replicaStatusDelegate);
+    reloadStore(changeThreshold(99, 1, false), replicaId, Collections.singletonList(replicaStatusDelegate));
     verifyNoMoreInteractions(replicaStatusDelegate);
 
     //Change config threshold to higher, see that it gets changed to unsealed on reset
-    reloadStore(changeThreshold(99, 1, true), replicaId, replicaStatusDelegate);
+    reloadStore(changeThreshold(99, 1, true), replicaId, Collections.singletonList(replicaStatusDelegate));
     verify(replicaStatusDelegate, times(1)).unseal(replicaId);
     replicaId.setSealedState(false);
 
     //Reset thresholds, verify that it changed back
-    reloadStore(defaultConfig, replicaId, replicaStatusDelegate);
+    reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
     verify(replicaStatusDelegate, times(2)).seal(replicaId);
     replicaId.setSealedState(true);
 
@@ -399,7 +399,7 @@ public class BlobStoreTest {
 
       //Need to restart blob otherwise compaction will ignore segments in journal (which are all segments right now).
       //By restarting, only last segment will be in journal
-      reloadStore(defaultConfig, replicaId, replicaStatusDelegate);
+      reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
       verifyNoMoreInteractions(replicaStatusDelegate);
 
       //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
@@ -411,9 +411,45 @@ public class BlobStoreTest {
 
       //Test if replicaId is erroneously true that it updates the status upon startup
       replicaId.setSealedState(true);
-      reloadStore(defaultConfig, replicaId, replicaStatusDelegate);
+      reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
       verify(replicaStatusDelegate, times(3)).unseal(replicaId);
     }
+    store.shutdown();
+  }
+
+  @Test
+  public void multiReplicaStatusDelegatesTest() throws Exception {
+    List<ReplicaId> sealedReplicas1 = new ArrayList<>();
+    ReplicaStatusDelegate mockDelegate1 = Mockito.mock(ReplicaStatusDelegate.class);
+    doAnswer(invocation -> {
+      sealedReplicas1.add(invocation.getArgument(0));
+      return null;
+    }).when(mockDelegate1).seal(any());
+    List<ReplicaId> sealedReplicas2 = new ArrayList<>();
+    ReplicaStatusDelegate mockDelegate2 = Mockito.mock(ReplicaStatusDelegate.class);
+    doAnswer(invocation -> {
+      sealedReplicas2.add(invocation.getArgument(0));
+      return null;
+    }).when(mockDelegate2).seal(any());
+    doAnswer(invocation -> {
+      sealedReplicas1.remove((ReplicaId) invocation.getArgument(0));
+      return null;
+    }).when(mockDelegate1).unseal(any());
+    doAnswer(invocation -> {
+      sealedReplicas2.remove((ReplicaId) invocation.getArgument(0));
+      return null;
+    }).when(mockDelegate2).unseal(any());
+    StoreConfig defaultConfig = changeThreshold(65, 5, true);
+    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    reloadStore(defaultConfig, replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
+    // make the replica sealed
+    put(4, (long) (SEGMENT_CAPACITY * 0.8), Utils.Infinite_Time);
+    assertEquals("Sealed replica lists are different", sealedReplicas1, sealedReplicas2);
+    assertEquals("Sealed replica is not correct", replicaId, sealedReplicas1.get(0));
+    // try to bump the readonly threshold so as to unseal the replica
+    replicaId.setSealedState(true);
+    reloadStore(changeThreshold(99, 1, true), replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
+    assertTrue("Replica should be unsealed", sealedReplicas1.isEmpty() && sealedReplicas2.isEmpty());
     store.shutdown();
   }
 
@@ -1372,12 +1408,13 @@ public class BlobStoreTest {
         Collections.singletonList(ByteBuffer.allocate(PUT_RECORD_SIZE)), null);
     MessageWriteSet validWriteSet3 = new MockMessageWriteSet(Collections.singletonList(info3),
         Collections.singletonList(ByteBuffer.allocate(PUT_RECORD_SIZE)), null);
+    ReplicaStatusDelegate mockDelegate = mock(ReplicaStatusDelegate.class);
 
     // Test1: simulate StoreErrorCodes.IOError triggered by corrupted write set.
     // verify that store can capture disk I/O errors in Put/Delete/TtlUpdate methods and take proper actions.
     BlobStore testStore1 =
         createBlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)),
-            mock(ReplicaStatusDelegate.class));
+            Collections.singletonList(mockDelegate));
     testStore1.start();
     assertTrue("Store should start successfully", testStore1.isStarted());
     // verify store can keep track of real I/O errors for Put operation and shutdown properly.
@@ -1419,7 +1456,7 @@ public class BlobStoreTest {
     BlobStore testStore2 =
         new BlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), scheduler,
             storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics, mockStoreKeyFactory, recovery,
-            hardDelete, mock(ReplicaStatusDelegate.class), time, null);
+            hardDelete, Collections.singletonList(mockDelegate), time, null);
 
     testStore2.start();
     assertTrue("Store should start up", testStore2.isStarted());
@@ -1534,7 +1571,8 @@ public class BlobStoreTest {
     StoreMetrics metrics = new StoreMetrics(registry);
     BlobStore testStore =
         new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
-            diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time, null);
+            diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time,
+            null);
     testStore.start();
     DiskSpaceRequirements diskSpaceRequirements = testStore.getDiskSpaceRequirements();
     diskAllocator.initializePool(diskSpaceRequirements == null ? Collections.emptyList()
@@ -1640,9 +1678,10 @@ public class BlobStoreTest {
    */
   private void catchStoreExceptionAndVerifyErrorCode(StoreMethodCaller methodCaller) throws StoreException {
     properties.put("store.io.error.count.to.trigger.shutdown", "1");
+    ReplicaStatusDelegate mockDelegate = mock(ReplicaStatusDelegate.class);
     MockBlobStore mockBlobStore =
         new MockBlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)),
-            mock(ReplicaStatusDelegate.class), new StoreMetrics(new MetricRegistry()));
+            Collections.singletonList(mockDelegate), new StoreMetrics(new MetricRegistry()));
     // First, verify that a normal shutdown will create a clean shutdown file in the store directory.
     mockBlobStore.start();
     mockBlobStore.shutdown();
@@ -2324,16 +2363,16 @@ public class BlobStoreTest {
    * Shuts down and restarts the store. All further tests will implicitly test persistence.
    * @param config the {@link StoreConfig} to use
    * @param replicaId the {@link ReplicaId} for which the store is being created
-   * @param delegate the {@link ReplicaStatusDelegate} to use
+   * @param delegates a list of {@link ReplicaStatusDelegate}(s) to use
    * @throws StoreException
    */
-  private void reloadStore(StoreConfig config, ReplicaId replicaId, ReplicaStatusDelegate delegate)
+  private void reloadStore(StoreConfig config, ReplicaId replicaId, List<ReplicaStatusDelegate> delegates)
       throws StoreException {
     if (store.isStarted()) {
       store.shutdown();
     }
     assertFalse("Store should be shutdown", store.isStarted());
-    store = createBlobStore(replicaId, config, delegate);
+    store = createBlobStore(replicaId, config, delegates);
     assertEquals("Store should be in OFFLINE state after creation", ReplicaState.OFFLINE, store.getCurrentState());
     assertFalse("Store should not be started", store.isStarted());
     store.start();
@@ -2686,11 +2725,11 @@ public class BlobStoreTest {
   }
 
   private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
-      ReplicaStatusDelegate replicaStatusDelegate) {
+      List<ReplicaStatusDelegate> replicaStatusDelegates) {
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
     return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator,
-        metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegate, time, null);
+        metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, null);
   }
 
   private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
@@ -2747,10 +2786,10 @@ public class BlobStoreTest {
 
   private class MockBlobStore extends BlobStore {
 
-    MockBlobStore(ReplicaId replicaId, StoreConfig config, ReplicaStatusDelegate replicaStatusDelegate,
+    MockBlobStore(ReplicaId replicaId, StoreConfig config, List<ReplicaStatusDelegate> replicaStatusDelegates,
         StoreMetrics metrics) {
       super(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics,
-          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegate, time, null);
+          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, null);
     }
 
     /**

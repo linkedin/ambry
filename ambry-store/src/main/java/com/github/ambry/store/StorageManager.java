@@ -61,6 +61,8 @@ public class StorageManager implements StoreManager {
   protected final ConcurrentHashMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
   protected final ConcurrentHashMap<DiskId, DiskManager> diskToDiskManager = new ConcurrentHashMap<>();
   protected final ConcurrentHashMap<String, ReplicaId> partitionNameToReplicaId = new ConcurrentHashMap<>();
+  private final List<ReplicaStatusDelegate> replicaStatusDelegates;
+  private final Set<String> stoppedReplicas = new HashSet<>();
   private final StorageManagerMetrics metrics;
   private final Time time;
   private final StoreConfig storeConfig;
@@ -73,9 +75,8 @@ public class StorageManager implements StoreManager {
   private final DataNodeId currentNode;
   private final MessageStoreRecovery recovery;
   private final MessageStoreHardDelete hardDelete;
-  private final ReplicaStatusDelegate replicaStatusDelegate;
-  private final List<String> stoppedReplicas;
-  private final ClusterParticipant clusterParticipant;
+  private final List<ClusterParticipant> clusterParticipants;
+  private final ClusterParticipant primaryParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final Set<String> unexpectedDirs = new HashSet<>();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
@@ -91,15 +92,17 @@ public class StorageManager implements StoreManager {
    * @param clusterMap the {@link ClusterMap} instance to use.
    * @param dataNodeId the {@link DataNodeId} of current node.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
-   * @param clusterParticipant the {@link ClusterParticipant} that allows storage manager to interact with cluster
-   *                           manager (i.e Helix)
+   * @param clusterParticipants a list of {@link ClusterParticipant}(s) that allows storage manager to interact with
+   *                            cluster managers (i.e Helix). In most cases there is only one participant. However, in
+   *                            edge case like migrating Ambry from one zk cluster to the other, it requires server to
+   *                            temporarily participate into two clusters and therefore we need two participants.
    * @param time the {@link Time} instance to use.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param accountService the {@link AccountService} instance to use.
    */
   public StorageManager(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
       ScheduledExecutorService scheduler, MetricRegistry registry, StoreKeyFactory keyFactory, ClusterMap clusterMap,
-      DataNodeId dataNodeId, MessageStoreHardDelete hardDelete, ClusterParticipant clusterParticipant, Time time,
+      DataNodeId dataNodeId, MessageStoreHardDelete hardDelete, List<ClusterParticipant> clusterParticipants, Time time,
       MessageStoreRecovery recovery, AccountService accountService) throws StoreException {
     verifyConfigs(storeConfig, diskManagerConfig);
     this.storeConfig = storeConfig;
@@ -111,15 +114,26 @@ public class StorageManager implements StoreManager {
     this.hardDelete = hardDelete;
     this.accountService = accountService;
     this.clusterMap = clusterMap;
-    this.clusterParticipant = clusterParticipant;
+    this.clusterParticipants = clusterParticipants;
+    // The first participant (if there are multiple) in clusterParticipants list is considered primary participant by default.
+    // Only primary participant should take actions in storage manager when state transition is invoked by Helix controller.
+    primaryParticipant =
+        clusterParticipants == null || clusterParticipants.isEmpty() ? null : clusterParticipants.get(0);
+    replicaSyncUpManager = primaryParticipant == null ? null : primaryParticipant.getReplicaSyncUpManager();
     currentNode = dataNodeId;
-    replicaStatusDelegate = clusterParticipant == null ? null : new ReplicaStatusDelegate(clusterParticipant);
-    replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
     metrics = new StorageManagerMetrics(registry);
     storeMainMetrics = new StoreMetrics(registry);
     storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
-    stoppedReplicas =
-        replicaStatusDelegate == null ? Collections.emptyList() : replicaStatusDelegate.getStoppedReplicas();
+    if (clusterParticipants != null) {
+      replicaStatusDelegates = new ArrayList<>();
+      for (ClusterParticipant clusterParticipant : clusterParticipants) {
+        ReplicaStatusDelegate replicaStatusDelegate = new ReplicaStatusDelegate(clusterParticipant);
+        replicaStatusDelegates.add(replicaStatusDelegate);
+        stoppedReplicas.addAll(replicaStatusDelegate.getStoppedReplicas());
+      }
+    } else {
+      replicaStatusDelegates = null;
+    }
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : clusterMap.getReplicaIds(dataNodeId)) {
       DiskId disk = replica.getDiskId();
@@ -131,7 +145,7 @@ public class StorageManager implements StoreManager {
       List<ReplicaId> replicasForDisk = entry.getValue();
       DiskManager diskManager =
           new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, scheduler, metrics, storeMainMetrics,
-              storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate, stoppedReplicas,
+              storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates, stoppedReplicas,
               time, accountService);
       diskToDiskManager.put(disk, diskManager);
       for (ReplicaId replica : replicasForDisk) {
@@ -185,10 +199,13 @@ public class StorageManager implements StoreManager {
         startupThread.join();
       }
       metrics.initializeCompactionThreadsTracker(this, diskToDiskManager.size());
-      if (clusterParticipant != null) {
-        clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StorageManagerListener,
+      if (primaryParticipant != null) {
+        primaryParticipant.registerPartitionStateChangeListener(StateModelListenerType.StorageManagerListener,
             new PartitionStateChangeListenerImpl());
-        clusterParticipant.setInitialLocalPartitions(partitionNameToReplicaId.keySet());
+      }
+      if (clusterParticipants != null) {
+        clusterParticipants.forEach(
+            participant -> participant.setInitialLocalPartitions(partitionNameToReplicaId.keySet()));
       }
       diskToDiskManager.values().forEach(diskManager -> unexpectedDirs.addAll(diskManager.getUnexpectedDirs()));
       logger.info("Starting storage manager complete");
@@ -311,7 +328,7 @@ public class StorageManager implements StoreManager {
     DiskManager diskManager = diskToDiskManager.computeIfAbsent(replica.getDiskId(), disk -> {
       DiskManager newDiskManager =
           new DiskManager(disk, Collections.emptyList(), storeConfig, diskManagerConfig, scheduler, metrics,
-              storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
+              storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
               stoppedReplicas, time, accountService);
       logger.info("Creating new DiskManager on {} for new added store", replica.getDiskId().getMountPath());
       try {
@@ -442,10 +459,10 @@ public class StorageManager implements StoreManager {
           throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
               ReplicaOperationFailure);
         }
-        if (clusterParticipant != null) {
+        if (primaryParticipant != null) {
           // update InstanceConfig in Helix
           try {
-            if (!clusterParticipant.updateDataNodeInfoInCluster(replicaToAdd, true)) {
+            if (!primaryParticipant.updateDataNodeInfoInCluster(replicaToAdd, true)) {
               logger.error("Failed to add partition {} into InstanceConfig of current node", partitionName);
               throw new StateTransitionException("Failed to add partition " + partitionName + " into InstanceConfig",
                   StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
@@ -540,10 +557,10 @@ public class StorageManager implements StoreManager {
         throw new StateTransitionException("Failed to shutdown store " + partitionName, ReplicaOperationFailure);
       }
       logger.info("Store {} is successfully shut down during Inactive-To-Offline transition", partitionName);
-      if (clusterParticipant != null) {
+      if (primaryParticipant != null) {
         // update InstanceConfig in Helix
         try {
-          if (!clusterParticipant.updateDataNodeInfoInCluster(replica, false)) {
+          if (!primaryParticipant.updateDataNodeInfoInCluster(replica, false)) {
             logger.error("Failed to remove partition {} from InstanceConfig of current node", partitionName);
             throw new StateTransitionException("Failed to remove partition " + partitionName + " from InstanceConfig",
                 StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
@@ -575,7 +592,7 @@ public class StorageManager implements StoreManager {
         return;
       }
       Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners =
-          clusterParticipant == null ? new HashMap<>() : clusterParticipant.getPartitionStateChangeListeners();
+          primaryParticipant == null ? new HashMap<>() : primaryParticipant.getPartitionStateChangeListeners();
       replicationManagerListener = partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
       statsManagerListener = partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
       // get the store (skip the state check here, because probably the store is stopped in previous transition. Also,

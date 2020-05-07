@@ -174,8 +174,8 @@ public class StatsManagerTest {
     for (PartitionId partitionId : storeMap.keySet()) {
       statsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
     }
-    assertTrue("Actual aggregated StatsSnapshot does not match with expected snapshot",
-        preAggregatedSnapshot.equals(actualSnapshot));
+    assertEquals("Actual aggregated StatsSnapshot does not match with expected snapshot", preAggregatedSnapshot,
+        actualSnapshot);
     List<String> unreachableStores = statsManager.examineUnreachablePartitions(unreachablePartitions);
     StatsHeader statsHeader =
         new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, SystemTime.getInstance().milliseconds(),
@@ -238,8 +238,8 @@ public class StatsManagerTest {
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
     }
-    assertTrue("Actual aggregated StatsSnapshot does not match with expected snapshot",
-        preAggregatedSnapshot.equals(actualSnapshot));
+    assertEquals("Actual aggregated StatsSnapshot does not match with expected snapshot", preAggregatedSnapshot,
+        actualSnapshot);
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachablePartitions.size());
     // test fetchSnapshot method in StatsManager
     unreachablePartitions.clear();
@@ -247,9 +247,9 @@ public class StatsManagerTest {
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
       StatsSnapshot snapshot =
           testStatsManager.fetchSnapshot(partitionId, unreachablePartitions, StatsReportType.ACCOUNT_REPORT);
-      if (Integer.valueOf(partitionId.toPathString()) < 3) {
-        assertTrue("Actual StatsSnapshot does not match with expected snapshot",
-            snapshot.equals(partitionToSnapshot.get(partitionId)));
+      if (Integer.parseInt(partitionId.toPathString()) < 3) {
+        assertEquals("Actual StatsSnapshot does not match with expected snapshot", snapshot,
+            partitionToSnapshot.get(partitionId));
       }
     }
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachablePartitions.size());
@@ -549,7 +549,8 @@ public class StatsManagerTest {
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(currentNode);
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, currentNode, null, clusterParticipant, new MockTime(), null, null);
+            new MetricRegistry(), null, clusterMap, currentNode, null, Collections.singletonList(clusterParticipant),
+            new MockTime(), null, null);
     storageManager.start();
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());

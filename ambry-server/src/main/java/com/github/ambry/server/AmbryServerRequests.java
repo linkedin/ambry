@@ -542,11 +542,12 @@ public class AmbryServerRequests extends AmbryRequests {
     // Attempt to remove store from storage manager.
     if (storeManager.removeBlobStore(partitionId) && store != null) {
       ((BlobStore) store).deleteStoreFiles();
-      ReplicaStatusDelegate replicaStatusDelegate = ((BlobStore) store).getReplicaStatusDelegate();
-      // Remove store from sealed and stopped list (if present)
-      logger.info("Removing store from sealed and stopped list(if present)");
-      replicaStatusDelegate.unseal(replicaId);
-      replicaStatusDelegate.unmarkStopped(Collections.singletonList(replicaId));
+      for (ReplicaStatusDelegate replicaStatusDelegate : ((BlobStore) store).getReplicaStatusDelegates()) {
+        // Remove store from sealed and stopped list (if present)
+        logger.info("Removing store from sealed and stopped list(if present)");
+        replicaStatusDelegate.unseal(replicaId);
+        replicaStatusDelegate.unmarkStopped(Collections.singletonList(replicaId));
+      }
     } else {
       errorCode = ServerErrorCode.Unknown_Error;
     }
