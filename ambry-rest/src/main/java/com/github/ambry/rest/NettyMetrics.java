@@ -127,6 +127,7 @@ public class NettyMetrics {
   public final Counter preconditionFailedErrorCount;
   public final Counter methodNotAllowedErrorCount;
   public final Counter notFoundCount;
+  public final Counter conflictCount;
   public final Counter forbiddenCount;
   public final Counter proxyAuthRequiredCount;
   public final Counter rangeNotSatisfiableCount;
@@ -308,6 +309,7 @@ public class NettyMetrics {
     methodNotAllowedErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "MethodNotAllowedErrorCount"));
     notFoundCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "NotFoundCount"));
+    conflictCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ConflictCount"));
     forbiddenCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ForbiddenCount"));
     proxyAuthRequiredCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ProxyAuthenticationRequiredCount"));

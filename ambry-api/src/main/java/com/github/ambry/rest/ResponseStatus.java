@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+
 /**
  * All the REST response statuses.
  */
@@ -73,6 +74,11 @@ public enum ResponseStatus {
    * 407 - Proxy authentication required
    */
   ProxyAuthenticationRequired(407),
+
+  /**
+   * 409 - Request conflicts with the current state of the server
+   */
+  Conflict(409),
 
   /**
    * 410 Gone - Resource has been deleted or has expired.
@@ -169,6 +175,8 @@ public enum ResponseStatus {
     switch (restServiceErrorCode) {
       case RequestTooLarge:
         return RequestTooLarge;
+      case Conflict:
+        return Conflict;
       case Deleted:
         return Gone;
       case NotFound:
