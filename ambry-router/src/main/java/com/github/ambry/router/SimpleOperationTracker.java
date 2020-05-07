@@ -70,10 +70,10 @@ import org.slf4j.LoggerFactory;
 class SimpleOperationTracker implements OperationTracker {
   protected final String datacenterName;
   protected final String originatingDcName;
-  protected final int diskSuccessTarget;
-  protected final int diskParallelism;
-  protected final int cloudSuccessTarget;
-  protected final int cloudParallelism;
+  protected final int diskReplicaSuccessTarget;
+  protected final int diskReplicaParallelism;
+  protected final int cloudReplicaSuccessTarget;
+  protected final int cloudReplicaParallelism;
   protected final boolean cloudReplicasPresent;
   protected final boolean diskReplicasPresent;
   // How many NotFound responses from originating dc will terminate the operation.
@@ -144,14 +144,14 @@ class SimpleOperationTracker implements OperationTracker {
     this.routerOperation = routerOperation;
     this.originatingDcName = originatingDcName;
     datacenterName = routerConfig.routerDatacenterName;
-    cloudSuccessTarget = routerConfig.routerCloudSuccessTarget;
-    cloudParallelism = routerConfig.routerCloudRequestParallelism;
+    cloudReplicaSuccessTarget = routerConfig.routerCloudSuccessTarget;
+    cloudReplicaParallelism = routerConfig.routerCloudRequestParallelism;
     List<ReplicaId> eligibleReplicas;
     switch (routerOperation) {
       case GetBlobOperation:
       case GetBlobInfoOperation:
-        diskSuccessTarget = routerConfig.routerGetSuccessTarget;
-        diskParallelism = routerConfig.routerGetRequestParallelism;
+        diskReplicaSuccessTarget = routerConfig.routerGetSuccessTarget;
+        diskReplicaParallelism = routerConfig.routerGetRequestParallelism;
         crossColoEnabled = routerConfig.routerGetCrossDcEnabled;
         includeNonOriginatingDcReplicas = routerConfig.routerGetIncludeNonOriginatingDcReplicas;
         numOfReplicasRequired = routerConfig.routerGetReplicasRequired;
@@ -161,52 +161,54 @@ class SimpleOperationTracker implements OperationTracker {
       case PutOperation:
         eligibleReplicas =
             getEligibleReplicas(partitionId, datacenterName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
-        diskSuccessTarget = routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.max(eligibleReplicas.size() - 1,
-            routerConfig.routerPutSuccessTarget) : routerConfig.routerPutSuccessTarget;
-        diskParallelism = routerConfig.routerGetEligibleReplicasByStateEnabled ? eligibleReplicas.size()
+        diskReplicaSuccessTarget =
+            routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.max(eligibleReplicas.size() - 1,
+                routerConfig.routerPutSuccessTarget) : routerConfig.routerPutSuccessTarget;
+        diskReplicaParallelism = routerConfig.routerGetEligibleReplicasByStateEnabled ? eligibleReplicas.size()
             : routerConfig.routerPutRequestParallelism;
         crossColoEnabled = false;
         break;
       case DeleteOperation:
-        diskSuccessTarget = routerConfig.routerDeleteSuccessTarget;
-        diskParallelism = routerConfig.routerDeleteRequestParallelism;
+        diskReplicaSuccessTarget = routerConfig.routerDeleteSuccessTarget;
+        diskReplicaParallelism = routerConfig.routerDeleteRequestParallelism;
         crossColoEnabled = true;
         eligibleReplicas = getEligibleReplicas(partitionId, null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         break;
       case TtlUpdateOperation:
-        diskSuccessTarget = routerConfig.routerTtlUpdateSuccessTarget;
-        diskParallelism = routerConfig.routerTtlUpdateRequestParallelism;
+        diskReplicaSuccessTarget = routerConfig.routerTtlUpdateSuccessTarget;
+        diskReplicaParallelism = routerConfig.routerTtlUpdateRequestParallelism;
         crossColoEnabled = true;
         eligibleReplicas = getEligibleReplicas(partitionId, null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         break;
       case UndeleteOperation:
-        diskParallelism = routerConfig.routerUndeleteRequestParallelism;
+        diskReplicaParallelism = routerConfig.routerUndeleteRequestParallelism;
         crossColoEnabled = true;
         eligibleReplicas = getEligibleReplicas(partitionId, null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         // Undelete operation need to get global quorum. It will require a different criteria for success.
         // Here set the success target to the number of eligible replicas.
-        diskSuccessTarget = eligibleReplicas.size();
+        diskReplicaSuccessTarget = eligibleReplicas.size();
         break;
       default:
         throw new IllegalArgumentException("Unsupported operation: " + routerOperation);
     }
-    if (diskParallelism < 1 || cloudParallelism < 1) {
+    if (diskReplicaParallelism < 1 || cloudReplicaParallelism < 1) {
       throw new IllegalArgumentException(
-          "Parallelism has to be > 0. diskParallelism=" + diskParallelism + ", cloudParallelism=" + cloudParallelism
-              + ", routerOperation=" + routerOperation);
+          "Parallelism has to be > 0. diskParallelism=" + diskReplicaParallelism + ", cloudParallelism="
+              + cloudReplicaParallelism + ", routerOperation=" + routerOperation);
     }
 
     // Order the replicas so that local healthy replicas are ordered and returned first,
     // then the remote healthy ones, and finally the possibly down ones.
     List<? extends ReplicaId> replicas =
         routerConfig.routerGetEligibleReplicasByStateEnabled ? eligibleReplicas : partitionId.getReplicaIds();
-    // In a case where a certain dc is decommissioned and blobs uploaded to this dc now have a unrecognizable dc id.
-    // Clustermap will treat originating dc as null. To improve success rate of cross-colo requests(GET/DELETE/TTLUpdate),
-    // operation tracker should be allowed to try remote dc with most replicas first. This is useful in cluster with
-    // "unbalanced" replica distribution (i.e. 3 replicas in local dc and 1 replica per remote dc)
+    // In a case where a certain dc is decommissioned and blobs previously uploaded to this dc now have a unrecognizable
+    // dc id. Current clustermap code will treat originating dc as null if dc id is not identifiable. To improve success
+    // rate of cross-colo requests(GET/DELETE/TTLUpdate), operation tracker should be allowed to try remote dc with most
+    // replicas first. This is useful in cluster with "unbalanced" replica distribution (i.e. 3 replicas in local dc and
+    // 1 replica per remote dc)
     if (originatingDcName == null && routerConfig.routerCrossColoRequestToDcWithMostReplicas) {
       Map<String, Long> dcToReplicaCnt = replicas.stream()
           .collect(Collectors.groupingBy(e -> e.getDataNodeId().getDatacenterName(), Collectors.counting()));
@@ -214,9 +216,10 @@ class SimpleOperationTracker implements OperationTracker {
       entryList.sort(Map.Entry.comparingByValue());
       // we assign a dc with most replicas to "originatingDcName", which only takes effect when populating replica pool
       // (replicas in that colo have higher priority than other remote colos). Note that, "this.originatingDcName" still
-      // keeps the actual originating dc name, which is null in this case. This value is forces operation track to go
-      // through replicas in all dc(s) rather than terminating on not found in originating dc.
+      // keeps the actual originating dc name (which is null). This value forces operation track to go through replicas
+      // in all dc(s) rather than terminating on not found in originating dc.
       originatingDcName = entryList.get(entryList.size() - 1).getKey();
+      logger.debug("Originating dc name is null and has been re-assigned to {}", originatingDcName);
     }
     LinkedList<ReplicaId> backupReplicas = new LinkedList<>();
     LinkedList<ReplicaId> downReplicas = new LinkedList<>();
@@ -298,7 +301,8 @@ class SimpleOperationTracker implements OperationTracker {
     this.otIterator = new OpTrackerIterator();
     logger.debug(
         "Router operation type: {}, successTarget = {}, parallelism = {}, originatingDcNotFoundFailureThreshold = {}, replicaPool = {}",
-        routerOperation, diskSuccessTarget, diskParallelism, originatingDcNotFoundFailureThreshold, replicaPool);
+        routerOperation, diskReplicaSuccessTarget, diskReplicaParallelism, originatingDcNotFoundFailureThreshold,
+        replicaPool);
   }
 
   /**
@@ -323,7 +327,8 @@ class SimpleOperationTracker implements OperationTracker {
       int dynamicSuccessTarget = Math.max(totalReplicaCount - disabledCount - 1, routerConfig.routerPutSuccessTarget);
       hasSucceeded = diskReplicaSuccessCount >= dynamicSuccessTarget;
     } else {
-      hasSucceeded = diskReplicaSuccessCount >= diskSuccessTarget || cloudReplicaSuccessCount >= cloudSuccessTarget;
+      hasSucceeded =
+          diskReplicaSuccessCount >= diskReplicaSuccessTarget || cloudReplicaSuccessCount >= cloudReplicaSuccessTarget;
     }
     return hasSucceeded;
   }
@@ -342,7 +347,7 @@ class SimpleOperationTracker implements OperationTracker {
     // failures responses other than not found.
     // TODO support cloud replicas in this condition, also account for failures other than not found
     return (crossColoEnabled && !cloudReplicasPresent
-        && diskDownCount + totalNotFoundCount > totalReplicaCount - diskSuccessTarget);
+        && diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget);
   }
 
   @Override
@@ -438,8 +443,9 @@ class SimpleOperationTracker implements OperationTracker {
     } else {
       // if there is no possible way to use the remaining replicas to meet either the disk or cloud success target,
       // deem the operation a failure.
-      if (!diskReplicasPresent || diskReplicaInPoolOrFlightCount + diskReplicaSuccessCount < diskSuccessTarget) {
-        if (!cloudReplicasPresent || cloudReplicaInPoolOrFlightCount + cloudReplicaSuccessCount < cloudSuccessTarget) {
+      if (!diskReplicasPresent || diskReplicaInPoolOrFlightCount + diskReplicaSuccessCount < diskReplicaSuccessTarget) {
+        if (!cloudReplicasPresent
+            || cloudReplicaInPoolOrFlightCount + cloudReplicaSuccessCount < cloudReplicaSuccessTarget) {
           return true;
         }
       }
@@ -483,7 +489,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @return the success target number of this operation tracker for the provided replica type.
    */
   int getSuccessTarget(ReplicaType replicaType) {
-    return replicaType == ReplicaType.CLOUD_BACKED ? cloudSuccessTarget : diskSuccessTarget;
+    return replicaType == ReplicaType.CLOUD_BACKED ? cloudReplicaSuccessTarget : diskReplicaSuccessTarget;
   }
 
   /**
@@ -493,7 +499,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @return the parallelism setting to honor.
    */
   int getCurrentParallelism() {
-    return inFlightReplicaType == ReplicaType.CLOUD_BACKED ? cloudParallelism : diskParallelism;
+    return inFlightReplicaType == ReplicaType.CLOUD_BACKED ? cloudReplicaParallelism : diskReplicaParallelism;
   }
 
   /**
