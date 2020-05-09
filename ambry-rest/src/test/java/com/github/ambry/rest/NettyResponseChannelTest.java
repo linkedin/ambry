@@ -1091,7 +1091,8 @@ public class NettyResponseChannelTest {
   @Test
   public void completeRequestWithDelayedCloseTest() throws Exception {
     Properties properties = new Properties();
-    properties.setProperty(NettyConfig.NETTY_SERVER_CLOSE_DELAY_TIMEOUT_MS, "500");
+    long delayMs = 500;
+    properties.setProperty(NettyConfig.NETTY_SERVER_CLOSE_DELAY_TIMEOUT_MS, String.valueOf(delayMs));
     NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(properties));
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
     processor.setNettyConfig(nettyConfig);
@@ -1111,8 +1112,14 @@ public class NettyResponseChannelTest {
     assertEquals("Unexpected response status", getExpectedHttpResponseStatus(REST_ERROR_CODE), response.status());
     //channel should not be closed right away.
     assertTrue("Channel closed on the server", channel.isActive());
-    assertEquals("delayed close counter mismatch", 1,
+    //wait for delayed time * 2 times (to rule out timing out on border) and then check again.
+    Thread.sleep(delayMs * 2);
+    channel.runPendingTasks();
+    assertFalse("Channel not closed on the server", channel.isActive());
+    assertEquals("delayed close scheduled counter mismatch", 1,
         processor.getNettyMetrics().delayedCloseScheduledCount.getCount());
+    assertEquals("delayed close executed counter mismatch", 1,
+        processor.getNettyMetrics().delayedCloseExecutedCount.getCount());
   }
 }
 
