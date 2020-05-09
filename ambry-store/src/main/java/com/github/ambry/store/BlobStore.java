@@ -698,20 +698,28 @@ public class BlobStore implements Store {
   public short undelete(MessageInfo info) throws StoreException {
     checkStarted();
     final Timer.Context context = metrics.undeleteResponse.time();
+    // The lifeVersion from message info is -1 when the undelete method is invoked by frontend request, we have to
+    // get the legit lifeVersion before we can write undelete record to log segment.
+    short revisedLifeVersion = info.getLifeVersion();
     try {
       StoreKey id = info.getStoreKey();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      short lifeVersionFromMessageInfo = info.getLifeVersion();
+
       List<IndexValue> values = index.findAllIndexValuesForKey(id, null);
-      index.validateSanityForUndelete(id, values, info.getLifeVersion());
+      // Check if the undelete record is valid.
+      index.validateSanityForUndelete(id, values, lifeVersionFromMessageInfo);
       IndexValue latestValue = values.get(0);
-      short lifeVersion = (short) (latestValue.getLifeVersion() + 1);
+      if (!IndexValue.hasLifeVersion(revisedLifeVersion)) {
+        revisedLifeVersion = (short) (latestValue.getLifeVersion() + 1);
+      }
       MessageFormatInputStream stream =
           new UndeleteMessageFormatInputStream(id, info.getAccountId(), info.getContainerId(),
-              info.getOperationTimeMs(), lifeVersion);
+              info.getOperationTimeMs(), revisedLifeVersion);
       // Update info to add stream size;
       info =
           new MessageInfo(id, stream.getSize(), info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
-              info.getLifeVersion());
+              revisedLifeVersion);
       ArrayList<MessageInfo> infoList = new ArrayList<>();
       infoList.add(info);
       MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
@@ -731,22 +739,32 @@ public class BlobStore implements Store {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
-          IndexValue value =
-              index.findKey(info.getStoreKey(), fileSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
+          IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
+              EnumSet.of(PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE));
           if (value != null) {
-            throw new StoreException("Cannot undelete id " + info.getStoreKey() + " since concurrent operation occurs",
-                StoreErrorCodes.Life_Version_Conflict);
+            if (value.isUndelete() && value.getLifeVersion() == revisedLifeVersion) {
+              // Might get an concurrent undelete from both replication and frontend. This is considered as an
+              // successful operation and the exception will be captured by the catch statement below.
+              throw new StoreException(
+                  "Can't undelete id " + info.getStoreKey() + " in " + dataDir + " since concurrent operations",
+                  StoreErrorCodes.ID_Undeleted);
+            } else {
+              throw new StoreException(
+                  "Cannot undelete id " + info.getStoreKey() + " since concurrent operation occurs",
+                  StoreErrorCodes.Life_Version_Conflict);
+            }
           }
         }
         Offset endOffsetOfLastMessage = log.getEndOffset();
         writeSet.writeTo(log);
         logger.trace("Store : {} undelete mark written to log", dataDir);
         FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-        index.markAsUndeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs(), info.getLifeVersion());
+        // we still use lifeVersion from message info here so that we can re-verify the sanity of undelete request in persistent index.
+        index.markAsUndeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs(), lifeVersionFromMessageInfo);
         // TODO: update blobstore stats for undelete (2020-02-10)
       }
       onSuccess();
-      return lifeVersion;
+      return revisedLifeVersion;
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.IOError) {
         onError();

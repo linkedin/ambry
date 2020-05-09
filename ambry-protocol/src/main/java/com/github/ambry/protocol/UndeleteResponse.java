@@ -41,7 +41,7 @@ public class UndeleteResponse extends Response {
    */
   public UndeleteResponse(int correlationId, String clientId, ServerErrorCode error) {
     super(RequestOrResponseType.UndeleteResponse, UNDELETE_RESPONSE_VERSION_1, correlationId, clientId, error);
-    if (error == ServerErrorCode.No_Error) {
+    if (error == ServerErrorCode.No_Error || error == ServerErrorCode.Blob_Already_Undeleted) {
       throw new IllegalArgumentException("NoError is not a valid error code");
     }
     this.lifeVersion = INVALID_LIFE_VERSION;
@@ -62,6 +62,18 @@ public class UndeleteResponse extends Response {
     this.lifeVersion = lifeVersion;
   }
 
+  /**
+   * Constructs a {@link UndeleteResponse} with a valid lifeVersion. The error code will be set to {@link ServerErrorCode#No_Error}.
+   * @param correlationId correlationId of the undelete response.
+   * @param clientId clientId of the undelete response.
+   * @param lifeVersion a valid lifeVersion to return to client.
+   * @param error error code returned in this undelete response.
+   */
+  public UndeleteResponse(int correlationId, String clientId, short lifeVersion, ServerErrorCode error) {
+    super(RequestOrResponseType.UndeleteResponse, UNDELETE_RESPONSE_VERSION_1, correlationId, clientId, error);
+    this.lifeVersion = lifeVersion;
+  }
+
   public static UndeleteResponse readFrom(DataInputStream stream) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
     if (type != RequestOrResponseType.UndeleteResponse) {
@@ -74,21 +86,15 @@ public class UndeleteResponse extends Response {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
-    if (error == ServerErrorCode.No_Error) {
-      short lifeVersion = stream.readShort();
-      return new UndeleteResponse(correlationId, clientId, lifeVersion);
-    } else {
-      return new UndeleteResponse(correlationId, clientId, error);
-    }
+    short lifeVersion = stream.readShort();
+    return new UndeleteResponse(correlationId, clientId, lifeVersion, error);
   }
 
   private void prepareBuffer() {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
-      if (getError() == ServerErrorCode.No_Error) {
-        bufferToSend.putShort(lifeVersion);
-      }
+      bufferToSend.putShort(lifeVersion);
       bufferToSend.flip();
     }
   }
@@ -111,7 +117,7 @@ public class UndeleteResponse extends Response {
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + (long) (getError() == ServerErrorCode.No_Error ? Life_Version_InBytes : 0);
+    return super.sizeInBytes() + (long) Life_Version_InBytes;
   }
 
   @Override

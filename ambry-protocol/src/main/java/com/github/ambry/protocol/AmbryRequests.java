@@ -656,8 +656,10 @@ public class AmbryRequests implements RequestAPI {
     metrics.undeleteBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     UndeleteResponse response = null;
+    Store storeToUndelete = null;
+    StoreKey convertedStoreKey = null;
     try {
-      StoreKey convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(undeleteRequest.getBlobId())).get(0);
+      convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(undeleteRequest.getBlobId())).get(0);
       ServerErrorCode error =
           validateRequest(undeleteRequest.getBlobId().getPartition(), RequestOrResponseType.UndeleteRequest, false);
       if (error != ServerErrorCode.No_Error) {
@@ -668,7 +670,7 @@ public class AmbryRequests implements RequestAPI {
         MessageInfo info = new MessageInfo(convertedBlobId, -1, false, false, true, Utils.Infinite_Time, null,
             convertedBlobId.getAccountId(), convertedBlobId.getContainerId(), undeleteRequest.getOperationTimeMs(),
             MessageInfo.LIFE_VERSION_FROM_FRONTEND);
-        Store storeToUndelete = storeManager.getStore(undeleteRequest.getBlobId().getPartition());
+        storeToUndelete = storeManager.getStore(undeleteRequest.getBlobId().getPartition());
         short lifeVersion = storeToUndelete.undelete(info);
         response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), lifeVersion);
         if (notification != null) {
@@ -703,8 +705,22 @@ public class AmbryRequests implements RequestAPI {
         logger.trace("Store exception on a undelete with error code {} for request {}", e.getErrorCode(),
             undeleteRequest, e);
       }
-      response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
-          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+      if (e.getErrorCode() == StoreErrorCodes.ID_Undeleted) {
+        try {
+          // try to get the lifeVersion when the error is ID_Undeleted.
+          MessageInfo info = storeToUndelete.findKey(convertedStoreKey);
+          response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+              info.getLifeVersion(), ServerErrorCode.Blob_Already_Undeleted);
+        } catch (StoreException se) {
+          logger.trace("Store exception on a findKey after undelete with error code {} for request {}",
+              se.getErrorCode(), undeleteRequest, se);
+          response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+              ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+        }
+      } else {
+        response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+            ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+      }
     } catch (Exception e) {
       logger.error("Unknown exception for undelete request " + undeleteRequest, e);
       response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),

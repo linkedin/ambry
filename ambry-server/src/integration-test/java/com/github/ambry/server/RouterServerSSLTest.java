@@ -127,7 +127,7 @@ public class RouterServerSSLTest {
   public void interleavedOperationsTest() throws Exception {
     List<OperationChain> opChains = new ArrayList<>();
     Random random = new Random();
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 20; i++) {
       Queue<OperationType> operations = new LinkedList<>();
       switch (i % 3) {
         case 0:
@@ -146,6 +146,10 @@ public class RouterServerSSLTest {
           operations.add(OperationType.GET_INFO_DELETED);
           operations.add(OperationType.GET_DELETED_SUCCESS);
           operations.add(OperationType.GET_INFO_DELETED_SUCCESS);
+          operations.add(OperationType.UNDELETE);
+          operations.add(OperationType.AWAIT_UNDELETE);
+          operations.add(OperationType.GET);
+          operations.add(OperationType.GET_INFO);
           break;
         case 1:
           operations.add(OperationType.PUT);

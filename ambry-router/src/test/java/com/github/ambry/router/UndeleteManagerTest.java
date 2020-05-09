@@ -163,8 +163,7 @@ public class UndeleteManagerTest {
       executeOpAndVerify(Collections.singleton(blobId), RouterErrorCode.BlobNotDeleted);
       deleteBlobInAllServer(blobId);
       executeOpAndVerify(Collections.singleton(blobId), null);
-      // Already undeleted, should return BlobUndeleted.
-      executeOpAndVerify(Collections.singleton(blobId), RouterErrorCode.BlobUndeleted);
+      executeOpAndVerify(Collections.singleton(blobId), null);
     }
   }
 

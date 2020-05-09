@@ -38,6 +38,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.router.UndeleteOperation;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -469,6 +470,23 @@ class RouterServerTestFramework {
   }
 
   /**
+   * Submit a undeleteBlob operation.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startUndeleteBlob(final OperationChain opChain) {
+    Callback<Void> callback = new TestCallback<>(opChain, false);
+    System.out.println("Undelete blob " + opChain.blobId);
+    Future<Void> future = router.undeleteBlob(opChain.blobId, null, callback);
+    TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("undeleteBlob", false), opChain) {
+      @Override
+      void check() throws Exception {
+        get();
+      }
+    };
+    opChain.testFutures.add(testFuture);
+  }
+
+  /**
    * Using the mock notification system, wait for the put blob in this operation chain to be replicated to all server
    * nodes before continuing the chain.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
@@ -495,6 +513,16 @@ class RouterServerTestFramework {
    */
   private void startAwaitTtlUpdate(final OperationChain opChain) {
     notificationSystem.awaitBlobUpdates(opChain.blobId, UpdateType.TTL_UPDATE);
+    continueChain(opChain);
+  }
+
+  /**
+   * Using the mock notification system, wait for the undelete blob in this operation chain to be undeleted on all server
+   * nodes before continuing the chain.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startAwaitUndelete(final OperationChain opChain) {
+    notificationSystem.awaitBlobUndeletes(opChain.blobId);
     continueChain(opChain);
   }
 
@@ -547,6 +575,12 @@ class RouterServerTestFramework {
           break;
         case DELETE_AUTHORIZATION_FAILURE:
           startDeleteBlobAuthorizationFailTest(opChain);
+          break;
+        case UNDELETE:
+          startUndeleteBlob(opChain);
+          break;
+        case AWAIT_UNDELETE:
+          startAwaitUndelete(opChain);
           break;
         default:
           throw new IllegalArgumentException("Unknown op: " + nextOp);
@@ -633,7 +667,18 @@ class RouterServerTestFramework {
      * Wait for the operation chain's blob ID to be reported as updated on all replicas. Continue with the remaining
      * actions in the operation chain afterwards.
      */
-    AWAIT_TTL_UPDATE(false);
+    AWAIT_TTL_UPDATE(false),
+
+    /**
+     * Undelete blob with the nonblocking router.
+     */
+    UNDELETE(false),
+
+    /**
+     * Wait for the operation chain's blob ID to be reported as undeleted on all replicas. Continue with the remaining
+     * actions in the operation chain afterwards.
+     */
+    AWAIT_UNDELETE(false);
 
     /**
      * {@code true} if this operation needs to check that the response returned indicates that the blob is deleted.
