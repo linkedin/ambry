@@ -26,4 +26,11 @@ public interface ClusterMapChangeListener {
    * @param removedReplicas {@link ReplicaId}(s) that have been removed.
    */
   void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas);
+
+  /**
+   * Take actions when there is a routing table update. This is triggered whenever there is any change to state of a replicas (of this data center) in the cluster.
+   * On this trigger, we can look up the latest states of all the replicas (in this data center) from the routing table snapshot {@link org.apache.helix.spectator.RoutingTableSnapshot}
+   * with the help of various APIs provided in its class.
+   */
+  void onRoutingTableChange();
 }

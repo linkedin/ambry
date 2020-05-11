@@ -609,6 +609,13 @@ public class ClusterMapUtils {
       generatePartitionMapsAndSwitch(addedReplicas, removedReplicas);
     }
 
+    @Override
+    public void onRoutingTableChange() {
+      // This method is used to handle any state changes (offline, bootstrap, leader, standby) for remote replicas in the cluster (of a given data center).
+      // On receiving this trigger, we can look up the latest states of replicas in helix routing table snapshot {@link org.apache.helix.spectator.RoutingTableSnapshot}
+      // Should be of no use for now
+    }
+
     /**
      * Generate new partition-selection related maps and switch current maps to new ones. This method should be synchronized
      * because it can be invoked by cluster change handlers in different dcs concurrently. We need to ensure one dc has
