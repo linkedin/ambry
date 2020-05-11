@@ -15,7 +15,7 @@
 package com.github.ambry.replication;
 
 /**
- * The type of replication used for inter-data centers
+ * The model used for cross-colo replication
  * Under ALL_TO_ALL mode, all replicas of local data center replicate from all peer replicas in remote data centers
  * Under LEADER_BASED mode, only the leader replica of local data center (as elected by helix) will replicate with other leader replicas in remote data centers
  */

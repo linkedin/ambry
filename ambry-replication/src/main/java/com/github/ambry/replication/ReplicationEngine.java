@@ -122,7 +122,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.storeManager = storeManager;
     replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
     peerLeaderReplicasByPartition = new ConcurrentHashMap<>();
-    replicationModelType = replicationConfig.replicationModelForInterColoDatacenters.equals("leader-based")
+    replicationModelType = replicationConfig.replicationModelAcrossDatacenters.equalsIgnoreCase("leader-based")
         ? ReplicationModelType.LEADER_BASED : ReplicationModelType.ALL_TO_ALL;
   }
 

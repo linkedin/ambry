@@ -172,11 +172,11 @@ public class ReplicationTest {
   }
 
   /**
-   * Tests replication model is correct obtained from properties
+   * Tests replication model is correctly obtained from properties
    * @throws Exception
    */
   @Test
-  public void verifyReplicationTypeFromConfig() throws Exception {
+  public void replicationTypeFromConfigTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     StoreConfig storeConfig = new StoreConfig(verifiableProperties);
@@ -189,7 +189,7 @@ public class ReplicationTest {
     storageManager.start();
 
     ReplicationConfig initialReplicationConfig = replicationConfig;
-    properties.setProperty("replication.inter.colo.datacenter.model", "leader-based");
+    properties.setProperty("replication.model.across.datacenters", "leader-based");
     replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));
 
     MockReplicationManager replicationManager =

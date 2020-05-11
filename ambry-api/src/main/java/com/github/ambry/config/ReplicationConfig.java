@@ -188,9 +188,9 @@ public class ReplicationConfig {
    * If set to "all-to-all", inter colo replication will be in an all-to-all fashion, i.e. each replica talks to all other replicas irrespective of their state.
    * Intra colo replication will continue as all-to-all fashion in both the models.
    */
-  @Config("replication.inter.colo.datacenter.model")
+  @Config("replication.model.across.datacenters")
   @Default("all-to-all")
-  public final String replicationModelForInterColoDatacenters;
+  public final String replicationModelAcrossDatacenters;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
@@ -234,7 +234,7 @@ public class ReplicationConfig {
     replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);
     String vcrRecoveryPartitions = verifiableProperties.getString("replication.vcr.recovery.partitions", "");
     replicationVcrRecoveryPartitions = Utils.splitString(vcrRecoveryPartitions, ",", HashSet::new);
-    replicationModelForInterColoDatacenters =
-        verifiableProperties.getString("replication.inter.colo.datacenter.model", "all-to-all");
+    replicationModelAcrossDatacenters =
+        verifiableProperties.getString("replication.model.across.datacenters", "all-to-all");
   }
 }
