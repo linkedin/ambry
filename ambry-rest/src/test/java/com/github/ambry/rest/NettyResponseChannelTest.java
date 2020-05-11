@@ -672,6 +672,43 @@ public class NettyResponseChannelTest {
     }
   }
 
+  /**
+   * Tests the invocation of DELAYED_CLOSE when post failures happen in {@link NettyResponseChannel}.
+   */
+  @Test
+  public void completeRequestWithDelayedCloseTest() throws Exception {
+    Properties properties = new Properties();
+    long delayMs = 500;
+    properties.setProperty(NettyConfig.NETTY_SERVER_CLOSE_DELAY_TIMEOUT_MS, String.valueOf(delayMs));
+    NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(properties));
+    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+    processor.setNettyConfig(nettyConfig);
+    ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
+    EmbeddedChannel channel = new EmbeddedChannel(chunkedWriteHandler, processor);
+
+    RestServiceErrorCode REST_ERROR_CODE = RestServiceErrorCode.BadRequest;
+    String content = "@@randomContent@@@";
+    HttpHeaders httpHeaders = new DefaultHttpHeaders();
+    httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, REST_ERROR_CODE);
+    httpHeaders.set(MockNettyMessageProcessor.INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME, "true");
+    HttpRequest httpRequest =
+        RestTestUtils.createFullRequest(HttpMethod.POST, TestingUri.OnResponseCompleteWithRestException.toString(),
+            httpHeaders, content.getBytes());
+    channel.writeInbound(httpRequest);
+    HttpResponse response = channel.readOutbound();
+    assertEquals("Unexpected response status", getExpectedHttpResponseStatus(REST_ERROR_CODE), response.status());
+    //channel should not be closed right away.
+    assertTrue("Channel closed on the server", channel.isActive());
+    //wait for delayed time * 2 times (to rule out timing out on border) and then check again.
+    Thread.sleep(delayMs * 2);
+    channel.runPendingTasks();
+    assertFalse("Channel not closed on the server", channel.isActive());
+    assertEquals("delayed close scheduled counter mismatch", 1,
+        processor.getNettyMetrics().delayedCloseScheduledCount.getCount());
+    assertEquals("delayed close executed counter mismatch", 1,
+        processor.getNettyMetrics().delayedCloseExecutedCount.getCount());
+  }
+
   // helpers
   // general
 
@@ -1085,42 +1122,6 @@ public class NettyResponseChannelTest {
     }
   }
 
-  /**
-   * Tests the invocation of DELAYED_CLOSE when post failures happen in {@link NettyResponseChannel}.
-   */
-  @Test
-  public void completeRequestWithDelayedCloseTest() throws Exception {
-    Properties properties = new Properties();
-    long delayMs = 500;
-    properties.setProperty(NettyConfig.NETTY_SERVER_CLOSE_DELAY_TIMEOUT_MS, String.valueOf(delayMs));
-    NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(properties));
-    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    processor.setNettyConfig(nettyConfig);
-    ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
-    EmbeddedChannel channel = new EmbeddedChannel(chunkedWriteHandler, processor);
-
-    RestServiceErrorCode REST_ERROR_CODE = RestServiceErrorCode.BadRequest;
-    String content = "@@randomContent@@@";
-    HttpHeaders httpHeaders = new DefaultHttpHeaders();
-    httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, REST_ERROR_CODE);
-    httpHeaders.set(MockNettyMessageProcessor.INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME, "true");
-    HttpRequest httpRequest =
-        RestTestUtils.createFullRequest(HttpMethod.POST, TestingUri.OnResponseCompleteWithRestException.toString(),
-            httpHeaders, content.getBytes());
-    channel.writeInbound(httpRequest);
-    HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", getExpectedHttpResponseStatus(REST_ERROR_CODE), response.status());
-    //channel should not be closed right away.
-    assertTrue("Channel closed on the server", channel.isActive());
-    //wait for delayed time * 2 times (to rule out timing out on border) and then check again.
-    Thread.sleep(delayMs * 2);
-    channel.runPendingTasks();
-    assertFalse("Channel not closed on the server", channel.isActive());
-    assertEquals("delayed close scheduled counter mismatch", 1,
-        processor.getNettyMetrics().delayedCloseScheduledCount.getCount());
-    assertEquals("delayed close executed counter mismatch", 1,
-        processor.getNettyMetrics().delayedCloseExecutedCount.getCount());
-  }
 }
 
 /**
@@ -1273,17 +1274,16 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   static final byte[] CHUNK = TestUtils.getRandomBytes(1024);
   static final String CHUNK_COUNT_HEADER_NAME = "chunkCount";
   static PerformanceConfig PERFORMANCE_CONFIG = new PerformanceConfig(new VerifiableProperties(new Properties()));
-  static NettyConfig NETTY_CONFIG = new NettyConfig(new VerifiableProperties(new Properties()));
   static boolean useMockNettyRequest = false;
 
   // the write callbacks to verify if any. This is reset at the beginning of every request.
   final List<ChannelWriteCallback> writeCallbacksToVerify = new ArrayList<>();
+  private NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(new Properties()));
 
   private ChannelHandlerContext ctx;
   private NettyRequest request;
   private NettyResponseChannel restResponseChannel;
   private NettyMetrics nettyMetrics;
-  private NettyConfig nettyConfig = NETTY_CONFIG;
 
   public void setNettyConfig(NettyConfig nettyConfig) {
     this.nettyConfig = nettyConfig;
