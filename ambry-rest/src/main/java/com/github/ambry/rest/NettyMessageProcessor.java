@@ -393,7 +393,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     request = null;
     lastChannelReadTime = null;
     requestContentFullyReceived = false;
-    responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig);
+    responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);
     logger.trace("Refreshed state for channel {}", ctx.channel());
   }
 
