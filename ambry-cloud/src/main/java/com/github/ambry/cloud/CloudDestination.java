@@ -57,7 +57,8 @@ public interface CloudDestination extends Closeable {
    * @return flag indicating whether the blob was deleted
    * @throws CloudStorageException if the deletion encounters an error.
    */
-  boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion) throws CloudStorageException;
+  boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
+      throws CloudStorageException;
 
   /**
    * Undelete the blob from cloud destination, and update the new life version.
@@ -66,16 +67,18 @@ public interface CloudDestination extends Closeable {
    * @return final live version of the undeleted blob.
    * @throws CloudStorageException if the undelete encounters an error.
    */
-  short undeleteBlob(BlobId blobId, short lifeVersion) throws CloudStorageException;
+  short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
+      throws CloudStorageException;
 
   /**
    * Update expiration time of blob in the cloud destination.
    * @param blobId id of the Ambry blob
    * @param expirationTime the new expiration time
-   * @return flag indicating whether the blob was updated
+   * @return the life version of the blob if the blob was updated, otherwise -1.
    * @throws CloudStorageException if the update encounters an error.
    */
-  boolean updateBlobExpiration(BlobId blobId, long expirationTime) throws CloudStorageException;
+  short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
+      throws CloudStorageException;
 
   /**
    * Query the blob metadata for the specified blobs.

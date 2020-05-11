@@ -435,8 +435,36 @@ public class CloudBlobMetadata {
    * @return true if this blob is deleted or expired, otherwise false.
    */
   public boolean isDeletedOrExpired() {
-    return (expirationTime != Utils.Infinite_Time && expirationTime < System.currentTimeMillis())
-        || deletionTime != Utils.Infinite_Time;
+    return isExpired() || isDeleted();
+  }
+
+  /**
+   * @return true if this blob is marked as deleted, false otherwise.
+   */
+  public boolean isDeleted() {
+    return (deletionTime != Utils.Infinite_Time);
+  }
+
+  /**
+   * @return true if this blob has expired, false otherwise.
+   */
+  public boolean isExpired() {
+    return expirationTime != Utils.Infinite_Time && expirationTime < System.currentTimeMillis();
+  }
+
+  /**
+   * @return true if this blob is undeleted.
+   */
+  public boolean isUndeleted() {
+    return !isDeleted() && lifeVersion > 0;
+  }
+
+  /**
+   * @param retentionPeriod period for which blobs marked a deleted aren't compacted away.
+   * @return true if deletion time is outside retention window. false otherwise.
+   */
+  public boolean isCompactionCandidate(long retentionPeriod) {
+    return isDeleted() && deletionTime <= (System.currentTimeMillis() - retentionPeriod);
   }
 
   @Override

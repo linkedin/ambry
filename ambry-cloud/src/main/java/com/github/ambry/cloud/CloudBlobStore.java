@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.FindInfo;
@@ -43,6 +44,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -76,6 +78,8 @@ class CloudBlobStore implements Store {
   private final CloudBlobCryptoAgent cryptoAgent;
   private final CloudRequestAgent requestAgent;
   private final VcrMetrics vcrMetrics;
+  private final StoreConfig storeConfig;
+  private final long ttlUpdateBufferTimeMs;
 
   // Map blobId to state (created, ttlUpdated, deleted)
   private final Map<String, BlobLifeState> recentBlobCache;
@@ -99,6 +103,8 @@ class CloudBlobStore implements Store {
     CloudConfig cloudConfig = new CloudConfig(properties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
     this.clusterMap = clusterMap;
+    this.storeConfig = new StoreConfig(properties);
+    this.ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(storeConfig.storeTtlUpdateBufferTimeSeconds);
     this.cloudDestination = Objects.requireNonNull(cloudDestination, "cloudDestination is required");
     this.partitionId = Objects.requireNonNull(partitionId, "partitionId is required");
     this.vcrMetrics = Objects.requireNonNull(vcrMetrics, "vcrMetrics is required");
@@ -150,7 +156,7 @@ class CloudBlobStore implements Store {
             StoreErrorCodes.ID_Not_Found);
       }
       long currentTimeStamp = System.currentTimeMillis();
-      validateCloudMetadata(cloudBlobMetadataListMap, storeGetOptions, currentTimeStamp);
+      validateCloudMetadata(cloudBlobMetadataListMap, storeGetOptions, currentTimeStamp, ids);
       for (BlobId blobId : blobIdList) {
         CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
         // TODO: need to add ttlUpdated to CloudBlobMetadata so we can use it here
@@ -205,37 +211,6 @@ class CloudBlobStore implements Store {
   }
 
   /**
-   * validate the {@code CloudBlobMetadata} map to make sure it has metadata for all keys, and they meet the {@code storeGetOptions} requirements.
-   * @param cloudBlobMetadataListMap
-   * @throws StoreException if the {@code CloudBlobMetadata} isnt valid
-   */
-  private void validateCloudMetadata(Map<String, CloudBlobMetadata> cloudBlobMetadataListMap,
-      EnumSet<StoreGetOptions> storeGetOptions, long currentTimestamp) throws StoreException {
-    for (String key : cloudBlobMetadataListMap.keySet()) {
-      if (isBlobDeleted(cloudBlobMetadataListMap.get(key)) && !storeGetOptions.contains(
-          StoreGetOptions.Store_Include_Deleted)) {
-        throw new StoreException("Id " + key + " has been deleted on the cloud", StoreErrorCodes.ID_Deleted);
-      }
-      if (isBlobExpired(cloudBlobMetadataListMap.get(key), currentTimestamp) && !storeGetOptions.contains(
-          StoreGetOptions.Store_Include_Expired)) {
-        throw new StoreException("Id " + key + " has expired on the cloud", StoreErrorCodes.TTL_Expired);
-      }
-    }
-  }
-
-  /**
-   * Gets the operation time for a blob from blob metadata based on the blob's current state and timestamp recorded for that state.
-   * @param metadata blob metadata from which to derive operation time.
-   * @return operation time.
-   */
-  private long getOperationTime(CloudBlobMetadata metadata) {
-    if (isBlobDeleted(metadata)) {
-      return metadata.getDeletionTime();
-    }
-    return (metadata.getCreationTime() == Utils.Infinite_Time) ? metadata.getUploadTime() : metadata.getCreationTime();
-  }
-
-  /**
    * Check if the blob is marked for deletion in its metadata
    * @param metadata to check for deletion
    * @return true if deleted. false otherwise
@@ -279,12 +254,13 @@ class CloudBlobStore implements Store {
    * @throws CloudStorageException if the upload failed.
    */
   private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size)
-      throws CloudStorageException, IOException {
+      throws CloudStorageException, IOException, StoreException {
     if (shouldUpload(messageInfo)) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       boolean isRouterEncrypted = isRouterEncrypted(blobId);
       EncryptionOrigin encryptionOrigin = isRouterEncrypted ? EncryptionOrigin.ROUTER : EncryptionOrigin.NONE;
       boolean encryptThisBlob = requireEncryption && !isRouterEncrypted;
+      boolean uploaded;
       if (encryptThisBlob) {
         // Need to encrypt the buffer before upload
         long encryptedSize = -1;
@@ -305,7 +281,7 @@ class CloudBlobStore implements Store {
         // If buffer was encrypted, we no longer know its size
         long bufferLen = (encryptedSize == -1) ? size : encryptedSize;
         InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
-        requestAgent.doWithRetries(
+        uploaded = requestAgent.doWithRetries(
             () -> cloudDestination.uploadBlob(blobId, bufferLen, blobMetadata, uploadInputStream), "Upload",
             partitionId.toPathString());
       } else {
@@ -314,13 +290,20 @@ class CloudBlobStore implements Store {
             new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
                 messageInfo.getSize(), encryptionOrigin);
         InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
-        requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, size, blobMetadata, uploadInputStream),
-            "Upload", partitionId.toPathString());
+        uploaded =
+            requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, size, blobMetadata, uploadInputStream),
+                "Upload", partitionId.toPathString());
       }
       addToCache(blobId.getID(), (short) 0, BlobState.CREATED);
+      if (!uploaded) {
+        throw new StoreException(String.format("Another blob with same key %s exists in store", blobId.getID()),
+            StoreErrorCodes.Already_Exist);
+      }
     } else {
-      logger.trace("Blob is skipped: {}", messageInfo);
       vcrMetrics.blobUploadSkippedCount.inc();
+      throw new CloudStorageException("Error updating blob metadata", new StoreException(
+          String.format("Another blob with same key %s exists in store", messageInfo.getStoreKey().getID()),
+          StoreErrorCodes.Already_Exist));
     }
   }
 
@@ -372,6 +355,9 @@ class CloudBlobStore implements Store {
             "Delete", partitionId.toPathString());
       }
     } catch (CloudStorageException ex) {
+      if (ex.getCause() instanceof StoreException) {
+        throw (StoreException) ex.getCause();
+      }
       StoreErrorCodes errorCode =
           (ex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
       throw new StoreException(ex, errorCode);
@@ -391,11 +377,15 @@ class CloudBlobStore implements Store {
     // Note: always check cache before operation attempt, since this could be a retry after a CONFLICT error,
     // in which case the cache may have been updated by another thread.
     if (!checkCacheState(blobKey, lifeVersion, BlobState.DELETED)) {
-      boolean deleted = cloudDestination.deleteBlob(blobId, deletionTime, lifeVersion);
+      boolean deleted = cloudDestination.deleteBlob(blobId, deletionTime, lifeVersion,
+          (metadata, key, updateFields) -> preDeleteValidation(metadata, key, updateFields));
       addToCache(blobKey, lifeVersion, BlobState.DELETED);
       return deleted;
+    } else {
+      throw new CloudStorageException("Error updating blob metadata",
+          new StoreException("Cannot delete id " + blobId.getID() + " since it is already marked as deleted in cloud.",
+              StoreErrorCodes.ID_Deleted));
     }
-    return false;
   }
 
   @Override
@@ -419,32 +409,34 @@ class CloudBlobStore implements Store {
    * @throws CloudStorageException in case any exception happens during undelete.
    */
   private short undeleteIfNeeded(BlobId blobId, short lifeVersion) throws CloudStorageException {
-    // TODO: Currently this is implemented for undeletes via replication only for DR.
     // See note in deleteIfNeeded.
     if (!checkCacheState(blobId.getID(), lifeVersion, BlobState.CREATED)) {
-      short newLifeVersion = cloudDestination.undeleteBlob(blobId, lifeVersion);
+      short newLifeVersion = cloudDestination.undeleteBlob(blobId, lifeVersion,
+          (metadata, key, updateFields) -> preUndeleteValidation(metadata, key, updateFields));
       addToCache(blobId.getID(), newLifeVersion, BlobState.CREATED);
       return newLifeVersion;
+    } else {
+      throw new CloudStorageException("Error updating blob metadata",
+          new StoreException("Id " + blobId.getID() + " is already undeleted in cloud", StoreErrorCodes.ID_Undeleted));
     }
-    // this means we found a blob in the cache in correct state and with the same lifeVersion as requested.
-    return lifeVersion;
   }
 
   /**
    * {@inheritDoc}
    * Currently, the only supported operation is to set the TTL to infinite (i.e. no arbitrary increase or decrease)
-   * @param infos The list of messages that need to be updated
+   * @param infos The list of messages that need to be updated.
    * @throws StoreException
    */
   @Override
   public void updateTtl(List<MessageInfo> infos) throws StoreException {
     checkStarted();
-    // Note: we skipped uploading the blob on PUT record if the TTL was below threshold.
+    // Note: We skipped uploading the blob on PUT record if the TTL was below threshold (threshold should be 0 for non DR cases).
     try {
       for (MessageInfo msgInfo : infos) {
-        // MessageInfo.expirationTimeInMs is not reliable if ttlUpdate is set. See {@code PersistentIndex#findKey()}
-        // and {@code PersistentIndex#markAsPermanent()}. If we change updateTtl to be more flexible, code here will
-        // need to be modified.
+        if (msgInfo.getExpirationTimeInMs() != Utils.Infinite_Time) {
+          throw new StoreException("CloudBlobStore only supports removing the expiration time",
+              StoreErrorCodes.Update_Not_Allowed);
+        }
         if (msgInfo.isTtlUpdated()) {
           BlobId blobId = (BlobId) msgInfo.getStoreKey();
           requestAgent.doWithRetries(() -> updateTtlIfNeeded(blobId), "UpdateTtl", partitionId.toPathString());
@@ -469,15 +461,161 @@ class CloudBlobStore implements Store {
   private boolean updateTtlIfNeeded(BlobId blobId) throws CloudStorageException {
     String blobKey = blobId.getID();
     // See note in deleteIfNeeded.
-    if (!checkCacheState(blobKey, BlobState.TTL_UPDATED, BlobState.DELETED)) {
-      boolean updated = cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time);
-      // We do not have the definitive value of life version here. So we add to cache with minimum valid value.
-      // If the key is present in cache, then correct life version will be updated. (see method {@link addToCache}).
-      // If not then in worst case, the cache might let some operations with higher life version go through again.
-      addToCache(blobKey, (short) 0, BlobState.TTL_UPDATED);
-      return updated;
+    if (!checkCacheState(blobKey, BlobState.TTL_UPDATED)) {
+      short lifeVersion = cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time,
+          (metadata, key, updateFields) -> preTtlUpdateValidation(metadata, key, updateFields));
+      addToCache(blobKey, lifeVersion, BlobState.TTL_UPDATED);
+      return (lifeVersion != -1);
     }
     return false;
+  }
+
+  /**
+   * Validate {@link CloudBlobMetadata} map to make sure it has metadata for all keys, and they meet the {@code storeGetOptions} requirements.
+   * @param cloudBlobMetadataMap {@link CloudBlobMetadata} map.
+   * @param storeGetOptions {@link StoreGetOptions} requirements.
+   * @param currentTimestamp current time stamp.
+   * @throws StoreException if the {@code CloudBlobMetadata} isnt valid
+   */
+  private void validateCloudMetadata(Map<String, CloudBlobMetadata> cloudBlobMetadataMap,
+      EnumSet<StoreGetOptions> storeGetOptions, long currentTimestamp, List<? extends StoreKey> ids)
+      throws StoreException {
+    for (String key : cloudBlobMetadataMap.keySet()) {
+      if (isBlobDeleted(cloudBlobMetadataMap.get(key)) && !storeGetOptions.contains(
+          StoreGetOptions.Store_Include_Deleted)) {
+        throw new StoreException("Id " + key + " has been deleted on the cloud", StoreErrorCodes.ID_Deleted);
+      }
+      if (isBlobExpired(cloudBlobMetadataMap.get(key), currentTimestamp) && !storeGetOptions.contains(
+          StoreGetOptions.Store_Include_Expired)) {
+        throw new StoreException("Id " + key + " has expired on the cloud", StoreErrorCodes.TTL_Expired);
+      }
+    }
+    validateAccountAndContainer(cloudBlobMetadataMap, ids);
+  }
+
+  /**
+   * Validate account id and container id for blobs in {@link CloudBlobMetadata} map match those in {@link StoreKey} list.
+   * @param cloudBlobMetadataMap {@link Map} of {@link CloudBlobMetadata}.
+   * @param storeKeys {@link List} of {@link StoreKey}s.
+   */
+  private void validateAccountAndContainer(Map<String, CloudBlobMetadata> cloudBlobMetadataMap,
+      List<? extends StoreKey> storeKeys) throws StoreException {
+    for (StoreKey key : storeKeys) {
+      CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataMap.get(key.getID());
+      // validate accountId and containerId
+      if (!key.isAccountContainerMatch((short) cloudBlobMetadata.getAccountId(),
+          (short) cloudBlobMetadata.getContainerId())) {
+        if (storeConfig.storeValidateAuthorization) {
+          throw new StoreException("GET authorization failure. Key: " + key.getID() + " Actual accountId: "
+              + cloudBlobMetadata.getAccountId() + " Actual containerId: " + cloudBlobMetadata.getAccountId(),
+              StoreErrorCodes.Authorization_Failure);
+        } else {
+          logger.warn("GET authorization failure. Key: {} Actually accountId: {} Actually containerId: {}", key.getID(),
+              cloudBlobMetadata.getAccountId(), cloudBlobMetadata.getContainerId());
+        }
+      }
+    }
+  }
+
+  /**
+   * Validates existing metadata in cloud destination against requested update for delete.
+   * @param metadata existing {@link CloudBlobMetadata} in cloud.
+   * @param key {@link StoreKey} being deleted.
+   * @param updateFields {@link Map} of fields and values being updated.
+   * @throws StoreException if validation fails.
+   */
+  private void preDeleteValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
+      throws StoreException {
+    validateAccountAndContainer(Collections.singletonMap(metadata.getId(), metadata), Collections.singletonList(key));
+    short requestedLifeVersion = (short) updateFields.get(FIELD_LIFE_VERSION);
+    if (requestedLifeVersion == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
+      // This is a delete request from frontend
+      if (metadata.isDeleted()) {
+        throw new StoreException(
+            "Cannot delete id " + metadata.getId() + " since it is already marked as deleted in cloud.",
+            StoreErrorCodes.ID_Deleted);
+      }
+      // this is delete request from frontend, we use life version only for validation.
+      updateFields.remove(FIELD_LIFE_VERSION);
+    } else {
+      // This is a delete request from replication
+      if ((metadata.isDeleted() && metadata.getLifeVersion() >= requestedLifeVersion) || (metadata.getLifeVersion()
+          > requestedLifeVersion)) {
+        throw new StoreException(
+            "Cannot delete id " + metadata.getId() + " since it is already marked as deleted in cloud.",
+            StoreErrorCodes.Life_Version_Conflict);
+      }
+    }
+  }
+
+  /**
+   * Validates existing metadata in cloud destination against requested update for ttl.
+   * Note that this method also has an unclean side effect of updating the {@code updateFields}.
+   * @param metadata existing {@link CloudBlobMetadata} in cloud.
+   * @param key {@link StoreKey} being updated.
+   * @param updateFields {@link Map} of fields and values being updated.
+   * @throws StoreException if validation fails.
+   */
+  private void preTtlUpdateValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
+      throws StoreException {
+    validateAccountAndContainer(Collections.singletonMap(metadata.getId(), metadata), Collections.singletonList(key));
+    long now = System.currentTimeMillis();
+    if (metadata.isDeleted()) {
+      throw new StoreException("Cannot update TTL of " + key.getID() + " since it is already deleted in the index.",
+          StoreErrorCodes.ID_Deleted);
+    } else if (metadata.getExpirationTime() != Utils.Infinite_Time
+        && metadata.getExpirationTime() < now + ttlUpdateBufferTimeMs) {
+      throw new StoreException(
+          "TTL of " + key.getID() + " cannot be updated because it is too close to expiry. Minimum Op time (ms): " + now
+              + ". ExpiresAtMs: " + metadata.getExpirationTime(), StoreErrorCodes.Update_Not_Allowed);
+    }
+  }
+
+  /**
+   * Validates existing metadata in cloud destination against requested undelete.
+   * Note that this method also has an unclean side effect of updating the {@code updateFields}.
+   * @param metadata existing {@link CloudBlobMetadata} in cloud.
+   * @param key {@link StoreKey} being updated.
+   * @param updateFields {@link Map} of fields and values being updated.
+   * @throws StoreException if validation fails.
+   */
+  private void preUndeleteValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
+      throws StoreException {
+    validateAccountAndContainer(Collections.singletonMap(metadata.getId(), metadata), Collections.singletonList(key));
+    short requestedLifeVersion = (short) updateFields.get(FIELD_LIFE_VERSION);
+    if (metadata.isExpired()) {
+      throw new StoreException("Id " + key + " already expired in cloud ", StoreErrorCodes.TTL_Expired);
+    } else if (metadata.isUndeleted()) {
+      throw new StoreException("Id " + key + " is already undeleted in cloud", StoreErrorCodes.ID_Undeleted);
+    } else if (!metadata.isDeleted()) {
+      throw new StoreException("Id " + key + " is not deleted yet in cloud ", StoreErrorCodes.ID_Not_Deleted);
+    } else if (metadata.getDeletionTime() + TimeUnit.DAYS.toMillis(storeConfig.storeDeletedMessageRetentionDays)
+        < System.currentTimeMillis()) {
+      throw new StoreException("Id " + key + " already permanently deleted in cloud ",
+          StoreErrorCodes.ID_Deleted_Permanently);
+    }
+    if (requestedLifeVersion != MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
+      if (metadata.getLifeVersion() >= requestedLifeVersion) {
+        throw new StoreException(
+            "LifeVersion conflict in cloud. Id " + key + " LifeVersion: " + metadata.getLifeVersion()
+                + " Undelete LifeVersion: " + requestedLifeVersion, StoreErrorCodes.Life_Version_Conflict);
+      }
+    } else {
+      // Update life version to appropriate value for frontend requests.
+      updateFields.put(FIELD_LIFE_VERSION, metadata.getLifeVersion() + 1);
+    }
+  }
+
+  /**
+   * Gets the operation time for a blob from blob metadata based on the blob's current state and timestamp recorded for that state.
+   * @param metadata blob metadata from which to derive operation time.
+   * @return operation time.
+   */
+  private long getOperationTime(CloudBlobMetadata metadata) {
+    if (isBlobDeleted(metadata)) {
+      return metadata.getDeletionTime();
+    }
+    return (metadata.getCreationTime() == Utils.Infinite_Time) ? metadata.getUploadTime() : metadata.getCreationTime();
   }
 
   /**
@@ -500,28 +638,39 @@ class CloudBlobStore implements Store {
    * version, otherwise false.
    */
   private boolean checkCacheState(String blobKey, short lifeVersion, BlobState... desiredStates) {
-    if (isVcr) {
-      BlobLifeState cachedState = recentBlobCache.get(blobKey);
-      vcrMetrics.blobCacheLookupCount.inc();
-      if (cachedState == null) {
-        return false;
-      }
-      if (desiredStates == null || desiredStates.length == 0) {
+    // If the request is coming from frontend, and the desired states being checked are deleted/created (undelete),
+    // then cache might not help. Operations like ttl update and put are once in lifetime of a blob. So a cache hit in
+    // those cases definitely helps. A cache miss for ttl update or put, doesn't necessarily mean that we never saw
+    // that operation for the given blob before. It only means that this cloud blob store instance didn't see it. For
+    // this case, the pre<operation>Validation methods (e.g, {@code preDeleteValidation, preTtlUpdateValidation} etc)
+    // will help do any validations if required.
+    if (lifeVersion == MessageInfo.LIFE_VERSION_FROM_FRONTEND && !Collections.disjoint(Arrays.asList(desiredStates),
+        Arrays.asList(BlobState.DELETED, BlobState.CREATED))) {
+      return false;
+    }
+    // If we are here, in case of delete and undelete, we pass the life version to check against.
+    // So this should be safe, as long as we claim a cache hit, only when life version in cache is not older than
+    // life version passed. Again this doesn't mean that a more recent life version was never seen for this blob. It
+    // only means that this cloud blob store instance didn't see it. And for this case, the pre<operation>Validation
+    // methods (e.g, {@code preDeleteValidation, preTtlUpdateValidation} etc) will help do any validations if required.
+    BlobLifeState cachedState = recentBlobCache.get(blobKey);
+    vcrMetrics.blobCacheLookupCount.inc();
+    if (cachedState == null) {
+      return false;
+    }
+    if (desiredStates == null || desiredStates.length == 0) {
+      vcrMetrics.blobCacheHitCount.inc();
+      return true;
+    }
+    for (BlobState desiredState : desiredStates) {
+      if ((desiredState == cachedState.getBlobState() && (lifeVersion == IGNORE_LIFE_VERSION
+          || lifeVersion <= cachedState.getLifeVersion()))
+          || desiredState == BlobState.TTL_UPDATED && cachedState.isTtlUpdated()) {
         vcrMetrics.blobCacheHitCount.inc();
         return true;
       }
-      for (BlobState desiredState : desiredStates) {
-        if ((desiredState == cachedState.getBlobState() && (lifeVersion == IGNORE_LIFE_VERSION
-            || lifeVersion <= cachedState.getLifeVersion()))
-            || desiredState == BlobState.TTL_UPDATED && cachedState.isTtlUpdated()) {
-          vcrMetrics.blobCacheHitCount.inc();
-          return true;
-        }
-      }
-      return false;
-    } else {
-      return false;
     }
+    return false;
   }
 
   /**
@@ -583,6 +732,9 @@ class CloudBlobStore implements Store {
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     checkStarted();
     // Check existence of keys in cloud metadata
+    // Note that it is ok to reference cache here, because all we are doing is eliminating blobs that were seen before and
+    // we don't care about the state of the blob.
+    // TODO Fix corner case where a blob is deleted in cache, and has been compacted. Ideally it should show as missing.
     List<BlobId> blobIdQueryList = keys.stream()
         .filter(key -> !checkCacheState(key.getID()))
         .map(key -> (BlobId) key)
@@ -607,16 +759,18 @@ class CloudBlobStore implements Store {
 
   @Override
   public MessageInfo findKey(StoreKey key) throws StoreException {
-    // This is a workaround. This is only used in replication where replicaThread need to figure out if the blob
-    // is deleted and if the blob is ttlupdated, and also returns the lifeVersion.
-    // Since we are not supporting lifeVersion in CloudBlobStore yet, for lifVersion, we will return 0 as default value.
-    // For deleted, use return value from isKeyDeleted.
-    // For ttl update, return false to trigger ttl update operation in replication. For an already ttl udpated blob
-    // second ttl update would end up with an error, which replication will be able to silence.
-
-    // TODO: isKeyDeleted isn't reliable for determining if the blob is deleted or not. Fix it later.
-    return new MessageInfo(key, 0, isKeyDeleted(key), false, false, Utils.Infinite_Time, null,
-        ((BlobId) key).getAccountId(), ((BlobId) key).getContainerId(), 0, (short) 0);
+    try {
+      Map<String, CloudBlobMetadata> cloudBlobMetadataListMap =
+          requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key)),
+              "FindKey", partitionId.toPathString());
+      CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataListMap.get(key.getID());
+      return new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
+          cloudBlobMetadata.isExpired(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
+          (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
+          cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
+    } catch (CloudStorageException e) {
+      throw new StoreException(e, StoreErrorCodes.IOError);
+    }
   }
 
   @Override
@@ -712,7 +866,6 @@ class CloudBlobStore implements Store {
    */
   private void checkStoreKeyDuplicates(List<? extends StoreKey> keys) throws IllegalArgumentException {
     if (keys.size() > 1) {
-      new HashSet<>();
       Set<StoreKey> seenKeys = new HashSet<>();
       Set<StoreKey> duplicates = keys.stream().filter(key -> !seenKeys.add(key)).collect(Collectors.toSet());
       if (duplicates.size() > 0) {
@@ -811,6 +964,8 @@ class CloudBlobStore implements Store {
         messageBuf.flip();
         cloudBlobStore.putBlob(messageInfo, messageBuf, size);
         messageIndex++;
+      } catch (StoreException se) {
+        throw se;
       } catch (IOException | CloudStorageException e) {
         throw new StoreException(e, StoreErrorCodes.IOError);
       }
