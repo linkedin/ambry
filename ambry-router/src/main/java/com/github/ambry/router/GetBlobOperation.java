@@ -1100,7 +1100,7 @@ class GetBlobOperation extends GetOperation {
     private BlobType blobType;
     private List<CompositeBlobInfo.ChunkMetadata> chunkMetadataList;
     private BlobProperties serverBlobProperties;
-    private MessageInfo serverMessageInfo;
+    private short lifeVersion;
 
     /**
      * Construct a FirstGetChunk and initialize it with the {@link BlobId} of the overall operation.
@@ -1154,8 +1154,8 @@ class GetBlobOperation extends GetOperation {
             logger.trace("Processing stored decryption callback result for Metadata blob {}", blobId);
             initializeDataChunks();
             blobInfo =
-                new BlobInfo(serverBlobProperties, decryptCallbackResultInfo.result.getDecryptedUserMetadata().array());
-            blobInfo.setLifeVersion(serverMessageInfo.getLifeVersion());
+                new BlobInfo(serverBlobProperties, decryptCallbackResultInfo.result.getDecryptedUserMetadata().array(),
+                    lifeVersion);
             progressTracker.setCryptoJobSuccess();
             logger.trace("BlobContent available to process for Metadata blob {}", blobId);
           } else {
@@ -1164,8 +1164,7 @@ class GetBlobOperation extends GetOperation {
             // Only in-case of GetBlobInfo and GetBlobAll, user-metadata is required to be decrypted
             if (decryptCallbackResultInfo.result.getDecryptedUserMetadata() != null) {
               blobInfo = new BlobInfo(serverBlobProperties,
-                  decryptCallbackResultInfo.result.getDecryptedUserMetadata().array());
-              blobInfo.setLifeVersion(serverMessageInfo.getLifeVersion());
+                  decryptCallbackResultInfo.result.getDecryptedUserMetadata().array(), lifeVersion);
             }
             totalSize = decryptCallbackResultInfo.result.getDecryptedBlobContent().remaining();
             if (!resolveRange(totalSize)) {
@@ -1227,7 +1226,7 @@ class GetBlobOperation extends GetOperation {
             blobInfo.setLifeVersion(messageInfo.getLifeVersion());
           } else {
             serverBlobProperties = serverBlobInfo.getBlobProperties();
-            serverMessageInfo = messageInfo;
+            lifeVersion = messageInfo.getLifeVersion();
             userMetadata = serverBlobInfo.getUserMetadata();
           }
         }

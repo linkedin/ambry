@@ -14,26 +14,44 @@
 package com.github.ambry.messageformat;
 
 /**
- * A BlobInfo class that contains both the blob property and the usermetadata for the blob
+ * A BlobInfo class that contains both the blob property, the usermetadata and the lifeVersion for the blob.
  */
 public class BlobInfo {
-
   private BlobProperties blobProperties;
-
   private byte[] userMetadata;
-
   private short lifeVersion;
 
+  /**
+   * Constructor to creat a {@link BlobInfo}.
+   * @param blobProperties The {@link BlobProperties} of this blob.
+   * @param userMetadata The user metadata of this blob.
+   */
   public BlobInfo(BlobProperties blobProperties, byte[] userMetadata) {
-    this.blobProperties = blobProperties;
-    this.userMetadata = userMetadata;
-    this.lifeVersion = 0;
+    this(blobProperties, userMetadata, (short) 0);
   }
 
+  /**
+   * Constructor to creat a {@link BlobInfo}.
+   * @param blobProperties The {@link BlobProperties} of this blob.
+   * @param userMetadata The user metadata of this blob.
+   * @param lifeVersion The lifeVersion of this blob.
+   */
+  public BlobInfo(BlobProperties blobProperties, byte[] userMetadata, short lifeVersion) {
+    this.blobProperties = blobProperties;
+    this.userMetadata = userMetadata;
+    this.lifeVersion = lifeVersion;
+  }
+
+  /**
+   * @return The {@link BlobProperties} of this blob.
+   */
   public BlobProperties getBlobProperties() {
     return blobProperties;
   }
 
+  /**
+   * @return The user metadata of this blob.
+   */
   public byte[] getUserMetadata() {
     return userMetadata;
   }

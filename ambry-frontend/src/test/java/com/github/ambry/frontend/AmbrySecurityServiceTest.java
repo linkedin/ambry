@@ -114,8 +114,7 @@ public class AmbrySecurityServiceTest {
       LIFEVERSION_INFO = new BlobInfo(
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
               false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null),
-          RestUtils.buildUserMetadata(USER_METADATA));
-      LIFEVERSION_INFO.setLifeVersion(DEFAULT_LIFEVERSION);
+          RestUtils.buildUserMetadata(USER_METADATA), DEFAULT_LIFEVERSION);
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
     } catch (Exception e) {
       throw new IllegalStateException(e);
