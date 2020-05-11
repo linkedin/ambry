@@ -139,7 +139,6 @@ public class AmbryServer {
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
-      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 
@@ -156,9 +155,11 @@ public class AmbryServer {
       CloudConfig cloudConfig = new CloudConfig(properties);
       // verify the configs
       properties.verify();
+      this.metrics =
+          new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class, clusterParticipants, serverConfig);
 
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
-      logger.info("check if node exist in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
+      logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
       DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
       if (nodeId == null) {
         throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port
@@ -170,8 +171,8 @@ public class AmbryServer {
       AccountService accountService = accountServiceFactory.getAccountService();
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
-      // In most cases, there should be only on participant in the clusterParticipants list. If there are more than one
-      // participants and some components require sole participant, the first one in the list will be primary participant.
+      // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
+      // and some components require sole participant, the first one in the list will be primary participant.
       storageManager =
           new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
               new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
@@ -291,6 +292,7 @@ public class AmbryServer {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
+      metrics.shutdownConsistencyChecker();
       if (clusterParticipants != null) {
         clusterParticipants.forEach(ClusterParticipant::close);
       }

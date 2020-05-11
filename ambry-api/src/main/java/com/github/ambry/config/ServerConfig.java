@@ -107,6 +107,13 @@ public class ServerConfig {
   @Default("com.github.ambry.account.InMemoryUnknownAccountServiceFactory")
   public final String serverAccountServiceFactory;
 
+  /**
+   * The period of participants consistency checker in second. If is set to 0, the checker is disabled.
+   */
+  @Config("server.participants.consistency.checker.period.sec")
+  @Default("0")
+  public final long serverParticipantsConsistencyCheckerPeriodSec;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
@@ -126,7 +133,9 @@ public class ServerConfig {
         verifiableProperties.getBoolean("server.validate.request.based.on.store.state", false);
     serverHandleUndeleteRequestEnabled =
         verifiableProperties.getBoolean("server.handle.undelete.request.enabled", false);
-    serverAccountServiceFactory =
-        verifiableProperties.getString("server.account.service.factory", "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
+    serverAccountServiceFactory = verifiableProperties.getString("server.account.service.factory",
+        "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
+    serverParticipantsConsistencyCheckerPeriodSec =
+        verifiableProperties.getLong("server.participants.consistency.checker.period.sec", 0);
   }
 }
