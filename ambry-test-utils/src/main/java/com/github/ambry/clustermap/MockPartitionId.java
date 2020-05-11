@@ -93,6 +93,20 @@ public class MockPartitionId implements PartitionId {
         .collect(Collectors.toList());
   }
 
+  /**
+   * Update state for a replica belonging to this partition.
+   * @param replicaId {@link ReplicaId} of one of the replicas on this partition.
+   * @param replicaState {@link ReplicaState} to be set on the passed replica
+   */
+  public void setReplicaIdToState(ReplicaId replicaId, ReplicaState replicaState) {
+    for (ReplicaId replicaId1 : replicaIds) {
+      if (replicaId1.equals(replicaId)) {
+        replicaAndState.put(replicaId1, replicaState);
+        break;
+      }
+    }
+  }
+
   @Override
   public PartitionState getPartitionState() {
     return partitionState;
