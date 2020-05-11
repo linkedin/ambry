@@ -27,6 +27,7 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.DummyCloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -94,6 +95,7 @@ public class AzureCloudDestinationTest {
   private AsyncDocumentClient mockumentClient;
   private VcrMetrics vcrMetrics;
   private AzureMetrics azureMetrics;
+  private DummyCloudUpdateValidator dummyCloudUpdateValidator = new DummyCloudUpdateValidator();
   private int blobSize = 1024;
   private byte dataCenterId = 66;
   private short accountId = 101;
@@ -179,7 +181,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testDelete() throws Exception {
     mockBlobExistence(true);
-    assertTrue("Expected success", azureDest.deleteBlob(blobId, deletionTime, (short) 0));
+    assertTrue("Expected success", azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator));
     assertEquals(1, azureMetrics.blobUpdatedCount.getCount());
     assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
     assertEquals(1, azureMetrics.blobUpdateTime.getCount());
@@ -191,7 +193,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testUndelete() throws Exception {
     mockBlobExistence(true);
-    assertEquals(0, azureDest.undeleteBlob(blobId, (short) 0));
+    assertEquals(0, azureDest.undeleteBlob(blobId, (short) 0, dummyCloudUpdateValidator));
     assertEquals(1, azureMetrics.blobUpdatedCount.getCount());
     assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
     assertEquals(1, azureMetrics.blobUpdateTime.getCount());
@@ -203,7 +205,11 @@ public class AzureCloudDestinationTest {
   @Test
   public void testExpire() throws Exception {
     mockBlobExistence(true);
-    assertTrue("Expected success", azureDest.updateBlobExpiration(blobId, expirationTime));
+    try {
+      azureDest.updateBlobExpiration(blobId, expirationTime, dummyCloudUpdateValidator);
+    } catch (Exception ex) {
+      fail("Expected success, instead for exception " + ex.toString());
+    }
     assertEquals(1, azureMetrics.blobUpdatedCount.getCount());
     assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
     assertEquals(1, azureMetrics.blobUpdateTime.getCount());
@@ -271,7 +277,7 @@ public class AzureCloudDestinationTest {
   public void testDeleteBlobNotFound() {
     BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
     when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
-    expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime, (short) 0),
+    expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator),
         BlobStorageException.class);
     assertEquals(1, azureMetrics.blobUpdateErrorCount.getCount());
     assertEquals(1, azureMetrics.storageErrorCount.getCount());
@@ -282,7 +288,8 @@ public class AzureCloudDestinationTest {
   public void testUndeleteBlobNotFound() {
     BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
     when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
-    expectCloudStorageException(() -> azureDest.undeleteBlob(blobId, (short) 0), BlobStorageException.class);
+    expectCloudStorageException(() -> azureDest.undeleteBlob(blobId, (short) 0, dummyCloudUpdateValidator),
+        BlobStorageException.class);
     assertEquals(1, azureMetrics.blobUpdateErrorCount.getCount());
     assertEquals(1, azureMetrics.storageErrorCount.getCount());
   }
@@ -292,7 +299,7 @@ public class AzureCloudDestinationTest {
   public void testUpdateBlobNotFound() {
     BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
     when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
-    expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
+    expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime, dummyCloudUpdateValidator),
         BlobStorageException.class);
     assertEquals(1, azureMetrics.blobUpdateErrorCount.getCount());
     assertEquals(1, azureMetrics.storageErrorCount.getCount());
@@ -303,11 +310,12 @@ public class AzureCloudDestinationTest {
   public void testUpdateBlobException() {
     BlobStorageException ex = mockStorageException(BlobErrorCode.INTERNAL_ERROR);
     when(mockBlockBlobClient.setMetadataWithResponse(any(), any(), any(), any())).thenThrow(ex);
-    expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime, (short) 0),
+    expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator),
         BlobStorageException.class);
-    expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
+    expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime, dummyCloudUpdateValidator),
         BlobStorageException.class);
-    expectCloudStorageException(() -> azureDest.undeleteBlob(blobId, (short) 0), BlobStorageException.class);
+    expectCloudStorageException(() -> azureDest.undeleteBlob(blobId, (short) 0, dummyCloudUpdateValidator),
+        BlobStorageException.class);
     verifyUpdateErrorMetrics(3, false);
   }
 
@@ -317,9 +325,14 @@ public class AzureCloudDestinationTest {
     mockBlobExistence(true);
     when(mockumentClient.readDocument(anyString(), any())).thenThrow(
         new RuntimeException("Document not Found", new DocumentClientException(404)));
-    assertTrue("Expected update to recover", azureDest.deleteBlob(blobId, deletionTime, (short) 0));
-    assertTrue("Expected update to recover", azureDest.undeleteBlob(blobId, (short) 0) == 0);
-    assertTrue("Expected update to recover", azureDest.updateBlobExpiration(blobId, expirationTime));
+    assertTrue("Expected update to recover",
+        azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator));
+    assertTrue("Expected update to recover", azureDest.undeleteBlob(blobId, (short) 0, dummyCloudUpdateValidator) == 0);
+    try {
+      azureDest.updateBlobExpiration(blobId, expirationTime, dummyCloudUpdateValidator);
+    } catch (Exception ex) {
+      fail("Expected update to recover");
+    }
     verify(mockumentClient, times(3)).upsertDocument(anyString(), any(Object.class), any(RequestOptions.class),
         anyBoolean());
     assertEquals("Expected two recoveries", 3, azureMetrics.blobUpdateRecoverCount.getCount());
@@ -336,7 +349,8 @@ public class AzureCloudDestinationTest {
     Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource(deletedMetadata);
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
     // Now delete the puppy, Cosmos record should get purged.
-    assertFalse("Expected update to recover and return false", azureDest.deleteBlob(blobId, deletionTime, (short) 0));
+    assertFalse("Expected update to recover and return false",
+        azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator));
     assertEquals("Expected recovery", 1, azureMetrics.blobUpdateRecoverCount.getCount());
     verify(mockumentClient).deleteDocument(anyString(), any());
   }
@@ -347,11 +361,12 @@ public class AzureCloudDestinationTest {
     mockBlobExistence(true);
     when(mockumentClient.readDocument(anyString(), any())).thenThrow(
         new RuntimeException("Dcoument not Found", new DocumentClientException(500)));
-    expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime, (short) 0),
+    expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator),
         DocumentClientException.class);
-    expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
+    expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime, dummyCloudUpdateValidator),
         DocumentClientException.class);
-    expectCloudStorageException(() -> azureDest.undeleteBlob(blobId, (short) 0), DocumentClientException.class);
+    expectCloudStorageException(() -> azureDest.undeleteBlob(blobId, (short) 0, dummyCloudUpdateValidator),
+        DocumentClientException.class);
     verifyUpdateErrorMetrics(3, true);
   }
 

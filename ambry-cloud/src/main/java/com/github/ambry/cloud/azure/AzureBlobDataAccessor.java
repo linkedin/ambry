@@ -304,6 +304,7 @@ public class AzureBlobDataAccessor {
    * Update the metadata for the specified blob.
    * @param blobId The {@link BlobId} to update.
    * @param updateFields Map of field names and new values to modify.
+   * @param cloudUpdateValidator {@link CloudUpdateValidator} validator for the update passed by the caller.
    * @return a {@link AzureCloudDestination.UpdateResponse} with the updated metadata.
    * @throws BlobStorageException if the blob does not exist or an error occurred.
    * @throws IllegalStateException on request timeout.

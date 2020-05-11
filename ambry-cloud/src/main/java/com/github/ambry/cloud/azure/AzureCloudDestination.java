@@ -175,7 +175,7 @@ class AzureCloudDestination implements CloudDestination {
     updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, deletionTime);
     UpdateResponse updateResponse = updateBlobMetadata(blobId, updateFields, cloudUpdateValidator);
-    return updateResponse != null && updateResponse.wasUpdated;
+    return updateResponse.wasUpdated;
   }
 
   @Override
@@ -184,8 +184,7 @@ class AzureCloudDestination implements CloudDestination {
     UpdateResponse updateResponse =
         updateBlobMetadata(blobId, Collections.singletonMap(CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime),
             cloudUpdateValidator);
-    return (updateResponse != null) ? Short.parseShort(
-        updateResponse.metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION)) : (short) -1;
+    return Short.parseShort(updateResponse.metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
   }
 
   @Override
@@ -269,7 +268,8 @@ class AzureCloudDestination implements CloudDestination {
    * Update the metadata for the specified blob.
    * @param blobId The {@link BlobId} to update.
    * @param updateFields map of fields and new values to update.
-   * @return {@code true} if the update succeeded, {@code false} if no update was needed.
+   * @param cloudUpdateValidator {@link CloudUpdateValidator} passed by the caller to validate the update.
+   * @return {@link UpdateResponse} object containing updated metadata.
    * @throws CloudStorageException if the update fails.
    */
   private UpdateResponse updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields,
@@ -302,17 +302,13 @@ class AzureCloudDestination implements CloudDestination {
               logger.warn("Inconsistency: Cosmos contains record for inactive blob {}, removing it.", blobId.getID());
               cosmosDataAccessor.deleteMetadata(cosmosMetadata);
               azureMetrics.blobUpdateRecoverCount.inc();
-              return null;
             } else {
               // If the blob is still active but ABS does not have it, we are in deeper trouble.
               logger.error("Inconsistency: Cosmos contains record for active blob {} that is missing from ABS!",
                   blobId.getID());
-              throw bex;
             }
-          } else {
-            // Blob is not in Cosmos either, so simple NOT_FOUND error.
-            throw bex;
           }
+          throw bex;
         } else {
           // Other type of error, just throw.
           throw bex;
