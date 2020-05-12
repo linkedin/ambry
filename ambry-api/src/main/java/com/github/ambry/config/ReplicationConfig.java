@@ -24,6 +24,7 @@ import java.util.Set;
 public class ReplicationConfig {
 
   public static final String REPLICATION_CLOUD_TOKEN_FACTORY = "replication.cloud.token.factory";
+  public static final String DEFAULT_REPLICATION_MODEL_ACROSS_DATACENTERS = "all-to-all";
 
   /**
    * The factory class the replication uses to creates its tokens
@@ -189,7 +190,7 @@ public class ReplicationConfig {
    * Intra colo replication will continue as all-to-all fashion in both the models.
    */
   @Config("replication.model.across.datacenters")
-  @Default("all-to-all")
+  @Default(DEFAULT_REPLICATION_MODEL_ACROSS_DATACENTERS)
   public final String replicationModelAcrossDatacenters;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
@@ -234,7 +235,7 @@ public class ReplicationConfig {
     replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);
     String vcrRecoveryPartitions = verifiableProperties.getString("replication.vcr.recovery.partitions", "");
     replicationVcrRecoveryPartitions = Utils.splitString(vcrRecoveryPartitions, ",", HashSet::new);
-    replicationModelAcrossDatacenters =
-        verifiableProperties.getString("replication.model.across.datacenters", "all-to-all");
+    replicationModelAcrossDatacenters = verifiableProperties.getString("replication.model.across.datacenters",
+        DEFAULT_REPLICATION_MODEL_ACROSS_DATACENTERS);
   }
 }
