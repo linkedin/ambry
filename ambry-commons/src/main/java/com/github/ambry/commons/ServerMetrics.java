@@ -17,19 +17,8 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.config.ServerConfig;
-import com.github.ambry.utils.Utils;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -232,20 +221,14 @@ public class ServerMetrics {
 
   private final MetricRegistry registry;
   private final Class<?> requestClass;
-  private final List<ClusterParticipant> participants;
-  private ScheduledExecutorService scheduler = null;
-  private ScheduledFuture<?> consistencyCheckerTask = null;
-  private static final Logger logger = LoggerFactory.getLogger(ServerMetrics.class);
 
   public ServerMetrics(MetricRegistry registry, Class<?> requestClass) {
-    this(registry, requestClass, null, null, null);
+    this(registry, requestClass, null);
   }
 
-  public ServerMetrics(MetricRegistry registry, Class<?> requestClass, Class<?> serverClass,
-      List<ClusterParticipant> participants, ServerConfig serverConfig) {
+  public ServerMetrics(MetricRegistry registry, Class<?> requestClass, Class<?> serverClass) {
     this.registry = registry;
     this.requestClass = requestClass;
-    this.participants = participants;
     putBlobRequestQueueTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobRequestQueueTime"));
     putBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobProcessingTime"));
     putBlobResponseQueueTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobResponseQueueTime"));
@@ -502,20 +485,13 @@ public class ServerMetrics {
     ttlUpdateRejectedError = registry.counter(MetricRegistry.name(requestClass, "TtlUpdateRejectedError"));
     replicationResponseMessageSizeTooHigh =
         registry.counter(MetricRegistry.name(requestClass, "ReplicationResponseMessageSizeTooHigh"));
+  }
 
-    // if there are more than one participants and consistency checker period > 0, a scheduler is instantiated and
-    // periodically checks consistency of participants (in terms of sealed/stopped replicas)
-    if (participants != null && participants.size() > 1
-        && serverConfig.serverParticipantsConsistencyCheckerPeriodSec > 0 && serverClass != null) {
-      ParticipantsConsistencyChecker consistencyChecker = new ParticipantsConsistencyChecker();
-      sealedReplicasMismatchCount = registry.counter(MetricRegistry.name(serverClass, "SealedReplicasMismatchCount"));
-      stoppedReplicasMismatchCount = registry.counter(MetricRegistry.name(serverClass, "StoppedReplicasMismatchCount"));
-      scheduler = Utils.newScheduler(1, false);
-      logger.info("Scheduling participants consistency checker with a period of {} secs",
-          serverConfig.serverParticipantsConsistencyCheckerPeriodSec);
-      consistencyCheckerTask = scheduler.scheduleAtFixedRate(consistencyChecker, 0,
-          serverConfig.serverParticipantsConsistencyCheckerPeriodSec, TimeUnit.SECONDS);
-    }
+  public void registerParticipantsMismatchMetrics() {
+    sealedReplicasMismatchCount =
+        registry.counter(MetricRegistry.name(ServerMetrics.class, "SealedReplicasMismatchCount"));
+    stoppedReplicasMismatchCount =
+        registry.counter(MetricRegistry.name(ServerMetrics.class, "StoppedReplicasMismatchCount"));
   }
 
   public void updateCrossColoFetchBytesRate(String dcName, long bytes) {
@@ -578,42 +554,6 @@ public class ServerMetrics {
       putMediumBlobProcessingTimeInMs.update(processingTime);
     } else {
       putLargeBlobProcessingTimeInMs.update(processingTime);
-    }
-  }
-
-  /**
-   * Shuts down {@link ParticipantsConsistencyChecker} if it is not null.
-   */
-  public void shutdownConsistencyChecker() {
-    if (consistencyCheckerTask != null) {
-      consistencyCheckerTask.cancel(false);
-    }
-  }
-
-  /**
-   * A thread that helps periodically check consistency of participants. Specifically, it checks if there is a mismatch
-   * in sealed and stopped replicas from each participant.
-   */
-  private class ParticipantsConsistencyChecker implements Runnable {
-    @Override
-    public void run() {
-      // when code reaches here, it means there are at least two participants.
-      ClusterParticipant clusterParticipant = participants.get(0);
-      Set<String> sealedReplicas1 = new HashSet<>(clusterParticipant.getSealedReplicas());
-      Set<String> stoppedReplicas1 = new HashSet<>(clusterParticipant.getStoppedReplicas());
-      for (int i = 1; i < participants.size(); ++i) {
-        Set<String> sealedReplicas2 = new HashSet<>(participants.get(i).getSealedReplicas());
-        if (!sealedReplicas1.equals(sealedReplicas2)) {
-          logger.warn("Mismatch in sealed replicas. Set {} is different from set {}", sealedReplicas1, sealedReplicas2);
-          sealedReplicasMismatchCount.inc();
-        }
-        Set<String> stoppedReplicas2 = new HashSet<>(participants.get(i).getStoppedReplicas());
-        if (!stoppedReplicas1.equals(stoppedReplicas2)) {
-          logger.warn("Mismatch in stopped replicas. Set {} is different from set {}", stoppedReplicas1,
-              stoppedReplicas2);
-          stoppedReplicasMismatchCount.inc();
-        }
-      }
     }
   }
 }

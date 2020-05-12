@@ -367,7 +367,7 @@ public class HelixParticipantTest {
   @Test
   public void testUpdateNodeInfoInCluster() throws Exception {
     // test setup: 3 disks on local node, each disk has 3 replicas
-    MockClusterMap clusterMap = new MockClusterMap(false, 1, 3, 3, false, false);
+    MockClusterMap clusterMap = new MockClusterMap(false, true, 1, 3, 3, false, false);
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     ReplicaId existingReplica = localReplicas.get(0);

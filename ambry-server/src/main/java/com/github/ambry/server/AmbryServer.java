@@ -73,6 +73,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -110,6 +111,7 @@ public class AmbryServer {
   private RequestHandlerPool requestHandlerPoolForHttp2;
   private RestRequestHandler restRequestHandlerForHttp2;
   private NioServer nettyHttp2Server;
+  private ScheduledFuture<?> consistencyCheckerTask = null;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       ClusterSpectatorFactory clusterSpectatorFactory, Time time) {
@@ -139,6 +141,7 @@ public class AmbryServer {
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
+      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 
@@ -155,10 +158,17 @@ public class AmbryServer {
       CloudConfig cloudConfig = new CloudConfig(properties);
       // verify the configs
       properties.verify();
-      this.metrics =
-          new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class, clusterParticipants, serverConfig);
 
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
+      if (clusterParticipants != null && clusterParticipants.size() > 1
+          && serverConfig.serverParticipantsConsistencyCheckerPeriodSec > 0) {
+        ParticipantsConsistencyChecker consistencyChecker =
+            new ParticipantsConsistencyChecker(clusterParticipants, metrics);
+        logger.info("Scheduling participants consistency checker with a period of {} secs",
+            serverConfig.serverParticipantsConsistencyCheckerPeriodSec);
+        consistencyCheckerTask = scheduler.scheduleAtFixedRate(consistencyChecker, 0,
+            serverConfig.serverParticipantsConsistencyCheckerPeriodSec, TimeUnit.SECONDS);
+      }
       logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
       DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
       if (nodeId == null) {
@@ -292,7 +302,9 @@ public class AmbryServer {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
-      metrics.shutdownConsistencyChecker();
+      if (consistencyCheckerTask != null) {
+        consistencyCheckerTask.cancel(false);
+      }
       if (clusterParticipants != null) {
         clusterParticipants.forEach(ClusterParticipant::close);
       }
@@ -355,5 +367,13 @@ public class AmbryServer {
 
   public void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
+  }
+
+  /**
+   * Exposed for testing.
+   * @return {@link ServerMetrics}
+   */
+  ServerMetrics getServerMetrics() {
+    return metrics;
   }
 }

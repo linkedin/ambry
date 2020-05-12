@@ -24,23 +24,26 @@ import java.util.Map;
 
 public class MockClusterAgentsFactory implements ClusterAgentsFactory {
   private final boolean enableSslPorts;
+  private final boolean enableHttp2Ports;
   private final int numNodes;
   private final int numMountPointsPerNode;
   private final int numStoresPerMountPoint;
   private MockClusterMap mockClusterMap;
-  private ClusterParticipant clusterParticipant;
+  private List<ClusterParticipant> clusterParticipants;
   private List<String> partitionLeadershipList;
 
   /**
    * Create {@link MockClusterAgentsFactory} object.
    * @param enableSslPorts disable/enable ssl ports.
+   * @param enableHttp2Ports disable/enable http2 ports.
    * @param numNodes number of nodes in the cluster.
    * @param numMountPointsPerNode number of mount points per node.
    * @param numStoresPerMountPoint number of stores per mount point.
    */
-  public MockClusterAgentsFactory(boolean enableSslPorts, int numNodes, int numMountPointsPerNode,
-      int numStoresPerMountPoint) {
+  public MockClusterAgentsFactory(boolean enableSslPorts, boolean enableHttp2Ports, int numNodes,
+      int numMountPointsPerNode, int numStoresPerMountPoint) {
     this.enableSslPorts = enableSslPorts;
+    this.enableHttp2Ports = enableHttp2Ports;
     this.numNodes = numNodes;
     this.numMountPointsPerNode = numMountPointsPerNode;
     this.numStoresPerMountPoint = numStoresPerMountPoint;
@@ -54,6 +57,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
   public MockClusterAgentsFactory(MockClusterMap mockClusterMap, List<String> partitionLeadershipList) {
     this.mockClusterMap = mockClusterMap;
     this.enableSslPorts = mockClusterMap.enableSSLPorts;
+    this.enableHttp2Ports = mockClusterMap.enableHttp2Ports;
     this.numMountPointsPerNode = mockClusterMap.numMountPointsPerNode;
     this.numNodes = mockClusterMap.dataNodes.size();
     this.numStoresPerMountPoint = mockClusterMap.partitions.size();
@@ -64,15 +68,16 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
   public MockClusterMap getClusterMap() throws IOException {
     if (mockClusterMap == null) {
       mockClusterMap =
-          new MockClusterMap(enableSslPorts, numNodes, numMountPointsPerNode, numStoresPerMountPoint, false, false);
+          new MockClusterMap(enableSslPorts, enableHttp2Ports, numNodes, numMountPointsPerNode, numStoresPerMountPoint,
+              false, false);
     }
     return mockClusterMap;
   }
 
   @Override
   public List<ClusterParticipant> getClusterParticipants() {
-    if (clusterParticipant == null) {
-      clusterParticipant = new ClusterParticipant() {
+    if (clusterParticipants == null) {
+      ClusterParticipant clusterParticipant = new ClusterParticipant() {
         private final Map<StateModelListenerType, PartitionStateChangeListener>
             registeredPartitionStateChangeListeners = new HashMap<>();
 
@@ -143,7 +148,12 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
           return false;
         }
       };
+      clusterParticipants = new ArrayList<>(Collections.singleton(clusterParticipant));
     }
-    return Collections.singletonList(clusterParticipant);
+    return clusterParticipants;
+  }
+
+  public void setClusterParticipants(List<ClusterParticipant> clusterParticipants) {
+    this.clusterParticipants = clusterParticipants;
   }
 }

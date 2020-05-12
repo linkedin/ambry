@@ -167,7 +167,7 @@ public class VcrServer {
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
 
       //todo fix enableDataPrefetch
-      ServerMetrics serverMetrics = new ServerMetrics(registry, VcrRequests.class, VcrServer.class, null, serverConfig);
+      ServerMetrics serverMetrics = new ServerMetrics(registry, VcrRequests.class, VcrServer.class);
       requests =
           new VcrRequests(cloudStorageManager, networkServer.getRequestResponseChannel(), clusterMap, currentNode,
               registry, serverMetrics, new FindTokenHelper(storeKeyFactory, replicationConfig), notificationSystem,

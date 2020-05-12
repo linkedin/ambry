@@ -11,17 +11,20 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.commons;
+package com.github.ambry.server;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.MockClusterAgentsFactory;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.StateModelListenerType;
-import com.github.ambry.config.ServerConfig;
+import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.server.AmbryHealthReport;
+import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -42,39 +45,45 @@ import static org.mockito.Mockito.*;
  */
 public class ParticipantsConsistencyCheckerTest {
   private Properties props = new Properties();
-  private ServerConfig serverConfig;
+  private Time time;
+  private NotificationSystem notificationSystem;
+  private MockClusterAgentsFactory clusterAgentsFactory;
 
-  public ParticipantsConsistencyCheckerTest() {
+  public ParticipantsConsistencyCheckerTest() throws Exception {
+    clusterAgentsFactory = new MockClusterAgentsFactory(false, false, 1, 1, 1);
+    MockClusterMap mockClusterMap = clusterAgentsFactory.getClusterMap();
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "DC1");
+    props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("server.participants.consistency.checker.period.sec", Long.toString(1L));
-    serverConfig = new ServerConfig(new VerifiableProperties(props));
+    props.setProperty("host.name", mockClusterMap.getDataNodes().get(0).getHostname());
+    props.setProperty("port", Integer.toString(mockClusterMap.getDataNodes().get(0).getPort()));
+    time = SystemTime.getInstance();
+    notificationSystem = new LoggingNotificationSystem();
   }
 
   /**
    * Test that consistency checker should be disabled in some scenarios.
    */
   @Test
-  public void consistencyCheckDisabledTest() {
-    // 1. participants = null, checker should be disabled
-    ServerMetrics metrics =
-        new ServerMetrics(new MetricRegistry(), ServerMetrics.class, ServerMetrics.class, null, serverConfig);
-    assertNull("The mismatch metric should not be created", metrics.sealedReplicasMismatchCount);
-    // 2. only one participant exists, checker should be disabled
-    List<ClusterParticipant> participants = new ArrayList<>();
-    MockClusterParticipant participant1 =
-        new MockClusterParticipant(Collections.emptyList(), Collections.emptyList(), null, null);
-    participants.add(participant1);
-    metrics =
-        new ServerMetrics(new MetricRegistry(), ServerMetrics.class, ServerMetrics.class, participants, serverConfig);
-    assertNull("The mismatch metric should not be created", metrics.stoppedReplicasMismatchCount);
-    // 3. there are two participants but period of checker is zero, checker should be disabled.
-    MockClusterParticipant participant2 =
-        new MockClusterParticipant(Collections.emptyList(), Collections.emptyList(), null, null);
-    participants.add(participant2);
+  public void consistencyCheckDisabledTest() throws Exception {
+    // 1. only one participant, consistency checker should be disabled
+    AmbryServer server =
+        new AmbryServer(new VerifiableProperties(props), clusterAgentsFactory, notificationSystem, time);
+    server.startup();
+    assertNull("The mismatch metric should not be created", server.getServerMetrics().stoppedReplicasMismatchCount);
+    server.shutdown();
+    // 2. there are two participants but period of checker is zero, consistency checker should be disabled.
     props.setProperty("server.participants.consistency.checker.period.sec", Long.toString(0L));
-    serverConfig = new ServerConfig(new VerifiableProperties(props));
-    metrics =
-        new ServerMetrics(new MetricRegistry(), ServerMetrics.class, ServerMetrics.class, participants, serverConfig);
-    assertNull("The mismatch metric should not be created", metrics.stoppedReplicasMismatchCount);
+    List<ClusterParticipant> participants = new ArrayList<>();
+    for (int i = 0; i < 2; ++i) {
+      participants.add(new MockClusterParticipant(Collections.emptyList(), Collections.emptyList(), null, null));
+    }
+    clusterAgentsFactory.setClusterParticipants(participants);
+    server = new AmbryServer(new VerifiableProperties(props), clusterAgentsFactory, notificationSystem, time);
+    server.startup();
+    assertNull("The mismatch metric should not be created", server.getServerMetrics().stoppedReplicasMismatchCount);
+    server.shutdown();
   }
 
   /**
@@ -93,14 +102,18 @@ public class ParticipantsConsistencyCheckerTest {
     MockClusterParticipant participant2 = new MockClusterParticipant(sealedReplicas, stoppedReplicas, null, null);
     participants.add(participant1);
     participants.add(participant2);
-    ServerMetrics metrics =
-        new ServerMetrics(new MetricRegistry(), ServerMetrics.class, ServerMetrics.class, participants, serverConfig);
+    clusterAgentsFactory.setClusterParticipants(participants);
+    AmbryServer server =
+        new AmbryServer(new VerifiableProperties(props), clusterAgentsFactory, notificationSystem, time);
+    server.startup();
     assertTrue("The latch didn't count to zero within 5 secs", invocationLatch.await(5, TimeUnit.SECONDS));
     // verify that: 1. checker is instantiated 2.no mismatch event is emitted.
-    assertNotNull("The mismatch metric should be created", metrics.sealedReplicasMismatchCount);
-    assertEquals("Sealed replicas mismatch count should be 0", 0, metrics.sealedReplicasMismatchCount.getCount());
-    assertEquals("Stopped replicas mismatch count should be 0", 0, metrics.stoppedReplicasMismatchCount.getCount());
-    metrics.shutdownConsistencyChecker();
+    assertNotNull("The mismatch metric should be created", server.getServerMetrics().sealedReplicasMismatchCount);
+    assertEquals("Sealed replicas mismatch count should be 0", 0,
+        server.getServerMetrics().sealedReplicasMismatchCount.getCount());
+    assertEquals("Stopped replicas mismatch count should be 0", 0,
+        server.getServerMetrics().stoppedReplicasMismatchCount.getCount());
+    server.shutdown();
   }
 
   /**
@@ -117,13 +130,17 @@ public class ParticipantsConsistencyCheckerTest {
         new MockClusterParticipant(new ArrayList<>(), new ArrayList<>(), null, invocationLatch);
     participants.add(participant1);
     participants.add(participant2);
-    // initially, two participants have consistent sealed/stopped replicas
-    ServerMetrics metrics =
-        new ServerMetrics(new MetricRegistry(), ServerMetrics.class, ServerMetrics.class, participants, serverConfig);
-    // verify that: 1. checker is instantiated 2.no mismatch event is emitted.
-    assertNotNull("The mismatch metric should be created", metrics.sealedReplicasMismatchCount);
-    assertEquals("Sealed replicas mismatch count should be 0", 0, metrics.sealedReplicasMismatchCount.getCount());
-    assertEquals("Stopped replicas mismatch count should be 0", 0, metrics.stoppedReplicasMismatchCount.getCount());
+    clusterAgentsFactory.setClusterParticipants(participants);
+    AmbryServer server =
+        new AmbryServer(new VerifiableProperties(props), clusterAgentsFactory, notificationSystem, time);
+    server.startup();
+    // initially, two participants have consistent sealed/stopped replicas. Verify that:
+    // 1. checker is instantiated 2. no mismatch event is emitted.
+    assertNotNull("The mismatch metric should be created", server.getServerMetrics().sealedReplicasMismatchCount);
+    assertEquals("Sealed replicas mismatch count should be 0", 0,
+        server.getServerMetrics().sealedReplicasMismatchCount.getCount());
+    assertEquals("Stopped replicas mismatch count should be 0", 0,
+        server.getServerMetrics().stoppedReplicasMismatchCount.getCount());
     // induce mismatch for sealed and stopped replica list
     // add 1 sealed replica to participant1
     ReplicaId mockReplica1 = Mockito.mock(ReplicaId.class);
@@ -134,10 +151,11 @@ public class ParticipantsConsistencyCheckerTest {
     when(mockReplica2.getReplicaPath()).thenReturn("4");
     participant2.setReplicaStoppedState(Collections.singletonList(mockReplica2), true);
     assertTrue("The latch didn't count to zero within 5 secs", invocationLatch.await(5, TimeUnit.SECONDS));
-    assertTrue("Sealed replicas mismatch count should be non-zero", metrics.sealedReplicasMismatchCount.getCount() > 0);
+    assertTrue("Sealed replicas mismatch count should be non-zero",
+        server.getServerMetrics().sealedReplicasMismatchCount.getCount() > 0);
     assertTrue("Stopped replicas mismatch count should be non-zero",
-        metrics.stoppedReplicasMismatchCount.getCount() > 0);
-    metrics.shutdownConsistencyChecker();
+        server.getServerMetrics().stoppedReplicasMismatchCount.getCount() > 0);
+    server.shutdown();
   }
 
   /**
