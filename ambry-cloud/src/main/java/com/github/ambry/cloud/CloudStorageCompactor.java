@@ -128,9 +128,6 @@ public class CloudStorageCompactor implements Runnable {
     long compactionStartTime = now;
     long timeToQuit = now + compactionTimeLimitMs;
     long queryEndTime = now - retentionPeriodMs;
-    // TODO: checkpoint the latest timestamp and use that on subsequent compactions
-    // Starting from beginning of time is too expensive
-    // Order partitions by earliest time at which dead blob exists
     long queryStartTime = now - TimeUnit.DAYS.toMillis(lookbackDays);
     Date queryStartDate = new Date(queryStartTime);
     Date queryEndDate = new Date(queryEndTime);
@@ -201,6 +198,7 @@ public class CloudStorageCompactor implements Runnable {
 
   /**
    * Purge the inactive blobs in the specified partition.
+   * Long time windows are divided into smaller buckets.
    * @param partitionPath the partition to compact.
    * @param fieldName the field name to query on. Allowed values are {@link CloudBlobMetadata#FIELD_DELETION_TIME}
    *                      and {@link CloudBlobMetadata#FIELD_EXPIRATION_TIME}.
@@ -214,28 +212,45 @@ public class CloudStorageCompactor implements Runnable {
 
     // Iterate until returned list size < limit, time runs out or we get shut down
     int totalPurged = 0;
-    long chunkTimeRange = TimeUnit.DAYS.toMillis(queryBucketDays);
-    if (queryEndTime - queryStartTime > chunkTimeRange) {
-      logger.debug("Dividing compaction query for {} into buckets of {} days", partitionPath, queryBucketDays);
-      long chunkedStartTime = queryStartTime;
-      while (chunkedStartTime < queryEndTime) {
-        long chunkedEndTime = Math.min(chunkedStartTime + chunkTimeRange, queryEndTime);
-        int numPurged = compactPartition(partitionPath, fieldName, chunkedStartTime, chunkedEndTime, timeToQuit);
-        totalPurged += numPurged;
-        chunkedStartTime += chunkTimeRange;
-        if (isShuttingDown() || System.currentTimeMillis() >= timeToQuit) {
-          break;
-        }
-        if (numPurged == 0) {
-          // TODO: Back off since the last index scan might have been expensive
-        } else {
-          logger.info("Purged {} blobs in partition {} up to {} {}", totalPurged, partitionPath, fieldName,
-              new Date(chunkedEndTime));
-        }
+    long bucketTimeRange = TimeUnit.DAYS.toMillis(queryBucketDays);
+    logger.debug("Dividing compaction query for {} into buckets of {} days", partitionPath, queryBucketDays);
+    long bucketStartTime = queryStartTime;
+    while (bucketStartTime < queryEndTime) {
+      long bucketEndTime = Math.min(bucketStartTime + bucketTimeRange, queryEndTime);
+      int numPurged = compactPartitionBucketed(partitionPath, fieldName, bucketStartTime, bucketEndTime, timeToQuit);
+      totalPurged += numPurged;
+      bucketStartTime += bucketTimeRange;
+      if (isShuttingDown() || System.currentTimeMillis() >= timeToQuit) {
+        break;
       }
-      return totalPurged;
+      if (numPurged == 0) {
+        // TODO: Consider backing off since the last query might have been expensive
+      } else {
+        logger.info("Purged {} blobs in partition {} up to {} {}", totalPurged, partitionPath, fieldName,
+            new Date(bucketEndTime));
+      }
+    }
+    return totalPurged;
+  }
+
+  /**
+   * Purge the inactive blobs in the specified partition.
+   * @param partitionPath the partition to compact.
+   * @param fieldName the field name to query on. Allowed values are {@link CloudBlobMetadata#FIELD_DELETION_TIME}
+   *                      and {@link CloudBlobMetadata#FIELD_EXPIRATION_TIME}.
+   * @param queryStartTime the initial query start time, which will be adjusted as compaction progresses.
+   * @param queryEndTime the query end time.
+   * @param timeToQuit the time at which compaction should terminate.
+   * @return the number of blobs purged or found.
+   */
+  private int compactPartitionBucketed(String partitionPath, String fieldName, long queryStartTime, long queryEndTime,
+      long timeToQuit) throws CloudStorageException {
+
+    if (queryEndTime - queryStartTime > TimeUnit.DAYS.toMillis(queryBucketDays)) {
+      throw new IllegalArgumentException("Time window is longer than " + queryBucketDays + " days");
     }
 
+    int totalPurged = 0;
     while (System.currentTimeMillis() < timeToQuit && !isShuttingDown()) {
 
       Callable<List<CloudBlobMetadata>> deadBlobsLambda =
