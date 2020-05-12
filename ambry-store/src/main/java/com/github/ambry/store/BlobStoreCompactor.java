@@ -248,7 +248,9 @@ class BlobStoreCompactor {
     runningLatch = new CountDownLatch(1);
     compactionInProgress.set(true);
     selectedContainers.clear();
-    getAllContainersByStatus(EnumSet.of(Container.ContainerStatus.INACTIVE, Container.ContainerStatus.DELETE_IN_PROGRESS));
+    getAllContainersByStatus(
+        EnumSet.of(Container.ContainerStatus.INACTIVE, Container.ContainerStatus.DELETE_IN_PROGRESS));
+    logger.trace("Selected containers are {} for {}", selectedContainers, storeId);
     try {
       while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         CompactionLog.Phase phase = compactionLog.getCompactionPhase();
