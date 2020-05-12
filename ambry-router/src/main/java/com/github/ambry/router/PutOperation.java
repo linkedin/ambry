@@ -1390,12 +1390,13 @@ class PutOperation {
         throws RouterException {
       PartitionId selected = clusterMap.getRandomWritablePartition(partitionClass, partitionIdsToExclude);
       if (selected == null) {
-        throw new RouterException("No writable partitions of class " + partitionClass + " available.",
+        throw new RouterException("No writable partitions of class '" + partitionClass + "' or default available.",
             RouterErrorCode.AmbryUnavailable);
       }
       if (!partitionClass.equals(selected.getPartitionClass())) {
-        throw new IllegalStateException(
-            "Selected partition's class [" + selected.getPartitionClass() + "] is not as required: " + partitionClass);
+        logger.warn("No partitions for partitionClass='{}' found, partitionClass='{}' used instead. blobProperties={}",
+            partitionClass, selected.getPartitionClass(), passedInBlobProperties);
+        routerMetrics.unknownPartitionClassCount.inc();
       }
       return selected;
     }

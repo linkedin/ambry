@@ -396,21 +396,24 @@ public class ClusterMapUtils {
     private final int minimumLocalReplicaCount;
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final ClusterManagerCallback<?, ?, ?, ?> clusterManagerCallback;
+    private final String localDatacenterName;
+    private final String defaultPartitionClass;
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
     private Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas;
-    private String localDatacenterName;
 
     /**
      * @param clusterManagerCallback the {@link ClusterManagerCallback} to query current cluster info
      * @param localDatacenterName the name of the local datacenter. Can be null if datacenter specific replica counts
      * @param minimumLocalReplicaCount the minimum number of replicas in local datacenter. This is used when selecting
+     * @param defaultPartitionClass the default partition class to use if a partition class is not found
      */
     PartitionSelectionHelper(ClusterManagerCallback<?, ?, ?, ?> clusterManagerCallback, String localDatacenterName,
-        int minimumLocalReplicaCount) {
+        int minimumLocalReplicaCount, String defaultPartitionClass) {
       this.localDatacenterName = localDatacenterName;
       this.minimumLocalReplicaCount = minimumLocalReplicaCount;
       this.clusterManagerCallback = clusterManagerCallback;
+      this.defaultPartitionClass = defaultPartitionClass;
       updatePartitions(clusterManagerCallback.getPartitions(), localDatacenterName);
     }
 
@@ -568,22 +571,27 @@ public class ClusterMapUtils {
       try {
         if (partitionClass == null) {
           toReturn.addAll(allPartitions);
-        } else if (partitionIdsByClassAndLocalReplicaCount.containsKey(partitionClass)) {
+        } else {
           SortedMap<Integer, List<PartitionId>> partitionsByReplicaCount =
               partitionIdsByClassAndLocalReplicaCount.get(partitionClass);
+          if (partitionsByReplicaCount == null) {
+            partitionsByReplicaCount = partitionIdsByClassAndLocalReplicaCount.get(defaultPartitionClass);
+          }
+          if (partitionsByReplicaCount == null) {
+            throw new IllegalArgumentException(
+                "No partitions for partition class = '" + partitionClass + "' or default partition class = '"
+                    + defaultPartitionClass + "' found");
+          }
           if (minimumReplicaCountRequired) {
             // get partitions with replica count >= min replica count specified in ClusterMapConfig
             for (List<PartitionId> partitionIds : partitionsByReplicaCount.tailMap(minimumLocalReplicaCount).values()) {
               toReturn.addAll(partitionIds);
             }
           } else {
-            for (List<PartitionId> partitionIds : partitionIdsByClassAndLocalReplicaCount.get(partitionClass)
-                .values()) {
+            for (List<PartitionId> partitionIds : partitionsByReplicaCount.values()) {
               toReturn.addAll(partitionIds);
             }
           }
-        } else {
-          throw new IllegalArgumentException("Unrecognized partition class " + partitionClass);
         }
       } finally {
         rwLock.readLock().unlock();
