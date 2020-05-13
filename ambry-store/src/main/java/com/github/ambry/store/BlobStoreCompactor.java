@@ -200,21 +200,15 @@ class BlobStoreCompactor {
   /**
    * Converts the set of {@link Container}s to the set of accountId & ContainerId pairs for easy detection.
    */
-  private void getAllContainersByStatus(EnumSet<Container.ContainerStatus> containerStatusSet) {
+  private void getAllFilteredContainers() {
     Set<Pair<Short, Short>> selectedContainerPairSet = new HashSet<>();
     if (accountService != null) {
-      for (Container.ContainerStatus containerStatus : containerStatusSet) {
-        switch (containerStatus) {
-          case INACTIVE:
-          case DELETE_IN_PROGRESS:
-            accountService.getContainersByStatus(containerStatus).forEach((container) -> {
-              selectedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
-            });
-            break;
-          default:
-            logger.error("Invalid container status: {}", containerStatus);
-        }
-      }
+      accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
+        selectedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
+      });
+      accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE).forEach((container) -> {
+        selectedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
+      });
     }
     selectedContainers.addAll(selectedContainerPairSet);
   }
@@ -248,8 +242,7 @@ class BlobStoreCompactor {
     runningLatch = new CountDownLatch(1);
     compactionInProgress.set(true);
     selectedContainers.clear();
-    getAllContainersByStatus(
-        EnumSet.of(Container.ContainerStatus.INACTIVE, Container.ContainerStatus.DELETE_IN_PROGRESS));
+    getAllFilteredContainers();
     logger.trace("Selected containers are {} for {}", selectedContainers, storeId);
     try {
       while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
