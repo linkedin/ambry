@@ -147,7 +147,8 @@ public class ClusterMapUtilsTest {
       }
     }
     // additional test: ensure getRandomWritablePartition now honors replica state for PUT request
-    psh = new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, dc1, minimumLocalReplicaCount);
+    psh = new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, dc1, minimumLocalReplicaCount,
+        maxReplicasAllSites);
     ReplicaId replicaId = everywhere1.getReplicaIds()
         .stream()
         .filter(r -> r.getDataNodeId().getDatacenterName().equals(dc1))
