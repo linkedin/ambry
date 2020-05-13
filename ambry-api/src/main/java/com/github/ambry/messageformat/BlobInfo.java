@@ -22,7 +22,7 @@ public class BlobInfo {
   private short lifeVersion;
 
   /**
-   * Constructor to creat a {@link BlobInfo}.
+   * Constructor to create a {@link BlobInfo}.
    * @param blobProperties The {@link BlobProperties} of this blob.
    * @param userMetadata The user metadata of this blob.
    */
@@ -31,7 +31,7 @@ public class BlobInfo {
   }
 
   /**
-   * Constructor to creat a {@link BlobInfo}.
+   * Constructor to create a {@link BlobInfo}.
    * @param blobProperties The {@link BlobProperties} of this blob.
    * @param userMetadata The user metadata of this blob.
    * @param lifeVersion The lifeVersion of this blob.
