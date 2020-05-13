@@ -86,7 +86,7 @@ class BlobStoreCompactor {
   private final AccountService accountService;
   private volatile boolean isActive = false;
   private PersistentIndex srcIndex;
-  private final Set<Pair<Short,Short>> selectedContainers;
+  private final Set<Pair<Short,Short>> notActiveContainers;
 
   private Log tgtLog;
   private PersistentIndex tgtIndex;
@@ -133,7 +133,7 @@ class BlobStoreCompactor {
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
     this.useDirectIO = Utils.isLinux() && config.storeCompactionEnableDirectIO;
-    this.selectedContainers = new HashSet<>();
+    this.notActiveContainers = new HashSet<>();
     if (config.storeCompactionFilter.equals(IndexSegmentValidEntryFilterWithoutUndelete.class.getSimpleName())) {
       validEntryFilter = new IndexSegmentValidEntryFilterWithoutUndelete();
     } else {
@@ -198,19 +198,21 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Converts the set of {@link Container}s to the set of accountId & ContainerId pairs for easy detection.
+   * Filters not active {@link Container}s for compaction purpose. Not active status include DELETE_IN_PROGRESS and INACTIVE.
+   * @return the not active {@link Container}s' accountId & containerId pairs.
    */
-  private void getAllFilteredContainers() {
+  private void getNotActiveContainers() {
+    notActiveContainers.clear();
     Set<Pair<Short, Short>> selectedContainerPairSet = new HashSet<>();
     if (accountService != null) {
       accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
-        selectedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
+        notActiveContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
       });
       accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE).forEach((container) -> {
-        selectedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
+        notActiveContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
       });
     }
-    selectedContainers.addAll(selectedContainerPairSet);
+    notActiveContainers.addAll(selectedContainerPairSet);
   }
 
   /**
@@ -241,9 +243,8 @@ class BlobStoreCompactor {
     logger.trace("resumeCompaction() started for {}", storeId);
     runningLatch = new CountDownLatch(1);
     compactionInProgress.set(true);
-    selectedContainers.clear();
-    getAllFilteredContainers();
-    logger.trace("Selected containers are {} for {}", selectedContainers, storeId);
+    getNotActiveContainers();
+    logger.trace("Selected containers are {} for {}", notActiveContainers, storeId);
     try {
       while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         CompactionLog.Phase phase = compactionLog.getCompactionPhase();
@@ -580,7 +581,7 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Determines if {@code copyCandidate} belongs to the DELETED_IN_PROGRESS {@link Container}s.
+   * Determines if {@code copyCandidate} container in the status of DELETED_IN_PROGRESS or INACTIVE.
    * @param copyCandidate the {@link IndexEntry} to check
    * @param selectedContainerPairSet the collection of AccountId and ContainerId pairs in the given status.
    */
@@ -1055,7 +1056,7 @@ class BlobStoreCompactor {
       int validEntriesSize = copyCandidates.size();
       copyCandidates.removeIf(
           copyCandidate -> isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(),
-              checkAlreadyCopied) || isFromDeletedContainer(copyCandidate, selectedContainers));
+              checkAlreadyCopied) || isFromDeletedContainer(copyCandidate, notActiveContainers));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),
@@ -1342,7 +1343,7 @@ class BlobStoreCompactor {
       int validEntriesSize = copyCandidates.size();
       copyCandidates.removeIf(
           copyCandidate -> isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(),
-              checkAlreadyCopied) || isFromDeletedContainer(copyCandidate, selectedContainers));
+              checkAlreadyCopied) || isFromDeletedContainer(copyCandidate, notActiveContainers));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of entries, {} are valid and {} will be copied in this round", validEntriesSize,
