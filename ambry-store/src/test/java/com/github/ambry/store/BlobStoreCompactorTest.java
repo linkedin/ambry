@@ -947,7 +947,6 @@ public class BlobStoreCompactorTest {
     state.properties.setProperty("store.index.max.number.of.inmem.elements", "5");
     state.initIndex(null);
     long notExpiredMs = state.time.milliseconds() + TimeUnit.SECONDS.toMillis(Short.MAX_VALUE);
-
     // LS (Log Segment) 0
     // IS (Index Segment) 0.1
     // p1 DeleteInProgress
@@ -957,6 +956,7 @@ public class BlobStoreCompactorTest {
     state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
     state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
     state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
+    
     // IS (Index Segment) 0.2
     // p3 DeleteInProgress
     // p4 Inactive
