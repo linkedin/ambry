@@ -253,9 +253,7 @@ public class MockHelixAdmin implements HelixAdmin {
    * @return all instances registered via this Helix admin that are down.
    */
   List<String> getDownInstances() {
-    List<String> downList = new ArrayList<>();
-    downList.addAll(downInstances);
-    return downList;
+    return new ArrayList<>(downInstances);
   }
 
   /**
@@ -602,12 +600,12 @@ public class MockHelixAdmin implements HelixAdmin {
 
   @Override
   public void addCloudConfig(String clusterName, CloudConfig cloudConfig) {
-
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override
   public void removeCloudConfig(String clusterName) {
-
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override

@@ -14,7 +14,7 @@
 package com.github.ambry.clustermap;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.apache.helix.BaseDataAccessor;
@@ -192,7 +192,7 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
 
   @Override
   public <T extends HelixProperty> Map<String, T> getChildValuesMap(PropertyKey key, boolean throwException) {
-    return new HashMap<>();
+    return Collections.emptyMap();
   }
 
   @Override
