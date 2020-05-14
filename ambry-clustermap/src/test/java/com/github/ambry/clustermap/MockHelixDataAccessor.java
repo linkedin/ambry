@@ -37,7 +37,8 @@ import org.apache.helix.zookeeper.zkclient.DataUpdater;
  * creation and any state changes within cluster. Some methods are hard coded to directly return result we need.
  */
 public class MockHelixDataAccessor implements HelixDataAccessor {
-  // The session id will be converted hex string in LiveInstance.getEphemeralOwner(). Hence the hex string of 1024 = 0x400
+  // The session id will be converted to hex string in LiveInstance.getEphemeralOwner(). Hence the hex string of 1024
+  // is 0x400.
   private static final long SESSION_ID = 1024L;
   private final String LIVEINSTANCE_PATH;
   private final String INSTANCECONFIG_PATH;
