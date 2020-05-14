@@ -20,7 +20,7 @@ import java.util.Set;
 
 
 /**
- * The configs for the replication layer
+ * The configs for the replication layer "
  */
 public class ReplicationConfig {
 
@@ -184,9 +184,9 @@ public class ReplicationConfig {
 
   /**
    * To specify the type of replication to be used for inter colo replication.
-   * It has two values - "all-to-all" or "leader-based". Default value is "all-to-all".
-   * If set to "leader-based", inter colo replication between will be limited to the leaders(as elected by Helix) of the partition of each datacenter.
-   * If set to "all-to-all", inter colo replication will be in an all-to-all fashion, i.e. each replica talks to all other replicas irrespective of their state.
+   * It has two values - "ALL_TO_ALL" or "LEADER_BASED". Default value is "ALL_TO_ALL".
+   * If set to "LEADER_BASED", inter colo replication between will be limited to the leaders(as elected by Helix) of the partition of each datacenter.
+   * If set to "ALL_TO_ALL", inter colo replication will be in an all-to-all fashion, i.e. each replica talks to all other replicas irrespective of their state.
    * Intra colo replication will continue as all-to-all fashion in both the models.
    */
   @Config("replication.model.across.datacenters")
