@@ -13,13 +13,14 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.replication.ReplicationModelType;
 import com.github.ambry.utils.Utils;
 import java.util.HashSet;
 import java.util.Set;
 
 
 /**
- * The configs for the replication layer
+ * The configs for the replication layer "
  */
 public class ReplicationConfig {
 
@@ -181,6 +182,17 @@ public class ReplicationConfig {
   @Default("")
   public final Set<String> replicationVcrRecoveryPartitions;
 
+  /**
+   * To specify the type of replication to be used for inter colo replication.
+   * It has two values - "ALL_TO_ALL" or "LEADER_BASED". Default value is "ALL_TO_ALL".
+   * If set to "LEADER_BASED", inter colo replication between will be limited to the leaders(as elected by Helix) of the partition of each datacenter.
+   * If set to "ALL_TO_ALL", inter colo replication will be in an all-to-all fashion, i.e. each replica talks to all other replicas irrespective of their state.
+   * Intra colo replication will continue as all-to-all fashion in both the models.
+   */
+  @Config("replication.model.across.datacenters")
+  @Default("ALL_TO_ALL")
+  public final ReplicationModelType replicationModelType;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationStoreTokenFactory =
@@ -223,5 +235,7 @@ public class ReplicationConfig {
     replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);
     String vcrRecoveryPartitions = verifiableProperties.getString("replication.vcr.recovery.partitions", "");
     replicationVcrRecoveryPartitions = Utils.splitString(vcrRecoveryPartitions, ",", HashSet::new);
+    replicationModelType = ReplicationModelType.valueOf(
+        verifiableProperties.getString("replication.model.across.datacenters", ReplicationModelType.ALL_TO_ALL.name()));
   }
 }
