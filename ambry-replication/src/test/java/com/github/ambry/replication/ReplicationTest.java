@@ -177,30 +177,25 @@ public class ReplicationTest {
    */
   @Test
   public void replicationTypeFromConfigTest() throws Exception {
-    MockClusterMap clusterMap = new MockClusterMap();
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
-    DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
-    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
-    storeKeyConverterFactory.setConversionMap(new HashMap<>());
-    StorageManager storageManager =
-        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null, null);
-    storageManager.start();
+    //When replication config is missing, replicationModelType should be defaulted to ALL_TO_ALL
+    assertEquals("Replication model mismatch from the value present in config", replicationConfig.replicationModelType,
+        ReplicationModelType.ALL_TO_ALL);
 
     ReplicationConfig initialReplicationConfig = replicationConfig;
-    properties.setProperty("replication.model.across.datacenters", "leader-based");
+
+    //When the config set is "LEADER_BASED", replicationModelType should be LEADER_BASED
+    properties.setProperty("replication.model.across.datacenters", "LEADER_BASED");
     replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));
+    assertEquals("Replication model mismatch from the value present in config", replicationConfig.replicationModelType,
+        ReplicationModelType.LEADER_BASED);
 
-    MockReplicationManager replicationManager =
-        new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-            dataNodeId, storeKeyConverterFactory, null);
-
-    assertEquals("Replication model mismatch from the value present in config",
-        replicationManager.getReplicationModelType(), ReplicationModelType.LEADER_BASED);
+    //When the config set is "ALL_TO_ALL", replicationModelType should be ALL_TO_ALL
+    properties.setProperty("replication.model.across.datacenters", "ALL_TO_ALL");
+    replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));
+    assertEquals("Replication model mismatch from the value present in config", replicationConfig.replicationModelType,
+        ReplicationModelType.ALL_TO_ALL);
 
     replicationConfig = initialReplicationConfig;
-    storageManager.shutdown();
   }
 
   /**
