@@ -28,9 +28,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
-import org.I0Itec.zkclient.ZkServer;
-import org.I0Itec.zkclient.exception.ZkException;
-import org.I0Itec.zkclient.exception.ZkInterruptedException;
+import org.apache.helix.zookeeper.zkclient.ZkServer;
+import org.apache.helix.zookeeper.zkclient.exception.ZkException;
+import org.apache.helix.zookeeper.zkclient.exception.ZkInterruptedException;
 import org.apache.zookeeper.server.NIOServerCnxnFactory;
 import org.apache.zookeeper.server.ZooKeeperServer;
 import org.junit.Assert;
@@ -258,10 +258,10 @@ public class TestUtils {
   }
 
   /**
-   * A wrapper class to start and shutdown {@link ZooKeeperServer}. The code is from {@link org.I0Itec.zkclient.ZkServer}.
+   * A wrapper class to start and shutdown {@link ZooKeeperServer}. The code is from {@link org.apache.helix.zookeeper.zkclient.ZkServer}.
    * We maintain this class to speed up tests because function calls to NetworkUtil.getLocalHostNames() in
-   * {@link org.I0Itec.zkclient.ZkServer} takes time in Mac OS.
-   * {@link org.I0Itec.zkclient.ZkServer} calls NetworkUtil.getLocalHostNames() to log and make sure "localhost" is in
+   * {@link org.apache.helix.zookeeper.zkclient.ZkServer} takes time in Mac OS.
+   * {@link org.apache.helix.zookeeper.zkclient.ZkServer} calls NetworkUtil.getLocalHostNames() to log and make sure "localhost" is in
    * the list of NetworkUtil.getLocalHostNames(), which are not necessary in tests.
    */
   static class ZkServerWrapper {

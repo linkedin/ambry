@@ -35,7 +35,12 @@ import org.apache.helix.NotificationContext;
 import org.apache.helix.PreConnectCallback;
 import org.apache.helix.PropertyKey;
 import org.apache.helix.ScopedConfigChangeListener;
-import org.apache.helix.ZNRecord;
+import org.apache.helix.api.listeners.CustomizedStateChangeListener;
+import org.apache.helix.api.listeners.CustomizedStateConfigChangeListener;
+import org.apache.helix.api.listeners.CustomizedStateRootChangeListener;
+import org.apache.helix.api.listeners.CustomizedViewChangeListener;
+import org.apache.helix.api.listeners.CustomizedViewRootChangeListener;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.apache.helix.api.listeners.ClusterConfigChangeListener;
 import org.apache.helix.api.listeners.ConfigChangeListener;
 import org.apache.helix.api.listeners.ResourceConfigChangeListener;
@@ -239,6 +244,11 @@ public class MockHelixManagerFactory extends HelixFactory {
     }
 
     @Override
+    public void addCustomizedStateConfigChangeListener(CustomizedStateConfigChangeListener listener) throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void addClusterfigChangeListener(ClusterConfigChangeListener clusterConfigChangeListener) throws Exception {
       throw new IllegalStateException("Not implemented");
     }
@@ -281,8 +291,31 @@ public class MockHelixManagerFactory extends HelixFactory {
     }
 
     @Override
+    public void addCustomizedStateRootChangeListener(CustomizedStateRootChangeListener listener, String instanceName)
+        throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void addCustomizedStateChangeListener(CustomizedStateChangeListener listener, String instanceName,
+        String stateName) throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void addExternalViewChangeListener(
         org.apache.helix.api.listeners.ExternalViewChangeListener externalViewChangeListener) throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void addCustomizedViewChangeListener(CustomizedViewChangeListener listener, String customizedStateType)
+        throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void addCustomizedViewRootChangeListener(CustomizedViewRootChangeListener listener) throws Exception {
       throw new IllegalStateException("Not implemented");
     }
 

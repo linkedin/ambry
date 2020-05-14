@@ -24,8 +24,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import org.apache.helix.AccessOption;
-import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.junit.Test;
 
 import static com.github.ambry.utils.TestUtils.*;

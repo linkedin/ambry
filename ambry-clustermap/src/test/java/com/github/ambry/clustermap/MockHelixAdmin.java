@@ -22,14 +22,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.model.CloudConfig;
 import org.apache.helix.model.ClusterConstraints;
 import org.apache.helix.model.ConstraintItem;
 import org.apache.helix.model.CurrentState;
+import org.apache.helix.model.CustomizedStateConfig;
 import org.apache.helix.model.ExternalView;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.MaintenanceSignal;
+import org.apache.helix.model.ResourceConfig;
 import org.apache.helix.model.StateModelDefinition;
 
 
@@ -87,7 +90,7 @@ public class MockHelixAdmin implements HelixAdmin {
     Map<String, Map<String, String>> diskInfos = instanceConfig.getRecord().getMapFields();
     totalDiskCount += diskInfos.size();
     for (Map<String, String> diskInfo : diskInfos.values()) {
-      totalDiskCapacity += Long.valueOf(diskInfo.get(ClusterMapUtils.DISK_CAPACITY_STR));
+      totalDiskCapacity += Long.parseLong(diskInfo.get(ClusterMapUtils.DISK_CAPACITY_STR));
     }
   }
 
@@ -206,11 +209,11 @@ public class MockHelixAdmin implements HelixAdmin {
    * is actually added into dc where current HelixAdmin sits). This would trigger ideal state change which should be captured
    * by Helix Cluster Manager on each node.
    * @param resourceName name of resource. (The resource may contain one or more partitions)
-   * @param idealstate ideal state associated with the resource. (it defines location of each replica from each partition)
+   * @param idealState ideal state associated with the resource. (it defines location of each replica from each partition)
    * @throws Exception
    */
-  void addNewResource(String resourceName, IdealState idealstate) throws Exception {
-    resourcesToIdealStates.put(resourceName, idealstate);
+  void addNewResource(String resourceName, IdealState idealState) throws Exception {
+    resourcesToIdealStates.put(resourceName, idealState);
     triggerIdealStateChangeNotification();
   }
 
@@ -233,9 +236,7 @@ public class MockHelixAdmin implements HelixAdmin {
    * @return all instances registered via this Helix admin that are up.
    */
   List<String> getUpInstances() {
-    List<String> upList = new ArrayList<>();
-    upList.addAll(upInstances);
-    return upList;
+    return new ArrayList<>(upInstances);
   }
 
   /**
@@ -440,6 +441,26 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   @Override
+  public void addCustomizedStateConfig(String clusterName, CustomizedStateConfig customizedStateConfig) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void removeCustomizedStateConfig(String clusterName) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void addTypeToCustomizedStateConfig(String clusterName, String type) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void removeTypeFromCustomizedStateConfig(String clusterName, String type) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public void addResource(String clusterName, String resourceName, int numPartitions, String stateModelRef) {
     throw new IllegalStateException("Not implemented");
   }
@@ -580,6 +601,16 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   @Override
+  public void addCloudConfig(String clusterName, CloudConfig cloudConfig) {
+
+  }
+
+  @Override
+  public void removeCloudConfig(String clusterName) {
+
+  }
+
+  @Override
   public List<String> getStateModelDefs(String clusterName) {
     throw new IllegalStateException("Not implemented");
   }
@@ -710,5 +741,25 @@ public class MockHelixAdmin implements HelixAdmin {
   @Override
   public void close() {
     // no-op.
+  }
+
+  @Override
+  public boolean addResourceWithWeight(String clusterName, IdealState idealState, ResourceConfig resourceConfig) {
+    return false;
+  }
+
+  @Override
+  public boolean enableWagedRebalance(String clusterName, List<String> resourceNames) {
+    return false;
+  }
+
+  @Override
+  public Map<String, Boolean> validateResourcesForWagedRebalance(String clusterName, List<String> resourceNames) {
+    return null;
+  }
+
+  @Override
+  public Map<String, Boolean> validateInstancesForWagedRebalance(String clusterName, List<String> instancesNames) {
+    return null;
   }
 }

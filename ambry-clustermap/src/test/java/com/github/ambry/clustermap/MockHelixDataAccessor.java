@@ -17,12 +17,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.I0Itec.zkclient.DataUpdater;
 import org.apache.helix.BaseDataAccessor;
 import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixProperty;
 import org.apache.helix.PropertyKey;
-import org.apache.helix.ZNRecord;
 import org.apache.helix.model.CurrentState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
@@ -30,6 +28,8 @@ import org.apache.helix.model.MaintenanceSignal;
 import org.apache.helix.model.Message;
 import org.apache.helix.model.PauseSignal;
 import org.apache.helix.model.StateModelDefinition;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
+import org.apache.helix.zookeeper.zkclient.DataUpdater;
 
 
 /**
@@ -37,7 +37,8 @@ import org.apache.helix.model.StateModelDefinition;
  * creation and any state changes within cluster. Some methods are hard coded to directly return result we need.
  */
 public class MockHelixDataAccessor implements HelixDataAccessor {
-  private static final String SESSION_ID = "sessionId";
+  // The session id will be converted hex string in LiveInstance.getEphemeralOwner(). Hence the hex string of 1024 = 0x400
+  private static final long SESSION_ID = 1024L;
   private final String LIVEINSTANCE_PATH;
   private final String INSTANCECONFIG_PATH;
   private final String clusterName;
@@ -106,9 +107,8 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
   @Override
   public <T extends HelixProperty> List<T> getProperty(List<PropertyKey> keys, boolean throwException) {
     List<T> result = new ArrayList<>();
-    // example for key
     for (PropertyKey key : keys) {
-      if (key.toString().matches("/Ambry-/INSTANCES/.*/CURRENTSTATES/sessionId/\\d+")) {
+      if (key.toString().matches("/Ambry-/INSTANCES/.*/CURRENTSTATES/\\d+/\\d+")) {
         // an example for the key: /Ambry-/INSTANCES/localhost_18089/CURRENTSTATES/sessionId/0
         String[] segments = key.toString().split("/");
         String instanceName = segments[3];
@@ -118,6 +118,21 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
         ZNRecord record = new ZNRecord(resourceName);
         record.setMapFields(partitionStateMap);
         result.add((T) (new CurrentState(record)));
+      } else if (key.toString().matches("/Ambry-/LIVEINSTANCES/.*_\\d+")) {
+        String[] segments = key.toString().split("/");
+        String instanceName = segments[3];
+        ZNRecord record = new ZNRecord(instanceName);
+        record.setEphemeralOwner(SESSION_ID);
+        result.add((T) (new LiveInstance(record)));
+      } else if (key.toString().matches("/Ambry-/CONFIGS/PARTICIPANT/.*_\\d+")) {
+        String[] segments = key.toString().split("/");
+        String instanceName = segments[4];
+        InstanceConfig instanceConfig = mockHelixAdmin.getInstanceConfigs(clusterName)
+            .stream()
+            .filter(config -> config.getInstanceName().equals(instanceName))
+            .findFirst()
+            .get();
+        result.add((T) instanceConfig);
       }
     }
     return result;
@@ -146,9 +161,15 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
   @Override
   public List<String> getChildNames(PropertyKey key) {
     List<String> result = new ArrayList<>();
-    if (key.toString().endsWith("/CURRENTSTATES/" + SESSION_ID)) {
+    if (key.toString().endsWith("/CURRENTSTATES/" + Long.toHexString(SESSION_ID))) {
       // Add resource name into result. Note that, in current test setup, all partitions within same dc are under same resource.
       result.add(mockHelixAdmin.getResourcesInCluster(clusterName).get(0));
+    } else if (key.toString().equals(LIVEINSTANCE_PATH)) {
+      result = mockHelixAdmin.getUpInstances();
+    } else if (key.toString().equals(INSTANCECONFIG_PATH)) {
+      for (InstanceConfig config : mockHelixAdmin.getInstanceConfigs(clusterName)) {
+        result.add(config.getInstanceName());
+      }
     }
     return result;
   }
@@ -170,19 +191,7 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
 
   @Override
   public <T extends HelixProperty> Map<String, T> getChildValuesMap(PropertyKey key, boolean throwException) {
-    Map<String, T> result = new HashMap<>();
-    if (key.toString().equals(LIVEINSTANCE_PATH)) {
-      for (String instance : mockHelixAdmin.getUpInstances()) {
-        LiveInstance liveInstance = new LiveInstance(instance);
-        liveInstance.setSessionId(SESSION_ID);
-        result.put(instance, (T) liveInstance);
-      }
-    } else if (key.toString().equals(INSTANCECONFIG_PATH)) {
-      for (InstanceConfig config : mockHelixAdmin.getInstanceConfigs(clusterName)) {
-        result.put(config.getInstanceName(), (T) config);
-      }
-    }
-    return result;
+    return new HashMap<>();
   }
 
   @Override

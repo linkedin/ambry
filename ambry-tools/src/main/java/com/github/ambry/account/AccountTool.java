@@ -41,8 +41,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
-import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -552,11 +552,13 @@ public class AccountTool {
 
     // for creating NonBlockingRouter
     if (clusterMapDcsZkConnectString != null) {
-      properties.setProperty("clustermap.clusteragents.factory", "com.github.ambry.clustermap.HelixClusterAgentsFactory");
+      properties.setProperty("clustermap.clusteragents.factory",
+          "com.github.ambry.clustermap.HelixClusterAgentsFactory");
       properties.setProperty("clustermap.dcs.zk.connect.strings", clusterMapDcsZkConnectString);
       properties.setProperty("clustermap.cluster.name", clusterName);
     } else {
-      properties.setProperty("clustermap.clusteragents.factory", "com.github.ambry.clustermap.StaticClusterAgentsFactory");
+      properties.setProperty("clustermap.clusteragents.factory",
+          "com.github.ambry.clustermap.StaticClusterAgentsFactory");
     }
     properties.setProperty("clustermap.host.name", hostname);
     properties.setProperty("clustermap.datacenter.name", dcName);
