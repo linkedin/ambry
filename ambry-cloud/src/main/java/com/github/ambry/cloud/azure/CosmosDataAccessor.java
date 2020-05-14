@@ -38,6 +38,7 @@ import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import com.microsoft.azure.cosmosdb.internal.HttpConstants;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -267,13 +268,13 @@ public class CosmosDataAccessor {
         response.getResults().iterator().forEachRemaining(doc -> deadBlobsList.add(createMetadataFromDocument(doc)));
       }
       if (requestCharge >= requestChargeThreshold) {
-        logger.info("Dead blobs query on partition {} got request charge {} for {} records", partitionPath,
-            requestCharge, deadBlobsList.size());
+        logger.info("Dead blobs query partition {} endTime {} request charge {} for {} records", partitionPath,
+            new Date(endTime), requestCharge, deadBlobsList.size());
       }
       return deadBlobsList;
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
-        logger.warn("Dead blobs query {} on partition {} got {}", deadBlobsQuery, partitionPath,
+        logger.warn("Dead blobs query {} partition {} got {}", deadBlobsQuery, partitionPath,
             ((DocumentClientException) rex.getCause()).getStatusCode());
         throw (DocumentClientException) rex.getCause();
       }

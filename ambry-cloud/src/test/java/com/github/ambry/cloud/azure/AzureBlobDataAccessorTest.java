@@ -169,11 +169,19 @@ public class AzureBlobDataAccessorTest {
     List<CloudBlobMetadata> purgeList = new ArrayList<>();
     purgeList.add(new CloudBlobMetadata().setId(blobNameOkStatus));
     purgeList.add(new CloudBlobMetadata().setId(blobNameNotFoundStatus));
-    purgeList.add(new CloudBlobMetadata().setId(blobNameErrorStatus));
+    // Purge first 2 and expect success
     List<CloudBlobMetadata> purgeResponseList = dataAccessor.purgeBlobs(purgeList);
     assertEquals("Wrong response size", 2, purgeResponseList.size());
     assertEquals("Wrong blob name", blobNameOkStatus, purgeResponseList.get(0).getId());
     assertEquals("Wrong blob name", blobNameNotFoundStatus, purgeResponseList.get(1).getId());
+    // Including last one should fail
+    purgeList.add(new CloudBlobMetadata().setId(blobNameErrorStatus));
+    try {
+      dataAccessor.purgeBlobs(purgeList);
+      fail("Expected purge to fail");
+    } catch (BlobStorageException bex) {
+      assertEquals("Unexpected status code", 503, bex.getStatusCode());
+    }
   }
 
   /** Test initializing with a proxy */
