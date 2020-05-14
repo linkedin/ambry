@@ -507,11 +507,15 @@ public class BlobStore implements Store {
           lifeVersions.add(value.getLifeVersion());
         } else {
           // This is a delete request from replication
-          if ((value.isDelete() && value.getLifeVersion() >= info.getLifeVersion()) || (value.getLifeVersion()
-              > info.getLifeVersion())) {
+          if (value.isDelete() && value.getLifeVersion() == info.getLifeVersion()) {
             throw new StoreException(
-                "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
-                StoreErrorCodes.Life_Version_Conflict);
+                "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index with lifeVersion "
+                    + value.getLifeVersion() + ".", StoreErrorCodes.ID_Deleted);
+          }
+          if (value.getLifeVersion() > info.getLifeVersion()) {
+            throw new StoreException(
+                "Cannot delete id " + info.getStoreKey() + " since it has a higher lifeVersion than the message info: "
+                    + value.getLifeVersion() + ">" + info.getLifeVersion(), StoreErrorCodes.Life_Version_Conflict);
           }
           indexValuesToDelete.add(value);
           lifeVersions.add(info.getLifeVersion());

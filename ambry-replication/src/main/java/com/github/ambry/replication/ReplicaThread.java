@@ -1042,8 +1042,8 @@ public class ReplicaThread implements Runnable {
       // The blob may be undeleted, which is alright
       if (e.getErrorCode() == StoreErrorCodes.Life_Version_Conflict
           || e.getErrorCode() == StoreErrorCodes.ID_Undeleted) {
-        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key already undeleted: {}", remoteNode,
-            threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key {}: {}", remoteNode,
+            threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), e.getErrorCode().name());
       } else {
         throw e;
       }
@@ -1074,9 +1074,9 @@ public class ReplicaThread implements Runnable {
           remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
     } catch (StoreException e) {
       // The blob may be deleted or updated which is alright
-      if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key already deleted: {}", remoteNode,
-            threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+      if (e.getErrorCode() == StoreErrorCodes.ID_Deleted || e.getErrorCode() == StoreErrorCodes.Life_Version_Conflict) {
+        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key {}: {}", remoteNode,
+            threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), e.getErrorCode().name());
       } else {
         throw e;
       }

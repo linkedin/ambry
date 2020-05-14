@@ -808,7 +808,7 @@ public class BlobStoreTest {
       store.delete(Collections.singletonList(info));
       fail("Should not delete");
     } catch (StoreException e) {
-      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+      assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Deleted);
     }
 
     // delete with the smaller lifeVersion, should fail with life_version_conflict
