@@ -132,14 +132,23 @@ public class ServerSSLTest {
   }
 
   /**
-   * Do end to end cloud backup test.
+   * Do end to end cloud backup test (without TtlUpdate)
    */
   @Test
-  public void endToEndCloudBackupTest() throws Exception {
+  public void endToEndCloudBackupWithoutTtlUpdateTest() throws Exception {
     assumeTrue(testEncryption);
     DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
     ServerTestUtil.endToEndCloudBackupTest(sslCluster, dataNode, clientSSLConfig2, clientSSLSocketFactory2,
         notificationSystem, serverSSLProps, Utils.Infinite_Time, false);
+  }
+
+  /**
+   * Do end to end cloud backup test (with TtlUpdate)
+   */
+  @Test
+  public void endToEndCloudBackupWithTtlUpdateTest() throws Exception {
+    assumeTrue(testEncryption);
+    DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
     ServerTestUtil.endToEndCloudBackupTest(sslCluster, dataNode, clientSSLConfig2, clientSSLSocketFactory2,
         notificationSystem, serverSSLProps, System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1), true);
   }

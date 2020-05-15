@@ -182,7 +182,7 @@ public class SocketServer implements NetworkServer {
 
   public void shutdown() {
     try {
-      logger.info("Shutting down server");
+      logger.info("Shutting down socket server");
       for (Acceptor acceptor : acceptors) {
         if (acceptor != null) {
           acceptor.shutdown();
@@ -191,10 +191,10 @@ public class SocketServer implements NetworkServer {
       for (Processor processor : processors) {
         processor.shutdown();
       }
-      logger.info("Shutdown completed");
+      logger.info("Shutdown socket server completed");
       requestResponseChannel.shutdown();
     } catch (Exception e) {
-      logger.error("Error shutting down socket server {}", e);
+      logger.error("Error shutting down socket server ", e);
     }
   }
 }

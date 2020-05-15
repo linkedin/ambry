@@ -101,14 +101,23 @@ public class ServerPlaintextTest {
   }
 
   /**
-   * Do end to end cloud backup test.
+   * Do end to end cloud backup test (without TtlUpdate)
    */
   @Test
-  public void endToEndCloudBackupTest() throws Exception {
+  public void endToEndCloudBackupWithoutTtlUpdateTest() throws Exception {
     assumeTrue(testEncryption);
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem, null,
         Utils.Infinite_Time, false);
+  }
+
+  /**
+   * Do end to end cloud backup test (with TtlUpdate)
+   */
+  @Test
+  public void endToEndCloudBackupWithTtlUpdateTest() throws Exception {
+    assumeTrue(testEncryption);
+    DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem, null,
         System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1), true);
   }
