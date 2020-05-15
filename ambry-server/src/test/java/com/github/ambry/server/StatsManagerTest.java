@@ -15,6 +15,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
@@ -550,7 +551,7 @@ public class StatsManagerTest {
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
             new MetricRegistry(), null, clusterMap, currentNode, null, Collections.singletonList(clusterParticipant),
-            new MockTime(), null, null);
+            new MockTime(), null, new InMemAccountService(false, false));
     storageManager.start();
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());

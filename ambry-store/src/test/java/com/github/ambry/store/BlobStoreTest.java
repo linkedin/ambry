@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
@@ -1456,7 +1457,7 @@ public class BlobStoreTest {
     BlobStore testStore2 =
         new BlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), scheduler,
             storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics, mockStoreKeyFactory, recovery,
-            hardDelete, Collections.singletonList(mockDelegate), time, null);
+            hardDelete, Collections.singletonList(mockDelegate), time, new InMemAccountService(false, false));
 
     testStore2.start();
     assertTrue("Store should start up", testStore2.isStarted());
@@ -1572,7 +1573,7 @@ public class BlobStoreTest {
     BlobStore testStore =
         new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
             diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time,
-            null);
+            new InMemAccountService(false, false));
     testStore.start();
     DiskSpaceRequirements diskSpaceRequirements = testStore.getDiskSpaceRequirements();
     diskAllocator.initializePool(diskSpaceRequirements == null ? Collections.emptyList()
@@ -2729,7 +2730,8 @@ public class BlobStoreTest {
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
     return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator,
-        metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, null);
+        metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time,
+        new InMemAccountService(false, false));
   }
 
   private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
@@ -2789,7 +2791,7 @@ public class BlobStoreTest {
     MockBlobStore(ReplicaId replicaId, StoreConfig config, List<ReplicaStatusDelegate> replicaStatusDelegates,
         StoreMetrics metrics) {
       super(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics,
-          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, null);
+          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, new InMemAccountService(false, false));
     }
 
     /**

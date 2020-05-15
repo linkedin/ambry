@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
@@ -312,7 +313,7 @@ class MockBlobStore extends BlobStore {
   MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, long capacityInBytes, long segmentCapacity,
       long segmentHeaderSize, long usedCapacity, MockBlobStoreStats mockBlobStoreStats) {
     super(StoreTestUtils.createMockReplicaId("", 0, null), config, null, null, null, null, metrics, metrics, null, null,
-        null, null, time, null);
+        null, null, time, new InMemAccountService(false, false));
     this.capacityInBytes = capacityInBytes;
     this.segmentCapacity = segmentCapacity;
     this.segmentHeaderSize = segmentHeaderSize;
