@@ -13,6 +13,7 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.SSLFactory;
@@ -20,16 +21,15 @@ import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import org.junit.After;
@@ -76,7 +76,6 @@ public class ServerSSLTest {
     sslCluster = new MockCluster(serverSSLProps, false, SystemTime.getInstance());
     notificationSystem = new MockNotificationSystem(sslCluster.getClusterMap());
     sslCluster.initializeServers(notificationSystem);
-    sslCluster.startServers();
     //client
     sslFactory = SSLFactory.getNewInstance(clientSSLConfig1);
     SSLContext sslContext = sslFactory.getSSLContext();
@@ -115,7 +114,8 @@ public class ServerSSLTest {
   }
 
   @Test
-  public void endToEndSSLTest() {
+  public void endToEndSSLTest() throws IOException, InstantiationException {
+    sslCluster.startServers();
     DataNodeId dataNodeId = sslCluster.getGeneralDataNode();
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", sslCluster, clientSSLConfig1,
         clientSSLSocketFactory1, routerProps, testEncryption);
@@ -125,7 +125,8 @@ public class ServerSSLTest {
    * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
    */
   @Test
-  public void endToEndSSLTestWithPrefetch() {
+  public void endToEndSSLTestWithPrefetch() throws IOException, InstantiationException {
+    sslCluster.startServers();
     DataNodeId dataNodeId = sslCluster.getPrefetchDataNode();
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", sslCluster, clientSSLConfig1,
         clientSSLSocketFactory1, routerProps, testEncryption);
@@ -137,26 +138,28 @@ public class ServerSSLTest {
   @Test
   public void endToEndCloudBackupWithoutTtlUpdateTest() throws Exception {
     assumeTrue(testEncryption);
+    sslCluster.startServers();
     DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil.endToEndCloudBackupTest(sslCluster, dataNode, clientSSLConfig2, clientSSLSocketFactory2,
-        notificationSystem, serverSSLProps, Utils.Infinite_Time, false);
-  }
-
-  /**
-   * Do end to end cloud backup test (with TtlUpdate)
-   */
-  @Test
-  public void endToEndCloudBackupWithTtlUpdateTest() throws Exception {
-    assumeTrue(testEncryption);
-    DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil.endToEndCloudBackupTest(sslCluster, dataNode, clientSSLConfig2, clientSSLSocketFactory2,
-        notificationSystem, serverSSLProps, System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1), true);
+    // Start Helix Controller and ZK Server.
+    int zkPort = 31999;
+    String zkConnectString = "localhost:" + zkPort;
+    String vcrClusterName = "vcrTestCluster";
+    TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
+    HelixControllerManager helixControllerManager =
+        VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, sslCluster.getClusterMap());
+    ServerTestUtil.endToEndCloudBackupTest(sslCluster, zkConnectString, vcrClusterName, dataNode, clientSSLConfig2,
+        clientSSLSocketFactory2, notificationSystem, serverSSLProps, false);
+    ServerTestUtil.endToEndCloudBackupTest(sslCluster, zkConnectString, vcrClusterName, dataNode, clientSSLConfig2,
+        clientSSLSocketFactory2, notificationSystem, serverSSLProps, true);
+    helixControllerManager.syncStop();
+    zkInfo.shutdown();
   }
 
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest() throws Exception {
+    sslCluster.startServers();
     DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
-    ArrayList<String> dataCenterList = new ArrayList<String>(Arrays.asList("DC1", "DC2", "DC3"));
+    ArrayList<String> dataCenterList = new ArrayList<>(Arrays.asList("DC1", "DC2", "DC3"));
     List<DataNodeId> dataNodes = sslCluster.getOneDataNodeFromEachDatacenter(dataCenterList);
     ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionTest(dataNode.getPort(),
         new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
@@ -170,6 +173,7 @@ public class ServerSSLTest {
     // this test uses router to Put and direct GetRequest to verify Gets. So, no way to get access to encryptionKey against
     // which to compare the GetResponse. Hence skipping encryption flow for this test
     assumeTrue(!testEncryption);
+    sslCluster.startServers();
     ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3", PortType.SSL,
         sslCluster, notificationSystem, routerProps);
   }

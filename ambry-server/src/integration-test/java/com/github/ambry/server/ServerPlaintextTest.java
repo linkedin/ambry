@@ -13,12 +13,14 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -27,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -55,7 +56,6 @@ public class ServerPlaintextTest {
     plaintextCluster = new MockCluster(serverProperties, false, SystemTime.getInstance());
     notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);
-    plaintextCluster.startServers();
   }
 
   /**
@@ -106,20 +106,21 @@ public class ServerPlaintextTest {
   @Test
   public void endToEndCloudBackupWithoutTtlUpdateTest() throws Exception {
     assumeTrue(testEncryption);
+    plaintextCluster.startServers();
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem, null,
-        Utils.Infinite_Time, false);
-  }
-
-  /**
-   * Do end to end cloud backup test (with TtlUpdate)
-   */
-  @Test
-  public void endToEndCloudBackupWithTtlUpdateTest() throws Exception {
-    assumeTrue(testEncryption);
-    DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem, null,
-        System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1), true);
+    // Start Helix Controller and ZK Server.
+    int zkPort = 31999;
+    String zkConnectString = "localhost:" + zkPort;
+    String vcrClusterName = "vcrTestCluster";
+    TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
+    HelixControllerManager helixControllerManager =
+        VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, plaintextCluster.getClusterMap());
+    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, zkConnectString, vcrClusterName, dataNode, null, null,
+        notificationSystem, null, false);
+    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, zkConnectString, vcrClusterName, dataNode, null, null,
+        notificationSystem, null, true);
+    helixControllerManager.syncStop();
+    zkInfo.shutdown();
   }
 
   @Test
@@ -139,6 +140,7 @@ public class ServerPlaintextTest {
     // this test uses router to Put and direct GetRequest to verify Gets. So, no way to get access to encryptionKey against
     // which to compare the GetResponse. Hence skipping encryption flow for this test
     if (!testEncryption) {
+      plaintextCluster.startServers();
       ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "", PortType.PLAINTEXT,
           plaintextCluster, notificationSystem, routerProps);
     }
