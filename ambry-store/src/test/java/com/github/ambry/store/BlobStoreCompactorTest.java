@@ -944,6 +944,8 @@ public class BlobStoreCompactorTest {
   @Test
   public void containerDeletionTest() throws Exception {
     refreshState(false, false);
+
+    state.properties.setProperty("store.container.deletion.enabled", "true");
     state.properties.setProperty("store.index.max.number.of.inmem.elements", "5");
     state.initIndex(null);
     long notExpiredMs = state.time.milliseconds() + TimeUnit.SECONDS.toMillis(Short.MAX_VALUE);
@@ -956,7 +958,7 @@ public class BlobStoreCompactorTest {
     state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
     state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
     state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, notExpiredMs).get(0);
-    
+
     // IS (Index Segment) 0.2
     // p3 DeleteInProgress
     // p4 Inactive

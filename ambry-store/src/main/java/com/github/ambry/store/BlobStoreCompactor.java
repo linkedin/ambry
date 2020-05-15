@@ -86,7 +86,7 @@ class BlobStoreCompactor {
   private final AccountService accountService;
   private volatile boolean isActive = false;
   private PersistentIndex srcIndex;
-  private final Set<Pair<Short,Short>> notActiveContainers;
+  private final Set<Pair<Short,Short>> deprecatedContainers;
 
   private Log tgtLog;
   private PersistentIndex tgtIndex;
@@ -133,7 +133,7 @@ class BlobStoreCompactor {
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
     this.useDirectIO = Utils.isLinux() && config.storeCompactionEnableDirectIO;
-    this.notActiveContainers = new HashSet<>();
+    this.deprecatedContainers = new HashSet<>();
     if (config.storeCompactionFilter.equals(IndexSegmentValidEntryFilterWithoutUndelete.class.getSimpleName())) {
       validEntryFilter = new IndexSegmentValidEntryFilterWithoutUndelete();
     } else {
@@ -198,17 +198,17 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Filters not active {@link Container}s for compaction purpose. Not active status include DELETE_IN_PROGRESS and INACTIVE.
-   * @return the not active {@link Container}s' accountId & containerId pairs.
+   * Filters deprecated {@link Container}s for compaction purpose. Deprecated status include DELETE_IN_PROGRESS and INACTIVE.
+   * @return the deprecated {@link Container}s' accountId & containerId pairs.
    */
-  private void getNotActiveContainers() {
-    notActiveContainers.clear();
+  private void getDeprecatedContainers() {
+    deprecatedContainers.clear();
     if (accountService != null) {
       accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
-        notActiveContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
+        deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
       });
       accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE).forEach((container) -> {
-        notActiveContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
+        deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
       });
     }
   }
@@ -241,8 +241,10 @@ class BlobStoreCompactor {
     logger.trace("resumeCompaction() started for {}", storeId);
     runningLatch = new CountDownLatch(1);
     compactionInProgress.set(true);
-    getNotActiveContainers();
-    logger.info("Not active containers are {} for {}", notActiveContainers, storeId);
+    if (config.storeContainerDeletionEnabled) {
+      getDeprecatedContainers();
+      logger.info("Deprecated containers are {} for {}", deprecatedContainers, storeId);
+    }
     try {
       while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         CompactionLog.Phase phase = compactionLog.getCompactionPhase();
@@ -582,15 +584,15 @@ class BlobStoreCompactor {
    * Determines if {@code copyCandidate} container in the status of DELETED_IN_PROGRESS or INACTIVE.
    * @param copyCandidate the {@link IndexEntry} to check
    */
-  private boolean isFromDeletedContainer(IndexEntry copyCandidate) {
+  private boolean isFromDeprecatedContainer(IndexEntry copyCandidate) {
     IndexValue copyCandidateValue = copyCandidate.getValue();
-    boolean isFromDeletedContainer = false;
-    if (notActiveContainers.contains(
+    boolean isFromDeprecatedContainer = false;
+    if (deprecatedContainers.contains(
         new Pair<>(copyCandidateValue.getAccountId(), copyCandidateValue.getContainerId()))) {
-      logger.trace("{} in segment in {} is from deleted container", copyCandidate, storeId);
-      isFromDeletedContainer = true;
+      logger.debug("{} in store {} is from deprecated container.", copyCandidate, storeId);
+      isFromDeprecatedContainer = true;
     }
-    return isFromDeletedContainer;
+    return isFromDeprecatedContainer;
   }
 
   /**
@@ -1059,7 +1061,7 @@ class BlobStoreCompactor {
       int validEntriesSize = copyCandidates.size();
       copyCandidates.removeIf(
           copyCandidate -> isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(),
-              checkAlreadyCopied) || isFromDeletedContainer(copyCandidate));
+              checkAlreadyCopied) || (config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),
@@ -1346,7 +1348,7 @@ class BlobStoreCompactor {
       int validEntriesSize = copyCandidates.size();
       copyCandidates.removeIf(
           copyCandidate -> isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(),
-              checkAlreadyCopied) || isFromDeletedContainer(copyCandidate));
+              checkAlreadyCopied) || (config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of entries, {} are valid and {} will be copied in this round", validEntriesSize,
