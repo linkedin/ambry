@@ -133,10 +133,10 @@ public class ServerSSLTest {
   }
 
   /**
-   * Do end to end cloud backup test (without TtlUpdate)
+   * Do end to end cloud backup test
    */
   @Test
-  public void endToEndCloudBackupWithoutTtlUpdateTest() throws Exception {
+  public void endToEndCloudBackupTest() throws Exception {
     assumeTrue(testEncryption);
     sslCluster.startServers();
     DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);

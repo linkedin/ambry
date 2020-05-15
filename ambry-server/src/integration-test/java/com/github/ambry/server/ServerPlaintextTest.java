@@ -84,7 +84,8 @@ public class ServerPlaintextTest {
   }
 
   @Test
-  public void endToEndTest() {
+  public void endToEndTest() throws Exception {
+    plaintextCluster.startServers();
     DataNodeId dataNodeId = plaintextCluster.getGeneralDataNode();
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", plaintextCluster, null, null,
         routerProps, testEncryption);
@@ -94,17 +95,18 @@ public class ServerPlaintextTest {
    * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
    */
   @Test
-  public void endToEndTestWithPrefetch() {
+  public void endToEndTestWithPrefetch() throws Exception {
+    plaintextCluster.startServers();
     DataNodeId dataNodeId = plaintextCluster.getPrefetchDataNode();
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", plaintextCluster, null, null,
         routerProps, testEncryption);
   }
 
   /**
-   * Do end to end cloud backup test (without TtlUpdate)
+   * Do end to end cloud backup test
    */
   @Test
-  public void endToEndCloudBackupWithoutTtlUpdateTest() throws Exception {
+  public void endToEndCloudBackupTest() throws Exception {
     assumeTrue(testEncryption);
     plaintextCluster.startServers();
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
@@ -125,6 +127,7 @@ public class ServerPlaintextTest {
 
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest() throws Exception {
+    plaintextCluster.startServers();
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
     List<DataNodeId> dataNodes = plaintextCluster.getOneDataNodeFromEachDatacenter(dataCenterList);
