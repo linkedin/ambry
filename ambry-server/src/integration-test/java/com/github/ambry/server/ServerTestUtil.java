@@ -95,6 +95,7 @@ import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -661,7 +662,8 @@ final class ServerTestUtil {
         updateBlobTtl(channel, blobId);
       }
     }
-
+    HelixControllerManager helixControllerManager =
+        VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, cluster.getClusterMap());
     // Start the VCR and CloudBackupManager
     Properties props =
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
@@ -689,6 +691,7 @@ final class ServerTestUtil {
       // TODO: verify other metadata and blob data
     }
     vcrServer.shutdown();
+    helixControllerManager.syncStop();
   }
 
   static void endToEndReplicationWithMultiNodeMultiPartitionTest(int interestedDataNodePortNumber, Port dataNode1Port,

@@ -83,7 +83,7 @@ public class ServerPlaintextTest {
     System.out.println("ServerPlaintextTest::cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
 
-  @Test
+  //@Test
   public void endToEndTest() throws Exception {
     plaintextCluster.startServers();
     DataNodeId dataNodeId = plaintextCluster.getGeneralDataNode();
@@ -94,7 +94,7 @@ public class ServerPlaintextTest {
   /**
    * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
    */
-  @Test
+  //@Test
   public void endToEndTestWithPrefetch() throws Exception {
     plaintextCluster.startServers();
     DataNodeId dataNodeId = plaintextCluster.getPrefetchDataNode();
@@ -113,19 +113,16 @@ public class ServerPlaintextTest {
     // Start Helix Controller and ZK Server.
     int zkPort = 31999;
     String zkConnectString = "localhost:" + zkPort;
-    String vcrClusterName = "vcrTestCluster";
+    String vcrClusterName = "vcrTestClusterPlainText";
     TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
-    HelixControllerManager helixControllerManager =
-        VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, plaintextCluster.getClusterMap());
     ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, zkConnectString, vcrClusterName, dataNode, null, null,
         notificationSystem, null, false);
     ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, zkConnectString, vcrClusterName, dataNode, null, null,
         notificationSystem, null, true);
-    helixControllerManager.syncStop();
     zkInfo.shutdown();
   }
 
-  @Test
+  //@Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest() throws Exception {
     plaintextCluster.startServers();
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
@@ -138,7 +135,7 @@ public class ServerPlaintextTest {
         notificationSystem, testEncryption);
   }
 
-  @Test
+  //@Test
   public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest() throws Exception {
     // this test uses router to Put and direct GetRequest to verify Gets. So, no way to get access to encryptionKey against
     // which to compare the GetResponse. Hence skipping encryption flow for this test

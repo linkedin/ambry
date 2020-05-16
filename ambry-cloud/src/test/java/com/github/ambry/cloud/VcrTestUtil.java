@@ -30,7 +30,6 @@ import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
-import org.apache.helix.manager.zk.client.DedicatedZkClientFactory;
 import org.apache.helix.model.ClusterConfig;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.IdealState;
@@ -39,6 +38,7 @@ import org.apache.helix.model.builder.FullAutoModeISBuilder;
 import org.apache.helix.model.builder.HelixConfigScopeBuilder;
 import org.apache.helix.tools.ClusterSetup;
 import org.apache.helix.zookeeper.api.client.HelixZkClient;
+import org.apache.helix.zookeeper.impl.factory.DedicatedZkClientFactory;
 
 
 /**
@@ -63,15 +63,15 @@ public class VcrTestUtil {
 
   /**
    * Populate info on ZooKeeper server and start {@link HelixControllerManager}.
-   * @param zKConnectString zk connect string to zk server.
+   * @param zkConnectString zk connect string to zk server.
    * @param vcrClusterName the vcr cluster name.
    * @param clusterMap the {@link ClusterMap} to use.
    * @return the created {@link HelixControllerManager}.
    */
-  public static HelixControllerManager populateZkInfoAndStartController(String zKConnectString, String vcrClusterName,
+  public static HelixControllerManager populateZkInfoAndStartController(String zkConnectString, String vcrClusterName,
       ClusterMap clusterMap) {
-    HelixZkClient zkClient =
-        DedicatedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(zKConnectString));
+    HelixZkClient zkClient = DedicatedZkClientFactory.getInstance()
+        .buildZkClient(new HelixZkClient.ZkConnectionConfig(zkConnectString), new HelixZkClient.ZkClientConfig());
     try {
       zkClient.setZkSerializer(new ZNRecordSerializer());
       ClusterSetup clusterSetup = new ClusterSetup(zkClient);
@@ -98,7 +98,7 @@ public class VcrTestUtil {
       IdealState idealState = builder.build();
       admin.addResource(vcrClusterName, helixResource, idealState);
       admin.rebalance(vcrClusterName, helixResource, 3, "", "");
-      HelixControllerManager helixControllerManager = new HelixControllerManager(zKConnectString, vcrClusterName);
+      HelixControllerManager helixControllerManager = new HelixControllerManager(zkConnectString, vcrClusterName);
       helixControllerManager.syncStart();
       return helixControllerManager;
     } finally {

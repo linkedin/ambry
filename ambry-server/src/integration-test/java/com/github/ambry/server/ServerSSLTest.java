@@ -13,7 +13,6 @@
  */
 package com.github.ambry.server;
 
-import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.SSLFactory;
@@ -21,7 +20,6 @@ import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import java.io.File;
@@ -140,18 +138,15 @@ public class ServerSSLTest {
     assumeTrue(testEncryption);
     sslCluster.startServers();
     DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
-    // Start Helix Controller and ZK Server.
-    int zkPort = 31999;
+    // Start ZK Server.
+    int zkPort = 31998;
     String zkConnectString = "localhost:" + zkPort;
-    String vcrClusterName = "vcrTestCluster";
+    String vcrClusterName = "vcrTestClusterSSL";
     TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
-    HelixControllerManager helixControllerManager =
-        VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, sslCluster.getClusterMap());
     ServerTestUtil.endToEndCloudBackupTest(sslCluster, zkConnectString, vcrClusterName, dataNode, clientSSLConfig2,
         clientSSLSocketFactory2, notificationSystem, serverSSLProps, false);
     ServerTestUtil.endToEndCloudBackupTest(sslCluster, zkConnectString, vcrClusterName, dataNode, clientSSLConfig2,
         clientSSLSocketFactory2, notificationSystem, serverSSLProps, true);
-    helixControllerManager.syncStop();
     zkInfo.shutdown();
   }
 

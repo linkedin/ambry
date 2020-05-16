@@ -79,8 +79,8 @@ public class CloudAndStoreReplicationTest {
   private MockDataNodeId partitionLeaderRecoveryNode;
   private List<MockDataNodeId> allRecoveryNodes;
   private VcrServer vcrServer;
-  private HelixControllerManager helixControllerManager;
-  private TestUtils.ZkInfo zkInfo;
+  private static HelixControllerManager helixControllerManager;
+  private static TestUtils.ZkInfo zkInfo;
   private PartitionId partitionId;
   private LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination;
   private List<BlobId> cloudBlobIds;
@@ -89,6 +89,18 @@ public class CloudAndStoreReplicationTest {
   private final short containerId = Utils.getRandomShort(TestUtils.RANDOM);
   private final static int FOUR_MB_SZ = 4194304;
   private final String vcrRecoveryPartitionConfig;
+  private static int zkPort = 31997;
+  private static final String zkConnectString = "localhost:" + zkPort;
+  private static final String vcrClusterName = "vcrTestCluster";
+  private static final String cloudDc = "CloudDc";
+
+  static {
+    try {
+      zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), cloudDc, (byte) 1, zkPort, true);
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
+    }
+  }
 
   /**
    * Parameterized constructor.
@@ -113,7 +125,6 @@ public class CloudAndStoreReplicationTest {
    */
   @Before
   public void setup() throws Exception {
-    String cloudDc = "CloudDc";
     String vcrMountPath = ClusterMapSnapshotConstants.CLOUD_REPLICA_MOUNT + "/1";
     recoveryProperties = new Properties();
     recoveryProperties.setProperty("replication.metadata.request.version", "2");
@@ -142,15 +153,14 @@ public class CloudAndStoreReplicationTest {
         serverClusterMap.getAllPartitionIds(null).stream().map(PartitionId::toPathString).collect(Collectors.toList()));
 
     // Start Helix Controller and ZK Server.
-    int zkPort = 31999;
-    String zkConnectString = "localhost:" + zkPort;
-    String vcrClusterName = "vcrTestCluster";
-    zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), cloudDc, (byte) 1, zkPort, true);
+    if (!zkInfo.isZkServerStarted()) {
+      zkInfo.startZkServer();
+    }
     helixControllerManager =
         VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, recoveryCluster.getClusterMap());
 
     Properties vcrProperties =
-        VcrTestUtil.createVcrProperties(vcrNode.getDatacenterName(), "vcrTestCluster", zkConnectString, 12310, 12410,
+        VcrTestUtil.createVcrProperties(vcrNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
             null);
     vcrProperties.putAll(recoveryProperties);
     MockNotificationSystem notificationSystem = new MockNotificationSystem(recoveryCluster.getClusterMap());
