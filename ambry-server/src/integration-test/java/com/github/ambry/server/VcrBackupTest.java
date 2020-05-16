@@ -332,8 +332,9 @@ public class VcrBackupTest {
       }).collect(Collectors.toSet());
       assertTrue("Each VCR should have some assignment.",
           vcrServers.get(i).getVirtualReplicatorCluster().getAssignedPartitionIds().size() > 0);
-      assertEquals("Each VCR should only backup its assigned partitions.",
-          new HashSet<>(vcrServers.get(i).getVirtualReplicatorCluster().getAssignedPartitionIds()), partitionIdSet);
+      assertTrue("Each VCR should only backup its assigned partitions.",
+          new HashSet<>(vcrServers.get(i).getVirtualReplicatorCluster().getAssignedPartitionIds()).containsAll(
+              partitionIdSet));
     }
     logger.info("Phase 1 done.");
 
