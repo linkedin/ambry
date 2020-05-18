@@ -29,9 +29,7 @@ import org.apache.helix.controller.rebalancer.DelayedAutoRebalancer;
 import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
-import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.manager.zk.client.DedicatedZkClientFactory;
-import org.apache.helix.manager.zk.client.HelixZkClient;
 import org.apache.helix.model.ClusterConfig;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.IdealState;
@@ -39,6 +37,8 @@ import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.model.builder.FullAutoModeISBuilder;
 import org.apache.helix.model.builder.HelixConfigScopeBuilder;
 import org.apache.helix.tools.ClusterSetup;
+import org.apache.helix.zookeeper.api.client.HelixZkClient;
+import org.apache.helix.zookeeper.datamodel.serializer.ZNRecordSerializer;
 
 
 /**
@@ -146,9 +146,9 @@ public class HelixVcrPopulateTool {
     HelixZkClient destZkClient = getHelixZkClient(destZkString);
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
     if (destAdmin.getClusters().contains(destClusterName)) {
-      errorAndExit("Failed to create cluster becuase " + destClusterName + " already exist.");
+      errorAndExit("Failed to create cluster because " + destClusterName + " already exist.");
     }
-    ClusterSetup clusterSetup = new ClusterSetup(destZkString);
+    ClusterSetup clusterSetup = new ClusterSetup.Builder().setZkAddress(destZkString).build();
     clusterSetup.addCluster(destClusterName, true);
 
     // set ALLOW_PARTICIPANT_AUTO_JOIN

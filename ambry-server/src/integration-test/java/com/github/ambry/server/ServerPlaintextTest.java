@@ -13,12 +13,14 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -27,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -55,7 +56,6 @@ public class ServerPlaintextTest {
     plaintextCluster = new MockCluster(serverProperties, false, SystemTime.getInstance());
     notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);
-    plaintextCluster.startServers();
   }
 
   /**
@@ -83,8 +83,9 @@ public class ServerPlaintextTest {
     System.out.println("ServerPlaintextTest::cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
 
-  @Test
-  public void endToEndTest() {
+  //@Test
+  public void endToEndTest() throws Exception {
+    plaintextCluster.startServers();
     DataNodeId dataNodeId = plaintextCluster.getGeneralDataNode();
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", plaintextCluster, null, null,
         routerProps, testEncryption);
@@ -93,28 +94,37 @@ public class ServerPlaintextTest {
   /**
    * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
    */
-  @Test
-  public void endToEndTestWithPrefetch() {
+  //@Test
+  public void endToEndTestWithPrefetch() throws Exception {
+    plaintextCluster.startServers();
     DataNodeId dataNodeId = plaintextCluster.getPrefetchDataNode();
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", plaintextCluster, null, null,
         routerProps, testEncryption);
   }
 
   /**
-   * Do end to end cloud backup test.
+   * Do end to end cloud backup test
    */
   @Test
   public void endToEndCloudBackupTest() throws Exception {
     assumeTrue(testEncryption);
+    plaintextCluster.startServers();
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem, null,
-        Utils.Infinite_Time, false);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem, null,
-        System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1), true);
+    // Start Helix Controller and ZK Server.
+    int zkPort = 31999;
+    String zkConnectString = "localhost:" + zkPort;
+    String vcrClusterName = "vcrTestClusterPlainText";
+    TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
+    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, zkConnectString, vcrClusterName, dataNode, null, null,
+        notificationSystem, null, false);
+    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, zkConnectString, vcrClusterName, dataNode, null, null,
+        notificationSystem, null, true);
+    zkInfo.shutdown();
   }
 
-  @Test
+  //@Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest() throws Exception {
+    plaintextCluster.startServers();
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
     List<DataNodeId> dataNodes = plaintextCluster.getOneDataNodeFromEachDatacenter(dataCenterList);
@@ -125,11 +135,12 @@ public class ServerPlaintextTest {
         notificationSystem, testEncryption);
   }
 
-  @Test
+  //@Test
   public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest() throws Exception {
     // this test uses router to Put and direct GetRequest to verify Gets. So, no way to get access to encryptionKey against
     // which to compare the GetResponse. Hence skipping encryption flow for this test
     if (!testEncryption) {
+      plaintextCluster.startServers();
       ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "", PortType.PLAINTEXT,
           plaintextCluster, notificationSystem, routerProps);
     }

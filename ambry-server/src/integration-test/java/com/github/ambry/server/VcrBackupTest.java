@@ -58,13 +58,21 @@ public class VcrBackupTest {
   private Logger logger = LoggerFactory.getLogger(getClass());
   private MockNotificationSystem notificationSystem;
   private MockCluster mockCluster;
-  private TestUtils.ZkInfo zkInfo;
   private HelixControllerManager helixControllerManager;
   private DataNodeId dataNode;
-  private int zkPort = 31999;
-  private String zkConnectString = "localhost:" + zkPort;
-  private String vcrClusterName = "vcrTestCluster";
   private int numOfPartitions = 20;
+  private static TestUtils.ZkInfo zkInfo;
+  private static int zkPort = 31996;
+  private static String zkConnectString = "localhost:" + zkPort;
+  private static String vcrClusterName = "vcrBackupTestCluster";
+
+  static {
+    try {
+      zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
+    }
+  }
 
   @Before
   public void setup() throws Exception {
@@ -76,8 +84,10 @@ public class VcrBackupTest {
     mockCluster.startServers();
     dataNode = mockCluster.getClusterMap().getDataNodeIds().get(0);
 
-    // Start Helix Controller and ZK Server.
-    zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
+    // Start ZK Server and Helix Controller
+    if (!zkInfo.isZkServerStarted()) {
+      zkInfo.startZkServer();
+    }
     helixControllerManager =
         VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, mockCluster.getClusterMap());
   }
@@ -123,7 +133,7 @@ public class VcrBackupTest {
     StrictMatchExternalViewVerifier helixBalanceVerifier =
         new StrictMatchExternalViewVerifier(zkConnectString, vcrClusterName,
             Collections.singleton(VcrTestUtil.helixResource), null);
-    int numberOfBlobs = 100;
+    int numberOfBlobs = 20;
     sendBlobToDataNode(dataNode, numberOfBlobs);
     // Create in memory cloud destination.
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
@@ -143,7 +153,7 @@ public class VcrBackupTest {
     makeSureHelixBalance(vcrServer, helixBalanceVerifier);
     final MockNotificationSystem vcrNotificationSystemCopy = vcrNotificationSystem;
     assertTrue("Blob count is not correct.",
-        TestUtils.checkAndSleep(numberOfBlobs, () -> vcrNotificationSystemCopy.getBlobIds().size(), 200));
+        TestUtils.checkAndSleep(numberOfBlobs, () -> vcrNotificationSystemCopy.getBlobIds().size(), 400));
     vcrServer.shutdown();
     assertTrue("VCR server shutdown timeout.", vcrServer.awaitShutdown(5000));
     // Error metrics should be zero.
@@ -201,7 +211,7 @@ public class VcrBackupTest {
     StrictMatchExternalViewVerifier helixBalanceVerifier =
         new StrictMatchExternalViewVerifier(zkConnectString, vcrClusterName,
             Collections.singleton(VcrTestUtil.helixResource), null);
-    int numberOfBlobs = 100;
+    int numberOfBlobs = 20;
     sendBlobToDataNode(dataNode, numberOfBlobs);
     // Create in memory cloud destination.
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
@@ -221,7 +231,7 @@ public class VcrBackupTest {
     makeSureHelixBalance(vcrServer, helixBalanceVerifier);
     final MockNotificationSystem vcrNotificationSystemCopy = vcrNotificationSystem;
     assertTrue("Blob count is not correct.",
-        TestUtils.checkAndSleep(numberOfBlobs, () -> vcrNotificationSystemCopy.getBlobIds().size(), 200));
+        TestUtils.checkAndSleep(numberOfBlobs, () -> vcrNotificationSystemCopy.getBlobIds().size(), 400));
     vcrServer.shutdown();
     assertTrue("VCR server shutdown timeout.", vcrServer.awaitShutdown(5000));
     // Error metrics should be zero.
@@ -264,7 +274,7 @@ public class VcrBackupTest {
     makeSureHelixBalance(vcrServer, helixBalanceVerifier);
     final MockNotificationSystem vcrNotificationSystemCopy2 = vcrNotificationSystem;
     assertTrue("Blob count is not correct.",
-        TestUtils.checkAndSleep(0, () -> vcrNotificationSystemCopy2.getBlobIds().size(), 200));
+        TestUtils.checkAndSleep(0, () -> vcrNotificationSystemCopy2.getBlobIds().size(), 400));
     vcrServer.shutdown();
     assertTrue("VCR server shutdown timeout.", vcrServer.awaitShutdown(5000));
     // Error metrics should be zero.
@@ -304,7 +314,7 @@ public class VcrBackupTest {
       vcrNotificationSystems.add(vcrNotificationSystem);
     }
     makeSureHelixBalance(vcrServers.get(vcrServers.size() - 1), helixBalanceVerifier);
-    int numOfBlobs = 1000;
+    int numOfBlobs = 100;
     sendBlobToDataNode(dataNode, numOfBlobs);
     // Make sure blobs are backed up.
     TestUtils.checkAndSleep(numOfBlobs,
@@ -322,8 +332,9 @@ public class VcrBackupTest {
       }).collect(Collectors.toSet());
       assertTrue("Each VCR should have some assignment.",
           vcrServers.get(i).getVirtualReplicatorCluster().getAssignedPartitionIds().size() > 0);
-      assertEquals("Each VCR should only backup its assigned partitions.",
-          new HashSet<>(vcrServers.get(i).getVirtualReplicatorCluster().getAssignedPartitionIds()), partitionIdSet);
+      assertTrue("Each VCR should only backup its assigned partitions.",
+          new HashSet<>(vcrServers.get(i).getVirtualReplicatorCluster().getAssignedPartitionIds()).containsAll(
+              partitionIdSet));
     }
     logger.info("Phase 1 done.");
 
@@ -339,7 +350,7 @@ public class VcrBackupTest {
     vcrNotificationSystems.add(vcrNotificationSystem);
 
     makeSureHelixBalance(vcrServers.get(vcrServers.size() - 1), helixBalanceVerifier);
-    int secondNumOfBlobs = 1000;
+    int secondNumOfBlobs = 100;
     sendBlobToDataNode(dataNode, secondNumOfBlobs);
     Assert.assertTrue("All blobs should be back up.", TestUtils.checkAndSleep(numOfBlobs + secondNumOfBlobs,
         () -> vcrNotificationSystems.stream().mapToInt(i -> i.getBlobIds().size()).sum(), 5000));
@@ -358,7 +369,7 @@ public class VcrBackupTest {
     int temp = vcrNotificationSystems.get(vcrNotificationSystems.size() - 1).getBlobIds().size();
 
     assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(5000));
-    int thirdNumOfBlobs = 1000;
+    int thirdNumOfBlobs = 100;
     sendBlobToDataNode(dataNode, thirdNumOfBlobs);
     Assert.assertTrue("All blobs should be back up.",
         TestUtils.checkAndSleep(numOfBlobs + secondNumOfBlobs + thirdNumOfBlobs,
@@ -388,8 +399,8 @@ public class VcrBackupTest {
    */
   private void makeSureHelixBalance(VcrServer vcrServer, StrictMatchExternalViewVerifier helixBalanceVerifier) {
     Assert.assertTrue("Helix topology change timeout.", TestUtils.checkAndSleep(true,
-        () -> vcrServer.getVirtualReplicatorCluster().getAssignedPartitionIds().size() > 0, 10000));
-    assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(5000));
+        () -> vcrServer.getVirtualReplicatorCluster().getAssignedPartitionIds().size() > 0, 15000));
+    assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(15000));
   }
 
   /**
