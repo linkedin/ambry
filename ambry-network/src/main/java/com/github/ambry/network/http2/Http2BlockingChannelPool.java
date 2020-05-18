@@ -66,7 +66,12 @@ public class Http2BlockingChannelPool implements ConnectionPool {
   @Override
   public void shutdown() {
     logger.info("Shutting down Http2BlockingChannelPool.");
-    eventLoopGroup.shutdownGracefully();
+    try {
+      eventLoopGroup.shutdownGracefully().await(http2ClientConfig.http2BlockingChannelPoolShutdownTimeoutMs);
+    } catch (InterruptedException e) {
+      logger.info("EventLoopGroup shutdown timeout: {} ms",
+          http2ClientConfig.http2BlockingChannelPoolShutdownTimeoutMs);
+    }
   }
 
   @Override

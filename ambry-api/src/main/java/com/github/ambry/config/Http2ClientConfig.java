@@ -28,6 +28,11 @@ public class Http2ClientConfig {
   public static final String HTTP2_INITIAL_WINDOW_SIZE = "http2.initial.window.size";
   public static final String NETTY_RECEIVE_BUFFER_SIZE = "netty.receive.buffer.size";
   public static final String NETTY_SEND_BUFFER_SIZE = "netty.send.buffer.size";
+  public static final String HTTP2_BLOCKING_CHANNEL_ACQUIRE_TIMEOUT_MS = "http2.blocking.channel.acquire.timeout.ms";
+  public static final String HTTP2_BLOCKING_CHANNEL_SEND_TIMEOUT_MS = "http2.blocking.channel.send.timeout.ms";
+  public static final String HTTP2_BLOCKING_CHANNEL_RECEIVE_TIMEOUT_MS = "http2.blocking.channel.receive.timeout.ms";
+  public static final String HTTP2_BLOCKING_CHANNEL_POOL_SHUTDOWN_TIMEOUT_MS =
+      "http2.blocking.channel.pool.shutdown.timeout.ms";
 
   /**
    * HTTP/2 connection idle time before we close it. -1 means no idle close.
@@ -77,14 +82,12 @@ public class Http2ClientConfig {
   @Default("5 * 1024 * 1024")
   public final int http2FrameMaxSize;
 
-
   /**
    * The initial window size used in http streams. This allows sender send big frame.
    */
   @Config(HTTP2_INITIAL_WINDOW_SIZE)
   @Default("5 * 1024 * 1024")
   public final int http2InitialWindowSize;
-
 
   /**
    * The socket receive buffer size for netty http2 channel.
@@ -102,6 +105,34 @@ public class Http2ClientConfig {
   @Default("1024 * 1024")
   public final int nettySendBufferSize;
 
+  /**
+   * Maximum time allowed for acquire a stream channel from http2 connection.
+   */
+  @Config(HTTP2_BLOCKING_CHANNEL_ACQUIRE_TIMEOUT_MS)
+  @Default("300")
+  public final int http2BlockingChannelAcquireTimeoutMs;
+
+  /**
+   * Maximum time allowed for netty write and flush a request.
+   */
+  @Config(HTTP2_BLOCKING_CHANNEL_SEND_TIMEOUT_MS)
+  @Default("2000")
+  public final int http2BlockingChannelSendTimeoutMs;
+
+  /**
+   * Maximum waiting time for receiving a response.
+   */
+  @Config(HTTP2_BLOCKING_CHANNEL_RECEIVE_TIMEOUT_MS)
+  @Default("5000")
+  public final int http2BlockingChannelReceiveTimeoutMs;
+
+  /**
+   * Maximum waiting time for shutting down Http2BlockingChannelPool and its EventLoopGroup.
+   */
+  @Config(HTTP2_BLOCKING_CHANNEL_POOL_SHUTDOWN_TIMEOUT_MS)
+  @Default("3000")
+  public final int http2BlockingChannelPoolShutdownTimeoutMs;
+
   public Http2ClientConfig(VerifiableProperties verifiableProperties) {
     idleConnectionTimeoutMs = verifiableProperties.getLong(HTTP2_IDLE_CONNECTION_TIMEOUT_MS, -1);
     http2MinConnectionPerPort = verifiableProperties.getInt(HTTP2_MIN_CONNECTION_PER_PORT, 2);
@@ -115,5 +146,10 @@ public class Http2ClientConfig {
 
     nettyReceiveBufferSize = verifiableProperties.getInt(NETTY_RECEIVE_BUFFER_SIZE, 1024 * 1024);
     nettySendBufferSize = verifiableProperties.getInt(NETTY_SEND_BUFFER_SIZE, 1024 * 1024);
+    http2BlockingChannelAcquireTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_ACQUIRE_TIMEOUT_MS, 300);
+    http2BlockingChannelSendTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_SEND_TIMEOUT_MS, 2000);
+    http2BlockingChannelReceiveTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_RECEIVE_TIMEOUT_MS, 5000);
+    http2BlockingChannelPoolShutdownTimeoutMs =
+        verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_POOL_SHUTDOWN_TIMEOUT_MS, 3000);
   }
 }

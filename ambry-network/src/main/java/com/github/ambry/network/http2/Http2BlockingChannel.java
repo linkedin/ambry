@@ -52,10 +52,14 @@ public class Http2BlockingChannel implements ConnectedChannel {
   private static final Logger logger = LoggerFactory.getLogger(Http2BlockingChannel.class);
   private final static AttributeKey<Promise<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
   private Promise<ByteBuf> responsePromise;
-  private Http2MultiplexedChannelPool http2MultiplexedChannelPool;
+  private final Http2MultiplexedChannelPool http2MultiplexedChannelPool;
+  private final Http2ClientConfig http2ClientConfig;
+  private final Http2ClientMetrics http2ClientMetrics;
 
   public Http2BlockingChannel(Http2MultiplexedChannelPool http2MultiplexedChannelPool) {
     this.http2MultiplexedChannelPool = http2MultiplexedChannelPool;
+    this.http2ClientMetrics = http2MultiplexedChannelPool.getHttp2ClientMetrics();
+    this.http2ClientConfig = http2MultiplexedChannelPool.getHttp2ClientConfig();
   }
 
   /**
@@ -69,6 +73,8 @@ public class Http2BlockingChannel implements ConnectedChannel {
     } catch (GeneralSecurityException | IOException e) {
       throw new IllegalStateException("Can't create NettySslHttp2Factory: ", e);
     }
+    this.http2ClientConfig = http2ClientConfig;
+    this.http2ClientMetrics = http2ClientMetrics;
     this.http2MultiplexedChannelPool =
         new Http2MultiplexedChannelPool(new InetSocketAddress(hostName, port), nettySslHttp2Factory,
             Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup(), http2ClientConfig,
@@ -92,14 +98,16 @@ public class Http2BlockingChannel implements ConnectedChannel {
   public void send(Send request) throws IOException {
     Channel streamChannel;
     try {
-      streamChannel = http2MultiplexedChannelPool.acquire().get(500, TimeUnit.MILLISECONDS);
-    } catch (InterruptedException | ExecutionException | TimeoutException e) {
-      throw new IOException("Can't acquire stream channel: ", e);
+      streamChannel = http2MultiplexedChannelPool.acquire()
+          .get(http2ClientConfig.http2BlockingChannelAcquireTimeoutMs, TimeUnit.MILLISECONDS);
+    } catch (Exception e) {
+      throw new IOException("Can't acquire stream channel from " + getRemoteHost() + ":" + getRemotePort(), e);
     }
 
     ChannelPipeline p = streamChannel.pipeline();
+    p.addLast(new Http2ClientStreamStatsHandler(http2ClientMetrics));
     p.addLast(new Http2StreamFrameToHttpObjectCodec(false));
-    p.addLast(new HttpObjectAggregator(http2MultiplexedChannelPool.getMaxContentLength()));
+    p.addLast(new HttpObjectAggregator(http2ClientConfig.http2MaxContentLength));
     p.addLast(new SimpleChannelInboundHandler<FullHttpResponse>() {
       @Override
       protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
@@ -111,21 +119,28 @@ public class Http2BlockingChannel implements ConnectedChannel {
             .get()
             .release(ctx.channel());
       }
+
+      @Override
+      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null).setFailure(cause);
+      }
     });
-    streamChannel.pipeline().addLast(new AmbrySendToHttp2Adaptor());
+    p.addLast(new AmbrySendToHttp2Adaptor());
 
     responsePromise = streamChannel.eventLoop().newPromise();
     streamChannel.attr(RESPONSE_PROMISE).set(responsePromise);
-    streamChannel.writeAndFlush(request).awaitUninterruptibly(3, TimeUnit.SECONDS);
+    streamChannel.writeAndFlush(request)
+        .awaitUninterruptibly(http2ClientConfig.http2BlockingChannelSendTimeoutMs, TimeUnit.MICROSECONDS);
   }
 
   @Override
   public ChannelOutput receive() throws IOException {
     ByteBuf responseByteBuf;
     try {
-      responseByteBuf = responsePromise.get(3, TimeUnit.SECONDS);
+      responseByteBuf =
+          responsePromise.get(http2ClientConfig.http2BlockingChannelReceiveTimeoutMs, TimeUnit.MICROSECONDS);
     } catch (InterruptedException | ExecutionException | TimeoutException e) {
-      throw new IOException("No response received in 3 seconds.");
+      throw new IOException("Failed to receive response from " + getRemoteHost() + ":" + getRemotePort(), e);
     }
     DataInputStream dataInputStream = new NettyByteBufDataInputStream(responseByteBuf);
     return new ChannelOutput(dataInputStream, dataInputStream.readLong());
