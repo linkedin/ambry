@@ -113,16 +113,21 @@ public class Http2BlockingChannel implements ConnectedChannel {
       protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
         ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null).setSuccess(msg.content().retainedDuplicate());
         // Stream channel can't be reused. Release it here.
-        ctx.channel()
-            .parent()
-            .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
-            .get()
-            .release(ctx.channel());
+        releaseStreamChannel(ctx);
       }
 
       @Override
       public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
         ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null).setFailure(cause);
+        releaseStreamChannel(ctx);
+      }
+
+      private void releaseStreamChannel(ChannelHandlerContext ctx) {
+        ctx.channel()
+            .parent()
+            .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
+            .get()
+            .release(ctx.channel());
       }
     });
     p.addLast(new AmbrySendToHttp2Adaptor());

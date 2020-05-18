@@ -117,7 +117,8 @@ public class Http2NetworkClient implements NetworkClient {
                   requestInfo.getPort().getPort(), future.cause());
               // release related bytebuf
               requestInfo.getRequest().release();
-              readyResponseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
+              http2ClientResponseHandler.getResponseInfoQueue()
+                  .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
             }
           });
     }
