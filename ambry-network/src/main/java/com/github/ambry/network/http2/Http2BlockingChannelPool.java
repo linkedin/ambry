@@ -38,24 +38,20 @@ import org.slf4j.LoggerFactory;
  */
 public class Http2BlockingChannelPool implements ConnectionPool {
   private static final Logger logger = LoggerFactory.getLogger(Http2BlockingChannelPool.class);
-  private Map<InetSocketAddress, Http2MultiplexedChannelPool> http2ChannelPoolMap;
-  private SSLFactory sslFactory;
+  private Http2ChannelPoolMap http2ChannelPoolMap;
   private EventLoopGroup eventLoopGroup;
   private Http2ClientConfig http2ClientConfig;
-  private Http2ClientMetrics http2ClientMetrics;
 
   public Http2BlockingChannelPool(SSLFactory sslFactory, Http2ClientConfig http2ClientConfig,
       Http2ClientMetrics http2ClientMetrics) {
-    http2ChannelPoolMap = new ConcurrentHashMap<>();
-    this.sslFactory = sslFactory;
     if (Epoll.isAvailable()) {
       logger.info("Using EpollEventLoopGroup in Http2BlockingChannelPool.");
       this.eventLoopGroup = new EpollEventLoopGroup(http2ClientConfig.http2NettyEventLoopGroupThreads);
     } else {
       this.eventLoopGroup = new NioEventLoopGroup(http2ClientConfig.http2NettyEventLoopGroupThreads);
     }
+    http2ChannelPoolMap = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics);
     this.http2ClientConfig = http2ClientConfig;
-    this.http2ClientMetrics = http2ClientMetrics;
   }
 
   @Override
@@ -78,9 +74,7 @@ public class Http2BlockingChannelPool implements ConnectionPool {
   public ConnectedChannel checkOutConnection(String host, Port port, long timeout)
       throws IOException, InterruptedException, ConnectionPoolTimeoutException {
     InetSocketAddress inetSocketAddress = new InetSocketAddress(host, port.getPort());
-    return new Http2BlockingChannel(http2ChannelPoolMap.computeIfAbsent(inetSocketAddress,
-        key -> new Http2MultiplexedChannelPool(inetSocketAddress, sslFactory, eventLoopGroup, http2ClientConfig,
-            http2ClientMetrics)));
+    return new Http2BlockingChannel((Http2MultiplexedChannelPool) (http2ChannelPoolMap.get(inetSocketAddress)));
   }
 
   @Override

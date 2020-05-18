@@ -111,15 +111,21 @@ public class Http2BlockingChannel implements ConnectedChannel {
     p.addLast(new SimpleChannelInboundHandler<FullHttpResponse>() {
       @Override
       protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
-        ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null).setSuccess(msg.content().retainedDuplicate());
-        // Stream channel can't be reused. Release it here.
-        releaseStreamChannel(ctx);
+        Promise<ByteBuf> promise = ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null);
+        if (promise != null) {
+          promise.setSuccess(msg.content().retainedDuplicate());
+          // Stream channel can't be reused. Release it here.
+          releaseStreamChannel(ctx);
+        }
       }
 
       @Override
       public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null).setFailure(cause);
-        releaseStreamChannel(ctx);
+        Promise<ByteBuf> promise = ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null);
+        if (promise != null) {
+          promise.setFailure(cause);
+          releaseStreamChannel(ctx);
+        }
       }
 
       private void releaseStreamChannel(ChannelHandlerContext ctx) {
