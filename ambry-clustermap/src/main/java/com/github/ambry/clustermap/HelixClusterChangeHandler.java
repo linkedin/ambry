@@ -15,7 +15,6 @@ package com.github.ambry.clustermap;
 
 import java.util.stream.Stream;
 import org.apache.helix.api.listeners.IdealStateChangeListener;
-import org.apache.helix.api.listeners.InstanceConfigChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.api.listeners.RoutingTableChangeListener;
 import org.apache.helix.spectator.RoutingTableSnapshot;
@@ -26,7 +25,7 @@ import org.apache.helix.spectator.RoutingTableSnapshot;
  * implements various helix listeners and provides facilities for using routing tables.
  */
 interface HelixClusterChangeHandler
-    extends ClusterChangeHandler, InstanceConfigChangeListener, LiveInstanceChangeListener, IdealStateChangeListener,
+    extends ClusterChangeHandler, DataNodeConfigChangeListener, LiveInstanceChangeListener, IdealStateChangeListener,
             RoutingTableChangeListener {
 
   /**

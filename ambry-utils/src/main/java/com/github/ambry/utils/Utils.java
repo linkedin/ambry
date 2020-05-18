@@ -40,6 +40,7 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
+import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -47,6 +48,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
+import java.util.RandomAccess;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -55,6 +57,9 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
+import java.util.function.IntFunction;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -119,7 +124,8 @@ public class Utils {
       read += readBytes;
     }
     if (read != size) {
-      throw new IllegalArgumentException("readShortString : the size of the input does not match the actual data size: " + read + " != " + size);
+      throw new IllegalArgumentException(
+          "readShortString : the size of the input does not match the actual data size: " + read + " != " + size);
     }
     return new String(bytes, StandardCharsets.UTF_8);
   }
@@ -934,7 +940,8 @@ public class Utils {
   }
 
   /**
-   * Partition the input list into a List of smaller sublists, each one limited to the specified batch size.
+   * Partition the input list into a List of smaller sublists, each one limited to the specified batch size. This method
+   * copy elements, so changes to the so changes to the original list will be reflected in the returned list.
    * Method inspired by the Guava utility Lists.partition(List<T> list, int size).
    * @param inputList the input list to partition.
    * @param batchSize the maximum size of the returned sublists.
@@ -945,12 +952,35 @@ public class Utils {
     if (batchSize < 1) {
       throw new IllegalArgumentException("Invalid batchSize: " + batchSize);
     }
-    List<List<T>> partitionedLists = new ArrayList<>();
-    for (int start = 0; start < inputList.size(); start += batchSize) {
+    IntSupplier numBatches = () -> (inputList.size() + batchSize - 1) / batchSize;
+    IntFunction<List<T>> batchFetcher = index -> {
+      int start = index * batchSize;
       int end = Math.min(start + batchSize, inputList.size());
-      partitionedLists.add(inputList.subList(start, end));
-    }
-    return partitionedLists;
+      return inputList.subList(start, end);
+    };
+    return new ListView<>(numBatches, batchFetcher);
+  }
+
+  /**
+   * Create a transformed view of a list by applying a transformer function on each element when {@link List#get(int)}
+   * is called. This method does not copy elements, so changes to the original list will be reflected in the returned
+   * list. Method inspired by the Guava utility Lists.transform.
+   * @param inputList the input list.
+   * @param transformer the function to map an element in {@code inputList} to an element of type {@code U}.
+   * @return the transformed list view.
+   */
+  public static <T, U> List<U> transformList(List<T> inputList, Function<T, U> transformer) {
+    return new ListView<>(inputList::size, index -> transformer.apply(inputList.get(index)));
+  }
+
+  /**
+   * Create a view of a numerically indexed dataset as a {@link List}. The returned list is read only.
+   * @param currentSize the current number of elements in the dataset.
+   * @param itemFetcher a function that returns the element at the provided index.
+   * @return the list view.
+   */
+  public static <T> List<T> listView(IntSupplier currentSize, IntFunction<T> itemFetcher) {
+    return new ListView<>(currentSize, itemFetcher);
   }
 
   /**
@@ -1140,4 +1170,33 @@ public class Utils {
       return Utils.newThread(threadNamePrefix + schedulerThreadId.getAndIncrement(), r, isDaemon);
     }
   }
+
+  /**
+   * A view of a numerically indexed dataset as a read only list.
+   * @param <T>
+   */
+  private static class ListView<T> extends AbstractList<T> implements RandomAccess {
+    private final IntSupplier currentSize;
+    private final IntFunction<T> itemFetcher;
+
+    /**
+     * @param currentSize the current number of elements in the dataset.
+     * @param itemFetcher a function that returns the element at the provided index.
+     */
+    public ListView(IntSupplier currentSize, IntFunction<T> itemFetcher) {
+      this.currentSize = currentSize;
+      this.itemFetcher = itemFetcher;
+    }
+
+    @Override
+    public T get(int index) {
+      return itemFetcher.apply(index);
+    }
+
+    @Override
+    public int size() {
+      return currentSize.getAsInt();
+    }
+  }
+
 }

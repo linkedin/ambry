@@ -57,6 +57,7 @@ import org.mockito.MockitoAnnotations;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
+import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 
@@ -1074,7 +1075,7 @@ public class HelixClusterManagerTest {
     assertEquals(instanceCount + numCloudDcs - 1, clusterManager.getDataNodeIds().size());
     for (DataNodeId dataNode : clusterManager.getDataNodeIds()) {
       String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
-      assertFalse(instanceName.equals(aheadInstanceConfig.getInstanceName()));
+      assertThat(instanceName, not(aheadInstanceConfig.getInstanceName()));
     }
 
     // Ahead instance should be honored if the cluster manager is of the aheadInstance.

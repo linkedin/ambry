@@ -36,8 +36,6 @@ import org.apache.helix.spectator.RoutingTableSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
-
 
 /**
  * An implementation of {@link HelixClusterChangeHandler} to register as listener for Helix related changes in each
@@ -111,7 +109,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
   }
 
   @Override
-  public void onInstanceConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
+  public void onDataNodeConfigChange(Iterable<DataNodeConfig> configs) {
     try {
       logger.debug("InstanceConfig change triggered in {} with: {}", dcName, configs);
       synchronized (notificationLock) {
@@ -270,37 +268,29 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
   /**
    * Populate the initial data from the admin connection. Create nodes, disks, partitions and replicas for the entire
    * cluster. An {@link InstanceConfig} will only be looked at if the xid in it is <= currentXid.
-   * @param instanceConfigs the list of {@link InstanceConfig}s containing the information about the sealed states of replicas.
+   * @param dataNodeConfigs the list of {@link DataNodeConfig}s containing the information about the sealed states of
+   *                        replicas.
    * @throws Exception if creation of {@link AmbryDataNode}s or {@link AmbryDisk}s throw an Exception.
    */
-  private void initializeInstances(List<InstanceConfig> instanceConfigs) throws Exception {
+  private void initializeInstances(Iterable<DataNodeConfig> dataNodeConfigs) throws Exception {
     logger.info("Initializing cluster information from {}", dcName);
-    for (InstanceConfig instanceConfig : instanceConfigs) {
-      int schemaVersion = getSchemaVersion(instanceConfig);
-      switch (schemaVersion) {
-        case 0:
-          String instanceName = instanceConfig.getInstanceName();
-          long instanceXid = getXid(instanceConfig);
-          if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
-            logger.info("Adding node {} and its disks and replicas", instanceName);
-            // HTTP2 port null for now, until it's populated to Helix
-            AmbryDataNode datanode =
-                new AmbryServerDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
-                    Integer.parseInt(instanceConfig.getPort()), getRackId(instanceConfig),
-                    getSslPortStr(instanceConfig), getHttp2PortStr(instanceConfig), instanceXid,
-                    helixClusterManagerCallback);
-            initializeDisksAndReplicasOnNode(datanode, instanceConfig);
-            instanceNameToAmbryDataNode.put(instanceName, datanode);
-          } else {
-            logger.info(
-                "Ignoring instanceConfig for {} because the xid associated with it ({}) is later than current xid ({})",
-                instanceName, instanceXid, currentXid.get());
-            helixClusterManagerMetrics.ignoredUpdatesCount.inc();
-          }
-          break;
-        default:
-          logger.error("Unknown InstanceConfig schema version: {}, ignoring.", schemaVersion);
-          break;
+    for (DataNodeConfig dataNodeConfig : dataNodeConfigs) {
+      String instanceName = dataNodeConfig.getInstanceName();
+      long instanceXid = dataNodeConfig.getXid();
+      if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
+        logger.info("Adding node {} and its disks and replicas", instanceName);
+        // HTTP2 port null for now, until it's populated to Helix
+        AmbryDataNode datanode =
+            new AmbryServerDataNode(dataNodeConfig.getDatacenterName(), clusterMapConfig, dataNodeConfig.getHostName(),
+                dataNodeConfig.getPort(), dataNodeConfig.getRackId(), dataNodeConfig.getSslPort(),
+                dataNodeConfig.getHttp2Port(), instanceXid, helixClusterManagerCallback);
+        initializeDisksAndReplicasOnNode(datanode, dataNodeConfig);
+        instanceNameToAmbryDataNode.put(instanceName, datanode);
+      } else {
+        logger.info(
+            "Ignoring instanceConfig for {} because the xid associated with it ({}) is later than current xid ({})",
+            instanceName, instanceXid, currentXid.get());
+        helixClusterManagerMetrics.ignoredUpdatesCount.inc();
       }
     }
     logger.info("Initialized cluster information from {}", dcName);
@@ -308,48 +298,41 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
 
   /**
    * Go over the given list of {@link InstanceConfig}s and update the both sealed and stopped states of replicas.
-   * An {@link InstanceConfig} will only be looked at if the xid in it is <= currentXid.
-   * @param instanceConfigs the list of {@link InstanceConfig}s containing the up-to-date information about the
+   * A {@link DataNodeConfig} will only be looked at if the xid in it is <= currentXid.
+   * @param dataNodeConfigs the list of {@link DataNodeConfig}s containing the up-to-date information about the
    *                        sealed states of replicas.
    */
-  private void updateStateOfReplicas(List<InstanceConfig> instanceConfigs) {
-    for (InstanceConfig instanceConfig : instanceConfigs) {
-      int schemaVersion = getSchemaVersion(instanceConfig);
-      switch (schemaVersion) {
-        case 0:
-          String instanceName = instanceConfig.getInstanceName();
-          long instanceXid = getXid(instanceConfig);
-          AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceName);
-          if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
-            if (node == null) {
-              logger.trace("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
-                  instanceConfig);
+  private void updateStateOfReplicas(Iterable<DataNodeConfig> dataNodeConfigs) {
+    for (DataNodeConfig dataNodeConfig : dataNodeConfigs) {
+      String instanceName = dataNodeConfig.getInstanceName();
+      long instanceXid = dataNodeConfig.getXid();
+      AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceName);
+      if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
+        if (node == null) {
+          logger.trace("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
+              dataNodeConfig);
+        } else {
+          Set<String> sealedReplicas = dataNodeConfig.getSealedReplicas();
+          Set<String> stoppedReplicas = dataNodeConfig.getStoppedReplicas();
+          for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node).values()) {
+            String partitionId = replica.getPartitionId().toPathString();
+            if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(
+                partitionId)) {
+              logger.trace(
+                  "Ignoring instanceConfig change for partition {} on instance {} because partition override is enabled",
+                  partitionId, instanceName);
+              helixClusterManagerMetrics.ignoredUpdatesCount.inc();
             } else {
-              Set<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
-              Set<String> stoppedReplicas = new HashSet<>(getStoppedReplicas(instanceConfig));
-              for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node).values()) {
-                String partitionId = replica.getPartitionId().toPathString();
-                if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(
-                    partitionId)) {
-                  logger.trace(
-                      "Ignoring instanceConfig change for partition {} on instance {} because partition override is enabled",
-                      partitionId, instanceName);
-                  helixClusterManagerMetrics.ignoredUpdatesCount.inc();
-                } else {
-                  replica.setSealedState(sealedReplicas.contains(partitionId));
-                  replica.setStoppedState(stoppedReplicas.contains(partitionId));
-                }
-              }
+              replica.setSealedState(sealedReplicas.contains(partitionId));
+              replica.setStoppedState(stoppedReplicas.contains(partitionId));
             }
-          } else {
-            logger.trace(
-                "Ignoring instanceConfig change for {} because the xid associated with it ({}) is later than current xid ({})",
-                instanceName, instanceXid, currentXid.get());
-            helixClusterManagerMetrics.ignoredUpdatesCount.inc();
           }
-          break;
-        default:
-          logger.error("Unknown InstanceConfig schema version: {}, ignoring.", schemaVersion);
+        }
+      } else {
+        logger.trace(
+            "Ignoring instanceConfig change for {} because the xid associated with it ({}) is later than current xid ({})",
+            instanceName, instanceXid, currentXid.get());
+        helixClusterManagerMetrics.ignoredUpdatesCount.inc();
       }
     }
   }
@@ -381,70 +364,57 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
    * that partition is being constructed. If partition override is enabled, the seal state of replica is determined by
    * partition info in HelixPropertyStore, if disabled, the seal state is determined by instanceConfig.
    * @param datanode the {@link AmbryDataNode} that is being initialized.
-   * @param instanceConfig the {@link InstanceConfig} associated with this datanode.
+   * @param dataNodeConfig the {@link DataNodeConfig} associated with this datanode.
    * @throws Exception if creation of {@link AmbryDisk} throws an Exception.
    */
-  private void initializeDisksAndReplicasOnNode(AmbryDataNode datanode, InstanceConfig instanceConfig)
+  private void initializeDisksAndReplicasOnNode(AmbryDataNode datanode, DataNodeConfig dataNodeConfig)
       throws Exception {
     ambryDataNodeToAmbryReplicas.put(datanode, new ConcurrentHashMap<>());
-    ambryDataNodeToAmbryDisks.put(datanode, new HashSet<AmbryDisk>());
-    List<String> sealedReplicas = getSealedReplicas(instanceConfig);
-    List<String> stoppedReplicas = getStoppedReplicas(instanceConfig);
-    Map<String, Map<String, String>> diskInfos = instanceConfig.getRecord().getMapFields();
-    for (Map.Entry<String, Map<String, String>> entry : diskInfos.entrySet()) {
-      String mountPath = entry.getKey();
-      Map<String, String> diskInfo = entry.getValue();
-      long capacityBytes = Long.valueOf(diskInfo.get(DISK_CAPACITY_STR));
-      HardwareState diskState =
-          diskInfo.get(DISK_STATE).equals(AVAILABLE_STR) ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE;
-      String replicasStr = diskInfo.get(ClusterMapUtils.REPLICAS_STR);
+    ambryDataNodeToAmbryDisks.put(datanode, new HashSet<>());
+    Set<String> sealedReplicas = dataNodeConfig.getSealedReplicas();
+    Set<String> stoppedReplicas = dataNodeConfig.getStoppedReplicas();
+    for (Map.Entry<String, DataNodeConfig.DiskConfig> diskEntry : dataNodeConfig.getDiskConfigs().entrySet()) {
+      String mountPath = diskEntry.getKey();
+      DataNodeConfig.DiskConfig diskConfig = diskEntry.getValue();
 
       // Create disk
-      AmbryDisk disk = new AmbryDisk(clusterMapConfig, datanode, mountPath, diskState, capacityBytes);
+      AmbryDisk disk =
+          new AmbryDisk(clusterMapConfig, datanode, mountPath, diskConfig.getState(), diskConfig.getDiskCapacity());
       ambryDataNodeToAmbryDisks.get(datanode).add(disk);
+      for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaEntry : diskConfig.getReplicaConfigs().entrySet()) {
+        String partitionName = replicaEntry.getKey();
+        DataNodeConfig.ReplicaConfig replicaConfig = replicaEntry.getValue();
 
-      if (!replicasStr.isEmpty()) {
-        String[] replicaInfoList = replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR);
-        for (String replicaInfo : replicaInfoList) {
-          String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
-          // partition name and replica name are the same.
-          String partitionName = info[0];
-          long replicaCapacity = Long.valueOf(info[1]);
-          String partitionClass = clusterMapConfig.clusterMapDefaultPartitionClass;
-          if (info.length > 2) {
-            partitionClass = info[2];
-          }
-          AmbryPartition mappedPartition =
-              new AmbryPartition(Long.valueOf(partitionName), partitionClass, helixClusterManagerCallback);
-          // Ensure only one AmbryPartition entry goes in to the mapping based on the name.
-          AmbryPartition existing = partitionNameToAmbryPartition.putIfAbsent(partitionName, mappedPartition);
-          if (existing != null) {
-            mappedPartition = existing;
-          }
-          // mappedPartition is now the final mapped AmbryPartition object for this partition.
-          synchronized (mappedPartition) {
-            if (!ambryPartitionToAmbryReplicas.containsKey(mappedPartition)) {
-              ambryPartitionToAmbryReplicas.put(mappedPartition, ConcurrentHashMap.newKeySet());
-              partitionMap.put(ByteBuffer.wrap(mappedPartition.getBytes()), mappedPartition);
-            }
-          }
-          ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
-          // Create replica associated with this node.
-          boolean isSealed;
-          if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(
-              partitionName)) {
-            isSealed = partitionOverrideInfoMap.get(partitionName)
-                .get(ClusterMapUtils.PARTITION_STATE)
-                .equals(ClusterMapUtils.READ_ONLY_STR);
-          } else {
-            isSealed = sealedReplicas.contains(partitionName);
-          }
-          AmbryReplica replica =
-              new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
-                  replicaCapacity, isSealed);
-          ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
-          ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);
+        AmbryPartition mappedPartition =
+            new AmbryPartition(Long.parseLong(partitionName), replicaConfig.getPartitionClass(),
+                helixClusterManagerCallback);
+        // Ensure only one AmbryPartition entry goes in to the mapping based on the name.
+        AmbryPartition existing = partitionNameToAmbryPartition.putIfAbsent(partitionName, mappedPartition);
+        if (existing != null) {
+          mappedPartition = existing;
         }
+        // mappedPartition is now the final mapped AmbryPartition object for this partition.
+        synchronized (mappedPartition) {
+          if (!ambryPartitionToAmbryReplicas.containsKey(mappedPartition)) {
+            ambryPartitionToAmbryReplicas.put(mappedPartition, ConcurrentHashMap.newKeySet());
+            partitionMap.put(ByteBuffer.wrap(mappedPartition.getBytes()), mappedPartition);
+          }
+        }
+        ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaConfig.getReplicaCapacity());
+        // Create replica associated with this node.
+        boolean isSealed;
+        if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
+          isSealed = partitionOverrideInfoMap.get(partitionName)
+              .get(ClusterMapUtils.PARTITION_STATE)
+              .equals(ClusterMapUtils.READ_ONLY_STR);
+        } else {
+          isSealed = sealedReplicas.contains(partitionName);
+        }
+        AmbryReplica replica =
+            new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
+                replicaConfig.getReplicaCapacity(), isSealed);
+        ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
+        ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);
       }
     }
   }
