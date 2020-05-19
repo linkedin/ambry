@@ -341,10 +341,13 @@ public class GetBlobOperationTest {
    */
   @Test
   public void testSimpleBlobGetSuccess() throws Exception {
+    short[] expectedLifeVersions = new short[]{0, 1, 2};
     for (int i = 0; i < 10; i++) {
       // blobSize in the range [1, maxChunkSize]
       blobSize = random.nextInt(maxChunkSize) + 1;
+      short expectedLifeVersion = expectedLifeVersions[random.nextInt(expectedLifeVersions.length)];
       doPut();
+      changeLifeVersionForBlobId(blobId.getID(), expectedLifeVersion);
       GetBlobOptions.OperationType operationType;
       switch (i % 3) {
         case 0:
@@ -359,7 +362,7 @@ public class GetBlobOperationTest {
       }
       options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(operationType).build(), false,
           routerMetrics.ageAtGet);
-      getAndAssertSuccess();
+      getAndAssertSuccess(false, false, expectedLifeVersion);
     }
   }
 
@@ -463,7 +466,13 @@ public class GetBlobOperationTest {
     for (int i = 2; i < 10; i++) {
       blobSize = maxChunkSize * i;
       doPut();
-      getAndAssertSuccess();
+      short lifeVersion = 0;
+      if (i % 2 == 0) {
+        lifeVersion = 11;
+        // Only change the lifeVersion for the compositeBlob id
+        changeLifeVersionForBlobId(blobId.getID(), lifeVersion);
+      }
+      getAndAssertSuccess(false, false, lifeVersion);
     }
   }
 
@@ -949,6 +958,14 @@ public class GetBlobOperationTest {
     getAndAssertSuccess();
   }
 
+  private void changeLifeVersionForBlobId(String blobIdStr, short lifeVersion) {
+    for (MockServer server : mockServerLayout.getMockServers()) {
+      if (server.getBlobs().containsKey(blobIdStr)) {
+        server.getBlobs().get(blobIdStr).lifeVersion = lifeVersion;
+      }
+    }
+  }
+
   /**
    * Test that read succeeds when all chunks are received before read is called.
    * @throws Exception
@@ -1397,7 +1414,7 @@ public class GetBlobOperationTest {
    * and ensure that the whole blob data is read out and the contents match.
    */
   private void getAndAssertSuccess() throws Exception {
-    getAndAssertSuccess(false, false);
+    getAndAssertSuccess(false, false, (short) 0);
   }
 
   /**
@@ -1410,6 +1427,20 @@ public class GetBlobOperationTest {
    */
   private void getAndAssertSuccess(final boolean getChunksBeforeRead, final boolean initiateReadBeforeChunkGet)
       throws Exception {
+    getAndAssertSuccess(getChunksBeforeRead, initiateReadBeforeChunkGet, (short) 0);
+  }
+
+  /**
+   * Construct GetBlob operations with appropriate callbacks, then poll those operations until they complete,
+   * and ensure that the whole blob data is read out and the contents match.
+   * @param getChunksBeforeRead {@code true} if all chunks should be cached by the router before reading from the
+   *                            stream.
+   * @param initiateReadBeforeChunkGet Whether readInto() should be initiated immediately before data chunks are
+   *                                   fetched by the router to simulate chunk arrival delay.
+   * @param expectedLifeVersion the expected lifeVersion from get operation.
+   */
+  private void getAndAssertSuccess(final boolean getChunksBeforeRead, final boolean initiateReadBeforeChunkGet,
+      short expectedLifeVersion) throws Exception {
     final CountDownLatch readCompleteLatch = new CountDownLatch(1);
     final AtomicReference<Throwable> readCompleteThrowable = new AtomicReference<>(null);
     final AtomicLong readCompleteResult = new AtomicLong(0);
@@ -1447,6 +1478,7 @@ public class GetBlobOperationTest {
                 Assert.assertEquals("Blob size should in received blobProperties should be the same as actual",
                     blobSize, blobInfo.getBlobProperties().getBlobSize());
                 Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());
+                Assert.assertEquals("LifeVersion mismatch", expectedLifeVersion, blobInfo.getLifeVersion());
               }
               break;
             case Data:
@@ -1459,6 +1491,7 @@ public class GetBlobOperationTest {
               Assert.assertEquals("Blob size should in received blobProperties should be the same as actual", blobSize,
                   blobInfo.getBlobProperties().getBlobSize());
               Assert.assertNull("Unexpected blob data in operation result", result.getBlobResult.getBlobDataChannel());
+              Assert.assertEquals("LifeVersion mismatch", expectedLifeVersion, blobInfo.getLifeVersion());
           }
         } catch (Throwable e) {
           readCompleteThrowable.set(e);
