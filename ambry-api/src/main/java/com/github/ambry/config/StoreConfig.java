@@ -313,6 +313,13 @@ public class StoreConfig {
   @Default("false")
   public final boolean storeIndexRebuildBloomFilterEnabled;
 
+  /**
+   * True to enable container deletion in store.
+   */
+  @Config("store.container.deletion.enabled")
+  @Default("false")
+  public final boolean storeContainerDeletionEnabled;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -381,6 +388,8 @@ public class StoreConfig {
     storeUuidBasedBloomFilterEnabled = verifiableProperties.getBoolean("store.uuid.based.bloom.filter.enabled", false);
     storeIndexRebuildBloomFilterEnabled =
         verifiableProperties.getBoolean("store.index.rebuild.bloom.filter.enabled", false);
+    storeContainerDeletionEnabled =
+        verifiableProperties.getBoolean("store.container.deletion.enabled", false);
   }
 }
 

@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
@@ -85,6 +86,7 @@ class BlobStoreCompactor {
   private final AccountService accountService;
   private volatile boolean isActive = false;
   private PersistentIndex srcIndex;
+  private final Set<Pair<Short,Short>> deprecatedContainers;
 
   private Log tgtLog;
   private PersistentIndex tgtIndex;
@@ -131,6 +133,7 @@ class BlobStoreCompactor {
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
     this.useDirectIO = Utils.isLinux() && config.storeCompactionEnableDirectIO;
+    this.deprecatedContainers = new HashSet<>();
     if (config.storeCompactionFilter.equals(IndexSegmentValidEntryFilterWithoutUndelete.class.getSimpleName())) {
       validEntryFilter = new IndexSegmentValidEntryFilterWithoutUndelete();
     } else {
@@ -195,6 +198,22 @@ class BlobStoreCompactor {
   }
 
   /**
+   * Filters deprecated {@link Container}s for compaction purpose. Deprecated status include DELETE_IN_PROGRESS and INACTIVE.
+   * @return the deprecated {@link Container}s' accountId & containerId pairs.
+   */
+  private void getDeprecatedContainers() {
+    deprecatedContainers.clear();
+    if (accountService != null) {
+      accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
+        deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
+      });
+      accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE).forEach((container) -> {
+        deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
+      });
+    }
+  }
+
+  /**
    * Resumes compaction from where it was left off.
    * @throws IllegalStateException if the compactor has not been initialized or if there is no compaction to resume.
    * @throws StoreException if there were exceptions reading to writing to store components.
@@ -222,6 +241,10 @@ class BlobStoreCompactor {
     logger.trace("resumeCompaction() started for {}", storeId);
     runningLatch = new CountDownLatch(1);
     compactionInProgress.set(true);
+    if (config.storeContainerDeletionEnabled) {
+      getDeprecatedContainers();
+      logger.info("Deprecated containers are {} for {}", deprecatedContainers, storeId);
+    }
     try {
       while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         CompactionLog.Phase phase = compactionLog.getCompactionPhase();
@@ -555,6 +578,21 @@ class BlobStoreCompactor {
     // persist
     tgtIndex.persistIndex();
     return copiedAll;
+  }
+
+  /**
+   * Determines if {@code copyCandidate} container in the status of DELETED_IN_PROGRESS or INACTIVE.
+   * @param copyCandidate the {@link IndexEntry} to check
+   */
+  private boolean isFromDeprecatedContainer(IndexEntry copyCandidate) {
+    IndexValue copyCandidateValue = copyCandidate.getValue();
+    boolean isFromDeprecatedContainer = false;
+    if (deprecatedContainers.contains(
+        new Pair<>(copyCandidateValue.getAccountId(), copyCandidateValue.getContainerId()))) {
+      logger.debug("{} in store {} is from deprecated container.", copyCandidate, storeId);
+      isFromDeprecatedContainer = true;
+    }
+    return isFromDeprecatedContainer;
   }
 
   /**
@@ -1023,7 +1061,7 @@ class BlobStoreCompactor {
       int validEntriesSize = copyCandidates.size();
       copyCandidates.removeIf(
           copyCandidate -> isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(),
-              checkAlreadyCopied));
+              checkAlreadyCopied) || (config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),
@@ -1310,7 +1348,7 @@ class BlobStoreCompactor {
       int validEntriesSize = copyCandidates.size();
       copyCandidates.removeIf(
           copyCandidate -> isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(),
-              checkAlreadyCopied));
+              checkAlreadyCopied) || (config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of entries, {} are valid and {} will be copied in this round", validEntriesSize,

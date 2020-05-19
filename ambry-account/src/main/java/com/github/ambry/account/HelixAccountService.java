@@ -18,21 +18,18 @@ import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.router.Router;
 import java.io.IOException;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Random;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import java.util.concurrent.locks.ReentrantLock;
-import org.I0Itec.zkclient.DataUpdater;
-import org.I0Itec.zkclient.DataUpdater;
-import org.apache.helix.AccessOption;
-import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
-import org.json.JSONException;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -125,14 +122,14 @@ public class HelixAccountService extends AbstractAccountService implements Accou
     AccountMetadataStore backFillStore = null;
     if (config.useNewZNodePath) {
       accountMetadataStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, false,
-              config.totalNumberOfVersionToKeep);
+          config.totalNumberOfVersionToKeep);
       // postpone initializeFetchAndSchedule to setupRouter function.
     } else {
       accountMetadataStore = new LegacyMetadataStore(this.accountServiceMetrics, backupFileManager, helixStore);
       initialFetchAndSchedule();
       if (config.backFillAccountsToNewZNode) {
         backFillStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, true,
-                config.totalNumberOfVersionToKeep);
+            config.totalNumberOfVersionToKeep);
       }
     }
     this.backFillStore = backFillStore;
@@ -253,7 +250,8 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    * @param accountMetadataStore The {@link AccountMetadataStore}.
    * @return True when the update operation succeeds.
    */
-  boolean updateAccountsWithAccountMetadataStore(Collection<Account> accounts, AccountMetadataStore accountMetadataStore) {
+  boolean updateAccountsWithAccountMetadataStore(Collection<Account> accounts,
+      AccountMetadataStore accountMetadataStore) {
     checkOpen();
     Objects.requireNonNull(accounts, "accounts cannot be null");
     if (accounts.isEmpty()) {

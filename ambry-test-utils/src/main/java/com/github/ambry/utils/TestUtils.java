@@ -28,9 +28,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
-import org.I0Itec.zkclient.ZkServer;
-import org.I0Itec.zkclient.exception.ZkException;
-import org.I0Itec.zkclient.exception.ZkInterruptedException;
+import org.apache.helix.zookeeper.zkclient.ZkServer;
+import org.apache.helix.zookeeper.zkclient.exception.ZkException;
+import org.apache.helix.zookeeper.zkclient.exception.ZkInterruptedException;
 import org.apache.zookeeper.server.NIOServerCnxnFactory;
 import org.apache.zookeeper.server.ZooKeeperServer;
 import org.junit.Assert;
@@ -49,6 +49,7 @@ public class TestUtils {
   public static final List<Boolean> BOOLEAN_VALUES = Collections.unmodifiableList(Arrays.asList(true, false));
   private static final int CHECK_INTERVAL_IN_MS = 100;
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  private static final Logger logger = LoggerFactory.getLogger(TestUtils.class);
 
   /**
    * Return the number of threads currently running with a name containing the given pattern.
@@ -258,14 +259,13 @@ public class TestUtils {
   }
 
   /**
-   * A wrapper class to start and shutdown {@link ZooKeeperServer}. The code is from {@link org.I0Itec.zkclient.ZkServer}.
+   * A wrapper class to start and shutdown {@link ZooKeeperServer}. The code is from {@link org.apache.helix.zookeeper.zkclient.ZkServer}.
    * We maintain this class to speed up tests because function calls to NetworkUtil.getLocalHostNames() in
-   * {@link org.I0Itec.zkclient.ZkServer} takes time in Mac OS.
-   * {@link org.I0Itec.zkclient.ZkServer} calls NetworkUtil.getLocalHostNames() to log and make sure "localhost" is in
+   * {@link org.apache.helix.zookeeper.zkclient.ZkServer} takes time in Mac OS.
+   * {@link org.apache.helix.zookeeper.zkclient.ZkServer} calls NetworkUtil.getLocalHostNames() to log and make sure "localhost" is in
    * the list of NetworkUtil.getLocalHostNames(), which are not necessary in tests.
    */
   static class ZkServerWrapper {
-    private static final Logger logger = LoggerFactory.getLogger(ZkServerWrapper.class);
     private ZooKeeperServer zk;
     private NIOServerCnxnFactory nioFactory;
     private int port;
@@ -325,6 +325,7 @@ public class TestUtils {
     private String dataDir;
     private String logDir;
     private ZkServerWrapper zkServer;
+    private boolean isZkServerStarted = false;
 
     /**
      * Instantiate by starting a Zk server.
@@ -344,10 +345,19 @@ public class TestUtils {
       }
     }
 
+    public void startZkServer() {
+      if (zkServer != null) {
+        zkServer.start();
+        isZkServerStarted = true;
+        logger.info("ZooKeeperServer started successfully.");
+      }
+    }
+
     private void startZkServer(int port, String dataDir, String logDir) {
       // start zookeeper
       zkServer = new ZkServerWrapper(dataDir, logDir, port);
       zkServer.start();
+      isZkServerStarted = true;
     }
 
     public int getPort() {
@@ -369,7 +379,12 @@ public class TestUtils {
     public void shutdown() {
       if (zkServer != null) {
         zkServer.shutdown();
+        isZkServerStarted = false;
       }
+    }
+
+    public boolean isZkServerStarted() {
+      return isZkServerStarted;
     }
   }
 

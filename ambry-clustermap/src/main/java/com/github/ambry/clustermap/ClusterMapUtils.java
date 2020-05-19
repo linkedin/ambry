@@ -20,6 +20,7 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -395,21 +396,24 @@ public class ClusterMapUtils {
     private final int minimumLocalReplicaCount;
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final ClusterManagerCallback<?, ?, ?, ?> clusterManagerCallback;
+    private final String localDatacenterName;
+    private final String defaultPartitionClass;
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
     private Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas;
-    private String localDatacenterName;
 
     /**
      * @param clusterManagerCallback the {@link ClusterManagerCallback} to query current cluster info
      * @param localDatacenterName the name of the local datacenter. Can be null if datacenter specific replica counts
      * @param minimumLocalReplicaCount the minimum number of replicas in local datacenter. This is used when selecting
+     * @param defaultPartitionClass the default partition class to use if a partition class is not found
      */
     PartitionSelectionHelper(ClusterManagerCallback<?, ?, ?, ?> clusterManagerCallback, String localDatacenterName,
-        int minimumLocalReplicaCount) {
+        int minimumLocalReplicaCount, String defaultPartitionClass) {
       this.localDatacenterName = localDatacenterName;
       this.minimumLocalReplicaCount = minimumLocalReplicaCount;
       this.clusterManagerCallback = clusterManagerCallback;
+      this.defaultPartitionClass = defaultPartitionClass;
       updatePartitions(clusterManagerCallback.getPartitions(), localDatacenterName);
     }
 
@@ -487,7 +491,7 @@ public class ClusterMapUtils {
               selected)) {
             if (selected.getPartitionState() == PartitionState.READ_WRITE) {
               anyWritablePartition = selected;
-              if (areEnoughReplicasForPartitionUp(selected)) {
+              if (hasEnoughEligibleWritableReplicas(selected)) {
                 return selected;
               }
             }
@@ -505,17 +509,19 @@ public class ClusterMapUtils {
     }
 
     /**
-     * Check whether the parition has has enough replicas up for write operations to try. Enough replicas is considered
-     * to be all local replicas if such information is available. In case localDatacenterName is not available, all of
-     * the partition's replicas should be up.
+     * Check whether the partition has enough eligible replicas for write operations to try. Here, "eligible" means
+     * replica is up and in required states for PUT request (i.e LEADER or STANDBY). Enough replicas is considered to be
+     * all local replicas if such information is available. In case localDatacenterName is not available, all of the
+     * partition's replicas should be up.
      * @param partitionId the {@link PartitionId} to check.
-     * @return true if enough replicas are up; false otherwise.
+     * @return true if enough replicas are eligible; false otherwise.
      */
-    private boolean areEnoughReplicasForPartitionUp(PartitionId partitionId) {
+    private boolean hasEnoughEligibleWritableReplicas(PartitionId partitionId) {
       if (localDatacenterName != null && !localDatacenterName.isEmpty()) {
-        return areAllLocalReplicasForPartitionUp(partitionId);
+        return areAllLocalReplicasForPartitionUp(partitionId) && areAllReplicaStatesEligibleForPut(partitionId,
+            localDatacenterName);
       } else {
-        return areAllReplicasForPartitionUp(partitionId);
+        return areAllReplicasForPartitionUp(partitionId) && areAllReplicaStatesEligibleForPut(partitionId, null);
       }
     }
 
@@ -534,6 +540,23 @@ public class ClusterMapUtils {
     }
 
     /**
+     * Check if all replicas from given partition are in eligible states for PUT request. (That is, replica state should
+     * be either LEADER or STANDBY.)
+     * @param partitionId the {@link PartitionId} to check.
+     * @param dcName the datacenter which replicas come from. If null, replicas from all datacenters should be checked.
+     * @return true if all replicas are eligible for put.
+     */
+    private boolean areAllReplicaStatesEligibleForPut(PartitionId partitionId, String dcName) {
+      Set<ReplicaId> eligibleReplicas = new HashSet<>();
+      EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)
+          .forEach(state -> eligibleReplicas.addAll(partitionId.getReplicaIdsByState(state, dcName)));
+      if (dcName != null) {
+        return partitionIdToLocalReplicas.get(partitionId).size() == eligibleReplicas.size();
+      }
+      return partitionId.getReplicaIds().size() == eligibleReplicas.size();
+    }
+
+    /**
      * Returns the partitions belonging to the {@code partitionClass}. Returns all partitions if {@code partitionClass}
      * is {@code null}.
      * @param partitionClass the class of the partitions desired.
@@ -548,22 +571,27 @@ public class ClusterMapUtils {
       try {
         if (partitionClass == null) {
           toReturn.addAll(allPartitions);
-        } else if (partitionIdsByClassAndLocalReplicaCount.containsKey(partitionClass)) {
+        } else {
           SortedMap<Integer, List<PartitionId>> partitionsByReplicaCount =
               partitionIdsByClassAndLocalReplicaCount.get(partitionClass);
+          if (partitionsByReplicaCount == null) {
+            partitionsByReplicaCount = partitionIdsByClassAndLocalReplicaCount.get(defaultPartitionClass);
+          }
+          if (partitionsByReplicaCount == null) {
+            throw new IllegalArgumentException(
+                "No partitions for partition class = '" + partitionClass + "' or default partition class = '"
+                    + defaultPartitionClass + "' found");
+          }
           if (minimumReplicaCountRequired) {
             // get partitions with replica count >= min replica count specified in ClusterMapConfig
             for (List<PartitionId> partitionIds : partitionsByReplicaCount.tailMap(minimumLocalReplicaCount).values()) {
               toReturn.addAll(partitionIds);
             }
           } else {
-            for (List<PartitionId> partitionIds : partitionIdsByClassAndLocalReplicaCount.get(partitionClass)
-                .values()) {
+            for (List<PartitionId> partitionIds : partitionsByReplicaCount.values()) {
               toReturn.addAll(partitionIds);
             }
           }
-        } else {
-          throw new IllegalArgumentException("Unrecognized partition class " + partitionClass);
         }
       } finally {
         rwLock.readLock().unlock();

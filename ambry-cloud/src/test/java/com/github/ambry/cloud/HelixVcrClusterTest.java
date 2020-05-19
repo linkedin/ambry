@@ -34,15 +34,12 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
  * Tests of HelixVcrCluster.
  */
 public class HelixVcrClusterTest {
-  private final static Logger logger = LoggerFactory.getLogger(HelixVcrClusterTest.class);
   private static MockClusterAgentsFactory mockClusterAgentsFactory;
   private static MockClusterMap mockClusterMap;
   private static final String ZK_SERVER_HOSTNAME = "localhost";
@@ -150,7 +147,7 @@ public class HelixVcrClusterTest {
       partitionSet.remove(partitionId);
     }
 
-    public Set getPartitionSet() {
+    public Set<PartitionId> getPartitionSet() {
       return partitionSet;
     }
   }

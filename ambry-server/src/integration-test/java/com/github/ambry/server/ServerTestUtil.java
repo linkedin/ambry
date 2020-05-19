@@ -487,7 +487,7 @@ final class ServerTestUtil {
       ids = new ArrayList<BlobId>();
       PartitionId partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(blobId1);
-      partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+      partitionRequestInfoList = new ArrayList<>();
       partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       getRequest1 = new GetRequest(1, "clientid1", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
@@ -617,27 +617,28 @@ final class ServerTestUtil {
   /**
    * Tests blobs put to dataNode can be backed up by {@link com.github.ambry.cloud.VcrReplicationManager}.
    * @param cluster the {@link MockCluster} of dataNodes.
+   * @param zkConnectString ZK endpoint to establish VCR cluster
+   * @param vcrClusterName the name of VCR cluster
    * @param dataNode the datanode where blobs are originally put.
    * @param clientSSLConfig the {@link SSLConfig}.
    * @param clientSSLSocketFactory the {@link SSLSocketFactory}.
    * @param notificationSystem the {@link MockNotificationSystem} to track blobs event in {@link MockCluster}.
    * @param vcrSSLProps SSL related properties for VCR. Can be {@code null}.
-   * @param ttl The ttl of blobs in their original PUT.
-   * @param doTtlUpdate Do ttlUpdate request if {@true}.
+   * @param doTtlUpdate Do ttlUpdate request if {@code true}.
    */
-  static void endToEndCloudBackupTest(MockCluster cluster, DataNodeId dataNode, SSLConfig clientSSLConfig,
-      SSLSocketFactory clientSSLSocketFactory, MockNotificationSystem notificationSystem, Properties vcrSSLProps,
-      long ttl, boolean doTtlUpdate) throws Exception {
+  static void endToEndCloudBackupTest(MockCluster cluster, String zkConnectString, String vcrClusterName,
+      DataNodeId dataNode, SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory,
+      MockNotificationSystem notificationSystem, Properties vcrSSLProps, boolean doTtlUpdate) throws Exception {
     int blobBackupCount = 10;
     int blobSize = 100;
     int userMetaDataSize = 100;
-    ClusterMap clusterMap = cluster.getClusterMap();
     ClusterAgentsFactory clusterAgentsFactory = cluster.getClusterAgentsFactory();
     // Send blobs to DataNode
     byte[] userMetadata = new byte[userMetaDataSize];
     byte[] data = new byte[blobSize];
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long ttl = doTtlUpdate ? System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1) : Utils.Infinite_Time;
     BlobProperties properties =
         new BlobProperties(blobSize, "serviceid1", null, null, false, ttl, accountId, containerId, false, null);
     TestUtils.RANDOM.nextBytes(userMetadata);
@@ -661,14 +662,8 @@ final class ServerTestUtil {
         updateBlobTtl(channel, blobId);
       }
     }
-
-    // Start Helix Controller and ZK Server.
-    int zkPort = 31999;
-    String zkConnectString = "localhost:" + zkPort;
-    String vcrClusterName = "vcrTestCluster";
-    TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
     HelixControllerManager helixControllerManager =
-        VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, clusterMap);
+        VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, cluster.getClusterMap());
     // Start the VCR and CloudBackupManager
     Properties props =
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
@@ -697,7 +692,6 @@ final class ServerTestUtil {
     }
     vcrServer.shutdown();
     helixControllerManager.syncStop();
-    zkInfo.shutdown();
   }
 
   static void endToEndReplicationWithMultiNodeMultiPartitionTest(int interestedDataNodePortNumber, Port dataNode1Port,

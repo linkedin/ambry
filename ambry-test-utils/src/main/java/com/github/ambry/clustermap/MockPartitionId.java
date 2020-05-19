@@ -136,6 +136,15 @@ public class MockPartitionId implements PartitionId {
   }
 
   /**
+   * Set state of certain replica for this partition.
+   * @param replicaId the {@link ReplicaId} to use.
+   * @param state the {@link ReplicaState} to set.
+   */
+  public void setReplicaState(ReplicaId replicaId, ReplicaState state){
+    replicaAndState.computeIfPresent(replicaId, (k, v) -> state);
+  }
+
+  /**
    * If all replicaIds == !isSealed, then partition status = Read-Write, else Read-Only
    */
   public void resolvePartitionStatus() {

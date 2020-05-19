@@ -16,7 +16,7 @@ package com.github.ambry.commons;
 
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.util.List;
-import org.apache.helix.ZNRecord;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.manager.zk.ZkClient;

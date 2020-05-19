@@ -176,7 +176,7 @@ class PutManager {
     Account account = accountService.getAccountById(blobProperties.getAccountId());
     if (account != null) {
       Container container = account.getContainerById(blobProperties.getContainerId());
-      if (container != null && container.getReplicationPolicy() != null) {
+      if (container != null && !Utils.isNullOrEmpty(container.getReplicationPolicy())) {
         partitionClass = container.getReplicationPolicy();
       }
     }

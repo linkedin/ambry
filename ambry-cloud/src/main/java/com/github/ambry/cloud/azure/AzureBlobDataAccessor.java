@@ -216,7 +216,8 @@ public class AzureBlobDataAccessor {
       throws BlobStorageException {
     try {
       BlockBlobClient blobClient = getBlockBlobClient(containerName, fileName, false);
-      blobClient.downloadWithResponse(outputStream, null, null, defaultRequestConditions, false, requestTimeout,
+      // Might as well use same timeout for upload and download
+      blobClient.downloadWithResponse(outputStream, null, null, defaultRequestConditions, false, uploadTimeout,
           Context.NONE);
       return true;
     } catch (BlobStorageException e) {
@@ -372,23 +373,17 @@ public class AzureBlobDataAccessor {
         Response<Void> response = responseList.get(j);
         CloudBlobMetadata blobMetadata = batchOfBlobs.get(j);
         // Note: Response.getStatusCode() throws exception on any error.
-        int statusCode;
         try {
-          statusCode = response.getStatusCode();
+          response.getStatusCode();
         } catch (BlobStorageException bex) {
-          statusCode = bex.getStatusCode();
-        }
-        switch (statusCode) {
-          case HttpURLConnection.HTTP_OK:
-          case HttpURLConnection.HTTP_ACCEPTED:
-          case HttpURLConnection.HTTP_NOT_FOUND:
-          case HttpURLConnection.HTTP_GONE:
-            // blob was deleted or already gone
-            deletedBlobs.add(blobMetadata);
-            break;
-          default:
+          int statusCode = bex.getStatusCode();
+          // Don't worry if blob is already gone
+          if (statusCode != HttpURLConnection.HTTP_NOT_FOUND && statusCode != HttpURLConnection.HTTP_GONE) {
             logger.error("Deleting blob {} got status {}", blobMetadata.getId(), statusCode);
+            throw bex;
+          }
         }
+        deletedBlobs.add(blobMetadata);
       }
     }
     return deletedBlobs;

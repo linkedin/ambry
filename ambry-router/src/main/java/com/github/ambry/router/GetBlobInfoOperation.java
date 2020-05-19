@@ -353,9 +353,8 @@ class GetBlobInfoOperation extends GetOperation {
     ByteBuffer userMetadata = MessageFormatRecord.deserializeUserMetadata(payload);
     if (encryptionKey == null) {
       // if blob is not encrypted, move the state to Complete
-      operationResult =
-          new GetBlobResultInternal(new GetBlobResult(new BlobInfo(serverBlobProperties, userMetadata.array()), null),
-              null);
+      BlobInfo blobInfo = new BlobInfo(serverBlobProperties, userMetadata.array(), messageInfo.getLifeVersion());
+      operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, null), null);
     } else {
       // submit decrypt job
       progressTracker.initializeCryptoJobTracker(CryptoJobType.DECRYPTION);
@@ -370,9 +369,9 @@ class GetBlobInfoOperation extends GetOperation {
             routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
             if (exception == null) {
               logger.trace("Successfully updating decrypt job callback results for {}", blobId);
-              operationResult = new GetBlobResultInternal(
-                  new GetBlobResult(new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array()),
-                      null), null);
+              BlobInfo blobInfo = new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array(),
+                  messageInfo.getLifeVersion());
+              operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, null), null);
               progressTracker.setCryptoJobSuccess();
             } else {
               decryptJobMetricsTracker.incrementOperationError();

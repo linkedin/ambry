@@ -38,8 +38,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
-import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.apache.zookeeper.data.Stat;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -180,7 +180,7 @@ class RouterStore extends AccountMetadataStore {
    * @return All the versions of {@link Account} metadata.
    */
   public List<Integer> getAllVersions() {
-    List<BlobIDAndVersion> blobIDAndVersions = fetchAllBlobIDAndVersions() ;
+    List<BlobIDAndVersion> blobIDAndVersions = fetchAllBlobIDAndVersions();
     if (blobIDAndVersions == null) {
       return null;
     } else {
@@ -199,12 +199,12 @@ class RouterStore extends AccountMetadataStore {
     if (blobIDAndVersions == null) {
       return null;
     }
-    for (BlobIDAndVersion blobIDAndVersion: blobIDAndVersions) {
+    for (BlobIDAndVersion blobIDAndVersion : blobIDAndVersions) {
       if (blobIDAndVersion.getVersion() == version) {
         return readAccountMetadataFromBlobID(blobIDAndVersion.getBlobID());
       }
     }
-    throw new IllegalArgumentException("Version " + version  + " doesn't exist");
+    throw new IllegalArgumentException("Version " + version + " doesn't exist");
   }
 
   @Override

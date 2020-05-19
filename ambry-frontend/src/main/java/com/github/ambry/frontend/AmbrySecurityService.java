@@ -82,16 +82,17 @@ class AmbrySecurityService implements SecurityService {
     } else if (restRequest.getArgs().containsKey(InternalKeys.KEEP_ALIVE_ON_ERROR_HINT)) {
       exception = new RestServiceException(InternalKeys.KEEP_ALIVE_ON_ERROR_HINT + " is not allowed in the request",
           RestServiceErrorCode.BadRequest);
-    } else if (urlSigningService.isRequestSigned(restRequest)) {
-      try {
-        urlSigningService.verifySignedRequest(restRequest);
-      } catch (RestServiceException e) {
-        exception = e;
-      }
     }
-    restRequest.setArg(InternalKeys.SEND_TRACKING_INFO, new Boolean(frontendConfig.attachTrackingInfo));
-    frontendMetrics.securityServicePreProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
-    callback.onCompletion(null, exception);
+    restRequest.setArg(InternalKeys.SEND_TRACKING_INFO, frontendConfig.attachTrackingInfo);
+    if (exception == null && urlSigningService.isRequestSigned(restRequest)) {
+      urlSigningService.verifySignedRequest(restRequest, (r, e) -> {
+        frontendMetrics.securityServicePreProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+        callback.onCompletion(r, e);
+      });
+    } else {
+      frontendMetrics.securityServicePreProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+      callback.onCompletion(null, exception);
+    }
   }
 
   @Override
@@ -194,12 +195,14 @@ class AmbrySecurityService implements SecurityService {
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
                   setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel);
+                  responseChannel.setHeader(RestUtils.Headers.LIFE_VERSION, blobInfo.getLifeVersion());
                 }
                 setCacheHeaders(restRequest, responseChannel);
               } else {
                 if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
+                  responseChannel.setHeader(RestUtils.Headers.LIFE_VERSION, blobInfo.getLifeVersion());
                 }
                 if (!setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel)) {
                   restRequest.setArg(InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY, true);
@@ -269,6 +272,7 @@ class AmbrySecurityService implements SecurityService {
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, contentLength);
     setBlobPropertiesHeaders(blobProperties, restResponseChannel);
     setAccountAndContainerHeaders(restRequest, restResponseChannel);
+    restResponseChannel.setHeader(RestUtils.Headers.LIFE_VERSION, blobInfo.getLifeVersion());
   }
 
   /**

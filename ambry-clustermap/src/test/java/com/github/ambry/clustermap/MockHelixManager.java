@@ -34,10 +34,14 @@ import org.apache.helix.LiveInstanceInfoProvider;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.PreConnectCallback;
 import org.apache.helix.PropertyKey;
-import org.apache.helix.ZNRecord;
 import org.apache.helix.api.listeners.ClusterConfigChangeListener;
 import org.apache.helix.api.listeners.ControllerChangeListener;
 import org.apache.helix.api.listeners.CurrentStateChangeListener;
+import org.apache.helix.api.listeners.CustomizedStateChangeListener;
+import org.apache.helix.api.listeners.CustomizedStateConfigChangeListener;
+import org.apache.helix.api.listeners.CustomizedStateRootChangeListener;
+import org.apache.helix.api.listeners.CustomizedViewChangeListener;
+import org.apache.helix.api.listeners.CustomizedViewRootChangeListener;
 import org.apache.helix.api.listeners.ExternalViewChangeListener;
 import org.apache.helix.api.listeners.IdealStateChangeListener;
 import org.apache.helix.api.listeners.InstanceConfigChangeListener;
@@ -52,6 +56,7 @@ import org.apache.helix.model.LiveInstance;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.spectator.RoutingTableProvider;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 
 
 /**
@@ -257,6 +262,11 @@ class MockHelixManager implements HelixManager {
   }
 
   @Override
+  public void addCustomizedStateConfigChangeListener(CustomizedStateConfigChangeListener listener) throws Exception {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public void addClusterfigChangeListener(ClusterConfigChangeListener clusterConfigChangeListener) throws Exception {
     throw new IllegalStateException("Not implemented");
   }
@@ -291,6 +301,18 @@ class MockHelixManager implements HelixManager {
   }
 
   @Override
+  public void addCustomizedStateRootChangeListener(CustomizedStateRootChangeListener listener, String instanceName)
+      throws Exception {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void addCustomizedStateChangeListener(CustomizedStateChangeListener listener, String instanceName,
+      String stateName) throws Exception {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public void addExternalViewChangeListener(ExternalViewChangeListener externalViewChangeListener) throws Exception {
     if (beBadException != null) {
       throw beBadException;
@@ -299,6 +321,17 @@ class MockHelixManager implements HelixManager {
     NotificationContext notificationContext = new NotificationContext(this);
     notificationContext.setType(NotificationContext.Type.INIT);
     this.externalViewChangeListener.onExternalViewChange(Collections.emptyList(), notificationContext);
+  }
+
+  @Override
+  public void addCustomizedViewChangeListener(CustomizedViewChangeListener listener, String customizedStateType)
+      throws Exception {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void addCustomizedViewRootChangeListener(CustomizedViewRootChangeListener listener) throws Exception {
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override

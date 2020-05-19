@@ -59,8 +59,8 @@ class DiskManager {
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final CompactionManager compactionManager;
-  private final List<String> stoppedReplicas;
-  private final ReplicaStatusDelegate replicaStatusDelegate;
+  private final Set<String> stoppedReplicas;
+  private final List<ReplicaStatusDelegate> replicaStatusDelegates;
   private final Set<String> expectedDirs = new HashSet<>();
   private final StoreConfig storeConfig;
   private final ScheduledExecutorService scheduler;
@@ -88,14 +88,17 @@ class DiskManager {
    * @param keyFactory the {@link StoreKeyFactory} for parsing store keys.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
+   * @param replicaStatusDelegates a list of {@link ReplicaStatusDelegate} representing replica status agent for each
+   *                               cluster current node has participated in.
+   * @param stoppedReplicas a set of replicas that have been stopped (which should be skipped during startup).
    * @param time the {@link Time} instance to use.
    * @param accountService the {@link AccountService} instance to use.
    */
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
       ScheduledExecutorService scheduler, StorageManagerMetrics metrics, StoreMetrics storeMainMetrics,
       StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, ReplicaStatusDelegate replicaStatusDelegate, List<String> stoppedReplicas,
-      Time time, AccountService accountService) {
+      MessageStoreHardDelete hardDelete, List<ReplicaStatusDelegate> replicaStatusDelegates,
+      Set<String> stoppedReplicas, Time time, AccountService accountService) {
     this.disk = disk;
     this.storeConfig = storeConfig;
     this.scheduler = scheduler;
@@ -112,14 +115,14 @@ class DiskManager {
     File reserveFileDir = new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName);
     diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling, reserveFileDir,
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
-    this.replicaStatusDelegate = replicaStatusDelegate;
+    this.replicaStatusDelegates = replicaStatusDelegates;
     this.stoppedReplicas = stoppedReplicas;
     expectedDirs.add(reserveFileDir.getAbsolutePath());
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         BlobStore store =
             new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
-                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
+                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
                 time, accountService);
         stores.put(replica.getPartitionId(), store);
         partitionToReplicaMap.put(replica.getPartitionId(), replica);
@@ -332,7 +335,7 @@ class DiskManager {
         }
         BlobStore store =
             new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
-                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
+                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
                 time, accountService);
         store.start();
         // collect store segment requirements and add into DiskSpaceAllocator
@@ -468,14 +471,17 @@ class DiskManager {
     } finally {
       rwLock.readLock().unlock();
     }
-    boolean updated = false;
-    if (replicaStatusDelegate != null) {
+    boolean updated = true;
+    if (replicaStatusDelegates != null && !replicaStatusDelegates.isEmpty()) {
       logger.trace("Setting replica stopped state via ReplicaStatusDelegate on replica {}",
           Arrays.toString(replicasToUpdate.toArray()));
-      updated = markStop ? replicaStatusDelegate.markStopped(replicasToUpdate)
-          : replicaStatusDelegate.unmarkStopped(replicasToUpdate);
+      for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
+        updated &= markStop ? replicaStatusDelegate.markStopped(replicasToUpdate)
+            : replicaStatusDelegate.unmarkStopped(replicasToUpdate);
+      }
     } else {
       logger.warn("The ReplicaStatusDelegate is not instantiated");
+      updated = false;
     }
     if (!updated) {
       // either mark/unmark operation fails or ReplicaStatusDelegate is not instantiated.

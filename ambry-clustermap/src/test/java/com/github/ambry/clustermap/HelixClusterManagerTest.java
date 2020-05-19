@@ -42,10 +42,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
-import org.apache.helix.ZNRecord;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.spectator.RoutingTableSnapshot;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
@@ -337,7 +337,7 @@ public class HelixClusterManagerTest {
       verifyInitialClusterChanges((HelixClusterManager) clusterManager, helixCluster, helixDcs);
     }
 
-    int savedport = dcsToZkInfo.get(remoteDc).getPort();
+    int savedPort = dcsToZkInfo.get(remoteDc).getPort();
     // Connectivity failure to remote should not prevent instantiation.
     dcsToZkInfo.get(remoteDc).setPort(0);
     Set<com.github.ambry.utils.TestUtils.ZkInfo> zkInfos = new HashSet<>(dcsToZkInfo.values());
@@ -363,7 +363,7 @@ public class HelixClusterManagerTest {
     verifyInitialClusterChanges(clusterManager, helixCluster, new String[]{localDc});
 
     // Local dc connectivity failure should fail instantiation.
-    dcsToZkInfo.get(remoteDc).setPort(savedport);
+    dcsToZkInfo.get(remoteDc).setPort(savedPort);
     dcsToZkInfo.get(localDc).setPort(0);
     zkInfos = new HashSet<>(dcsToZkInfo.values());
     invalidZkJson = constructZkLayoutJSON(zkInfos);
@@ -1146,7 +1146,7 @@ public class HelixClusterManagerTest {
         .findAny()
         .get();
     DataNodeId remote = helixClusterManager.getDataNodeId(remoteInstanceConfig.getHostName(),
-        Integer.valueOf(remoteInstanceConfig.getPort()));
+        Integer.parseInt(remoteInstanceConfig.getPort()));
     Set<PartitionId> writablePartitions = new HashSet<>(helixClusterManager.getWritablePartitionIds(null));
     PartitionId partitionIdToSealInRemote = helixClusterManager.getReplicaIds(remote)
         .stream()

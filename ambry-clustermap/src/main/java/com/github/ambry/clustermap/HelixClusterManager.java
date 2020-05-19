@@ -31,13 +31,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
-import org.apache.helix.ZNRecord;
 import org.apache.helix.spectator.RoutingTableSnapshot;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
+import org.apache.helix.zookeeper.zkclient.IZkDataListener;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -177,7 +177,8 @@ public class HelixClusterManager implements ClusterMap {
     localDatacenterId = dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
     partitionSelectionHelper =
         new PartitionSelectionHelper(helixClusterManagerCallback, clusterMapConfig.clusterMapDatacenterName,
-            clusterMapConfig.clustermapWritablePartitionMinReplicaCount);
+            clusterMapConfig.clustermapWritablePartitionMinReplicaCount,
+            clusterMapConfig.clusterMapDefaultPartitionClass);
     // register partition selection helper as a listener of cluster map changes.
     registerClusterMapListener(partitionSelectionHelper);
   }

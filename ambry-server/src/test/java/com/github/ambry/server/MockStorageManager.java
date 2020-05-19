@@ -14,6 +14,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -134,7 +135,7 @@ class MockStorageManager extends StorageManager {
     public void delete(List<MessageInfo> infos) throws StoreException {
       operationReceived = RequestOrResponseType.DeleteRequest;
       List<MessageInfo> infosToDelete = new ArrayList<>(infos.size());
-      List<InputStream> inputStreams = new ArrayList();
+      List<InputStream> inputStreams = new ArrayList<>();
       MessageWriteSet writeSet;
       try {
         for (MessageInfo info : infos) {
@@ -163,7 +164,7 @@ class MockStorageManager extends StorageManager {
     public void updateTtl(List<MessageInfo> infos) throws StoreException {
       operationReceived = RequestOrResponseType.TtlUpdateRequest;
       List<MessageInfo> infosToUpdate = new ArrayList<>(infos.size());
-      List<InputStream> inputStreams = new ArrayList();
+      List<InputStream> inputStreams = new ArrayList<>();
       MessageFormatWriteSet writeSet;
       try {
         for (MessageInfo info : infos) {
@@ -450,7 +451,7 @@ class MockStorageManager extends StorageManager {
   MockStorageManager(Set<StoreKey> validKeysInStore, ClusterMap clusterMap, DataNodeId dataNodeId,
       FindTokenHelper findTokenHelper) throws StoreException {
     super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
-        null, clusterMap, dataNodeId, null, null, new MockTime(), null, null);
+        null, clusterMap, dataNodeId, null, null, new MockTime(), null, new InMemAccountService(false, false));
     this.validKeysInStore = validKeysInStore;
     this.findTokenHelper = findTokenHelper;
     for (ReplicaId replica : clusterMap.getReplicaIds(dataNodeId)) {
@@ -460,7 +461,8 @@ class MockStorageManager extends StorageManager {
 
   MockStorageManager(Map<PartitionId, Store> map, DataNodeId dataNodeId) throws Exception {
     super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), null, new MetricRegistry(), null,
-        new MockClusterMap(), dataNodeId, null, null, SystemTime.getInstance(), null, null);
+        new MockClusterMap(), dataNodeId, null, null, SystemTime.getInstance(), null,
+        new InMemAccountService(false, false));
     storeMap = map;
   }
 

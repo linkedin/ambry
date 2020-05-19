@@ -39,6 +39,8 @@ public class CloudConfig {
   public static final String CLOUD_BLOB_COMPACTION_ENABLED = "cloud.blob.compaction.enabled";
   public static final String CLOUD_BLOB_COMPACTION_INTERVAL_HOURS = "cloud.blob.compaction.interval.hours";
   public static final String CLOUD_BLOB_COMPACTION_QUERY_LIMIT = "cloud.blob.compaction.query.limit";
+  public static final String CLOUD_COMPACTION_LOOKBACK_DAYS = "cloud.compaction.lookback.days";
+  public static final String CLOUD_COMPACTION_BUCKET_TIME_DAYS = "cloud.compaction.bucket.time.days";
   public static final String CLOUD_BLOB_COMPACTION_SHUTDOWN_TIMEOUT_SECS =
       "cloud.blob.compaction.shutdown.timeout.secs";
   public static final String CLOUD_RECENT_BLOB_CACHE_LIMIT = "cloud.recent.blob.cache.limit";
@@ -69,6 +71,8 @@ public class CloudConfig {
   public static final int DEFAULT_MIN_TTL_DAYS = 14;
   public static final int DEFAULT_RETENTION_DAYS = 7;
   public static final int DEFAULT_COMPACTION_QUERY_LIMIT = 100;
+  public static final int DEFAULT_COMPACTION_BUCKET_TIME_DAYS = 7;
+  public static final int DEFAULT_COMPACTION_LOOKBACK_DAYS = 364; // Multiple of 7
   public static final int DEFAULT_COMPACTION_TIMEOUT = 10;
   public static final int DEFAULT_RECENT_BLOB_CACHE_LIMIT = 10000;
   public static final int DEFAULT_MAX_ATTEMPTS = 3;
@@ -205,8 +209,17 @@ public class CloudConfig {
    */
   @Config(CLOUD_BLOB_COMPACTION_SHUTDOWN_TIMEOUT_SECS)
   @Default("10")
-  public final int cloudBlobCompactionShutDownTimeoutSecs;
+  public final int cloudBlobCompactionShutdownTimeoutSecs;
 
+  /*
+   * Max number of days in the past compaction should consider.
+   */
+  public final int cloudCompactionLookbackDays;
+
+  /**
+   * The time range used for bucketing compaction queries.
+   */
+  public final int cloudCompactionQueryBucketTimeDays;
   /**
    * The max size of recently-accessed blob cache in each cloud blob store.
    */
@@ -313,8 +326,12 @@ public class CloudConfig {
     cloudBlobCompactionIntervalHours = verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_INTERVAL_HOURS, 24);
     cloudBlobCompactionQueryLimit =
         verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_QUERY_LIMIT, DEFAULT_COMPACTION_QUERY_LIMIT);
-    cloudBlobCompactionShutDownTimeoutSecs =
+    cloudBlobCompactionShutdownTimeoutSecs =
         verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_SHUTDOWN_TIMEOUT_SECS, DEFAULT_COMPACTION_TIMEOUT);
+    cloudCompactionLookbackDays =
+        verifiableProperties.getInt(CLOUD_COMPACTION_LOOKBACK_DAYS, DEFAULT_COMPACTION_LOOKBACK_DAYS);
+    cloudCompactionQueryBucketTimeDays =
+        verifiableProperties.getInt(CLOUD_COMPACTION_BUCKET_TIME_DAYS, DEFAULT_COMPACTION_BUCKET_TIME_DAYS);
     recentBlobCacheLimit = verifiableProperties.getInt(CLOUD_RECENT_BLOB_CACHE_LIMIT, DEFAULT_RECENT_BLOB_CACHE_LIMIT);
     cloudMaxAttempts = verifiableProperties.getInt(CLOUD_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS);
     cloudDefaultRetryDelay = verifiableProperties.getInt(CLOUD_DEFAULT_RETRY_DELAY, DEFAULT_RETRY_DELAY_VALUE);
