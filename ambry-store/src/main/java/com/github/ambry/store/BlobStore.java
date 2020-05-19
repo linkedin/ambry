@@ -743,11 +743,10 @@ public class BlobStore implements Store {
               EnumSet.of(PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE));
           if (value != null) {
             if (value.isUndelete() && value.getLifeVersion() == revisedLifeVersion) {
-              // Might get an concurrent undelete from both replication and frontend. This is considered as an
-              // successful operation and the exception will be captured by the catch statement below.
-              throw new StoreException(
+              // Might get an concurrent undelete from both replication and frontend.
+              throw new IdUndeletedStoreException(
                   "Can't undelete id " + info.getStoreKey() + " in " + dataDir + " since concurrent operations",
-                  StoreErrorCodes.ID_Undeleted);
+                  value.getLifeVersion());
             } else {
               throw new StoreException(
                   "Cannot undelete id " + info.getStoreKey() + " since concurrent operation occurs",

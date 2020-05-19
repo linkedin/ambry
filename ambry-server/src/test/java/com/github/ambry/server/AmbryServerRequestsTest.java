@@ -75,6 +75,7 @@ import com.github.ambry.replication.MockReplicationManager;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.BlobStore;
+import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageInfoTest;
 import com.github.ambry.store.MessageWriteSet;
@@ -170,8 +171,7 @@ public class AmbryServerRequestsTest {
     statsManager =
         new MockStatsManager(storageManager, clusterMap.getReplicaIds(dataNodeId), clusterMap.getMetricRegistry(),
             statsManagerConfig, null);
-    serverMetrics =
-        new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
+    serverMetrics = new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
         storeKeyConverterFactory, statsManager);
@@ -1416,7 +1416,9 @@ public class AmbryServerRequestsTest {
     PartitionId id = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
     // store exceptions
     for (StoreErrorCodes code : StoreErrorCodes.values()) {
-      MockStorageManager.storeException = new StoreException("expected", code);
+      MockStorageManager.storeException =
+          code == StoreErrorCodes.ID_Undeleted ? new IdUndeletedStoreException("expected", (short)1)
+              : new StoreException("expected", code);
       ServerErrorCode expectedErrorCode = ErrorMapping.getStoreErrorMapping(code);
       sendAndVerifyOperationRequest(RequestOrResponseType.UndeleteRequest, Collections.singletonList(id),
           expectedErrorCode, true, null);

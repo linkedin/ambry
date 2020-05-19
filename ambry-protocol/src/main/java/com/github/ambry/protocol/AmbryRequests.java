@@ -44,6 +44,7 @@ import com.github.ambry.replication.ReplicationAPI;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
@@ -706,16 +707,12 @@ public class AmbryRequests implements RequestAPI {
             undeleteRequest, e);
       }
       if (e.getErrorCode() == StoreErrorCodes.ID_Undeleted) {
-        try {
-          // try to get the lifeVersion when the error is ID_Undeleted.
-          MessageInfo info = storeToUndelete.findKey(convertedStoreKey);
+        if (e instanceof IdUndeletedStoreException) {
           response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
-              info.getLifeVersion(), ServerErrorCode.Blob_Already_Undeleted);
-        } catch (StoreException se) {
-          logger.trace("Store exception on a findKey after undelete with error code {} for request {}",
-              se.getErrorCode(), undeleteRequest, se);
+              ((IdUndeletedStoreException) e).getLifeVersion(), ServerErrorCode.Blob_Already_Undeleted);
+        } else {
           response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
-              ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+              MessageInfo.LIFE_VERSION_FROM_FRONTEND, ServerErrorCode.Blob_Already_Undeleted);
         }
       } else {
         response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),

@@ -905,7 +905,7 @@ public class BlobStoreTest {
       store.undelete(info);
       fail("Should not succeed");
     } catch (StoreException e) {
-      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+      assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Undeleted);
     }
 
     // Undelete with even larger lifeVersion, should succeed.
