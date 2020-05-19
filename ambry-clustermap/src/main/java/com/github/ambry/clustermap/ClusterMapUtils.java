@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  * A class with clustermap related utility methods for use by other classes.
  */
 public class ClusterMapUtils {
-  // datacenterId == UNKNOWN_DATACENTER_ID indicate da:acenterId is not available at the time when this blobId is formed.
+  // datacenterId == UNKNOWN_DATACENTER_ID indicate datacenterId is not available at the time when this blobId is formed.
   public static final byte UNKNOWN_DATACENTER_ID = -1;
   public static final String PARTITION_OVERRIDE_STR = "PartitionOverride";
   public static final String REPLICA_ADDITION_STR = "ReplicaAddition";
