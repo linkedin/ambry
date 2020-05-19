@@ -41,15 +41,15 @@ import static org.mockito.Mockito.*;
 
 
 /**
- * Test class to verify participant consistency checker.
+ * Test class to verify participant consistency is correctly tracked by {@link ParticipantsConsistencyChecker} if enabled.
  */
-public class ParticipantsConsistencyCheckerTest {
+public class ParticipantsConsistencyTest {
   private Properties props = new Properties();
   private Time time;
   private NotificationSystem notificationSystem;
   private MockClusterAgentsFactory clusterAgentsFactory;
 
-  public ParticipantsConsistencyCheckerTest() throws Exception {
+  public ParticipantsConsistencyTest() throws Exception {
     clusterAgentsFactory = new MockClusterAgentsFactory(false, false, 1, 1, 1);
     MockClusterMap mockClusterMap = clusterAgentsFactory.getClusterMap();
     props.setProperty("clustermap.cluster.name", "test");
@@ -66,7 +66,7 @@ public class ParticipantsConsistencyCheckerTest {
    * Test that consistency checker should be disabled in some scenarios.
    */
   @Test
-  public void consistencyCheckDisabledTest() throws Exception {
+  public void consistencyCheckerDisabledTest() throws Exception {
     // 1. only one participant, consistency checker should be disabled
     AmbryServer server =
         new AmbryServer(new VerifiableProperties(props), clusterAgentsFactory, notificationSystem, time);
@@ -91,7 +91,7 @@ public class ParticipantsConsistencyCheckerTest {
    * @throws Exception
    */
   @Test
-  public void consistencyCheckerNoMismatchTest() throws Exception {
+  public void participantsWithNoMismatchTest() throws Exception {
     List<String> sealedReplicas = new ArrayList<>(Arrays.asList("10", "1", "4"));
     List<String> stoppedReplicas = new ArrayList<>();
     List<ClusterParticipant> participants = new ArrayList<>();
@@ -121,7 +121,7 @@ public class ParticipantsConsistencyCheckerTest {
    * @throws Exception
    */
   @Test
-  public void consistencyCheckerWithMismatchTest() throws Exception {
+  public void participantsWithMismatchTest() throws Exception {
     List<ClusterParticipant> participants = new ArrayList<>();
     // create a latch with init value = 2 and add it to second participant. This latch will count down under certain condition
     CountDownLatch invocationLatch = new CountDownLatch(2);

@@ -160,6 +160,8 @@ public class AmbryServer {
       properties.verify();
 
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
+      // if there are more than one participants on local node, we create a consistency checker to monitor and alert any
+      // mismatch in sealed/stopped replica lists that maintained by each participant.
       if (clusterParticipants != null && clusterParticipants.size() > 1
           && serverConfig.serverParticipantsConsistencyCheckerPeriodSec > 0) {
         ParticipantsConsistencyChecker consistencyChecker =
