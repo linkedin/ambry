@@ -123,6 +123,7 @@ class NettyResponseChannel implements RestResponseChannel {
     public void operationComplete(ChannelFuture future) {
       logger.trace("scheduling closure of channel {}", future.channel());
       future.channel().eventLoop().schedule(() -> {
+        nettyMetrics.delayedCloseExpiredCount.inc();
         if (future.channel().isActive()) {
           logger.trace("closing channel {}", future.channel());
           nettyMetrics.delayedCloseExecutedCount.inc();
