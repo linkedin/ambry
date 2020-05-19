@@ -165,6 +165,10 @@ public class RouterServerPlaintextTest {
           operations.add(OperationType.GET_INFO_DELETED);
           operations.add(OperationType.GET_DELETED_SUCCESS);
           operations.add(OperationType.GET_INFO_DELETED_SUCCESS);
+          operations.add(OperationType.UNDELETE);
+          operations.add(OperationType.AWAIT_UNDELETE);
+          operations.add(OperationType.GET);
+          operations.add(OperationType.GET_INFO);
           break;
         case 1:
           operations.add(OperationType.PUT);

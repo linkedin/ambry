@@ -905,7 +905,8 @@ public class BlobStoreTest {
       store.undelete(info);
       fail("Should not succeed");
     } catch (StoreException e) {
-      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+      assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Undeleted);
+      assertTrue(e instanceof IdUndeletedStoreException);
     }
 
     // Undelete with even larger lifeVersion, should succeed.
@@ -2609,6 +2610,9 @@ public class BlobStoreTest {
       fail("Store UNDELETE should have failed for key " + idToUndelete);
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
+      if (expectedErrorCode == StoreErrorCodes.ID_Undeleted) {
+        assertTrue(e instanceof IdUndeletedStoreException);
+      }
     }
   }
 

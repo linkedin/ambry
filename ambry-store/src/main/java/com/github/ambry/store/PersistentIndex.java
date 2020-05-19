@@ -60,10 +60,7 @@ class PersistentIndex {
    * Represents the different types of index entries.
    */
   enum IndexEntryType {
-    TTL_UPDATE,
-    PUT,
-    DELETE,
-    UNDELETE
+    TTL_UPDATE, PUT, DELETE, UNDELETE
   }
 
   static final short VERSION_0 = 0;
@@ -742,6 +739,10 @@ class PersistentIndex {
       throw new StoreException("Id " + key + " requires first value to be a put in index " + dataDir,
           StoreErrorCodes.ID_Deleted_Permanently);
     }
+    if (latestValue.getLifeVersion() == lifeVersion && latestValue.isUndelete()) {
+      throw new IdUndeletedStoreException(
+          "Id " + key + " already undeleted at lifeVersion " + lifeVersion + " in index " + dataDir, lifeVersion);
+    }
     if (latestValue.getLifeVersion() >= lifeVersion) {
       throw new StoreException(
           "LifeVersion conflict in index. Id " + key + " LifeVersion: " + latestValue.getLifeVersion()
@@ -775,8 +776,8 @@ class PersistentIndex {
         throw new StoreException("Id " + key + " is not deleted yet in index " + dataDir,
             StoreErrorCodes.ID_Not_Deleted);
       } else {
-        throw new StoreException("Id " + key + " is already undeleted in index" + dataDir,
-            StoreErrorCodes.ID_Undeleted);
+        throw new IdUndeletedStoreException("Id " + key + " is already undeleted in index" + dataDir,
+            value.getLifeVersion());
       }
     }
     // Oldest value has to be put and latest value has to be a delete.
@@ -784,7 +785,8 @@ class PersistentIndex {
     IndexValue latestValue = values.get(0);
     IndexValue oldestValue = values.get(values.size() - 1);
     if (latestValue.isUndelete()) {
-      throw new StoreException("Id " + key + " is already undeleted in index" + dataDir, StoreErrorCodes.ID_Undeleted);
+      throw new IdUndeletedStoreException("Id " + key + " is already undeleted in index" + dataDir,
+          latestValue.getLifeVersion());
     }
     if (!oldestValue.isPut() || !latestValue.isDelete()) {
       throw new StoreException(

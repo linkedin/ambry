@@ -433,7 +433,10 @@ public class NonBlockingRouterTest {
     ensureUndeleteInAllServers(simpleBlobId, mockServerLayout);
     router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build()).get();
 
-    // 5. Test ttl update after undelete
+    // 5. Undelete the same blob again
+    router.undeleteBlob(simpleBlobId, "undelete_server_id").get();
+
+    // 6. Test ttl update after undelete
     router.updateBlobTtl(simpleBlobId, null, Utils.Infinite_Time);
     router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build()).get();
 
@@ -513,12 +516,14 @@ public class NonBlockingRouterTest {
         BlobId.BlobDataType.DATACHUNK).getID();
     try {
       router.getBlob(nonExistBlobId, new GetBlobOptionsBuilder().build()).get();
+      fail("Should fail because of non-existed id");
     } catch (ExecutionException e) {
       RouterException r = (RouterException) e.getCause();
       Assert.assertEquals("BlobDoesNotExist error is expected", RouterErrorCode.BlobDoesNotExist, r.getErrorCode());
     }
     try {
       router.undeleteBlob(nonExistBlobId, "undelete_server_id").get();
+      fail("Should fail because of non-existed id");
     } catch (ExecutionException e) {
       RouterException r = (RouterException) e.getCause();
       Assert.assertEquals("BlobDoesNotExist error is expected", RouterErrorCode.BlobDoesNotExist, r.getErrorCode());
@@ -532,30 +537,13 @@ public class NonBlockingRouterTest {
     router.getBlob(notDeletedBlobId, new GetBlobOptionsBuilder().build()).get();
     try {
       router.undeleteBlob(notDeletedBlobId, "undelete_server_id").get();
+      fail("Should fail because of not-deleted id");
     } catch (ExecutionException e) {
       RouterException r = (RouterException) e.getCause();
       Assert.assertEquals("BlobNotDeleted error is expected", RouterErrorCode.BlobNotDeleted, r.getErrorCode());
     }
 
-    // 3. Test already undeleted blob
-    setOperationParams();
-    String undeletedBlobId =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
-    ensurePutInAllServers(undeletedBlobId, mockServerLayout);
-    router.getBlob(undeletedBlobId, new GetBlobOptionsBuilder().build()).get();
-    router.deleteBlob(undeletedBlobId, null).get();
-    ensureDeleteInAllServers(undeletedBlobId, mockServerLayout);
-    router.undeleteBlob(undeletedBlobId, "undelete_server_id").get();
-    ensureUndeleteInAllServers(undeletedBlobId, mockServerLayout);
-    router.getBlob(undeletedBlobId, new GetBlobOptionsBuilder().build()).get();
-    try {
-      router.undeleteBlob(undeletedBlobId, "undelete_server_id").get();
-    } catch (ExecutionException e) {
-      RouterException r = (RouterException) e.getCause();
-      Assert.assertEquals("BlobUndeleted error is expected", RouterErrorCode.BlobUndeleted, r.getErrorCode());
-    }
-
-    // 4. Test lifeVersion conflict blob
+    // 3. Test lifeVersion conflict blob
     setOperationParams();
     String conflictBlobId =
         router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
@@ -576,6 +564,7 @@ public class NonBlockingRouterTest {
 
     try {
       router.undeleteBlob(conflictBlobId, "undelete_server_id").get();
+      fail("Should fail because of lifeVersion conflict");
     } catch (ExecutionException e) {
       RouterException r = (RouterException) e.getCause();
       Assert.assertEquals("LifeVersionConflict error is expected", RouterErrorCode.LifeVersionConflict,

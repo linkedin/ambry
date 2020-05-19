@@ -277,6 +277,14 @@ project(':ambry-store') {
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
         testCompile project(path: ':ambry-api', configuration: 'testArchives')
     }
+
+    test {
+        testLogging {
+            exceptionFormat = 'full'
+            events 'started', 'failed', 'passed', 'skipped'
+            showStandardStreams = false
+        }
+    }
 }
 
 project(':ambry-messageformat') {

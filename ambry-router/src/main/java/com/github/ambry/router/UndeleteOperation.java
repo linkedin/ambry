@@ -23,6 +23,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
 import java.util.Map;
@@ -184,8 +185,9 @@ public class UndeleteOperation {
                   RouterErrorCode.UnexpectedInternalError));
         } else {
           ServerErrorCode serverError = undeleteResponse.getError();
-          if (serverError == ServerErrorCode.No_Error) {
-            operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
+          if (serverError == ServerErrorCode.No_Error || (serverError == ServerErrorCode.Blob_Already_Undeleted
+              // LIFE_VERSION_FROM_FRONTEND is an invalid lifeVersion
+              && undeleteResponse.getLifeVersion() != MessageInfo.LIFE_VERSION_FROM_FRONTEND)) {
             if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
               LOGGER.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
                   replica.getDataNodeId().getDatacenterName());
@@ -195,6 +197,7 @@ public class UndeleteOperation {
               // This is first successful response.
               lifeVersion = undeleteResponse.getLifeVersion();
               firstResponseReplicaId = replica;
+              operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
             } else {
               if (lifeVersion != undeleteResponse.getLifeVersion()) {
                 String message = String.format(
@@ -205,6 +208,8 @@ public class UndeleteOperation {
                 // success target has been reached or not.
                 operationCompleted = true;
                 onErrorResponse(replica, new RouterException(message, RouterErrorCode.LifeVersionConflict));
+              } else {
+                operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
               }
             }
           } else if (serverError == ServerErrorCode.Disk_Unavailable) {

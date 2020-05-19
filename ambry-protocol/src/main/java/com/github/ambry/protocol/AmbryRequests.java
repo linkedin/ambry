@@ -44,6 +44,7 @@ import com.github.ambry.replication.ReplicationAPI;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
@@ -656,8 +657,10 @@ public class AmbryRequests implements RequestAPI {
     metrics.undeleteBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     UndeleteResponse response = null;
+    Store storeToUndelete = null;
+    StoreKey convertedStoreKey = null;
     try {
-      StoreKey convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(undeleteRequest.getBlobId())).get(0);
+      convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(undeleteRequest.getBlobId())).get(0);
       ServerErrorCode error =
           validateRequest(undeleteRequest.getBlobId().getPartition(), RequestOrResponseType.UndeleteRequest, false);
       if (error != ServerErrorCode.No_Error) {
@@ -668,7 +671,7 @@ public class AmbryRequests implements RequestAPI {
         MessageInfo info = new MessageInfo(convertedBlobId, -1, false, false, true, Utils.Infinite_Time, null,
             convertedBlobId.getAccountId(), convertedBlobId.getContainerId(), undeleteRequest.getOperationTimeMs(),
             MessageInfo.LIFE_VERSION_FROM_FRONTEND);
-        Store storeToUndelete = storeManager.getStore(undeleteRequest.getBlobId().getPartition());
+        storeToUndelete = storeManager.getStore(undeleteRequest.getBlobId().getPartition());
         short lifeVersion = storeToUndelete.undelete(info);
         response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), lifeVersion);
         if (notification != null) {
@@ -703,8 +706,18 @@ public class AmbryRequests implements RequestAPI {
         logger.trace("Store exception on a undelete with error code {} for request {}", e.getErrorCode(),
             undeleteRequest, e);
       }
-      response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
-          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+      if (e.getErrorCode() == StoreErrorCodes.ID_Undeleted) {
+        if (e instanceof IdUndeletedStoreException) {
+          response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+              ((IdUndeletedStoreException) e).getLifeVersion(), ServerErrorCode.Blob_Already_Undeleted);
+        } else {
+          response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+              MessageInfo.LIFE_VERSION_FROM_FRONTEND, ServerErrorCode.Blob_Already_Undeleted);
+        }
+      } else {
+        response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+            ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+      }
     } catch (Exception e) {
       logger.error("Unknown exception for undelete request " + undeleteRequest, e);
       response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),

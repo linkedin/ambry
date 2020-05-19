@@ -98,6 +98,7 @@ public class UndeleteManager {
       }
       blobIds.add(blobId);
     }
+
     if (blobIds.size() == 1) {
       UndeleteOperation undeleteOperation =
           new UndeleteOperation(clusterMap, routerConfig, routerMetrics, blobIds.get(0), serviceId, time.milliseconds(),

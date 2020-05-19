@@ -435,9 +435,10 @@ class MockServer {
     if (undeleteError == ServerErrorCode.No_Error) {
       undeleteError = updateBlobMap(undeleteRequest);
     }
-    if (undeleteError == ServerErrorCode.No_Error) {
+    if (undeleteError == ServerErrorCode.No_Error || undeleteError == ServerErrorCode.Blob_Already_Undeleted) {
       short lifeVersion = blobs.get(undeleteRequest.getBlobId().getID()).lifeVersion;
-      return new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), lifeVersion);
+      return new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), lifeVersion,
+          undeleteError);
     } else {
       return new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), undeleteError);
     }
