@@ -100,6 +100,7 @@ class SimpleOperationTracker implements OperationTracker {
   private final RouterConfig routerConfig;
   private final boolean crossColoEnabled;
   private Iterator<ReplicaId> replicaIterator;
+  private String reassignedOriginDc = null;
   private static final Logger logger = LoggerFactory.getLogger(SimpleOperationTracker.class);
 
   /**
@@ -204,6 +205,7 @@ class SimpleOperationTracker implements OperationTracker {
     // then the remote healthy ones, and finally the possibly down ones.
     List<? extends ReplicaId> replicas =
         routerConfig.routerGetEligibleReplicasByStateEnabled ? eligibleReplicas : partitionId.getReplicaIds();
+
     // In a case where a certain dc is decommissioned and blobs previously uploaded to this dc now have a unrecognizable
     // dc id. Current clustermap code will treat originating dc as null if dc id is not identifiable. To improve success
     // rate of cross-colo requests(GET/DELETE/TTLUpdate), operation tracker should be allowed to try remote dc with most
@@ -216,11 +218,12 @@ class SimpleOperationTracker implements OperationTracker {
       entryList.sort(Map.Entry.comparingByValue());
       // we assign a dc with most replicas to "originatingDcName", which only takes effect when populating replica pool
       // (replicas in that colo have higher priority than other remote colos). Note that, "this.originatingDcName" still
-      // keeps the actual originating dc name (which is null). This value forces operation track to go through replicas
+      // keeps the actual originating dc name (which is null). This value forces operation tracker to go through replicas
       // in all dc(s) rather than terminating on not found in originating dc.
-      originatingDcName = entryList.get(entryList.size() - 1).getKey();
-      logger.debug("Originating dc name is null and has been re-assigned to {}", originatingDcName);
+      reassignedOriginDc = entryList.get(entryList.size() - 1).getKey();
+      logger.debug("Originating dc name is null and has been re-assigned to {}", reassignedOriginDc);
     }
+
     LinkedList<ReplicaId> backupReplicas = new LinkedList<>();
     LinkedList<ReplicaId> downReplicas = new LinkedList<>();
     if (shuffleReplicas) {
@@ -234,7 +237,7 @@ class SimpleOperationTracker implements OperationTracker {
     // To improve read-after-write performance across DC, we prefer to take local and originating replicas only,
     // which can be done by setting includeNonOriginatingDcReplicas False.
     List<ReplicaId> examinedReplicas = new ArrayList<>();
-
+    originatingDcName = originatingDcName == null ? reassignedOriginDc : originatingDcName;
     for (ReplicaId replicaId : replicas) {
       examinedReplicas.add(replicaId);
       String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
