@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  * A class with clustermap related utility methods for use by other classes.
  */
 public class ClusterMapUtils {
-  // datacenterId == UNKNOWN_DATACENTER_ID indicate datacenterId is not available at the time when this blobId is formed.
+  // datacenterId == UNKNOWN_DATACENTER_ID indicate da:acenterId is not available at the time when this blobId is formed.
   public static final byte UNKNOWN_DATACENTER_ID = -1;
   public static final String PARTITION_OVERRIDE_STR = "PartitionOverride";
   public static final String REPLICA_ADDITION_STR = "ReplicaAddition";
@@ -607,13 +607,6 @@ public class ClusterMapUtils {
       // No matter whether this method is called by local dc's or remote dcs' cluster change handler, we need to populate
       // "allPartitions" again because there may be some new partitions with special class added to remote dc only.
       generatePartitionMapsAndSwitch(addedReplicas, removedReplicas);
-    }
-
-    @Override
-    public void onRoutingTableChange() {
-      // This method is used to handle any state changes (offline, bootstrap, leader, standby) for remote replicas in the cluster (of a given data center).
-      // On receiving this trigger, we can look up the latest states of replicas in helix routing table snapshot {@link org.apache.helix.spectator.RoutingTableSnapshot}
-      // Should be of no use for now
     }
 
     /**

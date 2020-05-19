@@ -80,13 +80,6 @@ class CloudServiceClusterChangeHandler implements ClusterMapChangeListener, Clus
   }
 
   @Override
-  public void onRoutingTableChange() {
-    // This method is used to handle any state changes (offline,bootstrap,standby,leader,etc.) for the replicas (of a given data center) in a cluster
-    // On receiving this trigger, we can look up the latest states of replicas in helix routing table snapshot {@link org.apache.helix.spectator.RoutingTableSnapshot}
-    // Should be of no use for now
-  }
-
-  @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
     // Only register change listeners other than this instance so that CloudServiceClusterChangeHandler does not notify
     // itself twice.

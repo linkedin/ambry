@@ -47,7 +47,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -346,14 +345,14 @@ public class ReplicationManager extends ReplicationEngine {
       // Below are the actions performed in this method:
       // 1. For each leader partition in the peerLeaderReplicasByPartition map, we do the following:
       // 2. Compare the list of existing remote leaders with the new list obtained from routingtablesnapshot and collect sets of added leaders and removed leaders
-      // 3. Assign new remote leader replicas to the replica threads
-      // 4. Remove old remote leader replicas from the replica threads
+      // 3. Update the Replica state (going to be maintained in RemoteReplicaInfo class) of newly found remote leaders
+      // 4. Update the Replica state (going to be maintained in RemoteReplicaInfo class) of old remote leaders
 
       // Read-write lock here avoids contention between this method and onPartitionBecomeLeaderFromStandby()/onPartitionBecomeStandbyFromLeader() (where leader partitions are added and removed from the map peerLeaderReplicasByPartition).
       // Read lock (for threads belonging to different cluster change handlers) is sufficient here because of following reasons:
       // 1. We are only updating the existing partitions (not adding or removing) in the 'peerLeaderReplicasByPartition' map. Since, it is a concurrent hash map, PUTs and GETs are clean.
-      // 2. Adding and removing replicas to PartitionInfo for a given partition is already synchronized.
-      // 3. Adding and removing replicas to the replica threads for a given partition is already synchronized.
+      // 2. Updating of Replica state (going to be maintained in RemoteReplicaInfo class) of newly found remote leaders and old leaders will be synchronized in RemoteReplicaInfo class.
+
       rwlock1.readLock().lock();
       try {
         for (String partitionName : peerLeaderReplicasByPartition.keySet()) {
@@ -373,10 +372,9 @@ public class ReplicationManager extends ReplicationEngine {
           Set<ReplicaId> removedRemoteReplicas = new HashSet<>(currentRemoteLeaderReplicas);
           removedRemoteReplicas.removeAll(updatedRemoteLeaderReplicas);
 
-          //create replicaInfo for new remote replicas and assign them to replica-threads.
-          List<RemoteReplicaInfo> replicaInfosToAdd = new ArrayList<>();
           for (ReplicaId remoteReplica : addedRemoteReplicas) {
-            // for now, we are just logging the newly found remote leader replicas, assignment/removal of them from replica threads will be done in later PRs
+            // for now, we are just logging the newly found remote leader replicas
+            // we will update the Replica state (going to be maintained in RemoteReplicaInfo object) of the relevant remote replicas in later PRs
             logger.info("Adding new remote leader {} for Partition {} to replicate from dc {}",
                 getInstanceName(remoteReplica.getDataNodeId().getHostname(), remoteReplica.getDataNodeId().getPort()),
                 partitionName, remoteReplica.getDataNodeId().getDatacenterName());
@@ -385,7 +383,8 @@ public class ReplicationManager extends ReplicationEngine {
           //remove replicaInfo from existing partitionInfo and replica-threads
           List<RemoteReplicaInfo> replicaInfosToRemove = new ArrayList<>();
           for (ReplicaId remoteReplica : removedRemoteReplicas) {
-            // for now, we are just logging the old leader replicas, assignment/removal of them from replica threads will be done in later PRs
+            // for now, we are just logging the old leader replicas
+            // we will update the Replica state (going to be maintained in RemoteReplicaInfo object) of the relevant remote replicas in later PRs
             logger.info("Removing old remote leader {} for Partition {} from dc {}",
                 getInstanceName(remoteReplica.getDataNodeId().getHostname(), remoteReplica.getDataNodeId().getPort()),
                 partitionName, remoteReplica.getDataNodeId().getDatacenterName());
