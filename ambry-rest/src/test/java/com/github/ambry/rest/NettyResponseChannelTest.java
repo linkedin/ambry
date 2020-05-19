@@ -708,7 +708,7 @@ public class NettyResponseChannelTest {
         processor.getNettyMetrics().delayedCloseScheduledCount.getCount());
     assertEquals("delayed close executed counter mismatch", 1,
         processor.getNettyMetrics().delayedCloseExecutedCount.getCount());
-    assertEquals("delayed close nop counter mismatch", 1,
+    assertEquals("delayed close expired counter mismatch", 1,
         processor.getNettyMetrics().delayedCloseExpiredCount.getCount());
   }
 
