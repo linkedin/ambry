@@ -52,7 +52,7 @@ public class HelixVcrClusterTest {
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, 1, 1, NUM_PARTITIONS);
+    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, true, 1, 1, NUM_PARTITIONS);
     mockClusterMap = mockClusterAgentsFactory.getClusterMap();
     zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, ZK_SERVER_PORT, true);
     helixControllerManager =

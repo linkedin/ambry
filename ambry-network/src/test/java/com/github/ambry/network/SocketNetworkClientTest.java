@@ -18,10 +18,10 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Time;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -107,7 +107,7 @@ public class SocketNetworkClientTest {
     networkClient =
         new SocketNetworkClient(selector, networkConfig, networkMetrics, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, time);
-    sslEnabledClusterMap = new MockClusterMap(true, 9, 3, 3, false, false);
+    sslEnabledClusterMap = new MockClusterMap(true, true, 9, 3, 3, false, false);
     localSslDataNodes = sslEnabledClusterMap.getDataNodeIds()
         .stream()
         .filter(dataNodeId -> sslEnabledClusterMap.getDatacenterName(sslEnabledClusterMap.getLocalDatacenterId())

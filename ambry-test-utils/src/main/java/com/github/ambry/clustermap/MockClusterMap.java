@@ -52,6 +52,7 @@ public class MockClusterMap implements ClusterMap {
   protected final Map<Long, PartitionId> partitions;
   protected final List<MockDataNodeId> dataNodes;
   protected final int numMountPointsPerNode;
+  protected boolean enableHttp2Ports = true;
   private final List<String> dataCentersInClusterMap = new ArrayList<>();
   private final Map<String, List<MockDataNodeId>> dcToDataNodes = new HashMap<>();
   private final ClusterMapUtils.PartitionSelectionHelper partitionSelectionHelper;
@@ -84,7 +85,7 @@ public class MockClusterMap implements ClusterMap {
    * on the test machine.
    */
   public MockClusterMap() throws IOException {
-    this(false, 9, 3, 3, false, false);
+    this(false, true, 9, 3, 3, false, false);
   }
 
   /**
@@ -108,6 +109,8 @@ public class MockClusterMap implements ClusterMap {
    * 3. There are at least 3 nodes in the designated "local" datacenter.
    * To determine whether a "special" partition was created, use the function {@link #getSpecialPartition()}.
    * The "special" partition has 3 replicas in the designated "local" datacenter and 2 replicas in all other datacenters
+   * @param  enableSSLPorts whether to enable SSL ports.
+   * @param enableHttp2Ports whether to enable Http2 ports.
    * @param numNodes number of mock datanodes that will be created (every 3 of which will be put in a separate
    *                 datacenter).
    * @param numMountPointsPerNode number of mount points (mocking disks) that will be created in each datanode.
@@ -118,10 +121,11 @@ public class MockClusterMap implements ClusterMap {
    *                       replica for each partition in the cluster map. The virtual datanode created for the cloud DC
    *                       does not count against {@code numNodes}.
    */
-  public MockClusterMap(boolean enableSSLPorts, int numNodes, int numMountPointsPerNode,
+  public MockClusterMap(boolean enableSSLPorts, boolean enableHttp2Ports, int numNodes, int numMountPointsPerNode,
       int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass, boolean includeCloudDc)
       throws IOException {
     this.enableSSLPorts = enableSSLPorts;
+    this.enableHttp2Ports = enableHttp2Ports;
     this.numMountPointsPerNode = numMountPointsPerNode;
     dataNodes = new ArrayList<>(numNodes);
     //Every group of 3 nodes will be put in the same DC.
@@ -147,12 +151,13 @@ public class MockClusterMap implements ClusterMap {
       }
       MockDataNodeId dataNodeId;
       if (enableSSLPorts) {
-        dataNodeId =
-            createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++, currentHttp2Port++), dcName,
-                numMountPointsPerNode);
+        dataNodeId = createDataNode(
+            getListOfPorts(currentPlainTextPort++, currentSSLPort++, enableHttp2Ports ? currentHttp2Port++ : null),
+            dcName, numMountPointsPerNode);
       } else {
-        dataNodeId = createDataNode(getListOfPorts(currentPlainTextPort++, null, currentHttp2Port++), dcName,
-            numMountPointsPerNode);
+        dataNodeId =
+            createDataNode(getListOfPorts(currentPlainTextPort++, null, enableHttp2Ports ? currentHttp2Port++ : null),
+                dcName, numMountPointsPerNode);
       }
       dataNodes.add(dataNodeId);
       dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(dataNodeId);

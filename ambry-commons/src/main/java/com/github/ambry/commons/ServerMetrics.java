@@ -213,6 +213,9 @@ public class ServerMetrics {
   public final Counter ttlAlreadyUpdatedError;
   public final Counter ttlUpdateRejectedError;
   public final Counter replicationResponseMessageSizeTooHigh;
+  public Counter sealedReplicasMismatchCount = null;
+  public Counter stoppedReplicasMismatchCount = null;
+
   public final Map<String, Meter> crossColoFetchBytesRate = new ConcurrentHashMap<>();
   public final Map<String, Meter> crossColoMetadataExchangeBytesRate = new ConcurrentHashMap<>();
 
@@ -482,6 +485,13 @@ public class ServerMetrics {
     ttlUpdateRejectedError = registry.counter(MetricRegistry.name(requestClass, "TtlUpdateRejectedError"));
     replicationResponseMessageSizeTooHigh =
         registry.counter(MetricRegistry.name(requestClass, "ReplicationResponseMessageSizeTooHigh"));
+  }
+
+  public void registerParticipantsMismatchMetrics() {
+    sealedReplicasMismatchCount =
+        registry.counter(MetricRegistry.name(ServerMetrics.class, "SealedReplicasMismatchCount"));
+    stoppedReplicasMismatchCount =
+        registry.counter(MetricRegistry.name(ServerMetrics.class, "StoppedReplicasMismatchCount"));
   }
 
   public void updateCrossColoFetchBytesRate(String dcName, long bytes) {

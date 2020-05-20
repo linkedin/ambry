@@ -88,7 +88,7 @@ public class MockCluster {
         sslEnabledDataCentersStr != null ? Utils.splitString(sslEnabledDataCentersStr, ",") : new ArrayList<>();
 
     mockClusterAgentsFactory =
-        new MockClusterAgentsFactory(sslEnabledDataCentersStr != null, numNodes, numMountPointsPerNode,
+        new MockClusterAgentsFactory(sslEnabledDataCentersStr != null, true, numNodes, numMountPointsPerNode,
             numStoresPerMountPoint);
     clusterMap = mockClusterAgentsFactory.getClusterMap();
 
@@ -499,7 +499,6 @@ class EventTracker {
   boolean awaitBlobDeletions() throws InterruptedException {
     return deletionHelper.await(10, TimeUnit.SECONDS);
   }
-
 
   /**
    * Waits for blob undeletes on all replicas

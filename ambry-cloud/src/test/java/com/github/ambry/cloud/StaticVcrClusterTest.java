@@ -39,7 +39,7 @@ public class StaticVcrClusterTest {
 
   @Before
   public void setup() throws Exception {
-    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, 1, 1, 2);
+    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, true, 1, 1, 2);
     mockClusterMap = mockClusterAgentsFactory.getClusterMap();
   }
 

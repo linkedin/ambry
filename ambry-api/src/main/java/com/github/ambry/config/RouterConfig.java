@@ -424,7 +424,7 @@ public class RouterConfig {
   public final boolean routerOperationTrackerHistogramDumpEnabled;
 
   /**
-   * The period of dumping resource-level histogram (if enabled).
+   * The period of dumping resource-level histogram in seconds(if enabled).
    */
   @Config(ROUTER_OPERATION_TRACKER_HISTOGRAM_DUMP_PERIOD)
   @Default("600")

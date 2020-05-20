@@ -76,6 +76,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,6 +114,7 @@ public class AmbryServer {
   private RequestHandlerPool requestHandlerPoolForHttp2;
   private RestRequestHandler restRequestHandlerForHttp2;
   private NioServer nettyHttp2Server;
+  private ScheduledFuture<?> consistencyCheckerTask = null;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       ClusterSpectatorFactory clusterSpectatorFactory, Time time) {
@@ -161,7 +163,18 @@ public class AmbryServer {
       properties.verify();
 
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
-      logger.info("check if node exist in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
+      // if there are more than one participants on local node, we create a consistency checker to monitor and alert any
+      // mismatch in sealed/stopped replica lists that maintained by each participant.
+      if (clusterParticipants != null && clusterParticipants.size() > 1
+          && serverConfig.serverParticipantsConsistencyCheckerPeriodSec > 0) {
+        ParticipantsConsistencyChecker consistencyChecker =
+            new ParticipantsConsistencyChecker(clusterParticipants, metrics);
+        logger.info("Scheduling participants consistency checker with a period of {} secs",
+            serverConfig.serverParticipantsConsistencyCheckerPeriodSec);
+        consistencyCheckerTask = scheduler.scheduleAtFixedRate(consistencyChecker, 0,
+            serverConfig.serverParticipantsConsistencyCheckerPeriodSec, TimeUnit.SECONDS);
+      }
+      logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
       DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
       if (nodeId == null) {
         throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port
@@ -173,8 +186,8 @@ public class AmbryServer {
       AccountService accountService = accountServiceFactory.getAccountService();
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
-      // In most cases, there should be only on participant in the clusterParticipants list. If there are more than one
-      // participants and some components require sole participant, the first one in the list will be primary participant.
+      // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
+      // and some components require sole participant, the first one in the list will be primary participant.
       storageManager =
           new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
               new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
@@ -300,6 +313,9 @@ public class AmbryServer {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
+      if (consistencyCheckerTask != null) {
+        consistencyCheckerTask.cancel(false);
+      }
       if (clusterParticipants != null) {
         clusterParticipants.forEach(ClusterParticipant::close);
       }
@@ -362,5 +378,13 @@ public class AmbryServer {
 
   public void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
+  }
+
+  /**
+   * Exposed for testing.
+   * @return {@link ServerMetrics}
+   */
+  ServerMetrics getServerMetrics() {
+    return metrics;
   }
 }

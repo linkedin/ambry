@@ -85,7 +85,7 @@ public class ServerHardDeleteTest {
 
   @Before
   public void initialize() throws Exception {
-    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, 1, 1, 1);
+    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, true, 1, 1, 1);
     mockClusterMap = mockClusterAgentsFactory.getClusterMap();
     notificationSystem = new MockNotificationSystem(mockClusterMap);
     time = new MockTime(SystemTime.getInstance().milliseconds());
