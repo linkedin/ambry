@@ -83,15 +83,15 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       localDcResourceToHistogram = getResourceToLatencyMap(routerOperation, true);
       crossDcResourceToHistogram = getResourceToLatencyMap(routerOperation, false);
     }
-    if (diskParallelism > routerConfig.routerOperationTrackerMaxInflightRequests) {
+    if (diskReplicaParallelism > routerConfig.routerOperationTrackerMaxInflightRequests) {
       throw new IllegalArgumentException(String.format(
           "Operation tracker disk replica parallelism (%s) is larger than adaptive tracker max inflight number (%s)",
-          diskParallelism, routerConfig.routerOperationTrackerMaxInflightRequests));
+          diskReplicaParallelism, routerConfig.routerOperationTrackerMaxInflightRequests));
     }
-    if (cloudParallelism > routerConfig.routerOperationTrackerMaxInflightRequests) {
+    if (cloudReplicaParallelism > routerConfig.routerOperationTrackerMaxInflightRequests) {
       throw new IllegalArgumentException(String.format(
           "Operation tracker cloud replica parallelism (%s) is larger than adaptive tracker max inflight number (%s)",
-          diskParallelism, routerConfig.routerOperationTrackerMaxInflightRequests));
+          diskReplicaParallelism, routerConfig.routerOperationTrackerMaxInflightRequests));
     }
   }
 

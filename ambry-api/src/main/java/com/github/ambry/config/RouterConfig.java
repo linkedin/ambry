@@ -101,6 +101,8 @@ public class RouterConfig {
   public static final String ROUTER_CLOUD_SUCCESS_TARGET = "router.cloud.success.target";
   public static final String ROUTER_CLOUD_REQUEST_PARALLELISM = "router.cloud.request.parallelism";
   public static final String ROUTER_ENABLE_HTTP2_NETWORK_CLIENT = "router.enable.http2.network.client";
+  public static final String ROUTER_CROSS_COLO_REQUEST_TO_DC_WITH_MOST_REPLICAS =
+      "router.cross.colo.request.to.dc.with.most.replicas";
 
   /**
    * Number of independent scaling units for the router.
@@ -489,6 +491,16 @@ public class RouterConfig {
   public final boolean routerEnableHttp2NetworkClient;
 
   /**
+   * When request didn't succeed in local dc, whether to let router send request to remote dc with most replicas first.
+   * Currently, our logic is to try originating dc first. In some cases where originating dc is no longer available (i.e.
+   * the dc has been decommissioned), this config allows router to choose a dc with most replicas in which it's more
+   * likely to succeed.
+   */
+  @Config(ROUTER_CROSS_COLO_REQUEST_TO_DC_WITH_MOST_REPLICAS)
+  @Default("false")
+  public final boolean routerCrossColoRequestToDcWithMostReplicas;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -593,5 +605,7 @@ public class RouterConfig {
     routerCloudRequestParallelism =
         verifiableProperties.getIntInRange(ROUTER_CLOUD_REQUEST_PARALLELISM, 1, 1, Integer.MAX_VALUE);
     routerEnableHttp2NetworkClient = verifiableProperties.getBoolean(ROUTER_ENABLE_HTTP2_NETWORK_CLIENT, false);
+    routerCrossColoRequestToDcWithMostReplicas =
+        verifiableProperties.getBoolean(ROUTER_CROSS_COLO_REQUEST_TO_DC_WITH_MOST_REPLICAS, false);
   }
 }
