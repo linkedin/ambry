@@ -696,7 +696,8 @@ public class NettyResponseChannelTest {
             httpHeaders, content.getBytes());
     channel.writeInbound(httpRequest);
     HttpResponse response = channel.readOutbound();
-    assertEquals("Unexpected response status", getExpectedHttpResponseStatus(REST_ERROR_CODE), response.status());
+    assertEquals("Unexpected response status", getExpectedHttpResponseStatus(REST_ERROR_CODE),
+        response.status());
     //channel should not be closed right away.
     assertTrue("Channel closed on the server", channel.isActive());
     //wait for delayed time * 2 times (to rule out timing out on border) and then check again.
@@ -707,6 +708,8 @@ public class NettyResponseChannelTest {
         processor.getNettyMetrics().delayedCloseScheduledCount.getCount());
     assertEquals("delayed close executed counter mismatch", 1,
         processor.getNettyMetrics().delayedCloseExecutedCount.getCount());
+    assertEquals("delayed close expired counter mismatch", 1,
+        processor.getNettyMetrics().delayedCloseActivatedCount.getCount());
   }
 
   // helpers
