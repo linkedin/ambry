@@ -21,6 +21,8 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -28,12 +30,13 @@ import io.netty.handler.codec.http.FullHttpResponse;
  */
 @ChannelHandler.Sharable
 class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
+  private static final Logger logger = LoggerFactory.getLogger(Http2ClientResponseHandler.class);
   private static final ResponseInfo WAKEUP_MARKER = new ResponseInfo(null, null, null);
   private BatchBlockingQueue<ResponseInfo> responseInfoQueue = new BatchBlockingQueue<>(WAKEUP_MARKER);
-  private Http2NetworkClient http2NetworkClient;
+  private Http2ClientMetrics http2ClientMetrics;
 
-  public Http2ClientResponseHandler(Http2NetworkClient http2NetworkClient) {
-    this.http2NetworkClient = http2NetworkClient;
+  public Http2ClientResponseHandler(Http2ClientMetrics http2ClientMetrics) {
+    this.http2ClientMetrics = http2ClientMetrics;
   }
 
   @Override
@@ -43,16 +46,11 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
     // Consume length
     dup.readLong();
     RequestInfo requestInfo = ctx.channel().attr(Http2NetworkClient.REQUEST_INFO).get();
-    http2NetworkClient.getHttp2ClientMetrics().http2StreamFirstToAllFrameReadyTime.update(
+    http2ClientMetrics.http2StreamFirstToAllFrameReadyTime.update(
         System.currentTimeMillis() - requestInfo.getStreamHeaderFrameReceiveTime());
     ResponseInfo responseInfo = new ResponseInfo(requestInfo, null, dup);
     responseInfoQueue.put(responseInfo);
-    // TODO: is this a good place to release stream channel?
-    ctx.channel()
-        .parent()
-        .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
-        .get()
-        .release(ctx.channel());
+    releaseAndCloseStreamChannel(ctx);
   }
 
   /**
@@ -63,5 +61,21 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
    */
   public BatchBlockingQueue<ResponseInfo> getResponseInfoQueue() {
     return responseInfoQueue;
+  }
+
+  @Override
+  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+    http2ClientMetrics.http2StreamExceptionCount.inc();
+    logger.info("Exception Caught from inbound.", cause.getMessage());
+    releaseAndCloseStreamChannel(ctx);
+  }
+
+  private void releaseAndCloseStreamChannel(ChannelHandlerContext ctx) {
+    logger.debug("Stream channel is being closed. Stream: {}, Parent: {}", ctx.channel(), ctx.channel().parent());
+    ctx.channel()
+        .parent()
+        .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
+        .get()
+        .release(ctx.channel());
   }
 }

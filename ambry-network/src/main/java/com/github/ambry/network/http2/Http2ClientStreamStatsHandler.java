@@ -32,10 +32,10 @@ import org.slf4j.LoggerFactory;
 @ChannelHandler.Sharable
 class Http2ClientStreamStatsHandler extends SimpleChannelInboundHandler<Http2Frame> {
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private Http2NetworkClient http2NetworkClient;
+  private final Http2ClientMetrics http2ClientMetrics;
 
-  public Http2ClientStreamStatsHandler(Http2NetworkClient http2NetworkClient) {
-    this.http2NetworkClient = http2NetworkClient;
+  public Http2ClientStreamStatsHandler(Http2ClientMetrics http2ClientMetrics) {
+    this.http2ClientMetrics = http2ClientMetrics;
   }
 
   @Override
@@ -45,7 +45,7 @@ class Http2ClientStreamStatsHandler extends SimpleChannelInboundHandler<Http2Fra
     requestInfo.responseFramesCount++;
     long time = System.currentTimeMillis() - requestInfo.getStreamSendTime();
     if (frame instanceof Http2HeadersFrame) {
-      http2NetworkClient.getHttp2ClientMetrics().http2StreamRoundTripTime.update(time);
+      http2ClientMetrics.http2StreamRoundTripTime.update(time);
       requestInfo.setStreamHeaderFrameReceiveTime(System.currentTimeMillis());
       logger.debug("Header Frame received. Time from send: {}ms. Request: {}", time, requestInfo);
     } else if (frame instanceof Http2DataFrame) {
@@ -54,8 +54,8 @@ class Http2ClientStreamStatsHandler extends SimpleChannelInboundHandler<Http2Fra
     }
 
     if (frame instanceof Http2DataFrame && ((Http2DataFrame) frame).isEndStream()) {
-      http2NetworkClient.getHttp2ClientMetrics().http2StreamFirstToLastFrameTime.update(time);
-      http2NetworkClient.getHttp2ClientMetrics().http2ResponseFrameCount.update(requestInfo.responseFramesCount);
+      http2ClientMetrics.http2StreamFirstToLastFrameTime.update(time);
+      http2ClientMetrics.http2ResponseFrameCount.update(requestInfo.responseFramesCount);
       logger.debug("All Frame received. Time from send: {}ms. Request: {}", time, requestInfo);
     }
     ctx.fireChannelRead(frame);

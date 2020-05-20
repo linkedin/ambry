@@ -20,6 +20,7 @@ package com.github.ambry.network.http2;
 import com.github.ambry.commons.NettyUtils;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
+import com.github.ambry.config.VerifiableProperties;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
@@ -42,6 +43,7 @@ import java.net.InetSocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -76,37 +78,34 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
 
   // HTTP/2 physical connection pool.
   private final ChannelPool parentConnectionPool;
+  private final InetSocketAddress inetSocketAddress;
   private final EventLoopGroup eventLoopGroup;
   private final Set<MultiplexedChannelRecord> parentConnections;
-  private final Long idleConnectionTimeoutMs;
-  private final int minParentConnections;
-  private final int maxConcurrentStreamsAllowed;
-  private final int maxContentLength;
+  private final Http2ClientConfig http2ClientConfig;
   private final Http2ClientMetrics http2ClientMetrics;
 
   private AtomicBoolean closed = new AtomicBoolean(false);
 
   /**
-   * @param inetSocketAddress IP Socket Address (IP address + port number).
+   * @param inetSocketAddress Remote Socket Address (IP address + port number).
    * @param sslFactory {@link SSLFactory} used for SSL connection.
    * @param eventLoopGroup The event loop group.
    * @param http2ClientConfig http2 client configs.
    * @param http2ClientMetrics http2 client metrics.
    */
-  Http2MultiplexedChannelPool(InetSocketAddress inetSocketAddress, SSLFactory sslFactory, EventLoopGroup eventLoopGroup,
-      Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics) {
+  public Http2MultiplexedChannelPool(InetSocketAddress inetSocketAddress, SSLFactory sslFactory,
+      EventLoopGroup eventLoopGroup, Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics) {
     this(new SimpleChannelPool(createBootStrap(eventLoopGroup, http2ClientConfig, inetSocketAddress),
             new Http2ChannelPoolHandler(sslFactory, inetSocketAddress.getHostName(), inetSocketAddress.getPort(),
-                http2ClientConfig)), eventLoopGroup, ConcurrentHashMap.newKeySet(),
-        http2ClientConfig.idleConnectionTimeoutMs, http2ClientConfig.http2MinConnectionPerPort,
-        http2ClientConfig.http2MaxConcurrentStreamsPerConnection, http2ClientConfig.http2MaxContentLength,
-        http2ClientMetrics);
+                http2ClientConfig)), eventLoopGroup, ConcurrentHashMap.newKeySet(), inetSocketAddress,
+        new Http2ClientConfig(new VerifiableProperties(new Properties())), http2ClientMetrics);
   }
 
   /**
    * @param inetSocketAddress IP Socket Address (IP address + port number).
    * @param eventLoopGroup The event loop group.
    * @param http2ClientConfig http2 client configs.
+   * @param inetSocketAddress Remote Socket Address (IP address + port number).
    * @return {@link Bootstrap}
    */
   static private Bootstrap createBootStrap(EventLoopGroup eventLoopGroup, Http2ClientConfig http2ClientConfig,
@@ -132,23 +131,40 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
   /**
    * @param connectionPool The {@link ChannelPool} to acquire parent channel.
    * @param eventLoopGroup The event loop group.
-   * @param idleConnectionTimeoutMs the idle time before a channel is closed.
-   * @param minParentConnections Minimum number of parent channel will be created before reuse.
-   * @param maxConcurrentStreamsAllowed The maximum streams allowed per parent channel.
-   * @param maxContentLength Maximum content length for a full HTTP/2 content. Used in HttpObjectAggregator.
+   * @param inetSocketAddress Remote Socket Address (IP address + port number).
+   * @param http2ClientConfig
    * @param http2ClientMetrics Http2 client metrics.
    */
   Http2MultiplexedChannelPool(ChannelPool connectionPool, EventLoopGroup eventLoopGroup,
-      Set<MultiplexedChannelRecord> connections, Long idleConnectionTimeoutMs, int minParentConnections,
-      int maxConcurrentStreamsAllowed, int maxContentLength, Http2ClientMetrics http2ClientMetrics) {
+      Set<MultiplexedChannelRecord> connections, InetSocketAddress inetSocketAddress,
+      Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics) {
     this.parentConnectionPool = connectionPool;
     this.eventLoopGroup = eventLoopGroup;
     this.parentConnections = connections;
-    this.idleConnectionTimeoutMs = idleConnectionTimeoutMs;
-    this.minParentConnections = minParentConnections;
-    this.maxConcurrentStreamsAllowed = maxConcurrentStreamsAllowed;
-    this.maxContentLength = maxContentLength;
+    this.inetSocketAddress = inetSocketAddress;
+    this.http2ClientConfig = http2ClientConfig;
     this.http2ClientMetrics = http2ClientMetrics;
+  }
+
+  /**
+   * Get remote socket address (IP address + port number) of this pool.
+   */
+  public InetSocketAddress getInetSocketAddress() {
+    return inetSocketAddress;
+  }
+
+  /**
+   * Get Http2ClientMetrics.
+   */
+  Http2ClientMetrics getHttp2ClientMetrics() {
+    return http2ClientMetrics;
+  }
+
+  /**
+   * Get Http2ClientConfig.
+   */
+  Http2ClientConfig getHttp2ClientConfig() {
+    return http2ClientConfig;
   }
 
   @Override
@@ -163,7 +179,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
       return promise.setFailure(new IOException("Channel pool is closed!"));
     }
 
-    if (parentConnections.size() >= minParentConnections) {
+    if (parentConnections.size() >= http2ClientConfig.http2MinConnectionPerPort) {
       // TODO: if warmup is not 100%, new connections are still required.
       // This is a passive load balance depends on compareAndSet in claimStream().
       for (MultiplexedChannelRecord multiplexedChannel : parentConnections) {
@@ -208,8 +224,8 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
     long startTime = System.currentTimeMillis();
     try {
       MultiplexedChannelRecord multiplexedChannel =
-          new MultiplexedChannelRecord(parentChannel, maxConcurrentStreamsAllowed, idleConnectionTimeoutMs,
-              maxContentLength);
+          new MultiplexedChannelRecord(parentChannel, http2ClientConfig.http2MaxConcurrentStreamsPerConnection,
+              http2ClientConfig.idleConnectionTimeoutMs, http2ClientConfig.http2MaxContentLength);
       parentChannel.attr(MULTIPLEXED_CHANNEL).set(multiplexedChannel);
 
       Promise<Channel> streamPromise = parentChannel.eventLoop().newPromise();
@@ -444,6 +460,8 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+      Http2MultiplexedChannelPool pool = ctx.channel().attr(HTTP2_MULTIPLEXED_CHANNEL_POOL).get();
+      pool.getHttp2ClientMetrics().http2ParentExceptionCount.inc();
       closeAndReleaseParent(ctx, cause);
     }
 

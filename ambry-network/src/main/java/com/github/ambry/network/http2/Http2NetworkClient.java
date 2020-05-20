@@ -67,8 +67,8 @@ public class Http2NetworkClient implements NetworkClient {
       this.eventLoopGroup = new NioEventLoopGroup(http2ClientConfig.http2NettyEventLoopGroupThreads);
     }
     this.pools = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics);
-    this.http2ClientResponseHandler = new Http2ClientResponseHandler(this);
-    this.http2ClientStreamStatsHandler = new Http2ClientStreamStatsHandler(this);
+    this.http2ClientResponseHandler = new Http2ClientResponseHandler(http2ClientMetrics);
+    this.http2ClientStreamStatsHandler = new Http2ClientStreamStatsHandler(http2ClientMetrics);
     this.http2ClientMetrics = http2ClientMetrics;
   }
 
@@ -117,7 +117,8 @@ public class Http2NetworkClient implements NetworkClient {
                   requestInfo.getPort().getPort(), future.cause());
               // release related bytebuf
               requestInfo.getRequest().release();
-              readyResponseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
+              http2ClientResponseHandler.getResponseInfoQueue()
+                  .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
             }
           });
     }

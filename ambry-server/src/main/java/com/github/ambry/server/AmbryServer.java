@@ -31,6 +31,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.RestServerConfig;
@@ -48,6 +49,8 @@ import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
+import com.github.ambry.network.http2.Http2BlockingChannelPool;
+import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestHandlerPool;
@@ -177,7 +180,14 @@ public class AmbryServer {
               new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
       storageManager.start();
 
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
+      SSLFactory sslFactory = new NettySslHttp2Factory(sslConfig);
+
+      if (replicationConfig.replicationEnableHttp2) {
+        connectionPool = new Http2BlockingChannelPool(sslFactory, new Http2ClientConfig(properties),
+            new Http2ClientMetrics(registry));
+      } else {
+        connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
+      }
       connectionPool.start();
 
       StoreKeyConverterFactory storeKeyConverterFactory =
@@ -225,7 +235,6 @@ public class AmbryServer {
       if (nodeId.hasHttp2Port()) {
         logger.info("Http2 port {} is enabled. Starting HTTP/2 service. ", nodeId.getHttp2Port());
         RestServerConfig restServerConfig = new RestServerConfig(properties);
-        SSLFactory sslFactory = new NettySslHttp2Factory(sslConfig);
         NettyServerRequestResponseChannel requestResponseChannel = new NettyServerRequestResponseChannel(32);
         RestRequestService restRequestService = new StorageRestRequestService(requestResponseChannel);
 

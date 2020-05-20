@@ -43,6 +43,7 @@ import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -63,6 +64,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SSLBlockingChannel;
 import com.github.ambry.network.http2.Http2BlockingChannel;
+import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
@@ -2351,8 +2353,9 @@ final class ServerTestUtil {
       channel = new SSLBlockingChannel(hostName, targetPort.getPort(), new MetricRegistry(), 10000, 10000, 10000, 4000,
           sslSocketFactory, sslConfig);
     } else if (targetPort.getPortType() == PortType.HTTP2) {
-      channel = new Http2BlockingChannel(hostName, targetPort.getPort(), sslConfig, 1024 * 1024, 1024 * 1024,
-          5 * 1024 * 1024);
+      channel = new Http2BlockingChannel(hostName, targetPort.getPort(), sslConfig,
+          new Http2ClientConfig(new VerifiableProperties(new Properties())),
+          new Http2ClientMetrics(new MetricRegistry()));
     }
     return channel;
   }
