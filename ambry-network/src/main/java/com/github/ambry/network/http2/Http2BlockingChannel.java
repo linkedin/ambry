@@ -105,13 +105,12 @@ public class Http2BlockingChannel implements ConnectedChannel {
     }
 
     ChannelPipeline p = streamChannel.pipeline();
-    p.addLast(new Http2ClientStreamStatsHandler(http2ClientMetrics));
     p.addLast(new Http2StreamFrameToHttpObjectCodec(false));
     p.addLast(new HttpObjectAggregator(http2ClientConfig.http2MaxContentLength));
     p.addLast(new SimpleChannelInboundHandler<FullHttpResponse>() {
       @Override
       protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
-        Promise<ByteBuf> promise = ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null);
+        Promise<ByteBuf> promise = ctx.channel().attr(RESPONSE_PROMISE).get();
         if (promise != null) {
           promise.setSuccess(msg.content().retainedDuplicate());
           // Stream channel can't be reused. Release it here.
@@ -141,7 +140,7 @@ public class Http2BlockingChannel implements ConnectedChannel {
     responsePromise = streamChannel.eventLoop().newPromise();
     streamChannel.attr(RESPONSE_PROMISE).set(responsePromise);
     streamChannel.writeAndFlush(request)
-        .awaitUninterruptibly(http2ClientConfig.http2BlockingChannelSendTimeoutMs, TimeUnit.MICROSECONDS);
+        .awaitUninterruptibly(http2ClientConfig.http2BlockingChannelSendTimeoutMs, TimeUnit.MILLISECONDS);
   }
 
   @Override
@@ -149,7 +148,7 @@ public class Http2BlockingChannel implements ConnectedChannel {
     ByteBuf responseByteBuf;
     try {
       responseByteBuf =
-          responsePromise.get(http2ClientConfig.http2BlockingChannelReceiveTimeoutMs, TimeUnit.MICROSECONDS);
+          responsePromise.get(http2ClientConfig.http2BlockingChannelReceiveTimeoutMs, TimeUnit.MILLISECONDS);
     } catch (InterruptedException | ExecutionException | TimeoutException e) {
       throw new IOException("Failed to receive response from " + getRemoteHost() + ":" + getRemotePort(), e);
     }
