@@ -16,6 +16,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -1350,7 +1351,7 @@ public class StorageManagerTest {
     }
 
     @Override
-    public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
+    public void participate(List<AmbryHealthReport> ambryHealthReports, AccountService accountService) throws IOException {
       // no op
     }
 

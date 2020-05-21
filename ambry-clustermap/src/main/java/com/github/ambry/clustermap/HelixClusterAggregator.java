@@ -53,7 +53,7 @@ public class HelixClusterAggregator {
    * for each partition.
    * @throws IOException
    */
-  Pair<String, String> doWork(Map<String, String> statsWrappersJSON, StatsReportType type) throws IOException {
+  Pair<StatsSnapshot, StatsSnapshot> doWork(Map<String, String> statsWrappersJSON, StatsReportType type) throws IOException {
     StatsSnapshot partitionSnapshot = new StatsSnapshot(0L, new HashMap<>());
     Map<String, Long> partitionTimestampMap = new HashMap<>();
     StatsSnapshot rawPartitionSnapshot = new StatsSnapshot(0L, new HashMap<>());
@@ -105,7 +105,7 @@ public class HelixClusterAggregator {
       logger.trace("Reduced raw snapshot {}", mapper.writeValueAsString(reducedRawSnapshot));
       logger.trace("Reduced valid snapshot {}", mapper.writeValueAsString(reducedSnapshot));
     }
-    return new Pair<>(mapper.writeValueAsString(reducedRawSnapshot), mapper.writeValueAsString(reducedSnapshot));
+    return new Pair<>(reducedRawSnapshot, reducedSnapshot);
   }
 
   /**

@@ -17,11 +17,16 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.router.Router;
+import com.github.ambry.server.StatsSnapshot;
+import com.google.common.base.Preconditions;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -93,7 +98,6 @@ public class HelixAccountService extends AbstractAccountService implements Accou
   private final TopicListener<String> changeTopicListener = this::onAccountChangeMessage;
   private final AccountMetadataStore accountMetadataStore;
   private static final Logger logger = LoggerFactory.getLogger(HelixAccountService.class);
-
   private final AtomicReference<Router> router = new AtomicReference<>();
 
   /**
@@ -340,6 +344,70 @@ public class HelixAccountService extends AbstractAccountService implements Accou
       logger.error("Exception occurred when processing message={} for topic={}.", message, topic, e);
       accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
       accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
+    }
+  }
+
+  /**
+   * Selects {@link Container}s to be marked as INACTIVE. Check the valid data size of each DELETE_IN_PROGRESS container
+   * from {@link StatsSnapshot} and select the ones with zero data size to be marked as INACTIVE.
+   */
+  Set<Container> selectInvalidContainers(StatsSnapshot statsSnapshot) {
+    Map<String, Set<String>> accountToContainerMap = new HashMap<>();
+    Set<Container> invalidContainerSet = new HashSet<>();
+    getValidContainers(accountToContainerMap, statsSnapshot, null);
+    Set<Container> deprecatedContainerSet = getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS);
+    for (Container container : deprecatedContainerSet) {
+      String containerIdToString = "C[" + container.getId() + "]";
+      String accountIdToString = "A[" + container.getParentAccountId() + "]";
+      if (accountToContainerMap.containsKey(accountIdToString) && accountToContainerMap.get(accountIdToString)
+          .contains(containerIdToString)) {
+        logger.info("Container {} has not been deleted yet", container);
+      } else {
+        invalidContainerSet.add(container);
+      }
+    }
+    return invalidContainerSet;
+  }
+
+  /**
+   * Selects {@link Container}s to be marked as INACTIVE and marked in zookeeper.
+   */
+  public void selectInvalidContainersAndMarkInZK(StatsSnapshot statsSnapshot) {
+    Set<Container> invalidContainerSet = selectInvalidContainers(statsSnapshot);
+    markContainerZkNodesInactive(invalidContainerSet);
+  }
+
+  /**
+   * Mark the given {@link Container}s status to INACTIVE in zookeeper.
+   * @param invalidContainerSet DELETE_IN_PROGRESS {@link Container} set which has been deleted successfully during compaction.
+   */
+  private void markContainerZkNodesInactive(Set<Container> invalidContainerSet) {
+    // TODO: mark the given containers status to INACTIVE in zookeeper.
+  }
+
+  /**
+   * Gets valid data size {@link Container}s. The qualified {@link Container}s' raw valid data size should be larger than zero.
+   * @param accountToContainerMap it holds a mapping of {@link Account}s to {@link Container}s which raw valid data size larger than zero.
+   * @param statsSnapshot the {@link StatsSnapshot} generated from cluster wide aggregation.
+   * @param keyName the key of subMap for each level of {@link StatsSnapshot}.
+   */
+  private void getValidContainers(Map<String, Set<String>> accountToContainerMap, StatsSnapshot statsSnapshot,
+      String keyName) {
+    if (statsSnapshot.getSubMap() == null || statsSnapshot.getSubMap().isEmpty()) {
+      return;
+    } else {
+      for (Map.Entry<String, StatsSnapshot> entry : statsSnapshot.getSubMap().entrySet()) {
+        if (entry.getKey().startsWith("C") && entry.getValue().getValue() > 0) {
+          Preconditions.checkNotNull(keyName,
+              "keyName should not be null since every container will have it's corresponding accountId");
+          accountToContainerMap.getOrDefault(keyName, new HashSet<>()).add(entry.getKey());
+        } else if (entry.getKey().startsWith("A")) {
+          accountToContainerMap.putIfAbsent(entry.getKey(), new HashSet<>());
+          getValidContainers(accountToContainerMap, entry.getValue(), entry.getKey());
+        } else {
+          getValidContainers(accountToContainerMap, entry.getValue(), null);
+        }
+      }
     }
   }
 

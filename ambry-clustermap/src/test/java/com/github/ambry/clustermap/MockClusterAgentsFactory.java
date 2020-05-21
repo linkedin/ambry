@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -82,7 +83,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
             registeredPartitionStateChangeListeners = new HashMap<>();
 
         @Override
-        public void participate(List<AmbryHealthReport> ambryHealthReports) {
+        public void participate(List<AmbryHealthReport> ambryHealthReports, AccountService accountService) {
           for (String partitionName : partitionLeadershipList) {
             for (PartitionStateChangeListener partitionStateChangeListener : registeredPartitionStateChangeListeners.values()) {
               partitionStateChangeListener.onPartitionBecomeLeaderFromStandby(partitionName);

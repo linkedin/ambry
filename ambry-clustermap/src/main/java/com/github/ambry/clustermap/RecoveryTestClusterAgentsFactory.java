@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
@@ -83,7 +84,7 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
       // create a no op cluster participant that does nothing. Just sits idly by!!! ¯\_(ツ)_/¯
       ClusterParticipant clusterParticipant = new ClusterParticipant() {
         @Override
-        public void participate(List<AmbryHealthReport> ambryHealthReports) {
+        public void participate(List<AmbryHealthReport> ambryHealthReports, AccountService accountService) {
         }
 
         @Override

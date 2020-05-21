@@ -13,6 +13,7 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -176,7 +177,7 @@ public class ParticipantsConsistencyTest {
     }
 
     @Override
-    public void participate(List<AmbryHealthReport> ambryHealthReports) {
+    public void participate(List<AmbryHealthReport> ambryHealthReports, AccountService accountService) {
     }
 
     @Override

@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.Utils;
@@ -103,13 +104,13 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
+  public void participate(List<AmbryHealthReport> ambryHealthReports, AccountService accountService) throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
         new AmbryStateModelFactory(clusterMapConfig, this));
-    registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
+    registerHealthReportTasks(stateMachineEngine, ambryHealthReports, accountService);
     try {
       synchronized (helixAdministrationLock) {
         // close the temporary helixAdmin used in the process of starting StorageManager
@@ -417,7 +418,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param healthReports the {@link List} of {@link AmbryHealthReport}s that may require the registration of
    * corresponding {@link HelixHealthReportAggregatorTask}s.
    */
-  private void registerHealthReportTasks(StateMachineEngine engine, List<AmbryHealthReport> healthReports) {
+  private void registerHealthReportTasks(StateMachineEngine engine, List<AmbryHealthReport> healthReports, AccountService accountService) {
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
     for (final AmbryHealthReport healthReport : healthReports) {
       if (healthReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {
@@ -428,7 +429,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
               @Override
               public Task createNewTask(TaskCallbackContext context) {
                 return new HelixHealthReportAggregatorTask(context, healthReport.getAggregateIntervalInMinutes(),
-                    healthReport.getReportName(), healthReport.getStatsFieldName(), healthReport.getStatsReportType());
+                    healthReport.getReportName(), healthReport.getStatsFieldName(), healthReport.getStatsReportType(),
+                    accountService);
               }
             });
       }

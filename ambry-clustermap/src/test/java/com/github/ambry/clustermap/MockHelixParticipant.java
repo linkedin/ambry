@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
@@ -88,7 +89,7 @@ public class MockHelixParticipant extends HelixParticipant {
   }
 
   @Override
-  public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
+  public void participate(List<AmbryHealthReport> ambryHealthReports, AccountService accountService) throws IOException {
     // no op
   }
 

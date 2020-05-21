@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.IOException;
@@ -57,6 +58,7 @@ public class HelixParticipantTest {
   private final String clusterName = "HelixParticipantTestCluster";
   private final JSONObject zkJson;
   private final String stateModelDef;
+  private AccountService accountService;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -77,6 +79,7 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.state.model.definition", stateModelDef);
     this.stateModelDef = stateModelDef;
     helixManagerFactory = new MockHelixManagerFactory();
+    accountService = Mockito.mock(AccountService.class);
   }
 
   /**
@@ -97,7 +100,7 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipant =
         new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
             getDefaultZkConnectStr(clusterMapConfig), true);
-    helixParticipant.participate(Collections.emptyList());
+    helixParticipant.participate(Collections.emptyList(), accountService);
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     InstanceConfig instanceConfig = new InstanceConfig("someInstanceId");
@@ -193,9 +196,9 @@ public class HelixParticipantTest {
         new HelixParticipant(clusterMapConfigDummy, helixManagerFactory, new MetricRegistry(),
             getDefaultZkConnectStr(clusterMapConfigDummy), true);
     HelixParticipant helixParticipantSpy = Mockito.spy(helixParticipant);
-    helixParticipant.participate(Collections.emptyList());
-    helixParticipantDummy.participate(Collections.emptyList());
-    helixParticipantSpy.participate(Collections.emptyList());
+    helixParticipant.participate(Collections.emptyList(), accountService);
+    helixParticipantDummy.participate(Collections.emptyList(), accountService);
+    helixParticipantSpy.participate(Collections.emptyList(), accountService);
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     InstanceConfig instanceConfig = new InstanceConfig("testInstanceId");
@@ -286,7 +289,7 @@ public class HelixParticipantTest {
         new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
             getDefaultZkConnectStr(clusterMapConfig), true);
     try {
-      helixParticipant.participate(Collections.emptyList());
+      helixParticipant.participate(Collections.emptyList(), accountService);
       fail("Participation should have failed");
     } catch (IOException e) {
       // OK
@@ -351,7 +354,7 @@ public class HelixParticipantTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
         getDefaultZkConnectStr(clusterMapConfig), true);
-    participant.participate(Collections.emptyList());
+    participant.participate(Collections.emptyList(), accountService);
     MockHelixManagerFactory.MockHelixManager helixManager = helixManagerFactory.getHelixManager();
     assertTrue(helixManager.isConnected());
     assertEquals(stateModelDef, helixManager.getStateModelDef());

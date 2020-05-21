@@ -14,6 +14,7 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
 import java.util.Collection;
@@ -32,7 +33,7 @@ public interface ClusterParticipant extends AutoCloseable {
    * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
    * @throws IOException
    */
-  void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException;
+  void participate(List<AmbryHealthReport> ambryHealthReports, AccountService accountService) throws IOException;
 
   /**
    * Set or reset the sealed state of the given replica.

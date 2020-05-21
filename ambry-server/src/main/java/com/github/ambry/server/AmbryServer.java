@@ -306,7 +306,7 @@ public class AmbryServer {
         vcrClusterSpectator.spectate();
       }
       for (ClusterParticipant clusterParticipant : clusterParticipants) {
-        clusterParticipant.participate(ambryHealthReports);
+        clusterParticipant.participate(ambryHealthReports, accountService);
       }
 
       logger.info("started");
