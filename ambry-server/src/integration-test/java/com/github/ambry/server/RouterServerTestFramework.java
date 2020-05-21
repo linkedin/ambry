@@ -65,7 +65,7 @@ import org.junit.Assert;
  * {@link RouterServerSSLTest} for example usage.
  */
 class RouterServerTestFramework {
-  static final int AWAIT_TIMEOUT = 20;
+  static final int AWAIT_TIMEOUT = 25;
   static final int CHUNK_SIZE = 1024 * 1024;
   private static final double BALANCE_FACTOR = 3.0;
 
@@ -126,7 +126,8 @@ class RouterServerTestFramework {
     double blobsPut = 0;
     for (OperationChain opChain : opChains) {
       if (!opChain.latch.await(AWAIT_TIMEOUT, TimeUnit.SECONDS)) {
-        Assert.fail("Timeout waiting for operation chain " + opChain.chainId + " to finish.");
+        Assert.fail("Timeout waiting for operation chain " + opChain.chainId + " to finish and it is stuck at "
+            + opChain.opIndex + "th op:" + opChain.currentOpType + ".");
       }
       synchronized (opChain.testFutures) {
         for (TestFuture testFuture : opChain.testFutures) {
@@ -141,6 +142,7 @@ class RouterServerTestFramework {
         partitionCount.put(partitionId, count + 1);
       }
     }
+    /*
     double numPartitions = clusterMap.getWritablePartitionIds(null).size();
     if (opChains.size() > numPartitions) {
       double blobBalanceThreshold = BALANCE_FACTOR * Math.ceil(blobsPut / numPartitions);
@@ -150,6 +152,7 @@ class RouterServerTestFramework {
             entry.getValue() <= blobBalanceThreshold);
       }
     }
+     */
   }
 
   /**
@@ -474,8 +477,16 @@ class RouterServerTestFramework {
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
   private void startUndeleteBlob(final OperationChain opChain) {
+    // Sleep for a while to make sure delete request is finished.
+    // NotificationSystem and latch won't guarantee that since replication and frontend request both could count down
+    // the latch and there is a chance when waiting deletes finished in the notification system but one of the delete
+    // requests from frontend hasn't arrived the server yet. (Latch countdown is done by replication).
+    try {
+      Thread.sleep(1000);
+    } catch (Exception e) {
+      //
+    }
     Callback<Void> callback = new TestCallback<>(opChain, false);
-    System.out.println("Undelete blob " + opChain.blobId);
     Future<Void> future = router.undeleteBlob(opChain.blobId, null, callback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("undeleteBlob", false), opChain) {
       @Override
@@ -533,7 +544,7 @@ class RouterServerTestFramework {
    */
   private void continueChain(final OperationChain opChain) {
     synchronized (opChain.testFutures) {
-      OperationType nextOp = opChain.operations.poll();
+      OperationType nextOp = opChain.nextOp();
       if (nextOp == null) {
         opChain.latch.countDown();
         return;
@@ -702,6 +713,8 @@ class RouterServerTestFramework {
     final List<TestFuture> testFutures = new ArrayList<>();
     final CountDownLatch latch = new CountDownLatch(1);
     String blobId;
+    int opIndex = -1;
+    OperationType currentOpType;
 
     OperationChain(int chainId, BlobProperties properties, byte[] userMetadata, byte[] data,
         Queue<OperationType> operations) {
@@ -710,6 +723,12 @@ class RouterServerTestFramework {
       this.userMetadata = userMetadata;
       this.data = data;
       this.operations = operations;
+    }
+
+    OperationType nextOp() {
+      opIndex++;
+      currentOpType = operations.poll();
+      return currentOpType;
     }
   }
 
@@ -747,7 +766,8 @@ class RouterServerTestFramework {
       try {
         return future.get(AWAIT_TIMEOUT, TimeUnit.SECONDS);
       } catch (Exception e) {
-        throw new Exception("Exception occured in operation: " + getOperationName(), e);
+        throw new Exception(
+            "Exception occured in operation: " + getOperationName() + " The blob id is " + opChain.blobId, e);
       }
     }
 

@@ -530,10 +530,18 @@ public class BlobStore implements Store {
             IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
                 EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE,
                     PersistentIndex.IndexEntryType.UNDELETE));
-            if (value != null && value.isDelete() && value.getLifeVersion() == lifeVersions.get(i)) {
-              throw new StoreException(
-                  "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
-                  StoreErrorCodes.ID_Deleted);
+            if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) > 0) {
+              if (value.isDelete() && value.getLifeVersion() == lifeVersions.get(i)) {
+                throw new StoreException(
+                    "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                    StoreErrorCodes.ID_Deleted);
+              } else {
+                logger.warn("Concurrent operation for id " + info.getStoreKey() + " in store " + dataDir
+                    + ". Newly added value " + value);
+                throw new StoreException(
+                    "Cannot delete id " + info.getStoreKey() + " since there are concurrent operation while delete",
+                    StoreErrorCodes.Life_Version_Conflict);
+              }
             }
             i++;
           }
@@ -743,13 +751,15 @@ public class BlobStore implements Store {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
               EnumSet.of(PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE));
-          if (value != null) {
+          if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) > 0) {
+            // Make sure the value is after the indexEndOffsetBeforeCheck
             if (value.isUndelete() && value.getLifeVersion() == revisedLifeVersion) {
               // Might get an concurrent undelete from both replication and frontend.
               throw new IdUndeletedStoreException(
                   "Can't undelete id " + info.getStoreKey() + " in " + dataDir + " since concurrent operations",
                   value.getLifeVersion());
             } else {
+              logger.warn("Revised lifeVersion is " + revisedLifeVersion + " last value is " + value);
               throw new StoreException(
                   "Cannot undelete id " + info.getStoreKey() + " since concurrent operation occurs",
                   StoreErrorCodes.Life_Version_Conflict);
