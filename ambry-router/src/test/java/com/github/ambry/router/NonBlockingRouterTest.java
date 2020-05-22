@@ -206,15 +206,28 @@ public class NonBlockingRouterTest {
    * @return the created VerifiableProperties instance.
    */
   protected Properties getNonBlockingRouterProperties(String routerDataCenter) {
+    return getNonBlockingRouterProperties(routerDataCenter, PUT_REQUEST_PARALLELISM, DELETE_REQUEST_PARALLELISM);
+  }
+
+  /**
+   * Constructs and returns a VerifiableProperties instance with the defaults required for instantiating
+   * the {@link NonBlockingRouter}.
+   * @param routerDataCenter the router's datacenter name
+   * @param putParallelism put request parallelism
+   * @param deleteParallelism delete request parallelism
+   * @return the created VerifiableProperties instance.
+   */
+  protected Properties getNonBlockingRouterProperties(String routerDataCenter, int putParallelism,
+      int deleteParallelism) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", routerDataCenter);
-    properties.setProperty("router.put.request.parallelism", Integer.toString(PUT_REQUEST_PARALLELISM));
+    properties.setProperty("router.put.request.parallelism", Integer.toString(putParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(PUT_SUCCESS_TARGET));
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(maxPutChunkSize));
     properties.setProperty("router.get.request.parallelism", Integer.toString(GET_REQUEST_PARALLELISM));
     properties.setProperty("router.get.success.target", Integer.toString(GET_SUCCESS_TARGET));
-    properties.setProperty("router.delete.request.parallelism", Integer.toString(DELETE_REQUEST_PARALLELISM));
+    properties.setProperty("router.delete.request.parallelism", Integer.toString(deleteParallelism));
     properties.setProperty("router.delete.success.target", Integer.toString(DELETE_SUCCESS_TARGET));
     properties.setProperty("router.connection.checkout.timeout.ms", Integer.toString(CHECKOUT_TIMEOUT_MS));
     properties.setProperty("router.request.timeout.ms", Integer.toString(REQUEST_TIMEOUT_MS));
@@ -352,7 +365,13 @@ public class NonBlockingRouterTest {
   @Test
   public void testUndeleteBasic() throws Exception {
     assumeTrue(!testEncryption && !includeCloudDc);
-    setRouter();
+    // Setting put and delete parallelism to 2, same as the put and delete success target.
+    // If put or delete requests' parallelism is 3 (default value), when we ensure all the servers has the correspoding
+    // requests, it might have override by the dangling request.
+    // For example, when deleting a blob, there are three delete requests being sent to the mock server. But only two of
+    // them required to be acknowledged. There is a chance that when we undelete this blob, this third unacknowledged
+    // delete request would override the undelete state.
+    setRouter(getNonBlockingRouterProperties("DC1", 3, 2), mockServerLayout, new LoggingNotificationSystem());
     assertExpectedThreadCounts(2, 1);
 
     // 1. Test undelete a composite blob
