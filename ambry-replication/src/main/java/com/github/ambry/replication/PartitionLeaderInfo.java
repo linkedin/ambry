@@ -38,18 +38,17 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  */
 public class PartitionLeaderInfo {
 
-  private final Map<String, Set<ReplicaId>> peerLeaderReplicasByPartition;
-  protected final StoreManager storeManager;
+  private final Map<String, Set<ReplicaId>> peerLeaderReplicasByPartition = new ConcurrentHashMap<>();
+  private final StoreManager storeManager;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-  protected final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(PartitionLeaderInfo.class);
 
   public PartitionLeaderInfo(StoreManager storeManager) {
-    peerLeaderReplicasByPartition = new ConcurrentHashMap<>();
     this.storeManager = storeManager;
   }
 
   /**
-   * Get a map of partitions to their sets of peer leader replicas
+   * Get a map of partitions to their sets of peer leader replicas (this method is only by ReplicationTest for now)
    * @return an unmodifiable map of peer leader replicas stored by partition {@link PartitionLeaderInfo#peerLeaderReplicasByPartition}
    */
   public Map<String, Set<ReplicaId>> getPeerLeaderReplicasByPartition() {
@@ -104,15 +103,19 @@ public class PartitionLeaderInfo {
   }
 
   /**
-   * Refreshes the list of remote leaders for all leader partitions (by looking at latest leader set in RoutingTableSnapshot). This method is thread safe.
+   * Refreshes the list of remote leaders for all leader partitions by querying the latest information from RoutingTableSnapshots of all data centers.
+   * This method is thread safe.
    */
   public void refreshPeerLeadersForAllPartitions() {
 
-    // Read-write lock usage:
-    // Avoids contention with threads adding new leaders (in addPeerLeadersByPartition()) and removing old leaders (in removePartition()).
-    // Multiple threads can call this method in parallel as we only update existing partitions (no adding or removing). Since, it is a concurrent hash map, PUTs and GETs will be clean.
+    // Read-write lock usage: Avoids contention between threads doing the following activities:
+    // 1. Adding new leaders (in addPeerLeadersByPartition())
+    // 2. Removing old leaders (in removePartition())
+    // 3. Refreshing remote leader set for existing leaders (current method).
+    // Explanation for point 3: Multiple threads from different cluster change handlers (we have one cluster change handler for each DC) can trigger onRoutingTableUpdate() in parallel which calls this method to refresh leader partitions.
+    // We need to make sure that the sequence of gathering remote leaders (from RoutingTableSnapshot of each DC) and updating the map is an atomic operation.
 
-    rwLock.readLock().lock();
+    rwLock.writeLock().lock();
     try {
       for (Map.Entry<String, Set<ReplicaId>> entry : peerLeaderReplicasByPartition.entrySet()) {
         String partitionName = entry.getKey();
@@ -127,21 +130,7 @@ public class PartitionLeaderInfo {
         }
       }
     } finally {
-      rwLock.readLock().unlock();
-    }
-  }
-
-  /**
-   * Checks if a partition is a leader
-   * @param partitionName
-   * @return true if partition is a leader; else, it returns false
-   */
-  public boolean isPartitionPresent(String partitionName) {
-    rwLock.readLock().lock();
-    try {
-      return peerLeaderReplicasByPartition.containsKey(partitionName);
-    } finally {
-      rwLock.readLock().unlock();
+      rwLock.writeLock().unlock();
     }
   }
 
