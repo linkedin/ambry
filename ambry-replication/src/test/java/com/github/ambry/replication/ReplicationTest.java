@@ -463,18 +463,18 @@ public class ReplicationTest {
     //Trigger PartitionStateChangeListener callback to replication manager to notify that a local replica state has changed from STANDBY to LEADER
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(existingPartition.toPathString());
 
-    //verify that map of peerLeaderReplicasByPartition in replication manager is updated correctly
-    List<ReplicaId> peerLeaderReplicasInReplicationManager =
-        replicationManager.getPeerLeaderReplicasByPartition().get(existingPartition.toPathString());
-    List<ReplicaId> peerLeaderReplicasInClusterMap = existingPartition.getReplicaIdsByState(ReplicaState.LEADER, null)
+    //verify that map of peerLeaderReplicasByPartition in PartitionLeaderInfo is updated correctly
+    Set<ReplicaId> peerLeaderReplicasInPartitionLeaderInfo =
+        replicationManager.partitionLeaderInfo.getPeerLeaderReplicasByPartition().get(existingPartition.toPathString());
+    Set<ReplicaId> peerLeaderReplicasInClusterMap = existingPartition.getReplicaIdsByState(ReplicaState.LEADER, null)
         .stream()
         .filter(r -> !r.getDataNodeId().getDatacenterName().equals(currentDataCenter))
-        .collect(Collectors.toList());
+        .collect(Collectors.toSet());
     assertThat("Mismatch in list of leader peer replicas stored by partition in replication manager with cluster map",
-        peerLeaderReplicasInReplicationManager, is(peerLeaderReplicasInClusterMap));
+        peerLeaderReplicasInPartitionLeaderInfo, is(peerLeaderReplicasInClusterMap));
 
     //Switch the LEADER/STANDBY states for remote replicas on one of the remote data centers
-    ReplicaId peerLeaderReplica = peerLeaderReplicasInClusterMap.get(0);
+    ReplicaId peerLeaderReplica = peerLeaderReplicasInClusterMap.iterator().next();
     ReplicaId peerStandByReplica = existingPartition.getReplicaIdsByState(ReplicaState.STANDBY,
         peerLeaderReplica.getDataNodeId().getDatacenterName()).get(0);
     existingPartition.setReplicaIdToState(peerLeaderReplica, ReplicaState.STANDBY);
@@ -485,15 +485,15 @@ public class ReplicationTest {
     clusterMapChangeListener.onRoutingTableChange();
 
     //verify that new remote leader is reflected in the peerLeaderReplicasByPartition map
-    peerLeaderReplicasInReplicationManager =
-        replicationManager.getPeerLeaderReplicasByPartition().get(existingPartition.toPathString());
+    peerLeaderReplicasInPartitionLeaderInfo =
+        replicationManager.partitionLeaderInfo.getPeerLeaderReplicasByPartition().get(existingPartition.toPathString());
     peerLeaderReplicasInClusterMap = existingPartition.getReplicaIdsByState(ReplicaState.LEADER, null)
         .stream()
         .filter(r -> !r.getDataNodeId().getDatacenterName().equals(currentDataCenter))
-        .collect(Collectors.toList());
+        .collect(Collectors.toSet());
     assertThat(
         "Mismatch in map of peer leader replicas stored by partition in replication manager with cluster map after routing table update",
-        peerLeaderReplicasInReplicationManager, is(peerLeaderReplicasInClusterMap));
+        peerLeaderReplicasInPartitionLeaderInfo, is(peerLeaderReplicasInClusterMap));
 
     storageManager.shutdown();
   }
@@ -707,12 +707,12 @@ public class ReplicationTest {
     String currentDataCenter =
         storageManager.getReplica(existingPartition.toString()).getDataNodeId().getDatacenterName();
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(existingPartition.toPathString());
-    List<ReplicaId> peerLeaderReplicasInReplicationManager =
-        replicationManager.getPeerLeaderReplicasByPartition().get(existingPartition.toPathString());
-    List<ReplicaId> peerLeaderReplicasInClusterMap = existingPartition.getReplicaIdsByState(ReplicaState.LEADER, null)
+    Set<ReplicaId> peerLeaderReplicasInReplicationManager =
+        replicationManager.partitionLeaderInfo.getPeerLeaderReplicasByPartition().get(existingPartition.toPathString());
+    Set<ReplicaId> peerLeaderReplicasInClusterMap = existingPartition.getReplicaIdsByState(ReplicaState.LEADER, null)
         .stream()
         .filter(r -> !r.getDataNodeId().getDatacenterName().equals(currentDataCenter))
-        .collect(Collectors.toList());
+        .collect(Collectors.toSet());
     assertThat("Mismatch in list of leader peer replicas stored by partition in replication manager and cluster map",
         peerLeaderReplicasInReplicationManager, is(peerLeaderReplicasInClusterMap));
     storageManager.shutdown();
@@ -737,7 +737,8 @@ public class ReplicationTest {
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
     PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(existingPartition.toPathString());
-    Map<String, List<ReplicaId>> peerLeaderReplicasByPartition = replicationManager.getPeerLeaderReplicasByPartition();
+    Map<String, Set<ReplicaId>> peerLeaderReplicasByPartition =
+        replicationManager.partitionLeaderInfo.getPeerLeaderReplicasByPartition();
     assertTrue(
         "Partition is not present in the map of partition to peer leader replicas after it moved from standby to leader",
         peerLeaderReplicasByPartition.containsKey(existingPartition.toPathString()));
