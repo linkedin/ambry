@@ -618,8 +618,10 @@ public class BlobStore implements Store {
         } else if (value.isTtlUpdate()) {
           throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
               StoreErrorCodes.Already_Updated);
-        } else if (value.getExpiresAtMs() != Utils.Infinite_Time
+        } else if (!IndexValue.hasLifeVersion(info.getLifeVersion()) && value.getExpiresAtMs() != Utils.Infinite_Time
             && value.getExpiresAtMs() < info.getOperationTimeMs() + ttlUpdateBufferTimeMs) {
+          // When the request is from frontend, make sure it's not too close to expiry date.
+          // When the request is from replication, we don't care about the operation time.
           throw new StoreException(
               "TTL of " + info.getStoreKey() + " cannot be updated because it is too close to expiry. Op time (ms): "
                   + info.getOperationTimeMs() + ". ExpiresAtMs: " + value.getExpiresAtMs(),
