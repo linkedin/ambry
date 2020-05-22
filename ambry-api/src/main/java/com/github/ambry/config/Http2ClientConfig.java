@@ -109,7 +109,7 @@ public class Http2ClientConfig {
    * Maximum time allowed for acquire a stream channel from http2 connection.
    */
   @Config(HTTP2_BLOCKING_CHANNEL_ACQUIRE_TIMEOUT_MS)
-  @Default("300")
+  @Default("1000")
   public final int http2BlockingChannelAcquireTimeoutMs;
 
   /**
@@ -146,7 +146,7 @@ public class Http2ClientConfig {
 
     nettyReceiveBufferSize = verifiableProperties.getInt(NETTY_RECEIVE_BUFFER_SIZE, 1024 * 1024);
     nettySendBufferSize = verifiableProperties.getInt(NETTY_SEND_BUFFER_SIZE, 1024 * 1024);
-    http2BlockingChannelAcquireTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_ACQUIRE_TIMEOUT_MS, 300);
+    http2BlockingChannelAcquireTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_ACQUIRE_TIMEOUT_MS, 1000);
     http2BlockingChannelSendTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_SEND_TIMEOUT_MS, 2000);
     http2BlockingChannelReceiveTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_RECEIVE_TIMEOUT_MS, 5000);
     http2BlockingChannelPoolShutdownTimeoutMs =
