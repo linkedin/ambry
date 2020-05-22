@@ -1103,9 +1103,17 @@ public class BlobStoreTest {
     // ID that does not exist
     verifyTtlUpdateFailure(getUniqueId(), Utils.Infinite_Time, StoreErrorCodes.ID_Not_Found);
     // ID that has expired
+    MockId expiredId = null;
     for (MockId expired : expiredKeys) {
       verifyTtlUpdateFailure(expired, Utils.Infinite_Time, StoreErrorCodes.Update_Not_Allowed);
+      expiredId = expired;
     }
+    // If the ttl update request comes from replication, then it should succeed
+    assertNotNull(expiredId);
+    MessageInfo info = new MessageInfo(expiredId, TTL_UPDATE_RECORD_SIZE, false, true, false, Utils.Infinite_Time, null,
+        expiredId.getAccountId(), expiredId.getContainerId(), time.milliseconds(), (short) 1);
+    store.updateTtl(Arrays.asList(info));
+
     // ID that has not expired but is within the "no updates" period
     inNoTtlUpdatePeriodTest();
     // ID that is already updated
@@ -1125,7 +1133,7 @@ public class BlobStoreTest {
     ttlUpdateAuthorizationFailureTest();
     // duplicates
     id = getUniqueId();
-    MessageInfo info = new MessageInfo(id, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, id.getAccountId(),
+    info = new MessageInfo(id, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, id.getAccountId(),
         id.getContainerId(), time.milliseconds());
     try {
       store.updateTtl(Arrays.asList(info, info));
