@@ -32,6 +32,7 @@ public class AzureCloudConfig {
   public static final String COSMOS_REQUEST_CHARGE_THRESHOLD = "cosmos.request.charge.threshold";
   public static final String COSMOS_CONTINUATION_TOKEN_LIMIT_KB = "cosmos.continuation.token.limit.kb";
   public static final String AZURE_PURGE_BATCH_SIZE = "azure.purge.batch.size";
+  public static final String COSMOS_PURGE_BATCH_SIZE = "cosmos.purge.batch.size";
   public static final String AZURE_NAME_SCHEME_VERSION = "azure.name.scheme.version";
   public static final String AZURE_BLOB_CONTAINER_STRATEGY = "azure.blob.container.strategy";
   // Per docs.microsoft.com/en-us/rest/api/storageservices/blob-batch
@@ -71,6 +72,9 @@ public class AzureCloudConfig {
   @Config(AZURE_PURGE_BATCH_SIZE)
   @Default("100")
   public final int azurePurgeBatchSize;
+
+  @Config(COSMOS_PURGE_BATCH_SIZE)
+  public final int cosmosPurgeBatchSize;
 
   @Config(AZURE_NAME_SCHEME_VERSION)
   @Default("0")
@@ -118,6 +122,7 @@ public class AzureCloudConfig {
         verifiableProperties.getInt(COSMOS_REQUEST_CHARGE_THRESHOLD, DEFAULT_COSMOS_REQUEST_CHARGE_THRESHOLD);
     azurePurgeBatchSize =
         verifiableProperties.getIntInRange(AZURE_PURGE_BATCH_SIZE, DEFAULT_PURGE_BATCH_SIZE, 1, MAX_PURGE_BATCH_SIZE);
+    cosmosPurgeBatchSize = verifiableProperties.getInt(COSMOS_PURGE_BATCH_SIZE, azurePurgeBatchSize);
     cosmosDirectHttps = verifiableProperties.getBoolean(COSMOS_DIRECT_HTTPS, false);
     azureBlobContainerStrategy =
         verifiableProperties.getString(AZURE_BLOB_CONTAINER_STRATEGY, DEFAULT_CONTAINER_STRATEGY);

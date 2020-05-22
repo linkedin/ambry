@@ -43,6 +43,7 @@ import com.microsoft.azure.cosmosdb.FeedResponse;
 import com.microsoft.azure.cosmosdb.RequestOptions;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.StoredProcedureResponse;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -123,7 +124,6 @@ public class AzureCloudDestinationTest {
         anyBoolean())).thenReturn(mockResponse);
     when(mockumentClient.replaceDocument(any(Document.class), any(RequestOptions.class))).thenReturn(mockResponse);
     when(mockumentClient.deleteDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
-
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com:443");
     configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
@@ -216,16 +216,18 @@ public class AzureCloudDestinationTest {
     Response<Void> okResponse = mock(Response.class);
     when(okResponse.getStatusCode()).thenReturn(202);
     when(mockBatch.deleteBlob(anyString(), anyString())).thenReturn(okResponse);
+    Observable<StoredProcedureResponse> mockBulkDeleteResponse = getMockBulkDeleteResponse(1);
+    when(mockumentClient.executeStoredProcedure(anyString(), any(RequestOptions.class), any())).thenReturn(
+        mockBulkDeleteResponse);
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
             CloudBlobMetadata.EncryptionOrigin.NONE);
     assertEquals("Expected success", 1, azureDest.purgeBlobs(Collections.singletonList(cloudBlobMetadata)));
     assertEquals(1, azureMetrics.blobDeletedCount.getCount());
     assertEquals(0, azureMetrics.blobDeleteErrorCount.getCount());
-    assertEquals(1, azureMetrics.documentDeleteTime.getCount());
   }
 
-  /** Test purge not found. */
+  /** Test purge error. */
   @Test
   public void testPurgeError() throws Exception {
     // Unsuccessful case

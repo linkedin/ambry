@@ -43,6 +43,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -354,43 +355,29 @@ class AzureCloudDestination implements CloudDestination {
       return 0;
     }
     azureMetrics.blobDeleteRequestCount.inc(blobMetadataList.size());
-    Timer.Context deleteTimer = azureMetrics.blobDeletionTime.time();
+    long t0 = System.currentTimeMillis();
     try {
       List<CloudBlobMetadata> deletedBlobs = azureBlobDataAccessor.purgeBlobs(blobMetadataList);
-      azureMetrics.blobDeletedCount.inc(deletedBlobs.size());
-      azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size() - deletedBlobs.size());
+      long t1 = System.currentTimeMillis();
+      int deletedCount = deletedBlobs.size();
+      azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size() - deletedCount);
+      if (deletedCount > 0) {
+        azureMetrics.blobDeletedCount.inc(deletedCount);
+        // Record as time per single blob deletion
+        azureMetrics.blobDeletionTime.update((t1 - t0) / deletedCount, TimeUnit.MILLISECONDS);
+      } else {
+        return 0;
+      }
 
       // Remove them from Cosmos too
-      for (CloudBlobMetadata blobMetadata : deletedBlobs) {
-        deleteFromCosmos(blobMetadata);
-      }
-      return deletedBlobs.size();
+      cosmosDataAccessor.deleteMetadata(deletedBlobs);
+      long t2 = System.currentTimeMillis();
+      // Record as time per single record deletion
+      azureMetrics.documentDeleteTime.update((t2 - t1) / deletedCount, TimeUnit.MILLISECONDS);
+      return deletedCount;
     } catch (Exception ex) {
       azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size());
       throw toCloudStorageException("Failed to purge all blobs", ex);
-    } finally {
-      deleteTimer.stop();
-    }
-  }
-
-  /**
-   * Delete a blob metadata record from Cosmos.
-   * @param blobMetadata the record to delete.
-   * @return {@code true} if the record was deleted, {@code false} if it was not found.
-   * @throws DocumentClientException
-   */
-  private boolean deleteFromCosmos(CloudBlobMetadata blobMetadata) throws DocumentClientException {
-    try {
-      cosmosDataAccessor.deleteMetadata(blobMetadata);
-      return true;
-    } catch (DocumentClientException dex) {
-      if (dex.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
-        // Can happen if this is a retry
-        logger.debug("Could not find metadata for blob {} to delete", blobMetadata.getId());
-        return false;
-      } else {
-        throw dex;
-      }
     }
   }
 
