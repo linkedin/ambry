@@ -142,17 +142,6 @@ class RouterServerTestFramework {
         partitionCount.put(partitionId, count + 1);
       }
     }
-    /*
-    double numPartitions = clusterMap.getWritablePartitionIds(null).size();
-    if (opChains.size() > numPartitions) {
-      double blobBalanceThreshold = BALANCE_FACTOR * Math.ceil(blobsPut / numPartitions);
-      for (Map.Entry<PartitionId, Integer> entry : partitionCount.entrySet()) {
-        Assert.assertTrue("Number of blobs is " + entry.getValue() + " on partition: " + entry.getKey()
-                + ", which is greater than the threshold of " + blobBalanceThreshold,
-            entry.getValue() <= blobBalanceThreshold);
-      }
-    }
-     */
   }
 
   /**
