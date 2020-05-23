@@ -325,7 +325,9 @@ public class AzureBlobDataAccessor {
         String etag = blobProperties.getETag();
         Map<String, String> metadata = blobProperties.getMetadata();
 
-        cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(metadata), blobId, updateFields);
+        if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(metadata), blobId, updateFields)) {
+          return new AzureCloudDestination.UpdateResponse(false, metadata);
+        }
 
         // Update only if any of the values have changed
         Map<String, String> changedFields = updateFields.entrySet()

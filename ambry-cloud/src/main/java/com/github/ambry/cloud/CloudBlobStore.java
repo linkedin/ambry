@@ -295,15 +295,23 @@ class CloudBlobStore implements Store {
                 "Upload", partitionId.toPathString());
       }
       addToCache(blobId.getID(), (short) 0, BlobState.CREATED);
-      if (!uploaded) {
+      if (!uploaded && !isVcr) {
+        // If put is coming from frontend, then uploadBlob must be true. Its not acceptable that a blob already exists.
+        // If put is coming from vcr, then findMissingKeys might have reported a key to be missing even though the blob
+        // was uploaded to ABS. This can happen, if previously, the upload to ABS succeeded but the upload couldn't make
+        // it to cosmos.
         throw new StoreException(String.format("Another blob with same key %s exists in store", blobId.getID()),
             StoreErrorCodes.Already_Exist);
       }
     } else {
       vcrMetrics.blobUploadSkippedCount.inc();
-      throw new CloudStorageException("Error updating blob metadata", new StoreException(
-          String.format("Another blob with same key %s exists in store", messageInfo.getStoreKey().getID()),
-          StoreErrorCodes.Already_Exist));
+      // The only case where its ok to see a put request for a already seen blob is, during replication if the blob is
+      // expiring within {@link CloudConfig#vcrMinTtlDays} for vcr to upload.
+      if (isVcr && !isExpiringSoon(messageInfo)) {
+        throw new StoreException(
+            String.format("Another blob with same key %s exists in store", messageInfo.getStoreKey().getID()),
+            StoreErrorCodes.Already_Exist);
+      }
     }
   }
 
@@ -334,8 +342,7 @@ class CloudBlobStore implements Store {
       // Expired blobs are blocked by ReplicaThread.
       // TODO: VCR for non-backup also needs to replicate everything
       // We can change default cloudConfig.vcrMinTtlDays to 0 and override in config
-      return (messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time
-          || messageInfo.getExpirationTimeInMs() - messageInfo.getOperationTimeMs() >= minTtlMillis);
+      return !isExpiringSoon(messageInfo);
     } else {
       // Upload all live blobs
       return true;
@@ -382,6 +389,7 @@ class CloudBlobStore implements Store {
       addToCache(blobKey, lifeVersion, BlobState.DELETED);
       return deleted;
     } else {
+      // This means that we definitely saw this delete for the same lifeversion before.
       throw new CloudStorageException("Error updating blob metadata",
           new StoreException("Cannot delete id " + blobId.getID() + " since it is already marked as deleted in cloud.",
               StoreErrorCodes.ID_Deleted));
@@ -522,12 +530,20 @@ class CloudBlobStore implements Store {
    * @param metadata existing {@link CloudBlobMetadata} in cloud.
    * @param key {@link StoreKey} being deleted.
    * @param updateFields {@link Map} of fields and values being updated.
+   * @return false only for vcr if local cloud destination life version is more recent. true if validation successful.
    * @throws StoreException if validation fails.
    */
-  private void preDeleteValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
+  private boolean preDeleteValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
       throws StoreException {
     validateAccountAndContainer(Collections.singletonMap(metadata.getId(), metadata), Collections.singletonList(key));
     short requestedLifeVersion = (short) updateFields.get(FIELD_LIFE_VERSION);
+    if (isVcr) {
+      // This is a delete request from vcr. Apply delete only if incoming life version is more recent. Don't throw any
+      // exception because replication relies on findMissingKeys which in turn relies on cosmos state for CloudBlobStore.
+      // Cosmos could be missing some updates that were applied to ABS.
+      return (!metadata.isDeleted() || metadata.getLifeVersion() < requestedLifeVersion) && (metadata.getLifeVersion()
+          <= requestedLifeVersion);
+    }
     if (requestedLifeVersion == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
       // This is a delete request from frontend
       if (metadata.isDeleted()) {
@@ -537,15 +553,8 @@ class CloudBlobStore implements Store {
       }
       // this is delete request from frontend, we use life version only for validation.
       updateFields.remove(FIELD_LIFE_VERSION);
-    } else {
-      // This is a delete request from replication
-      if ((metadata.isDeleted() && metadata.getLifeVersion() >= requestedLifeVersion) || (metadata.getLifeVersion()
-          > requestedLifeVersion)) {
-        throw new StoreException(
-            "Cannot delete id " + metadata.getId() + " since it is already marked as deleted in cloud.",
-            StoreErrorCodes.Life_Version_Conflict);
-      }
     }
+    return true;
   }
 
   /**
@@ -554,12 +563,19 @@ class CloudBlobStore implements Store {
    * @param metadata existing {@link CloudBlobMetadata} in cloud.
    * @param key {@link StoreKey} being updated.
    * @param updateFields {@link Map} of fields and values being updated.
+   * @return false only for vcr if ttl is already applied on blob. true in all other cases if validation is successful.
    * @throws StoreException if validation fails.
    */
-  private void preTtlUpdateValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
+  private boolean preTtlUpdateValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
       throws StoreException {
     validateAccountAndContainer(Collections.singletonMap(metadata.getId(), metadata), Collections.singletonList(key));
     long now = System.currentTimeMillis();
+    if (isVcr) {
+      // For vcr don't update ttl if already updated. Don't throw any exception because replication relies on
+      // findMissingKeys which in turn relies on cosmos state for CloudBlobStore. Cosmos could be missing some updates
+      // that were applied to ABS.
+      return metadata.getExpirationTime() != Utils.Infinite_Time;
+    }
     if (metadata.isDeleted()) {
       throw new StoreException("Cannot update TTL of " + key.getID() + " since it is already deleted in the index.",
           StoreErrorCodes.ID_Deleted);
@@ -569,6 +585,7 @@ class CloudBlobStore implements Store {
           "TTL of " + key.getID() + " cannot be updated because it is too close to expiry. Minimum Op time (ms): " + now
               + ". ExpiresAtMs: " + metadata.getExpirationTime(), StoreErrorCodes.Update_Not_Allowed);
     }
+    return true;
   }
 
   /**
@@ -579,10 +596,16 @@ class CloudBlobStore implements Store {
    * @param updateFields {@link Map} of fields and values being updated.
    * @throws StoreException if validation fails.
    */
-  private void preUndeleteValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
+  private boolean preUndeleteValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
       throws StoreException {
     validateAccountAndContainer(Collections.singletonMap(metadata.getId(), metadata), Collections.singletonList(key));
     short requestedLifeVersion = (short) updateFields.get(FIELD_LIFE_VERSION);
+    if (isVcr) {
+      // This is an undelete request from vcr. Apply undelete only if incoming life version is more recent. Don't throw
+      // any exception because replication relies on findMissingKeys which in turn relies on cosmos state for CloudBlobStore.
+      // Cosmos could be missing some updates that were applied to ABS.
+      return metadata.getLifeVersion() < requestedLifeVersion;
+    }
     if (metadata.isExpired()) {
       throw new StoreException("Id " + key + " already expired in cloud ", StoreErrorCodes.TTL_Expired);
     } else if (metadata.isUndeleted()) {
@@ -594,16 +617,9 @@ class CloudBlobStore implements Store {
       throw new StoreException("Id " + key + " already permanently deleted in cloud ",
           StoreErrorCodes.ID_Deleted_Permanently);
     }
-    if (requestedLifeVersion != MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
-      if (metadata.getLifeVersion() >= requestedLifeVersion) {
-        throw new StoreException(
-            "LifeVersion conflict in cloud. Id " + key + " LifeVersion: " + metadata.getLifeVersion()
-                + " Undelete LifeVersion: " + requestedLifeVersion, StoreErrorCodes.Life_Version_Conflict);
-      }
-    } else {
-      // Update life version to appropriate value for frontend requests.
-      updateFields.put(FIELD_LIFE_VERSION, metadata.getLifeVersion() + 1);
-    }
+    // Update life version to appropriate value for frontend requests.
+    updateFields.put(FIELD_LIFE_VERSION, metadata.getLifeVersion() + 1);
+    return true;
   }
 
   /**
@@ -649,7 +665,7 @@ class CloudBlobStore implements Store {
       return false;
     }
     // If we are here, in case of delete and undelete, we pass the life version to check against.
-    // So this should be safe, as long as we claim a cache hit, only when life version in cache is not older than
+    // So this should be safe, as long as we claim a cache hit only when life version in cache is not older than
     // life version passed. Again this doesn't mean that a more recent life version was never seen for this blob. It
     // only means that this cloud blob store instance didn't see it. And for this case, the pre<operation>Validation
     // methods (e.g, {@code preDeleteValidation, preTtlUpdateValidation} etc) will help do any validations if required.
@@ -847,6 +863,16 @@ class CloudBlobStore implements Store {
     if (!started) {
       throw new StoreException("Store not started", StoreErrorCodes.Store_Not_Started);
     }
+  }
+
+  /**
+   * Check if the blob expires within the min ttl threshold config for vcr {@code CloudConfig#vcrMinTtlDays}.
+   * @param messageInfo {@link MessageInfo} to check.
+   * @return true if blob is expiring within threshold, false otherwise.
+   */
+  private boolean isExpiringSoon(MessageInfo messageInfo) {
+    return messageInfo.getExpirationTimeInMs() != Utils.Infinite_Time
+        && messageInfo.getExpirationTimeInMs() - messageInfo.getOperationTimeMs() < minTtlMillis;
   }
 
   /**

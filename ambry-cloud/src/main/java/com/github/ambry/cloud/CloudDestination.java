@@ -54,7 +54,7 @@ public interface CloudDestination extends Closeable {
    * @param blobId id of the Ambry blob
    * @param deletionTime time of blob deletion
    * @param lifeVersion life version of the blob to be deleted.
-   * @param cloudUpdateValidator {@link CloudUpdateValidator} object passed by called to validate the update.
+   * @param cloudUpdateValidator {@link CloudUpdateValidator} object passed by caller to validate the delete.
    * @return flag indicating whether the blob was deleted
    * @throws CloudStorageException if the deletion encounters an error.
    */
@@ -65,7 +65,7 @@ public interface CloudDestination extends Closeable {
    * Undelete the blob from cloud destination, and update the new life version.
    * @param blobId id of the Ambry blob.
    * @param lifeVersion new life version to update.
-   * @param cloudUpdateValidator {@link CloudUpdateValidator} object passed by called to validate the update.
+   * @param cloudUpdateValidator {@link CloudUpdateValidator} object passed by caller to validate the undelete.
    * @return final live version of the undeleted blob.
    * @throws CloudStorageException if the undelete encounters an error.
    */
@@ -76,7 +76,7 @@ public interface CloudDestination extends Closeable {
    * Update expiration time of blob in the cloud destination.
    * @param blobId id of the Ambry blob
    * @param expirationTime the new expiration time
-   * @param cloudUpdateValidator {@link CloudUpdateValidator} object passed by called to validate the update.
+   * @param cloudUpdateValidator {@link CloudUpdateValidator} object passed by caller to validate the update.
    * @return the life version of the blob if the blob was updated, otherwise -1.
    * @throws CloudStorageException if the update encounters an error.
    */

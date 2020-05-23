@@ -432,13 +432,6 @@ public class CloudBlobMetadata {
   }
 
   /**
-   * @return true if this blob is deleted or expired, otherwise false.
-   */
-  public boolean isDeletedOrExpired() {
-    return isExpired() || isDeleted();
-  }
-
-  /**
    * @return true if this blob is marked as deleted, false otherwise.
    */
   public boolean isDeleted() {
@@ -461,10 +454,10 @@ public class CloudBlobMetadata {
 
   /**
    * @param retentionPeriod period for which blobs marked a deleted aren't compacted away.
-   * @return true if deletion time is outside retention window. false otherwise.
+   * @return true if deletion time is outside retention window or blob is expired. false otherwise.
    */
   public boolean isCompactionCandidate(long retentionPeriod) {
-    return isDeleted() && deletionTime <= (System.currentTimeMillis() - retentionPeriod);
+    return (isDeleted() && deletionTime <= (System.currentTimeMillis() - retentionPeriod)) || isExpired();
   }
 
   @Override

@@ -23,12 +23,15 @@ import java.util.Map;
  */
 public interface CloudUpdateValidator {
   /**
-   * Validate operation on {@link CloudBlobMetadata} in cloud destination for the operation on blob with
-   * given {@link StoreKey} and new requested life version.
+   * Validate the sanity of update operation on given {@code updateFields} against existing {@link CloudBlobMetadata} in
+   * cloud destination for the blob with key {@code key}. This can be used to hook Ambry store related validation logic
+   * during {@link CloudDestination} specific get-check-update flow.
    * @param metadata {@link CloudBlobMetadata} object obtained from cloud destination.
    * @param key {@link StoreKey} of the blob being updated.
    * @param updateFields {@link Map} of fields and new values requested for update.
+   * @return if no exception needs to thrown, return false if the operation is not needed (maybe cloud state is more
+   * recent). true otherwise.
    * @throws StoreException if validation fails.
    */
-  void validateUpdate(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields) throws StoreException;
+  boolean validateUpdate(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields) throws StoreException;
 }
