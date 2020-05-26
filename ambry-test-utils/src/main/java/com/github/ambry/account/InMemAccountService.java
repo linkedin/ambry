@@ -14,7 +14,6 @@
 
 package com.github.ambry.account;
 
-import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.Arrays;

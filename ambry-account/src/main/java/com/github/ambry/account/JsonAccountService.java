@@ -14,7 +14,6 @@
 package com.github.ambry.account;
 
 import com.github.ambry.config.JsonAccountConfig;
-import com.github.ambry.server.StatsSnapshot;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

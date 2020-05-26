@@ -351,30 +351,30 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    * Selects {@link Container}s to be marked as INACTIVE. Check the valid data size of each DELETE_IN_PROGRESS container
    * from {@link StatsSnapshot} and select the ones with zero data size to be marked as INACTIVE.
    */
-  Set<Container> selectInvalidContainers(StatsSnapshot statsSnapshot) {
+  Set<Container> selectInvalidContainerCandidates(StatsSnapshot statsSnapshot) {
     Map<String, Set<String>> accountToContainerMap = new HashMap<>();
-    Set<Container> invalidContainerSet = new HashSet<>();
+    Set<Container> invalidContainerCandidateSet = new HashSet<>();
     getValidContainers(accountToContainerMap, statsSnapshot, null);
-    Set<Container> deprecatedContainerSet = getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS);
-    for (Container container : deprecatedContainerSet) {
+    Set<Container> deleteInProgressContainerSet = getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS);
+    for (Container container : deleteInProgressContainerSet) {
       String containerIdToString = "C[" + container.getId() + "]";
       String accountIdToString = "A[" + container.getParentAccountId() + "]";
       if (accountToContainerMap.containsKey(accountIdToString) && accountToContainerMap.get(accountIdToString)
           .contains(containerIdToString)) {
         logger.info("Container {} has not been deleted yet", container);
       } else {
-        invalidContainerSet.add(container);
+        invalidContainerCandidateSet.add(container);
       }
     }
-    return invalidContainerSet;
+    return invalidContainerCandidateSet;
   }
 
   /**
    * Selects {@link Container}s to be marked as INACTIVE and marked in zookeeper.
    */
   public void selectInvalidContainersAndMarkInZK(StatsSnapshot statsSnapshot) {
-    Set<Container> invalidContainerSet = selectInvalidContainers(statsSnapshot);
-    markContainerZkNodesInactive(invalidContainerSet);
+    Set<Container> invalidContainerCandidateSet = selectInvalidContainerCandidates(statsSnapshot);
+    markContainerZkNodesInactive(invalidContainerCandidateSet);
   }
 
   /**
