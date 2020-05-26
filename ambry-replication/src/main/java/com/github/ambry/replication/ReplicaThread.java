@@ -1048,8 +1048,8 @@ public class ReplicaThread implements Runnable {
       // The blob may be undeleted, which is alright
       if (e.getErrorCode() == StoreErrorCodes.Life_Version_Conflict
           || e.getErrorCode() == StoreErrorCodes.ID_Undeleted) {
-        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key {}: {}", remoteNode,
-            threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), e.getErrorCode().name());
+        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key {}: {}", remoteNode, threadName,
+            remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), e.getErrorCode().name());
       } else {
         throw e;
       }
@@ -1081,8 +1081,8 @@ public class ReplicaThread implements Runnable {
     } catch (StoreException e) {
       // The blob may be deleted or updated which is alright
       if (e.getErrorCode() == StoreErrorCodes.ID_Deleted || e.getErrorCode() == StoreErrorCodes.Life_Version_Conflict) {
-        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key {}: {}", remoteNode,
-            threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), e.getErrorCode().name());
+        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key {}: {}", remoteNode, threadName,
+            remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), e.getErrorCode().name());
       } else {
         throw e;
       }
@@ -1108,18 +1108,26 @@ public class ReplicaThread implements Runnable {
     final long localLagFromRemoteInBytes;
     final ServerErrorCode serverErrorCode;
 
+    // Complete information (Key info, delete, ttl-update and un-delete information) of blobs missing in local store.
+    // This is used in leader-based replication where stand-by replicas cache the information of missing blobs to keep track of (and advance) the token once they are obtained through intra-dc replication.
+    // ExchangeMetadataResponse::missingStoreKeys is redundant after this change since MessageInfo contains StoreKey. We can remove it in future PRs once leader based replication is working.
+    final Set<MessageInfo> missingMessages;
+
     ExchangeMetadataResponse(Set<StoreKey> missingStoreKeys, FindToken remoteToken, long localLagFromRemoteInBytes) {
-      this.missingStoreKeys = missingStoreKeys;
-      this.remoteToken = remoteToken;
-      this.localLagFromRemoteInBytes = localLagFromRemoteInBytes;
-      this.serverErrorCode = ServerErrorCode.No_Error;
+      this(missingStoreKeys, remoteToken, localLagFromRemoteInBytes, ServerErrorCode.No_Error, null);
     }
 
     ExchangeMetadataResponse(ServerErrorCode errorCode) {
-      missingStoreKeys = null;
-      remoteToken = null;
-      localLagFromRemoteInBytes = -1;
-      this.serverErrorCode = errorCode;
+      this(null, null, -1, errorCode, null);
+    }
+
+    ExchangeMetadataResponse(Set<StoreKey> missingStoreKeys, FindToken remoteToken, long localLagFromRemoteInBytes,
+        ServerErrorCode serverErrorCode, Set<MessageInfo> missingMessages) {
+      this.missingStoreKeys = missingStoreKeys;
+      this.remoteToken = remoteToken;
+      this.localLagFromRemoteInBytes = localLagFromRemoteInBytes;
+      this.serverErrorCode = serverErrorCode;
+      this.missingMessages = missingMessages;
     }
   }
 

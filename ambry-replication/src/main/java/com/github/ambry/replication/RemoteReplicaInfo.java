@@ -62,6 +62,10 @@ public class RemoteReplicaInfo {
   private long reEnableReplicationTime = 0;
   private ReplicaThread replicaThread;
 
+  // Metadata response information (contains missing blobs, remote token, local lag from remote, etc.) of previous replication cycle.
+  // This is used in LEADER-BASED replication where standby replicas don't send the next metadata request until the missing keys in previous metadata response are obtained via intra-dc replication.
+  private ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse;
+
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port) {
     this.replicaId = replicaId;
@@ -72,6 +76,7 @@ public class RemoteReplicaInfo {
     this.port = port;
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
     initializeTokens(token);
+    this.exchangeMetadataResponse = null;
   }
 
   public ReplicaId getReplicaId() {
@@ -196,6 +201,22 @@ public class RemoteReplicaInfo {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Gets the cached meta data response information received in the previous replication cycle.
+   * @return exchangeMetadataResponse which contains the meta data response information (missing keys, token info, local lag from remote, etc.).
+   */
+  public ReplicaThread.ExchangeMetadataResponse getExchangeMetadataResponse() {
+    return exchangeMetadataResponse;
+  }
+
+  /**
+   * Stores/caches the meta data response received in the previous replication cycle.
+   * @param exchangeMetadataResponse contains the meta data response information (missing keys, token info, local lag from remote, etc.).
+   */
+  public void setExchangeMetadataResponse(ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse) {
+    this.exchangeMetadataResponse = exchangeMetadataResponse;
   }
 
   /**
