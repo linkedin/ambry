@@ -22,6 +22,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaType;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -36,6 +37,9 @@ import java.util.stream.Collectors;
  * Metrics for Replication
  */
 public class ReplicationMetrics {
+
+  private final static String MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE = "Partition-%s-maxLagFromPeersInBytes";
+  private final static String CATCH_POINT_FROM_CLOUD_METRIC_NAME_TEMPLATE = "Partition-%s-catchupPointFromCloud";
 
   public final Map<String, Meter> interColoReplicationBytesRate = new HashMap<String, Meter>();
   public final Meter intraColoReplicationBytesRate;
@@ -136,6 +140,7 @@ public class ReplicationMetrics {
   private final Map<PartitionId, Counter> partitionIdToInvalidMessageStreamErrorCounter = new HashMap<>();
   // ConcurrentHashMap is used to avoid cache incoherence.
   private final Map<PartitionId, Map<DataNodeId, Long>> partitionLags = new ConcurrentHashMap<>();
+  private Map<PartitionId, Long> cloudReplicaCatchUpPoint = new ConcurrentHashMap<>();
   private final Map<String, Set<RemoteReplicaInfo>> remoteReplicaInfosByDc = new ConcurrentHashMap<>();
   private final Map<String, LongSummaryStatistics> dcToReplicaLagStats = new ConcurrentHashMap<>();
 
@@ -427,7 +432,21 @@ public class ReplicationMetrics {
       // Set up metrics if and only if no mapping for this partition before.
       Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
       registry.register(MetricRegistry.name(ReplicaThread.class,
-          "Partition-" + partitionId.toPathString() + "-maxLagFromPeersInBytes"), replicaLag);
+          String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())), replicaLag);
+    }
+  }
+
+  /**
+   * Add catchup point metric(local from cloud) for given partitionId.
+   * @param partitionId partition to add metric for.
+   */
+  public void addCatchUpPointMetricForPartition(PartitionId partitionId) {
+    if (!cloudReplicaCatchUpPoint.containsKey(partitionId)) {
+      cloudReplicaCatchUpPoint.put(partitionId, 0L);
+      // Set up metrics if and only if no mapping for this partition before.
+      Gauge<Long> catchUpPoint = () -> cloudReplicaCatchUpPoint.get(partitionId);
+      registry.register(MetricRegistry.name(ReplicaThread.class,
+          String.format(CATCH_POINT_FROM_CLOUD_METRIC_NAME_TEMPLATE, partitionId.toPathString())), catchUpPoint);
     }
   }
 
@@ -438,7 +457,18 @@ public class ReplicationMetrics {
   public void removeLagMetricForPartition(PartitionId partitionId) {
     if (partitionLags.containsKey(partitionId)) {
       registry.remove(MetricRegistry.name(ReplicaThread.class,
-          "Partition-" + partitionId.toPathString() + "-maxLagFromPeersInBytes"));
+          String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())));
+    }
+  }
+
+  /**
+   * Remove catch up point metric of given partition if it's present.
+   * @param partitionId the given partition whose catch up point metric should be removed.
+   */
+  public void removeCatchupPointMetricForPartition(PartitionId partitionId) {
+    if (cloudReplicaCatchUpPoint.containsKey(partitionId)) {
+      registry.remove(MetricRegistry.name(ReplicaThread.class,
+          String.format(CATCH_POINT_FROM_CLOUD_METRIC_NAME_TEMPLATE, partitionId.toPathString())));
     }
   }
 
@@ -695,6 +725,20 @@ public class ReplicationMetrics {
       v.put(replicaId.getDataNodeId(), lag);
       return v;
     });
+  }
+
+  /**
+   * Update catch up point of local replica from the cloud replica.
+   * @param remoteReplicaInfo {@link RemoteReplicaInfo} of the cloud replica.
+   * @param catchUpPoint timestamp upto which local replica has caught with the cloud replica.
+   */
+  public void updateCatchupPointMetricForCloudReplica(RemoteReplicaInfo remoteReplicaInfo, long catchUpPoint) {
+    // update this metric only for cloud peer replica. There will only be one cloud replica peer per partition.
+    if (remoteReplicaInfo.getReplicaId().getReplicaType() == ReplicaType.CLOUD_BACKED
+        && cloudReplicaCatchUpPoint.containsKey(remoteReplicaInfo.getLocalReplicaId().getPartitionId())) {
+      // update the partition's catch up point if and only if it was tracked.
+      cloudReplicaCatchUpPoint.put(remoteReplicaInfo.getLocalReplicaId().getPartitionId(), catchUpPoint);
+    }
   }
 
   /**
