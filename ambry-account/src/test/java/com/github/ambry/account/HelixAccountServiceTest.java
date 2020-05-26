@@ -1219,7 +1219,7 @@ public class HelixAccountServiceTest {
     refReplicationPolicy = TestUtils.getRandomString(10);
     refContainerTtlRequired = random.nextBoolean();
     refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
-        refParentAccountId).setEncrypted(refContainerEncryption)
+        refParentAccountId, System.currentTimeMillis()).setEncrypted(refContainerEncryption)
         .setPreviouslyEncrypted(refContainerPreviousEncryption)
         .setCacheable(refContainerCaching)
         .setMediaScanDisabled(refContainerMediaScanDisabled)

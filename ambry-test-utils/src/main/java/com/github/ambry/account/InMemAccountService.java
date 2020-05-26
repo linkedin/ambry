@@ -192,6 +192,7 @@ public class InMemAccountService implements AccountService {
     short refContainerId = (short) (TestUtils.RANDOM.nextInt(Short.MAX_VALUE - 1) + 2);
     String refContainerName = TestUtils.getRandomString(10);
     Container.ContainerStatus refContainerStatus = Container.ContainerStatus.ACTIVE;
+    long lastTimeUpdate = System.currentTimeMillis();
     String refContainerDescription = TestUtils.getRandomString(10);
     boolean refContainerEncryption = TestUtils.RANDOM.nextBoolean();
     boolean refContainerPreviousEncryption = refContainerEncryption || TestUtils.RANDOM.nextBoolean();
@@ -199,7 +200,7 @@ public class InMemAccountService implements AccountService {
     boolean refContainerMediaScanDisabled = TestUtils.RANDOM.nextBoolean();
     boolean refContainerBackupEnabled = TestUtils.RANDOM.nextBoolean();
     return new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
-        accountId).setEncrypted(refContainerEncryption)
+        accountId, lastTimeUpdate).setEncrypted(refContainerEncryption)
         .setPreviouslyEncrypted(refContainerPreviousEncryption)
         .setCacheable(refContainerCaching)
         .setMediaScanDisabled(refContainerMediaScanDisabled)

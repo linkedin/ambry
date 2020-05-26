@@ -127,8 +127,9 @@ class AccountTestUtils {
         boolean mediaScanDisabled = random.nextBoolean();
         String replicationPolicy = TestUtils.getRandomString(10);
         boolean ttlRequired = random.nextBoolean();
+        long lastUpdateTime = System.currentTimeMillis();
         Container container = new ContainerBuilder(containerId, containerName, containerStatus, containerDescription,
-            accountId).setEncrypted(containerEncryption)
+            accountId, lastUpdateTime).setEncrypted(containerEncryption)
             .setPreviouslyEncrypted(containerPreviousEncryption)
             .setCacheable(containerCaching)
             .setMediaScanDisabled(mediaScanDisabled)

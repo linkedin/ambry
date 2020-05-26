@@ -993,6 +993,7 @@ public class BlobStoreCompactorTest {
       Container container = Mockito.mock(Container.class);
       Mockito.when(container.getParentAccountId()).thenReturn(indexEntry.getValue().getAccountId());
       Mockito.when(container.getId()).thenReturn(indexEntry.getValue().getContainerId());
+      Mockito.when(container.getLastUpdateTime()).thenReturn(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(14));
       deleteInProgressSet.add(container);
       deletedInProgressKeys.add((MockId) indexEntry.getKey());
       cleanedUpSize += indexEntry.getValue().getSize();

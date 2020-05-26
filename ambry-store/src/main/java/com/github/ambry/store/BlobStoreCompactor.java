@@ -45,7 +45,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 /**
  * Component that removes the "dead" data from the set of provided log segments and reclaims space.
  * <p/>
@@ -198,14 +197,17 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Filters deprecated {@link Container}s for compaction purpose. Deprecated status include DELETE_IN_PROGRESS and INACTIVE.
+   * Filters deprecated {@link Container}s for compaction purpose. Deprecated containers include DELETE_IN_PROGRESS
+   * containers met with retention time and all INACTIVE containers.
    * @return the deprecated {@link Container}s' accountId & containerId pairs.
    */
   private void getDeprecatedContainers() {
     deprecatedContainers.clear();
     if (accountService != null) {
       accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
-        deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
+        if (container.getLastUpdateTime() + TimeUnit.DAYS.toMillis(14) >= System.currentTimeMillis()) {
+          deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
+        }
       });
       accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE).forEach((container) -> {
         deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
