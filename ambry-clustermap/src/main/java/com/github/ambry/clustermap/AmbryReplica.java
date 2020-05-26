@@ -25,7 +25,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 /**
  * {@link ReplicaId} implementation to use within dynamic cluster managers.
  */
-abstract class AmbryReplica implements ReplicaId {
+public abstract class AmbryReplica implements ReplicaId {
   private final AmbryPartition partition;
   private final long capacityBytes;
   private volatile boolean isSealed;
@@ -40,7 +40,7 @@ abstract class AmbryReplica implements ReplicaId {
    * @param capacityBytes the capacity in bytes for this replica.
    * @param isSealed whether this replica is in sealed state.
    */
-  AmbryReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, boolean isReplicaStopped,
+  public AmbryReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, boolean isReplicaStopped,
       long capacityBytes, boolean isSealed) throws Exception {
     this.partition = Objects.requireNonNull(partition, "null partition");
     this.capacityBytes = capacityBytes;

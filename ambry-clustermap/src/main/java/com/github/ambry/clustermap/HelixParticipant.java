@@ -42,6 +42,7 @@ import org.apache.helix.task.TaskStateModelFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 
 
@@ -203,12 +204,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    */
   @Override
   public List<String> getSealedReplicas() {
-    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-    if (instanceConfig == null) {
-      throw new IllegalStateException(
-          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
-    }
-    return ClusterMapUtils.getSealedReplicas(instanceConfig);
+    return ClusterMapUtils.getSealedReplicas(getInstanceConfig());
   }
 
   /**
@@ -216,12 +212,12 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    */
   @Override
   public List<String> getStoppedReplicas() {
-    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-    if (instanceConfig == null) {
-      throw new IllegalStateException(
-          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
-    }
-    return ClusterMapUtils.getStoppedReplicas(instanceConfig);
+    return ClusterMapUtils.getStoppedReplicas(getInstanceConfig());
+  }
+
+  @Override
+  public List<String> getDisabledReplicas() {
+    return ClusterMapUtils.getDisabledReplicas(getInstanceConfig());
   }
 
   @Override
@@ -234,11 +230,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     boolean updateResult = true;
     if (clusterMapConfig.clustermapUpdateDatanodeInfo) {
       synchronized (helixAdministrationLock) {
-        InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-        if (instanceConfig == null) {
-          throw new IllegalStateException(
-              "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
-        }
+        InstanceConfig instanceConfig = getInstanceConfig();
         updateResult = shouldExist ? addNewReplicaInfo(replicaId, instanceConfig)
             : removeOldReplicaInfo(replicaId, instanceConfig);
       }
@@ -252,6 +244,33 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
     return Collections.unmodifiableMap(partitionStateChangeListeners);
+  }
+
+  @Override
+  public void setReplicaDisabledState(ReplicaId replicaId, boolean disable) {
+    if (!(replicaId instanceof AmbryReplica)) {
+      throw new IllegalArgumentException(
+          "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
+    }
+    synchronized (helixAdministrationLock) {
+      List<String> disabledReplicas = new ArrayList<>(getDisabledReplicas());
+      String partitionName = replicaId.getPartitionId().toPathString();
+      if (!disable && disabledReplicas.contains(partitionName)) {
+        logger.info("Removing the partition {} from disabledReplicas list", partitionName);
+        disabledReplicas.remove(partitionName);
+        setDisabledReplicas(disabledReplicas);
+      } else if (disable && !disabledReplicas.contains(partitionName)) {
+        logger.info("Adding the partition {} to disabledReplicas list", partitionName);
+        disabledReplicas.add(partitionName);
+        setDisabledReplicas(disabledReplicas);
+      }
+
+      // invoke Helix native method to enable/disable partition on local node, this will trigger subsequent state transition
+      InstanceConfig instanceConfig = getInstanceConfig();
+      String resourceNameForPartition = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
+      instanceConfig.setInstanceEnabledForPartition(resourceNameForPartition, partitionName, !disable);
+      logger.info("Disabled state of partition {} is updated", partitionName);
+    }
   }
 
   /**
@@ -418,17 +437,25 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
+   * @return {@link InstanceConfig} of current participant (The method also checks the existence of InstanceConfig).
+   */
+  private InstanceConfig getInstanceConfig() {
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    if (instanceConfig == null) {
+      throw new IllegalStateException(
+          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
+    }
+    return instanceConfig;
+  }
+
+  /**
    * Set the list of sealed replicas in the HelixAdmin. This method is called only after the helixAdministrationLock
    * is taken.
    * @param sealedReplicas list of sealed replicas to be set in the HelixAdmin
    * @return whether the operation succeeded or not
    */
   private boolean setSealedReplicas(List<String> sealedReplicas) {
-    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-    if (instanceConfig == null) {
-      throw new IllegalStateException(
-          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
-    }
+    InstanceConfig instanceConfig = getInstanceConfig();
     logger.trace("Setting InstanceConfig with list of sealed replicas: {}", sealedReplicas.toArray());
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
     return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
@@ -441,13 +468,22 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @return whether the operation succeeded or not
    */
   boolean setStoppedReplicas(List<String> stoppedReplicas) {
-    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-    if (instanceConfig == null) {
-      throw new IllegalStateException(
-          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
-    }
+    InstanceConfig instanceConfig = getInstanceConfig();
     logger.trace("Setting InstanceConfig with list of stopped replicas: {}", stoppedReplicas.toArray());
     instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicas);
+    return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+  }
+
+  /**
+   * Set the list of disabled replicas in the HelixAdmin. This method is called only after the helixAdministrationLock
+   * is taken.
+   * @param disabledReplicas list of disabled replicas to be set in the HelixAdmin
+   * @return whether the operation succeeded or not
+   */
+  boolean setDisabledReplicas(List<String> disabledReplicas) {
+    InstanceConfig instanceConfig = getInstanceConfig();
+    logger.info("Setting InstanceConfig with list of disabled replicas: {}", disabledReplicas.toArray());
+    instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, disabledReplicas);
     return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
 

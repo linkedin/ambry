@@ -172,6 +172,13 @@ public interface Store {
   boolean recoverFromDecommission();
 
   /**
+   * @return {@code true} if the store is disabled on error (due to disk I/O issue).
+   */
+  default boolean disabledOnError() {
+    return false;
+  }
+
+  /**
    * Shuts down the store
    */
   void shutdown() throws StoreException;

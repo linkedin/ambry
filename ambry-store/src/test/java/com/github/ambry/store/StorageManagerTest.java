@@ -357,6 +357,16 @@ public class StorageManagerTest {
       assertEquals("Error code doesn't match", StoreNotStarted, e.getErrorCode());
     }
     storageManager.startBlobStore(localReplica.getPartitionId());
+    // 4. store is disabled due to disk I/O error
+    BlobStore localStore = (BlobStore) storageManager.getStore(localReplica.getPartitionId());
+    localStore.getDisabledOnError().set(true);
+    try {
+      mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
+      fail("should fail because store is disabled");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
+    }
+    localStore.getDisabledOnError().set(false);
     // 4. success case (verify both replica's state and decommission file)
     mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
     assertEquals("local store state should be set to INACTIVE", ReplicaState.INACTIVE,
@@ -1251,6 +1261,7 @@ public class StorageManagerTest {
     Boolean updateNodeInfoReturnVal = null;
     Set<ReplicaId> sealedReplicas = new HashSet<>();
     Set<ReplicaId> stoppedReplicas = new HashSet<>();
+    Set<ReplicaId> disabledReplicas = new HashSet<>();
     private Boolean setSealStateReturnVal;
     private Boolean setStopStateReturnVal;
 
@@ -1302,6 +1313,15 @@ public class StorageManagerTest {
         stoppedReplicas.removeAll(replicaIds);
       }
       return true;
+    }
+
+    @Override
+    public void setReplicaDisabledState(ReplicaId replicaId, boolean disable) {
+      if (disable) {
+        disabledReplicas.add(replicaId);
+      } else {
+        disabledReplicas.remove(replicaId);
+      }
     }
 
     @Override

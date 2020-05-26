@@ -14,11 +14,16 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.AmbryDataNode;
+import com.github.ambry.clustermap.AmbryDisk;
+import com.github.ambry.clustermap.AmbryPartition;
+import com.github.ambry.clustermap.AmbryReplica;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.File;
@@ -54,7 +59,6 @@ class StoreTestUtils {
    * Need mock ReplicaId to get and set isSealed state
    */
   public static class MockReplicaId implements ReplicaId {
-
     private String storeId;
     private long capacity;
     private String filePath;
@@ -140,6 +144,54 @@ class StoreTestUtils {
     }
   }
 
+  public static class MockAmbryReplica extends AmbryReplica {
+    private String filePath;
+
+    MockAmbryReplica(ClusterMapConfig clusterMapConfig, long capacity, String filePath, AmbryPartition partitionId)
+        throws Exception {
+      super(clusterMapConfig, partitionId, false, capacity, false);
+      this.filePath = filePath;
+    }
+
+    @Override
+    public AmbryDataNode getDataNodeId() {
+      return null;
+    }
+
+    @Override
+    public AmbryDisk getDiskId() {
+      return null;
+    }
+
+    @Override
+    public String getMountPath() {
+      return null;
+    }
+
+    @Override
+    public String getReplicaPath() {
+      return filePath;
+    }
+
+    @Override
+    public void markDiskDown() {
+    }
+
+    @Override
+    public void markDiskUp() {
+    }
+
+    @Override
+    public ReplicaType getReplicaType() {
+      return ReplicaType.DISK_BACKED;
+    }
+
+    @Override
+    public JSONObject getSnapshot() {
+      return null;
+    }
+  }
+
   /**
    * Creates a mock replicaId for blob store testing
    * @param storeId partitionId from replicaId.getPartitionId() will toString() to this
@@ -149,6 +201,14 @@ class StoreTestUtils {
    */
   static MockReplicaId createMockReplicaId(String storeId, long capacity, String filePath) {
     return new MockReplicaId(storeId, capacity, filePath);
+  }
+
+  static MockAmbryReplica createMockAmbryReplica(ClusterMapConfig clusterMapConfig, String storeId, long capacity,
+      String filePath) throws Exception {
+    AmbryPartition partitionId = mock(AmbryPartition.class);
+    when(partitionId.toString()).thenReturn(storeId);
+    when(partitionId.toPathString()).thenReturn(storeId);
+    return new MockAmbryReplica(clusterMapConfig, capacity, filePath, partitionId);
   }
 
   /**

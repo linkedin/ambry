@@ -65,6 +65,22 @@ public class ReplicaStatusDelegate {
   }
 
   /**
+   * Disable given replica on current node (this will trigger LEADER -> STANDBY -> INACTIVE transition)
+   * @param replicaId the {@link ReplicaId} to disable
+   */
+  public void disableReplica(ReplicaId replicaId) {
+    clusterParticipant.setReplicaDisabledState(replicaId, true);
+  }
+
+  /**
+   * Enable given replica on current node (this will trigger OFFLINE -> BOOTSTRAP -> STANDBY transition)
+   * @param replicaId the {@link ReplicaId} to disable
+   */
+  public void enableReplica(ReplicaId replicaId) {
+    clusterParticipant.setReplicaDisabledState(replicaId, false);
+  }
+
+  /**
    * @return a list of stopped replicas in InstanceConfig of local node.
    */
   public List<String> getStoppedReplicas() {

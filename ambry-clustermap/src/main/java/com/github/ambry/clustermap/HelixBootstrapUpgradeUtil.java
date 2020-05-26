@@ -1217,25 +1217,6 @@ public class HelixBootstrapUpgradeUtil {
   }
 
   /**
-   * Get resource name associated with given partition.
-   * @param helixAdmin the {@link HelixAdmin} to access resources in cluster
-   * @param clusterName the name of cluster in which the partition resides
-   * @param partitionName name of partition
-   * @return resource name associated with given partition. {@code null} if not found.
-   */
-  static String getResourceNameOfPartition(HelixAdmin helixAdmin, String clusterName, String partitionName) {
-    String result = null;
-    for (String resourceName : helixAdmin.getResourcesInCluster(clusterName)) {
-      IdealState idealState = helixAdmin.getResourceIdealState(clusterName, resourceName);
-      if (idealState.getPartitionSet().contains(partitionName)) {
-        result = resourceName;
-        break;
-      }
-    }
-    return result;
-  }
-
-  /**
    * Validate that the information in Helix is consistent with the information in the static clustermap; and close
    * all the admin connections to ZK hosts.
    */

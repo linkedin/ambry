@@ -174,10 +174,9 @@ public class ReplicationTest {
 
   /**
    * Tests replication model is correctly obtained from properties
-   * @throws Exception
    */
   @Test
-  public void replicationTypeFromConfigTest() throws Exception {
+  public void replicationTypeFromConfigTest() {
     //When replication config is missing, replicationModelType should be defaulted to ALL_TO_ALL
     assertEquals("Replication model mismatch from the value present in config", replicationConfig.replicationModelType,
         ReplicationModelType.ALL_TO_ALL);

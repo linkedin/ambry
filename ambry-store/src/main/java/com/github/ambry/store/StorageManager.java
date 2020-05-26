@@ -512,35 +512,45 @@ public class StorageManager implements StoreManager {
       // if replica is null that means partition is not on current node (this shouldn't happen unless we use server admin
       // tool to remove the store before initiating decommission on this partition). We throw exception in this case.
       if (replica != null) {
-        // 0. as long as local replica exists, we create a decommission file in its dir
-        File decommissionFile = new File(replica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
-        try {
-          if (!decommissionFile.exists()) {
-            // if not present, create one.
-            decommissionFile.createNewFile();
-            logger.info("Decommission file is created for replica {}", replica.getReplicaPath());
-          }
-        } catch (IOException e) {
-          logger.error("IOException occurs when creating decommission file for replica {}", partitionName, e);
-          throw new StateTransitionException(
-              "Couldn't create decommission file for replica " + replica.getReplicaPath(), ReplicaOperationFailure);
+        Store localStore = getStore(replica.getPartitionId(), true);
+        if (localStore == null) {
+          throw new StateTransitionException("Store " + partitionName + " is not found on current node",
+              ReplicaNotFound);
         }
-        Store localStore = getStore(replica.getPartitionId());
-        if (localStore != null) {
-          // 1. set state to INACTIVE
-          localStore.setCurrentState(ReplicaState.INACTIVE);
-          logger.info("Store {} is set to INACTIVE", partitionName);
-          // 2. disable compaction on this store
-          if (!controlCompactionForBlobStore(replica.getPartitionId(), false)) {
-            logger.error("Failed to disable compaction on store {}", partitionName);
-            // we set error code to ReplicaNotFound because that is the only reason why compaction may fail.
-            throw new StateTransitionException("Couldn't disable compaction on replica " + replica.getReplicaPath(),
-                ReplicaNotFound);
-          }
-          logger.info("Compaction is successfully disabled on store {}", partitionName);
+        if (localStore.disabledOnError()) {
+          // if store is disabled due to disk I/O error, we explicitly throw an exception to mark partition as ERROR state
+          throw new StateTransitionException("Store " + partitionName + " is disabled due to I/O error",
+              ReplicaOperationFailure);
         } else {
-          // this may happen when the disk holding this store crashes (or store is stopped by server admin tool)
-          throw new StateTransitionException("Store " + partitionName + " is not started", StoreNotStarted);
+          // 0. as long as local replica exists, we create a decommission file in its dir
+          File decommissionFile = new File(replica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
+          try {
+            if (!decommissionFile.exists()) {
+              // if not present, create one.
+              decommissionFile.createNewFile();
+              logger.info("Decommission file is created for replica {}", replica.getReplicaPath());
+            }
+          } catch (IOException e) {
+            logger.error("IOException occurs when creating decommission file for replica " + partitionName, e);
+            throw new StateTransitionException(
+                "Couldn't create decommission file for replica " + replica.getReplicaPath(), ReplicaOperationFailure);
+          }
+          if (localStore.isStarted()) {
+            // 1. set state to INACTIVE
+            localStore.setCurrentState(ReplicaState.INACTIVE);
+            logger.info("Store {} is set to INACTIVE", partitionName);
+            // 2. disable compaction on this store
+            if (!controlCompactionForBlobStore(replica.getPartitionId(), false)) {
+              logger.error("Failed to disable compaction on store {}", partitionName);
+              // we set error code to ReplicaNotFound because that is the only reason why compaction may fail.
+              throw new StateTransitionException("Couldn't disable compaction on replica " + replica.getReplicaPath(),
+                  ReplicaNotFound);
+            }
+            logger.info("Compaction is successfully disabled on store {}", partitionName);
+          } else {
+            // this may happen when the disk holding this store crashes (or store is stopped by server admin tool)
+            throw new StateTransitionException("Store " + partitionName + " is not started", StoreNotStarted);
+          }
         }
       } else {
         throw new StateTransitionException("Replica " + partitionName + " is not found on current node",

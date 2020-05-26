@@ -24,8 +24,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 import org.mockito.Mockito;
 
-import static org.mockito.Mockito.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static org.mockito.Mockito.*;
 
 
 public class MockHelixParticipant extends HelixParticipant {
@@ -38,6 +38,7 @@ public class MockHelixParticipant extends HelixParticipant {
   ReplicaSyncUpManager replicaSyncUpService = null;
   private Set<ReplicaId> sealedReplicas = new HashSet<>();
   private Set<ReplicaId> stoppedReplicas = new HashSet<>();
+  private Set<ReplicaId> disabledReplicas = new HashSet<>();
   private PartitionStateChangeListener mockReplicationManagerListener;
 
   public MockHelixParticipant(ClusterMapConfig clusterMapConfig) {
@@ -81,6 +82,12 @@ public class MockHelixParticipant extends HelixParticipant {
     }).when(mockReplicationManagerListener).onPartitionBecomeOfflineFromInactive(any(String.class));
   }
 
+  public MockHelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) {
+    super(clusterMapConfig, helixFactory, metricRegistry,
+        parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
+            clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
+  }
+
   @Override
   public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
     // no op
@@ -104,6 +111,15 @@ public class MockHelixParticipant extends HelixParticipant {
       stoppedReplicas.removeAll(replicaIds);
     }
     return true;
+  }
+
+  @Override
+  public void setReplicaDisabledState(ReplicaId replicaId, boolean disable) {
+    if (disable) {
+      disabledReplicas.add(replicaId);
+    } else {
+      disabledReplicas.remove(replicaId);
+    }
   }
 
   @Override

@@ -93,6 +93,7 @@ public class BlobStore implements Store {
   private volatile boolean recoverFromDecommission;
   // TODO remove this once ZK migration is complete
   private AtomicBoolean isSealed = new AtomicBoolean(false);
+  private AtomicBoolean disabledOnError = new AtomicBoolean(false);
   protected PersistentIndex index;
   // THIS IS ONLY FOR TEST.
   protected Runnable operationBeforeSynchronizationFunc = null;
@@ -252,6 +253,7 @@ public class BlobStore implements Store {
         checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
         onSuccess();
+        disabledOnError.set(false);
         started = true;
         // This is to be compatible with static clustermap. If static cluster manager is adopted, all replicas are supposed to be STANDBY
         // and router relies on failure detector to track liveness of replicas(stores).
@@ -259,6 +261,7 @@ public class BlobStore implements Store {
         if (replicaId != null) {
           replicaId.markDiskUp();
         }
+        EnableReplicaIfNeeded();
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
         throw new StoreException("Error while starting store for dir " + dataDir, e,
@@ -352,6 +355,19 @@ public class BlobStore implements Store {
       return MessageWriteSetStateInStore.SOME_NOT_ALL_DUPLICATE;
     } else {
       return MessageWriteSetStateInStore.ALL_ABSENT;
+    }
+  }
+
+  /**
+   * Check disabled state of current store(replica), if it is on disabled list, remove it and re-enable the replica.
+   * Current store might be shut down and disabled due to disk I/O error and now it is able to restart after disk is
+   * fixed/replaced. This method is called at the end of startup to re-enable this store if it's still in disabled state.
+   */
+  private void EnableReplicaIfNeeded() {
+    if (replicaStatusDelegates != null) {
+      for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
+        replicaStatusDelegate.enableReplica(replicaId);
+      }
     }
   }
 
@@ -972,6 +988,11 @@ public class BlobStore implements Store {
     return recoverFromDecommission;
   }
 
+  @Override
+  public boolean disabledOnError() {
+    return disabledOnError.get();
+  }
+
   /**
    * Fetch {@link CompactionDetails} based on the {@link CompactionPolicy} for this {@link BlobStore} containing
    * information about log segments to be compacted
@@ -1078,6 +1099,14 @@ public class BlobStore implements Store {
     if (count == config.storeIoErrorCountToTriggerShutdown) {
       logger.error("Shutting down BlobStore {} because IO error count exceeds threshold", storeId);
       shutdown(true);
+      // Explicitly disable replica to trigger Helix state transition: LEADER -> STANDBY -> INACTIVE -> OFFLINE
+      if (!disabledOnError.getAndSet(true) && replicaStatusDelegates != null) {
+        try {
+          replicaStatusDelegates.forEach(delegate -> delegate.disableReplica(replicaId));
+        } catch (Exception e) {
+          logger.error("Failed to disable replica {} due to exception ", replicaId, e);
+        }
+      }
       metrics.storeIoErrorTriggeredShutdownCount.inc();
     }
   }
@@ -1094,6 +1123,14 @@ public class BlobStore implements Store {
    */
   AtomicInteger getErrorCount() {
     return errorCount;
+  }
+
+  /**
+   * Exposed for testing.
+   * @return a boolean value that indicates whether current store is disabled due to I/O error.
+   */
+  AtomicBoolean getDisabledOnError() {
+    return disabledOnError;
   }
 
   /**

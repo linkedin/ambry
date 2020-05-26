@@ -413,6 +413,7 @@ public class ReplicationManager extends ReplicationEngine {
 
     @Override
     public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+      // if code arrives here, we don't need to check if replica exists, it has been checked in StorageManager
       ReplicaId localReplica = storeManager.getReplica(partitionName);
       Store store = storeManager.getStore(localReplica.getPartitionId());
       // 1. check if store is started
@@ -425,6 +426,8 @@ public class ReplicationManager extends ReplicationEngine {
 
     @Override
     public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+      // we have to check existence of local replica because replication manager is invoked first in INACTIVE -> OFFLINE
+      // transition and we cannot guarantee there is no change after STANDBY -> INACTIVE is complete
       ReplicaId localReplica = storeManager.getReplica(partitionName);
       // check if local replica exists
       if (localReplica == null) {
