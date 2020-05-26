@@ -32,6 +32,7 @@ public class MockHelixParticipant extends HelixParticipant {
   public static MetricRegistry metricRegistry = new MetricRegistry();
   public Boolean updateNodeInfoReturnVal = null;
   public PartitionStateChangeListener mockStatsManagerListener = null;
+  public boolean overrideDisableReplicaMethod = true;
   CountDownLatch listenerLatch = null;
   ReplicaState replicaState = ReplicaState.OFFLINE;
   ReplicaId currentReplica = null;
@@ -115,10 +116,14 @@ public class MockHelixParticipant extends HelixParticipant {
 
   @Override
   public void setReplicaDisabledState(ReplicaId replicaId, boolean disable) {
-    if (disable) {
-      disabledReplicas.add(replicaId);
+    if (overrideDisableReplicaMethod) {
+      if (disable) {
+        disabledReplicas.add(replicaId);
+      } else {
+        disabledReplicas.remove(replicaId);
+      }
     } else {
-      disabledReplicas.remove(replicaId);
+      super.setReplicaDisabledState(replicaId, disable);
     }
   }
 

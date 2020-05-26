@@ -1845,7 +1845,8 @@ public class BlobStoreTest {
     when(mockHelixFactory.getZKHelixManager(anyString(), anyString(), any(), anyString())).thenReturn(null);
     when(mockHelixFactory.getHelixAdmin(anyString())).thenReturn(mockHelixAdmin);
     MockHelixParticipant.metricRegistry = new MetricRegistry();
-    ClusterParticipant mockParticipant = new MockHelixParticipant(clusterMapConfig, mockHelixFactory);
+    MockHelixParticipant mockParticipant = new MockHelixParticipant(clusterMapConfig, mockHelixFactory);
+    mockParticipant.overrideDisableReplicaMethod = false;
     ReplicaStatusDelegate replicaStatusDelegate = new ReplicaStatusDelegate(mockParticipant);
     BlobStore testStore = createBlobStore(getMockAmbryReplica(clusterMapConfig, tempDirStr),
         new StoreConfig(new VerifiableProperties(properties)), Collections.singletonList(replicaStatusDelegate));
