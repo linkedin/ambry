@@ -367,7 +367,7 @@ public class StorageManagerTest {
       assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
     localStore.getDisabledOnError().set(false);
-    // 4. success case (verify both replica's state and decommission file)
+    // 5. success case (verify both replica's state and decommission file)
     mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
     assertEquals("local store state should be set to INACTIVE", ReplicaState.INACTIVE,
         storageManager.getStore(localReplica.getPartitionId()).getCurrentState());
@@ -375,7 +375,7 @@ public class StorageManagerTest {
     assertTrue("Decommission file is not found in local replica's dir", decommissionFile.exists());
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
 
-    // 5. mock disable compaction failure
+    // 6. mock disable compaction failure
     mockHelixParticipant = new MockClusterParticipant();
     MockStorageManager mockStorageManager =
         new MockStorageManager(localNode, Collections.singletonList(mockHelixParticipant));
@@ -1207,6 +1207,7 @@ public class StorageManagerTest {
     properties.put("disk.manager.enable.segment.pooling", "true");
     properties.put("store.compaction.triggers", "Periodic,Admin");
     properties.put("store.replica.status.delegate.enable", "true");
+    properties.put("store.set.local.partition.state.enabled", "true");
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("clustermap.port", "2200");
     properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);

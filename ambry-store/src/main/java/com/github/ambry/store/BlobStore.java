@@ -261,7 +261,7 @@ public class BlobStore implements Store {
         if (replicaId != null) {
           replicaId.markDiskUp();
         }
-        EnableReplicaIfNeeded();
+        enableReplicaIfNeeded();
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
         throw new StoreException("Error while starting store for dir " + dataDir, e,
@@ -363,8 +363,8 @@ public class BlobStore implements Store {
    * Current store might be shut down and disabled due to disk I/O error and now it is able to restart after disk is
    * fixed/replaced. This method is called at the end of startup to re-enable this store if it's still in disabled state.
    */
-  private void EnableReplicaIfNeeded() {
-    if (replicaStatusDelegates != null) {
+  private void enableReplicaIfNeeded() {
+    if (config.storeSetLocalPartitionStateEnabled && replicaStatusDelegates != null) {
       for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
         replicaStatusDelegate.enableReplica(replicaId);
       }
@@ -1100,7 +1100,8 @@ public class BlobStore implements Store {
       logger.error("Shutting down BlobStore {} because IO error count exceeds threshold", storeId);
       shutdown(true);
       // Explicitly disable replica to trigger Helix state transition: LEADER -> STANDBY -> INACTIVE -> OFFLINE
-      if (!disabledOnError.getAndSet(true) && replicaStatusDelegates != null) {
+      if (config.storeSetLocalPartitionStateEnabled && !disabledOnError.getAndSet(true)
+          && replicaStatusDelegates != null) {
         try {
           replicaStatusDelegates.forEach(delegate -> delegate.disableReplica(replicaId));
         } catch (Exception e) {

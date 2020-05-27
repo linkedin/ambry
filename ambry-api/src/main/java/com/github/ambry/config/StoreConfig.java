@@ -327,6 +327,14 @@ public class StoreConfig {
   @Default("false")
   public final boolean storeContainerDeletionEnabled;
 
+  /**
+   * Whether to set local partition state through InstanceConfig in Helix. If true, store is allowed to enable/disable
+   * partition on local node by calling InstanceConfig API.
+   */
+  @Config("store.set.local.partition.state.enabled")
+  @Default("false")
+  public final boolean storeSetLocalPartitionStateEnabled;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -396,8 +404,9 @@ public class StoreConfig {
     storeUuidBasedBloomFilterEnabled = verifiableProperties.getBoolean("store.uuid.based.bloom.filter.enabled", false);
     storeIndexRebuildBloomFilterEnabled =
         verifiableProperties.getBoolean("store.index.rebuild.bloom.filter.enabled", false);
-    storeContainerDeletionEnabled =
-        verifiableProperties.getBoolean("store.container.deletion.enabled", false);
+    storeContainerDeletionEnabled = verifiableProperties.getBoolean("store.container.deletion.enabled", false);
+    storeSetLocalPartitionStateEnabled =
+        verifiableProperties.getBoolean("store.set.local.partition.state.enabled", false);
   }
 }
 

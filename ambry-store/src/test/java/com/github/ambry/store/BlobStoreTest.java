@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
-import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.HelixFactory;
 import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.ReplicaId;
@@ -364,6 +363,7 @@ public class BlobStoreTest {
       storeStatsScheduler = Utils.newScheduler(1, false);
       setupTestState(false, false);
     }
+    properties.setProperty("store.set.local.partition.state.enabled", Boolean.toString(true));
     //Setup threshold test properties, replicaId, mock write status delegate
     StoreConfig defaultConfig = changeThreshold(65, 5, true);
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
@@ -429,6 +429,7 @@ public class BlobStoreTest {
       verify(replicaStatusDelegate, times(3)).unseal(replicaId);
     }
     store.shutdown();
+    properties.setProperty("store.set.local.partition.state.enabled", Boolean.toString(false));
   }
 
   /**
@@ -1828,6 +1829,7 @@ public class BlobStoreTest {
     properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     properties.setProperty("store.io.error.count.to.trigger.shutdown", "1");
     properties.setProperty("store.replica.status.delegate.enable", "true");
+    properties.setProperty("store.set.local.partition.state.enabled", "true");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     InstanceConfig instanceConfig = new InstanceConfig("localhost");
     Map<String, List<String>> listMap = new HashMap<>();
