@@ -890,42 +890,6 @@ public class HelixAccountServiceTest {
   }
 
   /**
-   * Tests enabling backfilling for new znode path. While {@link HelixAccountService} is still using old znode path, it should
-   * forward the new {@link Account} metadata to new znode path.
-   */
-  @Test
-  public void testFillAccountsToNewZNode() throws Exception {
-    assumeTrue(!useNewZNodePath);
-    helixConfigProps.put(HelixAccountServiceConfig.BACKFILL_ACCOUNTS_TO_NEW_ZNODE, "true");
-    vHelixConfigProps = new VerifiableProperties(helixConfigProps);
-    storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
-    String updaterThreadPrefix = UUID.randomUUID().toString();
-    MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix,
-            mockRouter);
-    accountService = mockHelixAccountServiceFactory.getAccountService();
-    ((HelixAccountService) accountService).setupRouter(mockRouter);
-
-    // update accounts and then make sure the blob ids are stored in the helixStore
-    Account newAccountWithoutContainer = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
-    List<Account> accountsToUpdate = Collections.singletonList(newAccountWithoutContainer);
-    boolean hasUpdateAccountSucceed = accountService.updateAccounts(accountsToUpdate);
-    assertTrue("Wrong update return status", hasUpdateAccountSucceed);
-    assertAccountsInAccountService(accountsToUpdate, 1, accountService);
-
-    // verify the RouterStore can read the account map out.
-    HelixPropertyStore<ZNRecord> helixStore =
-        mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig);
-    HelixAccountService helixAccountService = (HelixAccountService) accountService;
-    RouterStore routerStore =
-        new RouterStore(helixAccountService.getAccountServiceMetrics(), helixAccountService.getBackupFileManager(),
-            helixStore, new AtomicReference<>(mockRouter), false, TOTAL_NUMBER_OF_VERSION_TO_KEEP);
-    Map<String, String> accountMap = routerStore.fetchAccountMetadata();
-    assertNotNull("Accounts should be backfilled to new znode", accountMap);
-    assertAccountMapEquals(accountService.getAllAccounts(), accountMap);
-  }
-
-  /**
    * Asserts the {@link Account}s received by the {@link Consumer} are as expected.
    * @param expectedAccounts The expected collection of {@link Account}s that should be received by the {@link Consumer}s.
    * @param expectedNumberOfConsumers The expected number of {@link Consumer}s.

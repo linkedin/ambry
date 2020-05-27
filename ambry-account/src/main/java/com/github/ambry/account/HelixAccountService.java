@@ -40,20 +40,11 @@ import static com.github.ambry.utils.Utils.*;
 /**
  * <p>
  *   An implementation of {@link AccountService} that employs a {@link HelixPropertyStore} as its underlying storage.
- *   It's in the middle of transitioning from using old helix path to the new path. In old way, it internally stores
- *   the full set of {@link Account} metadata in a store-relative path defined in {@link LegacyMetadataStore}. In the
- *   new way, it internally stores the list of blob ids that point to different versions of {@link Account} metadata.
- *   In both way, the latest full {@link Account} metadata will be cached locally, so serving an {@link Account} query
- *   will not incur any calls to remote {@code ZooKeeper} or {@code AmbryServer}.
- * </p>
- * <p>
- *   After transition, this implementation would not only save the latest set of {@link Account} metadata, but also save
- *   several previous versions. It keeps a list of blob ids in {@link HelixPropertyStore} and remove the earliest one
- *   when it reaches the limit of the version numbers. There are several benefits from this approach.
- *   <ul>
- *     <li>Reverting changes would be much easier.</li>
- *     <li>There will no be size limit for {@link Account} metadata</li>
- *   </ul>
+ *   It has two different {@link AccountMetadataStore} implementations. Use {@link HelixAccountServiceConfig#useNewZNodePath}
+ *   to control which one to use. When the configuration is true, it uses the {@link RouterStore}. Otherwise, it uses
+ *   {@link LegacyMetadataStore}.
+ *   In both {@link AccountMetadataStore}, the latest full {@link Account} metadata will be cached locally, so serving an
+ *   {@link Account} query will not incur any calls to remote {@code ZooKeeper} or {@code AmbryServer}.
  * </p>
  * <p>
  *   When a {@link HelixAccountService} starts up, it will automatically fetch a full set of {@link Account} metadata
@@ -65,12 +56,30 @@ import static com.github.ambry.utils.Utils.*;
  *   will not update its local cache.
  * </p>
  * <p>
- *   The full set of the {@link Account} metadata are stored in a single {@link ZNRecord} or a single blob in the new way, as a
- *   simple map from a string account id to the {@link Account} content in json as a string.
+ *   Every time a mutation of account metadata is performed, a new backup file will be created for locally, in a directory
+ *   specified by the {@link HelixAccountServiceConfig#backupDir}. A backup file is created when the helix listener on
+ *   {@link #ACCOUNT_METADATA_CHANGE_TOPIC} is notified. And backup's filename could contain version and mtime information
+ *   of the znode that stores the account metadata.
+ *   The flow to update account looks like
+ *   <ol>
+ *     <li>{@link #updateAccounts(Collection)} is invoked</li>
+ *     <li>{@link AccountMetadataStore} merges the incoming account mutation request with the current account set and write it back to helix</li>
+ *     <li>{@link Notifier} publish this action to helix by writing to {@link #ACCOUNT_METADATA_CHANGE_TOPIC}</li>
+ *     <li>Listeners listening on {@link #ACCOUNT_METADATA_CHANGE_TOPIC} fetches the new account metadata set</li>
+ *     <li>Listeners persists this new set as a backup file through {@link BackupFileManager}</li>
+ *   </ol>
+ *   There are limited number of backup files can be persisted. Once the number is exceeded, {@link BackupFileManager} would
+ *   start removing the oldest backup file. The number can be configured through {@link HelixAccountServiceConfig#maxBackupFileCount}.
+ * </p>
+ * <p>
+ *   The full set of the {@link Account} metadata are stored in a single {@link ZNRecord} in {@link LegacyMetadataStore}
+ *   or a single blob in {@link RouterStore}, as a simple map from a string account id to the {@link Account} content in
+ *   json as a string.
  * </p>
  * <p>
  *   Limited by {@link HelixPropertyStore}, the total size of {@link Account} data stored on a single {@link ZNRecord}
- *   cannot exceed 1MB before the transition.
+ *   cannot exceed 1MB. If the serialized json string exceeded 1MB limitation, it will then be compressed before saving
+ *   back to zookeeper.
  * </p>
  */
 public class HelixAccountService extends AbstractAccountService implements AccountService {
@@ -81,7 +90,6 @@ public class HelixAccountService extends AbstractAccountService implements Accou
   private final BackupFileManager backupFileManager;
   private final HelixPropertyStore<ZNRecord> helixStore;
   private final Notifier<String> notifier;
-  private final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers = new CopyOnWriteArraySet<>();
   private final ScheduledExecutorService scheduler;
   private final HelixAccountServiceConfig config;
   private final TopicListener<String> changeTopicListener = this::onAccountChangeMessage;
@@ -89,7 +97,6 @@ public class HelixAccountService extends AbstractAccountService implements Accou
   private static final Logger logger = LoggerFactory.getLogger(HelixAccountService.class);
 
   private final AtomicReference<Router> router = new AtomicReference<>();
-  private final AccountMetadataStore backFillStore;
 
   /**
    * <p>
@@ -119,7 +126,6 @@ public class HelixAccountService extends AbstractAccountService implements Accou
     this.scheduler = scheduler;
     this.config = config;
     this.backupFileManager = new BackupFileManager(this.accountServiceMetrics, config);
-    AccountMetadataStore backFillStore = null;
     if (config.useNewZNodePath) {
       accountMetadataStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, false,
           config.totalNumberOfVersionToKeep);
@@ -127,12 +133,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
     } else {
       accountMetadataStore = new LegacyMetadataStore(this.accountServiceMetrics, backupFileManager, helixStore);
       initialFetchAndSchedule();
-      if (config.backFillAccountsToNewZNode) {
-        backFillStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, true,
-            config.totalNumberOfVersionToKeep);
-      }
     }
-    this.backFillStore = backFillStore;
   }
 
   /**
@@ -332,7 +333,6 @@ public class HelixAccountService extends AbstractAccountService implements Accou
           logger.trace("Start processing message={} for topic={}", message, topic);
           fetchAndUpdateCache(true);
           logger.trace("Completed processing message={} for topic={}", message, topic);
-          maybeBackFillToNewStore();
           break;
         default:
           accountServiceMetrics.unrecognizedMessageErrorCount.inc();
@@ -346,23 +346,6 @@ public class HelixAccountService extends AbstractAccountService implements Accou
   }
 
   /**
-   * Backfill the newly updated {@link Account} metadata to new zookeeper node based on the configuration. This function
-   * doesn't guarantee the success of the operation. It gives up whenever there is failure or exception and wait for
-   * next update.
-   */
-  private void maybeBackFillToNewStore() {
-    if (!config.backFillAccountsToNewZNode) {
-      return;
-    }
-    logger.info("Starting backfilling the new state to new store");
-    if (backFillStore.updateAccounts(accountInfoMapRef.get().getAccounts())) {
-      logger.info("Finish backfilling the new state to new store");
-    } else {
-      logger.error("Fail to backfill the new state to new store, just skip this one");
-    }
-  }
-
-  /**
    * {@inheritDoc}
    */
   @Override
@@ -370,7 +353,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
     if (!open.get()) {
       throw new IllegalStateException("AccountService is closed.");
     }
-    if ((config.useNewZNodePath || config.backFillAccountsToNewZNode) && router.get() == null) {
+    if (config.useNewZNodePath && router.get() == null) {
       throw new IllegalStateException("Router not initialized.");
     }
   }
