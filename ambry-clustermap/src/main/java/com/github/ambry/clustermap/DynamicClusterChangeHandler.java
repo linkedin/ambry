@@ -208,6 +208,13 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
     } else {
       logger.info("Routing table change triggered from {}", dcName);
     }
+
+    //we should notify routing table change indication to different cluster map change listeners (i.e replication manager, partition selection helper, etc). However, only replication manager handles this callback now.
+    //On receiving this notification, listeners can query the latest state information of replicas by querying APIs provided in class RoutingTableSnapshot
+    for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
+      listener.onRoutingTableChange();
+    }
+
     helixClusterManagerMetrics.routingTableChangeTriggerCount.inc();
   }
 

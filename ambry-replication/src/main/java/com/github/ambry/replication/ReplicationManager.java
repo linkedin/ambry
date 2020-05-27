@@ -37,9 +37,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -49,7 +47,6 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 
 
@@ -247,14 +244,6 @@ public class ReplicationManager extends ReplicationEngine {
   }
 
   /**
-   * Get a map of partition to list of peer leader replicas
-   * @return an unmodifiable map of peer leader replicas stored by partition {@link ReplicationEngine#peerLeaderReplicasByPartition}
-   */
-  Map<String, List<ReplicaId>> getPeerLeaderReplicasByPartition() {
-    return Collections.unmodifiableMap(peerLeaderReplicasByPartition);
-  }
-
-  /**
    * Implementation of {@link ClusterMapChangeListener} that helps replication manager react to cluster map changes.
    */
   class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {
@@ -331,6 +320,28 @@ public class ReplicationManager extends ReplicationEngine {
         }
       }
     }
+
+    /**
+     * {@inheritDoc}
+     * Note that, this method should be thread-safe because multiple threads (from different cluster change handlers) may
+     * concurrently call this method.
+     */
+    @Override
+    public void onRoutingTableChange() {
+
+      // wait for start() to complete
+      try {
+        startupLatch.await();
+      } catch (InterruptedException e) {
+        logger.warn("Waiting for startup is interrupted.");
+        throw new IllegalStateException(
+            "Replication manager startup is interrupted while handling routing table change");
+      }
+
+      // Refreshes the remote leader information for all local leader partitions maintained in an in-mem structure in PartitionLeaderInfo.
+      // Thread safety is ensured in the method PartitionLeaderInfo.refreshPeerLeadersForAllPartitions().
+      partitionLeaderInfo.refreshPeerLeadersForAllPartitions();
+    }
   }
 
   /**
@@ -386,34 +397,18 @@ public class ReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeLeaderFromStandby(String partitionName) {
       logger.info("Partition state change notification from Standby to Leader received for partition {}",
           partitionName);
-      //Changes for leader based replication - for now, we just log the list of peer leader replicas
-      // 1. get replica ID of current node from store manager
-      ReplicaId localReplica = storeManager.getReplica(partitionName);
-
-      // 2. Get the peer leader replicas from all data centers for this partition
-      List<? extends ReplicaId> leaderReplicas =
-          localReplica.getPartitionId().getReplicaIdsByState(ReplicaState.LEADER, null);
-
-      // 3. Log the list of leader replicas associated with this partition (will be used later for leadership based replication)
-      List<ReplicaId> peerLeaderReplicas = new ArrayList<>();
-      for (ReplicaId leaderReplica : leaderReplicas) {
-        if (leaderReplica.getDataNodeId() != localReplica.getDataNodeId()) {
-          peerLeaderReplicas.add(leaderReplica);
-          logger.info("Partition {} on node instance {} is leader in remote dc {}", partitionName,
-              getInstanceName(leaderReplica.getDataNodeId().getHostname(), leaderReplica.getDataNodeId().getPort()),
-              leaderReplica.getDataNodeId().getDatacenterName());
-        }
-      }
-      peerLeaderReplicasByPartition.put(partitionName, peerLeaderReplicas);
+      // Add the leader partition (and its remote leaders) information to an in-mem structure maintained in PartitionLeaderInfo.
+      // PartitionLeaderInfo::addPartition is thread safe.
+      partitionLeaderInfo.addPartition(partitionName);
     }
 
     @Override
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
-      if (peerLeaderReplicasByPartition.containsKey(partitionName)) {
-        peerLeaderReplicasByPartition.remove((partitionName));
-      }
+      // Remove the leader partition from an in-mem structure maintained in PartitionLeaderInfo.
+      // PartitionLeaderInfo::removePartition is thread safe.
+      partitionLeaderInfo.removePartition(partitionName);
     }
 
     @Override
