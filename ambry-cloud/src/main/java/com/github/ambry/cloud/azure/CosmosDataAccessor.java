@@ -133,7 +133,8 @@ public class CosmosDataAccessor {
     }
     logger.info("CosmosDB connection test succeeded.");
 
-    // Check for existence of BulkDelete sproc
+    // Check for existence of BulkDelete stored procedure.
+    // Source: https://github.com/Azure/azure-cosmosdb-js-server/blob/master/samples/stored-procedures/bulkDelete.js
     String sprocLink = cosmosCollectionLink + BULK_DELETE_SPROC;
     try {
       ResourceResponse<StoredProcedure> spResponse =
