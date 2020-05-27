@@ -111,8 +111,8 @@ public class ReplicaThread implements Runnable {
   private final Condition pauseCondition = lock.newCondition();
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final int maxReplicaCountPerRequest;
-
   private volatile boolean allDisabled = false;
+  private final PartitionLeaderInfo partitionLeaderInfo;
 
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
@@ -120,6 +120,16 @@ public class ReplicaThread implements Runnable {
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager) {
+    this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool, replicationConfig,
+        replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
+        datacenterName, responseHandler, time, replicaSyncUpManager, null);
+  }
+
+  public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
+      DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
+      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName,
+      ResponseHandler responseHandler, Time time, ReplicaSyncUpManager replicaSyncUpManager,
+      PartitionLeaderInfo partitionLeaderInfo) {
     this.threadName = threadName;
     this.running = true;
     this.findTokenHelper = findTokenHelper;
@@ -151,6 +161,7 @@ public class ReplicaThread implements Runnable {
       throttleCount = replicationMetrics.intraColoReplicaThreadThrottleCount;
     }
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
+    this.partitionLeaderInfo = partitionLeaderInfo;
   }
 
   /**
@@ -453,12 +464,12 @@ public class ReplicaThread implements Runnable {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
                   replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
-              Set<StoreKey> remoteMissingStoreKeys =
-                  getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
-              processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
+              Set<MessageInfo> remoteMissingStoreMessages =
+                  getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+              processReplicaMetadataResponse(remoteMissingStoreMessages, replicaMetadataResponseInfo, remoteReplicaInfo,
                   remoteNode, remoteKeyToLocalKeyMap);
               ExchangeMetadataResponse exchangeMetadataResponse =
-                  new ExchangeMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo.getFindToken(),
+                  new ExchangeMetadataResponse(remoteMissingStoreMessages, replicaMetadataResponseInfo.getFindToken(),
                       replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
               // update replication lag in ReplicaSyncUpManager
               if (replicaSyncUpManager != null
@@ -617,14 +628,14 @@ public class ReplicaThread implements Runnable {
    * @param replicaMetadataResponseInfo The response that contains the messages from the remote node
    * @param remoteNode The remote node from which replication needs to happen
    * @param remoteReplicaInfo The remote replica that contains information about the remote replica id
-   * @return List of store keys that are missing from the local store
+   * @return List of store messages that are missing from the local store
    * @throws StoreException if store error (usually IOError) occurs when getting missing keys.
    */
-  private Set<StoreKey> getMissingStoreKeys(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
+  private Set<MessageInfo> getMissingStoreMessages(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
       DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
-    Map<StoreKey, StoreKey> remoteToConvertedNonNull = new HashMap<>();
+    Map<MessageInfo, StoreKey> remoteMessageToConvertedKeyNonNull = new HashMap<>();
 
     for (MessageInfo messageInfo : messageInfoList) {
       StoreKey storeKey = messageInfo.getStoreKey();
@@ -632,41 +643,41 @@ public class ReplicaThread implements Runnable {
           remoteReplicaInfo.getReplicaId(), storeKey);
       StoreKey convertedKey = storeKeyConverter.getConverted(storeKey);
       if (convertedKey != null) {
-        remoteToConvertedNonNull.put(storeKey, convertedKey);
+        remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
     }
     Set<StoreKey> convertedMissingStoreKeys =
-        remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteToConvertedNonNull.values()));
-    Set<StoreKey> missingRemoteStoreKeys = new HashSet<>();
-    remoteToConvertedNonNull.forEach((remoteKey, convertedKey) -> {
+        remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()));
+    Set<MessageInfo> missingRemoteMessages = new HashSet<>();
+    remoteMessageToConvertedKeyNonNull.forEach((messageInfo, convertedKey) -> {
       if (convertedMissingStoreKeys.contains(convertedKey)) {
         logger.trace(
             "Remote node: {} Thread name: {} Remote replica: {} Key missing id (converted): {} Key missing id (remote): {}",
-            remoteNode, threadName, remoteReplicaInfo.getReplicaId(), convertedKey, remoteKey);
-        missingRemoteStoreKeys.add(remoteKey);
+            remoteNode, threadName, remoteReplicaInfo.getReplicaId(), convertedKey, messageInfo.getStoreKey());
+        missingRemoteMessages.add(messageInfo);
       }
     });
-    if (messageInfoList.size() != 0 && missingRemoteStoreKeys.size() == 0) {
+    if (messageInfoList.size() != 0 && missingRemoteMessages.size() == 0) {
       // Catching up
       replicationMetrics.allResponsedKeysExist.inc();
     }
     replicationMetrics.updateCheckMissingKeysTime(SystemTime.getInstance().milliseconds() - startTime,
         replicatingFromRemoteColo, datacenterName);
-    return missingRemoteStoreKeys;
+    return missingRemoteMessages;
   }
 
   /**
    * Takes the missing keys and the message list from the remote store and identifies messages that are deleted
    * on the remote store and updates them locally. Also, if the message that is missing is deleted in the remote
    * store, we remove the message from the list of missing keys
-   * @param missingRemoteStoreKeys The list of keys missing from the local store
+   * @param missingRemoteStoreMessages The list of messages missing from the local store
    * @param replicaMetadataResponseInfo The replica metadata response from the remote store
    * @param remoteReplicaInfo The remote replica that is being replicated from
    * @param remoteNode The remote node from which replication needs to happen
    * @param remoteKeyToLocalKeyMap map mapping remote keys to local key equivalents
    * @throws StoreException
    */
-  private void processReplicaMetadataResponse(Set<StoreKey> missingRemoteStoreKeys,
+  private void processReplicaMetadataResponse(Set<MessageInfo> missingRemoteStoreMessages,
       ReplicaMetadataResponseInfo replicaMetadataResponseInfo, RemoteReplicaInfo remoteReplicaInfo,
       DataNodeId remoteNode, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap) throws StoreException {
     long startTime = SystemTime.getInstance().milliseconds();
@@ -680,16 +691,16 @@ public class ReplicaThread implements Runnable {
       }
       BlobId localKey = (BlobId) remoteKeyToLocalKeyMap.get(messageInfo.getStoreKey());
       if (localKey == null) {
-        missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
+        missingRemoteStoreMessages.remove(messageInfo);
         logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote key deprecated locally: {}", remoteNode,
             threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
-      } else if (missingRemoteStoreKeys.contains(messageInfo.getStoreKey())) {
+      } else if (missingRemoteStoreMessages.contains(messageInfo)) {
         // The key is missing in the local store, we either send get request to fetch the content of this key, or does
         // nothing if the key is deleted or expired remotely.
         if (messageInfo.isDeleted()) {
           // if the key is not present locally and if the remote replica has the message in deleted state,
           // it is not considered missing locally.
-          missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
+          missingRemoteStoreMessages.remove(messageInfo);
           logger.trace(
               "Remote node: {} Thread name: {} Remote replica: {} Key in deleted state remotely: {} Local key: {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
@@ -702,7 +713,7 @@ public class ReplicaThread implements Runnable {
         } else if (messageInfo.isExpired()) {
           // if the key is not present locally and if the remote replica has the key as expired,
           // it is not considered missing locally.
-          missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
+          missingRemoteStoreMessages.remove(messageInfo);
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in expired state remotely {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), localKey);
         }
@@ -828,7 +839,8 @@ public class ReplicaThread implements Runnable {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
-        Set<StoreKey> missingStoreKeys = exchangeMetadataResponse.missingStoreKeys;
+        Set<StoreKey> missingStoreKeys =
+            ExchangeMetadataResponse.getStoreKeysFromMessages(exchangeMetadataResponse.missingStoreMessages);
         if (missingStoreKeys.size() > 0) {
           ArrayList<BlobId> keysToFetch = new ArrayList<BlobId>();
           for (StoreKey storeKey : missingStoreKeys) {
@@ -894,7 +906,7 @@ public class ReplicaThread implements Runnable {
               time.milliseconds() + replicationConfig.replicationSyncedReplicaBackoffDurationMs);
           syncedBackOffCount.inc();
         }
-        if (exchangeMetadataResponse.missingStoreKeys.size() > 0) {
+        if (exchangeMetadataResponse.missingStoreMessages.size() > 0) {
           PartitionResponseInfo partitionResponseInfo =
               getResponse.getPartitionResponseInfoList().get(partitionResponseInfoIndex);
           responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
@@ -912,7 +924,8 @@ public class ReplicaThread implements Runnable {
             try {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Messages to fix: {} "
                       + "Partition: {} Local mount path: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
-                  exchangeMetadataResponse.missingStoreKeys, remoteReplicaInfo.getReplicaId().getPartitionId(),
+                  ExchangeMetadataResponse.getStoreKeysFromMessages(exchangeMetadataResponse.missingStoreMessages),
+                  remoteReplicaInfo.getReplicaId().getPartitionId(),
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
               MessageFormatWriteSet writeset;
@@ -968,7 +981,8 @@ public class ReplicaThread implements Runnable {
             replicationMetrics.blobAuthorizationFailureCount.inc();
             logger.error(
                 "One of the blobs authorization failed: Remote node: {} Thread name: {} Remote replica: {} Keys are: {}",
-                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.missingStoreKeys);
+                remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
+                ExchangeMetadataResponse.getStoreKeysFromMessages(exchangeMetadataResponse.missingStoreMessages));
           } else {
             replicationMetrics.updateGetRequestError(remoteReplicaInfo.getReplicaId());
             logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
@@ -1103,32 +1117,38 @@ public class ReplicaThread implements Runnable {
   }
 
   static class ExchangeMetadataResponse {
-    final Set<StoreKey> missingStoreKeys;
+    // Set of messages missing in the local store. MessageInfo contains complete information of the blob metadata like Key info, delete, ttl-update and un-delete values.
+    final Set<MessageInfo> missingStoreMessages;
     final FindToken remoteToken;
     final long localLagFromRemoteInBytes;
     final ServerErrorCode serverErrorCode;
 
-    // Complete information (Key info, delete, ttl-update and un-delete information) of blobs missing in local store.
-    // This is used in leader-based replication where stand-by replicas cache the information of missing blobs to keep track of (and advance) the token once they are obtained through intra-dc replication.
-    // ExchangeMetadataResponse::missingStoreKeys is redundant after this change since MessageInfo contains StoreKey. We can remove it in future PRs once leader based replication is working.
-    final Set<MessageInfo> missingMessages;
-
-    ExchangeMetadataResponse(Set<StoreKey> missingStoreKeys, FindToken remoteToken, long localLagFromRemoteInBytes) {
-      this(missingStoreKeys, remoteToken, localLagFromRemoteInBytes, ServerErrorCode.No_Error, null);
+    ExchangeMetadataResponse(Set<MessageInfo> missingStoreMessages, FindToken remoteToken,
+        long localLagFromRemoteInBytes) {
+      this.missingStoreMessages = missingStoreMessages;
+      this.remoteToken = remoteToken;
+      this.localLagFromRemoteInBytes = localLagFromRemoteInBytes;
+      this.serverErrorCode = ServerErrorCode.No_Error;
     }
 
     ExchangeMetadataResponse(ServerErrorCode errorCode) {
-      this(null, null, -1, errorCode, null);
+      this.missingStoreMessages = null;
+      this.remoteToken = null;
+      this.localLagFromRemoteInBytes = -1;
+      this.serverErrorCode = errorCode;
     }
 
-    ExchangeMetadataResponse(Set<StoreKey> missingStoreKeys, FindToken remoteToken, long localLagFromRemoteInBytes,
-        ServerErrorCode serverErrorCode, Set<MessageInfo> missingMessages) {
-      this.missingStoreKeys = missingStoreKeys;
-      this.remoteToken = remoteToken;
-      this.localLagFromRemoteInBytes = localLagFromRemoteInBytes;
-      this.serverErrorCode = serverErrorCode;
-      this.missingMessages = missingMessages;
+    /**
+     * Utility method to extract store keys from messages
+     */
+    public static Set<StoreKey> getStoreKeysFromMessages(Set<MessageInfo> messageInfos) {
+      if (messageInfos != null) {
+        return messageInfos.stream().map(MessageInfo::getStoreKey).collect(Collectors.toSet());
+      } else {
+        return new HashSet<>();
+      }
     }
+
   }
 
   boolean isThreadUp() {

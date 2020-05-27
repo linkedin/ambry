@@ -103,7 +103,6 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.Mock;
 import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.MockClusterMap.*;
@@ -1485,7 +1484,7 @@ public class ReplicationTest {
               remoteReplicaInfos);
       assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
       for (int i = 0; i < response.size(); i++) {
-        assertEquals(missingKeysCount, response.get(i).missingStoreKeys.size());
+        assertEquals(missingKeysCount, response.get(i).missingStoreMessages.size());
         assertEquals(expectedIndex, ((MockFindToken) response.get(i).remoteToken).getIndex());
         remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
       }
@@ -1509,7 +1508,7 @@ public class ReplicationTest {
             remoteReplicaInfos);
     assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
     for (ReplicaThread.ExchangeMetadataResponse metadata : response) {
-      assertEquals(0, metadata.missingStoreKeys.size());
+      assertEquals(0, metadata.missingStoreMessages.size());
       assertEquals(expectedIndex, ((MockFindToken) metadata.remoteToken).getIndex());
     }
 
@@ -1614,7 +1613,10 @@ public class ReplicationTest {
 
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
         idsToExpectByPartition.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()),
-        responses.stream().map(k -> k.missingStoreKeys).flatMap(Collection::stream).collect(Collectors.toSet()));
+        responses.stream()
+            .map(k -> ReplicaThread.ExchangeMetadataResponse.getStoreKeysFromMessages(k.missingStoreMessages))
+            .flatMap(Collection::stream)
+            .collect(Collectors.toSet()));
 
     // Now delete a message in the remote before doing the Get requests (for every partition). Remove these keys from
     // expected key set. Even though they are requested, they should not go into the local store. However, this cycle
@@ -1696,7 +1698,10 @@ public class ReplicationTest {
 
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
         idsToExpectByPartition.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()),
-        responses.stream().map(k -> k.missingStoreKeys).flatMap(Collection::stream).collect(Collectors.toSet()));
+        responses.stream()
+            .map(k -> ReplicaThread.ExchangeMetadataResponse.getStoreKeysFromMessages(k.missingStoreMessages))
+            .flatMap(Collection::stream)
+            .collect(Collectors.toSet()));
 
     // Now expire a message in the remote before doing the Get requests (for every partition). Remove these keys from
     // expected key set. Even though they are requested, they should not go into the local store. However, this cycle
@@ -1937,10 +1942,10 @@ public class ReplicationTest {
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
     for (int i = 0; i < response.size(); i++) {
       if (i % 2 == 0) {
-        assertEquals(0, response.get(i).missingStoreKeys.size());
+        assertEquals(0, response.get(i).missingStoreMessages.size());
         assertEquals(expectedIndex, ((MockFindToken) response.get(i).remoteToken).getIndex());
       } else {
-        assertEquals(1, response.get(i).missingStoreKeys.size());
+        assertEquals(1, response.get(i).missingStoreMessages.size());
         assertEquals(expectedIndex + 1, ((MockFindToken) response.get(i).remoteToken).getIndex());
       }
     }
@@ -2364,7 +2369,7 @@ public class ReplicationTest {
             remoteReplicaInfos);
     assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
     for (int i = 0; i < response.size(); i++) {
-      assertEquals(missingKeyCount, response.get(i).missingStoreKeys.size());
+      assertEquals(missingKeyCount, response.get(i).missingStoreMessages.size());
       remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
     }
     replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize), remoteReplicaInfos,
@@ -2504,7 +2509,7 @@ public class ReplicationTest {
             remoteReplicaInfos);
     assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
     for (int i = 0; i < response.size(); i++) {
-      assertEquals(0, response.get(i).missingStoreKeys.size());
+      assertEquals(0, response.get(i).missingStoreMessages.size());
       remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
     }
 
@@ -2622,7 +2627,7 @@ public class ReplicationTest {
             remoteReplicaInfos);
     assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
     for (int i = 0; i < response.size(); i++) {
-      assertEquals(0, response.get(i).missingStoreKeys.size());
+      assertEquals(0, response.get(i).missingStoreMessages.size());
       remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
     }
 
@@ -2738,7 +2743,7 @@ public class ReplicationTest {
             remoteReplicaInfos);
     assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
     for (int i = 0; i < response.size(); i++) {
-      assertEquals(1, response.get(i).missingStoreKeys.size());
+      assertEquals(1, response.get(i).missingStoreMessages.size());
       remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
     }
 
@@ -2852,7 +2857,7 @@ public class ReplicationTest {
     assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
     for (int i = 0; i < response.size(); i++) {
       // we don't have any missing key here.
-      assertEquals(0, response.get(i).missingStoreKeys.size());
+      assertEquals(0, response.get(i).missingStoreMessages.size());
       remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
       PartitionId partitionId = partitionIds.get(i);
       StoreKey key = localHost.infosByPartition.get(partitionId).get(0).getStoreKey();
@@ -2999,7 +3004,7 @@ public class ReplicationTest {
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
     for (int i = 0; i < response.size(); i++) {
-      assertEquals(expectedMissingKeysSum, response.get(i).missingStoreKeys.size());
+      assertEquals(expectedMissingKeysSum, response.get(i).missingStoreMessages.size());
       assertEquals(i % 2 == 0 ? expectedIndex : expectedIndexOdd,
           ((MockFindToken) response.get(i).remoteToken).getIndex());
       replicasToReplicate.get(remoteHost.dataNodeId).get(i).setToken(response.get(i).remoteToken);
@@ -3030,7 +3035,7 @@ public class ReplicationTest {
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
     for (int i = 0; i < response.size(); i++) {
-      assertEquals(expectedMissingKeysSum[i], response.get(i).missingStoreKeys.size());
+      assertEquals(expectedMissingKeysSum[i], response.get(i).missingStoreMessages.size());
     }
   }
 
@@ -3059,7 +3064,7 @@ public class ReplicationTest {
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
     for (int i = 0; i < response.size(); i++) {
-      assertEquals(0, response.get(i).missingStoreKeys.size());
+      assertEquals(0, response.get(i).missingStoreMessages.size());
       assertEquals(i % 2 == 0 ? expectedIndex : expectedIndexOdd,
           ((MockFindToken) response.get(i).remoteToken).getIndex());
     }
