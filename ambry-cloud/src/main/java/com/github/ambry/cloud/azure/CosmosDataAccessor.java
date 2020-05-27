@@ -35,8 +35,11 @@ import com.microsoft.azure.cosmosdb.RetryOptions;
 import com.microsoft.azure.cosmosdb.SqlParameter;
 import com.microsoft.azure.cosmosdb.SqlParameterCollection;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.StoredProcedure;
+import com.microsoft.azure.cosmosdb.StoredProcedureResponse;
 import com.microsoft.azure.cosmosdb.internal.HttpConstants;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
+import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
@@ -58,12 +61,19 @@ public class CosmosDataAccessor {
   private static final String LIMIT_PARAM = "@limit";
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
+  private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
+  private static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
+  static final String PROPERTY_CONTINUATION = "continuation";
+  static final String PROPERTY_DELETED = "deleted";
+
   private final AsyncDocumentClient asyncDocumentClient;
   private final String cosmosCollectionLink;
   private final AzureMetrics azureMetrics;
   private Callable<?> updateCallback = null;
   private final int continuationTokenLimitKb;
   private final int requestChargeThreshold;
+  private final int purgeBatchSize;
+  private boolean bulkDeleteEnabled = false;
 
   /** Production constructor */
   CosmosDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics) {
@@ -92,6 +102,7 @@ public class CosmosDataAccessor {
     this.cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
     this.continuationTokenLimitKb = azureCloudConfig.cosmosContinuationTokenLimitKb;
     this.requestChargeThreshold = azureCloudConfig.cosmosRequestChargeThreshold;
+    this.purgeBatchSize = azureCloudConfig.cosmosPurgeBatchSize;
     this.azureMetrics = azureMetrics;
   }
 
@@ -101,7 +112,9 @@ public class CosmosDataAccessor {
     this.cosmosCollectionLink = cosmosCollectionLink;
     this.continuationTokenLimitKb = AzureCloudConfig.DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT;
     this.requestChargeThreshold = AzureCloudConfig.DEFAULT_COSMOS_REQUEST_CHARGE_THRESHOLD;
+    this.purgeBatchSize = AzureCloudConfig.DEFAULT_PURGE_BATCH_SIZE;
     this.azureMetrics = azureMetrics;
+    this.bulkDeleteEnabled = true;
   }
 
   /** Visible for testing */
@@ -119,6 +132,22 @@ public class CosmosDataAccessor {
       throw new IllegalStateException("CosmosDB collection not found: " + cosmosCollectionLink);
     }
     logger.info("CosmosDB connection test succeeded.");
+
+    // Check for existence of BulkDelete stored procedure.
+    // Source: https://github.com/Azure/azure-cosmosdb-js-server/blob/master/samples/stored-procedures/bulkDelete.js
+    String sprocLink = cosmosCollectionLink + BULK_DELETE_SPROC;
+    try {
+      ResourceResponse<StoredProcedure> spResponse =
+          asyncDocumentClient.readStoredProcedure(sprocLink, null).toBlocking().single();
+      if (spResponse.getResource() == null) {
+        logger.error("Did not find stored procedure {}, falling back to individual record deletions", sprocLink);
+      } else {
+        logger.info("Found stored procedure {}, will use it.", sprocLink);
+        bulkDeleteEnabled = true;
+      }
+    } catch (Exception ex) {
+      logger.error("Did not find stored procedure {}, falling back to individual record deletions", sprocLink, ex);
+    }
   }
 
   /**
@@ -136,16 +165,83 @@ public class CosmosDataAccessor {
   }
 
   /**
-   * Delete the blob metadata document in the CosmosDB collection.
-   * @param blobMetadata the blob metadata document.
-   * @return the {@link ResourceResponse} returned by the operation, if successful.
+   * Delete the blob metadata document in the CosmosDB collection, if it exists.
+   * @param blobMetadata the blob metadata document to delete.
+   * @return {@code true} if the record was deleted, {@code false} if it was not found.
    * @throws DocumentClientException if the operation failed.
    */
-  ResourceResponse<Document> deleteMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
+  boolean deleteMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
     String docLink = getDocumentLink(blobMetadata.getId());
     RequestOptions options = getRequestOptions(blobMetadata.getPartitionId());
-    return executeCosmosAction(() -> asyncDocumentClient.deleteDocument(docLink, options).toBlocking().single(),
-        azureMetrics.documentDeleteTime);
+    try {
+      // Note: not timing here since bulk deletions are timed.
+      executeCosmosAction(() -> asyncDocumentClient.deleteDocument(docLink, options).toBlocking().single(), null);
+      return true;
+    } catch (DocumentClientException dex) {
+      if (dex.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
+        // Can happen on retry
+        logger.debug("Could not find metadata for blob {} to delete", blobMetadata.getId());
+        return false;
+      } else {
+        throw dex;
+      }
+    }
+  }
+
+  /**
+   * Delete the blob metadata documents in the CosmosDB collection.
+   * @param blobMetadataList the list of blob metadata documents to delete.
+   * @throws DocumentClientException if the operation failed.
+   */
+  void deleteMetadata(List<CloudBlobMetadata> blobMetadataList) throws DocumentClientException {
+    if (bulkDeleteEnabled) {
+      for (List<CloudBlobMetadata> batchOfBlobs : Utils.partitionList(blobMetadataList, purgeBatchSize)) {
+        bulkDeleteMetadata(batchOfBlobs);
+      }
+    } else {
+      for (CloudBlobMetadata metadata : blobMetadataList) {
+        deleteMetadata(metadata);
+      }
+    }
+  }
+
+  /**
+   * Delete the blob metadata documents from CosmosDB using the BulkDelete stored procedure.
+   * @param blobMetadataList the list of blob metadata documents to delete.
+   * @throws DocumentClientException if the operation failed.
+   */
+  private void bulkDeleteMetadata(List<CloudBlobMetadata> blobMetadataList) throws DocumentClientException {
+    String partitionPath = blobMetadataList.get(0).getPartitionId();
+    RequestOptions options = getRequestOptions(partitionPath);
+
+    // stored proc link provided in config.  Test for it at startup and use if available.
+    String quotedBlobIds =
+        blobMetadataList.stream().map(metadata -> '"' + metadata.getId() + '"').collect(Collectors.joining(","));
+    String query = String.format(BULK_DELETE_QUERY, quotedBlobIds);
+    String sprocLink = cosmosCollectionLink + BULK_DELETE_SPROC;
+    boolean more = true;
+    int deleteCount = 0;
+    double requestCharge = 0;
+    try {
+      while (more) {
+        StoredProcedureResponse response =
+            asyncDocumentClient.executeStoredProcedure(sprocLink, options, new String[]{query}).toBlocking().single();
+        requestCharge += response.getRequestCharge();
+        Document responseDoc = response.getResponseAsDocument();
+        more = responseDoc.getBoolean(PROPERTY_CONTINUATION);
+        deleteCount += responseDoc.getInt(PROPERTY_DELETED);
+      }
+      if (requestCharge >= requestChargeThreshold) {
+        logger.info("Bulk delete partition {} request charge {} for {} records", partitionPath, requestCharge,
+            deleteCount);
+      }
+    } catch (RuntimeException rex) {
+      if (rex.getCause() instanceof DocumentClientException) {
+        throw (DocumentClientException) rex.getCause();
+      } else {
+        throw rex;
+      }
+    }
   }
 
   /**
@@ -401,6 +497,7 @@ public class CosmosDataAccessor {
   /**
    * Utility method to call a Cosmos method and extract any nested DocumentClientException.
    * @param action the action to call.
+   * @param timer the {@link Timer} to use to time the action.  May be null.
    * @return the result of the action.
    * @throws DocumentClientException
    */
@@ -409,9 +506,10 @@ public class CosmosDataAccessor {
     ResourceResponse<Document> resourceResponse;
     Timer.Context operationTimer = null;
     try {
-      operationTimer = timer.time();
+      if (timer != null) {
+        operationTimer = timer.time();
+      }
       resourceResponse = action.call();
-      // TODO: add partition, tally request charge per partition and log on 429
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
         throw (DocumentClientException) rex.getCause();

@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 
@@ -30,7 +31,8 @@ public class VcrMetrics {
   public final Timer blobEncryptionTime;
   public final Timer blobDecryptionTime;
   // Compaction metrics
-  public final Timer blobCompactionTime;
+  // Rate of blob compaction for VCR instance
+  public final Meter blobCompactionRate;
   public final Counter compactionFailureCount;
   public final Counter compactionShutdownTimeoutCount;
   // Cache counters
@@ -63,7 +65,7 @@ public class VcrMetrics {
     blobCacheHitCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobCacheHitCount"));
     retryCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryCount"));
     retryWaitTimeMsec = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryWaitTimeMsec"));
-    blobCompactionTime = registry.timer(MetricRegistry.name(CloudStorageCompactor.class, "BlobCompactionTime"));
+    blobCompactionRate = registry.meter(MetricRegistry.name(CloudStorageCompactor.class, "BlobCompactionRate"));
     compactionFailureCount = registry.counter(MetricRegistry.name(CloudStorageCompactor.class, "CompactionFailureCount"));
     compactionShutdownTimeoutCount =
         registry.counter(MetricRegistry.name(CloudStorageCompactor.class, "CompactionShutdownTimeoutCount"));

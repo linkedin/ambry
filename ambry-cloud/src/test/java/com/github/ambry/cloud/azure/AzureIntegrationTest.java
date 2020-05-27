@@ -99,6 +99,7 @@ public class AzureIntegrationTest {
     testProperties.setProperty("clustermap.datacenter.name", "uswest");
     testProperties.setProperty("clustermap.host.name", "localhost");
     testProperties.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
+    testProperties.setProperty(AzureCloudConfig.AZURE_PURGE_BATCH_SIZE, "10");
     verifiableProperties = new VerifiableProperties(testProperties);
     azureDest = getAzureDestination(verifiableProperties);
     cloudRequestAgent =
@@ -265,7 +266,7 @@ public class AzureIntegrationTest {
   public void testPurgeDeadBlobs() throws Exception {
     cleanup();
 
-    int bucketCount = 10;
+    int bucketCount = 20;
     PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
 
     // Upload blobs in various lifecycle states

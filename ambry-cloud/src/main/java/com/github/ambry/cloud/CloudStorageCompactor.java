@@ -57,7 +57,7 @@ public class CloudStorageCompactor implements Runnable {
     this.vcrMetrics = vcrMetrics;
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
     this.queryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
-    this.queryBucketDays = cloudConfig.cloudCompactionQueryBucketTimeDays;
+    this.queryBucketDays = cloudConfig.cloudCompactionQueryBucketDays;
     this.lookbackDays = cloudConfig.cloudCompactionLookbackDays;
     this.shutDownTimeoutSecs = cloudConfig.cloudBlobCompactionShutdownTimeoutSecs;
     compactionTimeLimitMs = TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours);
@@ -67,13 +67,10 @@ public class CloudStorageCompactor implements Runnable {
 
   @Override
   public void run() {
-    Timer.Context timer = vcrMetrics.blobCompactionTime.time();
     try {
       compactPartitions();
     } catch (Throwable th) {
       logger.error("Hit exception running compaction task", th);
-    } finally {
-      timer.stop();
     }
   }
 
@@ -261,6 +258,7 @@ public class CloudStorageCompactor implements Runnable {
       }
       totalPurged +=
           requestAgent.doWithRetries(() -> cloudDestination.purgeBlobs(deadBlobs), "PurgeBlobs", partitionPath);
+      vcrMetrics.blobCompactionRate.mark(deadBlobs.size());
       if (deadBlobs.size() < queryLimit) {
         break;
       }

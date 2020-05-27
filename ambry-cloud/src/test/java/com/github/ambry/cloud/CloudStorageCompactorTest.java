@@ -47,7 +47,7 @@ public class CloudStorageCompactorTest {
   public CloudStorageCompactorTest() {
     Properties properties = new Properties();
     properties.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_QUERY_LIMIT, String.valueOf(pageSize));
-    properties.setProperty(CloudConfig.CLOUD_COMPACTION_BUCKET_TIME_DAYS, "7");
+    properties.setProperty(CloudConfig.CLOUD_COMPACTION_QUERY_BUCKET_DAYS, "7");
     properties.setProperty(CloudConfig.CLOUD_COMPACTION_LOOKBACK_DAYS, "28");
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(properties));
     compactor = new CloudStorageCompactor(mockDest, cloudConfig, partitionMap.keySet(), vcrMetrics);

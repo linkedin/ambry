@@ -24,6 +24,7 @@ import com.github.ambry.utils.TestUtils;
 import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.FeedResponse;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
+import com.microsoft.azure.cosmosdb.StoredProcedureResponse;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -123,6 +124,19 @@ class AzureTestUtils {
     Document metadataDoc = createDocumentFromCloudBlobMetadata(metadata);
     when(mockResourceResponse.getResource()).thenReturn(metadataDoc);
     return mockResponse;
+  }
+
+  static Observable<StoredProcedureResponse> getMockBulkDeleteResponse(int count) {
+    Observable<StoredProcedureResponse> mockObservable = mock(Observable.class);
+    BlockingObservable<StoredProcedureResponse> mockBlockingObservable = mock(BlockingObservable.class);
+    when(mockObservable.toBlocking()).thenReturn(mockBlockingObservable);
+    StoredProcedureResponse mockResponse = mock(StoredProcedureResponse.class);
+    when(mockBlockingObservable.single()).thenReturn(mockResponse);
+    Document responseDoc = new Document();
+    responseDoc.set(CosmosDataAccessor.PROPERTY_CONTINUATION, "false");
+    responseDoc.set(CosmosDataAccessor.PROPERTY_DELETED, String.valueOf(count));
+    when(mockResponse.getResponseAsDocument()).thenReturn(responseDoc);
+    return mockObservable;
   }
 
   /**

@@ -40,7 +40,7 @@ public class CloudConfig {
   public static final String CLOUD_BLOB_COMPACTION_INTERVAL_HOURS = "cloud.blob.compaction.interval.hours";
   public static final String CLOUD_BLOB_COMPACTION_QUERY_LIMIT = "cloud.blob.compaction.query.limit";
   public static final String CLOUD_COMPACTION_LOOKBACK_DAYS = "cloud.compaction.lookback.days";
-  public static final String CLOUD_COMPACTION_BUCKET_TIME_DAYS = "cloud.compaction.bucket.time.days";
+  public static final String CLOUD_COMPACTION_QUERY_BUCKET_DAYS = "cloud.compaction.query.bucket.days";
   public static final String CLOUD_BLOB_COMPACTION_SHUTDOWN_TIMEOUT_SECS =
       "cloud.blob.compaction.shutdown.timeout.secs";
   public static final String CLOUD_RECENT_BLOB_CACHE_LIMIT = "cloud.recent.blob.cache.limit";
@@ -214,12 +214,17 @@ public class CloudConfig {
   /*
    * Max number of days in the past compaction should consider.
    */
+  @Config(CLOUD_COMPACTION_LOOKBACK_DAYS)
+  @Default("364")
   public final int cloudCompactionLookbackDays;
 
   /**
    * The time range used for bucketing compaction queries.
    */
-  public final int cloudCompactionQueryBucketTimeDays;
+  @Config(CLOUD_COMPACTION_QUERY_BUCKET_DAYS)
+  @Default("7")
+  public final int cloudCompactionQueryBucketDays;
+
   /**
    * The max size of recently-accessed blob cache in each cloud blob store.
    */
@@ -330,8 +335,8 @@ public class CloudConfig {
         verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_SHUTDOWN_TIMEOUT_SECS, DEFAULT_COMPACTION_TIMEOUT);
     cloudCompactionLookbackDays =
         verifiableProperties.getInt(CLOUD_COMPACTION_LOOKBACK_DAYS, DEFAULT_COMPACTION_LOOKBACK_DAYS);
-    cloudCompactionQueryBucketTimeDays =
-        verifiableProperties.getInt(CLOUD_COMPACTION_BUCKET_TIME_DAYS, DEFAULT_COMPACTION_BUCKET_TIME_DAYS);
+    cloudCompactionQueryBucketDays =
+        verifiableProperties.getInt(CLOUD_COMPACTION_QUERY_BUCKET_DAYS, DEFAULT_COMPACTION_BUCKET_TIME_DAYS);
     recentBlobCacheLimit = verifiableProperties.getInt(CLOUD_RECENT_BLOB_CACHE_LIMIT, DEFAULT_RECENT_BLOB_CACHE_LIMIT);
     cloudMaxAttempts = verifiableProperties.getInt(CLOUD_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS);
     cloudDefaultRetryDelay = verifiableProperties.getInt(CLOUD_DEFAULT_RETRY_DELAY, DEFAULT_RETRY_DELAY_VALUE);
