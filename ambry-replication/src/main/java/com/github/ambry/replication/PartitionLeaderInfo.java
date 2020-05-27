@@ -36,7 +36,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 /**
  * Maintains the list of leader partitions on local node and their corresponding peer leaders in remote data centers
  */
-public class PartitionLeaderInfo {
+class PartitionLeaderInfo {
 
   private final Map<String, Set<ReplicaId>> peerLeaderReplicasByPartition = new ConcurrentHashMap<>();
   private final StoreManager storeManager;
@@ -75,7 +75,7 @@ public class PartitionLeaderInfo {
           localReplica.getPartitionId().getReplicaIdsByState(ReplicaState.LEADER, null);
 
       // 3. Log the list of leader replicas associated with this partition (will be used later for leadership based replication)
-      List<ReplicaId> peerLeaderReplicas = new ArrayList<>();
+      Set<ReplicaId> peerLeaderReplicas = new HashSet<>();
       for (ReplicaId leaderReplica : leaderReplicas) {
         if (leaderReplica.getDataNodeId() != localReplica.getDataNodeId()) {
           peerLeaderReplicas.add(leaderReplica);
@@ -85,7 +85,7 @@ public class PartitionLeaderInfo {
         }
       }
 
-      peerLeaderReplicasByPartition.put(partitionName, new HashSet<>(peerLeaderReplicas));
+      peerLeaderReplicasByPartition.put(partitionName, peerLeaderReplicas);
     } finally {
       rwLock.writeLock().unlock();
     }
@@ -146,8 +146,7 @@ public class PartitionLeaderInfo {
   public boolean isPeerReplicaLeaderForPartition(String partitionName, ReplicaId replicaId) {
     rwLock.readLock().lock();
     try {
-      return peerLeaderReplicasByPartition.containsKey(partitionName) && peerLeaderReplicasByPartition.get(
-          partitionName).contains(replicaId);
+      return peerLeaderReplicasByPartition.getOrDefault(partitionName, Collections.emptySet()).contains(replicaId);
     } finally {
       rwLock.readLock().unlock();
     }

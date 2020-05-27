@@ -455,6 +455,7 @@ public class ReplicationTest {
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
     StorageManager storageManager = managers.getFirst();
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    replicationManager.start();
     MockPartitionId existingPartition =
         (MockPartitionId) replicationManager.partitionToPartitionInfo.keySet().iterator().next();
     String currentDataCenter =
