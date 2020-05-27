@@ -200,9 +200,9 @@ public class UndeleteOperation {
               operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
             } else {
               if (lifeVersion != undeleteResponse.getLifeVersion()) {
-                String message = String.format(
-                    "LifeVersion from Replica {} is different than the lifeVersion from replica {}, {} != {}",
-                    firstResponseReplicaId, replica, lifeVersion, undeleteResponse.getLifeVersion());
+                String message = "LifeVersion of " + blobId + " from Replica " + firstResponseReplicaId
+                    + " is different than the lifeVersion from replica " + replica + " " + lifeVersion + " != "
+                    + undeleteResponse.getLifeVersion();
                 LOGGER.error(message);
                 // this is a successful response and one that completes the operation regardless of whether the
                 // success target has been reached or not.

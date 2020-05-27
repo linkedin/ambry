@@ -560,7 +560,7 @@ final class ServerTestUtil {
       channel.disconnect();
     } catch (Exception e) {
       e.printStackTrace();
-      fail();
+      assertNull(e);
     } finally {
       List<? extends ReplicaId> replicaIds = cluster.getClusterMap()
           .getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS)

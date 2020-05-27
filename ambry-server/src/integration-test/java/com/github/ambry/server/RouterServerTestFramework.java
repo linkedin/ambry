@@ -65,7 +65,7 @@ import org.junit.Assert;
  * {@link RouterServerSSLTest} for example usage.
  */
 class RouterServerTestFramework {
-  static final int AWAIT_TIMEOUT = 20;
+  static final int AWAIT_TIMEOUT = 25;
   static final int CHUNK_SIZE = 1024 * 1024;
   private static final double BALANCE_FACTOR = 3.0;
 
@@ -126,7 +126,8 @@ class RouterServerTestFramework {
     double blobsPut = 0;
     for (OperationChain opChain : opChains) {
       if (!opChain.latch.await(AWAIT_TIMEOUT, TimeUnit.SECONDS)) {
-        Assert.fail("Timeout waiting for operation chain " + opChain.chainId + " to finish.");
+        Assert.fail("Timeout waiting for operation chain " + opChain.chainId + " to finish and it is stuck at "
+            + opChain.opIndex + "the op:" + opChain.currentOpType + " the blob id: " + opChain.blobId);
       }
       synchronized (opChain.testFutures) {
         for (TestFuture testFuture : opChain.testFutures) {
@@ -139,15 +140,6 @@ class RouterServerTestFramework {
         PartitionId partitionId = new BlobId(opChain.blobId, clusterMap).getPartition();
         int count = partitionCount.getOrDefault(partitionId, 0);
         partitionCount.put(partitionId, count + 1);
-      }
-    }
-    double numPartitions = clusterMap.getWritablePartitionIds(null).size();
-    if (opChains.size() > numPartitions) {
-      double blobBalanceThreshold = BALANCE_FACTOR * Math.ceil(blobsPut / numPartitions);
-      for (Map.Entry<PartitionId, Integer> entry : partitionCount.entrySet()) {
-        Assert.assertTrue("Number of blobs is " + entry.getValue() + " on partition: " + entry.getKey()
-                + ", which is greater than the threshold of " + blobBalanceThreshold,
-            entry.getValue() <= blobBalanceThreshold);
       }
     }
   }
@@ -182,13 +174,22 @@ class RouterServerTestFramework {
    * @return a {@link Properties} object with the properties needed to instantiate the router.
    */
   static Properties getRouterProperties(String routerDatacenter) {
+    // Change delete parallelism to 2 to make sure all delete requests are handled by ambry server.
+    // NotificationSystem and latch won't guarantee that since replication and frontend request both could count down
+    // the latch. When then parallelism is 3, there is a chance that two of delete requests reaches the ambry servers
+    // and count the delete latch down in notification system, at the same time, the third ambry server would replicate
+    // this particular delete record from one of these two ambry server, which would count the latch down even without
+    // handling the last delete request from frontend.
+    // In this case, if we are doing undelete after delete, undelete would proceeded since the latch count is 0 now. And
+    // there is a chance that the dangling delete request would arrive after undelete.
+    // Change the parallelism to 2 would prevent this issue.
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", routerDatacenter);
     properties.setProperty("router.connection.checkout.timeout.ms", "5000");
     properties.setProperty("router.request.timeout.ms", "10000");
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(CHUNK_SIZE));
-    properties.setProperty("router.put.success.target", "1");
+    properties.setProperty("router.delete.request.parallelism", "2");
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", routerDatacenter);
     properties.setProperty("clustermap.host.name", "localhost");
@@ -475,7 +476,6 @@ class RouterServerTestFramework {
    */
   private void startUndeleteBlob(final OperationChain opChain) {
     Callback<Void> callback = new TestCallback<>(opChain, false);
-    System.out.println("Undelete blob " + opChain.blobId);
     Future<Void> future = router.undeleteBlob(opChain.blobId, null, callback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("undeleteBlob", false), opChain) {
       @Override
@@ -533,7 +533,7 @@ class RouterServerTestFramework {
    */
   private void continueChain(final OperationChain opChain) {
     synchronized (opChain.testFutures) {
-      OperationType nextOp = opChain.operations.poll();
+      OperationType nextOp = opChain.nextOp();
       if (nextOp == null) {
         opChain.latch.countDown();
         return;
@@ -702,6 +702,8 @@ class RouterServerTestFramework {
     final List<TestFuture> testFutures = new ArrayList<>();
     final CountDownLatch latch = new CountDownLatch(1);
     String blobId;
+    int opIndex = -1;
+    OperationType currentOpType;
 
     OperationChain(int chainId, BlobProperties properties, byte[] userMetadata, byte[] data,
         Queue<OperationType> operations) {
@@ -710,6 +712,12 @@ class RouterServerTestFramework {
       this.userMetadata = userMetadata;
       this.data = data;
       this.operations = operations;
+    }
+
+    OperationType nextOp() {
+      opIndex++;
+      currentOpType = operations.poll();
+      return currentOpType;
     }
   }
 
@@ -747,7 +755,8 @@ class RouterServerTestFramework {
       try {
         return future.get(AWAIT_TIMEOUT, TimeUnit.SECONDS);
       } catch (Exception e) {
-        throw new Exception("Exception occured in operation: " + getOperationName(), e);
+        throw new Exception(
+            "Exception occured in operation: " + getOperationName() + " The blob id is " + opChain.blobId, e);
       }
     }
 
