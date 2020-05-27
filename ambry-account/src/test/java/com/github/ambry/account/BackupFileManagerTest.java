@@ -397,10 +397,9 @@ public class BackupFileManagerTest {
     boolean containerMediaScanDisabled = random.nextBoolean();
     String replicationPolicy = TestUtils.getRandomString(10);
     boolean containerTtlRequired = random.nextBoolean();
-    long lastUpdateTime = System.currentTimeMillis();
     Container container =
         new ContainerBuilder(containerID, containerName, Container.ContainerStatus.ACTIVE, containerDescription,
-            accountID, lastUpdateTime).setEncrypted(containerEncryption)
+            accountID).setEncrypted(containerEncryption)
             .setPreviouslyEncrypted(containerPreviousEncryption)
             .setCacheable(containerCaching)
             .setMediaScanDisabled(containerMediaScanDisabled)

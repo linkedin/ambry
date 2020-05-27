@@ -1141,10 +1141,10 @@ public class FrontendRestRequestServiceTest {
     String[] refContainerNames = new String[]{"SecurePathValidation", "NoValidation"};
     Container signedPathRequiredContainer =
         new ContainerBuilder(refContainerIds[0], refContainerNames[0], Container.ContainerStatus.ACTIVE,
-            "validate secure path", refAccountId, System.currentTimeMillis()).setSecurePathRequired(true).build();
+            "validate secure path", refAccountId).setSecurePathRequired(true).build();
     Container noValidationContainer =
         new ContainerBuilder(refContainerIds[1], refContainerNames[1], Container.ContainerStatus.ACTIVE,
-            "no validation on secure path", refAccountId, System.currentTimeMillis()).setSecurePathRequired(false).build();
+            "no validation on secure path", refAccountId).setSecurePathRequired(false).build();
     Account account =
         new AccountBuilder(refAccountId, refAccountName, Account.AccountStatus.ACTIVE).addOrUpdateContainer(
             signedPathRequiredContainer).addOrUpdateContainer(noValidationContainer).build();
@@ -2420,10 +2420,10 @@ public class FrontendRestRequestServiceTest {
     Container legacyContainerForPublicBlob =
         new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, "containerForLegacyPublicPut",
             Container.ContainerStatus.ACTIVE, "This is a container for putting legacy public blob",
-            refAccount.getId(), System.currentTimeMillis()).build();
+            refAccount.getId()).build();
     Container legacyContainerForPrivateBlob =
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, "containerForLegacyPrivatePut",
-            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", refAccount.getId(), System.currentTimeMillis())
+            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", refAccount.getId())
             .setCacheable(false)
             .build();
     Account accountWithTwoDefaultContainers =

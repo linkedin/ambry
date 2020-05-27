@@ -142,7 +142,7 @@ public class RouterUtilsTest {
     // Both accountId and containerId are tracked by AccountService.
     Container container =
         new ContainerBuilder(containerId, "ContainerNameOf" + containerId, Container.ContainerStatus.ACTIVE,
-            "description", accountId, System.currentTimeMillis()).build();
+            "description", accountId).build();
     account =
         new AccountBuilder(accountId, "AccountNameOf" + accountId, Account.AccountStatus.ACTIVE).addOrUpdateContainer(
             container).build();

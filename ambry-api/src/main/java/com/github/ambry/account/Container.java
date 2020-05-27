@@ -79,6 +79,7 @@ public class Container {
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
   static final boolean MEDIA_SCAN_DISABLED_DEFAULT_VALUE = false;
   static final boolean TTL_REQUIRED_DEFAULT_VALUE = true;
+  static final long CONTAINER_LAST_UPDATE_TIME_DEFAULT_VALUE = 0;
   static final boolean SECURE_PATH_REQUIRED_DEFAULT_VALUE = false;
   static final boolean CACHEABLE_DEFAULT_VALUE = true;
   static final Set<String> CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE = Collections.emptySet();
@@ -140,17 +141,17 @@ public class Container {
   /**
    * The last update time of {@link #UNKNOWN_CONTAINER}
    */
-  public static final Long UNKNOWN_CONTAINER_LAST_UPDATE_TIME = System.currentTimeMillis();
+  public static final long UNKNOWN_CONTAINER_LAST_UPDATE_TIME = CONTAINER_LAST_UPDATE_TIME_DEFAULT_VALUE;
 
   /**
    * The last update time of {@link #DEFAULT_PUBLIC_CONTAINER}
    */
-  public static final Long DEFAULT_PUBLIC_CONTAINER_LAST_UPDATE_TIME = System.currentTimeMillis();
+  public static final long DEFAULT_PUBLIC_CONTAINER_LAST_UPDATE_TIME = CONTAINER_LAST_UPDATE_TIME_DEFAULT_VALUE;
 
   /**
    * The last update time of {@link #DEFAULT_PRIVATE_CONTAINER}
    */
-  public static final Long DEFAULT_PRIVATE_CONTAINER_LAST_UPDATE_TIME = System.currentTimeMillis();
+  public static final long DEFAULT_PRIVATE_CONTAINER_LAST_UPDATE_TIME = CONTAINER_LAST_UPDATE_TIME_DEFAULT_VALUE;
 
   /**
    * The status for the containers to be associated with the blobs that are put without specifying a target container,
@@ -355,7 +356,7 @@ public class Container {
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
         name = metadata.getString(CONTAINER_NAME_KEY);
         status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
-        lastUpdateTime = metadata.getLong(CONTAINER_LAST_UPDATE_TIME_KEY);
+        lastUpdateTime = CONTAINER_LAST_UPDATE_TIME_DEFAULT_VALUE;
         description = metadata.optString(DESCRIPTION_KEY);
         encrypted = ENCRYPTED_DEFAULT_VALUE;
         previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
@@ -371,7 +372,7 @@ public class Container {
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
         name = metadata.getString(CONTAINER_NAME_KEY);
         status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
-        lastUpdateTime = metadata.getLong(CONTAINER_LAST_UPDATE_TIME_KEY);
+        lastUpdateTime = metadata.optLong(CONTAINER_LAST_UPDATE_TIME_KEY, CONTAINER_LAST_UPDATE_TIME_DEFAULT_VALUE);
         description = metadata.optString(DESCRIPTION_KEY);
         encrypted = metadata.optBoolean(ENCRYPTED_KEY, ENCRYPTED_DEFAULT_VALUE);
         previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE);
@@ -425,7 +426,6 @@ public class Container {
     this.id = id;
     this.name = name;
     this.status = status;
-    this.lastUpdateTime = lastUpdateTime;
     this.description = description;
     this.cacheable = cacheable;
     this.parentAccountId = parentAccountId;
@@ -436,6 +436,7 @@ public class Container {
         this.previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
         this.mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         this.replicationPolicy = null;
+        this.lastUpdateTime = CONTAINER_LAST_UPDATE_TIME_DEFAULT_VALUE;
         this.ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
         this.securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
         this.contentTypeWhitelistForFilenamesOnDownload =
@@ -447,6 +448,7 @@ public class Container {
         this.previouslyEncrypted = previouslyEncrypted;
         this.mediaScanDisabled = mediaScanDisabled;
         this.replicationPolicy = replicationPolicy;
+        this.lastUpdateTime = lastUpdateTime;
         this.ttlRequired = ttlRequired;
         this.securePathRequired = securePathRequired;
         this.contentTypeWhitelistForFilenamesOnDownload =
@@ -498,7 +500,6 @@ public class Container {
         metadata.put(JSON_VERSION_KEY, JSON_VERSION_1);
         metadata.put(CONTAINER_ID_KEY, id);
         metadata.put(CONTAINER_NAME_KEY, name);
-        metadata.put(CONTAINER_LAST_UPDATE_TIME_KEY, lastUpdateTime);
         metadata.put(STATUS_KEY, status.name());
         metadata.put(DESCRIPTION_KEY, description);
         metadata.put(IS_PRIVATE_KEY, !cacheable);
@@ -508,7 +509,7 @@ public class Container {
         metadata.put(Container.JSON_VERSION_KEY, JSON_VERSION_2);
         metadata.put(CONTAINER_ID_KEY, id);
         metadata.put(CONTAINER_NAME_KEY, name);
-        metadata.put(CONTAINER_LAST_UPDATE_TIME_KEY, lastUpdateTime);
+        metadata.putOpt(CONTAINER_LAST_UPDATE_TIME_KEY, lastUpdateTime);
         metadata.put(Container.STATUS_KEY, status.name());
         metadata.put(DESCRIPTION_KEY, description);
         metadata.put(ENCRYPTED_KEY, encrypted);
@@ -561,7 +562,9 @@ public class Container {
    * Gets the last update time of the container.
    * @return The last update time of the container.
    */
-  public Long getLastUpdateTime() {return lastUpdateTime;}
+  public Long getLastUpdateTime() {
+    return lastUpdateTime;
+  }
 
   /**
    * Gets the description of the container.

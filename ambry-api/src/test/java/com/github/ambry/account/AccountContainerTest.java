@@ -127,7 +127,7 @@ public class AccountContainerTest {
     ArrayList<Container> containers = new ArrayList<>();
     // first container with (id=0, name="0")
     containers.add(
-        new ContainerBuilder((short) 0, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId, refContainerLastUpdateTime.get(0))
+        new ContainerBuilder((short) 0, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId)
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
@@ -137,10 +137,11 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
             .build());
     // second container with (id=1, name="0")
     containers.add(
-        new ContainerBuilder((short) 1, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId, refContainerLastUpdateTime.get(0))
+        new ContainerBuilder((short) 1, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId)
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
@@ -150,6 +151,7 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
             .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -162,7 +164,7 @@ public class AccountContainerTest {
     ArrayList<Container> containers = new ArrayList<>();
     // first container with (id=0, name="0")
     containers.add(
-        new ContainerBuilder((short) 0, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId, refContainerLastUpdateTime.get(0))
+        new ContainerBuilder((short) 0, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId)
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
@@ -172,10 +174,11 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
             .build());
     // second container with (id=0, name="1")
     containers.add(
-        new ContainerBuilder((short) 0, "1", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId, refContainerLastUpdateTime.get(0))
+        new ContainerBuilder((short) 0, "1", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId)
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
@@ -185,6 +188,7 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
             .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -197,7 +201,7 @@ public class AccountContainerTest {
     ArrayList<Container> containers = new ArrayList<>();
     // first container with (id=0, name="0")
     containers.add(
-        new ContainerBuilder((short) 0, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId, refContainerLastUpdateTime.get(0))
+        new ContainerBuilder((short) 0, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId)
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
@@ -207,10 +211,11 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
             .build());
     // second container with (id=1, name="0")
     containers.add(
-        new ContainerBuilder((short) 1, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId, refContainerLastUpdateTime.get(0))
+        new ContainerBuilder((short) 1, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0), refAccountId)
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
@@ -220,10 +225,11 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
             .build());
     // third container with (id=10, name="10")
     containers.add(new ContainerBuilder((short) 10, "10", refContainerStatuses.get(0), refContainerDescriptions.get(0),
-        refAccountId, refContainerLastUpdateTime.get(0)).setEncrypted(refContainerEncryptionValues.get(0))
+        refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
         .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
         .setCacheable(refContainerCachingValues.get(0))
         .setBackupEnabled(refContainerBackupEnabledValues.get(0))
@@ -232,10 +238,11 @@ public class AccountContainerTest {
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .setContentTypeWhitelistForFilenamesOnDownload(
             refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+        .setLastUpdateTime(refContainerLastUpdateTime.get(0))
         .build());
     // second container with (id=10, name="11")
     containers.add(new ContainerBuilder((short) 10, "11", refContainerStatuses.get(0), refContainerDescriptions.get(0),
-        refAccountId, refContainerLastUpdateTime.get(0)).setEncrypted(refContainerEncryptionValues.get(0))
+        refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
         .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
         .setCacheable(refContainerCachingValues.get(0))
         .setBackupEnabled(refContainerBackupEnabledValues.get(0))
@@ -244,6 +251,7 @@ public class AccountContainerTest {
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .setContentTypeWhitelistForFilenamesOnDownload(
             refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+        .setLastUpdateTime(refContainerLastUpdateTime.get(0))
         .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -267,7 +275,7 @@ public class AccountContainerTest {
     ArrayList<Container> containers = new ArrayList<>();
     // container with parentAccountId = refAccountId + 1
     containers.add(new ContainerBuilder(refContainerIds.get(0), refContainerNames.get(0), refContainerStatuses.get(0),
-        refContainerDescriptions.get(0), (short) (refAccountId + 1), refContainerLastUpdateTime.get(0)).setEncrypted(refContainerEncryptionValues.get(0))
+        refContainerDescriptions.get(0), (short) (refAccountId + 1)).setEncrypted(refContainerEncryptionValues.get(0))
         .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
         .setCacheable(refContainerCachingValues.get(0))
         .setBackupEnabled(refContainerBackupEnabledValues.get(0))
@@ -276,6 +284,7 @@ public class AccountContainerTest {
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .setContentTypeWhitelistForFilenamesOnDownload(
             refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+        .setLastUpdateTime(refContainerLastUpdateTime.get(0))
         .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -384,7 +393,7 @@ public class AccountContainerTest {
       // build a container with arguments supplied
       ContainerBuilder containerBuilder =
           new ContainerBuilder(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
-              refContainerDescriptions.get(i), refAccountId, refContainerLastUpdateTime.get(i)).setEncrypted(refContainerEncryptionValues.get(i))
+              refContainerDescriptions.get(i), refAccountId).setEncrypted(refContainerEncryptionValues.get(i))
               .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(i))
               .setCacheable(refContainerCachingValues.get(i))
               .setBackupEnabled(refContainerBackupEnabledValues.get(i))
@@ -393,7 +402,8 @@ public class AccountContainerTest {
               .setTtlRequired(refContainerTtlRequiredValues.get(i))
               .setSecurePathRequired(refContainerSignedPathRequiredValues.get(i))
               .setContentTypeWhitelistForFilenamesOnDownload(
-                  refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i));
+                  refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i))
+              .setLastUpdateTime(refContainerLastUpdateTime.get(i));
       Container containerFromBuilder = containerBuilder.build();
       assertContainer(containerFromBuilder, i);
 
@@ -629,7 +639,7 @@ public class AccountContainerTest {
     AccountBuilder accountBuilder = new AccountBuilder(origin);
     ContainerBuilder containerBuilder =
         new ContainerBuilder((short) -999, refContainerNames.get(0), refContainerStatuses.get(0),
-            refContainerDescriptions.get(0), refAccountId, refContainerLastUpdateTime.get(0)).setEncrypted(refContainerEncryptionValues.get(0))
+            refContainerDescriptions.get(0), refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
             .setBackupEnabled(refContainerBackupEnabledValues.get(0))
@@ -637,7 +647,8 @@ public class AccountContainerTest {
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
-                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0));
+                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+            .setLastUpdateTime(refContainerLastUpdateTime.get(0));
     Container container = containerBuilder.build();
     accountBuilder.removeContainer(container);
     accountBuilder.removeContainer(null);
@@ -747,7 +758,7 @@ public class AccountContainerTest {
     // field different from the other one.
     Container updatedContainer =
         new ContainerBuilder(refContainerIds.get(0), refContainerNames.get(0), refContainerStatuses.get(0),
-            "A changed container description", refAccountId, refContainerLastUpdateTime.get(0)).setEncrypted(refContainerEncryptionValues.get(0))
+            "A changed container description", refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
             .setBackupEnabled(refContainerBackupEnabledValues.get(0))
@@ -756,6 +767,7 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
             .build();
     refContainers.remove(0);
     refContainers.add(updatedContainer);
@@ -984,7 +996,7 @@ public class AccountContainerTest {
       }
       refContainerTtlRequiredValues.add(random.nextBoolean());
       refContainerSignedPathRequiredValues.add(random.nextBoolean());
-      refContainerLastUpdateTime.add(System.currentTimeMillis());
+      refContainerLastUpdateTime.add((long)0);
       if (i == 0) {
         refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(null);
       } else if (i == 1) {
@@ -1025,7 +1037,6 @@ public class AccountContainerTest {
         containerJson.put(Container.JSON_VERSION_KEY, Container.JSON_VERSION_1);
         containerJson.put(CONTAINER_ID_KEY, container.getId());
         containerJson.put(CONTAINER_NAME_KEY, container.getName());
-        containerJson.put(CONTAINER_LAST_UPDATE_TIME_KEY, container.getLastUpdateTime());
         containerJson.put(Container.STATUS_KEY, container.getStatus().name());
         containerJson.put(DESCRIPTION_KEY, container.getDescription());
         containerJson.put(IS_PRIVATE_KEY, !container.isCacheable());

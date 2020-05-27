@@ -29,11 +29,11 @@ public class ContainerBuilder {
   private short id;
   private String name;
   private ContainerStatus status;
-  private long lastUpdateTime;
   private String description;
   private short parentAccountId;
 
   // optional
+  private long lastUpdateTime = System.currentTimeMillis();
   private boolean encrypted = ENCRYPTED_DEFAULT_VALUE;
   private boolean previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
   private boolean cacheable = CACHEABLE_DEFAULT_VALUE;
@@ -80,13 +80,12 @@ public class ContainerBuilder {
    * @param description The description of the {@link Container}.
    * @param parentAccountId The id of the parent {@link Account} of the {@link Container} to build.
    */
-  public ContainerBuilder(short id, String name, ContainerStatus status, String description, short parentAccountId, long lastUpdateTime) {
+  public ContainerBuilder(short id, String name, ContainerStatus status, String description, short parentAccountId) {
     this.id = id;
     this.name = name;
     this.status = status;
     this.description = description;
     this.parentAccountId = parentAccountId;
-    this.lastUpdateTime = lastUpdateTime;
   }
 
   /**
@@ -122,9 +121,9 @@ public class ContainerBuilder {
   /**
    * Sets the last update time of the {@link Container} to build.
    */
-  public Long setLastUpdateTime(Long lastUpdateTime) {
+  public ContainerBuilder setLastUpdateTime(long lastUpdateTime) {
     this.lastUpdateTime = lastUpdateTime;
-    return lastUpdateTime;
+    return this;
   }
 
   /**
@@ -240,7 +239,7 @@ public class ContainerBuilder {
   }
 
   /**
-   * Builds a {@link Container} object. {@code id}, {@code name}, {@code status}, {@code isPrivate}, {@code lastUpdateTime} and
+   * Builds a {@link Container} object. {@code id}, {@code name}, {@code status}, {@code isPrivate}, and
    * {@code parentAccountId} are required before build.
    * @return A {@link Container} object.
    * @throws IllegalStateException If any required fields is not set.
