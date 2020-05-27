@@ -45,6 +45,9 @@ public class PartitionLeaderInfo {
 
   public PartitionLeaderInfo(StoreManager storeManager) {
     this.storeManager = storeManager;
+
+    // We can't initialize the peerLeaderReplicasByPartition here because we don't know the leader partitions on local node (server) until it has finished participating with Helix.
+    // peerLeaderReplicasByPartition map will be updated after server participates with Helix and state of replicas transition to LEADER (via onPartitionBecomeLeaderFromStandby())
   }
 
   /**
@@ -64,24 +67,24 @@ public class PartitionLeaderInfo {
     // 1. get local replica from store manager
     ReplicaId localReplica = storeManager.getReplica(partitionName);
 
-    // 2. Get the peer leader replicas from all data centers for this partition
-    List<? extends ReplicaId> leaderReplicas =
-        localReplica.getPartitionId().getReplicaIdsByState(ReplicaState.LEADER, null);
-
-    // 3. Log the list of leader replicas associated with this partition (will be used later for leadership based replication)
-    List<ReplicaId> peerLeaderReplicas = new ArrayList<>();
-    for (ReplicaId leaderReplica : leaderReplicas) {
-      if (leaderReplica.getDataNodeId() != localReplica.getDataNodeId()) {
-        peerLeaderReplicas.add(leaderReplica);
-        logger.info("Partition {} on node instance {} is leader in remote dc {}", partitionName,
-            getInstanceName(leaderReplica.getDataNodeId().getHostname(), leaderReplica.getDataNodeId().getPort()),
-            leaderReplica.getDataNodeId().getDatacenterName());
-      }
-    }
-
     // Read-write lock avoids contention from threads removing old leader partitions (removePartition()) and threads updating existing leader partitions (refreshPeerLeadersForAllPartitions())
     rwLock.writeLock().lock();
     try {
+      // 2. Get the peer leader replicas from all data centers for this partition
+      List<? extends ReplicaId> leaderReplicas =
+          localReplica.getPartitionId().getReplicaIdsByState(ReplicaState.LEADER, null);
+
+      // 3. Log the list of leader replicas associated with this partition (will be used later for leadership based replication)
+      List<ReplicaId> peerLeaderReplicas = new ArrayList<>();
+      for (ReplicaId leaderReplica : leaderReplicas) {
+        if (leaderReplica.getDataNodeId() != localReplica.getDataNodeId()) {
+          peerLeaderReplicas.add(leaderReplica);
+          logger.info("Partition {} on node instance {} is leader in remote dc {}", partitionName,
+              getInstanceName(leaderReplica.getDataNodeId().getHostname(), leaderReplica.getDataNodeId().getPort()),
+              leaderReplica.getDataNodeId().getDatacenterName());
+        }
+      }
+
       peerLeaderReplicasByPartition.put(partitionName, new HashSet<>(peerLeaderReplicas));
     } finally {
       rwLock.writeLock().unlock();

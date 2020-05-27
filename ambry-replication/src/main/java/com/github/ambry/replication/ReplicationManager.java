@@ -328,6 +328,16 @@ public class ReplicationManager extends ReplicationEngine {
      */
     @Override
     public void onRoutingTableChange() {
+
+      // wait for start() to complete
+      try {
+        startupLatch.await();
+      } catch (InterruptedException e) {
+        logger.warn("Waiting for startup is interrupted.");
+        throw new IllegalStateException(
+            "Replication manager startup is interrupted while handling routing table change");
+      }
+
       // Refreshes the remote leader information for all local leader partitions maintained in an in-mem structure in PartitionLeaderInfo.
       // Thread safety is ensured in the method PartitionLeaderInfo.refreshPeerLeadersForAllPartitions().
       partitionLeaderInfo.refreshPeerLeadersForAllPartitions();
