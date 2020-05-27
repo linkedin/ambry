@@ -76,6 +76,7 @@ public class RemoteReplicaInfo {
     this.port = port;
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
     initializeTokens(token);
+    // Exchange metadata response information is initially empty. It will be set by replica threads after exchanging metadata during a replication cycle.
     this.exchangeMetadataResponse = null;
   }
 

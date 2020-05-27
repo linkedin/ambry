@@ -125,11 +125,12 @@ public class ReplicaThread implements Runnable {
         datacenterName, responseHandler, time, replicaSyncUpManager, null);
   }
 
-  public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
-      DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
-      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName,
-      ResponseHandler responseHandler, Time time, ReplicaSyncUpManager replicaSyncUpManager,
-      PartitionLeaderInfo partitionLeaderInfo) {
+  public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
+      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
+      ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
+      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
+      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
+      ReplicaSyncUpManager replicaSyncUpManager, PartitionLeaderInfo partitionLeaderInfo) {
     this.threadName = threadName;
     this.running = true;
     this.findTokenHelper = findTokenHelper;
@@ -1148,7 +1149,6 @@ public class ReplicaThread implements Runnable {
         return new HashSet<>();
       }
     }
-
   }
 
   boolean isThreadUp() {
