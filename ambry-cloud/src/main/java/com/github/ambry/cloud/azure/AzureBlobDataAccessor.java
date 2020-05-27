@@ -83,7 +83,7 @@ public class AzureBlobDataAccessor {
    * @param blobLayoutStrategy the {@link AzureBlobLayoutStrategy} to use.
    * @param azureMetrics the {@link AzureMetrics} to use.
    */
-  AzureBlobDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
+  public AzureBlobDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
       AzureBlobLayoutStrategy blobLayoutStrategy, AzureMetrics azureMetrics) {
     this.blobLayoutStrategy = blobLayoutStrategy;
     this.azureMetrics = azureMetrics;
@@ -128,6 +128,14 @@ public class AzureBlobDataAccessor {
     requestTimeout = null;
     uploadTimeout = null;
     batchTimeout = null;
+  }
+
+  /**
+   * Visible for testing.
+   * @return the underlying {@link BlobServiceClient}.
+   */
+  public BlobServiceClient getStorageClient() {
+    return storageClient;
   }
 
   /** Visible for testing */

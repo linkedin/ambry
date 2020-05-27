@@ -25,6 +25,7 @@ import java.util.Set;
 public class ReplicationConfig {
 
   public static final String REPLICATION_CLOUD_TOKEN_FACTORY = "replication.cloud.token.factory";
+  public static final String REPLICA_TOKEN_FILE_NAME = "replicaTokens";
 
   /**
    * The factory class the replication uses to creates its tokens
