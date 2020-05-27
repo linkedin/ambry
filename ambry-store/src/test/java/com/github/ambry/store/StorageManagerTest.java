@@ -414,34 +414,6 @@ public class StorageManagerTest {
   }
 
   /**
-   * Test that initializing participant metrics fails because the initial offline partition count is not zero.
-   * @throws Exception
-   */
-  @Test
-  public void initParticipantMetricsFailureTest() throws Exception {
-    generateConfigs(true, false);
-    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
-    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
-    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
-    // create first storage manager and start
-    StorageManager storageManager1 =
-        createStorageManager(localNode, new MetricRegistry(), Collections.singletonList(mockHelixParticipant));
-    storageManager1.start();
-    shutdownAndAssertStoresInaccessible(storageManager1, localReplicas);
-    // create second storage manager with same mock helix participant
-    StorageManager storageManager2 =
-        createStorageManager(localNode, new MetricRegistry(), Collections.singletonList(mockHelixParticipant));
-    try {
-      storageManager2.start();
-      fail("should fail because offline partition count is non-zero before initialization");
-    } catch (IllegalStateException e) {
-      // expected
-    } finally {
-      shutdownAndAssertStoresInaccessible(storageManager2, localReplicas);
-    }
-  }
-
-  /**
    * Test failure cases when updating InstanceConfig in Helix for both Offline-To-Bootstrap and Inactive-To-Offline.
    */
   @Test

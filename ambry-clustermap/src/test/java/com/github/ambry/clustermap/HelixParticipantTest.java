@@ -64,7 +64,7 @@ public class HelixParticipantTest {
         new Object[][]{{ClusterMapConfig.DEFAULT_STATE_MODEL_DEF}, {ClusterMapConfig.AMBRY_STATE_MODEL_DEF}});
   }
 
-  public HelixParticipantTest(String stateModelDef) throws Exception {
+  public HelixParticipantTest(String stateModelDef) {
     List<ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new ZkInfo(null, "DC0", (byte) 0, 2199, false));
     zkJson = constructZkLayoutJSON(zkInfoList);

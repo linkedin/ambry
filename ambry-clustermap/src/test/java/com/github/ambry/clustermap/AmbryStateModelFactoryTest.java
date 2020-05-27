@@ -189,7 +189,11 @@ public class AmbryStateModelFactoryTest {
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     // reset method
     stateModel.reset();
-    assertEquals("Offline count should be 1 after reset", 2,
+    assertEquals("Offline count should be 1 after reset", 1,
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
+    // call reset method again to mock the case where same partition is reset multiple times during zk disconnection or shutdown
+    stateModel.reset();
+    assertEquals("Offline count should still be 1 after reset twice", 1,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
   }
 
