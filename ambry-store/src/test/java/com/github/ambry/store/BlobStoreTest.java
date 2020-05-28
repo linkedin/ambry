@@ -72,6 +72,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
@@ -1886,11 +1887,14 @@ public class BlobStoreTest {
     }
     assertEquals("Disabled partition name is not expected", storeId,
         instanceConfig.getDisabledPartitions(RESOURCE_NAME).get(0));
+    // verify "DISABLED" list in InstanceConfig has correct partition id.
+    assertEquals("Disabled replica list is not expected", Collections.singletonList(storeId),
+        getDisabledReplicas(instanceConfig));
     // 3. mock disk is replaced case, restart should succeed
     testStore.start();
-    List<String> disabledPartitions = instanceConfig.getDisabledPartitions(RESOURCE_NAME);
     assertNull("Disabled partition list should be null as restart will enable same replica",
         instanceConfig.getDisabledPartitions(RESOURCE_NAME));
+    assertTrue("Disabled replica list should be empty", getDisabledReplicas(instanceConfig).isEmpty());
     testStore.shutdown();
     reloadStore();
   }

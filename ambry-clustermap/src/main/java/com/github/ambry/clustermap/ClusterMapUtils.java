@@ -207,7 +207,7 @@ public class ClusterMapUtils {
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the list of disabled replicas.
    */
-  static List<String> getDisabledReplicas(InstanceConfig instanceConfig) {
+  public static List<String> getDisabledReplicas(InstanceConfig instanceConfig) {
     List<String> disabledReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.DISABLED_REPLICAS_STR);
     return disabledReplicas == null ? new ArrayList<>() : disabledReplicas;
   }
