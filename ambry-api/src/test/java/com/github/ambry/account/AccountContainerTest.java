@@ -65,7 +65,7 @@ public class AccountContainerTest {
   private List<Boolean> refContainerMediaScanDisabledValues;
   private List<String> refContainerReplicationPolicyValues;
   private List<Boolean> refContainerTtlRequiredValues;
-  private List<Long> refContainerLastUpdateTime;
+  private List<Long> refContainerDeleteTriggerTime;
   private List<Boolean> refContainerSignedPathRequiredValues;
   private List<Set<String>> refContainerContentTypeWhitelistForFilenamesOnDownloadValues;
   private List<JSONObject> containerJsonList;
@@ -137,7 +137,7 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
-            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
+            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     // second container with (id=1, name="0")
     containers.add(
@@ -151,7 +151,7 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
-            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
+            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -174,7 +174,7 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
-            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
+            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     // second container with (id=0, name="1")
     containers.add(
@@ -188,7 +188,7 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
-            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
+            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -211,7 +211,7 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
-            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
+            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     // second container with (id=1, name="0")
     containers.add(
@@ -225,7 +225,7 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
-            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
+            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     // third container with (id=10, name="10")
     containers.add(new ContainerBuilder((short) 10, "10", refContainerStatuses.get(0), refContainerDescriptions.get(0),
@@ -238,7 +238,7 @@ public class AccountContainerTest {
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .setContentTypeWhitelistForFilenamesOnDownload(
             refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
-        .setLastUpdateTime(refContainerLastUpdateTime.get(0))
+        .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
         .build());
     // second container with (id=10, name="11")
     containers.add(new ContainerBuilder((short) 10, "11", refContainerStatuses.get(0), refContainerDescriptions.get(0),
@@ -251,7 +251,7 @@ public class AccountContainerTest {
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .setContentTypeWhitelistForFilenamesOnDownload(
             refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
-        .setLastUpdateTime(refContainerLastUpdateTime.get(0))
+        .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
         .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -284,7 +284,7 @@ public class AccountContainerTest {
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .setContentTypeWhitelistForFilenamesOnDownload(
             refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
-        .setLastUpdateTime(refContainerLastUpdateTime.get(0))
+        .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
         .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -403,7 +403,7 @@ public class AccountContainerTest {
               .setSecurePathRequired(refContainerSignedPathRequiredValues.get(i))
               .setContentTypeWhitelistForFilenamesOnDownload(
                   refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i))
-              .setLastUpdateTime(refContainerLastUpdateTime.get(i));
+              .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(i));
       Container containerFromBuilder = containerBuilder.build();
       assertContainer(containerFromBuilder, i);
 
@@ -648,7 +648,7 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
-            .setLastUpdateTime(refContainerLastUpdateTime.get(0));
+            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0));
     Container container = containerBuilder.build();
     accountBuilder.removeContainer(container);
     accountBuilder.removeContainer(null);
@@ -767,7 +767,7 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
-            .setLastUpdateTime(refContainerLastUpdateTime.get(0))
+            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build();
     refContainers.remove(0);
     refContainers.add(updatedContainer);
@@ -964,7 +964,7 @@ public class AccountContainerTest {
     refContainerMediaScanDisabledValues = new ArrayList<>();
     refContainerReplicationPolicyValues = new ArrayList<>();
     refContainerTtlRequiredValues = new ArrayList<>();
-    refContainerLastUpdateTime = new ArrayList<>();
+    refContainerDeleteTriggerTime = new ArrayList<>();
     refContainerSignedPathRequiredValues = new ArrayList<>();
     refContainerContentTypeWhitelistForFilenamesOnDownloadValues = new ArrayList<>();
     containerJsonList = new ArrayList<>();
@@ -996,7 +996,7 @@ public class AccountContainerTest {
       }
       refContainerTtlRequiredValues.add(random.nextBoolean());
       refContainerSignedPathRequiredValues.add(random.nextBoolean());
-      refContainerLastUpdateTime.add((long)0);
+      refContainerDeleteTriggerTime.add((long)0);
       if (i == 0) {
         refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(null);
       } else if (i == 1) {
@@ -1011,7 +1011,7 @@ public class AccountContainerTest {
           refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
           refContainerTtlRequiredValues.get(i), refContainerSignedPathRequiredValues.get(i),
           refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i), refContainerBackupEnabledValues.get(i),
-          refAccountId, refContainerLastUpdateTime.get(i)));
+          refAccountId, refContainerDeleteTriggerTime.get(i)));
       containerJsonList.add(buildContainerJson(refContainers.get(i)));
     }
   }
@@ -1046,7 +1046,7 @@ public class AccountContainerTest {
         containerJson.put(Container.JSON_VERSION_KEY, Container.JSON_VERSION_2);
         containerJson.put(CONTAINER_ID_KEY, container.getId());
         containerJson.put(CONTAINER_NAME_KEY, container.getName());
-        containerJson.put(CONTAINER_LAST_UPDATE_TIME_KEY, container.getLastUpdateTime());
+        containerJson.put(CONTAINER_DELETE_TRIGGER_TIME_KEY, container.getDeleteTriggerTime());
         containerJson.put(Container.STATUS_KEY, container.getStatus().name());
         containerJson.put(DESCRIPTION_KEY, container.getDescription());
         containerJson.put(ENCRYPTED_KEY, container.isEncrypted());

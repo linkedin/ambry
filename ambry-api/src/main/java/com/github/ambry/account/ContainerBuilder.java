@@ -33,7 +33,7 @@ public class ContainerBuilder {
   private short parentAccountId;
 
   // optional
-  private long lastUpdateTime = System.currentTimeMillis();
+  private long deleteTriggerTime = System.currentTimeMillis();
   private boolean encrypted = ENCRYPTED_DEFAULT_VALUE;
   private boolean previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
   private boolean cacheable = CACHEABLE_DEFAULT_VALUE;
@@ -58,7 +58,7 @@ public class ContainerBuilder {
     id = origin.getId();
     name = origin.getName();
     status = origin.getStatus();
-    lastUpdateTime = origin.getLastUpdateTime();
+    deleteTriggerTime = origin.getDeleteTriggerTime();
     description = origin.getDescription();
     encrypted = origin.isEncrypted();
     previouslyEncrypted = origin.wasPreviouslyEncrypted();
@@ -119,10 +119,10 @@ public class ContainerBuilder {
   }
 
   /**
-   * Sets the last update time of the {@link Container} to build.
+   * Sets the delete trigger time of the {@link Container} to build.
    */
-  public ContainerBuilder setLastUpdateTime(long lastUpdateTime) {
-    this.lastUpdateTime = lastUpdateTime;
+  public ContainerBuilder setDeleteTriggerTime(long deleteTriggerTime) {
+    this.deleteTriggerTime = deleteTriggerTime;
     return this;
   }
 
@@ -247,6 +247,6 @@ public class ContainerBuilder {
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
         mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
-        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId, lastUpdateTime);
+        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId, deleteTriggerTime);
   }
 }
