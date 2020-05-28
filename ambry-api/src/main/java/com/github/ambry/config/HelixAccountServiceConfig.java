@@ -27,8 +27,6 @@ public class HelixAccountServiceConfig {
   public static final String ZK_CLIENT_CONNECT_STRING_KEY = HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string";
   public static final String USE_NEW_ZNODE_PATH = HELIX_ACCOUNT_SERVICE_PREFIX + "use.new.znode.path";
   public static final String UPDATE_DISABLED = HELIX_ACCOUNT_SERVICE_PREFIX + "update.disabled";
-  public static final String BACKFILL_ACCOUNTS_TO_NEW_ZNODE =
-      HELIX_ACCOUNT_SERVICE_PREFIX + "backfill.accounts.to.new.znode";
   public static final String ENABLE_SERVE_FROM_BACKUP = HELIX_ACCOUNT_SERVICE_PREFIX + "enable.serve.from.backup";
   public static final String TOTAL_NUMBER_OF_VERSION_TO_KEEP =
       HELIX_ACCOUNT_SERVICE_PREFIX + "total.number.of.version.to.keep";
@@ -85,15 +83,6 @@ public class HelixAccountServiceConfig {
   public final boolean updateDisabled;
 
   /**
-   * If true, HelixAccountService would persist account metadata to ambry-server upon receiving the account metadata
-   * change message. This option can't be true with useNewZNodePath at the same time. It should only be enabled while
-   * using the old znode path. And there should only be one machine enabling this option.
-   */
-  @Config(BACKFILL_ACCOUNTS_TO_NEW_ZNODE)
-  @Default("false")
-  public final boolean backFillAccountsToNewZNode;
-
-  /**
    * If true, HelixAccountService would load the account metadata from local backup file when fetching from helix fails.
    * Set it to false while transitioning, since the old backup files don't have up-to-date account metadata.
    */
@@ -120,10 +109,6 @@ public class HelixAccountServiceConfig {
     maxBackupFileCount = verifiableProperties.getIntInRange(MAX_BACKUP_FILE_COUNT, 100, 1, Integer.MAX_VALUE);
     useNewZNodePath = verifiableProperties.getBoolean(USE_NEW_ZNODE_PATH, false);
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
-    backFillAccountsToNewZNode = verifiableProperties.getBoolean(BACKFILL_ACCOUNTS_TO_NEW_ZNODE, false);
-    if (backFillAccountsToNewZNode && useNewZNodePath) {
-      throw new IllegalStateException("useNewZNodePath and backFillAccountsToNewZNode can't be true at the same time.");
-    }
     enableServeFromBackup = verifiableProperties.getBoolean(ENABLE_SERVE_FROM_BACKUP, false);
     totalNumberOfVersionToKeep =
         verifiableProperties.getIntInRange(TOTAL_NUMBER_OF_VERSION_TO_KEEP, 100, 1, Integer.MAX_VALUE);
