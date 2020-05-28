@@ -151,6 +151,7 @@ public class FrontendRestRequestServiceTest {
         String.valueOf(shouldAllowServiceIdBasedPut));
     configProps.setProperty("frontend.secure.path.prefix", SECURE_PATH_PREFIX);
     configProps.setProperty("frontend.path.prefixes.to.remove", "/media");
+    configProps.setProperty("frontend.enable.undelete", "true");
     verifiableProperties = new VerifiableProperties(configProps);
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);
@@ -438,26 +439,28 @@ public class FrontendRestRequestServiceTest {
    * @throws Exception
    */
   @Test
-  public void postGetHeadUpdateDeleteTest() throws Exception {
+  public void postGetHeadUpdateDeleteUndeleteTest() throws Exception {
     // add another account
     accountService.createAndAddRandomAccount();
     // valid account and container names passed as part of POST
     for (Account testAccount : accountService.getAllAccounts()) {
       if (testAccount.getId() != Account.UNKNOWN_ACCOUNT_ID) {
         for (Container container : testAccount.getAllContainers()) {
-          doPostGetHeadUpdateDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(),
+          doPostGetHeadUpdateDeleteUndeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(),
               testAccount, container);
           doConditionalUpdateAndDeleteTest(testAccount, container, testAccount.getName());
         }
       }
     }
     // valid account and container names but only serviceId passed as part of POST
-    doPostGetHeadUpdateDeleteTest(null, null, refAccount.getName(), false, refAccount, refDefaultPublicContainer);
-    doPostGetHeadUpdateDeleteTest(null, null, refAccount.getName(), true, refAccount, refDefaultPrivateContainer);
+    doPostGetHeadUpdateDeleteUndeleteTest(null, null, refAccount.getName(), false, refAccount,
+        refDefaultPublicContainer);
+    doPostGetHeadUpdateDeleteUndeleteTest(null, null, refAccount.getName(), true, refAccount,
+        refDefaultPrivateContainer);
     // unrecognized serviceId
-    doPostGetHeadUpdateDeleteTest(null, null, "unknown_service_id", false, InMemAccountService.UNKNOWN_ACCOUNT,
+    doPostGetHeadUpdateDeleteUndeleteTest(null, null, "unknown_service_id", false, InMemAccountService.UNKNOWN_ACCOUNT,
         Container.DEFAULT_PUBLIC_CONTAINER);
-    doPostGetHeadUpdateDeleteTest(null, null, "unknown_service_id", true, InMemAccountService.UNKNOWN_ACCOUNT,
+    doPostGetHeadUpdateDeleteUndeleteTest(null, null, "unknown_service_id", true, InMemAccountService.UNKNOWN_ACCOUNT,
         Container.DEFAULT_PRIVATE_CONTAINER);
   }
 
@@ -1348,6 +1351,20 @@ public class FrontendRestRequestServiceTest {
     return restResponseChannel;
   }
 
+  private MockRestResponseChannel verifyOperationFailure(RestRequest restRequest, RestServiceErrorCode errorCode,
+      boolean shouldIncludeFailureReason) throws Exception {
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("Operation should have failed");
+    } catch (RestServiceException e) {
+      assertEquals("Op should have failed with a specific error code", errorCode, e.getErrorCode());
+      assertEquals("Exception should include failure reason", shouldIncludeFailureReason,
+          e.shouldIncludeExceptionMessageInResponse());
+    }
+    return restResponseChannel;
+  }
+
   /**
    * Prepares random content, sets headers and POSTs a blob with the required parameters
    * @param contentLength the length of the content to be POSTed.
@@ -1465,7 +1482,7 @@ public class FrontendRestRequestServiceTest {
    * @param expectedContainer the {@link Container} details that are eventually expected to be populated.
    * @throws Exception
    */
-  private void doPostGetHeadUpdateDeleteTest(Account toPostAccount, Container toPostContainer, String serviceId,
+  private void doPostGetHeadUpdateDeleteUndeleteTest(Account toPostAccount, Container toPostContainer, String serviceId,
       boolean isPrivate, Account expectedAccount, Container expectedContainer) throws Exception {
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(CONTENT_LENGTH));
     String contentType = "application/octet-stream";
@@ -1505,7 +1522,13 @@ public class FrontendRestRequestServiceTest {
     getUserMetadataAndVerify(blobId, null, headers);
     getBlobInfoAndVerify(blobId, null, headers, expectedAccount, expectedContainer);
     updateBlobTtlAndVerify(blobId, headers, expectedAccount, expectedContainer, false);
+
+    // Before delete, let's undelete it, should fail
+    undeleteBlobAndVerify(blobId, headers, content, expectedAccount, expectedContainer, false,
+        RestServiceErrorCode.Conflict);
     deleteBlobAndVerify(blobId, headers, content, expectedAccount, expectedContainer, false);
+    // After delete, let's undelete it, should succeed
+    undeleteBlobAndVerify(blobId, headers, content, expectedAccount, expectedContainer, false, null);
   }
 
   /**
@@ -1986,6 +2009,71 @@ public class FrontendRestRequestServiceTest {
     assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getStatus());
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+  }
+
+  /**
+   * Undeletes the blob with blob ID {@code blobId} and verifies the response returned. Also checks responses from
+   * GET, HEAD.
+   * @param blobId the blob ID of the blob to undelete.
+   * @param expectedHeaders the expected headers in the GET response triggered for verification (if right options are
+   *                        provided).
+   * @param expectedContent the expected account in the GET response triggered for verification (if right options are
+   *                        provided). Also used to attach preconditions if required.
+   * @param expectedAccount the expected container in the GET response triggered for verification (if right options are
+   *                        provided). Also used to attach preconditions if required.
+   * @param expectedContainer the {@link Container} details that are eventually expected to be populated.
+   * @param attachPreconditions if {@code true}, attaches preconditions to the request
+   * @param expectedErrorCode the expected {@link RestServiceErrorCode}. Null when the request should have a 200 response.
+   * @throws Exception
+   */
+  private void undeleteBlobAndVerify(String blobId, JSONObject expectedHeaders, ByteBuffer expectedContent,
+      Account expectedAccount, Container expectedContainer, boolean attachPreconditions,
+      RestServiceErrorCode expectedErrorCode) throws Exception {
+    JSONObject headers = new JSONObject();
+    if (attachPreconditions) {
+      setAccountAndContainerHeaders(headers, expectedAccount.getName(), expectedContainer.getName());
+    }
+    headers.put(RestUtils.Headers.BLOB_ID, blobId);
+    headers.put(RestUtils.Headers.SERVICE_ID, "undeleteBlobAndVerify");
+    RestRequest restRequest = createRestRequest(RestMethod.PUT, "/" + Operations.UNDELETE, headers, null);
+    if (expectedErrorCode != null) {
+      verifyOperationFailure(restRequest, expectedErrorCode, true);
+    } else {
+      verifyUndeleteOK(restRequest);
+      verifyOperationsAfterUndelete(blobId, expectedHeaders, expectedContent, expectedAccount, expectedContainer);
+    }
+  }
+
+  /**
+   * Verifies that a request returns the right response code  once the blob has been undeleted.
+   * @param restRequest the {@link RestRequest} to send to {@link FrontendRestRequestService}.
+   * @throws Exception
+   */
+  private void verifyUndeleteOK(RestRequest restRequest) throws Exception {
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
+    assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+  }
+
+  /**
+   * Verifies that the right {@link ResponseStatus} is returned for GET, HEAD once a blob is undeleted.
+   * @param blobId the ID of the blob that was undeleted.
+   * @param expectedHeaders the expected headers in the response if the right options are provided.
+   * @param expectedContent the expected content of the blob if the right options are provided.
+   * @param expectedAccount the {@link Account} details that are eventually expected to be populated.
+   * @param expectedContainer the {@link Container} details that are eventually expected to be populated.
+   * @throws Exception
+   */
+  private void verifyOperationsAfterUndelete(String blobId, JSONObject expectedHeaders, ByteBuffer expectedContent,
+      Account expectedAccount, Container expectedContainer) throws Exception {
+    GetOption option = GetOption.None;
+    getBlobAndVerify(blobId, null, option, expectedHeaders, expectedContent, expectedAccount, expectedContainer);
+    getNotModifiedBlobAndVerify(blobId, option);
+    getUserMetadataAndVerify(blobId, option, expectedHeaders);
+    getBlobInfoAndVerify(blobId, option, expectedHeaders, expectedAccount, expectedContainer);
+    getHeadAndVerify(blobId, null, option, expectedHeaders, expectedAccount, expectedContainer);
   }
 
   /**

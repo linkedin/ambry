@@ -335,15 +335,13 @@ public class InMemoryRouter implements Router {
       checkBlobId(blobId);
       if (!blobs.containsKey(blobId)) {
         exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
-      } else if (undeletedBlobs.contains(blobId)) {
-        exception = new RouterException("Blob already undeleted", RouterErrorCode.BlobUndeleted);
       } else if (!deletedBlobs.contains(blobId)) {
         exception = new RouterException("Blob not deleted", RouterErrorCode.BlobNotDeleted);
       }
       undeletedBlobs.add(blobId);
       deletedBlobs.remove(blobId);
       if (notificationSystem != null) {
-        notificationSystem.onBlobDeleted(blobId, serviceId, null, null);
+        notificationSystem.onBlobUndeleted(blobId, serviceId, null, null);
       }
     } catch (RouterException e) {
       exception = e;
