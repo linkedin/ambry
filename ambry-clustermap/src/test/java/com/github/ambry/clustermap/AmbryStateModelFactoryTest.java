@@ -141,30 +141,38 @@ public class AmbryStateModelFactoryTest {
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     // OFFLINE -> BOOTSTRAP
     stateModel.onBecomeBootstrapFromOffline(mockMessage, null);
-    assertEquals("Bootstrap count should be 1", 1,
-        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "bootstrapPartitionCount"));
     assertEquals("Offline count should be 0", 0,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
+    assertEquals("Bootstrap count should be 1", 1,
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "bootstrapPartitionCount"));
     // BOOTSTRAP -> STANDBY
     stateModel.onBecomeStandbyFromBootstrap(mockMessage, null);
+    assertEquals("Offline count should be 0", 0,
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     assertEquals("Standby count should be 1", 1,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "standbyPartitionCount"));
     assertEquals("Bootstrap count should be 0", 0,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "bootstrapPartitionCount"));
     // STANDBY -> LEADER
     stateModel.onBecomeLeaderFromStandby(mockMessage, null);
+    assertEquals("Offline count should be 0", 0,
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     assertEquals("Leader count should be 1", 1,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "leaderPartitionCount"));
     assertEquals("Standby count should be 0", 0,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "standbyPartitionCount"));
     // LEADER -> STANDBY
     stateModel.onBecomeStandbyFromLeader(mockMessage, null);
+    assertEquals("Offline count should be 0", 0,
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     assertEquals("Standby count should be 1", 1,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "standbyPartitionCount"));
     assertEquals("Leader count should be 0", 0,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "leaderPartitionCount"));
     // STANDBY -> INACTIVE
     stateModel.onBecomeInactiveFromStandby(mockMessage, null);
+    assertEquals("Offline count should be 0", 0,
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     assertEquals("Inactive count should be 1", 1,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "inactivePartitionCount"));
     assertEquals("Standby count should be 0", 0,
@@ -189,7 +197,11 @@ public class AmbryStateModelFactoryTest {
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     // reset method
     stateModel.reset();
-    assertEquals("Offline count should be 1 after reset", 2,
+    assertEquals("Offline count should be 1 after reset", 1,
+        getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
+    // call reset method again to mock the case where same partition is reset multiple times during zk disconnection or shutdown
+    stateModel.reset();
+    assertEquals("Offline count should still be 1 after reset twice", 1,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
   }
 

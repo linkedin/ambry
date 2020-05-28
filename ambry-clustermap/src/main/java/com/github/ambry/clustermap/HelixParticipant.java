@@ -54,7 +54,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private final String zkConnectStr;
   private final Object helixAdministrationLock = new Object();
   private final ClusterMapConfig clusterMapConfig;
-  private final Set<String> localPartitions = ConcurrentHashMap.newKeySet();
+  private final Map<String, ReplicaState> localPartitionAndState = new ConcurrentHashMap<>();
   private HelixManager manager;
   private String instanceName;
   private HelixAdmin helixAdmin;
@@ -75,7 +75,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       String zkConnectStr, boolean isSoleParticipant) {
     this.clusterMapConfig = clusterMapConfig;
     this.zkConnectStr = zkConnectStr;
-    participantMetrics = new HelixParticipantMetrics(metricRegistry, isSoleParticipant ? null : zkConnectStr);
+    participantMetrics =
+        new HelixParticipantMetrics(metricRegistry, isSoleParticipant ? null : zkConnectStr, localPartitionAndState);
     clusterName = clusterMapConfig.clusterMapClusterName;
     instanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
@@ -92,8 +93,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void setInitialLocalPartitions(Collection<String> localPartitions) {
-    this.localPartitions.addAll(localPartitions);
-    participantMetrics.setLocalPartitionCount(localPartitions.size());
+    localPartitions.forEach(p -> localPartitionAndState.put(p, ReplicaState.OFFLINE));
   }
 
   /**
@@ -453,9 +453,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-    // this method may be called when dynamically adding a new replica that is not present on local node previously. In
-    // this case we don't change offline count as the metric was set to initial number of local partitions during startup.
-    int offlineCountChange = localPartitions.contains(partitionName) ? -1 : 0;
     try {
       // 1. take actions in storage manager (add new replica if necessary)
       PartitionStateChangeListener storageManagerListener =
@@ -476,14 +473,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
     } catch (Exception e) {
-      participantMetrics.errorStateCount.addAndGet(1);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
-    } finally {
-      participantMetrics.offlineCount.addAndGet(offlineCountChange);
     }
-    participantMetrics.bootstrapCount.addAndGet(1);
-    // Here we directly add the partition into set even though it may already exit because the op should be idempotent)
-    localPartitions.add(partitionName);
+    localPartitionAndState.put(partitionName, ReplicaState.BOOTSTRAP);
   }
 
   @Override
@@ -500,16 +493,14 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       }
     } catch (InterruptedException e) {
       logger.error("Bootstrap was interrupted on partition {}", partitionName);
-      participantMetrics.errorStateCount.addAndGet(1);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
     } catch (StateTransitionException e) {
       logger.error("Bootstrap didn't complete on partition {}", partitionName, e);
-      participantMetrics.errorStateCount.addAndGet(1);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
-    } finally {
-      participantMetrics.bootstrapCount.addAndGet(-1);
     }
-    participantMetrics.standbyCount.addAndGet(1);
+    localPartitionAndState.put(partitionName, ReplicaState.STANDBY);
   }
 
   @Override
@@ -526,12 +517,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         replicationManagerListener.onPartitionBecomeLeaderFromStandby(partitionName);
       }
     } catch (Exception e) {
-      participantMetrics.errorStateCount.addAndGet(1);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
-    } finally {
-      participantMetrics.standbyCount.addAndGet(-1);
     }
-    participantMetrics.leaderCount.addAndGet(1);
+    localPartitionAndState.put(partitionName, ReplicaState.LEADER);
   }
 
   @Override
@@ -548,12 +537,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         replicationManagerListener.onPartitionBecomeStandbyFromLeader(partitionName);
       }
     } catch (Exception e) {
-      participantMetrics.errorStateCount.addAndGet(1);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
-    } finally {
-      participantMetrics.leaderCount.addAndGet(-1);
     }
-    participantMetrics.standbyCount.addAndGet(1);
+    localPartitionAndState.put(partitionName, ReplicaState.STANDBY);
   }
 
   @Override
@@ -565,8 +552,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       try {
         storageManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
       } catch (Exception e) {
-        participantMetrics.standbyCount.addAndGet(-1);
-        participantMetrics.errorStateCount.addAndGet(1);
+        localPartitionAndState.put(partitionName, ReplicaState.ERROR);
         throw e;
       }
     }
@@ -584,16 +570,14 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       }
     } catch (InterruptedException e) {
       logger.error("Deactivation was interrupted on partition {}", partitionName);
-      participantMetrics.errorStateCount.addAndGet(1);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw new StateTransitionException("Deactivation failed or was interrupted", DeactivationFailure);
     } catch (StateTransitionException e) {
       logger.error("Deactivation didn't complete on partition {}", partitionName, e);
-      participantMetrics.errorStateCount.addAndGet(1);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
-    } finally {
-      participantMetrics.standbyCount.addAndGet(-1);
     }
-    participantMetrics.inactiveCount.addAndGet(1);
+    localPartitionAndState.put(partitionName, ReplicaState.INACTIVE);
   }
 
   @Override
@@ -618,16 +602,14 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       }
     } catch (InterruptedException e) {
       logger.error("Disconnection was interrupted on partition {}", partitionName);
-      participantMetrics.errorStateCount.addAndGet(1);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw new StateTransitionException("Disconnection failed or was interrupted", DisconnectionFailure);
     } catch (StateTransitionException e) {
       logger.error("Exception occurred during Inactive-To-Offline transition ", e);
-      participantMetrics.errorStateCount.addAndGet(1);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
-    } finally {
-      participantMetrics.inactiveCount.addAndGet(-1);
     }
-    participantMetrics.offlineCount.addAndGet(1);
+    localPartitionAndState.put(partitionName, ReplicaState.OFFLINE);
   }
 
   @Override
@@ -641,28 +623,26 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         storageManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
       }
     } catch (Exception e) {
-      participantMetrics.errorStateCount.addAndGet(1);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
-    } finally {
-      participantMetrics.offlineCount.addAndGet(-1);
     }
+    localPartitionAndState.remove(partitionName);
     participantMetrics.partitionDroppedCount.inc();
   }
 
   @Override
   public void onPartitionBecomeDroppedFromError(String partitionName) {
-    participantMetrics.errorStateCount.addAndGet(-1);
+    localPartitionAndState.remove(partitionName);
     participantMetrics.partitionDroppedCount.inc();
   }
 
   @Override
   public void onPartitionBecomeOfflineFromError(String partitionName) {
-    participantMetrics.errorStateCount.addAndGet(-1);
-    participantMetrics.offlineCount.addAndGet(1);
+    localPartitionAndState.put(partitionName, ReplicaState.OFFLINE);
   }
 
   @Override
   public void onReset(String partitionName) {
-    participantMetrics.offlineCount.addAndGet(1);
+    localPartitionAndState.put(partitionName, ReplicaState.OFFLINE);
   }
 }
