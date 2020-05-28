@@ -459,6 +459,8 @@ public class ReplicaThread implements Runnable {
             // Skip stores that were stopped during call to getReplicaMetadataResponse
             if (!remoteReplicaInfo.getLocalStore().isStarted()) {
               exchangeMetadataResponseList.add(new ExchangeMetadataResponse(ServerErrorCode.Temporarily_Disabled));
+              remoteReplicaInfo.setExchangeMetadataResponse(
+                  new ExchangeMetadataResponse(ServerErrorCode.Temporarily_Disabled));
               continue;
             }
             try {
@@ -492,6 +494,11 @@ public class ReplicaThread implements Runnable {
               // reason is replicaSyncUpManager may also throw exception and add one more exchangeMetadataResponse
               // associated with same RemoteReplicaInfo.
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
+
+              // Also, store the metadata exchange received from remote replica in the RemoteReplicaInfo.
+              // If leader based replication is enabled, standby's will advance the remote token only after missing keys in the exchangeMetadataResponse are obtained via intra-dc replication.
+              remoteReplicaInfo.setExchangeMetadataResponse(exchangeMetadataResponse);
+
               replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
                   exchangeMetadataResponse.localLagFromRemoteInBytes);
               if (replicaMetadataResponseInfo.getMessageInfoList().size() > 0) {
@@ -506,12 +513,16 @@ public class ReplicaThread implements Runnable {
                 // Must have just been stopped, just skip it and move on.
                 logger.info("Local store not started for remote replica: {}", remoteReplicaInfo.getReplicaId());
                 exchangeMetadataResponseList.add(new ExchangeMetadataResponse(ServerErrorCode.Temporarily_Disabled));
+                remoteReplicaInfo.setExchangeMetadataResponse(
+                    new ExchangeMetadataResponse(ServerErrorCode.Temporarily_Disabled));
               } else {
                 logger.error("Remote node: {} Thread name: {} Remote replica: {}", remoteNode, threadName,
                     remoteReplicaInfo.getReplicaId(), e);
                 replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
                 responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), e);
                 exchangeMetadataResponseList.add(new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error));
+                remoteReplicaInfo.setExchangeMetadataResponse(
+                    new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error));
               }
             }
           } else {
@@ -519,6 +530,8 @@ public class ReplicaThread implements Runnable {
             logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
                 remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
             exchangeMetadataResponseList.add(new ExchangeMetadataResponse(replicaMetadataResponseInfo.getError()));
+            remoteReplicaInfo.setExchangeMetadataResponse(
+                new ExchangeMetadataResponse(replicaMetadataResponseInfo.getError()));
           }
         }
         long processMetadataResponseTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;

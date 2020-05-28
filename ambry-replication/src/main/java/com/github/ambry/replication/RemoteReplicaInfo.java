@@ -16,6 +16,7 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.network.Port;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.Store;
 import com.github.ambry.utils.Time;
 import java.util.Objects;
@@ -76,8 +77,8 @@ public class RemoteReplicaInfo {
     this.port = port;
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
     initializeTokens(token);
-    // Exchange metadata response information is initially empty. It will be set by replica threads after exchanging metadata during a replication cycle.
-    this.exchangeMetadataResponse = null;
+    // Exchange metadata response information is initially empty. It will be populated by replica threads during replication cycles.
+    this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.No_Error);
   }
 
   public ReplicaId getReplicaId() {
