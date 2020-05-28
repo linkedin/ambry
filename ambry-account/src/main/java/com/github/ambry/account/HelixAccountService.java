@@ -22,12 +22,10 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.slf4j.Logger;
@@ -58,8 +56,8 @@ import static com.github.ambry.utils.Utils.*;
  * <p>
  *   Every time a mutation of account metadata is performed, a new backup file will be created for locally, in a directory
  *   specified by the {@link HelixAccountServiceConfig#backupDir}. A backup file is created when the helix listener on
- *   {@link #ACCOUNT_METADATA_CHANGE_TOPIC} is notified. And backup's filename could contain version and mtime information
- *   of the znode that stores the account metadata.
+ *   {@link #ACCOUNT_METADATA_CHANGE_TOPIC} is notified. And backup's filename could contain version and last modified time
+ *   information of the znode that stores the account metadata.
  *   The flow to update account looks like
  *   <ol>
  *     <li>{@link #updateAccounts(Collection)} is invoked</li>

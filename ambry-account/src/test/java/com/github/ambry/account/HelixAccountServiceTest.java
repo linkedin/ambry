@@ -41,7 +41,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
@@ -64,7 +63,6 @@ import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.HelixAccountService.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
-import static org.junit.Assume.*;
 
 
 /**
