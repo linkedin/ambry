@@ -255,11 +255,10 @@ class FrontendRestRequestService implements RestRequestService {
         });
       } else if (requestPath.matchesOperation(Operations.UNDELETE) && frontendConfig.enableUndelete) {
         // If the undelete is not enabled, then treat it as unrecognized operation.
+
+        // And always send failure reason back to client for undelete
+        restRequest.setArg(SEND_FAILURE_REASON, Boolean.TRUE);
         undeleteHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-          if (e instanceof RouterException) {
-            e = new RestServiceException(e.getMessage(),
-                RestServiceErrorCode.getRestServiceErrorCode(((RouterException) e).getErrorCode()), true);
-          }
           submitResponse(restRequest, restResponseChannel, null, e);
         });
       } else {

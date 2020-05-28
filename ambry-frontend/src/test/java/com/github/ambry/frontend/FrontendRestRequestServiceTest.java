@@ -1351,20 +1351,6 @@ public class FrontendRestRequestServiceTest {
     return restResponseChannel;
   }
 
-  private MockRestResponseChannel verifyOperationFailure(RestRequest restRequest, RestServiceErrorCode errorCode,
-      boolean shouldIncludeFailureReason) throws Exception {
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    try {
-      doOperation(restRequest, restResponseChannel);
-      fail("Operation should have failed");
-    } catch (RestServiceException e) {
-      assertEquals("Op should have failed with a specific error code", errorCode, e.getErrorCode());
-      assertEquals("Exception should include failure reason", shouldIncludeFailureReason,
-          e.shouldIncludeExceptionMessageInResponse());
-    }
-    return restResponseChannel;
-  }
-
   /**
    * Prepares random content, sets headers and POSTs a blob with the required parameters
    * @param contentLength the length of the content to be POSTed.
@@ -2037,7 +2023,7 @@ public class FrontendRestRequestServiceTest {
     headers.put(RestUtils.Headers.SERVICE_ID, "undeleteBlobAndVerify");
     RestRequest restRequest = createRestRequest(RestMethod.PUT, "/" + Operations.UNDELETE, headers, null);
     if (expectedErrorCode != null) {
-      verifyOperationFailure(restRequest, expectedErrorCode, true);
+      verifyOperationFailure(restRequest, expectedErrorCode);
     } else {
       verifyUndeleteOK(restRequest);
       verifyOperationsAfterUndelete(blobId, expectedHeaders, expectedContent, expectedAccount, expectedContainer);
