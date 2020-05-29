@@ -53,9 +53,7 @@ class DataNode implements DataNodeId {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   DataNode(Datacenter datacenter, JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
-    if (logger.isTraceEnabled()) {
-      logger.trace("DataNode " + jsonObject.toString());
-    }
+    logger.trace("DataNode {}", jsonObject);
     this.datacenter = datacenter;
     this.clusterMapConfig = clusterMapConfig;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
@@ -70,7 +68,7 @@ class DataNode implements DataNodeId {
               HardwareState.valueOf(jsonObject.getString("hardwareState")), clusterMapConfig);
       this.dataNodeStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     } catch (Exception e) {
-      logger.error("Error creating resource state policy when instantiating a datanode " + e);
+      logger.error("Error creating resource state policy when instantiating a datanode", e);
       throw new IllegalStateException(
           "Error creating resource state policy when instantiating a datanode: " + hostname + ":" + portNum, e);
     }

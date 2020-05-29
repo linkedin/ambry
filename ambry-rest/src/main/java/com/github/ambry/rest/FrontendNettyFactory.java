@@ -83,7 +83,7 @@ public class FrontendNettyFactory implements NioServerFactory {
       if (nettyConfig.nettyServerSslFactory.isEmpty()) {
         sslFactoryToUse = defaultSslFactory;
       } else {
-        LOGGER.info("Using " + nettyConfig.nettyServerSslFactory + " for Netty SSL instead of the shared instance.");
+        LOGGER.info("Using {} for Netty SSL instead of the shared instance.", nettyConfig.nettyServerSslFactory);
         sslFactoryToUse = Utils.getObj(nettyConfig.nettyServerSslFactory, new SSLConfig(verifiableProperties));
       }
       if (sslFactoryToUse == null) {

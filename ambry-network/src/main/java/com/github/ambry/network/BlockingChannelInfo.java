@@ -114,7 +114,7 @@ class BlockingChannelInfo {
         BlockingChannel channel = blockingChannelAvailableConnections.poll(timeoutInMs, TimeUnit.MILLISECONDS);
         if (channel != null) {
           blockingChannelActiveConnections.add(channel);
-          logger.trace("Returning connection to " + channel.getRemoteHost() + ":" + channel.getRemotePort());
+          logger.trace("Returning connection to {}:{}", channel.getRemoteHost(), channel.getRemotePort());
           return channel;
         } else if (numberOfConnections.get() == maxConnectionsPerHostPerPort) {
           logger.error("Timed out trying to get a connection for host {} and port {}", host, port.getPort());

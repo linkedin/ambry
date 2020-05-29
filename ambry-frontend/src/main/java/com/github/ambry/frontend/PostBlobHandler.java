@@ -269,9 +269,8 @@ class PostBlobHandler {
               "TTL < " + frontendConfig.maxAcceptableTtlSecsIfTtlRequired + " is required for upload to " + descriptor,
               RestServiceErrorCode.InvalidArgs);
         } else {
-          LOGGER.debug(
-              blobProperties.getServiceId() + " attempted an upload with ttl " + blobProperties.getTimeToLiveInSeconds()
-                  + " to " + descriptor);
+          LOGGER.debug("{} attempted an upload with ttl {} to {}", blobProperties.getServiceId(),
+              blobProperties.getTimeToLiveInSeconds(), descriptor);
           frontendMetrics.ttlNotCompliantError.inc();
           restResponseChannel.setHeader(RestUtils.Headers.NON_COMPLIANCE_WARNING,
               "TTL < " + frontendConfig.maxAcceptableTtlSecsIfTtlRequired + " will be required for future uploads");

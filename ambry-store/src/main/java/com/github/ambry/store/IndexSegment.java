@@ -173,7 +173,7 @@ class IndexSegment {
         if (!bloomFile.delete()) {
           throw new StoreException("Could not delete bloom file named " + bloomFile, StoreErrorCodes.Unknown_Error);
         }
-        logger.info(bloomFile + " is successfully deleted and will be rebuilt based on index segment");
+        logger.info("{} is successfully deleted and will be rebuilt based on index segment", bloomFile);
       }
       if (sealed) {
         map();
@@ -1076,7 +1076,7 @@ class IndexSegment {
           index++;
         }
       } else {
-        logger.error("IndexSegment : " + indexFile.getAbsolutePath() + " index not found for key " + key);
+        logger.error("IndexSegment : {} index not found for key {}", indexFile.getAbsolutePath(), key);
         metrics.keyInFindEntriesAbsent.inc();
       }
     } else if (key == null || index.containsKey(key)) {
@@ -1098,7 +1098,7 @@ class IndexSegment {
         }
       }
     } else {
-      logger.error("IndexSegment : " + indexFile.getAbsolutePath() + " key not found: " + key);
+      logger.error("IndexSegment : {} key not found: {}", indexFile.getAbsolutePath(), key);
       metrics.keyInFindEntriesAbsent.inc();
     }
     if (oneEntryPerKey) {

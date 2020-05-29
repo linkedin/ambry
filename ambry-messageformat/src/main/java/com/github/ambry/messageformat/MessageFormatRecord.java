@@ -1186,8 +1186,8 @@ public class MessageFormatRecord {
         long actualCRC = crcStream.getValue();
         long expectedCRC = dataStream.readLong();
         if (actualCRC != expectedCRC) {
-          logger.error(
-              "corrupt data while parsing blob properties Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+          logger.error("corrupt data while parsing blob properties Expected CRC {} Actual CRC {}", expectedCRC,
+              actualCRC);
           throw new MessageFormatException("Blob property data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
         }
         return properties;
@@ -1594,8 +1594,8 @@ public class MessageFormatRecord {
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
-        logger.error(
-            "corrupt data while parsing blob key record, expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+        logger.error("corrupt data while parsing blob key record, expected CRC {} Actual CRC {}", expectedCRC,
+            actualCRC);
         throw new MessageFormatException("Blob Key is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
       return blobEncryptionKey;
@@ -1644,8 +1644,7 @@ public class MessageFormatRecord {
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
-        logger.error(
-            "corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+        logger.error("corrupt data while parsing user metadata Expected CRC {} Actual CRC {}", expectedCRC, actualCRC);
         throw new MessageFormatException("User metadata is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
       return ByteBuffer.wrap(userMetadaBuffer);

@@ -35,7 +35,7 @@ public class PublicAccessLogger {
   public PublicAccessLogger(String[] requestHeaders, String[] responseHeaders) {
     this.requestHeaders = requestHeaders;
     this.responseHeaders = responseHeaders;
-    logger.trace("Created PublicAccessLogger for log " + publicAccessLogger.getName());
+    logger.trace("Created PublicAccessLogger for log {}", publicAccessLogger.getName());
   }
 
   public String[] getRequestHeaders() {

@@ -114,14 +114,13 @@ public class MessageSievingInputStream extends InputStream {
         // from the batched stream, as well as to ensure that subsequent messages can be correctly processed even if there
         // was an error during the sieving for this message.
         Message msg = new Message(msgInfo, new ByteArrayInputStream(Utils.readBytesFromStream(inStream, msgSize)));
-        logger.trace("Read stream for message info " + msgInfo + "  into memory");
+        logger.trace("Read stream for message info {}  into memory", msgInfo);
         validateAndTransform(msg, msgStreamList, bytesRead);
       }
       bytesRead += msgSize;
     }
     if (bytesRead != totalMessageListSize) {
-      logger.error(
-          "Failed to read intended size from stream. Expected " + totalMessageListSize + ", actual " + bytesRead);
+      logger.error("Failed to read intended size from stream. Expected {}, actual {}", totalMessageListSize, bytesRead);
     }
     if (hasInvalidMessages) {
       logger.error("There are invalidated messages in this stream");

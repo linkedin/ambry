@@ -43,9 +43,7 @@ class Datacenter {
 
   Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
-    if (logger.isTraceEnabled()) {
-      logger.trace("Datacenter " + jsonObject.toString());
-    }
+    logger.trace("Datacenter {}", jsonObject);
     this.hardwareLayout = hardwareLayout;
     this.name = jsonObject.getString("name");
     id = (byte) jsonObject.getInt("id");

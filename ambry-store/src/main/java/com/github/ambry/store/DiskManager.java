@@ -154,7 +154,7 @@ class DiskManager {
             partitionAndStore.getValue().start();
           } catch (Exception e) {
             numStoreFailures.incrementAndGet();
-            logger.error("Exception while starting store for the " + partitionAndStore.getKey(), e);
+            logger.error("Exception while starting store for the {}", partitionAndStore.getKey(), e);
           }
         }, false);
         thread.start();
@@ -164,8 +164,7 @@ class DiskManager {
         startupThread.join();
       }
       if (numStoreFailures.get() > 0) {
-        logger.error(
-            "Could not start " + numStoreFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
+        logger.error("Could not start {} out of {} stores on the disk {}", numStoreFailures.get(), stores.size(), disk);
       }
 
       // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
@@ -184,8 +183,8 @@ class DiskManager {
       reportUnrecognizedDirs();
       running = true;
     } catch (StoreException e) {
-      logger.error("Error while starting the DiskManager for " + disk.getMountPath()
-          + " ; no stores will be accessible on this disk.", e);
+      logger.error("Error while starting the DiskManager for {} ; no stores will be accessible on this disk.",
+          disk.getMountPath(), e);
     } finally {
       if (!running) {
         metrics.totalStoreStartFailures.inc(stores.size());
@@ -231,8 +230,7 @@ class DiskManager {
         shutdownThread.join();
       }
       if (numFailures.get() > 0) {
-        logger.error(
-            "Could not shutdown " + numFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
+        logger.error("Could not shutdown {} out of {} stores on the disk {}", numFailures.get(), stores.size(), disk);
       }
       compactionManager.awaitTermination();
       longLivedTaskScheduler.shutdown();

@@ -499,8 +499,8 @@ public class RestUtils {
             crc32.update(userMetadata, 0, userMetadata.length - CRC_SIZE);
             long expectedCRC = crc32.getValue();
             if (actualCRC != expectedCRC) {
-              logger.error(
-                  "corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+              logger.error("corrupt data while parsing user metadata Expected CRC {} Actual CRC {}", expectedCRC,
+                  actualCRC);
               toReturn = null;
             }
           }
@@ -585,7 +585,7 @@ public class RestUtils {
       SimpleDateFormat dateFormatter = new SimpleDateFormat(HTTP_DATE_FORMAT, Locale.US);
       return dateFormatter.parse(dateString).getTime();
     } catch (ParseException e) {
-      logger.warn("Could not parse milliseconds from an HTTP date header (" + dateString + ").");
+      logger.warn("Could not parse milliseconds from an HTTP date header ({}).", dateString);
       return null;
     }
   }

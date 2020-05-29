@@ -195,9 +195,9 @@ class StatsManager {
   boolean addReplica(ReplicaId id) {
     boolean success = partitionToReplicaMap.putIfAbsent(id.getPartitionId(), id) == null;
     if (success) {
-      logger.info("Partition " + id.getPartitionId() + " is added into StatsManager");
+      logger.info("Partition {} is added into StatsManager", id.getPartitionId());
     } else {
-      logger.error("Failed to add partition " + id.getPartitionId() + " because it is already in StatsManager");
+      logger.error("Failed to add partition {} because it is already in StatsManager", id.getPartitionId());
     }
     return success;
   }
@@ -210,9 +210,9 @@ class StatsManager {
   boolean removeReplica(ReplicaId id) {
     boolean success = partitionToReplicaMap.remove(id.getPartitionId()) != null;
     if (success) {
-      logger.info("Partition " + id.getPartitionId() + " is removed from StatsManager");
+      logger.info("Partition {} is removed from StatsManager", id.getPartitionId());
     } else {
-      logger.error("Failed to remove partition " + id.getPartitionId() + " because it doesn't exist in StatsManager");
+      logger.error("Failed to remove partition {} because it doesn't exist in StatsManager", id.getPartitionId());
     }
     return success;
   }
@@ -361,8 +361,8 @@ class StatsManager {
       if (partitionToReplicaMap.containsKey(partition)) {
         unreachableStores.add(partition.toPathString());
       } else {
-        logger.info("Removing partition " + partition.toPathString()
-            + " from unreachable list because it is no longer in StatsManager");
+        logger.info("Removing partition {} from unreachable list because it is no longer in StatsManager",
+            partition.toPathString());
       }
     }
     return unreachableStores;

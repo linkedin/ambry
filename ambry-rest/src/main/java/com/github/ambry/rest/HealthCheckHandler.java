@@ -52,7 +52,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
     this.restServerState = restServerState;
     this.healthCheckUri = restServerState.getHealthCheckUri();
     this.nettyMetrics = nettyMetrics;
-    logger.trace("Created HealthCheckHandler for HealthCheckUri=" + healthCheckUri);
+    logger.trace("Created HealthCheckHandler for HealthCheckUri={}", healthCheckUri);
   }
 
   @Override
@@ -63,7 +63,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
       if (request == null && ((HttpRequest) obj).uri().equals(healthCheckUri)) {
         nettyMetrics.healthCheckRequestRate.mark();
         startTimeInMs = System.currentTimeMillis();
-        logger.trace("Handling health check request while in state " + restServerState.isServiceUp());
+        logger.trace("Handling health check request while in state {}", restServerState.isServiceUp());
         request = (HttpRequest) obj;
         if (restServerState.isServiceUp()) {
           response =
@@ -113,7 +113,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
     if (!restServerState.isServiceUp()) {
       if (msg instanceof LastHttpContent) {
         // Start closing client channels after we've completed writing to them (even if they are keep-alive)
-        logger.info("Health check request handler closing connection " + ctx.channel() + " since in shutdown mode.");
+        logger.info("Health check request handler closing connection {} since in shutdown mode.", ctx.channel());
         promise.addListener(ChannelFutureListener.CLOSE);
         nettyMetrics.healthCheckHandlerChannelCloseOnWriteCount.inc();
       }

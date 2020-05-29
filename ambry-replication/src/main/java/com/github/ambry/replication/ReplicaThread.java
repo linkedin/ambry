@@ -195,12 +195,12 @@ public class ReplicaThread implements Runnable {
   @Override
   public void run() {
     try {
-      logger.trace("Starting replica thread on Local node: " + dataNodeId + " Thread name: " + threadName);
+      logger.trace("Starting replica thread on Local node: {} Thread name: {}", dataNodeId, threadName);
       for (Map.Entry<DataNodeId, Set<RemoteReplicaInfo>> replicasToReplicateEntry : replicasToReplicateGroupedByNode.entrySet()) {
-        logger.trace("Remote node: " + replicasToReplicateEntry.getKey() + " Thread name: " + threadName
-            + " ReplicasToReplicate: " + replicasToReplicateEntry.getValue());
+        logger.trace("Remote node: {} Thread name: {} ReplicasToReplicate: {}", replicasToReplicateEntry.getKey(),
+            threadName, replicasToReplicateEntry.getValue());
       }
-      logger.info("Begin iteration for thread " + threadName);
+      logger.info("Begin iteration for thread {}", threadName);
       while (running) {
         replicate();
         lock.lock();
@@ -593,10 +593,10 @@ public class ReplicaThread implements Runnable {
           || response.getReplicaMetadataResponseInfoList().size() != replicasToReplicatePerNode.size()) {
         int replicaMetadataResponseInfoListSize = response.getReplicaMetadataResponseInfoList() == null ? 0
             : response.getReplicaMetadataResponseInfoList().size();
-        logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replicas: "
-            + replicasToReplicatePerNode + " Replica metadata response error: " + response.getError()
-            + " ReplicaMetadataResponseInfoListSize: " + replicaMetadataResponseInfoListSize
-            + " ReplicasToReplicatePerNodeSize: " + replicasToReplicatePerNode.size());
+        logger.error(
+            "Remote node: {} Thread name: {} Remote replicas: {} Replica metadata response error: {} ReplicaMetadataResponseInfoListSize: {} ReplicasToReplicatePerNodeSize: {}",
+            remoteNode, threadName, replicasToReplicatePerNode, response.getError(),
+            replicaMetadataResponseInfoListSize, replicasToReplicatePerNode.size());
         throw new ReplicationException("Replica Metadata Response Error " + response.getError());
       }
       return response;
@@ -849,8 +849,8 @@ public class ReplicaThread implements Runnable {
         replicationMetrics.updateGetRequestTime(getRequestTime, replicatingFromRemoteColo, replicatingOverSsl,
             datacenterName);
         if (getResponse.getError() != ServerErrorCode.No_Error) {
-          logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replicas: "
-              + replicasToReplicatePerNode + " GetResponse from replication: " + getResponse.getError());
+          logger.error("Remote node: {} Thread name: {} Remote replicas: {} GetResponse from replication: {}",
+              remoteNode, threadName, replicasToReplicatePerNode, getResponse.getError());
           throw new ReplicationException(
               " Get Request returned error when trying to get missing keys " + getResponse.getError());
         }
@@ -915,9 +915,10 @@ public class ReplicaThread implements Runnable {
                       Collections.singletonList(transformer), metricRegistry);
               if (validMessageDetectionInputStream.hasInvalidMessages()) {
                 replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
-                logger.error("Out of " + (messageInfoList.size()) + " messages, " + (messageInfoList.size()
-                    - validMessageDetectionInputStream.getValidMessageInfoList().size())
-                    + " invalid messages were found in message stream from " + remoteReplicaInfo.getReplicaId());
+                logger.error("Out of {} messages, {} invalid messages were found in message stream from {}",
+                    messageInfoList.size(),
+                    messageInfoList.size() - validMessageDetectionInputStream.getValidMessageInfoList().size(),
+                    remoteReplicaInfo.getReplicaId());
               }
               messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
               if (messageInfoList.size() == 0) {
@@ -950,8 +951,8 @@ public class ReplicaThread implements Runnable {
             } catch (StoreException e) {
               if (e.getErrorCode() != StoreErrorCodes.Already_Exist) {
                 replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
-                logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replica: "
-                    + remoteReplicaInfo.getReplicaId(), e);
+                logger.error("Remote node: {} Thread name: {} Remote replica: {}", remoteNode, threadName,
+                    remoteReplicaInfo.getReplicaId(), e);
               }
             }
           } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Deleted) {

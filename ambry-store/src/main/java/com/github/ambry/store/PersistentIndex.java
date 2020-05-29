@@ -224,10 +224,10 @@ class PersistentIndex {
         // NOTE: It is safe to do the hard delete recovery after the regular recovery because we ensure that hard deletes
         // never work on the part of the log that is not yet flushed (by ensuring that the message retention
         // period is longer than the log flush time).
-        logger.info("Index : " + datadir + " Starting hard delete recovery");
+        logger.info("Index : {} Starting hard delete recovery", datadir);
         hardDeleter = new HardDeleter(config, metrics, datadir, log, this, hardDelete, factory, diskIOScheduler, time);
         hardDeleter.performRecovery();
-        logger.info("Index : " + datadir + " Finished performing hard delete recovery");
+        logger.info("Index : {} Finished performing hard delete recovery", datadir);
         metrics.initializeHardDeleteMetric(storeId, hardDeleter, this);
       } else {
         hardDeleter = null;
@@ -242,7 +242,7 @@ class PersistentIndex {
         persistorTask = null;
       }
       if (hardDelete != null && config.storeEnableHardDelete) {
-        logger.info("Index : " + datadir + " Starting hard delete thread ");
+        logger.info("Index : {} Starting hard delete thread ", datadir);
         hardDeleteThread = Utils.newThread(HardDeleter.getThreadName(datadir), hardDeleter, true);
         hardDeleteThread.start();
       } else if (hardDelete != null) {
@@ -428,7 +428,7 @@ class PersistentIndex {
       if (segmentToRemove.getEndOffset().compareTo(journalFirstOffset) >= 0) {
         throw new IllegalArgumentException(
             "End Offset of the one of the segments to remove [" + segmentToRemove.getFile() + "] is"
-                + " higher than the first offset in the journal");
+                + " higher than the first offset in the journal" );
       }
     }
 
@@ -581,12 +581,11 @@ class PersistentIndex {
     try {
       ConcurrentNavigableMap<Offset, IndexSegment> segmentsMapToSearch;
       if (fileSpan == null) {
-        logger.trace("Searching for " + key + " in the entire index");
+        logger.trace("Searching for {} in the entire index", key);
         segmentsMapToSearch = indexSegments.descendingMap();
       } else {
-        logger.trace(
-            "Searching for " + key + " in index with filespan ranging from " + fileSpan.getStartOffset() + " to "
-                + fileSpan.getEndOffset());
+        logger.trace("Searching for {} in index with filespan ranging from {} to {}", key, fileSpan.getStartOffset(),
+            fileSpan.getEndOffset());
         segmentsMapToSearch = indexSegments.subMap(indexSegments.floorKey(fileSpan.getStartOffset()), true,
             indexSegments.floorKey(fileSpan.getEndOffset()), true).descendingMap();
         metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
@@ -677,12 +676,11 @@ class PersistentIndex {
     try {
       ConcurrentNavigableMap<Offset, IndexSegment> segmentsMapToSearch;
       if (fileSpan == null) {
-        logger.trace("Searching all indexes for " + key + " in the entire index");
+        logger.trace("Searching all indexes for {} in the entire index", key);
         segmentsMapToSearch = indexSegments.descendingMap();
       } else {
-        logger.trace(
-            "Searching all indexes for " + key + " in index with filespan ranging from " + fileSpan.getStartOffset()
-                + " to " + fileSpan.getEndOffset());
+        logger.trace("Searching all indexes for {} in index with filespan ranging from {} to {}", key,
+            fileSpan.getStartOffset(), fileSpan.getEndOffset());
         segmentsMapToSearch = indexSegments.subMap(indexSegments.floorKey(fileSpan.getStartOffset()), true,
             indexSegments.floorKey(fileSpan.getEndOffset()), true).descendingMap();
         metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
@@ -1151,7 +1149,7 @@ class PersistentIndex {
         if (storeToken.getType().equals(FindTokenType.Uninitialized)) {
           offsetToStart = getStartOffset();
         }
-        logger.trace("Index : " + dataDir + " getting entries since " + offsetToStart);
+        logger.trace("Index : {} getting entries since {}", dataDir, offsetToStart);
         // check journal
         List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, storeToken.getInclusive());
         logger.trace("Journal based token, Time used to get entries: {}", (time.milliseconds() - startTimeInMs));
@@ -1164,9 +1162,8 @@ class PersistentIndex {
         // entries from the journal to when another view of the index segments was obtained.
         if (entries != null && offsetToStart.compareTo(journal.getFirstOffset()) >= 0) {
           startTimeInMs = time.milliseconds();
-          logger.trace(
-              "Index : " + dataDir + " retrieving from journal from offset " + offsetToStart + " total entries "
-                  + entries.size());
+          logger.trace("Index : {} retrieving from journal from offset {} total entries {}", dataDir, offsetToStart,
+              entries.size());
           Offset offsetEnd = offsetToStart;
           AtomicLong currentTotalSizeOfEntries = new AtomicLong(0);
           Offset endOffsetOfSnapshot = getCurrentEndOffset(indexSegments);
@@ -1183,7 +1180,7 @@ class PersistentIndex {
               (time.milliseconds() - startTimeInMs));
 
           startTimeInMs = time.milliseconds();
-          logger.trace("Index : " + dataDir + " new offset from find info " + offsetEnd);
+          logger.trace("Index : {} new offset from find info {}", dataDir, offsetEnd);
           eliminateDuplicates(messageEntries);
           logger.trace("Journal based token, Time used to eliminate duplicates: {}",
               (time.milliseconds() - startTimeInMs));
@@ -1279,17 +1276,17 @@ class PersistentIndex {
         // we reset the token to logEndOffsetOnStartup
         if (!storeToken.getType().equals(FindTokenType.Uninitialized)
             && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
-          logger.info("Index : " + dataDir + " resetting offset after not clean shutdown " + logEndOffsetOnStartup
-              + " before offset " + storeToken.getOffset());
+          logger.info("Index : {} resetting offset after not clean shutdown {} before offset {}", dataDir,
+              logEndOffsetOnStartup, storeToken.getOffset());
           storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId, true);
         }
       } else if (!storeToken.getType().equals(FindTokenType.Uninitialized)
           && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
-        logger.error(
-            "Index : " + dataDir + " invalid token. Provided offset is outside the log range after clean shutdown");
+        logger.error("Index : {} invalid token. Provided offset is outside the log range after clean shutdown",
+            dataDir);
         // if the shutdown was clean, the offset should always be lesser or equal to the logEndOffsetOnStartup
         throw new IllegalArgumentException(
-            "Invalid token. Provided offset is outside the log range after clean shutdown");
+            "Invalid token. Provided offset is outside the log range after clean shutdown" );
       }
     }
     return storeToken;
@@ -1460,7 +1457,7 @@ class PersistentIndex {
       // We would never have given away a token with a segmentStartOffset of the latest segment.
       throw new IllegalArgumentException(
           "Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset
-              + " is of the last segment");
+              + " is of the last segment" );
     }
 
     Offset newTokenSegmentStartOffset = null;
@@ -1477,9 +1474,8 @@ class PersistentIndex {
         // if we did fetch entries from this segment, set the new token info accordingly.
         newTokenSegmentStartOffset = segmentStartOffset;
       }
-      logger.trace(
-          "Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset + " with key "
-              + key + " total entries received " + messageEntries.size());
+      logger.trace("Index : {} findEntriesFromOffset segment start offset {} with key {} total entries received {}",
+          dataDir, segmentStartOffset, key, messageEntries.size());
       // Notice that we might not finish scanning the segmentToProcess, it's possible that current index segment contains
       // enough index values so that the findEngtriesCondition returns false. But we are still moving to the next index segment
       // because when findEntriesCondition returns false, we will skip the while loop below and return the new find token
@@ -1496,8 +1492,8 @@ class PersistentIndex {
       List<JournalEntry> entries = journal.getEntriesSince(segmentStartOffset, true);
       Offset endOffsetOfSnapshot = getCurrentEndOffset(indexSegments);
       if (entries != null) {
-        logger.trace("Index : " + dataDir + " findEntriesFromOffset journal offset " + segmentStartOffset
-            + " total entries received " + entries.size());
+        logger.trace("Index : {} findEntriesFromOffset journal offset {} total entries received {}", dataDir,
+            segmentStartOffset, entries.size());
         IndexSegment currentSegment = segmentToProcess;
         Map<StoreKey, MessageInfo> messageInfoCache = new HashMap<>();
         for (JournalEntry entry : entries) {
@@ -1540,14 +1536,15 @@ class PersistentIndex {
         throw new IllegalStateException(
             "Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset
                 + " is of the latest segment and not found in journal with range [" + journalFirstOffsetBeforeCheck
-                + ", " + journalLastOffsetBeforeCheck + "]");
+                + ", " + journalLastOffsetBeforeCheck + "]" );
       } else {
         // Read and populate from the first key in the segment with this segmentStartOffset
         if (segmentToProcess.getEntriesSince(null, findEntriesCondition, messageEntries, currentTotalSizeOfEntries)) {
           newTokenSegmentStartOffset = segmentStartOffset;
         }
-        logger.trace("Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset
-            + " with all the keys, total entries received " + messageEntries.size());
+        logger.trace(
+            "Index : {} findEntriesFromOffset segment start offset {} with all the keys, total entries received {}",
+            dataDir, segmentStartOffset, messageEntries.size());
         segmentStartOffset = indexSegments.higherKey(segmentStartOffset);
         if (segmentStartOffset == null) {
           // we have reached the last index segment in the index ref we have. The journal has moved past this final
@@ -1704,7 +1701,7 @@ class PersistentIndex {
           try {
             hardDeleter.shutdown();
           } catch (Exception e) {
-            logger.error("Index : " + dataDir + " error while persisting cleanup token ", e);
+            logger.error("Index : {} error while persisting cleanup token", dataDir, e);
           }
         }
         try {
@@ -1713,7 +1710,7 @@ class PersistentIndex {
             Files.setPosixFilePermissions(cleanShutdownFile.toPath(), config.storeOperationFilePermission);
           }
         } catch (IOException e) {
-          logger.error("Index : " + dataDir + " error while creating clean shutdown file ", e);
+          logger.error("Index : {} error while creating clean shutdown file", dataDir, e);
         }
       }
     } finally {
@@ -1783,7 +1780,7 @@ class PersistentIndex {
     }
     if (checkWithinSingleSegment && !fileSpan.getStartOffset().getName().equals(fileSpan.getEndOffset().getName())) {
       throw new IllegalArgumentException(
-          "The FileSpan provided [" + fileSpan + "] does not lie within a single log " + "segment");
+          "The FileSpan provided [" + fileSpan + "] does not lie within a single log " + "segment" );
     }
   }
 
@@ -2048,7 +2045,7 @@ class PersistentIndex {
       try {
         write();
       } catch (Exception e) {
-        logger.error("Index : " + dataDir + " error while persisting the index to disk ", e);
+        logger.error("Index : {} error while persisting the index to disk", dataDir, e);
       }
     }
   }

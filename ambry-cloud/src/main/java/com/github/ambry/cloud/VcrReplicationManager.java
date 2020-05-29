@@ -151,7 +151,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     }
     ReplicaId cloudReplica = new CloudReplica(partitionId, virtualReplicatorCluster.getCurrentDataNodeId());
     if (!storeManager.addBlobStore(cloudReplica)) {
-      logger.error("Can't start cloudstore for replica " + cloudReplica);
+      logger.error("Can't start cloudstore for replica {}", cloudReplica);
       throw new ReplicationException("Can't start cloudstore for replica " + cloudReplica);
     }
     List<? extends ReplicaId> peerReplicas = cloudReplica.getPeerReplicaIds();
