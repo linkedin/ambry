@@ -39,9 +39,7 @@ class Disk implements DiskId {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   Disk(DataNode dataNode, JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
-    if (logger.isTraceEnabled()) {
-      logger.trace("Disk " + jsonObject.toString());
-    }
+    logger.trace("Disk {}", jsonObject);
     this.dataNode = dataNode;
     this.mountPath = jsonObject.getString("mountPath");
     try {
@@ -50,7 +48,7 @@ class Disk implements DiskId {
               HardwareState.valueOf(jsonObject.getString("hardwareState")), clusterMapConfig);
       this.diskStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     } catch (Exception e) {
-      logger.error("Error creating resource state policy when instantiating a disk " + e);
+      logger.error("Error creating resource state policy when instantiating a disk", e);
       throw new IllegalStateException("Error creating resource state policy when instantiating a disk: " + mountPath,
           e);
     }

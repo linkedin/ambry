@@ -111,9 +111,9 @@ class Journal {
       if (crc != null) {
         recentCrcs.put(key, crc);
       }
-      logger.trace("Journal : " + dataDir + " offset " + offset + " key " + key);
+      logger.trace("Journal : {} offset {} key {}", dataDir, offset, key);
       currentNumberOfEntries.incrementAndGet();
-      logger.trace("Journal : " + dataDir + " number of entries " + currentNumberOfEntries.get());
+      logger.trace("Journal : {} number of entries {}", dataDir, currentNumberOfEntries.get());
     }
   }
 
@@ -169,7 +169,7 @@ class Journal {
       return null;
     }
 
-    logger.trace("Journal : " + dataDir + " entries returned " + journalEntries.size());
+    logger.trace("Journal : {} entries returned {}", dataDir, journalEntries.size());
     return journalEntries;
   }
 

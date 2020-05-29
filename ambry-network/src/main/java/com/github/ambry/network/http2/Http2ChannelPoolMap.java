@@ -45,7 +45,7 @@ public class Http2ChannelPoolMap extends AbstractChannelPoolMap<InetSocketAddres
 
   @Override
   protected ChannelPool newPool(InetSocketAddress inetSocketAddress) {
-    log.trace("New pool created for " + inetSocketAddress);
+    log.trace("New pool created for {}", inetSocketAddress);
     http2ClientMetrics.http2NewPoolCount.inc();
     return new Http2MultiplexedChannelPool(inetSocketAddress, sslFactory, eventLoopGroup, http2ClientConfig,
         http2ClientMetrics);

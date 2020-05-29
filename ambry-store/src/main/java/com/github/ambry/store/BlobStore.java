@@ -901,7 +901,7 @@ public class BlobStore implements Store {
     } catch (IOException e) {
       // if deletion fails, we log here without throwing exception. Next time when server restarts, the store should
       // complete BOOTSTRAP -> STANDBY quickly and attempt to delete this again.
-      logger.error("Failed to delete " + bootstrapFile.getName(), e);
+      logger.error("Failed to delete {}", bootstrapFile.getName(), e);
     }
   }
 
@@ -998,7 +998,7 @@ public class BlobStore implements Store {
     synchronized (storeWriteLock) {
       checkStarted();
       try {
-        logger.info("Store : " + dataDir + " shutting down");
+        logger.info("Store : {} shutting down", dataDir);
         blobStoreStats.close();
         compactor.close(30);
         index.close(skipDiskFlush);
@@ -1006,12 +1006,12 @@ public class BlobStore implements Store {
         metrics.deregisterMetrics(storeId);
         started = false;
       } catch (Exception e) {
-        logger.error("Store : " + dataDir + " shutdown of store failed for directory ", e);
+        logger.error("Store : {} shutdown of store failed for directory ", dataDir, e);
       } finally {
         try {
           fileLock.destroy();
         } catch (IOException e) {
-          logger.error("Store : " + dataDir + " IO Exception while trying to close the file lock", e);
+          logger.error("Store : {} IO Exception while trying to close the file lock", dataDir, e);
         }
         metrics.storeShutdownTimeInMs.update(time.milliseconds() - startTimeInMs);
       }

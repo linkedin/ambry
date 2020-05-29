@@ -162,9 +162,8 @@ public class BlobIdTransformer implements Transformer {
     if (headerFormat.isPutRecord()) {
       if (headerFormat.hasLifeVersion() && headerFormat.getLifeVersion() != oldMessageInfo.getLifeVersion()) {
         // The original Put buffer might have lifeVersion as 0, but the message info might have a higher lifeVersion.
-        logger.trace(
-            "LifeVersion in stream: " + headerFormat.getLifeVersion() + " failed to match lifeVersion from Index: "
-                + oldMessageInfo.getLifeVersion() + " for key " + oldMessageInfo.getStoreKey());
+        logger.trace("LifeVersion in stream: {} failed to match lifeVersion from Index: {} for key {}",
+            headerFormat.getLifeVersion(), oldMessageInfo.getLifeVersion(), oldMessageInfo.getStoreKey());
       }
       ByteBuffer blobEncryptionKey = null;
       if (headerFormat.hasEncryptionKeyRecord()) {

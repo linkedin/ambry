@@ -120,7 +120,7 @@ public class DumpDataTool {
    * @throws Exception
    */
   public void doOperation() throws Exception {
-    logger.info("Type of Operation " + typeOfOperation);
+    logger.info("Type of Operation {}", typeOfOperation);
     switch (typeOfOperation) {
       case "CompareIndexToLog":
         compareIndexEntriesToLogContent(new File(fileToRead), false);
@@ -129,7 +129,7 @@ public class DumpDataTool {
         compareReplicaIndexEntriestoLogContent(replicaRootDirectory);
         break;
       default:
-        logger.error("Unknown typeOfOperation " + typeOfOperation);
+        logger.error("Unknown typeOfOperation {}", typeOfOperation);
         break;
     }
   }
@@ -183,14 +183,14 @@ public class DumpDataTool {
       logger.trace("Record startOffset {} , endOffset {} ", curEntry.getKey(), curEntry.getValue());
       if (prevEntry.getValue().compareTo(curEntry.getKey()) != 0) {
         metrics.logRangeNotFoundInIndexError.inc();
-        logger.error("Cannot find entries in Index ranging from " + prevEntry.getValue() + " to " + curEntry.getKey()
-            + " with a hole of size " + (curEntry.getKey() - prevEntry.getValue()) + " in the Log");
+        logger.error("Cannot find entries in Index ranging from {} to {} with a hole of size {} in the Log",
+            prevEntry.getValue(), curEntry.getKey(), curEntry.getKey() - prevEntry.getValue());
       }
       prevEntry = curEntry;
     }
     if (prevEntry.getValue().compareTo(indexEndOffset) != 0) {
-      logger.error("End offset mismatch. FileEndPointer from the index segment " + indexEndOffset
-          + ", end offset as per records " + prevEntry.getValue());
+      logger.error("End offset mismatch. FileEndPointer from the index segment {}, end offset as per records {}",
+          indexEndOffset, prevEntry.getValue());
     }
   }
 
@@ -257,18 +257,20 @@ public class DumpDataTool {
                       }
                     } catch (IllegalArgumentException e) {
                       metrics.logDeserializationError.inc();
-                      logger.error("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", "
-                          + "while reading blob starting at offset " + originalOffset + " with exception: ", e);
+                      logger.error(
+                          "Illegal arg exception thrown at  {}, while reading blob starting at offset {} with exception: ",
+                          randomAccessFile.getChannel().position(), originalOffset, e);
                     } catch (MessageFormatException e) {
                       metrics.logDeserializationError.inc();
-                      logger.error("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position()
-                          + " while reading blob starting at offset " + originalOffset + " with exception: ", e);
+                      logger.error(
+                          "MessageFormat exception thrown at  {} while reading blob starting at offset {} with exception: ",
+                          randomAccessFile.getChannel().position(), originalOffset, e);
                     } catch (EOFException e) {
                       metrics.endOfFileOnDumpLogError.inc();
-                      logger.error("EOFException thrown at " + randomAccessFile.getChannel().position() + " ", e);
+                      logger.error("EOFException thrown at {} ", randomAccessFile.getChannel().position(), e);
                     } catch (Exception e) {
                       metrics.unknownErrorOnDumpIndex.inc();
-                      logger.error("Unknown exception thrown " + e.getMessage() + " ", e);
+                      logger.error("Unknown exception thrown {} ", e.getMessage(), e);
                     }
                   }
                 }
@@ -327,18 +329,18 @@ public class DumpDataTool {
       return true;
     } catch (IllegalArgumentException e) {
       metrics.logDeserializationError.inc();
-      logger.error("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", "
-          + "while reading blob starting at offset " + offset + " with exception: ", e);
+      logger.error("Illegal arg exception thrown at  {}, while reading blob starting at offset {} with exception: ",
+          randomAccessFile.getChannel().position(), offset, e);
     } catch (MessageFormatException e) {
       metrics.logDeserializationError.inc();
-      logger.error("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position()
-          + " while reading blob starting at offset " + offset + " with exception: ", e);
+      logger.error("MessageFormat exception thrown at  {} while reading blob starting at offset {} with exception: ",
+          randomAccessFile.getChannel().position(), offset, e);
     } catch (EOFException e) {
       metrics.endOfFileOnDumpLogError.inc();
-      logger.error("EOFException thrown at " + randomAccessFile.getChannel().position() + " ", e);
+      logger.error("EOFException thrown at {} ", randomAccessFile.getChannel().position(), e);
     } catch (Exception e) {
       metrics.unknownErrorOnDumpLog.inc();
-      logger.error("Unknown exception thrown " + e.getMessage() + " ", e);
+      logger.error("Unknown exception thrown {} ", e.getMessage(), e);
     } finally {
       context.stop();
     }
@@ -357,19 +359,18 @@ public class DumpDataTool {
     boolean isExpired = DumpDataHelper.isExpired(indexValue.getExpiresAtMs(), currentTimeInMs);
     if (isDeleted != logBlobRecordInfo.isDeleted) {
       metrics.indexToLogDeleteFlagMisMatchError.inc();
-      logger.error(
-          "Deleted value mismatch for " + logBlobRecordInfo.blobId + " Index value " + isDeleted + ", Log value "
-              + logBlobRecordInfo.isDeleted);
+      logger.error("Deleted value mismatch for {} Index value {}, Log value {}", logBlobRecordInfo.blobId, isDeleted,
+          logBlobRecordInfo.isDeleted);
     } else if (!logBlobRecordInfo.isDeleted && isExpired != logBlobRecordInfo.isExpired) {
       metrics.indexToLogExpiryMisMatchError.inc();
       logger.error(
-          "Expiration value mismatch for " + logBlobRecordInfo.blobId + " Index value " + isExpired + ", Log value "
-              + logBlobRecordInfo.isExpired + ", index expiresAt in ms " + indexValue.getExpiresAtMs()
-              + ", log expiresAt in ms " + logBlobRecordInfo.expiresAtMs);
+          "Expiration value mismatch for {} Index value {}, Log value {}, index expiresAt in ms {}, log expiresAt in ms {}",
+          logBlobRecordInfo.blobId, isExpired, logBlobRecordInfo.isExpired, indexValue.getExpiresAtMs(),
+          logBlobRecordInfo.expiresAtMs);
     } else if (!blobId.equals(logBlobRecordInfo.blobId.getID())) {
       metrics.indexToLogBlobIdMisMatchError.inc();
-      logger.error("BlobId value mismatch for " + logBlobRecordInfo.blobId + " Index value " + blobId + ", Log value "
-          + logBlobRecordInfo.blobId);
+      logger.error("BlobId value mismatch for {} Index value {}, Log value {}", logBlobRecordInfo.blobId, blobId,
+          logBlobRecordInfo.blobId);
     }
   }
 }

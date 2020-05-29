@@ -232,7 +232,7 @@ public class ConcurrencyTestTool {
         while (currentPutCount.get() < totalPutCount) {
           long startTimeInMs = SystemTime.getInstance().milliseconds();
           int burstCount = threadLocalRandom.nextInt(maxParallelRequest) + 1;
-          logger.info("PutThread producing " + burstCount + " times ");
+          logger.info("PutThread producing {} times ", burstCount);
           final CountDownLatch countDownLatch = new CountDownLatch(burstCount);
           final AtomicInteger failureCount = new AtomicInteger(0);
           for (int j = 0; j < burstCount; j++) {
@@ -257,7 +257,7 @@ public class ConcurrencyTestTool {
           countDownLatch.await(5, TimeUnit.MINUTES);
           metricsCollector.updateTimePassedSoFar(SystemTime.getInstance().milliseconds() - startTimeInMs);
           if (failureCount.get() > maxFailuresPerPutBatchToStopPuts) {
-            logger.error(failureCount.get() + "  failures during this batch, hence exiting the Put Thread");
+            logger.error("{}  failures during this batch, hence exiting the Put Thread", failureCount.get());
             break;
           }
           Thread.sleep(threadLocalRandom.nextLong(sleepTimeBetweenBatchPutsInMs));
@@ -268,8 +268,7 @@ public class ConcurrencyTestTool {
         putComplete.set(true);
         metricsCollector.reportMetrics();
       }
-      logger.info(
-          "Exiting Producer. Current Put Count " + currentPutCount.get() + ", total Put Count " + totalPutCount);
+      logger.info("Exiting Producer. Current Put Count {}, total Put Count {}", currentPutCount.get(), totalPutCount);
     }
   }
 
@@ -362,13 +361,13 @@ public class ConcurrencyTestTool {
               }
             }
 
-            logger.info("Get thread fetching " + blobCountPerBatch + " blobs for this phase ");
+            logger.info("Get thread fetching {} blobs for this phase ", blobCountPerBatch);
             final CountDownLatch countDownLatchForBatch = new CountDownLatch(blobCountPerBatch);
             final AtomicInteger failureCount = new AtomicInteger(0);
             for (Pair<BlobAccessInfo, Integer> blobAccessInfoBurstCountPair : blobInfoBurstCountPairList) {
               int burstCount = blobAccessInfoBurstCountPair.getSecond();
               final BlobAccessInfo blobAccessInfo = blobAccessInfoBurstCountPair.getFirst();
-              logger.trace("Get Thread fetching " + blobAccessInfo.blobId + " " + burstCount + " times ");
+              logger.trace("Get Thread fetching {} {} times ", blobAccessInfo.blobId, burstCount);
               final CountDownLatch countDownLatch = new CountDownLatch(burstCount);
               for (int j = 0; j < burstCount; j++) {
                 Callback<Void> callback = new Callback<Void>() {
@@ -381,7 +380,7 @@ public class ConcurrencyTestTool {
                       countDownLatchForBatch.countDown();
                     }
                     if (exception != null) {
-                      logger.error("Get and validation of " + blobAccessInfo.blobId + " failed with ", exception);
+                      logger.error("Get and validation of {} failed with ", blobAccessInfo.blobId, exception);
                       failureCount.incrementAndGet();
                     }
                   }
@@ -397,7 +396,7 @@ public class ConcurrencyTestTool {
               deleteBlobIds.addAll(toBeDeletedBlobsPerBatch);
             }
             if (failureCount.get() > maxFailuresPerGetBatch) {
-              logger.error(failureCount.get() + "  failures during this batch, hence exiting the GetThread");
+              logger.error("{}  failures during this batch, hence exiting the GetThread", failureCount.get());
               break;
             }
           }
@@ -438,16 +437,16 @@ public class ConcurrencyTestTool {
           if (blobIdStr != null) {
             final long startTimeInMs = SystemTime.getInstance().milliseconds();
             deletedCount.incrementAndGet();
-            logger.trace("Deleting blob " + blobIdStr);
+            logger.trace("Deleting blob {}", blobIdStr);
             Callback<Void> callback = new Callback<Void>() {
 
               @Override
               public void onCompletion(Void result, Exception exception) {
                 metricsCollector.updateTimePassedSoFar(SystemTime.getInstance().milliseconds() - startTimeInMs);
-                logger.trace("Deletion completed for " + blobIdStr);
+                logger.trace("Deletion completed for {}", blobIdStr);
                 countDownLatch.countDown();
                 if (exception != null) {
-                  logger.error("Deletion of " + blobIdStr + " failed with ", exception);
+                  logger.error("Deletion of {} failed with ", blobIdStr, exception);
                 }
               }
             };
@@ -630,8 +629,8 @@ public class ConcurrencyTestTool {
           public void onCompletion(String result, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().milliseconds() - startTimeInMs;
             metricsCollector.updateLatency(latencyPerBlob);
-            logger.trace(" Time taken to put blob id " + result + " in ms " + latencyPerBlob + " for blob of size "
-                + blob.length);
+            logger.trace(" Time taken to put blob id {} in ms {} for blob of size {}", result, latencyPerBlob,
+                blob.length);
             Exception exceptionToReturn = null;
             Pair<String, byte[]> toReturn = null;
             if (result != null) {
@@ -674,31 +673,31 @@ public class ConcurrencyTestTool {
           @Override
           public void onCompletion(GetBlobResult getBlobResult, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().milliseconds() - startTimeGetBlobMs;
-            logger.trace("Time taken to get blob " + blobIdStr + " in ms " + latencyPerBlob);
+            logger.trace("Time taken to get blob {} in ms {}", blobIdStr, latencyPerBlob);
             Exception exceptionToReturn = null;
             if (getBlobResult != null) {
-              logger.trace("OnCompletion returned for blob " + blobIdStr + " with non null result ");
+              logger.trace("OnCompletion returned for blob {} with non null result ", blobIdStr);
               Thread compareThread = new Thread(
                   new CompareRunnable(blobIdStr, blobContent, getBlobResult.getBlobDataChannel(), futureResult,
                       callback, metricsCollector, startTimeGetBlobMs));
               Utils.newThread(compareThread, true).start();
             } else {
-              logger.trace("OnCompletion returned for blob " + blobIdStr + " with exception ");
+              logger.trace("OnCompletion returned for blob {} with exception ", blobIdStr);
               if (exception instanceof RouterException) {
                 RouterException routerException = (RouterException) exception;
                 if (expectedErrorCode != null) {
                   if (!expectedErrorCode.equals(routerException.getErrorCode())) {
-                    logger.error("Error code mismatch. Expected " + expectedErrorCode + ", actual "
-                        + routerException.getErrorCode());
+                    logger.error("Error code mismatch. Expected {}, actual {}", expectedErrorCode,
+                        routerException.getErrorCode());
                     exceptionToReturn = exception;
                   }
                 } else {
-                  logger.trace("RouterException thrown with error code " + routerException.getErrorCode() + " "
-                      + "when no exception was expected for " + blobIdStr);
+                  logger.trace("RouterException thrown with error code {} when no exception was expected for {}",
+                      routerException.getErrorCode(), blobIdStr);
                   exceptionToReturn = exception;
                 }
               } else {
-                logger.trace("UnknownException thrown for " + blobIdStr);
+                logger.trace("UnknownException thrown for {}", blobIdStr);
                 exceptionToReturn = exception;
               }
               futureResult.done(null, exceptionToReturn);
@@ -813,10 +812,10 @@ public class ConcurrencyTestTool {
           public void onCompletion(Void result, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().milliseconds() - startTimeGetBlobInMs;
             metricsCollector.updateLatency(latencyPerBlob);
-            logger.trace(" Time taken to delete blob " + blobId + " in ms " + latencyPerBlob);
+            logger.trace(" Time taken to delete blob {} in ms {}", blobId, latencyPerBlob);
             final AtomicReference<Exception> exceptionToReturn = new AtomicReference<>();
             if (exception == null) {
-              logger.trace("Deletion of " + blobId + " succeeded. Issuing Get to confirm the deletion ");
+              logger.trace("Deletion of {} succeeded. Issuing Get to confirm the deletion ", blobId);
               getBlobAndValidate(blobId, null, RouterErrorCode.BlobDeleted, new Callback<GetBlobResult>() {
                 @Override
                 public void onCompletion(GetBlobResult getBlobResult, Exception exception) {
@@ -879,7 +878,7 @@ public class ConcurrencyTestTool {
       try {
         long startTime = System.currentTimeMillis();
         router.close();
-        logger.info("Router shutdown took " + (System.currentTimeMillis() - startTime) + " ms");
+        logger.info("Router shutdown took {} ms", System.currentTimeMillis() - startTime);
       } catch (IOException e) {
         e.printStackTrace();
       }

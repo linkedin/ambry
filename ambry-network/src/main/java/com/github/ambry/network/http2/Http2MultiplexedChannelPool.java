@@ -341,7 +341,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
     multiplexedChannel.closeAndReleaseChild(childChannel);
 
     if (multiplexedChannel.canBeClosedAndReleased()) {
-      log.debug("Parent channel closed: " + parentChannel.remoteAddress());
+      log.debug("Parent channel closed: {}", parentChannel.remoteAddress());
       // We just closed the last stream in a connection that has reached the end of its life.
       return closeAndReleaseParent(parentChannel, null, promise);
     }
@@ -389,7 +389,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
   }
 
   public void handleGoAway(Channel parentChannel, int lastStreamId, GoAwayException exception) {
-    log.debug("Received GOAWAY on " + parentChannel + " with lastStreamId of " + lastStreamId);
+    log.debug("Received GOAWAY on {} with lastStreamId of {}", parentChannel, lastStreamId);
     try {
       MultiplexedChannelRecord multiplexedChannel = parentChannel.attr(MULTIPLEXED_CHANNEL).get();
 
@@ -400,7 +400,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
         closeAndReleaseParent(parentChannel);
       }
     } catch (Exception e) {
-      log.error("Failed to handle GOAWAY frame on channel " + parentChannel, e);
+      log.error("Failed to handle GOAWAY frame on channel {}", parentChannel, e);
     }
   }
 

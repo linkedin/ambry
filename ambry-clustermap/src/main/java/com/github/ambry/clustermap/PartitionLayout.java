@@ -60,7 +60,7 @@ class PartitionLayout {
   public PartitionLayout(HardwareLayout hardwareLayout, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
     if (logger.isTraceEnabled()) {
-      logger.trace("PartitionLayout " + hardwareLayout + ", " + jsonObject.toString());
+      logger.trace("PartitionLayout {}, {}", hardwareLayout, jsonObject.toString());
     }
     this.hardwareLayout = hardwareLayout;
     this.localDatacenterName = clusterMapConfig.clusterMapDatacenterName;
@@ -85,7 +85,7 @@ class PartitionLayout {
    */
   public PartitionLayout(HardwareLayout hardwareLayout, ClusterMapConfig clusterMapConfig) {
     if (logger.isTraceEnabled()) {
-      logger.trace("PartitionLayout " + hardwareLayout);
+      logger.trace("PartitionLayout {}", hardwareLayout);
     }
     this.hardwareLayout = hardwareLayout;
     this.localDatacenterName = clusterMapConfig.clusterMapDatacenterName;

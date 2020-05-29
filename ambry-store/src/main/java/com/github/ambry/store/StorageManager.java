@@ -189,7 +189,7 @@ public class StorageManager implements StoreManager {
             diskManager.start();
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            logger.error("Disk manager startup thread interrupted for disk " + diskManager.getDisk(), e);
+            logger.error("Disk manager startup thread interrupted for disk {}", diskManager.getDisk(), e);
           }
         }, false);
         thread.start();
@@ -303,7 +303,7 @@ public class StorageManager implements StoreManager {
             diskManager.shutdown();
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            logger.error("Disk manager shutdown thread interrupted for disk " + diskManager.getDisk(), e);
+            logger.error("Disk manager shutdown thread interrupted for disk {}", diskManager.getDisk(), e);
           }
         }, false);
         thread.start();
@@ -334,7 +334,7 @@ public class StorageManager implements StoreManager {
       try {
         newDiskManager.start();
       } catch (Exception e) {
-        logger.error("Error while starting the new DiskManager for " + disk.getMountPath(), e);
+        logger.error("Error while starting the new DiskManager for {}", disk.getMountPath(), e);
         return null;
       }
       return newDiskManager;
@@ -521,7 +521,7 @@ public class StorageManager implements StoreManager {
             logger.info("Decommission file is created for replica {}", replica.getReplicaPath());
           }
         } catch (IOException e) {
-          logger.error("IOException occurs when creating decommission file for replica " + partitionName, e);
+          logger.error("IOException occurs when creating decommission file for replica {}", partitionName, e);
           throw new StateTransitionException(
               "Couldn't create decommission file for replica " + replica.getReplicaPath(), ReplicaOperationFailure);
         }

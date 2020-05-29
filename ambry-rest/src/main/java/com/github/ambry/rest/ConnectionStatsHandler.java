@@ -40,7 +40,7 @@ public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
 
   @Override
   public void channelActive(ChannelHandlerContext ctx) throws Exception {
-    logger.trace("Channel Active " + ctx.channel().remoteAddress());
+    logger.trace("Channel Active {}", ctx.channel().remoteAddress());
     metrics.connectionsConnectedCount.inc();
     openConnections.incrementAndGet();
     logHandshakeStatus(ctx);
@@ -49,7 +49,7 @@ public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
 
   @Override
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-    logger.trace("Channel Inactive " + ctx.channel().remoteAddress());
+    logger.trace("Channel Inactive {}", ctx.channel().remoteAddress());
     metrics.connectionsDisconnectedCount.inc();
     openConnections.decrementAndGet();
     super.channelInactive(ctx);

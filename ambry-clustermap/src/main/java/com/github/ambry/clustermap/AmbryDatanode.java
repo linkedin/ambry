@@ -122,7 +122,7 @@ abstract class AmbryDataNode implements DataNodeId {
    * @param newState the updated {@link HardwareState}
    */
   void setState(HardwareState newState) {
-    logger.trace("Setting state of instance " + getInstanceName(hostName, getPort()) + " to " + newState);
+    logger.trace("Setting state of instance {} to {}", getInstanceName(hostName, getPort()), newState);
     if (newState == HardwareState.AVAILABLE) {
       resourceStatePolicy.onHardUp();
     } else {

@@ -141,7 +141,7 @@ public class AmbryRequests implements RequestAPI {
           throw new UnsupportedOperationException("Request type not supported");
       }
     } catch (Exception e) {
-      logger.error("Error while handling request " + request + " closing connection", e);
+      logger.error("Error while handling request {} closing connection", request, e);
       requestResponseChannel.closeConnection(request);
     }
   }
@@ -188,8 +188,7 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     } catch (StoreException e) {
-      logger.error("Store exception on a put with error code " + e.getErrorCode() + " for request " + receivedRequest,
-          e);
+      logger.error("Store exception on a put with error code {} for request {}", e.getErrorCode(), receivedRequest, e);
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         metrics.idAlreadyExistError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.IOError) {
@@ -200,7 +199,7 @@ public class AmbryRequests implements RequestAPI {
       response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception on a put for request " + receivedRequest, e);
+      logger.error("Unknown exception on a put for request {}", receivedRequest, e);
       response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
           ServerErrorCode.Unknown_Error);
     } finally {
@@ -331,9 +330,8 @@ public class AmbryRequests implements RequestAPI {
                 ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
             partitionResponseInfoList.add(partitionResponseInfo);
           } catch (MessageFormatException e) {
-            logger.error(
-                "Message format exception on a get with error code " + e.getErrorCode() + " for partitionRequestInfo "
-                    + partitionRequestInfo, e);
+            logger.error("Message format exception on a get with error code {} for partitionRequestInfo {}",
+                e.getErrorCode(), partitionRequestInfo, e);
             if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
               metrics.dataCorruptError.inc();
             } else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version) {
@@ -349,7 +347,7 @@ public class AmbryRequests implements RequestAPI {
       response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), partitionResponseInfoList,
           compositeSend, ServerErrorCode.No_Error);
     } catch (Exception e) {
-      logger.error("Unknown exception for request " + getRequest, e);
+      logger.error("Unknown exception for request {}", getRequest, e);
       response =
           new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.Unknown_Error);
     } finally {
@@ -369,7 +367,7 @@ public class AmbryRequests implements RequestAPI {
         if (isReplicaRequest) {
           metrics.getBlobAllByReplicaProcessingTimeInMs.update(processingTime);
           // client id now has dc name at the end, for example: ClientId=replication-fetch-abc.example.com[dc1]
-          String[] clientStrs = getRequest.getClientId().split("\\[");
+          String[] clientStrs = getRequest.getClientId().split("\\[" );
           if (clientStrs.length > 1) {
             String clientDc = clientStrs[1].substring(0, clientStrs[1].length() - 1);
             if (!currentNode.getDatacenterName().equals(clientDc)) {
@@ -440,7 +438,7 @@ public class AmbryRequests implements RequestAPI {
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception for delete request " + deleteRequest, e);
+      logger.error("Unknown exception for delete request {}", deleteRequest, e);
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
           ServerErrorCode.Unknown_Error);
       metrics.unExpectedStoreDeleteError.inc();
@@ -600,9 +598,8 @@ public class AmbryRequests implements RequestAPI {
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
             metrics.replicaMetadataTotalSizeOfMessages.update(replicaMetadataResponseInfo.getTotalSizeOfAllMessages());
           } catch (StoreException e) {
-            logger.error(
-                "Store exception on a replica metadata request with error code " + e.getErrorCode() + " for partition "
-                    + partitionId, e);
+            logger.error("Store exception on a replica metadata request with error code {} for partition {}",
+                e.getErrorCode(), partitionId, e);
             if (e.getErrorCode() == StoreErrorCodes.IOError) {
               metrics.storeIOError.inc();
             } else {
@@ -621,7 +618,7 @@ public class AmbryRequests implements RequestAPI {
               ServerErrorCode.No_Error, replicaMetadataResponseList,
               ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
     } catch (Exception e) {
-      logger.error("Unknown exception for request " + replicaMetadataRequest, e);
+      logger.error("Unknown exception for request {}", replicaMetadataRequest, e);
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
               ServerErrorCode.Unknown_Error,
@@ -719,7 +716,7 @@ public class AmbryRequests implements RequestAPI {
             ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
       }
     } catch (Exception e) {
-      logger.error("Unknown exception for undelete request " + undeleteRequest, e);
+      logger.error("Unknown exception for undelete request {}", undeleteRequest, e);
       response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
           ServerErrorCode.Unknown_Error);
       metrics.unExpectedStoreUndeleteError.inc();

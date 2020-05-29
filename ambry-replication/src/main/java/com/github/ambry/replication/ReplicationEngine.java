@@ -344,7 +344,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         if (startThread) {
           Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);
           thread.start();
-          logger.info("Started replica thread " + thread.getName());
+          logger.info("Started replica thread {}", thread.getName());
         }
       } catch (Exception e) {
         throw new RuntimeException("Encountered exception instantiating ReplicaThread", e);
@@ -499,8 +499,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       try {
         persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
       } catch (IOException | ReplicationException e) {
-        logger.error(
-            "Exception " + e + " on token write when removing Partition " + partitionId + " from: " + dataNodeId);
+        logger.error("Exception {} on token write when removing Partition {} from: {}", e, partitionId, dataNodeId);
       }
     }
   }

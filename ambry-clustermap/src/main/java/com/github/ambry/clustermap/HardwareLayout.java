@@ -45,7 +45,7 @@ class HardwareLayout {
 
   public HardwareLayout(JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     if (logger.isTraceEnabled()) {
-      logger.trace("HardwareLayout " + jsonObject.toString());
+      logger.trace("HardwareLayout {}", jsonObject.toString());
     }
     this.clusterName = jsonObject.getString("clusterName");
     this.version = jsonObject.getLong("version");

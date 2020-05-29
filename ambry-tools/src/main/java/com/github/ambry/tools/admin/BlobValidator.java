@@ -223,7 +223,7 @@ public class BlobValidator implements Closeable {
         for (Map.Entry<BlobId, ServerErrorCode> entry : blobIdToErrorCode.entrySet()) {
           ServerErrorCode errorCode = entry.getValue();
           if (!validErrorCodes.contains(errorCode)) {
-            LOGGER.error("[" + entry.getKey() + "] received error code: " + errorCode);
+            LOGGER.error("[{}] received error code: {}", entry.getKey(), errorCode);
           }
         }
         break;
@@ -270,7 +270,7 @@ public class BlobValidator implements Closeable {
       BlobId blobId = entry.getKey();
       List<String> mismatchDetailsList = entry.getValue();
       for (String mismatchDetails : mismatchDetailsList) {
-        LOGGER.error("[" + blobId + "] : " + mismatchDetails);
+        LOGGER.error("[{}] : {}", blobId, mismatchDetails);
       }
     }
   }
