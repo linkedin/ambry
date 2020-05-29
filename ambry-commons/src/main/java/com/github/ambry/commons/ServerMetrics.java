@@ -431,9 +431,9 @@ public class ServerMetrics {
     }
 
     securityServiceValidateConnectionTimeInMs =
-        registry.histogram(MetricRegistry.name(serverClass, "securityServiceValidateConnectionTimeInMs"));
+        registry.histogram(MetricRegistry.name(requestClass, "securityServiceValidateConnectionTimeInMs"));
     securityServiceValidateRequestTimeInMs =
-        registry.histogram(MetricRegistry.name(serverClass, "securityServiceValidateRequestTimeInMs"));
+        registry.histogram(MetricRegistry.name(requestClass, "securityServiceValidateRequestTimeInMs"));
 
 
     putBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutBlobRequestRate"));
@@ -465,9 +465,9 @@ public class ServerMetrics {
     getLargeBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetLargeBlobRequestRate"));
 
     securityServiceValidateConnectionRate =
-        registry.meter(MetricRegistry.name(serverClass, "securityServiceValidateConnectionRate"));
+        registry.meter(MetricRegistry.name(requestClass, "securityServiceValidateConnectionRate"));
     securityServiceValidateRequestRate =
-        registry.meter(MetricRegistry.name(serverClass, "securityServiceValidateRequestRate"));
+        registry.meter(MetricRegistry.name(requestClass, "securityServiceValidateRequestRate"));
 
 
     partitionUnknownError = registry.counter(MetricRegistry.name(requestClass, "PartitionUnknownError"));
