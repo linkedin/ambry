@@ -221,7 +221,6 @@ public class RestUtils {
      * The lifeVersion of the blob.
      */
     public final static String LIFE_VERSION = "x-ambry-life-version";
-
   }
 
   public static final class TrackingHeaders {
@@ -297,6 +296,11 @@ public class RestUtils {
      * The key for the {@link RequestPath} that represents the parsed path of an incoming request.
      */
     public static final String REQUEST_PATH = KEY_PREFIX + "request-path";
+
+    /**
+     * To be set to {@code true} if failures reason should be attached to frontend responses.
+     */
+    public static final String SEND_FAILURE_REASON = KEY_PREFIX + "send-failure-reason";
   }
 
   /**

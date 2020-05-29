@@ -150,6 +150,8 @@ public class NettyResponseChannelTest {
       String returnedContent = RestTestUtils.getContentString(responseContent);
       responseContent.release();
       assertEquals("Content does not match with expected content", lastContent, returnedContent);
+      // When the Transfer-Encoding is Chunked, response channel would send the last http content in the request as
+      // regular http content and then send an empty last http content after that.
       assertTrue("Did not receive end marker", channel.readOutbound() instanceof LastHttpContent);
       assertEquals("Unexpected channel state on the server", isKeepAlive, channel.isActive());
     }
@@ -234,6 +236,8 @@ public class NettyResponseChannelTest {
           assertArrayEquals("Content does not match with expected content", MockNettyMessageProcessor.CHUNK,
               returnedContent);
         }
+        // When we know the content-length, the last httpContent would be an instance of LastHttpContent and there is no
+        // empty last http content following it.
         // the last HttpContent should also be an instance of LastHttpContent
         assertTrue("The last part of the content is not LastHttpContent", httpContent instanceof LastHttpContent);
       }
@@ -425,6 +429,36 @@ public class NettyResponseChannelTest {
     assertFalse("Channel not closed on the server", channel.isActive());
 
     checkHeaders(request, response);
+  }
+
+  /**
+   * Tests when setting internal send-failure-reason back to client.
+   * @throws Exception
+   */
+  @Test
+  public void setFailureReasonInResponseTest() throws Exception {
+    HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.SetFailureReasonInResponse.toString());
+    HttpUtil.setKeepAlive(request, false);
+
+    EmbeddedChannel channel = createEmbeddedChannel();
+    channel.writeInbound(request);
+
+    HttpResponse response = channel.readOutbound();
+    assertEquals(HttpResponseStatus.INTERNAL_SERVER_ERROR, response.status());
+    assertEquals(TestingUri.SetFailureReasonInResponse.toString(),
+        response.headers().get(NettyResponseChannel.FAILURE_REASON_HEADER));
+    assertFalse("Channel not closed on the server", channel.isActive());
+
+    request = createRequestWithHeaders(HttpMethod.GET, TestingUri.SetFailureReasonInResponseWithException.toString());
+    HttpUtil.setKeepAlive(request, false);
+
+    channel = createEmbeddedChannel();
+    channel.writeInbound(request);
+
+    response = channel.readOutbound();
+    assertEquals(HttpResponseStatus.INTERNAL_SERVER_ERROR, response.status());
+    assertFalse(response.headers().contains(NettyResponseChannel.FAILURE_REASON_HEADER));
+    assertFalse("Channel not closed on the server", channel.isActive());
   }
 
   /**
@@ -696,8 +730,7 @@ public class NettyResponseChannelTest {
             httpHeaders, content.getBytes());
     channel.writeInbound(httpRequest);
     HttpResponse response = channel.readOutbound();
-    assertEquals("Unexpected response status", getExpectedHttpResponseStatus(REST_ERROR_CODE),
-        response.status());
+    assertEquals("Unexpected response status", getExpectedHttpResponseStatus(REST_ERROR_CODE), response.status());
     //channel should not be closed right away.
     assertTrue("Channel closed on the server", channel.isActive());
     //wait for delayed time * 2 times (to rule out timing out on border) and then check again.
@@ -1126,7 +1159,6 @@ public class NettyResponseChannelTest {
       assertFalse(httpRequest.method() + " request should be unsatisfied", MockNettyRequest.mockTracker.isSatisfied());
     }
   }
-
 }
 
 /**
@@ -1239,6 +1271,16 @@ enum TestingUri {
    * {@link MockNettyMessageProcessor#CHUNK}
    */
   WriteMoreThanContentLength,
+  /**
+   * When this request is receive, an RestServiceException will be used onResponseComplete and the failure reason should
+   * be returned to client.
+   */
+  SetFailureReasonInResponse,
+  /**
+   * When this request is receive, an Exception will be used onResponseComplete and failure reasons will not be returned
+   * to the client.
+   */
+  SetFailureReasonInResponseWithException,
   /**
    * Catch all TestingUri.
    */
@@ -1473,6 +1515,16 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
           }
           restResponseChannel.onResponseComplete(null);
         }
+        break;
+      case SetFailureReasonInResponse:
+        request.setArg(RestUtils.InternalKeys.SEND_FAILURE_REASON, Boolean.TRUE);
+        restResponseChannel.onResponseComplete(
+            new RestServiceException(TestingUri.SetFailureReasonInResponse.toString(),
+                RestServiceErrorCode.InternalServerError));
+        break;
+      case SetFailureReasonInResponseWithException:
+        request.setArg(RestUtils.InternalKeys.SEND_FAILURE_REASON, Boolean.TRUE);
+        restResponseChannel.onResponseComplete(new Exception(TestingUri.SetFailureReasonInResponse.toString()));
         break;
     }
   }
