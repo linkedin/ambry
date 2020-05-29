@@ -171,8 +171,9 @@ public class AmbryServer {
             new ParticipantsConsistencyChecker(clusterParticipants, metrics);
         logger.info("Scheduling participants consistency checker with a period of {} secs",
             serverConfig.serverParticipantsConsistencyCheckerPeriodSec);
-        consistencyCheckerTask = scheduler.scheduleAtFixedRate(consistencyChecker, 0,
-            serverConfig.serverParticipantsConsistencyCheckerPeriodSec, TimeUnit.SECONDS);
+        consistencyCheckerTask = Utils.newScheduler(1, "consistency-checker-", false)
+            .scheduleAtFixedRate(consistencyChecker, 0, serverConfig.serverParticipantsConsistencyCheckerPeriodSec,
+                TimeUnit.SECONDS);
       }
       logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
       DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);

@@ -358,7 +358,11 @@ public class BlobStore implements Store {
     if (replicaStatusDelegates != null) {
       logger.debug("The current used capacity is {} bytes on store {}", index.getLogUsedCapacity(),
           replicaId.getPartitionId());
-      if (index.getLogUsedCapacity() > thresholdBytesHigh && !replicaId.isSealed()) {
+      // In two zk clusters case, "replicaId.isSealed()" might be true in first cluster but is still unsealed in second
+      // cluster, as server only spectates the first cluster. To guarantee both clusters have consistent seal/unseal
+      // state, we bypass "isSealed()" check if there are more than one replicaStatusDelegates.
+      if (index.getLogUsedCapacity() > thresholdBytesHigh && (!replicaId.isSealed()
+          || replicaStatusDelegates.size() > 1)) {
         for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
           if (!replicaStatusDelegate.seal(replicaId)) {
             metrics.sealSetError.inc();
@@ -370,7 +374,8 @@ public class BlobStore implements Store {
                 replicaId.getPartitionId(), index.getLogUsedCapacity(), thresholdBytesHigh);
           }
         }
-      } else if (index.getLogUsedCapacity() <= thresholdBytesLow && replicaId.isSealed()) {
+      } else if (index.getLogUsedCapacity() <= thresholdBytesLow && (replicaId.isSealed()
+          || replicaStatusDelegates.size() > 1)) {
         for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
           if (!replicaStatusDelegate.unseal(replicaId)) {
             metrics.unsealSetError.inc();

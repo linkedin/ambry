@@ -418,6 +418,10 @@ public class BlobStoreTest {
     store.shutdown();
   }
 
+  /**
+   * Test store is able to correctly seal/unseal replica with multiple participants.
+   * @throws Exception
+   */
   @Test
   public void multiReplicaStatusDelegatesTest() throws Exception {
     List<ReplicaId> sealedReplicas1 = new ArrayList<>();
@@ -451,6 +455,12 @@ public class BlobStoreTest {
     replicaId.setSealedState(true);
     reloadStore(changeThreshold(99, 1, true), replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
     assertTrue("Replica should be unsealed", sealedReplicas1.isEmpty() && sealedReplicas2.isEmpty());
+
+    // verify store still updates sealed lists even though replica state is already sealed. ("replicaId.setSealedState(true)")
+    // lower the threshold to make replica sealed again
+    reloadStore(changeThreshold(50, 5, true), replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
+    assertEquals("Sealed replica lists are different", sealedReplicas1, sealedReplicas2);
+    assertEquals("Sealed replica is not correct", replicaId, sealedReplicas1.get(0));
     store.shutdown();
   }
 
