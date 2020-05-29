@@ -1131,7 +1131,7 @@ public class ReplicaThread implements Runnable {
   }
 
   static class ExchangeMetadataResponse {
-    // Set of messages missing in the local store. MessageInfo contains complete information of the blob metadata like Key info, delete, ttl-update and un-delete values.
+    // Set of messages missing in the local store.
     final Set<MessageInfo> missingStoreMessages;
     final FindToken remoteToken;
     final long localLagFromRemoteInBytes;
@@ -1155,7 +1155,7 @@ public class ReplicaThread implements Runnable {
     /**
      * Utility method to extract store keys from messages
      */
-    public static Set<StoreKey> getStoreKeysFromMessages(Set<MessageInfo> messageInfos) {
+    static Set<StoreKey> getStoreKeysFromMessages(Set<MessageInfo> messageInfos) {
       if (messageInfos != null) {
         return messageInfos.stream().map(MessageInfo::getStoreKey).collect(Collectors.toSet());
       } else {
