@@ -20,6 +20,7 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
+import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,9 +32,12 @@ import org.slf4j.LoggerFactory;
 public class StorageRestRequestService implements RestRequestService {
   private static final Logger logger = LoggerFactory.getLogger(StorageRestRequestService.class);
   NettyServerRequestResponseChannel requestResponseChannel;
+  ServerSecurityService serverSecurityService;
 
-  public StorageRestRequestService(NettyServerRequestResponseChannel requestResponseChannel) {
+  public StorageRestRequestService(NettyServerRequestResponseChannel requestResponseChannel,
+      ServerSecurityService serverSecurityService) {
     this.requestResponseChannel = requestResponseChannel;
+    this.serverSecurityService = serverSecurityService;
   }
 
   @Override
@@ -48,7 +52,14 @@ public class StorageRestRequestService implements RestRequestService {
 
   @Override
   public void shutdown() {
-
+    try {
+      if (serverSecurityService != null) {
+        serverSecurityService.close();
+        serverSecurityService = null;
+      }
+    } catch (IOException e){
+        logger.error("Downstream service close failed", e);
+    }
   }
 
   @Override

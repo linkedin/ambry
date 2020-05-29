@@ -157,6 +157,10 @@ public class ServerMetrics {
   public final Histogram serverStartTimeInMs;
   public final Histogram serverShutdownTimeInMs;
 
+  // AmbryServerSecurityService
+  public final Histogram securityServiceValidateConnectionTimeInMs;
+  public final Histogram securityServiceValidateRequestTimeInMs;
+
   public final Meter putBlobRequestRate;
   public final Meter getBlobRequestRate;
   public final Meter getBlobPropertiesRequestRate;
@@ -182,6 +186,10 @@ public class ServerMetrics {
 
   public final Meter putLargeBlobRequestRate;
   public final Meter getLargeBlobRequestRate;
+
+  // AmbryServerSecurityService
+  public final Meter securityServiceValidateConnectionRate;
+  public final Meter securityServiceValidateRequestRate;
 
   public final Counter partitionUnknownError;
   public final Counter diskUnavailableError;
@@ -422,6 +430,12 @@ public class ServerMetrics {
       serverShutdownTimeInMs = null;
     }
 
+    securityServiceValidateConnectionTimeInMs =
+        registry.histogram(MetricRegistry.name(serverClass, "securityServiceValidateConnectionTimeInMs"));
+    securityServiceValidateRequestTimeInMs =
+        registry.histogram(MetricRegistry.name(serverClass, "securityServiceValidateRequestTimeInMs"));
+
+
     putBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutBlobRequestRate"));
     getBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobRequestRate"));
     getBlobPropertiesRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobPropertiesRequestRate"));
@@ -449,6 +463,12 @@ public class ServerMetrics {
 
     putLargeBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutLargeBlobRequestRate"));
     getLargeBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetLargeBlobRequestRate"));
+
+    securityServiceValidateConnectionRate =
+        registry.meter(MetricRegistry.name(serverClass, "securityServiceValidateConnectionRate"));
+    securityServiceValidateRequestRate =
+        registry.meter(MetricRegistry.name(serverClass, "securityServiceValidateRequestRate"));
+
 
     partitionUnknownError = registry.counter(MetricRegistry.name(requestClass, "PartitionUnknownError"));
     diskUnavailableError = registry.counter(MetricRegistry.name(requestClass, "DiskUnavailableError"));

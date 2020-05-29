@@ -40,6 +40,7 @@ import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.SecurityServiceFactory;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
@@ -230,6 +231,9 @@ public class AmbryServer {
         statsManager.start();
       }
 
+      ServerSecurityServiceFactory serverSecurityServiceFactory =
+          Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, this.metrics);
+
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
       if (nodeId.hasSSLPort()) {
@@ -249,7 +253,7 @@ public class AmbryServer {
         logger.info("Http2 port {} is enabled. Starting HTTP/2 service. ", nodeId.getHttp2Port());
         RestServerConfig restServerConfig = new RestServerConfig(properties);
         NettyServerRequestResponseChannel requestResponseChannel = new NettyServerRequestResponseChannel(32);
-        RestRequestService restRequestService = new StorageRestRequestService(requestResponseChannel);
+        RestRequestService restRequestService = new StorageRestRequestService(requestResponseChannel, serverSecurityServiceFactory.getServerSecurityService());
 
         AmbryServerRequests ambryServerRequestsForHttp2 =
             new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
@@ -267,7 +271,7 @@ public class AmbryServer {
 
         NioServerFactory nioServerFactory =
             new StorageServerNettyFactory(nodeId.getHttp2Port(), properties, registry, restRequestHandlerForHttp2,
-                sslFactory);
+                sslFactory, serverSecurityServiceFactory.getServerSecurityService());
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
       }

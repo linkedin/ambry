@@ -19,6 +19,7 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
+import com.github.ambry.server.ServerSecurityService;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.WriteBufferWaterMark;
@@ -45,6 +46,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
   private final ConnectionStatsHandler connectionStatsHandler;
   private final RestRequestHandler requestHandler;
   private final SSLFactory sslFactory;
+  private final ServerSecurityChecker serverSecurityChecker;
 
   /**
    * Construct a {@link StorageServerNettyChannelInitializer}.
@@ -59,7 +61,8 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
    */
   public StorageServerNettyChannelInitializer(NettyConfig nettyConfig, Http2ClientConfig http2ClientConfig,
       PerformanceConfig performanceConfig, NettyMetrics nettyMetrics, ConnectionStatsHandler connectionStatsHandler,
-      RestRequestHandler requestHandler, SSLFactory sslFactory, MetricRegistry metricRegistry) {
+      RestRequestHandler requestHandler, SSLFactory sslFactory, MetricRegistry metricRegistry,
+      ServerSecurityChecker serverSecurityChecker) {
     this.nettyConfig = nettyConfig;
     this.performanceConfig = performanceConfig;
     this.http2ClientConfig = http2ClientConfig;
@@ -70,6 +73,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     this.connectionStatsHandler = connectionStatsHandler;
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     this.requestHandler = requestHandler;
+    this.serverSecurityChecker = serverSecurityChecker;
   }
 
   @Override
@@ -93,6 +97,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     int peerPort = peerAddress.getPort();
     SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(peerHost, peerPort, SSLFactory.Mode.SERVER));
     pipeline.addLast("SslHandler", sslHandler);
+    pipeline.addLast("securityChecker", this.serverSecurityChecker);
     pipeline.addLast(Http2FrameCodecBuilder.forServer()
         .initialSettings(Http2Settings.defaultSettings()
             .maxFrameSize(http2ClientConfig.http2FrameMaxSize)
