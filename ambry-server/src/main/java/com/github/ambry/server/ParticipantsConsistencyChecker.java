@@ -39,20 +39,20 @@ public class ParticipantsConsistencyChecker implements Runnable {
 
   @Override
   public void run() {
-    logger.info("Participant consistency checker is initiated. Participants count = {}", participants.size());
+    logger.debug("Participant consistency checker is initiated. Participants count = {}", participants.size());
     try {
       // when code reaches here, it means there are at least two participants.
       ClusterParticipant clusterParticipant = participants.get(0);
       Set<String> sealedReplicas1 = new HashSet<>(clusterParticipant.getSealedReplicas());
       Set<String> stoppedReplicas1 = new HashSet<>(clusterParticipant.getStoppedReplicas());
       for (int i = 1; i < participants.size(); ++i) {
-        logger.info("Checking sealed replica list");
+        logger.debug("Checking sealed replica list");
         Set<String> sealedReplicas2 = new HashSet<>(participants.get(i).getSealedReplicas());
         if (!sealedReplicas1.equals(sealedReplicas2)) {
           logger.warn("Mismatch in sealed replicas. Set {} is different from set {}", sealedReplicas1, sealedReplicas2);
           metrics.sealedReplicasMismatchCount.inc();
         }
-        logger.info("Checking stopped replica list");
+        logger.debug("Checking stopped replica list");
         Set<String> stoppedReplicas2 = new HashSet<>(participants.get(i).getStoppedReplicas());
         if (!stoppedReplicas1.equals(stoppedReplicas2)) {
           logger.warn("Mismatch in stopped replicas. Set {} is different from set {}", stoppedReplicas1,
