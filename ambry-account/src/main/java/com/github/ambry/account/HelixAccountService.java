@@ -352,18 +352,19 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    * from {@link StatsSnapshot} and select the ones with zero data size to be marked as INACTIVE.
    */
   Set<Container> selectInvalidContainerCandidates(StatsSnapshot statsSnapshot) {
-    Map<String, Set<String>> accountToContainerMap = new HashMap<>();
     Set<Container> invalidContainerCandidateSet = new HashSet<>();
-    getValidContainers(accountToContainerMap, statsSnapshot, null);
-    Set<Container> deleteInProgressContainerSet = getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS);
-    for (Container container : deleteInProgressContainerSet) {
-      String containerIdToString = "C[" + container.getId() + "]";
-      String accountIdToString = "A[" + container.getParentAccountId() + "]";
-      if (accountToContainerMap.containsKey(accountIdToString) && accountToContainerMap.get(accountIdToString)
-          .contains(containerIdToString)) {
-        logger.info("Container {} has not been deleted yet", container);
-      } else {
-        invalidContainerCandidateSet.add(container);
+    if (statsSnapshot != null) {
+      Map<String, Set<String>> accountToContainerMap = new HashMap<>();
+      getValidContainers(accountToContainerMap, statsSnapshot, null);
+      Set<Container> deleteInProgressContainerSet = getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS);
+      for (Container container : deleteInProgressContainerSet) {
+        String containerIdToString = "C[" + container.getId() + "]";
+        String accountIdToString = "A[" + container.getParentAccountId() + "]";
+        if (accountToContainerMap.containsKey(accountIdToString) && accountToContainerMap.get(accountIdToString).contains(containerIdToString)) {
+          logger.info("Container {} has not been deleted yet", container);
+        } else {
+          invalidContainerCandidateSet.add(container);
+        }
       }
     }
     return invalidContainerCandidateSet;

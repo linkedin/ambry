@@ -16,7 +16,6 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -38,6 +37,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.Callback;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -1351,7 +1351,7 @@ public class StorageManagerTest {
     }
 
     @Override
-    public void participate(List<AmbryHealthReport> ambryHealthReports, AccountService accountService) throws IOException {
+    public void participate(List<AmbryHealthReport> ambryHealthReports, Callback callback) throws IOException {
       // no op
     }
 

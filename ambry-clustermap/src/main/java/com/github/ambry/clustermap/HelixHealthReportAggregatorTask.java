@@ -14,7 +14,7 @@
 
 package com.github.ambry.clustermap;
 
-import com.github.ambry.account.AccountService;
+import com.github.ambry.router.Callback;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
@@ -51,7 +51,7 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
   private final String healthReportName;
   private final String statsFieldName;
   private final StatsReportType statsReportType;
-  private final AccountService accountService;
+  public final Callback callback;
   private static final Logger logger = LoggerFactory.getLogger(HelixHealthReportAggregatorTask.class);
 
   /**
@@ -64,17 +64,19 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
    * @param statsReportType the type of stats report
    */
   HelixHealthReportAggregatorTask(TaskCallbackContext context, long relevantTimePeriodInMs, String healthReportName,
-      String statsFieldName, StatsReportType statsReportType, AccountService accountService) {
+      String statsFieldName, StatsReportType statsReportType, Callback callback) {
     manager = context.getManager();
     clusterAggregator = new HelixClusterAggregator(relevantTimePeriodInMs);
     this.healthReportName = healthReportName;
     this.statsFieldName = statsFieldName;
     this.statsReportType = statsReportType;
-    this.accountService = accountService;
+    this.callback = callback;
   }
 
   @Override
   public TaskResult run() {
+    Pair<StatsSnapshot, StatsSnapshot> results = null;
+    Exception exception = null;
     try {
       HelixDataAccessor helixDataAccessor = manager.getHelixDataAccessor();
       List<String> instanceNames = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
@@ -87,7 +89,7 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
         }
       }
       ObjectMapper mapper = new ObjectMapper();
-      Pair<StatsSnapshot, StatsSnapshot> results = clusterAggregator.doWork(statsWrappersJSON, statsReportType);
+      results = clusterAggregator.doWork(statsWrappersJSON, statsReportType);
       String resultId = String.format("Aggregated_%s", healthReportName);
       ZNRecord znRecord = new ZNRecord(resultId);
       znRecord.setSimpleField(RAW_VALID_SIZE_FIELD_NAME, mapper.writeValueAsString(results.getFirst()));
@@ -97,13 +99,15 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
           clusterAggregator.getExceptionOccurredInstances(statsReportType));
       String path = String.format("/%s", resultId);
       manager.getHelixPropertyStore().set(path, znRecord, AccessOption.PERSISTENT);
-      if (statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
-        accountService.selectInvalidContainersAndMarkInZK(results.getFirst());
-      }
       return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
     } catch (Exception e) {
       logger.error("Exception thrown while aggregating stats from health reports across all nodes ", e);
+      exception = e;
       return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
+    } finally {
+      if (callback != null && results != null && statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
+        callback.onCompletion(results.getFirst(), exception);
+      }
     }
   }
 
