@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
 import java.util.Map;
 
@@ -23,8 +22,8 @@ import java.util.Map;
  */
 public class DummyCloudUpdateValidator implements CloudUpdateValidator {
   @Override
-  public void validateUpdate(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
-      throws StoreException {
+  public boolean validateUpdate(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields) {
     // no op
+    return true;
   }
 }
