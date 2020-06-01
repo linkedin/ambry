@@ -14,7 +14,6 @@
 package com.github.ambry.tools.admin;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageCompactor;
 import com.github.ambry.cloud.VcrMetrics;
@@ -31,7 +30,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -94,22 +92,8 @@ public class AzureCompactionTool {
       }));
 
       if (testMode) {
-        String partitionPath = partitions.get(0);
-        long now = System.currentTimeMillis();
-        CloudBlobMetadata blobMetadata = compactor.getOldestDeletedBlob(partitionPath);
-        if (blobMetadata == null) {
-          logger.info("No deleted blobs need purging");
-        } else {
-          int daysOld = (int) ((now - blobMetadata.getDeletionTime()) / TimeUnit.DAYS.toMillis(1));
-          logger.info("Oldest deleted blob was deleted about {} days ago: {}", daysOld, blobMetadata.toMap());
-        }
-        blobMetadata = compactor.getOldestExpiredBlob(partitionPath);
-        if (blobMetadata == null) {
-          logger.info("No expired blobs need purging");
-        } else {
-          int daysOld = (int) ((now - blobMetadata.getExpirationTime()) / TimeUnit.DAYS.toMillis(1));
-          logger.info("Oldest expired blob was expired about {} days ago: {}", daysOld, blobMetadata.toMap());
-        }
+        // TODO: once we have Cosmos compactionCheckpoint table, can query it and dump results into sortable table.
+        // Probably need to move this class to com.github.ambry.cloud.azure package.
       } else {
         compactor.compactPartitions();
       }
