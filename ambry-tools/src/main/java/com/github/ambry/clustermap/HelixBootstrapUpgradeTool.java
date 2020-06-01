@@ -252,12 +252,12 @@ public class HelixBootstrapUpgradeTool {
       ToolUtils.ensureOrExit(listOpt, options, parser);
       String[] adminTypes = adminConfigStr.replaceAll("\\p{Space}", "").split(",");
       HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix, dcs, options.has(forceRemove), new HelixAdminFactory(), adminTypes, adminConfigFilePath);
+          clusterNamePrefix, dcs, options.has(forceRemove), adminTypes, adminConfigFilePath);
     } else if (options.has(addStateModel)) {
       listOpt.add(stateModelDefinitionOpt);
       ToolUtils.ensureOrExit(listOpt, options, parser);
       HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix, dcs, new HelixAdminFactory(), stateModelDef);
+          clusterNamePrefix, dcs, stateModelDef);
     } else {
       // The default operation is BootstrapCluster (if not specified)
       HelixAdminOperation operation = adminOpStr == null ? BootstrapCluster : HelixAdminOperation.valueOf(adminOpStr);
@@ -266,27 +266,28 @@ public class HelixBootstrapUpgradeTool {
       switch (operation) {
         case ValidateCluster:
           HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
-              dcs, new HelixAdminFactory(), stateModelDef);
+              dcs, stateModelDef);
           break;
         case ResetPartition:
         case EnablePartition:
           HelixBootstrapUpgradeUtil.controlPartitionState(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-              clusterNamePrefix, dcs, new HelixAdminFactory(), hostname, portNum, operation, partitionName);
+              clusterNamePrefix, dcs, hostname, portNum, operation, partitionName);
           break;
         case DisablePartition:
-          // we allow users not to specify hostname and partition name if they would like to disable multiple partitions
-          // concurrently. Hence, if hostname and partition name are empty, the tool goes to default branch and extracts
-          // removed replicas in static clustermap to disable them automatically.
+          // if user specifies hostname and partition name, tool directly disables this partition on given node without
+          // parsing partitions from clustermap.
           if (hostname != null && partitionName != null) {
             HelixBootstrapUpgradeUtil.controlPartitionState(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-                clusterNamePrefix, dcs, new HelixAdminFactory(), hostname, portNum, operation, partitionName);
+                clusterNamePrefix, dcs, hostname, portNum, operation, partitionName);
             break;
           }
-          // else go to default branch
+          // if user would like to disable multiple partitions concurrently, then hostname and partition name can be empty,
+          // the tool goes to default branch and extracts removed replicas from static clustermap to disable them
+          // automatically.
         default:
           HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-              clusterNamePrefix, dcs, maxPartitionsInOneResource, options.has(dryRun), options.has(forceRemove),
-              new HelixAdminFactory(), !options.has(disableValidatingClusterManager), stateModelDef, operation);
+              clusterNamePrefix, dcs, maxPartitionsInOneResource, options.has(dryRun), options.has(forceRemove), null,
+              !options.has(disableValidatingClusterManager), stateModelDef, operation);
       }
     }
     System.out.println("======== HelixBootstrapUpgradeTool completed successfully! ========");
