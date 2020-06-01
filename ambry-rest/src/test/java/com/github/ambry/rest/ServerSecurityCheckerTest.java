@@ -42,6 +42,7 @@ public class ServerSecurityCheckerTest {
   private static final SslContext SSL_CONTEXT;
 
   private ServerSecurityService serverSecurityService;
+
   static {
     try {
       PEER_CERT = new SelfSignedCertificate().cert();
@@ -63,7 +64,7 @@ public class ServerSecurityCheckerTest {
     //success case, channel should not be closed.
     EmbeddedChannel channel = createChannelSsl();
     SslHandler sslHandler = channel.pipeline().get(SslHandler.class);
-    Promise<Channel> promise = (Promise<Channel>)sslHandler.handshakeFuture();
+    Promise<Channel> promise = (Promise<Channel>) sslHandler.handshakeFuture();
     promise.setSuccess(channel);
     Assert.assertTrue("channel should not be closed", channel.isActive());
 
@@ -71,7 +72,7 @@ public class ServerSecurityCheckerTest {
     serverSecurityService.close();
     channel = createChannelSsl();
     sslHandler = channel.pipeline().get(SslHandler.class);
-    promise = (Promise<Channel>)sslHandler.handshakeFuture();
+    promise = (Promise<Channel>) sslHandler.handshakeFuture();
     promise.setSuccess(channel);
     Assert.assertTrue("channel should be closed", !channel.isActive());
   }

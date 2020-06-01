@@ -73,8 +73,8 @@ public class AmbryServerSecurityServiceTest {
   @Test
   public void validateRequestTest() throws Exception {
     //request is null
-    TestUtils.assertException(IllegalArgumentException.class, () -> serverSecurityService.validateRequest(null).get(),
-        null);
+    TestUtils.assertException(IllegalArgumentException.class, () -> serverSecurityService.validateRequest(
+        null).get(), null);
 
     //success case
     RestRequest request = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);

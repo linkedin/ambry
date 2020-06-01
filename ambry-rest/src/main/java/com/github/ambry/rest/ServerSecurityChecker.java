@@ -36,7 +36,8 @@ public class ServerSecurityChecker extends ChannelInboundHandlerAdapter {
   private final ServerSecurityService serverSecurityService;
 
   public ServerSecurityChecker(ServerSecurityService serverSecurityService) {
-    this.serverSecurityService = Objects.requireNonNull(serverSecurityService, "server security service can not be null");
+    this.serverSecurityService =
+        Objects.requireNonNull(serverSecurityService, "server security service can not be null");
   }
 
   @Override
@@ -69,7 +70,6 @@ public class ServerSecurityChecker extends ChannelInboundHandlerAdapter {
               if (e != null) {
                 logger.error("security validation failed for channel: {}", ctx.channel(), e);
                 ctx.channel().close();
-                //throw new Http2Exception(Http2Error.INADEQUATE_SECURITY, "authorization failed", e, Http2Exception.ShutdownHint.GRACEFUL_SHUTDOWN);
               } else {
                 logger.info("security validation succeeded for channel: {}", ctx.channel());
               }
