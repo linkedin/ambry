@@ -210,7 +210,7 @@ public class AzureStorageCompactorTest {
    */
   private BlobStorageException mockStorageException(BlobErrorCode errorCode) {
     BlobStorageException mockException = mock(BlobStorageException.class);
-    when(mockException.getErrorCode()).thenReturn(errorCode);
+    lenient().when(mockException.getErrorCode()).thenReturn(errorCode);
     return mockException;
   }
 }
