@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudDestinationFactory;
+import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -33,6 +34,7 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
   private final CloudConfig cloudConfig;
   private final AzureCloudConfig azureCloudConfig;
   private final String clusterName;
+  private final VcrMetrics vcrMetrics;
   private final AzureMetrics azureMetrics;
   private final AzureReplicationFeed.FeedType azureReplicationFeedType;
 
@@ -45,6 +47,7 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
     this.cloudConfig = new CloudConfig(verifiableProperties);
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
     this.clusterName = new ClusterMapConfig(verifiableProperties).clusterMapClusterName;
+    vcrMetrics = new VcrMetrics(metricRegistry);
     azureMetrics = new AzureMetrics(metricRegistry);
     azureReplicationFeedType = getReplicationFeedType(verifiableProperties);
   }
@@ -53,7 +56,8 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
   public CloudDestination getCloudDestination() throws IllegalStateException {
     try {
       AzureCloudDestination dest =
-          new AzureCloudDestination(cloudConfig, azureCloudConfig, clusterName, azureMetrics, azureReplicationFeedType);
+          new AzureCloudDestination(cloudConfig, azureCloudConfig, clusterName, vcrMetrics, azureMetrics,
+              azureReplicationFeedType);
       dest.testAzureConnectivity();
       return dest;
     } catch (Exception e) {

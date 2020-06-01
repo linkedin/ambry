@@ -17,14 +17,17 @@ import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
+import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.FindResult;
+import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.Document;
@@ -36,13 +39,14 @@ import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -60,6 +64,7 @@ class AzureCloudDestination implements CloudDestination {
   private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
   private final CosmosDataAccessor cosmosDataAccessor;
+  private final AzureStorageCompactor azureStorageCompactor;
   private final AzureReplicationFeed azureReplicationFeed;
   private final AzureMetrics azureMetrics;
   private final int queryBatchSize;
@@ -74,13 +79,15 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureReplicationFeedType {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
    */
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
-      AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType) {
+      VcrMetrics vcrMetrics, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType) {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =
         new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
     this.queryBatchSize = azureCloudConfig.cosmosQueryBatchSize;
     this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, azureMetrics);
+    this.azureStorageCompactor =
+        new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     isVcr = cloudConfig.cloudIsVcr;
@@ -105,6 +112,10 @@ class AzureCloudDestination implements CloudDestination {
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
     this.cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
+    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
+    VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
+    this.azureStorageCompactor =
+        new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     this.isVcr = isVcr;
@@ -210,6 +221,11 @@ class AzureCloudDestination implements CloudDestination {
     azureReplicationFeed.close();
   }
 
+  @Override
+  public void stopCompaction() {
+    azureStorageCompactor.shutdown();
+  }
+
   /**
    * Get metadata for specified list of blobs.
    * @param blobIds {@link List} of {@link BlobId}s to get metadata of.
@@ -228,28 +244,6 @@ class AzureCloudDestination implements CloudDestination {
     } catch (DocumentClientException dex) {
       throw toCloudStorageException(
           "Failed to query metadata for " + blobIds.size() + " blobs in partition " + partitionPath, dex);
-    }
-  }
-
-  @Override
-  public List<CloudBlobMetadata> getDeletedBlobs(String partitionPath, long startTime, long endTime, int maxEntries)
-      throws CloudStorageException {
-    try {
-      return cosmosDataAccessor.getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, startTime, endTime,
-          maxEntries);
-    } catch (DocumentClientException dex) {
-      throw toCloudStorageException("Failed to query deleted blobs for partition " + partitionPath, dex);
-    }
-  }
-
-  @Override
-  public List<CloudBlobMetadata> getExpiredBlobs(String partitionPath, long startTime, long endTime, int maxEntries)
-      throws CloudStorageException {
-    try {
-      return cosmosDataAccessor.getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, startTime, endTime,
-          maxEntries);
-    } catch (DocumentClientException dex) {
-      throw toCloudStorageException("Failed to query expired blobs for partition " + partitionPath, dex);
     }
   }
 
@@ -350,35 +344,8 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws CloudStorageException {
-    if (blobMetadataList.isEmpty()) {
-      return 0;
-    }
-    azureMetrics.blobDeleteRequestCount.inc(blobMetadataList.size());
-    long t0 = System.currentTimeMillis();
-    try {
-      List<CloudBlobMetadata> deletedBlobs = azureBlobDataAccessor.purgeBlobs(blobMetadataList);
-      long t1 = System.currentTimeMillis();
-      int deletedCount = deletedBlobs.size();
-      azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size() - deletedCount);
-      if (deletedCount > 0) {
-        azureMetrics.blobDeletedCount.inc(deletedCount);
-        // Record as time per single blob deletion
-        azureMetrics.blobDeletionTime.update((t1 - t0) / deletedCount, TimeUnit.MILLISECONDS);
-      } else {
-        return 0;
-      }
-
-      // Remove them from Cosmos too
-      cosmosDataAccessor.deleteMetadata(deletedBlobs);
-      long t2 = System.currentTimeMillis();
-      // Record as time per single record deletion
-      azureMetrics.documentDeleteTime.update((t2 - t1) / deletedCount, TimeUnit.MILLISECONDS);
-      return deletedCount;
-    } catch (Exception ex) {
-      azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size());
-      throw toCloudStorageException("Failed to purge all blobs", ex);
-    }
+  public int compactPartition(String partitionPath) throws CloudStorageException {
+    return azureStorageCompactor.compactPartition(partitionPath);
   }
 
   @Override
@@ -424,6 +391,14 @@ class AzureCloudDestination implements CloudDestination {
 
   /**
    * Visible for test.
+   * @return the {@link AzureStorageCompactor}
+   */
+  AzureStorageCompactor getAzureStorageCompactor() {
+    return azureStorageCompactor;
+  }
+
+  /**
+   * Visible for test.
    * @return the {@link AzureBlobDataAccessor}
    */
   AzureBlobDataAccessor getAzureBlobDataAccessor() {
@@ -445,6 +420,10 @@ class AzureCloudDestination implements CloudDestination {
    * @return the {@link CloudStorageException}.
    */
   private CloudStorageException toCloudStorageException(String message, Exception e) {
+    return toCloudStorageException(message, e, azureMetrics);
+  }
+
+  static CloudStorageException toCloudStorageException(String message, Exception e, AzureMetrics azureMetrics) {
     Long retryDelayMs = null;
     int statusCode;
     if (e instanceof BlobStorageException) {

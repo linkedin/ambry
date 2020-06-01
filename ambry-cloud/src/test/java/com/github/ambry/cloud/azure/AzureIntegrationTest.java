@@ -199,8 +199,8 @@ public class AzureIntegrationTest {
     // delete changes life version.
     assertEquals(metadata.getLifeVersion(), 3);
 
-    // purge blobs
-    purgeBlobsWithRetry(Collections.singletonList(metadata), partitionId.toPathString());
+    // compact partition
+    azureDest.compactPartition(partitionId.toPathString());
     assertTrue("Expected empty set after purge",
         getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).isEmpty());
 
@@ -326,30 +326,8 @@ public class AzureIntegrationTest {
     String partitionPath = String.valueOf(testPartition);
     long queryStartTime = 1;
     long queryEndTime = now - TimeUnit.DAYS.toMillis(retentionPeriodDays);
-    logger.info("First call to getDeletedBlobs");
-    List<CloudBlobMetadata> deadBlobs = cloudRequestAgent.doWithRetries(
-        () -> azureDest.getDeletedBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount), "GetDeadBlobs",
-        partitionPath);
-    assertEquals("Unexpected number returned", bucketCount, deadBlobs.size());
-    logger.info("First call to purge");
-    assertEquals("Not all blobs were purged", bucketCount, purgeBlobsWithRetry(deadBlobs, partitionPath));
-    logger.info("Second call to getDeletedBlobs");
-    deadBlobs = cloudRequestAgent.doWithRetries(
-        () -> azureDest.getDeletedBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount), "GetDeadBlobs",
-        partitionPath);
-    assertEquals("Expected zero", 0, deadBlobs.size());
-    logger.info("First call to getExpiredBlobs");
-    deadBlobs = cloudRequestAgent.doWithRetries(
-        () -> azureDest.getExpiredBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount), "GetDeadBlobs",
-        partitionPath);
-    assertEquals("Unexpected number returned", bucketCount, deadBlobs.size());
-    logger.info("First call to purge");
-    assertEquals("Not all blobs were purged", bucketCount, purgeBlobsWithRetry(deadBlobs, partitionPath));
-    logger.info("Second call to getExpiredBlobs");
-    deadBlobs = cloudRequestAgent.doWithRetries(
-        () -> azureDest.getExpiredBlobs(partitionPath, queryStartTime, queryEndTime, bucketCount), "GetDeadBlobs",
-        partitionPath);
-    assertEquals("Expected zero", 0, deadBlobs.size());
+    int compactedCount = azureDest.compactPartition(partitionPath);
+    assertEquals("Unexpected count compacted", 2 * bucketCount, compactedCount);
     cleanup();
   }
 
@@ -608,7 +586,8 @@ public class AzureIntegrationTest {
    */
   private int purgeBlobsWithRetry(List<CloudBlobMetadata> blobMetadataList, String partitionPath)
       throws CloudStorageException {
-    return cloudRequestAgent.doWithRetries(() -> azureDest.purgeBlobs(blobMetadataList), "PurgeBlobs", partitionPath);
+    return cloudRequestAgent.doWithRetries(() -> azureDest.getAzureStorageCompactor().purgeBlobs(blobMetadataList),
+        "PurgeBlobs", partitionPath);
   }
 
   /**

@@ -243,16 +243,6 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public List<CloudBlobMetadata> getExpiredBlobs(String partitionPath, long startTime, long endTime, int maxEntries) {
-    return Collections.emptyList();
-  }
-
-  @Override
-  public List<CloudBlobMetadata> getDeletedBlobs(String partitionPath, long startTime, long endTime, int maxEntries) {
-    return Collections.emptyList();
-  }
-
-  @Override
   public FindResult findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries) {
     switch (azureReplicationFeedType) {
       case COSMOS_CHANGE_FEED:
@@ -365,8 +355,12 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) {
+  public int compactPartition(String partitionPath) {
     return 0;
+  }
+
+  @Override
+  public void stopCompaction() {
   }
 
   boolean doesBlobExist(BlobId blobId) {
