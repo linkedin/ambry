@@ -25,13 +25,14 @@ public interface CloudUpdateValidator {
   /**
    * Validate the sanity of update operation on given {@code updateFields} against existing {@link CloudBlobMetadata} in
    * cloud destination for the blob with key {@code key}. This can be used to hook Ambry store related validation logic
-   * during {@link CloudDestination} specific get-check-update flow.
+   * during {@link CloudDestination} specific get-check-update flow. Note that this method can also update some fields
+   * within the map.
    * @param metadata {@link CloudBlobMetadata} object obtained from cloud destination.
    * @param key {@link StoreKey} of the blob being updated.
    * @param updateFields {@link Map} of fields and new values requested for update.
-   * @return if no exception needs to thrown, return false if the operation is not needed (maybe cloud state is more
-   * recent). true otherwise.
+   * @return true if the operation can proceed, or false if the operation is not needed.
    * @throws StoreException if validation fails.
    */
-  boolean validateUpdate(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields) throws StoreException;
+  boolean validateUpdate(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
+      throws StoreException;
 }

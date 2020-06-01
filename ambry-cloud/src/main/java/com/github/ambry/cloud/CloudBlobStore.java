@@ -298,8 +298,7 @@ class CloudBlobStore implements Store {
       if (!uploaded && !isVcr) {
         // If put is coming from frontend, then uploadBlob must be true. Its not acceptable that a blob already exists.
         // If put is coming from vcr, then findMissingKeys might have reported a key to be missing even though the blob
-        // was uploaded to ABS. This can happen, if previously, the upload to ABS succeeded but the upload couldn't make
-        // it to cosmos.
+        // was uploaded.
         throw new StoreException(String.format("Another blob with same key %s exists in store", blobId.getID()),
             StoreErrorCodes.Already_Exist);
       }
@@ -384,8 +383,7 @@ class CloudBlobStore implements Store {
     // Note: always check cache before operation attempt, since this could be a retry after a CONFLICT error,
     // in which case the cache may have been updated by another thread.
     if (!checkCacheState(blobKey, lifeVersion, BlobState.DELETED)) {
-      boolean deleted = cloudDestination.deleteBlob(blobId, deletionTime, lifeVersion,
-          (metadata, key, updateFields) -> preDeleteValidation(metadata, key, updateFields));
+      boolean deleted = cloudDestination.deleteBlob(blobId, deletionTime, lifeVersion, this::preDeleteValidation);
       addToCache(blobKey, lifeVersion, BlobState.DELETED);
       return deleted;
     } else {
@@ -419,8 +417,7 @@ class CloudBlobStore implements Store {
   private short undeleteIfNeeded(BlobId blobId, short lifeVersion) throws CloudStorageException {
     // See note in deleteIfNeeded.
     if (!checkCacheState(blobId.getID(), lifeVersion, BlobState.CREATED)) {
-      short newLifeVersion = cloudDestination.undeleteBlob(blobId, lifeVersion,
-          (metadata, key, updateFields) -> preUndeleteValidation(metadata, key, updateFields));
+      short newLifeVersion = cloudDestination.undeleteBlob(blobId, lifeVersion, this::preUndeleteValidation);
       addToCache(blobId.getID(), newLifeVersion, BlobState.CREATED);
       return newLifeVersion;
     } else {
@@ -470,8 +467,8 @@ class CloudBlobStore implements Store {
     String blobKey = blobId.getID();
     // See note in deleteIfNeeded.
     if (!checkCacheState(blobKey, BlobState.TTL_UPDATED)) {
-      short lifeVersion = cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time,
-          (metadata, key, updateFields) -> preTtlUpdateValidation(metadata, key, updateFields));
+      short lifeVersion =
+          cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time, this::preTtlUpdateValidation);
       addToCache(blobKey, lifeVersion, BlobState.TTL_UPDATED);
       return (lifeVersion != -1);
     }
@@ -538,9 +535,9 @@ class CloudBlobStore implements Store {
     validateAccountAndContainer(Collections.singletonMap(metadata.getId(), metadata), Collections.singletonList(key));
     short requestedLifeVersion = (short) updateFields.get(FIELD_LIFE_VERSION);
     if (isVcr) {
-      // This is a delete request from vcr. Apply delete only if incoming life version is more recent. Don't throw any
-      // exception because replication relies on findMissingKeys which in turn relies on cosmos state for CloudBlobStore.
-      // Cosmos could be missing some updates that were applied to ABS.
+      // This is a delete request from vcr. Apply delete only if incoming life version is more recent. Don't throw
+      // any exception because replication relies on findMissingKeys which in turn is dependent on {@link CloudDestination}
+      // implementation and can have some inconsistencies.
       return (!metadata.isDeleted() || metadata.getLifeVersion() < requestedLifeVersion) && (metadata.getLifeVersion()
           <= requestedLifeVersion);
     }
@@ -572,8 +569,7 @@ class CloudBlobStore implements Store {
     long now = System.currentTimeMillis();
     if (isVcr) {
       // For vcr don't update ttl if already updated. Don't throw any exception because replication relies on
-      // findMissingKeys which in turn relies on cosmos state for CloudBlobStore. Cosmos could be missing some updates
-      // that were applied to ABS.
+      // findMissingKeys which in turn is dependent on {@link CloudDestination} implementation and can have some inconsistencies.
       return metadata.getExpirationTime() != Utils.Infinite_Time;
     }
     if (metadata.isDeleted()) {
@@ -594,6 +590,7 @@ class CloudBlobStore implements Store {
    * @param metadata existing {@link CloudBlobMetadata} in cloud.
    * @param key {@link StoreKey} being updated.
    * @param updateFields {@link Map} of fields and values being updated.
+   * @return false only for vcr if local cloud destination life version is more recent. true if validation successful.
    * @throws StoreException if validation fails.
    */
   private boolean preUndeleteValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
@@ -602,8 +599,8 @@ class CloudBlobStore implements Store {
     short requestedLifeVersion = (short) updateFields.get(FIELD_LIFE_VERSION);
     if (isVcr) {
       // This is an undelete request from vcr. Apply undelete only if incoming life version is more recent. Don't throw
-      // any exception because replication relies on findMissingKeys which in turn relies on cosmos state for CloudBlobStore.
-      // Cosmos could be missing some updates that were applied to ABS.
+      // any exception because replication relies on findMissingKeys which in turn is dependent on {@link CloudDestination}
+      // implementation and can have some inconsistencies.
       return metadata.getLifeVersion() < requestedLifeVersion;
     }
     if (metadata.isExpired()) {
@@ -756,7 +753,7 @@ class CloudBlobStore implements Store {
         .map(key -> (BlobId) key)
         .collect(Collectors.toList());
     if (blobIdQueryList.isEmpty()) {
-      // Cool, the cache did its job and eliminated a Cosmos query!
+      // Cool, the cache did its job and eliminated a possibly expensive query to cloud!
       return Collections.emptySet();
     }
     try {
@@ -838,7 +835,7 @@ class CloudBlobStore implements Store {
   }
 
   @Override
-  public long getEndPositionOfLastPut() throws StoreException {
+  public long getEndPositionOfLastPut() {
     throw new UnsupportedOperationException("Method not supported");
   }
 
@@ -881,7 +878,7 @@ class CloudBlobStore implements Store {
    * @throws IllegalArgumentException if a duplicate is detected
    */
   private void checkDuplicates(List<MessageInfo> infos) throws IllegalArgumentException {
-    List<StoreKey> keys = infos.stream().map(info -> info.getStoreKey()).collect(Collectors.toList());
+    List<StoreKey> keys = infos.stream().map(MessageInfo::getStoreKey).collect(Collectors.toList());
     checkStoreKeyDuplicates(keys);
   }
 
@@ -909,7 +906,7 @@ class CloudBlobStore implements Store {
   enum BlobState {CREATED, TTL_UPDATED, DELETED}
 
   /** The lifecycle state of a recently seen blob. */
-  class BlobLifeState {
+  static class BlobLifeState {
 
     private final BlobState blobState;
     private final short lifeVersion;
@@ -964,7 +961,7 @@ class CloudBlobStore implements Store {
     }
 
     @Override
-    public int appendFrom(ByteBuffer buffer) throws StoreException {
+    public int appendFrom(ByteBuffer buffer) {
       throw new UnsupportedOperationException("Method not supported");
     }
 
@@ -990,8 +987,6 @@ class CloudBlobStore implements Store {
         messageBuf.flip();
         cloudBlobStore.putBlob(messageInfo, messageBuf, size);
         messageIndex++;
-      } catch (StoreException se) {
-        throw se;
       } catch (IOException | CloudStorageException e) {
         throw new StoreException(e, StoreErrorCodes.IOError);
       }

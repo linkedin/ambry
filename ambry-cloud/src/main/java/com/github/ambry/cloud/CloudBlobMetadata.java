@@ -457,7 +457,8 @@ public class CloudBlobMetadata {
    * @return true if deletion time is outside retention window or blob is expired. false otherwise.
    */
   public boolean isCompactionCandidate(long retentionPeriod) {
-    return (isDeleted() && deletionTime <= (System.currentTimeMillis() - retentionPeriod)) || isExpired();
+    return (isDeleted() && deletionTime <= (System.currentTimeMillis() - retentionPeriod)) || (isExpired()
+        && expirationTime <= (System.currentTimeMillis() - retentionPeriod));
   }
 
   @Override
