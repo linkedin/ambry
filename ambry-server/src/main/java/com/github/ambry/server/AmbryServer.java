@@ -116,6 +116,7 @@ public class AmbryServer {
   private RestRequestHandler restRequestHandlerForHttp2;
   private NioServer nettyHttp2Server;
   private ScheduledFuture<?> consistencyCheckerTask = null;
+  private ServerSecurityService serverSecurityService;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       ClusterSpectatorFactory clusterSpectatorFactory, Time time) {
@@ -233,6 +234,7 @@ public class AmbryServer {
 
       ServerSecurityServiceFactory serverSecurityServiceFactory =
           Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, this.metrics);
+      serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
 
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
@@ -253,7 +255,7 @@ public class AmbryServer {
         logger.info("Http2 port {} is enabled. Starting HTTP/2 service. ", nodeId.getHttp2Port());
         RestServerConfig restServerConfig = new RestServerConfig(properties);
         NettyServerRequestResponseChannel requestResponseChannel = new NettyServerRequestResponseChannel(32);
-        RestRequestService restRequestService = new StorageRestRequestService(requestResponseChannel, serverSecurityServiceFactory.getServerSecurityService());
+        RestRequestService restRequestService = new StorageRestRequestService(requestResponseChannel, serverSecurityService);
 
         AmbryServerRequests ambryServerRequestsForHttp2 =
             new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
@@ -271,7 +273,7 @@ public class AmbryServer {
 
         NioServerFactory nioServerFactory =
             new StorageServerNettyFactory(nodeId.getHttp2Port(), properties, registry, restRequestHandlerForHttp2,
-                sslFactory, serverSecurityServiceFactory.getServerSecurityService());
+                sslFactory, serverSecurityService);
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
       }
@@ -369,6 +371,10 @@ public class AmbryServer {
       if (clusterMap != null) {
         clusterMap.close();
       }
+      if (serverSecurityService != null) {
+        serverSecurityService.close();
+      }
+
       logger.info("shutdown completed");
     } catch (Exception e) {
       logger.error("Error while shutting down server", e);

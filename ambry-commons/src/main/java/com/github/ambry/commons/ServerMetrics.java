@@ -435,7 +435,6 @@ public class ServerMetrics {
     securityServiceValidateRequestTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "securityServiceValidateRequestTimeInMs"));
 
-
     putBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutBlobRequestRate"));
     getBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobRequestRate"));
     getBlobPropertiesRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobPropertiesRequestRate"));
@@ -468,7 +467,6 @@ public class ServerMetrics {
         registry.meter(MetricRegistry.name(requestClass, "securityServiceValidateConnectionRate"));
     securityServiceValidateRequestRate =
         registry.meter(MetricRegistry.name(requestClass, "securityServiceValidateRequestRate"));
-
 
     partitionUnknownError = registry.counter(MetricRegistry.name(requestClass, "PartitionUnknownError"));
     diskUnavailableError = registry.counter(MetricRegistry.name(requestClass, "DiskUnavailableError"));

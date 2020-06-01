@@ -16,8 +16,11 @@ package com.github.ambry.server;
 
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.router.Callback;
+import com.github.ambry.router.FutureResult;
 import java.io.Closeable;
 import io.netty.channel.ChannelHandlerContext;
+import java.util.concurrent.Future;
+
 
 /**
  * Responsible for performing any security validations on the HTTP2 connection terminating on server. Validations could
@@ -42,5 +45,29 @@ public interface  ServerSecurityService extends Closeable {
      * @param callback The {@link Callback} which will be invoked on the completion of the request. Cannot be null.
      */
     void validateRequest(RestRequest restRequest, Callback<Void> callback);
+
+    /**
+     * Similar to {@link #validateConnection(ChannelHandlerContext, Callback)} but returns a {@link Future} instead of requiring
+     * a callback.
+     * @param ctx {@link ChannelHandlerContext} upon which validations has to be performed
+     * @return a {@link Future} that is completed when the processing is done.
+     */
+    default Future<Void> validateConnection(ChannelHandlerContext ctx) {
+        FutureResult<Void> futureResult = new FutureResult<>();
+        validateConnection(ctx, futureResult::done);
+        return futureResult;
+    }
+
+    /**
+     * Similar to {@link #validateRequest(RestRequest, Callback)} but returns a {@link Future} instead of requiring
+     * a callback.
+     * @param restRequest {@link RestRequest} upon which validations has to be performed
+     * @return a {@link Future} that is completed when the processing is done.
+     */
+    default Future<Void> validateRequest(RestRequest restRequest) {
+        FutureResult<Void> futureResult = new FutureResult<>();
+        validateRequest(restRequest, futureResult::done);
+        return futureResult;
+    }
 
 }

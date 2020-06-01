@@ -19,7 +19,6 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
-import com.github.ambry.server.ServerSecurityService;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.WriteBufferWaterMark;

@@ -42,7 +42,7 @@ public class AmbryServerSecurityService implements ServerSecurityService {
     if (!isOpen) {
       exception = new RestServiceException("ServerSecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else if (ctx == null) {
-      exception = new IllegalArgumentException("ctx is null");
+      throw new IllegalArgumentException("ctx is null");
     }
     serverMetrics.securityServiceValidateConnectionTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);
@@ -56,7 +56,7 @@ public class AmbryServerSecurityService implements ServerSecurityService {
     if (!isOpen) {
       exception = new RestServiceException("ServerSecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else if (restRequest == null) {
-      exception = new IllegalArgumentException("restRequest is null");
+      throw new IllegalArgumentException("restRequest is null");
     }
     serverMetrics.securityServiceValidateRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);

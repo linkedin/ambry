@@ -22,6 +22,7 @@ import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.ssl.SslHandler;
 import java.security.cert.X509Certificate;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +36,7 @@ public class ServerSecurityChecker extends ChannelInboundHandlerAdapter {
   private final ServerSecurityService serverSecurityService;
 
   public ServerSecurityChecker(ServerSecurityService serverSecurityService) {
-    this.serverSecurityService = serverSecurityService;
+    this.serverSecurityService = Objects.requireNonNull(serverSecurityService, "server security service can not be null");
   }
 
   @Override
@@ -63,15 +64,20 @@ public class ServerSecurityChecker extends ChannelInboundHandlerAdapter {
           logger.debug("SSL handshake failed for channel: {}", ctx.channel(), future.cause());
         } else {
           logger.debug("SSL handshake succedded for channel: {}", ctx.channel(), future.cause());
-          serverSecurityService.validateConnection(ctx, (r, e) -> {
-            if (e != null) {
-              //logger.info("security validation failed for channel: {}", ctx.channel(), e);
-              ctx.channel().close();
-              //throw new Http2Exception(Http2Error.INADEQUATE_SECURITY, "authorization failed", e, Http2Exception.ShutdownHint.GRACEFUL_SHUTDOWN);
-            } else {
-              logger.info("security validation succeeded for channel: {}", ctx.channel());
-            }
-          });
+          try {
+            serverSecurityService.validateConnection(ctx, (r, e) -> {
+              if (e != null) {
+                logger.error("security validation failed for channel: {}", ctx.channel(), e);
+                ctx.channel().close();
+                //throw new Http2Exception(Http2Error.INADEQUATE_SECURITY, "authorization failed", e, Http2Exception.ShutdownHint.GRACEFUL_SHUTDOWN);
+              } else {
+                logger.info("security validation succeeded for channel: {}", ctx.channel());
+              }
+            });
+          } catch (Exception e) {
+            logger.error("security validation failed for channel: {}", ctx.channel(), e);
+            ctx.channel().close();
+          }
         }
       });
     }

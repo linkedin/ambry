@@ -52,14 +52,7 @@ public class StorageRestRequestService implements RestRequestService {
 
   @Override
   public void shutdown() {
-    try {
-      if (serverSecurityService != null) {
-        serverSecurityService.close();
-        serverSecurityService = null;
-      }
-    } catch (IOException e){
-        logger.error("Downstream service close failed", e);
-    }
+
   }
 
   @Override
