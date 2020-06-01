@@ -14,6 +14,9 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.AmbryReplicaSyncUpManager;
 import com.github.ambry.clustermap.ClusterMap;
@@ -56,6 +59,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
+import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockId;
@@ -130,6 +134,7 @@ public class ReplicationTest {
   private Properties properties;
   private VerifiableProperties verifiableProperties;
   private ReplicationConfig replicationConfig;
+  private final AccountService accountService;
 
   /**
    * Running for the two sets of compatible ReplicaMetadataRequest and ReplicaMetadataResponse,
@@ -170,6 +175,7 @@ public class ReplicationTest {
     properties.put("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 2L));
     verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
+    accountService = Mockito.mock(AccountService.class);
   }
 
   /**
@@ -227,7 +233,7 @@ public class ReplicationTest {
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
             mockStoreKeyConverterFactory.getStoreKeyConverter(), transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, null);
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, null, null);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }
@@ -1326,6 +1332,90 @@ public class ReplicationTest {
     // 3 unconverted + 2 unconverted deleted expected missing buffers
     verifyNoMoreMissingKeysAndExpectedMissingBufferCount(remoteHost, localHost, replicaThread, replicasToReplicate,
         idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, expectedIndex, 5);
+  }
+
+  /**
+   * Tests if deprecated containers have been blocked during replication.
+   */
+  @Test
+  public void blockDeprecatedContainerReplicationTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+    Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
+    storeKeyConverter.setConversionMap(conversionMap);
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+
+    for (int i = 0; i < partitionIds.size(); i++) {
+      PartitionId partitionId = partitionIds.get(i);
+      BlobId b0 = generateRandomBlobId(partitionId);
+      conversionMap.put(b0, b0);
+      BlobId b1 = generateRandomBlobId(partitionId);
+      conversionMap.put(b1, b1);
+      // add 2 messages to both hosts.
+      storeKeyConverter.setConversionMap(conversionMap);
+      storeKeyConverter.convert(conversionMap.keySet());
+      addPutMessagesToReplicasOfPartition(Arrays.asList(b0), Arrays.asList(localHost, remoteHost));
+      // add 3 messages to the remote host only
+      addPutMessagesToReplicasOfPartition(Arrays.asList(b1), Collections.singletonList(remoteHost));
+    }
+
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+    int batchSize = 4;
+    ReplicationMetrics replicationMetrics =
+        new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
+    replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
+
+    List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, null);
+    Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate =
+        Collections.singletonMap(remoteHost.dataNodeId, remoteReplicaInfoList);
+    storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    hosts.put(remoteHost.dataNodeId, remoteHost);
+    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
+    ReplicaThread replicaThread =
+        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
+            new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
+            storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, null, accountService);
+    for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
+      replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
+    }
+    List<RemoteReplicaInfo> remoteReplicaInfos = replicasToReplicate.get(remoteHost.dataNodeId);
+
+    DataNodeId remoteNode = remoteReplicaInfos.get(0).getReplicaId().getDataNodeId();
+    ReplicaMetadataResponse response =
+        replicaThread.getReplicaMetadataResponse(remoteReplicaInfos, new MockConnectionPool.MockConnection(remoteHost, batchSize), remoteNode);
+    Set<Pair<Short,Short>> checkSet = new HashSet<>();
+    for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
+      RemoteReplicaInfo remoteReplicaInfo = remoteReplicaInfos.get(i);
+      ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+          response.getReplicaMetadataResponseInfoList().get(i);
+      new ResponseHandler(clusterMap).onEvent(remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
+
+      for (int j = 0; j < replicaMetadataResponseInfo.getMessageInfoList().size(); j++) {
+        short accountId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getAccountId();
+        short containerId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getContainerId();
+        checkSet.add(new Pair<>(accountId, containerId));
+        Container container = Mockito.mock(Container.class);
+        Account account = Mockito.mock(Account.class);
+        Mockito.when(account.getContainerById(containerId)).thenReturn(container);
+        Mockito.when(accountService.getAccountById(accountId)).thenReturn(account);
+        Mockito.when(container.getStatus()).thenReturn(Container.ContainerStatus.DELETE_IN_PROGRESS);
+      }
+
+      Set<MessageInfo> remoteMissingStoreKeys =
+          replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+      assertEquals("All deprecated blobs should be blocked during replication", remoteMissingStoreKeys.size(), 0);
+    }
+
   }
 
   /**
@@ -2953,7 +3043,7 @@ public class ReplicationTest {
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, replicaSyncUpManager);
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, replicaSyncUpManager, null);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }

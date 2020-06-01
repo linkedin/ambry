@@ -14,6 +14,7 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -66,10 +67,10 @@ public class ReplicationManager extends ReplicationEngine {
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      ClusterParticipant clusterParticipant) throws ReplicationException {
+      ClusterParticipant clusterParticipant, AccountService accountService) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
-        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager);
+        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, accountService);
     this.storeConfig = storeConfig;
     this.currentNode = dataNode;
     trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;

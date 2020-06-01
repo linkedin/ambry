@@ -16,6 +16,8 @@ package com.github.ambry.replication;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -111,6 +113,7 @@ public class ReplicaThread implements Runnable {
   private final Condition pauseCondition = lock.newCondition();
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final int maxReplicaCountPerRequest;
+  private final AccountService accountService;
   private volatile boolean allDisabled = false;
   private final PartitionLeaderInfo partitionLeaderInfo;
 
@@ -119,10 +122,10 @@ public class ReplicaThread implements Runnable {
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager) {
+      ReplicaSyncUpManager replicaSyncUpManager, AccountService accountService) {
     this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
-        datacenterName, responseHandler, time, replicaSyncUpManager, null);
+        datacenterName, responseHandler, time, replicaSyncUpManager, null, accountService);
   }
 
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
@@ -130,7 +133,8 @@ public class ReplicaThread implements Runnable {
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager, PartitionLeaderInfo partitionLeaderInfo) {
+      ReplicaSyncUpManager replicaSyncUpManager, PartitionLeaderInfo partitionLeaderInfo, AccountService accountService) {
+
     this.threadName = threadName;
     this.running = true;
     this.findTokenHelper = findTokenHelper;
@@ -150,6 +154,7 @@ public class ReplicaThread implements Runnable {
     this.datacenterName = datacenterName;
     this.time = time;
     this.replicaSyncUpManager = replicaSyncUpManager;
+    this.accountService = accountService;
     if (replicatingFromRemoteColo) {
       threadThrottleDurationMs = replicationConfig.replicationInterReplicaThreadThrottleSleepDurationMs;
       syncedBackOffCount = replicationMetrics.interColoReplicaSyncedBackoffCount;
@@ -588,7 +593,7 @@ public class ReplicaThread implements Runnable {
    * @throws ReplicationException
    * @throws IOException
    */
-  private ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
+   ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       ConnectedChannel connectedChannel, DataNodeId remoteNode) throws ReplicationException, IOException {
     long replicaMetadataRequestStartTime = SystemTime.getInstance().milliseconds();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
@@ -639,14 +644,41 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Gets the missing store messages by comparing the messages from the remote node
+   * Determines if {@link MessageInfo} container in the given status.
+   * @param messageInfo A message info class that contains basic info about a blob.
+   * @param containerStatus Status of the container.
+   * @return {@code true} if the blob belongs to the given status container, {@code false} otherwise.
+   */
+  private boolean isGivenStatus(MessageInfo messageInfo, Container.ContainerStatus containerStatus) {
+    return accountService.getAccountById(messageInfo.getAccountId())
+        .getContainerById(messageInfo.getContainerId())
+        .getStatus() == containerStatus;
+  }
+
+  /**
+   * Determines if {@link MessageInfo} container in the status of DELETED_IN_PROGRESS or INACTIVE.
+   * @param messageInfo A message info class that contains basic info about a blob
+   * @return {@code true} if the blob associates with the deprecated container, {@code false} otherwise.
+   * Deprecated containers status include DELETE_IN_PROGRESS and INACTIVE.
+   */
+  private boolean isDeprecatedContainer(MessageInfo messageInfo) {
+    if (accountService != null) {
+      return isGivenStatus(messageInfo, Container.ContainerStatus.DELETE_IN_PROGRESS) || isGivenStatus(messageInfo,
+          Container.ContainerStatus.INACTIVE);
+    } else {
+      return false;
+    }
+  }
+
+  /**
+   * Gets the missing store keys by comparing the messages from the remote node
    * @param replicaMetadataResponseInfo The response that contains the messages from the remote node
    * @param remoteNode The remote node from which replication needs to happen
    * @param remoteReplicaInfo The remote replica that contains information about the remote replica id
    * @return List of store messages that are missing from the local store
    * @throws StoreException if store error (usually IOError) occurs when getting missing keys.
    */
-  private Set<MessageInfo> getMissingStoreMessages(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
+   Set<MessageInfo> getMissingStoreMessages(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
       DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
@@ -657,7 +689,7 @@ public class ReplicaThread implements Runnable {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key from remote: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), storeKey);
       StoreKey convertedKey = storeKeyConverter.getConverted(storeKey);
-      if (convertedKey != null) {
+      if (convertedKey != null && !isDeprecatedContainer(messageInfo)) {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
     }

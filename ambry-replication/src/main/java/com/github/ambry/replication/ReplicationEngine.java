@@ -14,6 +14,7 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -72,7 +73,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   private final List<String> sslEnabledDatacenters;
   private final StoreKeyConverterFactory storeKeyConverterFactory;
   private final String transformerClassName;
-
+  private final AccountService accountService;
   protected final DataNodeId dataNodeId;
   protected final MetricRegistry metricRegistry;
   protected final ReplicationMetrics replicationMetrics;
@@ -92,7 +93,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, ScheduledExecutorService scheduler, DataNodeId dataNode,
       List<? extends ReplicaId> replicaIds, ConnectionPool connectionPool, MetricRegistry metricRegistry,
       NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
-      String transformerClassName, ClusterParticipant clusterParticipant, StoreManager storeManager)
+      String transformerClassName, ClusterParticipant clusterParticipant, StoreManager storeManager,
+      AccountService accountService)
       throws ReplicationException {
     this.replicationConfig = replicationConfig;
     this.storeKeyFactory = storeKeyFactory;
@@ -119,6 +121,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.storeKeyConverterFactory = storeKeyConverterFactory;
     this.transformerClassName = transformerClassName;
     this.storeManager = storeManager;
+    this.accountService = accountService;
     replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
     partitionLeaderInfo = new PartitionLeaderInfo(storeManager);
   }
@@ -339,7 +342,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
             new ReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
                 connectionPool, replicationConfig, replicationMetrics, notification, threadSpecificKeyConverter,
                 threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter, responseHandler,
-                SystemTime.getInstance(), replicaSyncUpManager, partitionLeaderInfo);
+                SystemTime.getInstance(), replicaSyncUpManager, partitionLeaderInfo, accountService);
         replicaThreads.add(replicaThread);
         if (startThread) {
           Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);

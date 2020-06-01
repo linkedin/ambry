@@ -211,7 +211,7 @@ public class AmbryServer {
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
               clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
-              serverConfig.serverMessageTransformer, clusterParticipants.get(0));
+              serverConfig.serverMessageTransformer, clusterParticipants.get(0), accountService);
       replicationManager.start();
 
       if (replicationConfig.replicationEnabledWithVcrCluster) {
