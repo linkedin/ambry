@@ -1613,10 +1613,7 @@ public class ReplicationTest {
 
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
         idsToExpectByPartition.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()),
-        responses.stream()
-            .map(k -> ReplicaThread.ExchangeMetadataResponse.getStoreKeysFromMessages(k.missingStoreMessages))
-            .flatMap(Collection::stream)
-            .collect(Collectors.toSet()));
+        responses.stream().map(k -> k.getMissingStoreKeys()).flatMap(Collection::stream).collect(Collectors.toSet()));
 
     // Now delete a message in the remote before doing the Get requests (for every partition). Remove these keys from
     // expected key set. Even though they are requested, they should not go into the local store. However, this cycle
@@ -1698,10 +1695,7 @@ public class ReplicationTest {
 
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
         idsToExpectByPartition.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()),
-        responses.stream()
-            .map(k -> ReplicaThread.ExchangeMetadataResponse.getStoreKeysFromMessages(k.missingStoreMessages))
-            .flatMap(Collection::stream)
-            .collect(Collectors.toSet()));
+        responses.stream().map(k -> k.getMissingStoreKeys()).flatMap(Collection::stream).collect(Collectors.toSet()));
 
     // Now expire a message in the remote before doing the Get requests (for every partition). Remove these keys from
     // expected key set. Even though they are requested, they should not go into the local store. However, this cycle

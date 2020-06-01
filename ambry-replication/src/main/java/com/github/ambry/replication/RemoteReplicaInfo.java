@@ -64,6 +64,9 @@ public class RemoteReplicaInfo {
   private ReplicaThread replicaThread;
 
   // Metadata response information received for this replica in the most recent replication cycle.
+  // This is used during leader based replication to store the missing store messages, remote token info and local lag
+  // from remote for non-leader remote replicas. We will track the missing store messages when they come via intra-dc
+  // replication and update the currentToken to exchangeMetadataResponse.remoteToken after all of them are obtained.
   private ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse;
 
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
@@ -218,6 +221,9 @@ public class RemoteReplicaInfo {
    * @param exchangeMetadataResponse contains meta data response (missing keys, token info, local lag from remote, etc.).
    */
   synchronized void setExchangeMetadataResponse(ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse) {
+    // We are having this thread safe to avoid conflict between replica thread setting new exchangeMetadataResponse
+    // and replica threads updating the missing store messages in current exchangeMetadataResponse after they are
+    // written to local store via intra-dc replication (method will be added in future PR).
     this.exchangeMetadataResponse = exchangeMetadataResponse;
   }
 

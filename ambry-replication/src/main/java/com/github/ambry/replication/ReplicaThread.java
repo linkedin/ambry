@@ -495,8 +495,9 @@ public class ReplicaThread implements Runnable {
               // associated with same RemoteReplicaInfo.
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
 
-              // Also, store the metadata exchange received from remote replica in the RemoteReplicaInfo.
-              // If leader based replication is enabled, standby's will advance the remote token only after missing keys in the exchangeMetadataResponse are obtained via intra-dc replication.
+              // Also, store the metadata exchange response received from remote replica in the RemoteReplicaInfo.
+              // If leader based replication is enabled, standby's will advance the remote token only after missing keys
+              // in the exchangeMetadataResponse are obtained via intra-dc replication.
               remoteReplicaInfo.setExchangeMetadataResponse(exchangeMetadataResponse);
 
               replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
@@ -638,7 +639,7 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Gets the missing store keys by comparing the messages from the remote node
+   * Gets the missing store messages by comparing the messages from the remote node
    * @param replicaMetadataResponseInfo The response that contains the messages from the remote node
    * @param remoteNode The remote node from which replication needs to happen
    * @param remoteReplicaInfo The remote replica that contains information about the remote replica id
@@ -681,9 +682,9 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Takes the missing keys and the message list from the remote store and identifies messages that are deleted
+   * Takes the missing store messages and the message list from the remote store and identifies ones that are deleted
    * on the remote store and updates them locally. Also, if the message that is missing is deleted in the remote
-   * store, we remove the message from the list of missing keys
+   * store, we remove the message from the list of missing messages
    * @param missingRemoteStoreMessages The list of messages missing from the local store
    * @param replicaMetadataResponseInfo The replica metadata response from the remote store
    * @param remoteReplicaInfo The remote replica that is being replicated from
@@ -853,8 +854,7 @@ public class ReplicaThread implements Runnable {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
-        Set<StoreKey> missingStoreKeys =
-            ExchangeMetadataResponse.getStoreKeysFromMessages(exchangeMetadataResponse.missingStoreMessages);
+        Set<StoreKey> missingStoreKeys = exchangeMetadataResponse.getMissingStoreKeys();
         if (missingStoreKeys.size() > 0) {
           ArrayList<BlobId> keysToFetch = new ArrayList<BlobId>();
           for (StoreKey storeKey : missingStoreKeys) {
@@ -938,8 +938,7 @@ public class ReplicaThread implements Runnable {
             try {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Messages to fix: {} "
                       + "Partition: {} Local mount path: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
-                  ExchangeMetadataResponse.getStoreKeysFromMessages(exchangeMetadataResponse.missingStoreMessages),
-                  remoteReplicaInfo.getReplicaId().getPartitionId(),
+                  exchangeMetadataResponse.getMissingStoreKeys(), remoteReplicaInfo.getReplicaId().getPartitionId(),
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
               MessageFormatWriteSet writeset;
@@ -996,7 +995,7 @@ public class ReplicaThread implements Runnable {
             logger.error(
                 "One of the blobs authorization failed: Remote node: {} Thread name: {} Remote replica: {} Keys are: {}",
                 remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
-                ExchangeMetadataResponse.getStoreKeysFromMessages(exchangeMetadataResponse.missingStoreMessages));
+                exchangeMetadataResponse.getMissingStoreKeys());
           } else {
             replicationMetrics.updateGetRequestError(remoteReplicaInfo.getReplicaId());
             logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
@@ -1153,14 +1152,11 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
-     * Utility method to extract store keys from messages
+     *  get the keys corresponding to the missing messages in local store
      */
-    static Set<StoreKey> getStoreKeysFromMessages(Set<MessageInfo> messageInfos) {
-      if (messageInfos != null) {
-        return messageInfos.stream().map(MessageInfo::getStoreKey).collect(Collectors.toSet());
-      } else {
-        return new HashSet<>();
-      }
+    Set<StoreKey> getMissingStoreKeys() {
+      return missingStoreMessages == null ? Collections.emptySet()
+          : missingStoreMessages.stream().map(MessageInfo::getStoreKey).collect(Collectors.toSet());
     }
   }
 
