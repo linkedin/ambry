@@ -13,14 +13,10 @@
  */
 package com.github.ambry.cloud;
 
-import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
-import java.util.Date;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -29,6 +25,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * Class that runs scheduled or on-demand compaction of blobs in cloud storage.
+ */
 public class CloudStorageCompactor implements Runnable {
   private static final Logger logger = LoggerFactory.getLogger(CloudStorageCompactor.class);
   private final CloudDestination cloudDestination;
@@ -36,7 +35,6 @@ public class CloudStorageCompactor implements Runnable {
   private final int shutDownTimeoutSecs;
   private final long compactionTimeLimitMs;
   private final VcrMetrics vcrMetrics;
-  private final CloudRequestAgent requestAgent;
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
   private final AtomicReference<CountDownLatch> doneLatch = new AtomicReference<>();
 
@@ -53,7 +51,6 @@ public class CloudStorageCompactor implements Runnable {
     this.vcrMetrics = vcrMetrics;
     this.shutDownTimeoutSecs = cloudConfig.cloudBlobCompactionShutdownTimeoutSecs;
     compactionTimeLimitMs = TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours);
-    requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
     doneLatch.set(new CountDownLatch(0));
   }
 
