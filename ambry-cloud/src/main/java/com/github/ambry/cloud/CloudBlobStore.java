@@ -748,7 +748,7 @@ class CloudBlobStore implements Store {
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     checkStarted();
     // Check existence of keys in cloud metadata
-    // Note that it is ok to reference cache here, because all we are doing is eliminating blobs that were seen before and
+    // Note that it is ok to refer cache here, because all we are doing is eliminating blobs that were seen before and
     // we don't care about the state of the blob.
     // TODO Fix corner case where a blob is deleted in cache, and has been compacted. Ideally it should show as missing.
     List<BlobId> blobIdQueryList = keys.stream()

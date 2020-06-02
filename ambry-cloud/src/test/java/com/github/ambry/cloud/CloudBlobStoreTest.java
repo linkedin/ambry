@@ -106,7 +106,6 @@ public class CloudBlobStoreTest {
   private ClusterMap clusterMap;
   private VcrMetrics vcrMetrics;
   private Random random = new Random();
-  private DummyCloudUpdateValidator dummyCloudUpdateValidator = new DummyCloudUpdateValidator();
   private short refAccountId = 50;
   private short refContainerId = 100;
   private long operationTime = System.currentTimeMillis();
