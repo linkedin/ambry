@@ -22,7 +22,9 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.Callback;
 import io.netty.channel.ChannelHandlerContext;
 
-
+/**
+ * Default implementation of {@link ServerSecurityService} for Ambry that doesn't do any validations.
+ */
 public class AmbryServerSecurityService implements ServerSecurityService {
   private boolean isOpen;
   private final ServerConfig serverConfig;

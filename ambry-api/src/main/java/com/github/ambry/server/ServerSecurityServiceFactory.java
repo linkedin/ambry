@@ -14,9 +14,6 @@
 
 package com.github.ambry.server;
 
-import com.github.ambry.server.ServerSecurityService;
-
-
 public interface ServerSecurityServiceFactory {
   /**
    * Returns an instance of the {@link ServerSecurityService} that the factory generates.

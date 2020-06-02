@@ -14,9 +14,7 @@
 
 package com.github.ambry.server;
 
-import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.server.ServerSecurityService;
 import java.util.Properties;
 import junit.framework.Assert;
 import org.junit.Test;

@@ -14,17 +14,15 @@
 
 package com.github.ambry.server;
 
-import com.github.ambry.account.AccountService;
-import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ServerMetrics;
-import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.frontend.IdSigningService;
-import com.github.ambry.frontend.SecurityService;
-import com.github.ambry.frontend.UrlSigningService;
 
-
+/**
+ * Default implementation of {@link ServerSecurityServiceFactory} for Ambry
+ * <p/>
+ * Returns a new instance of {@link AmbryServerSecurityService} on {@link #getServerSecurityService()} call.
+ */
 public class AmbryServerSecurityServiceFactory implements ServerSecurityServiceFactory {
 
   private final ServerConfig serverConfig;

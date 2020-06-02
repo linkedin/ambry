@@ -13,15 +13,11 @@
  */
 package com.github.ambry.rest;
 
-import com.github.ambry.router.Callback;
 import com.github.ambry.server.ServerSecurityService;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.handler.codec.http2.Http2Error;
-import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.ssl.SslHandler;
-import java.security.cert.X509Certificate;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,7 +50,8 @@ public class ServerSecurityChecker extends ChannelInboundHandlerAdapter {
   }
 
   /**
-   * Listen to the handshake future if this is an SSL connection. Log and update metrics if the handshake failed.
+   * Listen to the handshake future for the SSL termination, then apply the security policies, potentialy closing the
+   * connection in case security check fails.
    * @param ctx the {@link ChannelHandlerContext}.
    */
   private void validateSslConnection(ChannelHandlerContext ctx) throws Exception {

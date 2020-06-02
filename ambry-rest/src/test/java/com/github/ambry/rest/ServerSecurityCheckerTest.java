@@ -36,6 +36,9 @@ import org.junit.Assert;
 import org.junit.Test;
 
 
+/**
+ * Unit tests for {@link ServerSecurityChecker}
+ */
 public class ServerSecurityCheckerTest {
 
   private static final X509Certificate PEER_CERT;
@@ -55,10 +58,18 @@ public class ServerSecurityCheckerTest {
     }
   }
 
+  /**
+   * Sets up the mock securityservice {@link ServerSecurityService} to use.
+   */
   public ServerSecurityCheckerTest() {
     serverSecurityService = new MockServerSecurityService();
   }
 
+  /**
+   * Test the code flow where {@link ServerSecurityChecker} waits for the SSL handshake complete event and
+   * apply security policy from channelActive method.
+   * @throws Exception
+   */
   @Test
   public void securityCheckerTest() throws Exception {
     //success case, channel should not be closed.
@@ -96,6 +107,9 @@ public class ServerSecurityCheckerTest {
   }
 }
 
+/**
+ * A mock class for {@link ServerSecurityService}
+ */
 class MockServerSecurityService implements ServerSecurityService {
   boolean isOpen = true;
 
