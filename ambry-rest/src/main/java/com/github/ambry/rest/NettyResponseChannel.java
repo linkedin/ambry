@@ -191,7 +191,7 @@ class NettyResponseChannel implements RestResponseChannel {
       return future;
     }
     Chunk chunk = new Chunk(src, callback);
-    logger.debug("Netty Response Chunk size: " + src.readableBytes());
+    logger.debug("Netty Response Chunk size: {}", src.readableBytes());
     chunksToWrite.add(chunk);
     if (HttpUtil.isContentLengthSet(finalResponseMetadata) && totalBytesReceived.get() > HttpUtil.getContentLength(
         finalResponseMetadata)) {
@@ -539,7 +539,7 @@ class NettyResponseChannel implements RestResponseChannel {
       restServiceErrorCode = restServiceException.getErrorCode();
       errorResponseStatus = ResponseStatus.getResponseStatus(restServiceErrorCode);
       status = getHttpResponseStatus(errorResponseStatus);
-      if (status == HttpResponseStatus.BAD_REQUEST || restServiceException.shouldIncludeExceptionMessageInResponse()) {
+      if (shouldSendFailureReason(status, restServiceException)) {
         errReason = new String(
             Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
             StandardCharsets.US_ASCII);
@@ -608,6 +608,14 @@ class NettyResponseChannel implements RestResponseChannel {
     }
     return shouldKeepAlive && !forceClose && HttpUtil.isKeepAlive(responseMetadata)
         && !CLOSE_CONNECTION_ERROR_STATUSES.contains(status);
+  }
+
+  private boolean shouldSendFailureReason(HttpResponseStatus status, RestServiceException exception) {
+    if (status == HttpResponseStatus.BAD_REQUEST || exception.shouldIncludeExceptionMessageInResponse()) {
+      return true;
+    }
+    return request != null && request.getArgs().containsKey(RestUtils.InternalKeys.SEND_FAILURE_REASON)
+        && (Boolean) request.getArgs().get(RestUtils.InternalKeys.SEND_FAILURE_REASON);
   }
 
   /**
@@ -962,6 +970,9 @@ class NettyResponseChannel implements RestResponseChannel {
       } else if (allChunksWritten() && !sentLastChunk) {
         // Send last chunk for this input
         sentLastChunk = true;
+        // When the Transfer-Encoding is Chunked, we don't really know which chunk is the last chunk since the content
+        // length information is lost. But here, we know that all the chunks are already put in the queue and there is
+        // no chunk polling out of the queue, we send back an empty last content.
         content = LastHttpContent.EMPTY_LAST_CONTENT;
         logger.trace("Last chunk was sent on channel {}", ctx.channel());
       }

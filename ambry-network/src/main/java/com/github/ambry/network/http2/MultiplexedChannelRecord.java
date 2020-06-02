@@ -251,8 +251,8 @@ public class MultiplexedChannelRecord {
       return;
     }
 
-    log.debug("Connection " + parentChannel + " has been idle for " + (System.currentTimeMillis()
-        - nonVolatileLastReserveAttemptTimeMillis) + "ms and will be shut down.");
+    log.debug("Connection {} has been idle for {}ms and will be shut down.", parentChannel,
+        System.currentTimeMillis() - nonVolatileLastReserveAttemptTimeMillis);
 
     // Mark ourselves as closed
     state = RecordState.CLOSED;

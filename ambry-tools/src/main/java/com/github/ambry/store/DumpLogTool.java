@@ -116,11 +116,11 @@ public class DumpLogTool {
       blobArray = blobIdList.split(",");
       blobs = new ArrayList<>();
       blobs.addAll(Arrays.asList(blobArray));
-      logger.info("Blobs to look out for :: " + blobs);
+      logger.info("Blobs to look out for :: {}", blobs);
     }
 
     if (fileToRead != null && !silent) {
-      logger.info("File to read " + fileToRead);
+      logger.info("File to read {}", fileToRead);
     }
     dumpLog(new File(fileToRead), logStartOffset, logEndOffset, blobs);
   }
@@ -143,10 +143,10 @@ public class DumpLogTool {
         LogBlobStatus logBlobStatus = blobIdToLogRecord.get(blobId);
         if (!logBlobStatus.isConsistent) {
           totalInConsistentBlobs++;
-          logger.error("Inconsistent blob " + blobId + " " + logBlobStatus);
+          logger.error("Inconsistent blob {} {}", blobId, logBlobStatus);
         }
       }
-      logger.info("Total inconsistent blob count " + totalInConsistentBlobs);
+      logger.info("Total inconsistent blob count {}", totalInConsistentBlobs);
     } finally {
       context.stop();
     }
@@ -164,7 +164,7 @@ public class DumpLogTool {
    */
   private void dumpLog(File file, long startOffset, long endOffset, ArrayList<String> blobs,
       Map<String, LogBlobStatus> blobIdToLogRecord) throws IOException {
-    logger.info("Dumping log file " + file.getAbsolutePath());
+    logger.info("Dumping log file {}", file.getAbsolutePath());
     long currentOffset = 0;
     RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
     long fileSize = file.length();
@@ -175,7 +175,7 @@ public class DumpLogTool {
     if (endOffset == -1) {
       endOffset = fileSize;
     }
-    logger.info("Starting dumping from offset " + currentOffset);
+    logger.info("Starting dumping from offset {}", currentOffset);
     while (currentOffset < endOffset) {
       try {
         DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
@@ -185,7 +185,7 @@ public class DumpLogTool {
           throttler.maybeThrottle(logBlobRecordInfo.totalRecordSize);
         }
         if (lastBlobFailed && !silent) {
-          logger.info("Successful record found at " + currentOffset + " after some failures ");
+          logger.info("Successful record found at {} after some failures ", currentOffset);
         }
         lastBlobFailed = false;
         if (!logBlobRecordInfo.isDeleted) {
@@ -224,38 +224,38 @@ public class DumpLogTool {
       } catch (IllegalArgumentException e) {
         if (!lastBlobFailed) {
           metrics.logDeserializationError.inc();
-          logger.error("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", "
-              + "while reading blob starting at offset " + currentOffset + "with exception: ", e);
+          logger.error("Illegal arg exception thrown at  {}, while reading blob starting at offset {}with exception: ",
+              randomAccessFile.getChannel().position(), currentOffset, e);
         }
         currentOffset++;
         lastBlobFailed = true;
       } catch (MessageFormatException e) {
         if (!lastBlobFailed) {
           metrics.logDeserializationError.inc();
-          logger.error("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position()
-              + " while reading blob starting at offset " + currentOffset + " with exception: ", e);
+          logger.error(
+              "MessageFormat exception thrown at  {} while reading blob starting at offset {} with exception: ",
+              randomAccessFile.getChannel().position(), currentOffset, e);
         }
         currentOffset++;
         lastBlobFailed = true;
       } catch (EOFException e) {
         metrics.endOfFileOnDumpLogError.inc();
-        logger.error("EOFException thrown at " + randomAccessFile.getChannel().position() + ", Cause :" + e.getCause()
-            + ", Msg :" + e.getMessage() + ", stacktrace ", e);
+        logger.error("EOFException thrown at {}, Cause :{}, Msg :{}, stacktrace ",
+            randomAccessFile.getChannel().position(), e.getCause(), e.getMessage(), e);
         throw (e);
       } catch (Exception e) {
         if (!lastBlobFailed) {
           metrics.unknownErrorOnDumpLog.inc();
-          logger.error(
-              "Unknown exception thrown with Cause " + e.getCause() + ", Msg :" + e.getMessage() + ", stacktrace ", e);
+          logger.error("Unknown exception thrown with Cause {}, Msg :{}, stacktrace ", e.getCause(), e.getMessage(), e);
           if (!silent) {
-            logger.info("Trying out next offset " + (currentOffset + 1));
+            logger.info("Trying out next offset {}", currentOffset + 1);
           }
         }
         currentOffset++;
         lastBlobFailed = true;
       }
     }
-    logger.info("Dumped until offset " + currentOffset);
+    logger.info("Dumped until offset {}", currentOffset);
   }
 
   /**

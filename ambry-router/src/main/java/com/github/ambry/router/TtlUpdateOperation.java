@@ -178,9 +178,9 @@ class TtlUpdateOperation {
         // The true case below should not really happen. This means a response has been received
         // not for its original request. We will immediately fail this operation.
         if (ttlUpdateResponse.getCorrelationId() != ttlUpdateRequest.getCorrelationId()) {
-          LOGGER.error("The correlation id in the TtlUpdateResponse " + ttlUpdateResponse.getCorrelationId()
-              + " is not the same as the correlation id in the associated TtlUpdateRequest: "
-              + ttlUpdateRequest.getCorrelationId());
+          LOGGER.error(
+              "The correlation id in the TtlUpdateResponse {} is not the same as the correlation id in the associated TtlUpdateRequest: {}",
+              ttlUpdateResponse.getCorrelationId(), ttlUpdateRequest.getCorrelationId());
           routerMetrics.unknownReplicaResponseError.inc();
           onErrorResponse(replica,
               new RouterException("Received wrong response that is not for the corresponding request.",

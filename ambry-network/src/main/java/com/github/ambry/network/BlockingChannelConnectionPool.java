@@ -150,12 +150,12 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
             blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry, sslSocketFactory, sslConfig);
             connections.put(host + port.getPort(), blockingChannelInfo);
           } else {
-            logger.trace("Using already existing BlockingChannelInfo for " + host + ":" + port.getPort()
-                + " in synchronized block");
+            logger.trace("Using already existing BlockingChannelInfo for {}:{} in synchronized block", host,
+                port.getPort());
           }
         }
       } else {
-        logger.trace("Using already existing BlockingChannelInfo for " + host + ":" + port.getPort());
+        logger.trace("Using already existing BlockingChannelInfo for {}:{}", host, port.getPort());
       }
       return blockingChannelInfo.getBlockingChannel(timeoutInMs);
     } finally {

@@ -67,7 +67,7 @@ class CryptoJobHandler implements Closeable {
         if (task instanceof CryptoJob) {
           ((CryptoJob) task).closeJob(CLOSED_EXCEPTION);
         } else {
-          logger.error("Unknown type of job seen : " + task.getClass());
+          logger.error("Unknown type of job seen : {}", task.getClass());
         }
       }
       try {

@@ -58,7 +58,7 @@ public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
     logger.trace("Reading on channel {}", ctx.channel());
     if (obj instanceof HttpRequest) {
       HttpRequest request = (HttpRequest) obj;
-      logger.trace("Handling incoming request " + request);
+      logger.trace("Handling incoming request {}", request);
       requestUri = request.uri();
       byte[] methodBytes = request.method().toString().getBytes();
       if (request.headers().get(IS_CHUNKED) == null || !request.headers().get(IS_CHUNKED).equals("true")) {

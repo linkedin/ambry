@@ -474,7 +474,7 @@ class Log implements Write {
           "There is no more capacity left in [" + dataDir + "]. Max capacity is [" + capacityInBytes + "]");
     }
     Pair<String, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
-    logger.info("Allocating new segment with name: " + segmentNameAndFilename.getFirst());
+    logger.info("Allocating new segment with name: {}", segmentNameAndFilename.getFirst());
     File newSegmentFile = null;
     try {
       newSegmentFile = allocate(segmentNameAndFilename.getSecond(), segmentCapacity, false);

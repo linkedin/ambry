@@ -506,7 +506,7 @@ class PutOperation {
       if (chunk.getChunkException() == null) {
         logger.error("Operation on chunk failed, but no exception was set");
       }
-      logger.error("Failed putting chunk at index: " + chunk.getChunkIndex() + ", failing the entire operation");
+      logger.error("Failed putting chunk at index: {}, failing the entire operation", chunk.getChunkIndex());
       setOperationCompleted();
     } else if (chunk != metadataPutChunk) {
       // a data chunk has succeeded.
@@ -1450,8 +1450,9 @@ class PutOperation {
             // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
             // There is no other way to handle it.
             routerMetrics.unknownReplicaResponseError.inc();
-            logger.error("The correlation id in the PutResponse " + putResponse.getCorrelationId()
-                + " is not the same as the correlation id in the associated PutRequest: " + correlationId);
+            logger.error(
+                "The correlation id in the PutResponse {} is not the same as the correlation id in the associated PutRequest: {}",
+                putResponse.getCorrelationId(), correlationId);
             setChunkException(
                 new RouterException("Unexpected internal error", RouterErrorCode.UnexpectedInternalError));
             isSuccessful = false;
@@ -1460,7 +1461,7 @@ class PutOperation {
           } else {
             ServerErrorCode putError = putResponse.getError();
             if (putError == ServerErrorCode.No_Error) {
-              logger.trace("The putRequest was successful for chunk " + chunkIndex);
+              logger.trace("The putRequest was successful for chunk {}", chunkIndex);
               isSuccessful = true;
             } else {
               // chunkException will be set within processServerError.

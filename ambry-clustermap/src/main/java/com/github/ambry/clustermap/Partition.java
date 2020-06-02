@@ -53,7 +53,7 @@ class Partition implements PartitionId {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   Partition(long id, String partitionClass, PartitionState partitionState, long replicaCapacityInBytes) {
-    logger.trace("Partition " + id + ", " + partitionState + ", " + replicaCapacityInBytes);
+    logger.trace("Partition {}, {}, {}", id, partitionState, replicaCapacityInBytes);
     this.id = id;
     this.partitionClass = partitionClass;
     this.partitionState = partitionState;
@@ -69,7 +69,7 @@ class Partition implements PartitionId {
 
   Partition(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
     if (logger.isTraceEnabled()) {
-      logger.trace("Partition " + jsonObject.toString());
+      logger.trace("Partition {}", jsonObject.toString());
     }
     this.id = jsonObject.getLong("id");
     this.partitionClass = jsonObject.has("partitionClass") ? jsonObject.getString("partitionClass")

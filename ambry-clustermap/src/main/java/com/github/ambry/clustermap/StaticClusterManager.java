@@ -57,7 +57,7 @@ class StaticClusterManager implements ClusterMap {
 
   StaticClusterManager(PartitionLayout partitionLayout, String localDatacenterName, MetricRegistry metricRegistry) {
     if (logger.isTraceEnabled()) {
-      logger.trace("StaticClusterManager " + partitionLayout);
+      logger.trace("StaticClusterManager {}", partitionLayout);
     }
     this.hardwareLayout = partitionLayout.getHardwareLayout();
     this.partitionLayout = partitionLayout;
@@ -68,7 +68,7 @@ class StaticClusterManager implements ClusterMap {
   }
 
   void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
-    logger.trace("persist " + hardwareLayoutPath + ", " + partitionLayoutPath);
+    logger.trace("persist {}, {}", hardwareLayoutPath, partitionLayoutPath);
     writeJsonObjectToFile(hardwareLayout.toJSONObject(), hardwareLayoutPath);
     writeJsonObjectToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
   }

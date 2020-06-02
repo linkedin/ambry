@@ -70,8 +70,8 @@ public class ValidatingTransformer implements Transformer {
       StoreKey keyInStream = storeKeyFactory.getStoreKey(new DataInputStream(msgStream));
       if (header.isPutRecord()) {
         if (header.hasLifeVersion() && header.getLifeVersion() != msgInfo.getLifeVersion()) {
-          logger.trace("LifeVersion in stream: " + header.getLifeVersion() + " failed to match lifeVersion from Index: "
-              + msgInfo.getLifeVersion() + " for key " + keyInStream);
+          logger.trace("LifeVersion in stream: {} failed to match lifeVersion from Index: {} for key {}",
+              header.getLifeVersion(), msgInfo.getLifeVersion(), keyInStream);
         }
         encryptionKey = header.hasEncryptionKeyRecord() ? deserializeBlobEncryptionKey(msgStream) : null;
         props = deserializeBlobProperties(msgStream);

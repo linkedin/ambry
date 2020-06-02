@@ -87,7 +87,7 @@ public class ReplicationManager extends ReplicationEngine {
           addRemoteReplicaInfoToReplicaThread(remoteReplicas, false);
         }
       } else {
-        logger.error("Not replicating to partition " + partition + " because an initialized store could not be found");
+        logger.error("Not replicating to partition {} because an initialized store could not be found", partition);
       }
     }
     // register replication manager's state change listener if clusterParticipant is not null
@@ -119,7 +119,7 @@ public class ReplicationManager extends ReplicationEngine {
       for (List<ReplicaThread> replicaThreads : replicaThreadPoolByDc.values()) {
         for (ReplicaThread thread : replicaThreads) {
           Thread replicaThread = Utils.newThread(thread.getName(), thread, false);
-          logger.info("Starting replica thread " + thread.getName());
+          logger.info("Starting replica thread {}", thread.getName());
           replicaThread.start();
         }
       }

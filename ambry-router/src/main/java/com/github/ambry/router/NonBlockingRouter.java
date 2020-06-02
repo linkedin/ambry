@@ -582,7 +582,7 @@ class NonBlockingRouter implements Router {
       BlobId.BlobDataType dataType = BlobId.getBlobDataType(blobId);
       return (dataType == null || dataType == BlobId.BlobDataType.METADATA);
     } catch (Exception ex) {
-      logger.error("Unexpected error getting blob data type for blobId " + blobId, ex);
+      logger.error("Unexpected error getting blob data type for blobId {}", blobId, ex);
       return true;
     }
   }
@@ -975,7 +975,7 @@ class NonBlockingRouter implements Router {
                 undeleteManager.handleResponse(responseInfo);
                 break;
               default:
-                logger.error("Unexpected response type: " + type + " received, discarding");
+                logger.error("Unexpected response type: {} received, discarding", type);
             }
           }
         } catch (Exception e) {

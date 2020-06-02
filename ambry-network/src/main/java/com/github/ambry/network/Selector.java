@@ -172,7 +172,7 @@ public class Selector implements Selectable {
       transmission = createTransmission(connectionId, key, address.getHostName(), address.getPort(), portType,
           SSLFactory.Mode.CLIENT);
     } catch (IOException e) {
-      logger.error("IOException on transmission creation " + e);
+      logger.error("IOException on transmission creation {}", e);
       channel.socket().close();
       channel.close();
       throw e;

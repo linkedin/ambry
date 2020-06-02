@@ -82,6 +82,13 @@ public class StoreConfig {
   public final int storeDeletedMessageRetentionDays;
 
   /**
+   * How long (in days) a container must be in DELETE_IN_PROGRESS state before it's been deleted during compaction.
+   */
+  @Config("store.container.deletion.retention.days")
+  @Default("14")
+  public final int storeContainerDeletionRetentionDays;
+
+  /**
    * The rate of I/O allowed per disk for hard deletes.
    */
   @Config("store.hard.delete.operations.bytes.per.sec")
@@ -332,6 +339,7 @@ public class StoreConfig {
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
     storeDeletedMessageRetentionDays = verifiableProperties.getInt("store.deleted.message.retention.days", 7);
+    storeContainerDeletionRetentionDays = verifiableProperties.getInt("store.container.deletion.retention.days", 14);
     storeHardDeleteOperationsBytesPerSec =
         verifiableProperties.getIntInRange("store.hard.delete.operations.bytes.per.sec", 100 * 1024, 1,
             Integer.MAX_VALUE);

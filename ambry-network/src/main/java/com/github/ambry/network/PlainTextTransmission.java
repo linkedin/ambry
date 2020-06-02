@@ -65,7 +65,7 @@ public class PlainTextTransmission extends Transmission {
     long startTimeMs = time.milliseconds();
     long bytesRead = networkReceive.getReceivedBytes().readFrom(socketChannel);
     long readTimeMs = time.milliseconds() - startTimeMs;
-    logger.trace("Bytes read " + bytesRead + " from {} using key {} Time: {}",
+    logger.trace("Bytes read {} from {} using key {} Time: {}", bytesRead,
         socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), readTimeMs);
     if (bytesRead > 0) {
       metrics.transmissionReceiveTime.update(readTimeMs);

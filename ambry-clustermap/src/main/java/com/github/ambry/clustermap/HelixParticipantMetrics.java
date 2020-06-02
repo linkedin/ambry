@@ -16,40 +16,41 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
 
 
 /**
  * Metrics for {@link HelixParticipant} to monitor partition state transitions.
  */
 class HelixParticipantMetrics {
-  final AtomicInteger bootstrapCount = new AtomicInteger();
-  final AtomicInteger standbyCount = new AtomicInteger();
-  final AtomicInteger leaderCount = new AtomicInteger();
-  final AtomicInteger inactiveCount = new AtomicInteger();
-  final AtomicInteger offlineCount = new AtomicInteger();
-  final AtomicInteger errorStateCount = new AtomicInteger();
+  private Map<ReplicaState, Integer> replicaCountByState = new HashMap<>();
+  private final Map<String, ReplicaState> localPartitionAndState;
   // no need to record exact number of "dropped" partition, a counter to track partition-dropped events would suffice
   final Counter partitionDroppedCount;
 
-  HelixParticipantMetrics(MetricRegistry metricRegistry, String zkConnectStr) {
+  HelixParticipantMetrics(MetricRegistry metricRegistry, String zkConnectStr,
+      Map<String, ReplicaState> localPartitionAndState) {
     String zkSuffix = zkConnectStr == null ? "" : "-" + zkConnectStr;
-    Gauge<Integer> bootstrapPartitionCount = bootstrapCount::get;
+    this.localPartitionAndState = localPartitionAndState;
+    EnumSet.complementOf(EnumSet.of(ReplicaState.DROPPED)).forEach(state -> replicaCountByState.put(state, 0));
+    Gauge<Integer> bootstrapPartitionCount = () -> getReplicaCountInState(ReplicaState.BOOTSTRAP);
     metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "bootstrapPartitionCount" + zkSuffix),
         bootstrapPartitionCount);
-    Gauge<Integer> standbyPartitionCount = standbyCount::get;
+    Gauge<Integer> standbyPartitionCount = () -> getReplicaCountInState(ReplicaState.STANDBY);
     metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "standbyPartitionCount" + zkSuffix),
         standbyPartitionCount);
-    Gauge<Integer> leaderPartitionCount = leaderCount::get;
+    Gauge<Integer> leaderPartitionCount = () -> getReplicaCountInState(ReplicaState.LEADER);
     metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "leaderPartitionCount" + zkSuffix),
         leaderPartitionCount);
-    Gauge<Integer> inactivePartitionCount = inactiveCount::get;
+    Gauge<Integer> inactivePartitionCount = () -> getReplicaCountInState(ReplicaState.INACTIVE);
     metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "inactivePartitionCount" + zkSuffix),
         inactivePartitionCount);
-    Gauge<Integer> offlinePartitionCount = offlineCount::get;
+    Gauge<Integer> offlinePartitionCount = () -> getReplicaCountInState(ReplicaState.OFFLINE);
     metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "offlinePartitionCount" + zkSuffix),
         offlinePartitionCount);
-    Gauge<Integer> errorStatePartitionCount = errorStateCount::get;
+    Gauge<Integer> errorStatePartitionCount = () -> getReplicaCountInState(ReplicaState.ERROR);
     metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "errorStatePartitionCount" + zkSuffix),
         errorStatePartitionCount);
     partitionDroppedCount =
@@ -57,14 +58,23 @@ class HelixParticipantMetrics {
   }
 
   /**
-   * Set number of partitions on current node. This is invoked during startup.
-   * @param partitionCount number of partitions on current node
+   * Get the number of replicas in given state.
+   * @param state the {@link ReplicaState} associated with local replica.
+   * @return number of replicas in given state
    */
-  void setLocalPartitionCount(int partitionCount) {
-    // this method should be invoked before participation, so the initial value is expected to be 0.
-    if (!offlineCount.compareAndSet(0, partitionCount)) {
-      throw new IllegalStateException("Number of OFFLINE partitions has changed to " + offlineCount.get()
-          + " before initializing participant metrics ");
+  private int getReplicaCountInState(ReplicaState state) {
+    // Scan the whole map only when it's OFFLINE state. Other gauges should be able to read cached result from
+    // replicaCountByState map.
+    if (state == ReplicaState.OFFLINE) {
+      Map<ReplicaState, Integer> replicaStateAndCount = new HashMap<>();
+      EnumSet.complementOf(EnumSet.of(ReplicaState.DROPPED))
+          .forEach(replicaState -> replicaStateAndCount.put(replicaState, 0));
+      for (ReplicaState replicaState : localPartitionAndState.values()) {
+        replicaStateAndCount.put(replicaState, replicaStateAndCount.get(replicaState) + 1);
+      }
+      // reference switch should be atomic
+      replicaCountByState = replicaStateAndCount;
     }
+    return replicaCountByState.get(state);
   }
 }

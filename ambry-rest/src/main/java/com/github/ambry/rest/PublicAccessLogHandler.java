@@ -79,9 +79,9 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
     } else if (obj instanceof LastHttpContent) {
       requestLastChunkArrivalTimeInMs = System.currentTimeMillis();
     } else if (!(obj instanceof HttpContent)) {
-      logger.error("Receiving request (messageReceived) that is not of type HttpRequest or HttpContent. "
-          + "Receiving request from " + ctx.channel().remoteAddress() + ". " + "Request is of type " + obj.getClass()
-          + ". " + "No action being taken other than logging this unexpected state.");
+      logger.error(
+          "Receiving request (messageReceived) that is not of type HttpRequest or HttpContent. Receiving request from {}. Request is of type {}. No action being taken other than logging this unexpected state.",
+          ctx.channel().remoteAddress(), obj.getClass());
     }
     nettyMetrics.publicAccessLogRequestProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
     super.channelRead(ctx, obj);
@@ -105,9 +105,8 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
         }
       } else if (!(msg instanceof HttpContent)) {
         logger.error(
-            "Sending response that is not of type HttpResponse or HttpContent. Sending response to " + ctx.channel()
-                .remoteAddress() + ". Request is of type " + msg.getClass()
-                + ". No action being taken other than logging this unexpected state.");
+            "Sending response that is not of type HttpResponse or HttpContent. Sending response to {}. Request is of type {}. No action being taken other than logging this unexpected state.",
+            ctx.channel().remoteAddress(), msg.getClass());
       }
       if (shouldReset) {
         logDurations();

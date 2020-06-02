@@ -221,7 +221,6 @@ public class RestUtils {
      * The lifeVersion of the blob.
      */
     public final static String LIFE_VERSION = "x-ambry-life-version";
-
   }
 
   public static final class TrackingHeaders {
@@ -297,6 +296,11 @@ public class RestUtils {
      * The key for the {@link RequestPath} that represents the parsed path of an incoming request.
      */
     public static final String REQUEST_PATH = KEY_PREFIX + "request-path";
+
+    /**
+     * To be set to {@code true} if failures reason should be attached to frontend responses.
+     */
+    public static final String SEND_FAILURE_REASON = KEY_PREFIX + "send-failure-reason";
   }
 
   /**
@@ -499,8 +503,8 @@ public class RestUtils {
             crc32.update(userMetadata, 0, userMetadata.length - CRC_SIZE);
             long expectedCRC = crc32.getValue();
             if (actualCRC != expectedCRC) {
-              logger.error(
-                  "corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+              logger.error("corrupt data while parsing user metadata Expected CRC {} Actual CRC {}", expectedCRC,
+                  actualCRC);
               toReturn = null;
             }
           }
@@ -585,7 +589,7 @@ public class RestUtils {
       SimpleDateFormat dateFormatter = new SimpleDateFormat(HTTP_DATE_FORMAT, Locale.US);
       return dateFormatter.parse(dateString).getTime();
     } catch (ParseException e) {
-      logger.warn("Could not parse milliseconds from an HTTP date header (" + dateString + ").");
+      logger.warn("Could not parse milliseconds from an HTTP date header ({}).", dateString);
       return null;
     }
   }
