@@ -339,7 +339,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
             new ReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
                 connectionPool, replicationConfig, replicationMetrics, notification, threadSpecificKeyConverter,
                 threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter, responseHandler,
-                SystemTime.getInstance(), replicaSyncUpManager);
+                SystemTime.getInstance(), replicaSyncUpManager, partitionLeaderInfo);
         replicaThreads.add(replicaThread);
         if (startThread) {
           Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);
