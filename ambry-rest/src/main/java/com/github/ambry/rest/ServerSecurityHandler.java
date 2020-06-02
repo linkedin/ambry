@@ -28,12 +28,12 @@ import org.slf4j.LoggerFactory;
  * Handler that performs any security validation on the new HTTP2 connection.
  */
 @ChannelHandler.Sharable
-public class ServerSecurityChecker extends ChannelInboundHandlerAdapter {
+public class ServerSecurityHandler extends ChannelInboundHandlerAdapter {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ServerSecurityService serverSecurityService;
   private final ServerMetrics serverMetrics;
 
-  public ServerSecurityChecker(ServerSecurityService serverSecurityService, ServerMetrics serverMetrics) {
+  public ServerSecurityHandler(ServerSecurityService serverSecurityService, ServerMetrics serverMetrics) {
     this.serverSecurityService =
         Objects.requireNonNull(serverSecurityService, "server security service can not be null");
     this.serverMetrics = Objects.requireNonNull(serverMetrics, "serverMetrics can not be null");
@@ -72,7 +72,7 @@ public class ServerSecurityChecker extends ChannelInboundHandlerAdapter {
                 serverMetrics.serverValidateConnectionFailure.inc();
                 ctx.channel().close();
               } else {
-                logger.info("security validation succeeded for channel: {}", ctx.channel());
+                logger.debug("security validation succeeded for channel: {}", ctx.channel());
                 serverMetrics.serverValidateConnectionSuccess.inc();
               }
             });

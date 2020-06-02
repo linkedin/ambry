@@ -42,7 +42,7 @@ public class StorageServerNettyFactory implements NioServerFactory {
   private final PerformanceConfig performanceConfig;
   private final NettyMetrics nettyMetrics;
   final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
-  private final ServerSecurityChecker serverSecurityChecker;
+  private final ServerSecurityHandler serverSecurityHandler;
 
   /**
    * Creates a new instance of StorageServerNettyFactory.
@@ -65,11 +65,11 @@ public class StorageServerNettyFactory implements NioServerFactory {
     nettyMetrics = new NettyMetrics(metricRegistry);
     Http2ClientConfig http2ClientConfig = new Http2ClientConfig(verifiableProperties);
     ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
-    this.serverSecurityChecker = new ServerSecurityChecker(serverSecurityService, serverMetrics);
+    this.serverSecurityHandler = new ServerSecurityHandler(serverSecurityService, serverMetrics);
 
     Map<Integer, ChannelInitializer<SocketChannel>> initializers = Collections.singletonMap(http2Port,
         new StorageServerNettyChannelInitializer(nettyConfig, http2ClientConfig, performanceConfig, nettyMetrics,
-            connectionStatsHandler, requestHandler, sslFactory, metricRegistry, this.serverSecurityChecker));
+            connectionStatsHandler, requestHandler, sslFactory, metricRegistry, this.serverSecurityHandler));
     channelInitializers = Collections.unmodifiableMap(initializers);
   }
 

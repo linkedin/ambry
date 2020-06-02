@@ -39,9 +39,9 @@ import org.junit.Test;
 
 
 /**
- * Unit tests for {@link ServerSecurityChecker}
+ * Unit tests for {@link ServerSecurityHandler}
  */
-public class ServerSecurityCheckerTest {
+public class ServerSecurityHandlerTest {
 
   private static final X509Certificate PEER_CERT;
   private static final SslContext SSL_CONTEXT;
@@ -63,12 +63,12 @@ public class ServerSecurityCheckerTest {
   /**
    * Sets up the mock securityservice {@link ServerSecurityService} to use.
    */
-  public ServerSecurityCheckerTest() {
+  public ServerSecurityHandlerTest() {
     serverSecurityService = new MockServerSecurityService();
   }
 
   /**
-   * Test the code flow where {@link ServerSecurityChecker} waits for the SSL handshake complete event and
+   * Test the code flow where {@link ServerSecurityHandler} waits for the SSL handshake complete event and
    * apply security policy from channelActive method.
    * @throws Exception
    */
@@ -84,7 +84,20 @@ public class ServerSecurityCheckerTest {
     Assert.assertEquals("validation success counter mismatch", 1,
         metrics.serverValidateConnectionSuccess.getCount());
 
-    //security validation failure case, channel should be closed.
+
+    //security validation failure case (throw exception), channel should be closed.
+    MockServerSecurityService mockServerSecurityService = (MockServerSecurityService)serverSecurityService;
+    mockServerSecurityService.setThrowException(true);
+    metrics = new ServerMetrics(new MetricRegistry(), this.getClass(), this.getClass());
+    channel = createChannelSsl(metrics);
+    sslHandler = channel.pipeline().get(SslHandler.class);
+    promise = (Promise<Channel>) sslHandler.handshakeFuture();
+    promise.setSuccess(channel);
+    Assert.assertTrue("channel should be closed", !channel.isActive());
+    Assert.assertEquals("validation success counter mismatch", 1,
+        metrics.serverValidateConnectionFailure.getCount());
+
+    //security validation failure case (service closed), channel should be closed.
     serverSecurityService.close();
     metrics = new ServerMetrics(new MetricRegistry(), this.getClass(), this.getClass());
     channel = createChannelSsl(metrics);
@@ -94,14 +107,17 @@ public class ServerSecurityCheckerTest {
     Assert.assertTrue("channel should be closed", !channel.isActive());
     Assert.assertEquals("validation success counter mismatch", 1,
         metrics.serverValidateConnectionFailure.getCount());
+
+
+
   }
 
   //helpers
   //general
 
   /**
-   * Creates an {@link EmbeddedChannel} that incorporates an instance of {@link ServerSecurityChecker}
-   * @return an {@link EmbeddedChannel} that incorporates an instance of {@link ServerSecurityChecker}
+   * Creates an {@link EmbeddedChannel} that incorporates an instance of {@link ServerSecurityHandler}
+   * @return an {@link EmbeddedChannel} that incorporates an instance of {@link ServerSecurityHandler}
    *         and an {@link SslHandler}.
    */
   private EmbeddedChannel createChannelSsl(ServerMetrics metrics) {
@@ -109,8 +125,8 @@ public class ServerSecurityCheckerTest {
     SSLEngine mockSSLEngine =
         new MockSSLEngine(sslEngine, new MockSSLSession(sslEngine.getSession(), new Certificate[]{PEER_CERT}));
     SslHandler sslHandler = new SslHandler(mockSSLEngine);
-    ServerSecurityChecker serverSecurityChecker = new ServerSecurityChecker(serverSecurityService, metrics);
-    EmbeddedChannel channel = new EmbeddedChannel(sslHandler, serverSecurityChecker);
+    ServerSecurityHandler serverSecurityHandler = new ServerSecurityHandler(serverSecurityService, metrics);
+    EmbeddedChannel channel = new EmbeddedChannel(sslHandler, serverSecurityHandler);
     return channel;
   }
 }
@@ -119,13 +135,20 @@ public class ServerSecurityCheckerTest {
  * A mock class for {@link ServerSecurityService}
  */
 class MockServerSecurityService implements ServerSecurityService {
-  boolean isOpen = true;
+  private boolean isOpen = true;
+  private boolean throwException = false;
+
+  public void setThrowException(boolean throwException) {
+    this.throwException = throwException;
+  }
 
   @Override
   public void validateConnection(ChannelHandlerContext ctx, Callback<Void> callback) {
     Exception exception = null;
     if (!isOpen) {
       exception = new RestServiceException("ServerSecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
+    } else if (throwException) {
+      throw new IllegalArgumentException("dummy exception for testing purpose");
     }
     callback.onCompletion(null, exception);
   }
