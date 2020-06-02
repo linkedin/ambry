@@ -36,6 +36,7 @@ import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -47,6 +48,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,7 +75,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected final Map<String, AtomicInteger> nextReplicaThreadIndexByDc;
   private final StoreKeyFactory storeKeyFactory;
   private final List<String> sslEnabledDatacenters;
-  private final StoreKeyConverterFactory storeKeyConverterFactory;
+  protected final StoreKeyConverterFactory storeKeyConverterFactory;
   private final String transformerClassName;
   private final Predicate<MessageInfo> skipPredicate;
   protected final DataNodeId dataNodeId;
@@ -87,10 +90,11 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected final ReplicaSyncUpManager replicaSyncUpManager;
   protected final StoreManager storeManager;
   protected ReplicaTokenPersistor persistor = null;
-  protected final PartitionLeaderInfo partitionLeaderInfo;
+  protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
   protected static final short Replication_Delay_Multiplier = 5;
   protected static final String replicaTokenFileName = "replicaTokens";
+  private final Time time;
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, ScheduledExecutorService scheduler, DataNodeId dataNode,
@@ -98,13 +102,28 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
       String transformerClassName, ClusterParticipant clusterParticipant, StoreManager storeManager,
       Predicate<MessageInfo> skipPredicate) throws ReplicationException {
+    this(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode, replicaIds,
+        connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory, transformerClassName,
+        clusterParticipant, storeManager, skipPredicate, null, SystemTime.getInstance());
+  }
+
+  public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
+      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, ScheduledExecutorService scheduler, DataNodeId dataNode,
+      List<? extends ReplicaId> replicaIds, ConnectionPool connectionPool, MetricRegistry metricRegistry,
+      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
+      String transformerClassName, ClusterParticipant clusterParticipant, StoreManager storeManager,
+      Predicate<MessageInfo> skipPredicate, FindTokenHelper findTokenHelper, Time time) throws ReplicationException {
     this.replicationConfig = replicationConfig;
     this.storeKeyFactory = storeKeyFactory;
-    try {
-      this.tokenHelper = new FindTokenHelper(this.storeKeyFactory, this.replicationConfig);
-    } catch (ReflectiveOperationException roe) {
-      logger.error("Error on getting ReplicaTokenHelper", roe);
-      throw new ReplicationException("Error on getting ReplicaTokenHelper");
+    if (findTokenHelper == null) {
+      try {
+        this.tokenHelper = new FindTokenHelper(this.storeKeyFactory, this.replicationConfig);
+      } catch (ReflectiveOperationException roe) {
+        logger.error("Error on getting ReplicaTokenHelper", roe);
+        throw new ReplicationException("Error on getting ReplicaTokenHelper");
+      }
+    } else {
+      this.tokenHelper = findTokenHelper;
     }
     this.replicaThreadPoolByDc = new ConcurrentHashMap<>();
     this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaIds);
@@ -125,7 +144,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.storeManager = storeManager;
     this.skipPredicate = skipPredicate;
     replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
-    partitionLeaderInfo = new PartitionLeaderInfo(storeManager);
+    this.time = time;
   }
 
   /**
@@ -279,10 +298,26 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * @param startThread if threads need to be started when create.
    */
   protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
+    addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, startThread, null);
+  }
+
+  /**
+   * Assign {@link RemoteReplicaInfo} to a {@link ReplicaThread} for replication.
+   * The assignment is based on {@link DataNodeId}. If no {@link ReplicaThread} responsible for a {@link DataNodeId},
+   * a {@link ReplicaThread} will be selected by {@link ReplicationEngine#getReplicaThreadIndexToUse(String)}.
+   * Create threads pool for a DC if not exists.
+   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo} to add.
+   * @param startThread if threads need to be started when create.
+   * @param leaderBasedReplicationAdmin to co-ordinate replication between leader and standby replicas of a partition
+   *                                    during leader based replication.
+   */
+  protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread,
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
       DataNodeId dataNodeIdToReplicate = remoteReplicaInfo.getReplicaId().getDataNodeId();
       String datacenter = dataNodeIdToReplicate.getDatacenterName();
-      List<ReplicaThread> replicaThreads = getOrCreateThreadPoolIfNecessary(datacenter, startThread);
+      List<ReplicaThread> replicaThreads =
+          getOrCreateThreadPoolIfNecessary(datacenter, startThread, leaderBasedReplicationAdmin);
       if (replicaThreads == null) {
         logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads for {}.",
             datacenter);
@@ -307,9 +342,12 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * Get thread pool for given datacenter. Create thread pool for a datacenter if its thread pool doesn't exist.
    * @param datacenter The datacenter String.
    * @param startThread If thread needs to be started when create.
+   * @param leaderBasedReplicationAdmin to co-ordinate replication between leader and standby replicas of a partition
+   *                                    during leader based replication.
    * @return List of {@link ReplicaThread}s. Return null if number of replication thread in config is 0 for this DC.
    */
-  private List<ReplicaThread> getOrCreateThreadPoolIfNecessary(String datacenter, boolean startThread) {
+  private List<ReplicaThread> getOrCreateThreadPoolIfNecessary(String datacenter, boolean startThread,
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     int numOfThreadsInPool =
         datacenter.equals(dataNodeId.getDatacenterName()) ? replicationConfig.replicationNumOfIntraDCReplicaThreads
             : replicationConfig.replicationNumOfInterDCReplicaThreads;
@@ -317,7 +355,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       return null;
     }
     return replicaThreadPoolByDc.computeIfAbsent(datacenter,
-        key -> createThreadPool(datacenter, numOfThreadsInPool, startThread));
+        key -> createThreadPool(datacenter, numOfThreadsInPool, startThread, leaderBasedReplicationAdmin));
   }
 
   /**
@@ -325,8 +363,11 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * @param datacenter The datacenter String.
    * @param numberOfThreads Number of threads to create for the thread pool.
    * @param startThread If thread needs to be started when create.
+   * @param leaderBasedReplicationAdmin to co-ordinate replication between leader and standby replicas of a partition
+   *                                    during leader based replication.
    */
-  private List<ReplicaThread> createThreadPool(String datacenter, int numberOfThreads, boolean startThread) {
+  private List<ReplicaThread> createThreadPool(String datacenter, int numberOfThreads, boolean startThread,
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     nextReplicaThreadIndexByDc.put(datacenter, new AtomicInteger(0));
     List<ReplicaThread> replicaThreads = new ArrayList<>();
     logger.info("Number of replica threads to replicate from {}: {}", datacenter, numberOfThreads);
@@ -343,8 +384,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         ReplicaThread replicaThread =
             new ReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
                 connectionPool, replicationConfig, replicationMetrics, notification, threadSpecificKeyConverter,
-                threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter, responseHandler,
-                SystemTime.getInstance(), replicaSyncUpManager, partitionLeaderInfo, skipPredicate);
+                threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter, responseHandler, time,
+                replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
         replicaThreads.add(replicaThread);
         if (startThread) {
           Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);
@@ -369,7 +410,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    */
   public void retrieveReplicaTokensAndPersistIfNecessary(String mountPath) throws ReplicationException, IOException {
     boolean tokenWasReset = false;
-    long readStartTimeMs = SystemTime.getInstance().milliseconds();
+    long readStartTimeMs = time.milliseconds();
     List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfoList = persistor.retrieve(mountPath);
 
     for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfoList) {
@@ -412,7 +453,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         logTokenReset(partitionId, hostname, port, token);
       }
     }
-    replicationMetrics.remoteReplicaTokensRestoreTime.update(SystemTime.getInstance().milliseconds() - readStartTimeMs);
+    replicationMetrics.remoteReplicaTokensRestoreTime.update(time.milliseconds() - readStartTimeMs);
 
     if (tokenWasReset) {
       // We must ensure that the the token file is persisted if any of the tokens in the file got reset. We need to do

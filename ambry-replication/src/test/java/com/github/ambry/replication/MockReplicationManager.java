@@ -23,10 +23,13 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
 import java.util.Collection;
 import java.util.List;
@@ -77,7 +80,9 @@ public class MockReplicationManager extends ReplicationManager {
       StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
       StoreKeyConverterFactory storeKeyConverterFactory, ClusterParticipant clusterParticipant)
       throws ReplicationException {
-    super(replicationConfig, clusterMapConfig, storeConfig, storageManager, new StoreKeyFactory() {
+    this(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap, dataNodeId,
+        storeKeyConverterFactory, clusterParticipant, null, null, BlobIdTransformer.class.getName(),
+        new StoreKeyFactory() {
           @Override
           public StoreKey getStoreKey(DataInputStream stream) {
             return null;
@@ -87,8 +92,17 @@ public class MockReplicationManager extends ReplicationManager {
           public StoreKey getStoreKey(String input) {
             return null;
           }
-        }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
-        BlobIdTransformer.class.getName(), clusterParticipant, null);
+        }, SystemTime.getInstance());
+  }
+
+  public MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
+      StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
+      StoreKeyConverterFactory storeKeyConverterFactory, ClusterParticipant clusterParticipant,
+      ConnectionPool connectionPool, FindTokenHelper findTokenHelper, String transformerClassName,
+      StoreKeyFactory storeKeyFactory, Time time) throws ReplicationException {
+    super(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory, clusterMap, null,
+        dataNodeId, connectionPool, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
+        transformerClassName, clusterParticipant, null, findTokenHelper, time);
     reset();
   }
 

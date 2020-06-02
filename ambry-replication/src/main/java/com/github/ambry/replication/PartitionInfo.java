@@ -15,6 +15,7 @@ package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import java.util.List;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -103,6 +104,24 @@ public class PartitionInfo {
       rwLock.writeLock().unlock();
     }
     return replicaInfoToRemove;
+  }
+
+  /**
+   * Go through remote replicas of this partition and compare messages newly written to store with messages
+   * found missing during the previous replication cycle. This is used during leader-based cross colo replication where
+   * missing store messages found in metadata exchange are not fetched for non-leader replica pairs (i.e. either local replica or
+   * remote replica is not a leader of their partition) and are expected to come from leader pair exchanges via intra-dc replication.
+   * @param messagesWrittenToStore list of messages written to local store.
+   */
+  void updateReplicaInfosOnMessageWrite(List<MessageInfo> messagesWrittenToStore) {
+    rwLock.readLock().lock();
+    try {
+      for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicas) {
+        remoteReplicaInfo.updateMissingMessagesInMetadataResponse(messagesWrittenToStore);
+      }
+    } finally {
+      rwLock.readLock().unlock();
+    }
   }
 
   @Override

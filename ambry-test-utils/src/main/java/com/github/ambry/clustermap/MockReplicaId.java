@@ -34,6 +34,7 @@ public class MockReplicaId implements ReplicaId {
   private boolean isMarkedDown = false;
   private ReplicaType replicaType;
   private volatile boolean isSealed;
+  private ReplicaState replicaState;
 
   public MockReplicaId(ReplicaType replicaType) {
     this.replicaType = replicaType;
@@ -60,6 +61,7 @@ public class MockReplicaId implements ReplicaId {
       diskId = new MockDiskId(dataNodeId, mountPath);
     }
     isSealed = partitionId.getPartitionState().equals(PartitionState.READ_ONLY);
+    replicaState = ReplicaState.STANDBY;
   }
 
   @Override
@@ -184,5 +186,21 @@ public class MockReplicaId implements ReplicaId {
    */
   public void markReplicaDownStatus(boolean isDown) {
     isMarkedDown = isDown;
+  }
+
+  /**
+   * Get the state (LEADER, STANDBY, INACTIVE, etc.) of replica
+   * @return replica state
+   */
+  public ReplicaState getReplicaState() {
+    return replicaState;
+  }
+
+  /**
+   * Set the state (LEADER, STANDBY, INACTIVE, etc.) of replica
+   * @param replicaState
+   */
+  public void setReplicaState(ReplicaState replicaState) {
+    this.replicaState = replicaState;
   }
 }
