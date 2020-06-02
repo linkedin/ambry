@@ -129,8 +129,8 @@ public class VcrReplicationManager extends ReplicationEngine {
 
     if (cloudConfig.cloudBlobCompactionEnabled) {
       // Schedule thread to purge dead blobs for this VCR's partitions
-      // after brief delay to allow startup to finish.
-      long delaySec = TimeUnit.MINUTES.toSeconds(1);
+      // after delay to allow startup to finish.
+      long delaySec = cloudConfig.cloudBlobCompactionStartupDelaySecs;
       long intervalSec = TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours);
       scheduler.scheduleAtFixedRate(cloudStorageCompactor, delaySec, intervalSec, TimeUnit.SECONDS);
       logger.info("Scheduled compaction task to run every {} hours starting in {} seconds.",

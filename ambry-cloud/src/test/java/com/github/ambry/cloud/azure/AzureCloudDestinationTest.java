@@ -28,6 +28,7 @@ import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.FindResult;
+import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -91,6 +92,7 @@ public class AzureCloudDestinationTest {
   private BlockBlobClient mockBlockBlobClient;
   private BlobBatchClient mockBlobBatchClient;
   private AsyncDocumentClient mockumentClient;
+  private VcrMetrics vcrMetrics;
   private AzureMetrics azureMetrics;
   private int blobSize = 1024;
   private byte dataCenterId = 66;
@@ -131,6 +133,7 @@ public class AzureCloudDestinationTest {
     configProps.setProperty("clustermap.cluster.name", "main");
     configProps.setProperty("clustermap.datacenter.name", "uswest");
     configProps.setProperty("clustermap.host.name", "localhost");
+    vcrMetrics = new VcrMetrics(new MetricRegistry());
     azureMetrics = new AzureMetrics(new MetricRegistry());
     azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
         azureMetrics, defaultAzureReplicationFeedType, false);
@@ -206,47 +209,6 @@ public class AzureCloudDestinationTest {
     assertEquals(1, azureMetrics.blobUpdateTime.getCount());
     assertEquals(1, azureMetrics.documentReadTime.getCount());
     assertEquals(1, azureMetrics.documentUpdateTime.getCount());
-  }
-
-  /** Test purge success. */
-  @Test
-  public void testPurge() throws Exception {
-    BlobBatch mockBatch = mock(BlobBatch.class);
-    when(mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
-    Response<Void> okResponse = mock(Response.class);
-    when(okResponse.getStatusCode()).thenReturn(202);
-    when(mockBatch.deleteBlob(anyString(), anyString())).thenReturn(okResponse);
-    Observable<StoredProcedureResponse> mockBulkDeleteResponse = getMockBulkDeleteResponse(1);
-    when(mockumentClient.executeStoredProcedure(anyString(), any(RequestOptions.class), any())).thenReturn(
-        mockBulkDeleteResponse);
-    CloudBlobMetadata cloudBlobMetadata =
-        new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
-            CloudBlobMetadata.EncryptionOrigin.NONE);
-    assertEquals("Expected success", 1, azureDest.purgeBlobs(Collections.singletonList(cloudBlobMetadata)));
-    assertEquals(1, azureMetrics.blobDeletedCount.getCount());
-    assertEquals(0, azureMetrics.blobDeleteErrorCount.getCount());
-  }
-
-  /** Test purge error. */
-  @Test
-  public void testPurgeError() throws Exception {
-    // Unsuccessful case
-    BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_ARCHIVED);
-    BlobBatch mockBatch = mock(BlobBatch.class);
-    Response<Void> mockResponse = mock(Response.class);
-    when(mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
-    when(mockBatch.deleteBlob(anyString(), anyString())).thenReturn(mockResponse);
-    when(mockBlobBatchClient.submitBatchWithResponse(any(), anyBoolean(), any(), any())).thenThrow(ex);
-    CloudBlobMetadata cloudBlobMetadata =
-        new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
-            CloudBlobMetadata.EncryptionOrigin.NONE);
-    try {
-      azureDest.purgeBlobs(Collections.singletonList(cloudBlobMetadata));
-      fail("Expected CloudStorageException");
-    } catch (CloudStorageException bex) {
-    }
-    assertEquals(0, azureMetrics.blobDeletedCount.getCount());
-    assertEquals(1, azureMetrics.blobDeleteErrorCount.getCount());
   }
 
   /** Test upload of existing blob. */
@@ -501,24 +463,6 @@ public class AzureCloudDestinationTest {
     } finally {
       azureDest.close();
     }
-  }
-
-  /** Test getDeadBlobs */
-  @Test
-  public void testGetDeadBlobs() throws Exception {
-    Observable<FeedResponse<Document>> mockResponse = getMockedObservableForQueryWithNoResults();
-    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        mockResponse);
-    long now = System.currentTimeMillis();
-    List<CloudBlobMetadata> metadataList = azureDest.getDeletedBlobs(blobId.getPartition().toPathString(), 1, now, 10);
-    assertEquals("Expected no deleted blobs", 0, metadataList.size());
-    assertEquals(1, azureMetrics.documentQueryCount.getCount());
-    assertEquals(1, azureMetrics.deadBlobsQueryTime.getCount());
-
-    metadataList = azureDest.getExpiredBlobs(blobId.getPartition().toPathString(), 1, now, 10);
-    assertEquals("Expected no expired blobs", 0, metadataList.size());
-    assertEquals(2, azureMetrics.documentQueryCount.getCount());
-    assertEquals(2, azureMetrics.deadBlobsQueryTime.getCount());
   }
 
   /** Test findEntriesSince when cloud destination uses change feed based token. */
@@ -859,7 +803,7 @@ public class AzureCloudDestinationTest {
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     AzureCloudDestination dest = null;
     try {
-      dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics,
+      dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, vcrMetrics, azureMetrics,
           defaultAzureReplicationFeedType);
       try {
         dest.getAzureBlobDataAccessor().testConnectivity();
@@ -888,7 +832,7 @@ public class AzureCloudDestinationTest {
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     try {
       // Test without proxy
-      dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics,
+      dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, vcrMetrics, azureMetrics,
           defaultAzureReplicationFeedType);
       assertNull("Expected null proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
       assertNull("Expected null proxy for Cosmos",
@@ -906,7 +850,7 @@ public class AzureCloudDestinationTest {
     configProps.setProperty(CloudConfig.VCR_PROXY_PORT, String.valueOf(proxyPort));
     cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     try {
-      dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics,
+      dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, vcrMetrics, azureMetrics,
           defaultAzureReplicationFeedType);
       assertNotNull("Expected proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
       InetSocketAddress proxy = dest.getCosmosDataAccessor().getAsyncDocumentClient().getConnectionPolicy().getProxy();

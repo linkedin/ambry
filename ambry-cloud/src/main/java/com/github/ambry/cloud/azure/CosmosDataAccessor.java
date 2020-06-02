@@ -62,7 +62,7 @@ public class CosmosDataAccessor {
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
-  private static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
+  static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
   static final String PROPERTY_CONTINUATION = "continuation";
   static final String PROPERTY_DELETED = "deleted";
 

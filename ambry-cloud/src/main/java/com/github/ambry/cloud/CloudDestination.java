@@ -20,6 +20,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -85,32 +86,6 @@ public interface CloudDestination extends Closeable {
   Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException;
 
   /**
-   * Get the list of blobs in the specified partition that have been deleted for at least the
-   * configured retention period.
-   * @param partitionPath the partition to query.
-   * @param startTime the start of the query time range.
-   * @param endTime the end of the query time range.
-   * @param maxEntries the max number of metadata records to return.
-   * @return a List of {@link CloudBlobMetadata} referencing the deleted blobs found.
-   * @throws CloudStorageException
-   */
-  List<CloudBlobMetadata> getDeletedBlobs(String partitionPath, long startTime, long endTime, int maxEntries)
-      throws CloudStorageException;
-
-  /**
-   * Get the list of blobs in the specified partition that have been expired for at least the
-   * configured retention period.
-   * @param partitionPath the partition to query.
-   * @param startTime the start of the query time range.
-   * @param endTime the end of the query time range.
-   * @param maxEntries the max number of metadata records to return.
-   * @return a List of {@link CloudBlobMetadata} referencing the expired blobs found.
-   * @throws CloudStorageException
-   */
-  List<CloudBlobMetadata> getExpiredBlobs(String partitionPath, long startTime, long endTime, int maxEntries)
-      throws CloudStorageException;
-
-  /**
    * Returns an ordered sequenced list of blobs within the specified partition and updated
    * {@link com.github.ambry.replication.FindToken}, such that total size of all blobs in the list are less or equal to
    * {@code maxTotalSizeOfEntries}
@@ -125,12 +100,12 @@ public interface CloudDestination extends Closeable {
       throws CloudStorageException;
 
   /**
-   * Permanently delete the specified blobs in the cloud destination.
-   * @param blobMetadataList the list of {@link CloudBlobMetadata} referencing the blobs to purge.
-   * @return the number of blobs successfully purged.
-   * @throws CloudStorageException if the purge operation fails for any blob.
+   * Compact the specified partition, removing blobs that have been deleted or expired for at least the
+   * configured retention period.
+   * @param partitionPath the path of the partitions to compact.
+   * @throws CloudStorageException
    */
-  int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws CloudStorageException;
+  int compactPartition(String partitionPath) throws CloudStorageException;
 
   /**
    * Upload and persist the replica tokens for the specified Ambry partition in cloud storage.
@@ -151,4 +126,9 @@ public interface CloudDestination extends Closeable {
    */
   boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream)
       throws CloudStorageException;
+
+  /**
+   * Halt any compactions in progress.
+   */
+  void stopCompaction();
 }

@@ -38,6 +38,7 @@ public class CloudConfig {
   public static final String CLOUD_DELETED_BLOB_RETENTION_DAYS = "cloud.deleted.blob.retention.days";
   public static final String CLOUD_BLOB_COMPACTION_ENABLED = "cloud.blob.compaction.enabled";
   public static final String CLOUD_BLOB_COMPACTION_INTERVAL_HOURS = "cloud.blob.compaction.interval.hours";
+  public static final String CLOUD_BLOB_COMPACTION_STARTUP_DELAY_SECS = "cloud.blob.compaction.startup.delay.secs";
   public static final String CLOUD_BLOB_COMPACTION_QUERY_LIMIT = "cloud.blob.compaction.query.limit";
   public static final String CLOUD_COMPACTION_LOOKBACK_DAYS = "cloud.compaction.lookback.days";
   public static final String CLOUD_COMPACTION_QUERY_BUCKET_DAYS = "cloud.compaction.query.bucket.days";
@@ -205,6 +206,13 @@ public class CloudConfig {
   public final int cloudBlobCompactionIntervalHours;
 
   /**
+   * Delay in seconds before compaction begins on VCR startup.
+   */
+  @Config(CLOUD_BLOB_COMPACTION_STARTUP_DELAY_SECS)
+  @Default("600")
+  public final int cloudBlobCompactionStartupDelaySecs;
+
+  /**
    * Maximum time to wait for in-flight compaction operation to complete on shutdown.
    */
   @Config(CLOUD_BLOB_COMPACTION_SHUTDOWN_TIMEOUT_SECS)
@@ -329,6 +337,7 @@ public class CloudConfig {
         verifiableProperties.getInt(CLOUD_DELETED_BLOB_RETENTION_DAYS, DEFAULT_RETENTION_DAYS);
     cloudBlobCompactionEnabled = verifiableProperties.getBoolean(CLOUD_BLOB_COMPACTION_ENABLED, true);
     cloudBlobCompactionIntervalHours = verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_INTERVAL_HOURS, 24);
+    cloudBlobCompactionStartupDelaySecs = verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_STARTUP_DELAY_SECS, 600);
     cloudBlobCompactionQueryLimit =
         verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_QUERY_LIMIT, DEFAULT_COMPACTION_QUERY_LIMIT);
     cloudBlobCompactionShutdownTimeoutSecs =
