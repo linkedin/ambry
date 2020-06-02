@@ -328,27 +328,32 @@ public class CloudBlobStoreTest {
       addBlobToSet(messageWriteSet, SMALL_BLOB_SIZE, -1, refAccountId, refContainerId, true);
     }
     store.updateTtl(messageWriteSet.getMessageSetInfo());
-    verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong(), eq(dummyCloudUpdateValidator));
+    verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong(), any(CloudUpdateValidator.class));
     verifyCacheHits(count, 0);
 
     // Call second time, If isVcr, should be cached causing updates to be skipped.
     store.updateTtl(messageWriteSet.getMessageSetInfo());
     int expectedCount = isVcr ? count : count * 2;
     verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong(),
-        eq(dummyCloudUpdateValidator));
+        any(CloudUpdateValidator.class));
     verifyCacheHits(count * 2, count);
 
     // test that if a blob is deleted and then undeleted, the ttlupdate status is preserved in cache.
     MessageInfo messageInfo = messageWriteSet.getMessageSetInfo().get(0);
     store.delete(Collections.singletonList(messageInfo));
-    verify(dest, times(1)).deleteBlob(any(BlobId.class), anyLong(), anyShort(), eq(dummyCloudUpdateValidator));
+    verify(dest, times(1)).deleteBlob(any(BlobId.class), anyLong(), anyShort(), any(CloudUpdateValidator.class));
     store.undelete(messageInfo);
-    verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort(), eq(dummyCloudUpdateValidator));
+    verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     store.updateTtl(Collections.singletonList(messageInfo));
     expectedCount = isVcr ? expectedCount : expectedCount + 1;
     verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong(),
-        eq(dummyCloudUpdateValidator));
-    verifyCacheHits((count * 2) + 3, count + 1);
+        any(CloudUpdateValidator.class));
+    if (isVcr) {
+      verifyCacheHits((count * 2) + 3, count + 1);
+    } else {
+      // delete and undelete should not cause cache lookup for frontend.
+      verifyCacheHits((count * 2) + 1, count + 1);
+    }
   }
 
   /** Test the CloudBlobStore undelete method. */
@@ -644,9 +649,9 @@ public class CloudBlobStoreTest {
         new CloudStorageException("Server unavailable", null, 500, true, retryDelay);
     when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(retryableException)
         .thenReturn(true);
-    when(exDest.deleteBlob(any(BlobId.class), anyLong(), anyShort(), eq(dummyCloudUpdateValidator))).thenThrow(
+    when(exDest.deleteBlob(any(BlobId.class), anyLong(), anyShort(), any(CloudUpdateValidator.class))).thenThrow(
         retryableException).thenReturn(true);
-    when(exDest.updateBlobExpiration(any(BlobId.class), anyLong(), eq(dummyCloudUpdateValidator))).thenThrow(
+    when(exDest.updateBlobExpiration(any(BlobId.class), anyLong(), any(CloudUpdateValidator.class))).thenThrow(
         retryableException).thenReturn((short) 1);
     when(exDest.getBlobMetadata(anyList())).thenThrow(retryableException)
         .thenReturn(Collections.singletonMap(metadata.getId(), metadata));
@@ -671,7 +676,10 @@ public class CloudBlobStoreTest {
     expectedCacheLookups += 2;
     exStore.delete(messageWriteSet.getMessageSetInfo());
     expectedRetries++;
-    expectedCacheLookups += 2;
+    if (isVcr) {
+      // no cache lookup in case of delete for frontend.
+      expectedCacheLookups += 2;
+    }
     exStore.get(keys, EnumSet.noneOf(StoreGetOptions.class));
     expectedRetries++;
     exStore.downloadBlob(metadata, blobId, new ByteArrayOutputStream());
@@ -684,12 +692,22 @@ public class CloudBlobStoreTest {
     // Rerun the first three, should all skip due to cache hit
     messageWriteSet.resetBuffers();
     int expectedCacheHits = 0;
-    exStore.put(messageWriteSet);
+    try {
+      exStore.put(messageWriteSet);
+    } catch (StoreException ex) {
+      assertEquals(ex.getErrorCode(), StoreErrorCodes.Already_Exist);
+    }
     expectedCacheHits++;
     exStore.updateTtl(messageWriteSet.getMessageSetInfo());
     expectedCacheHits++;
-    exStore.delete(messageWriteSet.getMessageSetInfo());
-    expectedCacheHits++;
+    try {
+      exStore.delete(messageWriteSet.getMessageSetInfo());
+    } catch (StoreException ex) {
+      assertEquals(ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+    }
+    if (isVcr) {
+      expectedCacheHits++;
+    }
     verifyCacheHits(expectedCacheLookups + expectedCacheHits, expectedCacheHits);
   }
 
@@ -859,7 +877,9 @@ public class CloudBlobStoreTest {
       short containerId, boolean encrypted) {
     BlobId id = getUniqueId(accountId, containerId, encrypted);
     long crc = random.nextLong();
-    MessageInfo info = new MessageInfo(id, size, false, true, expiresAtMs, crc, accountId, containerId, operationTime);
+    MessageInfo info =
+        new MessageInfo(id, size, false, true, false, expiresAtMs, crc, accountId, containerId, operationTime,
+            initLifeVersion());
     ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
     messageWriteSet.add(info, buffer);
     return id;
