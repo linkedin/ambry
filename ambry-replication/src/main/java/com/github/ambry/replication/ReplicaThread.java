@@ -644,18 +644,6 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Determines if {@link MessageInfo} container in the given status.
-   * @param messageInfo A message info class that contains basic info about a blob.
-   * @param containerStatus Status of the container.
-   * @return {@code true} if the blob belongs to the given status container, {@code false} otherwise.
-   */
-  private boolean isGivenStatus(MessageInfo messageInfo, Container.ContainerStatus containerStatus) {
-    return accountService.getAccountById(messageInfo.getAccountId())
-        .getContainerById(messageInfo.getContainerId())
-        .getStatus() == containerStatus;
-  }
-
-  /**
    * Determines if {@link MessageInfo} container in the status of DELETED_IN_PROGRESS or INACTIVE.
    * @param messageInfo A message info class that contains basic info about a blob
    * @return {@code true} if the blob associates with the deprecated container, {@code false} otherwise.
@@ -663,8 +651,10 @@ public class ReplicaThread implements Runnable {
    */
   private boolean isDeprecatedContainer(MessageInfo messageInfo) {
     if (accountService != null) {
-      return isGivenStatus(messageInfo, Container.ContainerStatus.DELETE_IN_PROGRESS) || isGivenStatus(messageInfo,
-          Container.ContainerStatus.INACTIVE);
+      Container.ContainerStatus status = accountService.getAccountById(messageInfo.getAccountId())
+          .getContainerById(messageInfo.getContainerId())
+          .getStatus();
+      return status == Container.ContainerStatus.DELETE_IN_PROGRESS || status == Container.ContainerStatus.INACTIVE;
     } else {
       return false;
     }
