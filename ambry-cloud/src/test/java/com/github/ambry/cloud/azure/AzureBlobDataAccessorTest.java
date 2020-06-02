@@ -132,7 +132,7 @@ public class AzureBlobDataAccessorTest {
     mockBlobExistence(true);
     AzureCloudDestination.UpdateResponse response =
         dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("deletionTime", deletionTime),
-            eq(dummyCloudUpdateValidator));
+            dummyCloudUpdateValidator);
     assertTrue("Expected was updated", response.wasUpdated);
     assertNotNull("Expected metadata", response.metadata);
   }
@@ -143,7 +143,7 @@ public class AzureBlobDataAccessorTest {
     mockBlobExistence(true);
     AzureCloudDestination.UpdateResponse response =
         dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("expirationTime", expirationTime),
-            eq(dummyCloudUpdateValidator));
+            dummyCloudUpdateValidator);
     assertTrue("Expected was updated", response.wasUpdated);
     assertNotNull("Expected metadata", response.metadata);
   }

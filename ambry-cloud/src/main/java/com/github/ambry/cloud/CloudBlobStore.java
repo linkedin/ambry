@@ -401,6 +401,9 @@ class CloudBlobStore implements Store {
       return requestAgent.doWithRetries(() -> undeleteIfNeeded((BlobId) info.getStoreKey(), info.getLifeVersion()),
           "Undelete", partitionId.toPathString());
     } catch (CloudStorageException cex) {
+      if (cex.getCause() instanceof StoreException) {
+        throw (StoreException) cex.getCause();
+      }
       StoreErrorCodes errorCode =
           (cex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
       throw new StoreException(cex, errorCode);

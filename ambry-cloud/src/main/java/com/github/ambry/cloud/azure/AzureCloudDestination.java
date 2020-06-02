@@ -184,7 +184,8 @@ class AzureCloudDestination implements CloudDestination {
     UpdateResponse updateResponse =
         updateBlobMetadata(blobId, Collections.singletonMap(CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime),
             cloudUpdateValidator);
-    return Short.parseShort(updateResponse.metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+    return updateResponse.metadata.containsKey(CloudBlobMetadata.FIELD_LIFE_VERSION) ? Short.parseShort(
+        updateResponse.metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION)) : 0;
   }
 
   @Override
@@ -194,7 +195,8 @@ class AzureCloudDestination implements CloudDestination {
     updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, Utils.Infinite_Time);
     UpdateResponse updateResponse = updateBlobMetadata(blobId, updateFields, cloudUpdateValidator);
-    return Short.parseShort(updateResponse.metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+    return updateResponse.metadata.containsKey(CloudBlobMetadata.FIELD_LIFE_VERSION) ? 0
+        : Short.parseShort(updateResponse.metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
   }
 
   @Override

@@ -349,8 +349,13 @@ public class AzureCloudDestinationTest {
     Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource(deletedMetadata);
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
     // Now delete the puppy, Cosmos record should get purged.
-    assertFalse("Expected update to recover and return false",
-        azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator));
+    try {
+      assertFalse("Expected update to recover and return false",
+          azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator));
+    } catch (CloudStorageException cex) {
+      assertTrue(cex.getCause() instanceof BlobStorageException);
+      assertEquals(((BlobStorageException) cex.getCause()).getErrorCode(), BlobErrorCode.BLOB_NOT_FOUND);
+    }
     assertEquals("Expected recovery", 1, azureMetrics.blobUpdateRecoverCount.getCount());
     verify(mockumentClient).deleteDocument(anyString(), any());
   }
@@ -360,7 +365,7 @@ public class AzureCloudDestinationTest {
   public void testUpdateCosmosException() {
     mockBlobExistence(true);
     when(mockumentClient.readDocument(anyString(), any())).thenThrow(
-        new RuntimeException("Dcoument not Found", new DocumentClientException(500)));
+        new RuntimeException("Document not Found", new DocumentClientException(500)));
     expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator),
         DocumentClientException.class);
     expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime, dummyCloudUpdateValidator),

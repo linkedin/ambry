@@ -779,7 +779,7 @@ public class ReplicaThread implements Runnable {
               }
               applyTtlUpdate(info, remoteReplicaInfo);
             } else {
-              // if final state is not delete, then to bump lifeVerion in local store to remote lifeVersion, we have to
+              // if final state is not delete, then to bump lifeVersion in local store to remote lifeVersion, we have to
               // add a undelete, and then add a ttl update.
               shouldInsertTtlUpdate = true;
             }
