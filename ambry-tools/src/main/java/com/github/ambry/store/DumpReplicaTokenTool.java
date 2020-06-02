@@ -65,7 +65,7 @@ public class DumpReplicaTokenTool {
    * @throws Exception
    */
   private void dumpReplicaToken() throws Exception {
-    logger.info("Dumping replica token file " + fileToRead);
+    logger.info("Dumping replica token file {}", fileToRead);
     DataInputStream stream = new DataInputStream(new FileInputStream(fileToRead));
     short version = stream.readShort();
     switch (version) {
@@ -87,14 +87,13 @@ public class DumpReplicaTokenTool {
           long totalBytesReadFromLocalStore = stream.readLong();
           // read replica token
           FindToken token = findTokenFactory.getFindToken(stream);
-          logger.info(
-              "partitionId " + partitionId + " hostname " + hostname + " replicaPath " + replicaPath + " port " + port
-                  + " totalBytesReadFromLocalStore " + totalBytesReadFromLocalStore + " token " + token);
+          logger.info("partitionId {} hostname {} replicaPath {} port {} totalBytesReadFromLocalStore {} token {}",
+              partitionId, hostname, replicaPath, port, totalBytesReadFromLocalStore, token);
         }
-        logger.info("crc " + stream.readLong());
+        logger.info("crc {}", stream.readLong());
         break;
       default:
-        logger.error("Version " + version + " unsupported ");
+        logger.error("Version {} unsupported ", version);
     }
   }
 }

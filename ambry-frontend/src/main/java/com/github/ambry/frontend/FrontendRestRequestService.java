@@ -113,10 +113,9 @@ class FrontendRestRequestService implements RestRequestService {
    * @param hostname the hostname for this frontend.
    * @param clusterName the name of the storage cluster that the router communicates with.
    */
-  FrontendRestRequestService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-      Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
-      SecurityServiceFactory securityServiceFactory, UrlSigningService urlSigningService,
-      IdSigningService idSigningService, AccountService accountService,
+  FrontendRestRequestService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics, Router router,
+      ClusterMap clusterMap, IdConverterFactory idConverterFactory, SecurityServiceFactory securityServiceFactory,
+      UrlSigningService urlSigningService, IdSigningService idSigningService, AccountService accountService,
       AccountAndContainerInjector accountAndContainerInjector, String datacenterName, String hostname,
       String clusterName) {
     this.frontendConfig = frontendConfig;
@@ -256,6 +255,9 @@ class FrontendRestRequestService implements RestRequestService {
         });
       } else if (requestPath.matchesOperation(Operations.UNDELETE) && frontendConfig.enableUndelete) {
         // If the undelete is not enabled, then treat it as unrecognized operation.
+
+        // And always send failure reason back to client for undelete
+        restRequest.setArg(SEND_FAILURE_REASON, Boolean.TRUE);
         undeleteHandler.handle(restRequest, restResponseChannel, (r, e) -> {
           submitResponse(restRequest, restResponseChannel, null, e);
         });

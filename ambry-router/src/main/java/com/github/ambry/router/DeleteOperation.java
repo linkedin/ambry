@@ -187,9 +187,9 @@ class DeleteOperation {
         // The true case below should not really happen. This means a response has been received
         // not for its original request. We will immediately fail this operation.
         if (deleteResponse.getCorrelationId() != deleteRequest.getCorrelationId()) {
-          logger.error("The correlation id in the DeleteResponse " + deleteResponse.getCorrelationId()
-              + " is not the same as the correlation id in the associated DeleteRequest: "
-              + deleteRequest.getCorrelationId());
+          logger.error(
+              "The correlation id in the DeleteResponse {} is not the same as the correlation id in the associated DeleteRequest: {}",
+              deleteResponse.getCorrelationId(), deleteRequest.getCorrelationId());
           routerMetrics.unknownReplicaResponseError.inc();
           onErrorResponse(replica,
               new RouterException("Received wrong response that is not for the corresponding request.",

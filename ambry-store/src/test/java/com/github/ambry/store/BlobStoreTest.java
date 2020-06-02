@@ -55,6 +55,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -418,39 +419,63 @@ public class BlobStoreTest {
     store.shutdown();
   }
 
+  /**
+   * Test store is able to correctly seal/unseal replica with multiple participants.
+   * @throws Exception
+   */
   @Test
   public void multiReplicaStatusDelegatesTest() throws Exception {
-    List<ReplicaId> sealedReplicas1 = new ArrayList<>();
+    Set<ReplicaId> sealedReplicas1 = new HashSet<>();
     ReplicaStatusDelegate mockDelegate1 = Mockito.mock(ReplicaStatusDelegate.class);
     doAnswer(invocation -> {
       sealedReplicas1.add(invocation.getArgument(0));
-      return null;
+      return true;
     }).when(mockDelegate1).seal(any());
-    List<ReplicaId> sealedReplicas2 = new ArrayList<>();
+    Set<ReplicaId> sealedReplicas2 = new HashSet<>();
     ReplicaStatusDelegate mockDelegate2 = Mockito.mock(ReplicaStatusDelegate.class);
     doAnswer(invocation -> {
       sealedReplicas2.add(invocation.getArgument(0));
-      return null;
+      return true;
     }).when(mockDelegate2).seal(any());
     doAnswer(invocation -> {
       sealedReplicas1.remove((ReplicaId) invocation.getArgument(0));
-      return null;
+      return true;
     }).when(mockDelegate1).unseal(any());
     doAnswer(invocation -> {
       sealedReplicas2.remove((ReplicaId) invocation.getArgument(0));
-      return null;
+      return true;
     }).when(mockDelegate2).unseal(any());
+    doAnswer(
+        invocation -> sealedReplicas1.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList()))
+        .when(mockDelegate1)
+        .getSealedReplicas();
+    doAnswer(
+        invocation -> sealedReplicas2.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList()))
+        .when(mockDelegate2)
+        .getSealedReplicas();
     StoreConfig defaultConfig = changeThreshold(65, 5, true);
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     reloadStore(defaultConfig, replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
     // make the replica sealed
     put(4, (long) (SEGMENT_CAPACITY * 0.8), Utils.Infinite_Time);
     assertEquals("Sealed replica lists are different", sealedReplicas1, sealedReplicas2);
-    assertEquals("Sealed replica is not correct", replicaId, sealedReplicas1.get(0));
+    assertEquals("Sealed replica is not correct", replicaId, sealedReplicas1.iterator().next());
     // try to bump the readonly threshold so as to unseal the replica
     replicaId.setSealedState(true);
     reloadStore(changeThreshold(99, 1, true), replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
     assertTrue("Replica should be unsealed", sealedReplicas1.isEmpty() && sealedReplicas2.isEmpty());
+
+    // verify store still updates sealed lists even though replica state is already sealed. ("replicaId.setSealedState(true)")
+    // lower the threshold to make replica sealed again
+    reloadStore(changeThreshold(50, 5, true), replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
+    assertEquals("Sealed replica lists are different", sealedReplicas1, sealedReplicas2);
+    assertEquals("Sealed replica is not correct", replicaId, sealedReplicas1.iterator().next());
+
+    // verify reconciliation case: we make read-write delta a wide range and clear sealedReplicas2 to make them reconcile
+    sealedReplicas2.clear();
+    reloadStore(changeThreshold(99, 90, true), replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
+    assertEquals("Sealed replica lists are different", sealedReplicas1, sealedReplicas2);
+    assertEquals("Sealed replica is not correct", replicaId, sealedReplicas2.iterator().next());
     store.shutdown();
   }
 
@@ -765,7 +790,7 @@ public class BlobStoreTest {
         addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), MessageInfo.LIFE_VERSION_FROM_FRONTEND);
     store.updateTtl(Collections.singletonList(info));
     ttlUpdatedKeys.add(addedId);
-    storeInfo = store.get(Arrays.asList(addedId), EnumSet.noneOf(StoreGetOptions.class));
+    storeInfo = store.get(Collections.singletonList(addedId), EnumSet.noneOf(StoreGetOptions.class));
     assertEquals(1, storeInfo.getMessageReadSetInfo().size());
     // still the lifeVersion is 2, not -1
     assertEquals(lifeVersion, storeInfo.getMessageReadSetInfo().get(0).getLifeVersion());

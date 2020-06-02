@@ -179,7 +179,7 @@ public class VcrServer {
       networkServer.start();
 
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
-      logger.info("VCR startup time in Ms " + processingTime);
+      logger.info("VCR startup time in Ms {}", processingTime);
     } catch (Exception e) {
       logger.error("Error during VCR startup", e);
       throw new InstantiationException("failure during VCR startup " + e);
@@ -234,7 +234,7 @@ public class VcrServer {
     } finally {
       shutdownLatch.countDown();
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
-      logger.info("VCR shutdown time in Ms " + processingTime);
+      logger.info("VCR shutdown time in Ms {}", processingTime);
     }
   }
 

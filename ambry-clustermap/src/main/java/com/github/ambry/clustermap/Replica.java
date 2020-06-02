@@ -45,7 +45,7 @@ class Replica implements ReplicaId {
 
   Replica(Partition partition, Disk disk, ClusterMapConfig clusterMapConfig) {
     if (logger.isTraceEnabled()) {
-      logger.trace("Replica " + partition + ", " + disk);
+      logger.trace("Replica {}, {}", partition, disk);
     }
     this.partition = partition;
     this.disk = disk;
@@ -56,7 +56,7 @@ class Replica implements ReplicaId {
               clusterMapConfig);
       resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     } catch (Exception e) {
-      logger.error("Error creating resource state policy when instantiating a replica " + e);
+      logger.error("Error creating resource state policy when instantiating a replica {}", e);
       throw new IllegalStateException("Error creating resource state policy when instantiating a replica " + partition,
           e);
     }

@@ -16,6 +16,7 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.network.Port;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.Store;
 import com.github.ambry.utils.Time;
 import java.util.Objects;
@@ -62,6 +63,12 @@ public class RemoteReplicaInfo {
   private long reEnableReplicationTime = 0;
   private ReplicaThread replicaThread;
 
+  // Metadata response information received for this replica in the most recent replication cycle.
+  // This is used during leader based replication to store the missing store messages, remote token info and local lag
+  // from remote for non-leader remote replicas. We will track the missing store messages when they come via intra-dc
+  // replication and update the currentToken to exchangeMetadataResponse.remoteToken after all of them are obtained.
+  private ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse;
+
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port) {
     this.replicaId = replicaId;
@@ -72,6 +79,8 @@ public class RemoteReplicaInfo {
     this.port = port;
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
     initializeTokens(token);
+    // ExchangeMetadataResponse is initially empty. It will be populated by replica threads during replication cycles.
+    this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.No_Error);
   }
 
   public ReplicaId getReplicaId() {
@@ -196,6 +205,26 @@ public class RemoteReplicaInfo {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Get the meta data response information received for this replica in the most recent replication cycle.
+   * @return exchangeMetadataResponse contains the meta data response (missing keys, token info, local lag from remote, etc.).
+   */
+  synchronized ReplicaThread.ExchangeMetadataResponse getExchangeMetadataResponse() {
+    return exchangeMetadataResponse;
+  }
+
+  /**
+   * Set the meta data exchange information received for this replica in the most recent replication cycle.
+   * Replica threads calls this method to store the metadata responses during replication cycles.
+   * @param exchangeMetadataResponse contains meta data response (missing keys, token info, local lag from remote, etc.).
+   */
+  synchronized void setExchangeMetadataResponse(ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse) {
+    // We are having this thread safe to avoid conflict between replica thread setting new exchangeMetadataResponse
+    // and replica threads updating the missing store messages in current exchangeMetadataResponse after they are
+    // written to local store via intra-dc replication (method will be added in future PR).
+    this.exchangeMetadataResponse = exchangeMetadataResponse;
   }
 
   /**

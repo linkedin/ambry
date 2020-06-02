@@ -125,7 +125,7 @@ class BackupFileManager {
     File[] files = backupDir.listFiles(tempFileFilter);
     if (files != null) {
       for (File file : files) {
-        logger.trace("Delete temp file " + file.getName());
+        logger.trace("Delete temp file {}", file.getName());
         tryDeleteFile(file);
       }
     }
@@ -137,7 +137,7 @@ class BackupFileManager {
       for (File file : files) {
         Matcher m = versionFilenamePattern.matcher(file.getName());
         m.find();
-        logger.trace("Starting processing version backup file " + file.getName());
+        logger.trace("Starting processing version backup file {}", file.getName());
         int version = Integer.parseInt(m.group(1));
         long modifiedTimeInSecond = LocalDateTime.parse(m.group(2), TIMESTAMP_FORMATTER).toEpochSecond(zoneOffset);
         BackupFileInfo currentBackup = new BackupFileInfo(version, file.getName(), modifiedTimeInSecond);
@@ -169,7 +169,7 @@ class BackupFileManager {
     files = backupDir.listFiles(oldStateFileFilter);
     if (files != null) {
       for (File file : files) {
-        logger.trace("Delete old state file " + file.getName());
+        logger.trace("Delete old state file {}", file.getName());
         tryDeleteFile(file);
       }
     }
@@ -183,7 +183,7 @@ class BackupFileManager {
         logger.trace("More than {} versioned backup found, remove all the backup files in old format",
             config.maxBackupFileCount);
         for (File file : allNewStateFiles) {
-          logger.trace("Delete new state file " + file.getName());
+          logger.trace("Delete new state file {}", file.getName());
           tryDeleteFile(file);
         }
       } else {
@@ -199,7 +199,7 @@ class BackupFileManager {
         for (int i = 0; i < size; i++) {
           File file = allNewStateFiles[i];
           if (i < startIndexToPreserveBackupFile) {
-            logger.trace("Delete new state file " + file.getName());
+            logger.trace("Delete new state file {}", file.getName());
             tryDeleteFile(file);
           } else {
             Matcher m = newStateFilenamePattern.matcher(file.getName());
@@ -246,7 +246,7 @@ class BackupFileManager {
       writeAccountMapToFile(tempFilePath, accountMap);
       Files.move(tempFilePath, filePath);
     } catch (IOException e) {
-      logger.error("Failed to persist state to file: " + fileName, e);
+      logger.error("Failed to persist state to file: {}", fileName, e);
       accountServiceMetrics.backupErrorCount.inc();
       return;
     }
@@ -316,7 +316,7 @@ class BackupFileManager {
       return deserializeAccountMap(bytes);
     } catch (IOException e) {
       accountServiceMetrics.backupErrorCount.inc();
-      logger.error("Failed to read all bytes out from file " + filepath + " " + e.getMessage());
+      logger.error("Failed to read all bytes out from file {} {}", filepath, e.getMessage());
       return null;
     }
   }
@@ -346,11 +346,11 @@ class BackupFileManager {
     try {
       Files.delete(toDelete);
     } catch (NoSuchFileException e) {
-      logger.error("File doesn't exist while deleting: " + toDelete.toString(), e);
+      logger.error("File doesn't exist while deleting: {}", toDelete.toString(), e);
     } catch (IOException e) {
-      logger.error("Encounter an I/O error while deleting file: " + toDelete.toString(), e);
+      logger.error("Encounter an I/O error while deleting file: {}", toDelete.toString(), e);
     } catch (Exception e) {
-      logger.error("Encounter an unexpected error while deleting file: " + toDelete.toString(), e);
+      logger.error("Encounter an unexpected error while deleting file: {}", toDelete.toString(), e);
     }
   }
 
@@ -379,7 +379,7 @@ class BackupFileManager {
       channel.write(buffer);
     } catch (IOException e) {
       // Failed to persist file
-      logger.error("Failed to persist account map to file " + filepath, e);
+      logger.error("Failed to persist account map to file {}", filepath, e);
       throw e;
     }
   }
@@ -413,7 +413,7 @@ class BackupFileManager {
       }
       return result;
     } catch (JSONException e) {
-      logger.error("Failed to deserialized bytes to account map: " + e.getMessage());
+      logger.error("Failed to deserialized bytes to account map: {}", e.getMessage());
       return null;
     }
   }

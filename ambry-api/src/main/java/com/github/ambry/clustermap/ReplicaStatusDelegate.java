@@ -64,7 +64,17 @@ public class ReplicaStatusDelegate {
     return clusterParticipant.setReplicaStoppedState(replicaIds, false);
   }
 
+  /**
+   * @return a list of stopped replicas in InstanceConfig of local node.
+   */
   public List<String> getStoppedReplicas() {
     return clusterParticipant.getStoppedReplicas();
+  }
+
+  /**
+   * @return a list of sealed replicas in InstanceConfig of local node.
+   */
+  public List<String> getSealedReplicas() {
+    return clusterParticipant.getSealedReplicas();
   }
 }

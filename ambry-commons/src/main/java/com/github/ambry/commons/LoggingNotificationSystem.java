@@ -41,24 +41,23 @@ public class LoggingNotificationSystem implements NotificationSystem {
   public void onBlobCreated(String blobId, BlobProperties blobProperties, Account account, Container container,
       NotificationBlobType notificationBlobType) {
     logger.debug(
-        "onBlobCreated " + blobId + ", blobProperties " + blobProperties + ", accountName " + (account == null ? null
-            : account.getName()) + ", accountId" + (account == null ? null : account.getId()) + ", containerName " + (
-            container == null ? null : container.getName()) + ", containerId " + (container == null ? null
-            : container.getId()) + ", blobType " + notificationBlobType);
+        "onBlobCreated {}, blobProperties {}, accountName {}, accountId{}, containerName {}, containerId {}, blobType {}",
+        blobId, blobProperties, account == null ? null : account.getName(), account == null ? null : account.getId(),
+        container == null ? null : container.getName(), container == null ? null : container.getId(),
+        notificationBlobType);
   }
 
   @Override
   public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, Account account,
       Container container) {
-    logger.debug("onBlobTtlUpdated " + blobId + ", serviceId " + serviceId + ", accountName " + (account == null ? null
-        : account.getName()) + ", accountId" + (account == null ? null : account.getId()) + ", containerName " + (
-        container == null ? null : container.getName()) + ", containerId " + (container == null ? null
-        : container.getId()) + ", " + expiresAtMs);
+    logger.debug("onBlobTtlUpdated {}, serviceId {}, accountName {}, accountId{}, containerName {}, containerId {}, {}",
+        blobId, serviceId, account == null ? null : account.getName(), account == null ? null : account.getId(),
+        container == null ? null : container.getName(), container == null ? null : container.getId(), expiresAtMs);
   }
 
   @Override
   public void onBlobDeleted(String blobId, String serviceId, Account account, Container container) {
-    logger.debug("onBlobDeleted " + blobId,
+    logger.debug("onBlobDeleted {}", blobId,
         ", " + serviceId + ", accountName " + (account == null ? null : account.getName()) + ", accountId" + (
             account == null ? null : account.getId()) + ", containerName " + (container == null ? null
             : container.getName()) + ", containerId " + (container == null ? null : container.getId()));
@@ -66,7 +65,7 @@ public class LoggingNotificationSystem implements NotificationSystem {
 
   @Override
   public void onBlobUndeleted(String blobId, String serviceId, Account account, Container container) {
-    logger.debug("onBlobUndeleted " + blobId,
+    logger.debug("onBlobUndeleted {}", blobId,
         ", " + serviceId + ", accountName " + (account == null ? null : account.getName()) + ", accountId" + (
             account == null ? null : account.getId()) + ", containerName " + (container == null ? null
             : container.getName()) + ", containerId " + (container == null ? null : container.getId()));
@@ -75,25 +74,23 @@ public class LoggingNotificationSystem implements NotificationSystem {
 
   @Override
   public void onBlobReplicaCreated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
-    logger.debug("onBlobReplicaCreated " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType);
+    logger.debug("onBlobReplicaCreated {}, {}, {}, {}", sourceHost, port, blobId, sourceType);
   }
 
   @Override
   public void onBlobReplicaDeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
-    logger.debug("onBlobReplicaDeleted " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType);
+    logger.debug("onBlobReplicaDeleted {}, {}, {}, {}", sourceHost, port, blobId, sourceType);
   }
 
   @Override
   public void onBlobReplicaUpdated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType,
       UpdateType updateType, MessageInfo info) {
-    logger.debug(
-        "onBlobReplicaUpdated " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType + ", " + updateType
-            + ", " + info);
+    logger.debug("onBlobReplicaUpdated {}, {}, {}, {}, {}, {}", sourceHost, port, blobId, sourceType, updateType, info);
   }
 
   @Override
   public void onBlobReplicaUndeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
-    logger.debug("onBlobReplicaUndeleted " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType);
+    logger.debug("onBlobReplicaUndeleted {}, {}, {}, {}", sourceHost, port, blobId, sourceType);
   }
 }
 

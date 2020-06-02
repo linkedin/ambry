@@ -114,7 +114,9 @@ public class AmbryServer {
   private RequestHandlerPool requestHandlerPoolForHttp2;
   private RestRequestHandler restRequestHandlerForHttp2;
   private NioServer nettyHttp2Server;
+  private ParticipantsConsistencyChecker consistencyChecker = null;
   private ScheduledFuture<?> consistencyCheckerTask = null;
+  private ScheduledExecutorService consistencyCheckerScheduler = null;
   private ServerSecurityService serverSecurityService;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
@@ -168,11 +170,11 @@ public class AmbryServer {
       // mismatch in sealed/stopped replica lists that maintained by each participant.
       if (clusterParticipants != null && clusterParticipants.size() > 1
           && serverConfig.serverParticipantsConsistencyCheckerPeriodSec > 0) {
-        ParticipantsConsistencyChecker consistencyChecker =
-            new ParticipantsConsistencyChecker(clusterParticipants, metrics);
+        consistencyChecker = new ParticipantsConsistencyChecker(clusterParticipants, metrics);
         logger.info("Scheduling participants consistency checker with a period of {} secs",
             serverConfig.serverParticipantsConsistencyCheckerPeriodSec);
-        consistencyCheckerTask = scheduler.scheduleAtFixedRate(consistencyChecker, 0,
+        consistencyCheckerScheduler = Utils.newScheduler(1, "consistency-checker-", false);
+        consistencyCheckerTask = consistencyCheckerScheduler.scheduleAtFixedRate(consistencyChecker, 0,
             serverConfig.serverParticipantsConsistencyCheckerPeriodSec, TimeUnit.SECONDS);
       }
       logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
@@ -304,7 +306,7 @@ public class AmbryServer {
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverStartTimeInMs.update(processingTime);
-      logger.info("Server startup time in Ms " + processingTime);
+      logger.info("Server startup time in Ms {}", processingTime);
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
@@ -324,6 +326,9 @@ public class AmbryServer {
       }
       if (clusterParticipants != null) {
         clusterParticipants.forEach(ClusterParticipant::close);
+      }
+      if (consistencyCheckerScheduler != null) {
+        shutDownExecutorService(consistencyCheckerScheduler, 5, TimeUnit.MINUTES);
       }
       if (scheduler != null) {
         shutDownExecutorService(scheduler, 5, TimeUnit.MINUTES);
@@ -382,7 +387,7 @@ public class AmbryServer {
       shutdownLatch.countDown();
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverShutdownTimeInMs.update(processingTime);
-      logger.info("Server shutdown time in Ms " + processingTime);
+      logger.info("Server shutdown time in Ms {}", processingTime);
     }
   }
 

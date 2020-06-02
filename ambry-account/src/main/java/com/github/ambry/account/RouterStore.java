@@ -364,8 +364,8 @@ class RouterStore extends AccountMetadataStore {
         while (blobIDAndVersions.size() + 1 > totalNumberOfVersionToKeep) {
           BlobIDAndVersion blobIDAndVersion = iter.next();
           iter.remove();
-          logger.info("Adding blob " + blobIDAndVersion.getBlobID() + " at version " + blobIDAndVersion.getVersion()
-              + " to delete");
+          logger.info("Adding blob {} at version {} to delete", blobIDAndVersion.getBlobID(),
+              blobIDAndVersion.getVersion());
           oldBlobIDsToDelete.add(blobIDAndVersion.getBlobID());
         }
         blobIDAndVersionsJson = blobIDAndVersions.stream().map(BlobIDAndVersion::toJson).collect(Collectors.toList());
@@ -382,11 +382,11 @@ class RouterStore extends AccountMetadataStore {
       if (!isUpdateSucceeded && newBlobID != null) {
         // Delete the ambry blob regardless what error fails the update.
         try {
-          logger.info("Removing blob " + newBlobID + " since the update failed");
+          logger.info("Removing blob {} since the update failed", newBlobID);
           // Block this execution? or maybe wait for a while then get out?
           router.get().deleteBlob(newBlobID, SERVICE_ID).get();
         } catch (Exception e) {
-          logger.error("Failed to delete blob=" + newBlobID, e);
+          logger.error("Failed to delete blob={}", newBlobID, e);
           accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
         }
       }
@@ -395,11 +395,11 @@ class RouterStore extends AccountMetadataStore {
       if (isUpdateSucceeded && oldBlobIDsToDelete != null) {
         for (String blobID : oldBlobIDsToDelete) {
           try {
-            logger.info("Removing blob " + blobID);
+            logger.info("Removing blob {}", blobID);
             // Block this execution? or maybe wait for a while then get out?
             router.get().deleteBlob(blobID, SERVICE_ID).get();
           } catch (Exception e) {
-            logger.error("Failed to delete blob=" + blobID, e);
+            logger.error("Failed to delete blob={}", blobID, e);
             accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
           }
         }

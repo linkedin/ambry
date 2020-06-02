@@ -14,7 +14,7 @@
 
 package com.github.ambry.clustermap;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import org.junit.Test;
 
@@ -32,7 +32,7 @@ public class ReplicaStatusDelegateTest {
     ClusterParticipant clusterParticipant = mock(ClusterParticipant.class);
     ReplicaId replicaId = mock(ReplicaId.class);
     ReplicaStatusDelegate delegate = new ReplicaStatusDelegate(clusterParticipant);
-    List<ReplicaId> replicaIds = Arrays.asList(replicaId);
+    List<ReplicaId> replicaIds = Collections.singletonList(replicaId);
 
     //Checks that the right underlying ClusterParticipant methods are called
     verifyZeroInteractions(clusterParticipant);
