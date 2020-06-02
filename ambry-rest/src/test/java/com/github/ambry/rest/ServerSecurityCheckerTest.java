@@ -14,6 +14,8 @@
 
 package com.github.ambry.rest;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.router.Callback;
 import com.github.ambry.server.ServerSecurityService;
 import io.netty.buffer.ByteBufAllocator;
@@ -72,20 +74,26 @@ public class ServerSecurityCheckerTest {
    */
   @Test
   public void securityCheckerTest() throws Exception {
-    //success case, channel should not be closed.
-    EmbeddedChannel channel = createChannelSsl();
+    //secuirty validation success case, channel should not be closed.
+    ServerMetrics metrics = new ServerMetrics(new MetricRegistry(), this.getClass(), this.getClass());
+    EmbeddedChannel channel = createChannelSsl(metrics);
     SslHandler sslHandler = channel.pipeline().get(SslHandler.class);
     Promise<Channel> promise = (Promise<Channel>) sslHandler.handshakeFuture();
     promise.setSuccess(channel);
     Assert.assertTrue("channel should not be closed", channel.isActive());
+    Assert.assertEquals("validation success counter mismatch", 1,
+        metrics.serverValidateConnectionSuccess.getCount());
 
-    //failure case, channel should be closed.
+    //security validation failure case, channel should be closed.
     serverSecurityService.close();
-    channel = createChannelSsl();
+    metrics = new ServerMetrics(new MetricRegistry(), this.getClass(), this.getClass());
+    channel = createChannelSsl(metrics);
     sslHandler = channel.pipeline().get(SslHandler.class);
     promise = (Promise<Channel>) sslHandler.handshakeFuture();
     promise.setSuccess(channel);
     Assert.assertTrue("channel should be closed", !channel.isActive());
+    Assert.assertEquals("validation success counter mismatch", 1,
+        metrics.serverValidateConnectionFailure.getCount());
   }
 
   //helpers
@@ -96,12 +104,12 @@ public class ServerSecurityCheckerTest {
    * @return an {@link EmbeddedChannel} that incorporates an instance of {@link ServerSecurityChecker}
    *         and an {@link SslHandler}.
    */
-  private EmbeddedChannel createChannelSsl() {
+  private EmbeddedChannel createChannelSsl(ServerMetrics metrics) {
     SSLEngine sslEngine = SSL_CONTEXT.newEngine(ByteBufAllocator.DEFAULT);
     SSLEngine mockSSLEngine =
         new MockSSLEngine(sslEngine, new MockSSLSession(sslEngine.getSession(), new Certificate[]{PEER_CERT}));
     SslHandler sslHandler = new SslHandler(mockSSLEngine);
-    ServerSecurityChecker serverSecurityChecker = new ServerSecurityChecker(serverSecurityService);
+    ServerSecurityChecker serverSecurityChecker = new ServerSecurityChecker(serverSecurityService, metrics);
     EmbeddedChannel channel = new EmbeddedChannel(sslHandler, serverSecurityChecker);
     return channel;
   }

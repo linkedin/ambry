@@ -223,6 +223,9 @@ public class ServerMetrics {
   public final Counter replicationResponseMessageSizeTooHigh;
   public Counter sealedReplicasMismatchCount = null;
   public Counter stoppedReplicasMismatchCount = null;
+  // AmbryServerSecurityService
+  public final Counter serverValidateConnectionSuccess;
+  public final Counter serverValidateConnectionFailure;
 
   public final Map<String, Meter> crossColoFetchBytesRate = new ConcurrentHashMap<>();
   public final Map<String, Meter> crossColoMetadataExchangeBytesRate = new ConcurrentHashMap<>();
@@ -503,6 +506,10 @@ public class ServerMetrics {
     ttlUpdateRejectedError = registry.counter(MetricRegistry.name(requestClass, "TtlUpdateRejectedError"));
     replicationResponseMessageSizeTooHigh =
         registry.counter(MetricRegistry.name(requestClass, "ReplicationResponseMessageSizeTooHigh"));
+    serverValidateConnectionSuccess =
+        registry.counter(MetricRegistry.name(requestClass, "ServerValidateConnectionSuccess"));
+    serverValidateConnectionFailure =
+        registry.counter(MetricRegistry.name(requestClass, "ServerValidateConnectionFailure"));
   }
 
   public void registerParticipantsMismatchMetrics() {

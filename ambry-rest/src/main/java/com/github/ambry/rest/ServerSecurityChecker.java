@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.server.ServerSecurityService;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -30,10 +31,12 @@ import org.slf4j.LoggerFactory;
 public class ServerSecurityChecker extends ChannelInboundHandlerAdapter {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ServerSecurityService serverSecurityService;
+  private final ServerMetrics serverMetrics;
 
-  public ServerSecurityChecker(ServerSecurityService serverSecurityService) {
+  public ServerSecurityChecker(ServerSecurityService serverSecurityService, ServerMetrics serverMetrics) {
     this.serverSecurityService =
         Objects.requireNonNull(serverSecurityService, "server security service can not be null");
+    this.serverMetrics = Objects.requireNonNull(serverMetrics, "serverMetrics can not be null");
   }
 
   @Override
@@ -66,13 +69,16 @@ public class ServerSecurityChecker extends ChannelInboundHandlerAdapter {
             serverSecurityService.validateConnection(ctx, (r, e) -> {
               if (e != null) {
                 logger.error("security validation failed for channel: {}", ctx.channel(), e);
+                serverMetrics.serverValidateConnectionFailure.inc();
                 ctx.channel().close();
               } else {
                 logger.info("security validation succeeded for channel: {}", ctx.channel());
+                serverMetrics.serverValidateConnectionSuccess.inc();
               }
             });
           } catch (Exception e) {
             logger.error("security validation failed for channel: {}", ctx.channel(), e);
+            serverMetrics.serverValidateConnectionFailure.inc();
             ctx.channel().close();
           }
         }

@@ -20,7 +20,6 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
-import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
