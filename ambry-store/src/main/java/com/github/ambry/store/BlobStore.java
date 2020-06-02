@@ -560,8 +560,8 @@ public class BlobStore implements Store {
             IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
                 EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE,
                     PersistentIndex.IndexEntryType.UNDELETE));
-            if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) > 0) {
-              // Make sure the value is actually after the indeEndOffsetBeforeCheck
+            if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) >= 0) {
+              // Make sure the value is actually after the indexEndOffsetBeforeCheck
               if (value.isDelete() && value.getLifeVersion() == lifeVersions.get(i)) {
                 throw new StoreException(
                     "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
@@ -782,7 +782,7 @@ public class BlobStore implements Store {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
               EnumSet.of(PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE));
-          if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) > 0) {
+          if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) >= 0) {
             // Make sure the value is actually after the indexEndOffsetBeforeCheck
             if (value.isUndelete() && value.getLifeVersion() == revisedLifeVersion) {
               // Might get an concurrent undelete from both replication and frontend.
@@ -903,6 +903,13 @@ public class BlobStore implements Store {
   @Override
   public long getSizeInBytes() {
     return index.getLogUsedCapacity();
+  }
+
+  /**
+   * @return The number of byte been written to log
+   */
+  public long getLogEndOffsetInBytes() {
+    return log.getEndOffset().getOffset();
   }
 
   @Override

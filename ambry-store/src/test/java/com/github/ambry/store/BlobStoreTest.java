@@ -644,6 +644,59 @@ public class BlobStoreTest {
   }
 
   /**
+   * Test when deleting the same blob at the same time. Only one delete can go through and only one log and index
+   * record should be persisted.
+   * @throws Exception
+   */
+  @Test
+  public void concurrentDeleteTestOnSameBlob() throws Exception {
+    MockId idToDelete = null;
+    for (MockId id : liveKeys) {
+      idToDelete = id;
+      break;
+    }
+    assertNotNull(idToDelete);
+    long logEndOffsetBeforeDelete = store.getLogEndOffsetInBytes();
+    long indexEndOffsetBeforeDelete = store.getSizeInBytes();
+    int count = 2;
+    ExecutorService executorService = Executors.newFixedThreadPool(count);
+    try {
+      final MockId id = idToDelete;
+      List<Future<Void>> futures = new ArrayList<>();
+      for (int i = 0; i < count; i++) {
+        futures.add(executorService.submit(new Callable<Void>() {
+          @Override
+          public Void call() throws Exception {
+            delete(id);
+            return null;
+          }
+        }));
+      }
+      int failedCount = 0;
+      int succeededCount = 0;
+      for (Future<Void> future : futures) {
+        try {
+          future.get();
+          succeededCount++;
+        } catch (ExecutionException e) {
+          failedCount++;
+          assertTrue(e.getCause() instanceof StoreException);
+          assertEquals(StoreErrorCodes.ID_Deleted, ((StoreException) e.getCause()).getErrorCode());
+        }
+      }
+
+      assertEquals(1, succeededCount);
+      assertEquals(count - succeededCount, failedCount);
+      long logEndOffsetAfterDelete = store.getLogEndOffsetInBytes();
+      long indexEndOffsetAfterDelete = store.getSizeInBytes();
+      assertEquals((long) DELETE_RECORD_SIZE, logEndOffsetAfterDelete - logEndOffsetBeforeDelete);
+      assertEquals((long) DELETE_RECORD_SIZE, indexEndOffsetAfterDelete - indexEndOffsetBeforeDelete);
+    } finally {
+      executorService.shutdownNow();
+    }
+  }
+
+  /**
    * Tests the case where there are many concurrent ttl updates.
    * @throws Exception
    */
@@ -676,6 +729,59 @@ public class BlobStoreTest {
     ExecutorService executorService = Executors.newFixedThreadPool(undeleters.size());
     List<Future<CallableResult>> futures = executorService.invokeAll(undeleters);
     verifyUndeleteFutures(undeleters, futures);
+  }
+
+  /**
+   * Test when undeleting the same blob at the same time. Only one undelete can go through and only one log and index
+   * record should be persisted.
+   * @throws Exception
+   */
+  @Test
+  public void concurrentUndeleteTestOnSameBlob() throws Exception {
+    MockId idToUndelete = null;
+    for (MockId id : deletedKeys) {
+      idToUndelete = id;
+      break;
+    }
+    assertNotNull(idToUndelete);
+    long logEndOffsetBeforeUndelete = store.getLogEndOffsetInBytes();
+    long indexEndOffsetBeforeUndelete = store.getSizeInBytes();
+    int count = 2;
+    ExecutorService executorService = Executors.newFixedThreadPool(count);
+    try {
+      final MockId id = idToUndelete;
+      List<Future<Void>> futures = new ArrayList<>();
+      for (int i = 0; i < count; i++) {
+        futures.add(executorService.submit(new Callable<Void>() {
+          @Override
+          public Void call() throws Exception {
+            undelete(id);
+            return null;
+          }
+        }));
+      }
+      int failedCount = 0;
+      int succeededCount = 0;
+      for (Future<Void> future : futures) {
+        try {
+          future.get();
+          succeededCount++;
+        } catch (ExecutionException e) {
+          failedCount++;
+          assertTrue(e.getCause() instanceof StoreException);
+          assertEquals(StoreErrorCodes.ID_Undeleted, ((StoreException) e.getCause()).getErrorCode());
+        }
+      }
+
+      assertEquals(1, succeededCount);
+      assertEquals(count - succeededCount, failedCount);
+      long logEndOffsetAfterUndelete = store.getLogEndOffsetInBytes();
+      long indexEndOffsetAfterUndelete = store.getSizeInBytes();
+      assertEquals((long) UNDELETE_RECORD_SIZE, logEndOffsetAfterUndelete - logEndOffsetBeforeUndelete);
+      assertEquals((long) UNDELETE_RECORD_SIZE, indexEndOffsetAfterUndelete - indexEndOffsetBeforeUndelete);
+    } finally {
+      executorService.shutdownNow();
+    }
   }
 
   /**
