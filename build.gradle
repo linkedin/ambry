@@ -189,7 +189,6 @@ project(':ambry-api') {
         compile "org.codehaus.jackson:jackson-core-asl:$jacksonVersion"
         compile "org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion"
         compile "io.netty:netty-buffer:$nettyVersion"
-        compile "io.netty:netty-all:$nettyVersion"
         testCompile project(':ambry-clustermap')
         testCompile project(':ambry-test-utils')
     }

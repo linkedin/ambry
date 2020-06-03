@@ -234,7 +234,7 @@ public class AmbryServer {
       }
 
       ServerSecurityServiceFactory serverSecurityServiceFactory =
-          Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, this.metrics);
+          Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, metrics);
       serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
 
       ArrayList<Port> ports = new ArrayList<Port>();

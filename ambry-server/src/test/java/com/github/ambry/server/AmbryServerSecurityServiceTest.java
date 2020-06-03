@@ -19,43 +19,46 @@ import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.protocol.AmbryRequests;
-import com.github.ambry.rest.MockChannelHandlerContext;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.router.Callback;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.embedded.EmbeddedChannel;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
+import javax.net.ssl.SSLSession;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 
+/**
+ * Unit tests for {@link AmbryServerSecurityService}
+ */
 public class AmbryServerSecurityServiceTest {
   private final ServerSecurityService serverSecurityService =
       new AmbryServerSecurityService(new ServerConfig(new VerifiableProperties(new Properties())),
           new ServerMetrics(new MetricRegistry(), AmbryRequests.class, AmbryServer.class));
 
+  /**
+   * Tests for {@link AmbryServerSecurityService#validateConnection(SSLSession, Callback)}
+   * @throws Exception
+   */
   @Test
   public void validateConnectionTest() throws Exception {
-    //ctx is null
+    //sslSession is null
     TestUtils.assertException(IllegalArgumentException.class,
         () -> serverSecurityService.validateConnection(null).get(), null);
 
     //success case
-    EmbeddedChannel channel = new EmbeddedChannel();
-    ChannelHandlerContext ctx = new MockChannelHandlerContext(channel);
-    try {
-      serverSecurityService.validateConnection(ctx, (r, e) -> {
-        Assert.assertNull("result not null", r);
-        Assert.assertNull("exception not null", e);
-      });
-    } catch (Exception e) {
-      Assert.fail("unexpected exception happened" + e);
-    }
+    SSLSession sslSession = Mockito.mock(SSLSession.class);
+    serverSecurityService.validateConnection(sslSession, (r, e) -> {
+      Assert.assertNull("result not null", r);
+      Assert.assertNull("exception not null", e);
+    });
+
 
     //service is closed
     serverSecurityService.close();
@@ -66,10 +69,14 @@ public class AmbryServerSecurityServiceTest {
       Assert.assertEquals("Unexpected RestServerErrorCode (Future)", RestServiceErrorCode.ServiceUnavailable,
           re.getErrorCode());
     };
-    TestUtils.assertException(ExecutionException.class, () -> serverSecurityService.validateConnection(ctx).get(),
+    TestUtils.assertException(ExecutionException.class, () -> serverSecurityService.validateConnection(sslSession).get(),
         errorAction);
   }
 
+  /**
+   * Tests for {@link AmbryServerSecurityService#validateRequest(RestRequest, Callback)}
+   * @throws Exception
+   */
   @Test
   public void validateRequestTest() throws Exception {
     //request is null
@@ -78,15 +85,11 @@ public class AmbryServerSecurityServiceTest {
 
     //success case
     RestRequest request = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
-    EmbeddedChannel channel = new EmbeddedChannel();
-    try {
-      serverSecurityService.validateRequest(request, (r, e) -> {
-        Assert.assertNull("result not null", r);
-        Assert.assertNull("exception not null", e);
-      });
-    } catch (Exception e) {
-      Assert.fail("unexpected exception happened" + e);
-    }
+    serverSecurityService.validateRequest(request, (r, e) -> {
+      Assert.assertNull("result not null", r);
+      Assert.assertNull("exception not null", e);
+    });
+
 
     //service is closed
     serverSecurityService.close();

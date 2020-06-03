@@ -20,6 +20,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslHandler;
 import java.util.Objects;
+import javax.net.ssl.SSLSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,11 +63,13 @@ public class ServerSecurityHandler extends ChannelInboundHandlerAdapter {
     if (sslHandler != null) {
       sslHandler.handshakeFuture().addListener(future -> {
         if (!future.isSuccess()) {
-          logger.debug("SSL handshake failed for channel: {}", ctx.channel(), future.cause());
+          logger.error("SSL handshake failed for channel: {}", ctx.channel(), future.cause());
         } else {
           logger.debug("SSL handshake succedded for channel: {}", ctx.channel(), future.cause());
+          long startTimeMs = System.currentTimeMillis();
           try {
-            serverSecurityService.validateConnection(ctx, (r, e) -> {
+            SSLSession sslSession = sslHandler.engine().getSession();
+            serverSecurityService.validateConnection(sslSession, (r, e) -> {
               if (e != null) {
                 logger.error("security validation failed for channel: {}", ctx.channel(), e);
                 serverMetrics.serverValidateConnectionFailure.inc();
@@ -80,6 +83,8 @@ public class ServerSecurityHandler extends ChannelInboundHandlerAdapter {
             logger.error("security validation failed for channel: {}", ctx.channel(), e);
             serverMetrics.serverValidateConnectionFailure.inc();
             ctx.channel().close();
+          } finally {
+            serverMetrics.securityServiceValidateConnectionTimeInMs.update(System.currentTimeMillis() - startTimeMs);
           }
         }
       });

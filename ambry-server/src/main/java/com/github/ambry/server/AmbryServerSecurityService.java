@@ -20,7 +20,8 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.Callback;
-import io.netty.channel.ChannelHandlerContext;
+import javax.net.ssl.SSLSession;
+
 
 /**
  * Default implementation of {@link ServerSecurityService} for Ambry that doesn't do any validations.
@@ -37,16 +38,14 @@ public class AmbryServerSecurityService implements ServerSecurityService {
   }
 
   @Override
-  public void validateConnection(ChannelHandlerContext ctx, Callback<Void> callback) {
+  public void validateConnection(SSLSession sslSession, Callback<Void> callback) {
     Exception exception = null;
     serverMetrics.securityServiceValidateConnectionRate.mark();
-    long startTimeMs = System.currentTimeMillis();
     if (!isOpen) {
       exception = new RestServiceException("ServerSecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
-    } else if (ctx == null) {
-      throw new IllegalArgumentException("ctx is null");
+    } else if (sslSession == null) {
+      throw new IllegalArgumentException("sslSession is null");
     }
-    serverMetrics.securityServiceValidateConnectionTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);
   }
 
@@ -54,13 +53,11 @@ public class AmbryServerSecurityService implements ServerSecurityService {
   public void validateRequest(RestRequest restRequest, Callback<Void> callback) {
     Exception exception = null;
     serverMetrics.securityServiceValidateRequestRate.mark();
-    long startTimeMs = System.currentTimeMillis();
     if (!isOpen) {
       exception = new RestServiceException("ServerSecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else if (restRequest == null) {
       throw new IllegalArgumentException("restRequest is null");
     }
-    serverMetrics.securityServiceValidateRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);
   }
 

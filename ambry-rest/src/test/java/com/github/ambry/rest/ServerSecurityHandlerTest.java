@@ -20,7 +20,6 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.server.ServerSecurityService;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
@@ -34,6 +33,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSession;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -143,7 +143,7 @@ class MockServerSecurityService implements ServerSecurityService {
   }
 
   @Override
-  public void validateConnection(ChannelHandlerContext ctx, Callback<Void> callback) {
+  public void validateConnection(SSLSession sslSession, Callback<Void> callback) {
     Exception exception = null;
     if (!isOpen) {
       exception = new RestServiceException("ServerSecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
