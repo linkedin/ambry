@@ -784,7 +784,7 @@ public class BlobStoreTest {
         } catch (ExecutionException e) {
           failedCount++;
           assertTrue(e.getCause() instanceof StoreException);
-          assertEquals(StoreErrorCodes.ID_Undeleted, ((StoreException) e.getCause()).getErrorCode());
+          assertEquals(StoreErrorCodes.Already_Updated, ((StoreException) e.getCause()).getErrorCode());
         }
       }
 
