@@ -650,24 +650,25 @@ public class BlobStoreTest {
    */
   @Test
   public void concurrentDeleteTestOnSameBlob() throws Exception {
-    MockId idToDelete = null;
-    for (MockId id : liveKeys) {
-      idToDelete = id;
-      break;
-    }
+    final MockId idToDelete = liveKeys.iterator().next();
     assertNotNull(idToDelete);
+    ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(() -> {
+      try {
+        Thread.sleep(1000);
+      } catch (Exception e) {
+      }
+    });
     long logEndOffsetBeforeDelete = store.getLogEndOffsetInBytes();
     long indexEndOffsetBeforeDelete = store.getSizeInBytes();
     int count = 2;
     ExecutorService executorService = Executors.newFixedThreadPool(count);
     try {
-      final MockId id = idToDelete;
       List<Future<Void>> futures = new ArrayList<>();
       for (int i = 0; i < count; i++) {
         futures.add(executorService.submit(new Callable<Void>() {
           @Override
           public Void call() throws Exception {
-            delete(id);
+            delete(idToDelete);
             return null;
           }
         }));
@@ -692,6 +693,7 @@ public class BlobStoreTest {
       assertEquals((long) DELETE_RECORD_SIZE, logEndOffsetAfterDelete - logEndOffsetBeforeDelete);
       assertEquals((long) DELETE_RECORD_SIZE, indexEndOffsetAfterDelete - indexEndOffsetBeforeDelete);
     } finally {
+      ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(null);
       executorService.shutdownNow();
     }
   }
@@ -738,24 +740,25 @@ public class BlobStoreTest {
    */
   @Test
   public void concurrentUndeleteTestOnSameBlob() throws Exception {
-    MockId idToUndelete = null;
-    for (MockId id : deletedKeys) {
-      idToUndelete = id;
-      break;
-    }
-    assertNotNull(idToUndelete);
+    final MockId idToUndelete = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    delete(idToUndelete);
+    ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(() -> {
+      try {
+        Thread.sleep(1000);
+      } catch (Exception e) {
+      }
+    });
     long logEndOffsetBeforeUndelete = store.getLogEndOffsetInBytes();
     long indexEndOffsetBeforeUndelete = store.getSizeInBytes();
     int count = 2;
     ExecutorService executorService = Executors.newFixedThreadPool(count);
     try {
-      final MockId id = idToUndelete;
       List<Future<Void>> futures = new ArrayList<>();
       for (int i = 0; i < count; i++) {
         futures.add(executorService.submit(new Callable<Void>() {
           @Override
           public Void call() throws Exception {
-            undelete(id);
+            undelete(idToUndelete);
             return null;
           }
         }));
@@ -780,6 +783,7 @@ public class BlobStoreTest {
       assertEquals((long) UNDELETE_RECORD_SIZE, logEndOffsetAfterUndelete - logEndOffsetBeforeUndelete);
       assertEquals((long) UNDELETE_RECORD_SIZE, indexEndOffsetAfterUndelete - indexEndOffsetBeforeUndelete);
     } finally {
+      ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(null);
       executorService.shutdownNow();
     }
   }
@@ -2872,9 +2876,7 @@ public class BlobStoreTest {
       List<ReplicaStatusDelegate> replicaStatusDelegates) {
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
-    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator,
-        metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time,
-        new InMemAccountService(false, false));
+    return new MockBlobStore(replicaId, config, replicaStatusDelegates, metrics);
   }
 
   private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
@@ -2947,6 +2949,10 @@ public class BlobStoreTest {
       index = mockPersistentIndex;
       doThrow(exception).when(mockPersistentIndex).findEntriesSince(any(FindToken.class), anyLong());
       doThrow(exception).when(mockPersistentIndex).findMissingKeys(anyList());
+    }
+
+    void setOperationBeforeSynchronizationFunc(Runnable runnable) {
+      operationBeforeSynchronizationFunc = runnable;
     }
   }
 

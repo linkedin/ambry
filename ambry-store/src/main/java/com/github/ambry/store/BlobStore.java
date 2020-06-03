@@ -94,6 +94,8 @@ public class BlobStore implements Store {
   // TODO remove this once ZK migration is complete
   private AtomicBoolean isSealed = new AtomicBoolean(false);
   protected PersistentIndex index;
+  // THIS IS ONLY FOR TEST.
+  protected Runnable operationBeforeSynchronizationFunc = null;
 
   /**
    * States representing the different scenarios that can occur when a set of messages are to be written to the store.
@@ -431,6 +433,7 @@ public class BlobStore implements Store {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       MessageWriteSetStateInStore state = checkWriteSetStateInStore(messageSetToWrite, null);
       if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
+        maybeCallBeforeSynchronizationFunc();
         synchronized (storeWriteLock) {
           // Validate that log end offset was not changed. If changed, check once again for existing
           // keys in store
@@ -551,6 +554,7 @@ public class BlobStore implements Store {
           lifeVersions.add(info.getLifeVersion());
         }
       }
+      maybeCallBeforeSynchronizationFunc();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -669,6 +673,7 @@ public class BlobStore implements Store {
         indexValuesToUpdate.add(value);
         lifeVersions.add(value.getLifeVersion());
       }
+      maybeCallBeforeSynchronizationFunc();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -776,6 +781,7 @@ public class BlobStore implements Store {
           metrics.undeleteAuthorizationFailureCount.inc();
         }
       }
+      maybeCallBeforeSynchronizationFunc();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -817,6 +823,15 @@ public class BlobStore implements Store {
           StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();
+    }
+  }
+
+  /**
+   * Call {@link #operationBeforeSynchronizationFunc} if it's not null. This is for testing only.
+   */
+  private void maybeCallBeforeSynchronizationFunc() {
+    if (operationBeforeSynchronizationFunc != null) {
+      operationBeforeSynchronizationFunc.run();
     }
   }
 
