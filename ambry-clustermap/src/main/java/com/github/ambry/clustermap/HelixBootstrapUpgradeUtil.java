@@ -468,6 +468,7 @@ public class HelixBootstrapUpgradeUtil {
       HelixAdmin admin;
       RealmAwareZkClient zkClient = null;
       if (helixAdminFactory == null) {
+        // TODO update zk client creation to remove deprecated Helix APIs.
         RealmAwareZkClient.RealmAwareZkClientConfig clientConfig =
             new RealmAwareZkClient.RealmAwareZkClientConfig().setConnectInitTimeout(30 * 1000L)
                 .setZkSerializer(new ZNRecordSerializer());
