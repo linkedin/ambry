@@ -210,7 +210,7 @@ public class AmbryServer {
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
 
-      Predicate replicationSkipPredicate = new ReplicationSkipPredicate(accountService);
+      Predicate replicationSkipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
               clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,

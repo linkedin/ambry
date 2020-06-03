@@ -1381,7 +1381,7 @@ public class ReplicationTest {
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
-    Predicate predicate = new ReplicationSkipPredicate(accountService);
+    Predicate predicate = new ReplicationSkipPredicate(accountService, replicationConfig);
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
@@ -1410,6 +1410,7 @@ public class ReplicationTest {
         Account account = Mockito.mock(Account.class);
         Mockito.when(account.getContainerById(containerId)).thenReturn(container);
         Mockito.when(accountService.getAccountById(accountId)).thenReturn(account);
+        Mockito.when(container.getDeleteTriggerTime()).thenReturn(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(replicationConfig.replicationContainerDeletionRetentionDays));
         Mockito.when(container.getStatus()).thenReturn(Container.ContainerStatus.DELETE_IN_PROGRESS);
       }
       Set<MessageInfo> remoteMissingStoreKeys =
