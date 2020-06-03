@@ -94,6 +94,8 @@ public class BlobStore implements Store {
   // TODO remove this once ZK migration is complete
   private AtomicBoolean isSealed = new AtomicBoolean(false);
   protected PersistentIndex index;
+  // THIS IS ONLY FOR TEST.
+  protected Runnable operationBeforeSynchronizationFunc = null;
 
   /**
    * States representing the different scenarios that can occur when a set of messages are to be written to the store.
@@ -431,6 +433,7 @@ public class BlobStore implements Store {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       MessageWriteSetStateInStore state = checkWriteSetStateInStore(messageSetToWrite, null);
       if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
+        maybeCallBeforeSynchronizationFunc();
         synchronized (storeWriteLock) {
           // Validate that log end offset was not changed. If changed, check once again for existing
           // keys in store
@@ -551,6 +554,7 @@ public class BlobStore implements Store {
           lifeVersions.add(info.getLifeVersion());
         }
       }
+      maybeCallBeforeSynchronizationFunc();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -560,8 +564,8 @@ public class BlobStore implements Store {
             IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
                 EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE,
                     PersistentIndex.IndexEntryType.UNDELETE));
-            if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) > 0) {
-              // Make sure the value is actually after the indeEndOffsetBeforeCheck
+            if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) >= 0) {
+              // Make sure the value is actually after the indexEndOffsetBeforeCheck
               if (value.isDelete() && value.getLifeVersion() == lifeVersions.get(i)) {
                 throw new StoreException(
                     "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
@@ -669,6 +673,7 @@ public class BlobStore implements Store {
         indexValuesToUpdate.add(value);
         lifeVersions.add(value.getLifeVersion());
       }
+      maybeCallBeforeSynchronizationFunc();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -776,13 +781,14 @@ public class BlobStore implements Store {
           metrics.undeleteAuthorizationFailureCount.inc();
         }
       }
+      maybeCallBeforeSynchronizationFunc();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
               EnumSet.of(PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE));
-          if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) > 0) {
+          if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) >= 0) {
             // Make sure the value is actually after the indexEndOffsetBeforeCheck
             if (value.isUndelete() && value.getLifeVersion() == revisedLifeVersion) {
               // Might get an concurrent undelete from both replication and frontend.
@@ -817,6 +823,15 @@ public class BlobStore implements Store {
           StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();
+    }
+  }
+
+  /**
+   * Call {@link #operationBeforeSynchronizationFunc} if it's not null. This is for testing only.
+   */
+  private void maybeCallBeforeSynchronizationFunc() {
+    if (operationBeforeSynchronizationFunc != null) {
+      operationBeforeSynchronizationFunc.run();
     }
   }
 
@@ -903,6 +918,13 @@ public class BlobStore implements Store {
   @Override
   public long getSizeInBytes() {
     return index.getLogUsedCapacity();
+  }
+
+  /**
+   * @return The number of byte been written to log
+   */
+  public long getLogEndOffsetInBytes() {
+    return log.getEndOffset().getOffset();
   }
 
   @Override
