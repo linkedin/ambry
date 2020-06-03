@@ -14,7 +14,6 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -46,6 +45,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
@@ -67,10 +67,10 @@ public class ReplicationManager extends ReplicationEngine {
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      ClusterParticipant clusterParticipant, AccountService accountService) throws ReplicationException {
+      ClusterParticipant clusterParticipant, Predicate predicate) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
-        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, accountService);
+        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, predicate);
     this.storeConfig = storeConfig;
     this.currentNode = dataNode;
     trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;

@@ -101,6 +101,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.junit.Assert;
@@ -233,7 +234,7 @@ public class ReplicationTest {
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
             mockStoreKeyConverterFactory.getStoreKeyConverter(), transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, null, null);
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, null, null, null);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }
@@ -1380,11 +1381,12 @@ public class ReplicationTest {
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
+    Predicate predicate = new ReplicationSkipPredicate(accountService);
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, null, accountService);
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, null, predicate);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }
@@ -1410,10 +1412,9 @@ public class ReplicationTest {
         Mockito.when(accountService.getAccountById(accountId)).thenReturn(account);
         Mockito.when(container.getStatus()).thenReturn(Container.ContainerStatus.DELETE_IN_PROGRESS);
       }
-
       Set<MessageInfo> remoteMissingStoreKeys =
           replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
-      assertEquals("All deprecated blobs should be blocked during replication", remoteMissingStoreKeys.size(), 0);
+      assertEquals("All deprecated blobs should be blocked during replication", 0, remoteMissingStoreKeys.size());
     }
 
   }
@@ -3043,7 +3044,8 @@ public class ReplicationTest {
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, replicaSyncUpManager, null);
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, replicaSyncUpManager, null,
+            null);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }

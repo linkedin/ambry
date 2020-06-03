@@ -57,6 +57,7 @@ import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
+import com.github.ambry.replication.ReplicationSkipPredicate;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
 import com.github.ambry.rest.RestRequestHandler;
@@ -78,6 +79,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -208,10 +210,11 @@ public class AmbryServer {
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
 
+      Predicate replicationSkipPredicate = new ReplicationSkipPredicate(accountService);
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
               clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
-              serverConfig.serverMessageTransformer, clusterParticipants.get(0), accountService);
+              serverConfig.serverMessageTransformer, clusterParticipants.get(0), replicationSkipPredicate);
       replicationManager.start();
 
       if (replicationConfig.replicationEnabledWithVcrCluster) {

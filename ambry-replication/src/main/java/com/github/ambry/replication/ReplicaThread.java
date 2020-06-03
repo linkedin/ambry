@@ -16,8 +16,6 @@ package com.github.ambry.replication;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import com.github.ambry.account.AccountService;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -70,6 +68,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,7 +112,7 @@ public class ReplicaThread implements Runnable {
   private final Condition pauseCondition = lock.newCondition();
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final int maxReplicaCountPerRequest;
-  private final AccountService accountService;
+  private final Predicate predicate;
   private volatile boolean allDisabled = false;
   private final PartitionLeaderInfo partitionLeaderInfo;
 
@@ -122,10 +121,10 @@ public class ReplicaThread implements Runnable {
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager, AccountService accountService) {
+      ReplicaSyncUpManager replicaSyncUpManager, Predicate predicate) {
     this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
-        datacenterName, responseHandler, time, replicaSyncUpManager, null, accountService);
+        datacenterName, responseHandler, time, replicaSyncUpManager, null, predicate);
   }
 
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
@@ -133,8 +132,7 @@ public class ReplicaThread implements Runnable {
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager, PartitionLeaderInfo partitionLeaderInfo, AccountService accountService) {
-
+      ReplicaSyncUpManager replicaSyncUpManager, PartitionLeaderInfo partitionLeaderInfo, Predicate predicate) {
     this.threadName = threadName;
     this.running = true;
     this.findTokenHelper = findTokenHelper;
@@ -154,7 +152,7 @@ public class ReplicaThread implements Runnable {
     this.datacenterName = datacenterName;
     this.time = time;
     this.replicaSyncUpManager = replicaSyncUpManager;
-    this.accountService = accountService;
+    this.predicate = predicate;
     if (replicatingFromRemoteColo) {
       threadThrottleDurationMs = replicationConfig.replicationInterReplicaThreadThrottleSleepDurationMs;
       syncedBackOffCount = replicationMetrics.interColoReplicaSyncedBackoffCount;
@@ -644,24 +642,7 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Determines if {@link MessageInfo} container in the status of DELETED_IN_PROGRESS or INACTIVE.
-   * @param messageInfo A message info class that contains basic info about a blob
-   * @return {@code true} if the blob associates with the deprecated container, {@code false} otherwise.
-   * Deprecated containers status include DELETE_IN_PROGRESS and INACTIVE.
-   */
-  private boolean isDeprecatedContainer(MessageInfo messageInfo) {
-    if (accountService != null) {
-      Container.ContainerStatus status = accountService.getAccountById(messageInfo.getAccountId())
-          .getContainerById(messageInfo.getContainerId())
-          .getStatus();
-      return status == Container.ContainerStatus.DELETE_IN_PROGRESS || status == Container.ContainerStatus.INACTIVE;
-    } else {
-      return false;
-    }
-  }
-
-  /**
-   * Gets the missing store keys by comparing the messages from the remote node
+   * Gets the missing store messages by comparing the messages from the remote node
    * @param replicaMetadataResponseInfo The response that contains the messages from the remote node
    * @param remoteNode The remote node from which replication needs to happen
    * @param remoteReplicaInfo The remote replica that contains information about the remote replica id
@@ -679,7 +660,7 @@ public class ReplicaThread implements Runnable {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key from remote: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), storeKey);
       StoreKey convertedKey = storeKeyConverter.getConverted(storeKey);
-      if (convertedKey != null && !isDeprecatedContainer(messageInfo)) {
+      if (convertedKey != null && (predicate == null || !predicate.test(messageInfo))) {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
     }
