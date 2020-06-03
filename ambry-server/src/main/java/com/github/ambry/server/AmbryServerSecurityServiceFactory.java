@@ -14,6 +14,7 @@
 
 package com.github.ambry.server;
 
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -28,7 +29,8 @@ public class AmbryServerSecurityServiceFactory implements ServerSecurityServiceF
   private final ServerConfig serverConfig;
   private final ServerMetrics serverMetrics;
 
-  public AmbryServerSecurityServiceFactory(VerifiableProperties verifiableProperties, ServerMetrics serverMetrics) {
+  public AmbryServerSecurityServiceFactory(VerifiableProperties verifiableProperties, ServerMetrics serverMetrics,
+      ClusterMap clusterMap) {
     this.serverConfig = new ServerConfig(verifiableProperties);
     this.serverMetrics = serverMetrics;
   }
