@@ -43,9 +43,7 @@ public class MockHelixParticipant extends HelixParticipant {
   private PartitionStateChangeListener mockReplicationManagerListener;
 
   public MockHelixParticipant(ClusterMapConfig clusterMapConfig) {
-    super(clusterMapConfig, new MockHelixManagerFactory(), metricRegistry,
-        parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
-            clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
+    this(clusterMapConfig, new MockHelixManagerFactory());
     // create mock state change listener for ReplicationManager
     mockReplicationManagerListener = Mockito.mock(PartitionStateChangeListener.class);
     // mock Bootstrap-To-Standby change
