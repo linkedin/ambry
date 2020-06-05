@@ -440,7 +440,7 @@ public class AzureIntegrationTest {
     // Case 2: concurrent modification to Cosmos record.
     azureDest.getCosmosDataAccessor()
         .setUpdateCallback(() -> concurrentUpdater.getCosmosDataAccessor()
-            .updateMetadata(blobId, Collections.singletonMap(fieldName, newUploadTime)));
+            .updateMetadata(blobId, Collections.singletonMap(fieldName, Long.toString(newUploadTime))));
     try {
       azureDest.updateBlobExpiration(blobId, ++now, dummyCloudUpdateValidator);
       fail("Expected 412 error");
@@ -502,8 +502,12 @@ public class AzureIntegrationTest {
     azureDest.getAzureBlobDataAccessor().purgeBlobs(Collections.singletonList(cloudBlobMetadata));
 
     // Try to delete again (to trigger recovery), verify removed from Cosmos
-    assertFalse("Expected delete to return false",
-        azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator));
+    try {
+      assertFalse("Expected delete to return false",
+          azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator));
+    } catch (CloudStorageException cex) {
+      assertEquals("Unexpected error code", HttpConstants.StatusCodes.NOTFOUND, cex.getStatusCode());
+    }
     assertNull("Expected record to be purged from Cosmos", azureDest.getCosmosDataAccessor().getMetadataOrNull(blobId));
   }
 
@@ -532,6 +536,7 @@ public class AzureIntegrationTest {
   /**
    * Test findEntriesSince with CosmosChangeFeedFindTokenFactory.
    */
+  @Ignore
   @Test
   public void testFindEntriesSinceByChangeFeed() throws Exception {
     testFindEntriesSince("com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory");

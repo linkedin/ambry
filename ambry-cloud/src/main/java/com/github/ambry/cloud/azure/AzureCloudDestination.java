@@ -195,8 +195,8 @@ class AzureCloudDestination implements CloudDestination {
     updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, Utils.Infinite_Time);
     UpdateResponse updateResponse = updateBlobMetadata(blobId, updateFields, cloudUpdateValidator);
-    return updateResponse.metadata.containsKey(CloudBlobMetadata.FIELD_LIFE_VERSION) ? 0
-        : Short.parseShort(updateResponse.metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+    return updateResponse.metadata.containsKey(CloudBlobMetadata.FIELD_LIFE_VERSION) ? Short.parseShort(
+        updateResponse.metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION)) : 0;
   }
 
   @Override
@@ -310,18 +310,15 @@ class AzureCloudDestination implements CloudDestination {
                   blobId.getID());
             }
           }
-          throw bex;
-        } else {
-          // Other type of error, just throw.
-          throw bex;
         }
+        throw bex;
       }
 
       // Note: even if nothing changed in blob storage, still attempt to update Cosmos since this could be a retry
       // of a request where ABS was updated but Cosmos update failed.
       boolean updatedCosmos = false;
       try {
-        ResourceResponse<Document> response = cosmosDataAccessor.updateMetadata(blobId, updateFields);
+        ResourceResponse<Document> response = cosmosDataAccessor.updateMetadata(blobId, metadataMap);
         updatedCosmos = response != null;
       } catch (DocumentClientException dex) {
         if (dex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {

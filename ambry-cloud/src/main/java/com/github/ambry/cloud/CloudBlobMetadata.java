@@ -107,7 +107,21 @@ public class CloudBlobMetadata {
    */
   public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
       EncryptionOrigin encryptionOrigin) {
-    this(blobId, creationTime, expirationTime, size, encryptionOrigin, null, null, 0, (short) 0);
+    this(blobId, creationTime, expirationTime, size, encryptionOrigin, (short) 0);
+  }
+
+  /**
+   * Constructor from {@link BlobId}.
+   * @param blobId The BlobId for metadata record.
+   * @param creationTime The blob creation time.
+   * @param expirationTime The blob expiration time.
+   * @param size The blob size.
+   * @param encryptionOrigin The blob's encryption origin.
+   * @param lifeVersion The life version.
+   */
+  public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
+      EncryptionOrigin encryptionOrigin, short lifeVersion) {
+    this(blobId, creationTime, expirationTime, size, encryptionOrigin, null, null, 0, lifeVersion);
   }
 
   /**
@@ -122,6 +136,7 @@ public class CloudBlobMetadata {
    *                         Only used when encryptionOrigin = VCR.
    * @param encryptedSize The size of the uploaded blob if it was encrypted and then uploaded.
    *                      Only used when encryptionOrigin = VCR.
+   * @param lifeVersion The life version.
    */
   public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
       EncryptionOrigin encryptionOrigin, String vcrKmsContext, String cryptoAgentFactory, long encryptedSize,

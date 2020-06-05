@@ -165,9 +165,9 @@ class CloudBlobStore implements Store {
         boolean ttlUpdated = blobMetadata.getExpirationTime() == Utils.Infinite_Time;
         boolean deleted = blobMetadata.getDeletionTime() != Utils.Infinite_Time;
         MessageInfo messageInfo =
-            new MessageInfo(blobId, blobMetadata.getSize(), deleted, ttlUpdated, blobMetadata.getExpirationTime(),
-                (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(),
-                getOperationTime(blobMetadata));
+            new MessageInfo(blobId, blobMetadata.getSize(), deleted, ttlUpdated, blobMetadata.isUndeleted(),
+                blobMetadata.getExpirationTime(), null, (short) blobMetadata.getAccountId(),
+                (short) blobMetadata.getContainerId(), getOperationTime(blobMetadata), blobMetadata.getLifeVersion());
         messageInfos.add(messageInfo);
         blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
       }
@@ -288,7 +288,7 @@ class CloudBlobStore implements Store {
         // Upload blob as is
         CloudBlobMetadata blobMetadata =
             new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
-                messageInfo.getSize(), encryptionOrigin);
+                messageInfo.getSize(), encryptionOrigin, messageInfo.getLifeVersion());
         InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
         uploaded =
             requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, size, blobMetadata, uploadInputStream),
@@ -306,7 +306,7 @@ class CloudBlobStore implements Store {
       vcrMetrics.blobUploadSkippedCount.inc();
       // The only case where its ok to see a put request for a already seen blob is, during replication if the blob is
       // expiring within {@link CloudConfig#vcrMinTtlDays} for vcr to upload.
-      if (isVcr && !isExpiringSoon(messageInfo)) {
+      if (isVcr && !isExpiringSoon(messageInfo) && !messageInfo.isDeleted()) {
         throw new StoreException(
             String.format("Another blob with same key %s exists in store", messageInfo.getStoreKey().getID()),
             StoreErrorCodes.Already_Exist);
@@ -387,7 +387,7 @@ class CloudBlobStore implements Store {
       addToCache(blobKey, lifeVersion, BlobState.DELETED);
       return deleted;
     } else {
-      // This means that we definitely saw this delete for the same lifeversion before.
+      // This means that we definitely saw this delete for the same or smaller lifeversion before.
       throw new CloudStorageException("Error updating blob metadata",
           new StoreException("Cannot delete id " + blobId.getID() + " since it is already marked as deleted in cloud.",
               StoreErrorCodes.ID_Deleted));
@@ -416,16 +416,21 @@ class CloudBlobStore implements Store {
    * @param lifeVersion life version of the deleted blob.
    * @return final updated life version of the blob.
    * @throws CloudStorageException in case any exception happens during undelete.
+   * @throws StoreException in case any {@link StoreException} is thrown.
    */
-  private short undeleteIfNeeded(BlobId blobId, short lifeVersion) throws CloudStorageException {
+  private short undeleteIfNeeded(BlobId blobId, short lifeVersion) throws CloudStorageException, StoreException {
     // See note in deleteIfNeeded.
     if (!checkCacheState(blobId.getID(), lifeVersion, BlobState.CREATED)) {
       short newLifeVersion = cloudDestination.undeleteBlob(blobId, lifeVersion, this::preUndeleteValidation);
       addToCache(blobId.getID(), newLifeVersion, BlobState.CREATED);
       return newLifeVersion;
     } else {
-      throw new CloudStorageException("Error updating blob metadata",
-          new StoreException("Id " + blobId.getID() + " is already undeleted in cloud", StoreErrorCodes.ID_Undeleted));
+      if (lifeVersion > 0) {
+        throw new StoreException("Id " + blobId.getID() + " is already undeleted in cloud",
+            StoreErrorCodes.ID_Undeleted);
+      } else {
+        throw new StoreException("Id " + blobId.getID() + " not deleted yet in cloud", StoreErrorCodes.ID_Not_Deleted);
+      }
     }
   }
 
@@ -454,6 +459,9 @@ class CloudBlobStore implements Store {
         }
       }
     } catch (CloudStorageException ex) {
+      if (ex.getCause() instanceof StoreException) {
+        throw (StoreException) ex.getCause();
+      }
       StoreErrorCodes errorCode =
           (ex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
       throw new StoreException(ex, errorCode);
