@@ -18,6 +18,7 @@ import com.github.ambry.network.Send;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.ByteBufChannel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
@@ -34,6 +35,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Translates Ambry {@link Send} to the HTTP/2 frame objects.
  */
+@ChannelHandler.Sharable
 public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
   private static final Logger logger = LoggerFactory.getLogger(AmbrySendToHttp2Adaptor.class);
 

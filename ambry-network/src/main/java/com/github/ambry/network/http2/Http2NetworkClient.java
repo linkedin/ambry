@@ -57,6 +57,8 @@ public class Http2NetworkClient implements NetworkClient {
   private final Http2ClientStreamStatsHandler http2ClientStreamStatsHandler;
   private final Http2ClientMetrics http2ClientMetrics;
   private final Http2ClientConfig http2ClientConfig;
+  private final Http2StreamFrameToHttpObjectCodec http2StreamFrameToHttpObjectCodec;
+  private final AmbrySendToHttp2Adaptor ambrySendToHttp2Adaptor;
   static final AttributeKey<RequestInfo> REQUEST_INFO = AttributeKey.newInstance("RequestInfo");
 
   public Http2NetworkClient(Http2ClientMetrics http2ClientMetrics, Http2ClientConfig http2ClientConfig,
@@ -71,6 +73,9 @@ public class Http2NetworkClient implements NetworkClient {
     }
     this.http2ClientResponseHandler = new Http2ClientResponseHandler(http2ClientMetrics);
     this.http2ClientStreamStatsHandler = new Http2ClientStreamStatsHandler(http2ClientMetrics);
+    this.http2StreamFrameToHttpObjectCodec = new Http2StreamFrameToHttpObjectCodec(false);
+    this.ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor();
+
     this.pools = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics,
         new StreamChannelInitializer());
     this.http2ClientMetrics = http2ClientMetrics;
@@ -201,15 +206,16 @@ public class Http2NetworkClient implements NetworkClient {
   }
 
   private class StreamChannelInitializer extends ChannelInitializer {
+
     public void initChannel(Channel channel) {
       channel.pipeline().addLast(http2ClientStreamStatsHandler);
       // TODO: implement ourselves' aggregator. Http2Streams to Response Object
-      channel.pipeline().addLast(new Http2StreamFrameToHttpObjectCodec(false));
+      channel.pipeline().addLast(http2StreamFrameToHttpObjectCodec);
       channel.pipeline().addLast(new HttpObjectAggregator(http2ClientConfig.http2MaxContentLength));
       channel.pipeline().addLast(http2ClientResponseHandler);
-      channel.pipeline().addLast(new AmbrySendToHttp2Adaptor());
+      channel.pipeline().addLast(ambrySendToHttp2Adaptor);
       // We log hashCode because frame id is -1 at this time.
-      logger.info("Handlers added to channel: {} {} ", channel.hashCode(), channel);
+      logger.trace("Handlers added to channel: {} {} ", channel.hashCode(), channel);
     }
   }
 }
