@@ -439,14 +439,14 @@ public class CloudBlobStoreTest {
     verify(dest, times(expectedCount)).undeleteBlob(any(BlobId.class), eq((short) 1), any(CloudUpdateValidator.class));
     verifyCacheHits(2, 1);
 
-    // Call again with a smaller life version. If isVcr, should hit cache again.
+    // Call again with a smaller life version.
     when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class))).thenReturn((short) 0);
     messageInfo =
         new MessageInfo(messageInfo.getStoreKey(), SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) 0);
     try {
       store.undelete(messageInfo);
     } catch (StoreException ex) {
-      assertEquals(ex.getErrorCode(), StoreErrorCodes.ID_Not_Deleted);
+      assertEquals(StoreErrorCodes.ID_Undeleted, ex.getErrorCode());
     }
     expectedCount = isVcr ? 1 : 3;
     verify(dest, times(expectedCount)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
