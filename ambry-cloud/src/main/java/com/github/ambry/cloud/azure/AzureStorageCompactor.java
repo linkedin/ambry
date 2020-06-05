@@ -13,22 +13,36 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.storage.blob.models.BlobStorageException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * Class that compacts partitions in the Azure cloud by purging inactive blobs from
+ * ABS and Cosmos.
+ */
 public class AzureStorageCompactor {
   private static final Logger logger = LoggerFactory.getLogger(AzureStorageCompactor.class);
+  private static final ObjectMapper objectMapper = new ObjectMapper();
   private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final CosmosDataAccessor cosmosDataAccessor;
   private final int queryLimit;
@@ -40,6 +54,9 @@ public class AzureStorageCompactor {
   private final AzureMetrics azureMetrics;
   private final CloudRequestAgent requestAgent;
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+  final Map<String, Long> emptyCheckpoints;
+  static final String CHECKPOINT_CONTAINER = "compaction-checkpoints";
+  static final long DEFAULT_TIME = 0L;
 
   /**
    * Public constructor.
@@ -61,6 +78,9 @@ public class AzureStorageCompactor {
     // TODO: change this
     compactionTimeLimitMs = TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours);
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
+    emptyCheckpoints = new HashMap<>();
+    emptyCheckpoints.put(CloudBlobMetadata.FIELD_DELETION_TIME, DEFAULT_TIME);
+    emptyCheckpoints.put(CloudBlobMetadata.FIELD_EXPIRATION_TIME, DEFAULT_TIME);
   }
 
   /**
@@ -81,10 +101,18 @@ public class AzureStorageCompactor {
    * Purge the inactive blobs in the specified partition.
    * @return the total number of blobs purged.
    */
-  public int compactPartition(String partitionPath) {
+  public int compactPartition(String partitionPath) throws CloudStorageException {
     if (isShuttingDown()) {
-      logger.info("Skipping compaction due to shut down.");
+      logger.info("Skipping compaction of {} due to shut down.", partitionPath);
       return 0;
+    }
+
+    Map<String, Long> checkpoints;
+    try {
+      checkpoints = getCompactionProgress(partitionPath);
+    } catch (BlobStorageException | UncheckedIOException e) {
+      // If checkpoint couldn't be read, skip and try later.
+      throw new CloudStorageException("Compaction of " + partitionPath + " failed reading checkpoint", e);
     }
 
     long now = System.currentTimeMillis();
@@ -92,18 +120,19 @@ public class AzureStorageCompactor {
     long timeToQuit = now + compactionTimeLimitMs;
     long queryEndTime = now - retentionPeriodMs;
     long queryStartTime = now - TimeUnit.DAYS.toMillis(lookbackDays);
-    Date queryStartDate = new Date(queryStartTime);
     Date queryEndDate = new Date(queryEndTime);
     int totalBlobsPurged = 0;
-    logger.info("Compacting partition {} over time range {} - {}", partitionPath, queryStartDate, queryEndDate);
     try {
+      long deletionStartTime = Math.max(queryStartTime, checkpoints.get(CloudBlobMetadata.FIELD_DELETION_TIME));
       int numPurged =
-          compactPartition(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, queryStartTime, queryEndTime,
+          compactPartition(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, deletionStartTime, queryEndTime,
               timeToQuit);
       logger.info("Purged {} deleted blobs in partition {} up to {}", numPurged, partitionPath, queryEndDate);
       totalBlobsPurged += numPurged;
-      numPurged = compactPartition(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, queryStartTime, queryEndTime,
-          timeToQuit);
+      long expirationStartTime = Math.max(queryStartTime, checkpoints.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME));
+      numPurged =
+          compactPartition(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationStartTime, queryEndTime,
+              timeToQuit);
       logger.info("Purged {} expired blobs in partition {} up to {}", numPurged, partitionPath, queryEndDate);
       totalBlobsPurged += numPurged;
     } catch (CloudStorageException ex) {
@@ -134,6 +163,8 @@ public class AzureStorageCompactor {
   public int compactPartition(String partitionPath, String fieldName, long queryStartTime, long queryEndTime,
       long timeToQuit) throws CloudStorageException {
 
+    logger.info("Compacting partition {} for {} in time range {} - {}", partitionPath, fieldName,
+        new Date(queryStartTime).toString(), new Date(queryEndTime).toString());
     // Iterate until returned list size < limit, time runs out or we get shut down
     int totalPurged = 0;
     long bucketTimeRange = TimeUnit.DAYS.toMillis(queryBucketDays);
@@ -147,6 +178,9 @@ public class AzureStorageCompactor {
       if (isShuttingDown() || System.currentTimeMillis() >= timeToQuit) {
         break;
       }
+
+      updateCompactionProgress(partitionPath, fieldName, bucketEndTime);
+
       if (numPurged == 0) {
         // TODO: Consider backing off since the last query might have been expensive
       } else {
@@ -257,17 +291,61 @@ public class AzureStorageCompactor {
   }
 
   /**
-   * Returns the dead blob in the specified partition with the earliest expiration or deletion time.
+   * Get the current compaction progress for a partition.
    * @param partitionPath the partition to check.
-   * @param fieldName the field name to use (expiration or deletion time).
-   * @return the {@link CloudBlobMetadata} for the dead blob, or NULL if none was found.
-   * @throws CloudStorageException
+   * @return a {@link Map} containing the progress time for compaction based on deletion and expiration time.
+   * @throws BlobStorageException if the checkpoint blob
    */
-  public CloudBlobMetadata getOldestDeadlob(String partitionPath, String fieldName) throws CloudStorageException {
-    // TODO: once we have Cosmos compaction table, can query that.
-    List<CloudBlobMetadata> deadBlobs =
-        requestAgent.doWithRetries(() -> getDeadBlobs(partitionPath, fieldName, 1, System.currentTimeMillis(), 1),
-            "GetDeadBlobs", partitionPath);
-    return deadBlobs.isEmpty() ? null : deadBlobs.get(0);
+  Map<String, Long> getCompactionProgress(String partitionPath) throws BlobStorageException {
+    ByteArrayOutputStream baos = new ByteArrayOutputStream(64);
+    boolean hasCheckpoint = azureBlobDataAccessor.downloadFile(CHECKPOINT_CONTAINER, partitionPath, baos, false);
+    if (!hasCheckpoint) {
+      return emptyCheckpoints;
+    }
+    try {
+      // Payload format: {"expirationTime" : 12345, "deletionTime" : 67890}
+      ObjectNode jsonNode = (ObjectNode) objectMapper.readTree(baos.toString());
+      Map<String, Long> checkpoints = new HashMap<>();
+      for (String fieldName : new String[]{CloudBlobMetadata.FIELD_DELETION_TIME,
+          CloudBlobMetadata.FIELD_EXPIRATION_TIME}) {
+        checkpoints.put(fieldName, jsonNode.has(fieldName) ? jsonNode.get(fieldName).longValue() : DEFAULT_TIME);
+      }
+      return checkpoints;
+    } catch (IOException e) {
+      logger.error("Could not retrieve compaction progress for {}", partitionPath, e);
+      azureMetrics.compactionProgressReadErrorCount.inc();
+      return emptyCheckpoints;
+    }
   }
+
+  /**
+   * Update the compaction progress for a partition.
+   * @param partitionPath the partition to update.
+   * @param fieldName the compaction field (deletion or expiration time).
+   * @param checkpointTime the updated progress time.
+   */
+  boolean updateCompactionProgress(String partitionPath, String fieldName, long checkpointTime) {
+    try {
+      // load existing progress checkpoint.
+      Map<String, Long> checkpoints = getCompactionProgress(partitionPath);
+      // Ensure we don't downgrade progress already recorded.
+      if (checkpointTime <= checkpoints.getOrDefault(fieldName, DEFAULT_TIME)) {
+        logger.info("Skipping update of compaction progress for {} because saved {} is more recent.", partitionPath,
+            fieldName);
+        return false;
+      }
+      checkpoints.put(fieldName, Math.max(checkpointTime, checkpoints.get(fieldName)));
+      String json = objectMapper.writeValueAsString(checkpoints);
+      ByteArrayInputStream bais = new ByteArrayInputStream(json.getBytes());
+      azureBlobDataAccessor.uploadFile(CHECKPOINT_CONTAINER, partitionPath, bais);
+      return true;
+    } catch (BlobStorageException | IOException e) {
+      logger.error("Could not save compaction progress for {}", partitionPath);
+      azureMetrics.compactionProgressWriteErrorCount.inc();
+      return false;
+    }
+  }
+
+  // TODO: method that returns checkpoints for all partitions by iterating through the checkpoint container
+  // Utility can sort the results to show which partitions are furthest behind.
 }

@@ -17,8 +17,10 @@ import com.azure.core.http.rest.Response;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatch;
 import com.azure.storage.blob.batch.BlobBatchClient;
+import com.azure.storage.blob.models.BlobDownloadResponse;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
+import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudStorageException;
@@ -34,13 +36,16 @@ import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.FeedOptions;
 import com.microsoft.azure.cosmosdb.FeedResponse;
 import com.microsoft.azure.cosmosdb.RequestOptions;
-import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import com.microsoft.azure.cosmosdb.StoredProcedureResponse;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
+import java.io.OutputStream;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.apache.commons.codec.binary.Base64;
 import org.junit.After;
 import org.junit.Before;
@@ -68,6 +73,7 @@ public class AzureStorageCompactorTest {
   private Properties configProps = new Properties();
   private AzureStorageCompactor azureStorageCompactor;
   private BlobServiceClient mockServiceClient;
+  private BlockBlobClient mockBlockBlobClient;
   private BlobBatchClient mockBlobBatchClient;
   private AsyncDocumentClient mockumentClient;
   private AzureMetrics azureMetrics;
@@ -90,6 +96,7 @@ public class AzureStorageCompactorTest {
     partitionPath = blobMetadata.getPartitionId();
 
     mockServiceClient = mock(BlobServiceClient.class);
+    mockBlockBlobClient = AzureBlobDataAccessorTest.setupMockBlobClient(mockServiceClient);
     mockBlobBatchClient = mock(BlobBatchClient.class);
     mockumentClient = mock(AsyncDocumentClient.class);
 
@@ -135,11 +142,29 @@ public class AzureStorageCompactorTest {
     Observable<StoredProcedureResponse> mockBulkDeleteResponse = getMockBulkDeleteResponse(1);
     when(mockumentClient.executeStoredProcedure(anyString(), any(RequestOptions.class), any())).thenReturn(
         mockBulkDeleteResponse);
+    String checkpointJson = objectMapper.writeValueAsString(azureStorageCompactor.emptyCheckpoints);
+    mockCheckpointDownload(true, checkpointJson);
     azureStorageCompactor.compactPartition(partitionPath);
     verify(mockumentClient, atLeast(2)).queryDocuments(eq(collectionLink), any(SqlQuerySpec.class), any());
-    verify(mockumentClient, atLeast(1)).executeStoredProcedure(eq(collectionLink + CosmosDataAccessor.BULK_DELETE_SPROC),
-        any(), any());
+    verify(mockumentClient, atLeast(1)).executeStoredProcedure(
+        eq(collectionLink + CosmosDataAccessor.BULK_DELETE_SPROC), any(), any());
     verify(mockBlobBatchClient, atLeast(1)).submitBatchWithResponse(any(BlobBatch.class), anyBoolean(), any(), any());
+
+    // Compaction should proceed if the checkpoint is not found
+    mockCheckpointDownload(false, null);
+    azureStorageCompactor.compactPartition(partitionPath);
+  }
+
+  @Test
+  public void testCompactionFailsOnCheckpointReadError() throws Exception {
+    BlobStorageException ex = mockStorageException(BlobErrorCode.INTERNAL_ERROR);
+    when(mockBlockBlobClient.downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any())).thenThrow(ex);
+    try {
+      azureStorageCompactor.compactPartition(partitionPath);
+      fail("Expected compaction to fail");
+    } catch (CloudStorageException cse) {
+      // expected
+    }
   }
 
   /** Test getDeadBlobs method */
@@ -202,6 +227,67 @@ public class AzureStorageCompactorTest {
     }
     assertEquals(0, azureMetrics.blobDeletedCount.getCount());
     assertEquals(1, azureMetrics.blobDeleteErrorCount.getCount());
+  }
+
+  /** Test compaction progress methods, normal cases */
+  @Test
+  public void testCheckpoints() throws Exception {
+    // Existing checkpoint
+    Map<String, Long> realCheckpoints = new HashMap<>();
+    long now = System.currentTimeMillis();
+    realCheckpoints.put(CloudBlobMetadata.FIELD_DELETION_TIME, now - TimeUnit.DAYS.toMillis(1));
+    realCheckpoints.put(CloudBlobMetadata.FIELD_EXPIRATION_TIME, now - TimeUnit.DAYS.toMillis(2));
+    mockCheckpointDownload(true, objectMapper.writeValueAsString(realCheckpoints));
+    Map<String, Long> checkpoints = azureStorageCompactor.getCompactionProgress(partitionPath);
+    assertEquals("Expected checkpoint to match", realCheckpoints, checkpoints);
+    // Successful update
+    assertTrue("Expected update to return true",
+        azureStorageCompactor.updateCompactionProgress(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, now));
+    // Update skipped due to earlier time
+    assertFalse("Expected update to return false",
+        azureStorageCompactor.updateCompactionProgress(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME,
+            now - TimeUnit.DAYS.toMillis(3)));
+
+    // No checkpoint
+    mockCheckpointDownload(false, null);
+    checkpoints = azureStorageCompactor.getCompactionProgress(partitionPath);
+    assertEquals("Expected empty checkpoint", azureStorageCompactor.emptyCheckpoints, checkpoints);
+  }
+
+  /** Test compaction progress methods, error cases */
+  @Test
+  public void testCheckpointErrors() throws Exception {
+    // Corrupted checkpoint
+    mockCheckpointDownload(true, "You can't do this!");
+    Map<String, Long> checkpoints = azureStorageCompactor.getCompactionProgress(partitionPath);
+    assertEquals(azureStorageCompactor.emptyCheckpoints, checkpoints);
+    assertEquals(1, azureMetrics.compactionProgressReadErrorCount.getCount());
+
+    // Upload error
+    mockCheckpointDownload(false, null);
+    BlobStorageException ex = mockStorageException(BlobErrorCode.CONTAINER_DISABLED);
+    when(mockBlockBlobClient.uploadWithResponse(any(), anyLong(), any(), any(), any(), any(), any(), any(),
+        any())).thenThrow(ex);
+    long now = System.currentTimeMillis();
+    azureStorageCompactor.updateCompactionProgress(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, now);
+    assertEquals(1, azureMetrics.compactionProgressWriteErrorCount.getCount());
+  }
+
+  private void mockCheckpointDownload(boolean exists, String checkpointValue) {
+    when(mockBlockBlobClient.exists()).thenReturn(exists);
+    if (exists) {
+      BlobDownloadResponse mockResponse = mock(BlobDownloadResponse.class);
+      when(mockBlockBlobClient.downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any())).thenAnswer(
+          invocation -> {
+            OutputStream outputStream = invocation.getArgument(0);
+            outputStream.write(checkpointValue.getBytes());
+            return mockResponse;
+          });
+    } else {
+      BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
+      doThrow(ex).when(mockBlockBlobClient)
+          .downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
+    }
   }
 
   /**

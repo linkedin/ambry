@@ -60,6 +60,8 @@ public class AzureMetrics {
   public static final String BACKUP_SUCCESS_LATENCY = "BackupSuccessLatency";
   public static final String BACKUP_SUCCESS_BYTE_RATE = "BackupSuccessByteRate";
   public static final String BACKUP_ERROR_COUNT = "BackupErrorCount";
+  public static final String COMPACTION_PROGRESS_READ_ERROR_COUNT = "CompactionProgressReadErrorCount";
+  public static final String COMPACTION_PROGRESS_WRITE_ERROR_COUNT = "CompactionProgressWriteErrorCount";
 
   // Metrics
   public final Counter blobUploadRequestCount;
@@ -102,6 +104,8 @@ public class AzureMetrics {
   public final Timer backupSuccessLatency;
   public final Meter backupSuccessByteRate;
   public final Counter backupErrorCount;
+  public final Counter compactionProgressReadErrorCount;
+  public final Counter compactionProgressWriteErrorCount;
 
   public AzureMetrics(MetricRegistry registry) {
     blobUploadRequestCount =
@@ -156,5 +160,9 @@ public class AzureMetrics {
     backupSuccessByteRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BACKUP_SUCCESS_BYTE_RATE));
     backupSuccessLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BACKUP_SUCCESS_LATENCY));
     backupErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BACKUP_ERROR_COUNT));
+    compactionProgressReadErrorCount =
+        registry.counter(MetricRegistry.name(AzureStorageCompactor.class, COMPACTION_PROGRESS_READ_ERROR_COUNT));
+    compactionProgressWriteErrorCount =
+        registry.counter(MetricRegistry.name(AzureStorageCompactor.class, COMPACTION_PROGRESS_WRITE_ERROR_COUNT));
   }
 }

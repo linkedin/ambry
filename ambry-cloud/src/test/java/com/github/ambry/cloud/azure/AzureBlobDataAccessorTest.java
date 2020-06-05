@@ -84,16 +84,17 @@ public class AzureBlobDataAccessorTest {
     BlobContainerClient mockContainerClient = mock(BlobContainerClient.class);
     BlobClient mockBlobClient = mock(BlobClient.class);
     BlockBlobClient mockBlockBlobClient = mock(BlockBlobClient.class);
-    BlobProperties mockBlobProperties = mock(BlobProperties.class);
-    Response<BlobProperties> mockPropertiesResponse = mock(Response.class);
-    when(mockPropertiesResponse.getValue()).thenReturn(mockBlobProperties);
     when(mockServiceClient.getBlobContainerClient(anyString())).thenReturn(mockContainerClient);
     when(mockContainerClient.getBlobClient(anyString())).thenReturn(mockBlobClient);
     when(mockContainerClient.exists()).thenReturn(false);
     when(mockBlobClient.getBlockBlobClient()).thenReturn(mockBlockBlobClient);
-    when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenReturn(mockPropertiesResponse);
+    // Rest is to mock getPropertiesWithResponse and not needed everywhere
+    BlobProperties mockBlobProperties = mock(BlobProperties.class);
     Map<String, String> metadataMap = new HashMap<>();
-    when(mockBlobProperties.getMetadata()).thenReturn(metadataMap);
+    lenient().when(mockBlobProperties.getMetadata()).thenReturn(metadataMap);
+    Response<BlobProperties> mockPropertiesResponse = mock(Response.class);
+    lenient().when(mockPropertiesResponse.getValue()).thenReturn(mockBlobProperties);
+    lenient().when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenReturn(mockPropertiesResponse);
     return mockBlockBlobClient;
   }
 
