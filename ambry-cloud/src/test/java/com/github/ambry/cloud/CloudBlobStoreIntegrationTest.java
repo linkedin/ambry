@@ -57,6 +57,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -69,7 +70,7 @@ import static org.junit.Assert.*;
  * Integration Test cases for {@link CloudBlobStore}
  * Must supply file azure-test.properties in classpath with valid config property values.
  */
-//@Ignore
+@Ignore
 @RunWith(Parameterized.class)
 public class CloudBlobStoreIntegrationTest {
 
