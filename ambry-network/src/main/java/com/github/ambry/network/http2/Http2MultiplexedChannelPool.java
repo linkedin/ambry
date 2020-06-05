@@ -25,6 +25,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
@@ -83,6 +84,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
   private final Set<MultiplexedChannelRecord> parentConnections;
   private final Http2ClientConfig http2ClientConfig;
   private final Http2ClientMetrics http2ClientMetrics;
+  private final ChannelInitializer streamChannelInitializer;
 
   private AtomicBoolean closed = new AtomicBoolean(false);
 
@@ -92,13 +94,16 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
    * @param eventLoopGroup The event loop group.
    * @param http2ClientConfig http2 client configs.
    * @param http2ClientMetrics http2 client metrics.
+   * @param streamChannelInitializer {@link ChannelInitializer} to initilize a stream channel pipeline
    */
   public Http2MultiplexedChannelPool(InetSocketAddress inetSocketAddress, SSLFactory sslFactory,
-      EventLoopGroup eventLoopGroup, Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics) {
+      EventLoopGroup eventLoopGroup, Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics,
+      ChannelInitializer streamChannelInitializer) {
     this(new SimpleChannelPool(createBootStrap(eventLoopGroup, http2ClientConfig, inetSocketAddress),
             new Http2ChannelPoolHandler(sslFactory, inetSocketAddress.getHostName(), inetSocketAddress.getPort(),
                 http2ClientConfig)), eventLoopGroup, ConcurrentHashMap.newKeySet(), inetSocketAddress,
-        new Http2ClientConfig(new VerifiableProperties(new Properties())), http2ClientMetrics);
+        new Http2ClientConfig(new VerifiableProperties(new Properties())), http2ClientMetrics,
+        streamChannelInitializer);
   }
 
   /**
@@ -132,18 +137,21 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
    * @param connectionPool The {@link ChannelPool} to acquire parent channel.
    * @param eventLoopGroup The event loop group.
    * @param inetSocketAddress Remote Socket Address (IP address + port number).
-   * @param http2ClientConfig
+   * @param http2ClientConfig Http2 client configs.
    * @param http2ClientMetrics Http2 client metrics.
+   * @param streamChannelInitializer {@link ChannelInitializer} to initilize a stream channel pipeline
    */
   Http2MultiplexedChannelPool(ChannelPool connectionPool, EventLoopGroup eventLoopGroup,
       Set<MultiplexedChannelRecord> connections, InetSocketAddress inetSocketAddress,
-      Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics) {
+      Http2ClientConfig http2ClientConfig, Http2ClientMetrics http2ClientMetrics,
+      ChannelInitializer streamChannelInitializer) {
     this.parentConnectionPool = connectionPool;
     this.eventLoopGroup = eventLoopGroup;
     this.parentConnections = connections;
     this.inetSocketAddress = inetSocketAddress;
     this.http2ClientConfig = http2ClientConfig;
     this.http2ClientMetrics = http2ClientMetrics;
+    this.streamChannelInitializer = streamChannelInitializer;
   }
 
   /**
@@ -225,7 +233,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
     try {
       MultiplexedChannelRecord multiplexedChannel =
           new MultiplexedChannelRecord(parentChannel, http2ClientConfig.http2MaxConcurrentStreamsPerConnection,
-              http2ClientConfig.idleConnectionTimeoutMs, http2ClientConfig.http2MaxContentLength);
+              http2ClientConfig.idleConnectionTimeoutMs, streamChannelInitializer);
       parentChannel.attr(MULTIPLEXED_CHANNEL).set(multiplexedChannel);
 
       Promise<Channel> streamPromise = parentChannel.eventLoop().newPromise();
@@ -453,8 +461,13 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
   private static final class ReleaseOnExceptionHandler extends ChannelDuplexHandler {
     private static final ReleaseOnExceptionHandler INSTANCE = new ReleaseOnExceptionHandler();
 
+    /**
+     * Netty calls this function when channel becomes inactive. The channel becomes inactive AFTER it is closed (either by
+     * the local or the remote end). One case is when server shutdown.
+     */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
+      log.info("Connection {} become inactive.", ctx.channel());
       closeAndReleaseParent(ctx, new ClosedChannelException());
     }
 

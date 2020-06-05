@@ -17,17 +17,13 @@
 package com.github.ambry.network.http2;
 
 import com.github.ambry.commons.NettyUtils;
-import com.github.ambry.utils.SystemTime;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelId;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundInvoker;
-import io.netty.channel.ChannelPipeline;
-import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http2.Http2GoAwayFrame;
 import io.netty.handler.codec.http2.Http2StreamChannel;
 import io.netty.handler.codec.http2.Http2StreamChannelBootstrap;
-import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.Promise;
@@ -53,13 +49,13 @@ public class MultiplexedChannelRecord {
   private final Channel parentChannel;
   private final int maxConcurrentStreams;
   private final Long allowedIdleTimeInMs;
-  private final int maxContentLength;
 
   private final AtomicInteger numOfAvailableStreams;
   private volatile long lastReserveAttemptTimeMillis;
 
   // Only read or write in the connection.eventLoop()
   private final Map<ChannelId, Http2StreamChannel> streamChannels = new HashMap<>();
+  private final ChannelInitializer streamChannelInitializer;
   private ScheduledFuture<?> closeIfIdleTask;
 
   // Only write in the connection.eventLoop()
@@ -68,12 +64,12 @@ public class MultiplexedChannelRecord {
   private volatile int lastStreamId;
 
   MultiplexedChannelRecord(Channel parentChannel, int maxConcurrentStreams, Long allowedIdleTimeInMs,
-      int maxContentLength) {
+      ChannelInitializer streamChannelInitializer) {
     this.parentChannel = parentChannel;
     this.maxConcurrentStreams = maxConcurrentStreams;
     this.numOfAvailableStreams = new AtomicInteger(maxConcurrentStreams);
     this.allowedIdleTimeInMs = allowedIdleTimeInMs;
-    this.maxContentLength = maxContentLength;
+    this.streamChannelInitializer = streamChannelInitializer;
   }
 
   AtomicInteger getNumOfAvailableStreams() {
@@ -107,8 +103,7 @@ public class MultiplexedChannelRecord {
       }
 
       Future<Http2StreamChannel> streamFuture =
-          new Http2StreamChannelBootstrap(parentChannel).open();
-      // handler are added when stream is returned to claimer.
+          new Http2StreamChannelBootstrap(parentChannel).handler(streamChannelInitializer).open();
       streamFuture.addListener((GenericFutureListener<Future<Http2StreamChannel>>) future -> {
         NettyUtils.warnIfNotInEventLoop(parentChannel.eventLoop());
 
@@ -214,6 +209,8 @@ public class MultiplexedChannelRecord {
       List<Http2StreamChannel> childrenToClose = new ArrayList<>(streamChannels.values());
       for (Channel childChannel : childrenToClose) {
         childChannelConsumer.accept(childChannel);
+        log.debug("fire exception to stream {} {} pipeline: {}. Active: {}", childChannel.hashCode(), childChannel,
+            childChannel.pipeline(), childChannel.isOpen());
       }
     });
   }

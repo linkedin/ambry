@@ -23,6 +23,7 @@ import com.github.ambry.network.ResponseInfo;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
@@ -41,6 +42,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.network.http2.Http2Utils.*;
 
 
 /**
@@ -66,9 +69,10 @@ public class Http2NetworkClient implements NetworkClient {
     } else {
       this.eventLoopGroup = new NioEventLoopGroup(http2ClientConfig.http2NettyEventLoopGroupThreads);
     }
-    this.pools = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics);
     this.http2ClientResponseHandler = new Http2ClientResponseHandler(http2ClientMetrics);
     this.http2ClientStreamStatsHandler = new Http2ClientStreamStatsHandler(http2ClientMetrics);
+    this.pools = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics,
+        new StreamChannelInitializer());
     this.http2ClientMetrics = http2ClientMetrics;
   }
 
@@ -88,12 +92,6 @@ public class Http2NetworkClient implements NetworkClient {
               http2ClientMetrics.http2StreamAcquireTime.update(System.currentTimeMillis() - streamInitiateTime);
               long streamAcquiredTime = System.currentTimeMillis();
               Channel streamChannel = future.getNow();
-              streamChannel.pipeline().addLast(http2ClientStreamStatsHandler);
-              // TODO: implement ourselves' aggregator. Http2Streams to Response Object
-              streamChannel.pipeline().addLast(new Http2StreamFrameToHttpObjectCodec(false));
-              streamChannel.pipeline().addLast(new HttpObjectAggregator(http2ClientConfig.http2MaxContentLength));
-              streamChannel.pipeline().addLast(http2ClientResponseHandler);
-              streamChannel.pipeline().addLast(new AmbrySendToHttp2Adaptor());
               streamChannel.attr(REQUEST_INFO).set(requestInfo);
               streamChannel.writeAndFlush(requestInfo.getRequest()).addListener(new ChannelFutureListener() {
                 @Override
@@ -106,14 +104,20 @@ public class Http2NetworkClient implements NetworkClient {
                     requestInfo.setStreamSendTime(System.currentTimeMillis());
                   } else {
                     http2ClientMetrics.http2StreamWriteAndFlushErrorCount.inc();
-                    logger.warn("Stream writeAndFlush fail: {}", future.cause());
+                    logger.warn("Stream {} {} writeAndFlush fail. Cause: ", streamChannel.hashCode(), streamChannel,
+                        future.cause());
+                    // Set attribute null and close stream. It's possible that exception was fired on parent channel close
+                    // and triggered releaseAndCloseStreamChannel before, but it's tolerable to call releaseAndCloseStreamChannel
+                    // again as streamChannel close happen in event loop. No impact to main flow.
+                    // For netty 4.1.42.Final, streamChannel can be close twice without any exception.
+                    releaseAndCloseStreamChannel(streamChannel);
                   }
                   // release related bytebuf
                   requestInfo.getRequest().release();
                 }
               });
             } else {
-              logger.error("Couldn't acquire stream channel to {}:{} . Cause: {}.", requestInfo.getHost(),
+              logger.error("Couldn't acquire stream channel to {}:{} . Cause:", requestInfo.getHost(),
                   requestInfo.getPort().getPort(), future.cause());
               // release related bytebuf
               requestInfo.getRequest().release();
@@ -124,6 +128,10 @@ public class Http2NetworkClient implements NetworkClient {
     }
     http2ClientMetrics.http2ClientSendTime.update(System.currentTimeMillis() - startTime);
     // TODO: close stream channel for requestsToDrop. Need a hashmap from corelationId to streamChannel
+    if (requestsToDrop.size() != 0) {
+      logger.warn("Number of requestsToDrop: {}", requestsToDrop.size());
+      http2ClientMetrics.http2RequestsToDropCount.inc(requestsToDrop.size());
+    }
 
     http2ClientResponseHandler.getResponseInfoQueue().poll(readyResponseInfos, pollTimeoutMs);
 
@@ -192,7 +200,16 @@ public class Http2NetworkClient implements NetworkClient {
 
   }
 
-  public Http2ClientMetrics getHttp2ClientMetrics() {
-    return http2ClientMetrics;
+  private class StreamChannelInitializer extends ChannelInitializer {
+    public void initChannel(Channel channel) {
+      channel.pipeline().addLast(http2ClientStreamStatsHandler);
+      // TODO: implement ourselves' aggregator. Http2Streams to Response Object
+      channel.pipeline().addLast(new Http2StreamFrameToHttpObjectCodec(false));
+      channel.pipeline().addLast(new HttpObjectAggregator(http2ClientConfig.http2MaxContentLength));
+      channel.pipeline().addLast(http2ClientResponseHandler);
+      channel.pipeline().addLast(new AmbrySendToHttp2Adaptor());
+      // We log hashCode because frame id is -1 at this time.
+      logger.info("Handlers added to channel: {} {} ", channel.hashCode(), channel);
+    }
   }
 }

@@ -22,15 +22,9 @@ import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpObjectAggregator;
-import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Promise;
 import java.io.DataInputStream;
@@ -50,11 +44,11 @@ import org.slf4j.LoggerFactory;
  */
 public class Http2BlockingChannel implements ConnectedChannel {
   private static final Logger logger = LoggerFactory.getLogger(Http2BlockingChannel.class);
-  private final static AttributeKey<Promise<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
   private Promise<ByteBuf> responsePromise;
   private final Http2MultiplexedChannelPool http2MultiplexedChannelPool;
   private final Http2ClientConfig http2ClientConfig;
   private final Http2ClientMetrics http2ClientMetrics;
+  final static AttributeKey<Promise<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
 
   public Http2BlockingChannel(Http2MultiplexedChannelPool http2MultiplexedChannelPool) {
     this.http2MultiplexedChannelPool = http2MultiplexedChannelPool;
@@ -78,7 +72,8 @@ public class Http2BlockingChannel implements ConnectedChannel {
     this.http2MultiplexedChannelPool =
         new Http2MultiplexedChannelPool(new InetSocketAddress(hostName, port), nettySslHttp2Factory,
             Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup(), http2ClientConfig,
-            http2ClientMetrics);
+            http2ClientMetrics,
+            new Http2BlockingChannelStreamChannelInitializer(http2ClientConfig.http2MaxContentLength));
   }
 
   @Override
@@ -103,39 +98,6 @@ public class Http2BlockingChannel implements ConnectedChannel {
     } catch (Exception e) {
       throw new IOException("Can't acquire stream channel from " + getRemoteHost() + ":" + getRemotePort(), e);
     }
-
-    ChannelPipeline p = streamChannel.pipeline();
-    p.addLast(new Http2StreamFrameToHttpObjectCodec(false));
-    p.addLast(new HttpObjectAggregator(http2ClientConfig.http2MaxContentLength));
-    p.addLast(new SimpleChannelInboundHandler<FullHttpResponse>() {
-      @Override
-      protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
-        Promise<ByteBuf> promise = ctx.channel().attr(RESPONSE_PROMISE).get();
-        if (promise != null) {
-          promise.setSuccess(msg.content().retainedDuplicate());
-          // Stream channel can't be reused. Release it here.
-          releaseStreamChannel(ctx);
-        }
-      }
-
-      @Override
-      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        Promise<ByteBuf> promise = ctx.channel().attr(RESPONSE_PROMISE).getAndSet(null);
-        if (promise != null) {
-          promise.setFailure(cause);
-          releaseStreamChannel(ctx);
-        }
-      }
-
-      private void releaseStreamChannel(ChannelHandlerContext ctx) {
-        ctx.channel()
-            .parent()
-            .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
-            .get()
-            .release(ctx.channel());
-      }
-    });
-    p.addLast(new AmbrySendToHttp2Adaptor());
 
     responsePromise = streamChannel.eventLoop().newPromise();
     streamChannel.attr(RESPONSE_PROMISE).set(responsePromise);

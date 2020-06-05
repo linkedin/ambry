@@ -25,8 +25,6 @@ import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,7 +48,8 @@ public class Http2BlockingChannelPool implements ConnectionPool {
     } else {
       this.eventLoopGroup = new NioEventLoopGroup(http2ClientConfig.http2NettyEventLoopGroupThreads);
     }
-    http2ChannelPoolMap = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics);
+    http2ChannelPoolMap = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics,
+        new Http2BlockingChannelStreamChannelInitializer(http2ClientConfig.http2MaxContentLength));
     this.http2ClientConfig = http2ClientConfig;
   }
 
