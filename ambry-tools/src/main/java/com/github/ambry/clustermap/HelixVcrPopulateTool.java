@@ -29,6 +29,7 @@ import org.apache.helix.controller.rebalancer.DelayedAutoRebalancer;
 import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
+import org.apache.helix.manager.zk.ZKUtil;
 import org.apache.helix.manager.zk.client.DedicatedZkClientFactory;
 import org.apache.helix.model.ClusterConfig;
 import org.apache.helix.model.HelixConfigScope;
@@ -145,7 +146,7 @@ public class HelixVcrPopulateTool {
   static void createCluster(String destZkString, String destClusterName) {
     HelixZkClient destZkClient = getHelixZkClient(destZkString);
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
-    if (destAdmin.getClusters().contains(destClusterName)) {
+    if (ZKUtil.isClusterSetup(destClusterName, destZkClient)) {
       errorAndExit("Failed to create cluster because " + destClusterName + " already exist.");
     }
     ClusterSetup clusterSetup = new ClusterSetup.Builder().setZkAddress(destZkString).build();
