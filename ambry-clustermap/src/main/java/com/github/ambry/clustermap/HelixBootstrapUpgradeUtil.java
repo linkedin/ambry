@@ -1107,7 +1107,7 @@ public class HelixBootstrapUpgradeUtil {
   /**
    * A comparator for replicas that compares based on the partition ids.
    */
-  private class ReplicaComparator implements Comparator<ReplicaId> {
+  private static class ReplicaComparator implements Comparator<ReplicaId> {
     @Override
     public int compare(ReplicaId a, ReplicaId b) {
       return a.getPartitionId().compareTo(b.getPartitionId());
