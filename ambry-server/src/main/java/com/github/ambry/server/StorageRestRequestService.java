@@ -31,12 +31,9 @@ import org.slf4j.LoggerFactory;
 public class StorageRestRequestService implements RestRequestService {
   private static final Logger logger = LoggerFactory.getLogger(StorageRestRequestService.class);
   NettyServerRequestResponseChannel requestResponseChannel;
-  ServerSecurityService serverSecurityService;
 
-  public StorageRestRequestService(NettyServerRequestResponseChannel requestResponseChannel,
-      ServerSecurityService serverSecurityService) {
+  public StorageRestRequestService(NettyServerRequestResponseChannel requestResponseChannel) {
     this.requestResponseChannel = requestResponseChannel;
-    this.serverSecurityService = serverSecurityService;
   }
 
   @Override

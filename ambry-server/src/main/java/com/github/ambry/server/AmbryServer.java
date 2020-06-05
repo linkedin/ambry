@@ -120,34 +120,50 @@ public class AmbryServer {
   private ServerSecurityService serverSecurityService;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      ClusterSpectatorFactory clusterSpectatorFactory, Time time) {
+      ClusterSpectatorFactory clusterSpectatorFactory, Time time) throws Exception {
     this(properties, clusterAgentsFactory, clusterSpectatorFactory, new LoggingNotificationSystem(), time);
   }
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      NotificationSystem notificationSystem, Time time) {
+      NotificationSystem notificationSystem, Time time) throws Exception {
     this(properties, clusterAgentsFactory, null, notificationSystem, time);
   }
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      ClusterSpectatorFactory clusterSpectatorFactory, NotificationSystem notificationSystem, Time time) {
+      ClusterSpectatorFactory clusterSpectatorFactory, NotificationSystem notificationSystem, Time time)
+      throws Exception {
     this.properties = properties;
     this.clusterAgentsFactory = clusterAgentsFactory;
     this.clusterSpectatorFactory = clusterSpectatorFactory;
     this.notificationSystem = notificationSystem;
     this.time = time;
+
+    try {
+      clusterMap = clusterAgentsFactory.getClusterMap();
+      logger.info("Initialized clusterMap");
+      registry = clusterMap.getMetricRegistry();
+      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
+
+      ServerConfig serverConfig = new ServerConfig(properties);
+      ServerSecurityServiceFactory serverSecurityServiceFactory =
+          Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, metrics, clusterMap);
+      serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
+
+    } catch (Exception e) {
+      logger.error("Error during bootup", e);
+      throw new InstantiationException("failure during bootup " + e);
+    }
   }
+
+
 
   public void startup() throws InstantiationException {
     try {
       logger.info("starting");
-      clusterMap = clusterAgentsFactory.getClusterMap();
-      logger.info("Initialized clusterMap");
       clusterParticipants = clusterAgentsFactory.getClusterParticipants();
       logger.info("Setting up JMX.");
+
       long startTime = SystemTime.getInstance().milliseconds();
-      registry = clusterMap.getMetricRegistry();
-      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 
@@ -233,9 +249,6 @@ public class AmbryServer {
         statsManager.start();
       }
 
-      ServerSecurityServiceFactory serverSecurityServiceFactory =
-          Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, metrics, clusterMap);
-      serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
 
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
@@ -257,7 +270,7 @@ public class AmbryServer {
         RestServerConfig restServerConfig = new RestServerConfig(properties);
         NettyServerRequestResponseChannel requestResponseChannel = new NettyServerRequestResponseChannel(32);
         RestRequestService restRequestService =
-            new StorageRestRequestService(requestResponseChannel, serverSecurityService);
+            new StorageRestRequestService(requestResponseChannel);
 
         AmbryServerRequests ambryServerRequestsForHttp2 =
             new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
