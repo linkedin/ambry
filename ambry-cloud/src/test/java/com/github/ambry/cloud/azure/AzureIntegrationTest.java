@@ -503,8 +503,7 @@ public class AzureIntegrationTest {
 
     // Try to delete again (to trigger recovery), verify removed from Cosmos
     try {
-      assertFalse("Expected delete to return false",
-          azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator));
+      azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator);
     } catch (CloudStorageException cex) {
       assertEquals("Unexpected error code", HttpConstants.StatusCodes.NOTFOUND, cex.getStatusCode());
     }

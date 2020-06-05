@@ -425,12 +425,7 @@ class CloudBlobStore implements Store {
       addToCache(blobId.getID(), newLifeVersion, BlobState.CREATED);
       return newLifeVersion;
     } else {
-      if (lifeVersion > 0) {
-        throw new StoreException("Id " + blobId.getID() + " is already undeleted in cloud",
-            StoreErrorCodes.ID_Undeleted);
-      } else {
-        throw new StoreException("Id " + blobId.getID() + " not deleted yet in cloud", StoreErrorCodes.ID_Not_Deleted);
-      }
+      throw new StoreException("Id " + blobId.getID() + " is already undeleted in cloud", StoreErrorCodes.ID_Undeleted);
     }
   }
 

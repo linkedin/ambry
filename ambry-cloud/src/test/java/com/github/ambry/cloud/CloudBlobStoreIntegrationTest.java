@@ -35,21 +35,11 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.ConnectionPolicy;
-import com.microsoft.azure.cosmosdb.ConsistencyLevel;
-import com.microsoft.azure.cosmosdb.Document;
-import com.microsoft.azure.cosmosdb.FeedOptions;
-import com.microsoft.azure.cosmosdb.FeedResponse;
-import com.microsoft.azure.cosmosdb.PartitionKey;
-import com.microsoft.azure.cosmosdb.RequestOptions;
-import com.microsoft.azure.cosmosdb.SqlQuerySpec;
-import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
@@ -83,10 +73,10 @@ public class CloudBlobStoreIntegrationTest {
   private long operationTime = System.currentTimeMillis();
   private boolean isVcr;
   private PartitionId partitionId;
-  // one day retention
   private final String PROPS_FILE_NAME = "azure-test.properties";
   private VcrMetrics vcrMetrics;
   private AzureMetrics azureMetrics;
+  private AzureCloudConfig azureCloudConfig;
 
   /**
    * Run in both VCR and live serving mode.
@@ -126,6 +116,7 @@ public class CloudBlobStoreIntegrationTest {
     testProperties.setProperty(AzureCloudConfig.AZURE_PURGE_BATCH_SIZE, "10");
     testProperties.setProperty(CloudConfig.CLOUD_IS_VCR, "" + isVcr);
     verifiableProperties = new VerifiableProperties(testProperties);
+    azureCloudConfig = new AzureCloudConfig(verifiableProperties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
     partitionId = new Partition(666, clusterMapConfig.clusterMapDefaultPartitionClass, PartitionState.READ_WRITE,
@@ -145,7 +136,7 @@ public class CloudBlobStoreIntegrationTest {
 
   @After
   public void destroy() throws IOException {
-    cleanup();
+    cleanupPartition(azureCloudConfig, partitionId);
     if (cloudBlobStore != null) {
       cloudBlobStore.shutdown();
     }
@@ -182,8 +173,8 @@ public class CloudBlobStoreIntegrationTest {
   @Test
   public void testGet() throws StoreException {
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    addBlobToMessageSet(messageWriteSet, Utils.Infinite_Time, accountId, containerId, partitionId,
-        operationTime, (short) 2);
+    addBlobToMessageSet(messageWriteSet, Utils.Infinite_Time, accountId, containerId, partitionId, operationTime,
+        (short) 2);
     cloudBlobStore.put(messageWriteSet);
 
     // verify that the blob was uploaded with expected metadata.
@@ -211,7 +202,6 @@ public class CloudBlobStoreIntegrationTest {
   /** Test {@link CloudBlobStore#delete} method. */
   @Test
   public void testDelete() throws StoreException {
-    cleanup();
     if (isVcr) {
       testDeleteFromVcr();
     } else {
@@ -223,8 +213,8 @@ public class CloudBlobStoreIntegrationTest {
   public void testDeleteFromVcr() throws StoreException {
     // First upload a blob with a life version 2
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    addBlobToMessageSet(messageWriteSet, Utils.Infinite_Time, accountId, containerId, partitionId,
-        operationTime, (short) 2);
+    addBlobToMessageSet(messageWriteSet, Utils.Infinite_Time, accountId, containerId, partitionId, operationTime,
+        (short) 2);
     cloudBlobStore.put(messageWriteSet);
 
     // verify that the blob was uploaded with expected metadata.
@@ -309,8 +299,8 @@ public class CloudBlobStoreIntegrationTest {
   public void testDeleteFromFrontend() throws StoreException {
     // First upload a blob with a life version 2
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    addBlobToMessageSet(messageWriteSet, Utils.Infinite_Time, accountId, containerId, partitionId,
-        operationTime, (short) -1);
+    addBlobToMessageSet(messageWriteSet, Utils.Infinite_Time, accountId, containerId, partitionId, operationTime,
+        (short) -1);
     cloudBlobStore.put(messageWriteSet);
 
     // verify that the blob was uploaded with expected metadata.
@@ -362,8 +352,8 @@ public class CloudBlobStoreIntegrationTest {
   @Test
   public void testUndelete() throws StoreException {
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    addBlobToMessageSet(messageWriteSet, Utils.Infinite_Time, accountId, containerId, partitionId,
-        operationTime, initLifeVersion(isVcr));
+    addBlobToMessageSet(messageWriteSet, Utils.Infinite_Time, accountId, containerId, partitionId, operationTime,
+        initLifeVersion(isVcr));
     cloudBlobStore.put(messageWriteSet);
 
     // Attempt to undelete a blob that is not deleted. Should fail silently for vcr and throw exception for frontend.
@@ -372,13 +362,16 @@ public class CloudBlobStoreIntegrationTest {
         new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(), messageInfo.isDeleted(),
             messageInfo.isTtlUpdated(), messageInfo.isUndeleted(), messageInfo.getExpirationTimeInMs(),
             messageInfo.getCrc(), messageInfo.getAccountId(), messageInfo.getContainerId(),
-            messageInfo.getOperationTimeMs(), initLifeVersion(isVcr));
+            messageInfo.getOperationTimeMs(), (isVcr ? (short) 1 : -1));
     try {
       cloudBlobStore.undelete(undeleteMessageInfo);
       if (!isVcr) {
         fail("Undelete from frontend of a not deleted blob should throw exception.");
       }
     } catch (StoreException ex) {
+      if (isVcr) {
+        fail("Undelete for the vcr should fail silently");
+      }
       assertEquals("Unexpected error message", StoreErrorCodes.ID_Not_Deleted, ex.getErrorCode());
     }
 
@@ -411,8 +404,8 @@ public class CloudBlobStoreIntegrationTest {
       expirationTimeMs += TimeUnit.SECONDS.toMillis(storeConfig.storeTtlUpdateBufferTimeSeconds);
     }
     expirationTimeMs += 100000;
-    addBlobToMessageSet(messageWriteSet, expirationTimeMs, accountId, containerId, partitionId,
-        operationTime, (short) -1);
+    addBlobToMessageSet(messageWriteSet, expirationTimeMs, accountId, containerId, partitionId, operationTime,
+        (short) -1);
     cloudBlobStore.put(messageWriteSet);
 
     // verify that the blob was uploaded with expected metadata.
@@ -481,36 +474,6 @@ public class CloudBlobStoreIntegrationTest {
       }
     } catch (StoreException ex) {
       assertEquals("Unexpected error code", ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
-    }
-  }
-
-  /**
-   * Cleanup the test partition by deleting all the blobs of the test partition.
-   */
-  private void cleanup() {
-    ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-    AsyncDocumentClient asyncDocumentClient =
-        new AsyncDocumentClient.Builder().withServiceEndpoint(verifiableProperties.getProperty("cosmos.endpoint"))
-            .withMasterKeyOrResourceToken(verifiableProperties.getProperty("cosmos.key"))
-            .withConnectionPolicy(connectionPolicy)
-            .withConsistencyLevel(ConsistencyLevel.Session)
-            .build();
-    SqlQuerySpec sqlQuerySpec =
-        new SqlQuerySpec("select * from c where c.partitionId=\"" + partitionId.toPathString() + "\"");
-    FeedOptions feedOptions = new FeedOptions();
-    feedOptions.setPartitionKey(new PartitionKey(partitionId.toPathString()));
-    Iterator<FeedResponse<Document>> iterator =
-        asyncDocumentClient.queryDocuments(verifiableProperties.getProperty("cosmos.collection.link"), sqlQuerySpec,
-            feedOptions).toBlocking().getIterator();
-    RequestOptions requestOptions = new RequestOptions();
-    requestOptions.setPartitionKey(new PartitionKey(partitionId.toPathString()));
-    while (iterator.hasNext()) {
-      FeedResponse<Document> response = iterator.next();
-      response.getResults()
-          .forEach(document -> asyncDocumentClient.deleteDocument(
-              verifiableProperties.getProperty("cosmos.collection.link") + "/docs/" + document.getId(), requestOptions)
-              .toBlocking()
-              .single());
     }
   }
 }

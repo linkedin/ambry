@@ -13,12 +13,23 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.utils.TestUtils;
+import com.microsoft.azure.cosmosdb.ConnectionPolicy;
+import com.microsoft.azure.cosmosdb.ConsistencyLevel;
+import com.microsoft.azure.cosmosdb.Document;
+import com.microsoft.azure.cosmosdb.FeedOptions;
+import com.microsoft.azure.cosmosdb.FeedResponse;
+import com.microsoft.azure.cosmosdb.PartitionKey;
+import com.microsoft.azure.cosmosdb.RequestOptions;
+import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.nio.ByteBuffer;
+import java.util.Iterator;
 import java.util.Random;
 
 import static com.github.ambry.commons.BlobId.*;
@@ -112,5 +123,38 @@ public class CloudTestUtil {
    */
   static short initLifeVersion(boolean isVcr) {
     return (short) (isVcr ? 0 : -1);
+  }
+
+  /**
+   * Cleanup the specified partition in azure by deleting all the blobs of the partition.
+   * @param azureCloudConfig Properties containing the credentials needed for connection to azure.
+   * @param partitionId partition to be deleted.
+   */
+  static void cleanupPartition(AzureCloudConfig azureCloudConfig, PartitionId partitionId) {
+    ConnectionPolicy connectionPolicy = new ConnectionPolicy();
+    AsyncDocumentClient asyncDocumentClient =
+        new AsyncDocumentClient.Builder().withServiceEndpoint(azureCloudConfig.cosmosEndpoint)
+            .withMasterKeyOrResourceToken(azureCloudConfig.cosmosKey)
+            .withConnectionPolicy(connectionPolicy)
+            .withConsistencyLevel(ConsistencyLevel.Session)
+            .build();
+    SqlQuerySpec sqlQuerySpec =
+        new SqlQuerySpec("select * from c where c.partitionId=\"" + partitionId.toPathString() + "\"");
+    FeedOptions feedOptions = new FeedOptions();
+    feedOptions.setPartitionKey(new PartitionKey(partitionId.toPathString()));
+    Iterator<FeedResponse<Document>> iterator =
+        asyncDocumentClient.queryDocuments(azureCloudConfig.cosmosCollectionLink, sqlQuerySpec, feedOptions)
+            .toBlocking()
+            .getIterator();
+    RequestOptions requestOptions = new RequestOptions();
+    requestOptions.setPartitionKey(new PartitionKey(partitionId.toPathString()));
+    while (iterator.hasNext()) {
+      FeedResponse<Document> response = iterator.next();
+      response.getResults()
+          .forEach(document -> asyncDocumentClient.deleteDocument(
+              azureCloudConfig.cosmosCollectionLink + "/docs/" + document.getId(), requestOptions)
+              .toBlocking()
+              .single());
+    }
   }
 }
