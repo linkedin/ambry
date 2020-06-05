@@ -587,7 +587,7 @@ public class HelixBootstrapUpgradeUtil {
     for (Map.Entry<String, HelixAdmin> entry : adminForDc.entrySet()) {
       HelixAdmin dcAdmin = entry.getValue();
       String dcName = entry.getKey();
-      info("Generating replica addition map for datacenter {}", dcName);
+      info("[{}] Generating replica addition map for datacenter {}", dcName.toUpperCase(), dcName);
       Map<String, Map<String, Replica>> partitionToInstancesAndReplicas = new HashMap<>();
       Map<String, Map<String, String>> newAddedReplicasInDc = new HashMap<>();
       for (String instanceName : dcToInstanceNameToDataNodeId.get(dcName).keySet()) {
@@ -610,19 +610,19 @@ public class HelixBootstrapUpgradeUtil {
           Map<String, Replica> instanceAndReplicaInStatic = partitionToInstancesAndReplicas.get(partitionStr);
           if (instanceAndReplicaInStatic == null || instanceAndReplicaInStatic.isEmpty()) {
             info(
-                "*** Partition {} no longer present in the static clustermap. Uploading cluster admin infos operation won't remove it *** ",
-                partitionStr);
+                "[{}] *** Partition {} no longer present in the static clustermap. Uploading cluster admin infos operation won't remove it *** ",
+                dcName.toUpperCase(), partitionStr);
           } else if (!instanceAndReplicaInStatic.keySet().equals(instanceSetInHelix)) {
             info(
-                "Different instance sets for partition {} under resource {}. Extracting new replicas from static clustermap.",
-                partitionStr, resourceName);
+                "[{}] Different instance sets for partition {} under resource {}. Extracting new replicas from static clustermap.",
+                dcName.toUpperCase(), partitionStr, resourceName);
             // instances in static only
             Set<String> instanceSetInStatic = instanceAndReplicaInStatic.keySet();
             instanceSetInStatic.removeAll(instanceSetInHelix);
             for (String instance : instanceSetInStatic) {
               Replica replica = instanceAndReplicaInStatic.get(instance);
-              info("New replica of partition[{}] will be added to instance {} on {}", partitionStr, instance,
-                  replica.getMountPath());
+              info("[{}] New replica of partition[{}] will be added to instance {} on {}", dcName.toUpperCase(),
+                  partitionStr, instance, replica.getMountPath());
               newAddedReplicasInDc.computeIfAbsent(partitionStr, key -> {
                 Map<String, String> partitionMap = new HashMap<>();
                 partitionMap.put(PARTITION_CLASS_STR, replica.getPartitionId().getPartitionClass());
