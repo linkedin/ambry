@@ -67,10 +67,10 @@ public class ReplicationManager extends ReplicationEngine {
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      ClusterParticipant clusterParticipant, Predicate predicate) throws ReplicationException {
+      ClusterParticipant clusterParticipant, Predicate skipPredicate) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
-        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, predicate);
+        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, skipPredicate);
     this.storeConfig = storeConfig;
     this.currentNode = dataNode;
     trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;

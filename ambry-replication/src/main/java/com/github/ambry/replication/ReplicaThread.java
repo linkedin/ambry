@@ -112,7 +112,7 @@ public class ReplicaThread implements Runnable {
   private final Condition pauseCondition = lock.newCondition();
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final int maxReplicaCountPerRequest;
-  private final Predicate predicate;
+  private final Predicate skipPredicate;
   private volatile boolean allDisabled = false;
   private final PartitionLeaderInfo partitionLeaderInfo;
 
@@ -121,10 +121,10 @@ public class ReplicaThread implements Runnable {
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager, Predicate predicate) {
+      ReplicaSyncUpManager replicaSyncUpManager, Predicate skipPredicate) {
     this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
-        datacenterName, responseHandler, time, replicaSyncUpManager, null, predicate);
+        datacenterName, responseHandler, time, replicaSyncUpManager, null, skipPredicate);
   }
 
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
@@ -132,7 +132,7 @@ public class ReplicaThread implements Runnable {
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager, PartitionLeaderInfo partitionLeaderInfo, Predicate predicate) {
+      ReplicaSyncUpManager replicaSyncUpManager, PartitionLeaderInfo partitionLeaderInfo, Predicate skipPredicate) {
     this.threadName = threadName;
     this.running = true;
     this.findTokenHelper = findTokenHelper;
@@ -152,7 +152,7 @@ public class ReplicaThread implements Runnable {
     this.datacenterName = datacenterName;
     this.time = time;
     this.replicaSyncUpManager = replicaSyncUpManager;
-    this.predicate = predicate;
+    this.skipPredicate = skipPredicate;
     if (replicatingFromRemoteColo) {
       threadThrottleDurationMs = replicationConfig.replicationInterReplicaThreadThrottleSleepDurationMs;
       syncedBackOffCount = replicationMetrics.interColoReplicaSyncedBackoffCount;
@@ -660,7 +660,7 @@ public class ReplicaThread implements Runnable {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key from remote: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), storeKey);
       StoreKey convertedKey = storeKeyConverter.getConverted(storeKey);
-      if (convertedKey != null && (predicate == null || !predicate.test(messageInfo))) {
+      if (convertedKey != null && (skipPredicate == null || !skipPredicate.test(messageInfo))) {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
     }

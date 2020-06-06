@@ -73,7 +73,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   private final List<String> sslEnabledDatacenters;
   private final StoreKeyConverterFactory storeKeyConverterFactory;
   private final String transformerClassName;
-  private final Predicate predicate;
+  private final Predicate skipPredicate;
   protected final DataNodeId dataNodeId;
   protected final MetricRegistry metricRegistry;
   protected final ReplicationMetrics replicationMetrics;
@@ -94,7 +94,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       List<? extends ReplicaId> replicaIds, ConnectionPool connectionPool, MetricRegistry metricRegistry,
       NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
       String transformerClassName, ClusterParticipant clusterParticipant, StoreManager storeManager,
-      Predicate predicate)
+      Predicate skipPredicate)
       throws ReplicationException {
     this.replicationConfig = replicationConfig;
     this.storeKeyFactory = storeKeyFactory;
@@ -121,7 +121,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.storeKeyConverterFactory = storeKeyConverterFactory;
     this.transformerClassName = transformerClassName;
     this.storeManager = storeManager;
-    this.predicate = predicate;
+    this.skipPredicate = skipPredicate;
     replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
     partitionLeaderInfo = new PartitionLeaderInfo(storeManager);
   }
@@ -342,7 +342,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
             new ReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
                 connectionPool, replicationConfig, replicationMetrics, notification, threadSpecificKeyConverter,
                 threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter, responseHandler,
-                SystemTime.getInstance(), replicaSyncUpManager, partitionLeaderInfo, predicate);
+                SystemTime.getInstance(), replicaSyncUpManager, partitionLeaderInfo, skipPredicate);
         replicaThreads.add(replicaThread);
         if (startThread) {
           Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);

@@ -1381,12 +1381,12 @@ public class ReplicationTest {
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
-    Predicate predicate = new ReplicationSkipPredicate(accountService, replicationConfig);
+    Predicate skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, null, predicate);
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, null, skipPredicate);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }
