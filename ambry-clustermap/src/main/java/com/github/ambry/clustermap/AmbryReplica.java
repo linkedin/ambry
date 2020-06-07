@@ -40,7 +40,7 @@ public abstract class AmbryReplica implements ReplicaId {
    * @param capacityBytes the capacity in bytes for this replica.
    * @param isSealed whether this replica is in sealed state.
    */
-  public AmbryReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, boolean isReplicaStopped,
+  AmbryReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, boolean isReplicaStopped,
       long capacityBytes, boolean isSealed) throws Exception {
     this.partition = Objects.requireNonNull(partition, "null partition");
     this.capacityBytes = capacityBytes;

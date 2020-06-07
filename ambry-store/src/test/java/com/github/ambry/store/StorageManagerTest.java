@@ -56,6 +56,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.InstanceConfig;
@@ -347,7 +348,18 @@ public class StorageManagerTest {
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
     }
-    // 3. store not started exception
+    // 3. not found store should throw exception (induced by removing the store)
+    ReplicaId replicaToRemove = localReplicas.get(localReplicas.size() - 1);
+    storageManager.controlCompactionForBlobStore(replicaToRemove.getPartitionId(), false);
+    storageManager.shutdownBlobStore(replicaToRemove.getPartitionId());
+    storageManager.getDiskManager(replicaToRemove.getPartitionId()).removeBlobStore(replicaToRemove.getPartitionId());
+    try {
+      mockHelixParticipant.onPartitionBecomeInactiveFromStandby(replicaToRemove.getPartitionId().toPathString());
+      fail("should fail because store is not found");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
+    }
+    // 4. store not started exception
     ReplicaId localReplica = localReplicas.get(0);
     storageManager.shutdownBlobStore(localReplica.getPartitionId());
     try {
@@ -357,17 +369,18 @@ public class StorageManagerTest {
       assertEquals("Error code doesn't match", StoreNotStarted, e.getErrorCode());
     }
     storageManager.startBlobStore(localReplica.getPartitionId());
-    // 4. store is disabled due to disk I/O error
+    // 5. store is disabled due to disk I/O error
     BlobStore localStore = (BlobStore) storageManager.getStore(localReplica.getPartitionId());
-    localStore.getDisabledOnError().set(true);
+    AtomicBoolean mockDisabledOnError = new AtomicBoolean(true);
+    localStore.setDisabledOnError(mockDisabledOnError);
     try {
       mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
       fail("should fail because store is disabled");
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
-    localStore.getDisabledOnError().set(false);
-    // 5. success case (verify both replica's state and decommission file)
+    mockDisabledOnError.set(false);
+    // 6. success case (verify both replica's state and decommission file)
     mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
     assertEquals("local store state should be set to INACTIVE", ReplicaState.INACTIVE,
         storageManager.getStore(localReplica.getPartitionId()).getCurrentState());
@@ -375,7 +388,7 @@ public class StorageManagerTest {
     assertTrue("Decommission file is not found in local replica's dir", decommissionFile.exists());
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
 
-    // 6. mock disable compaction failure
+    // 7. mock disable compaction failure
     mockHelixParticipant = new MockClusterParticipant();
     MockStorageManager mockStorageManager =
         new MockStorageManager(localNode, Collections.singletonList(mockHelixParticipant));

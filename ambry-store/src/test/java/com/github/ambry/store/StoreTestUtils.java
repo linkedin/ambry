@@ -14,8 +14,6 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.AmbryDataNode;
-import com.github.ambry.clustermap.AmbryDisk;
 import com.github.ambry.clustermap.AmbryPartition;
 import com.github.ambry.clustermap.AmbryReplica;
 import com.github.ambry.clustermap.DataNodeId;
@@ -23,7 +21,6 @@ import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
-import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.File;
@@ -32,6 +29,7 @@ import java.nio.file.Files;
 import java.util.List;
 import java.util.Properties;
 import org.json.JSONObject;
+import org.mockito.Mockito;
 
 import static org.mockito.Mockito.*;
 
@@ -59,14 +57,12 @@ class StoreTestUtils {
    * Need mock ReplicaId to get and set isSealed state
    */
   public static class MockReplicaId implements ReplicaId {
-    private String storeId;
     private long capacity;
     private String filePath;
     private PartitionId partitionId;
     private boolean isSealed = false;
 
     MockReplicaId(String storeId, long capacity, String filePath) {
-      this.storeId = storeId;
       this.capacity = capacity;
       this.filePath = filePath;
       partitionId = mock(PartitionId.class);
@@ -144,54 +140,6 @@ class StoreTestUtils {
     }
   }
 
-  public static class MockAmbryReplica extends AmbryReplica {
-    private String filePath;
-
-    MockAmbryReplica(ClusterMapConfig clusterMapConfig, long capacity, String filePath, AmbryPartition partitionId)
-        throws Exception {
-      super(clusterMapConfig, partitionId, false, capacity, false);
-      this.filePath = filePath;
-    }
-
-    @Override
-    public AmbryDataNode getDataNodeId() {
-      return null;
-    }
-
-    @Override
-    public AmbryDisk getDiskId() {
-      return null;
-    }
-
-    @Override
-    public String getMountPath() {
-      return null;
-    }
-
-    @Override
-    public String getReplicaPath() {
-      return filePath;
-    }
-
-    @Override
-    public void markDiskDown() {
-    }
-
-    @Override
-    public void markDiskUp() {
-    }
-
-    @Override
-    public ReplicaType getReplicaType() {
-      return ReplicaType.DISK_BACKED;
-    }
-
-    @Override
-    public JSONObject getSnapshot() {
-      return null;
-    }
-  }
-
   /**
    * Creates a mock replicaId for blob store testing
    * @param storeId partitionId from replicaId.getPartitionId() will toString() to this
@@ -203,12 +151,25 @@ class StoreTestUtils {
     return new MockReplicaId(storeId, capacity, filePath);
   }
 
-  static MockAmbryReplica createMockAmbryReplica(ClusterMapConfig clusterMapConfig, String storeId, long capacity,
-      String filePath) throws Exception {
+  /**
+   * Create a mock AmbryReplica for blob store testing
+   * @param storeId partitionId from replicaId.getPartitionId() will toString() to this
+   * @param capacity replicaId.getCapacityInBytes() will output this
+   * @param filePath replicaId.getReplicaPath() will output this
+   * @param isSealed whether the replica is sealed or not
+   * @return a mock AmbryReplica
+   */
+  static AmbryReplica createMockAmbryReplica(String storeId, long capacity, String filePath, boolean isSealed) {
     AmbryPartition partitionId = mock(AmbryPartition.class);
     when(partitionId.toString()).thenReturn(storeId);
     when(partitionId.toPathString()).thenReturn(storeId);
-    return new MockAmbryReplica(clusterMapConfig, capacity, filePath, partitionId);
+
+    AmbryReplica mockAmbryReplica = Mockito.mock(AmbryReplica.class);
+    when(mockAmbryReplica.getPartitionId()).thenReturn(partitionId);
+    when(mockAmbryReplica.getReplicaPath()).thenReturn(filePath);
+    when(mockAmbryReplica.getCapacityInBytes()).thenReturn(capacity);
+    when(mockAmbryReplica.isSealed()).thenReturn(isSealed);
+    return mockAmbryReplica;
   }
 
   /**

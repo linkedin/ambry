@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.clustermap.AmbryReplica;
 import com.github.ambry.clustermap.HelixFactory;
 import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.ReplicaId;
@@ -3084,9 +3085,8 @@ public class BlobStoreTest {
     return StoreTestUtils.createMockReplicaId(storeId, LOG_CAPACITY, filePath);
   }
 
-  private StoreTestUtils.MockAmbryReplica getMockAmbryReplica(ClusterMapConfig clusterMapConfig, String filePath)
-      throws Exception {
-    return StoreTestUtils.createMockAmbryReplica(clusterMapConfig, storeId, 1024 * 1024 * 1024L, filePath);
+  private AmbryReplica getMockAmbryReplica(ClusterMapConfig clusterMapConfig, String filePath) {
+    return StoreTestUtils.createMockAmbryReplica(storeId, 1024 * 1024 * 1024L, filePath, false);
   }
 
   /**

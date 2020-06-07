@@ -24,7 +24,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 /**
  * {@link DiskId} implementation to use within dynamic cluster managers.
  */
-public class AmbryDisk implements DiskId, Resource {
+class AmbryDisk implements DiskId, Resource {
   private final AmbryDataNode datanode;
   private final String mountPath;
   private final long rawCapacityBytes;

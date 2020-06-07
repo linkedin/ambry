@@ -93,7 +93,7 @@ public class BlobStore implements Store {
   private volatile boolean recoverFromDecommission;
   // TODO remove this once ZK migration is complete
   private AtomicBoolean isSealed = new AtomicBoolean(false);
-  private final AtomicBoolean disabledOnError = new AtomicBoolean(false);
+  private AtomicBoolean disabledOnError = new AtomicBoolean(false);
   protected PersistentIndex index;
   // THIS IS ONLY FOR TEST.
   protected Runnable operationBeforeSynchronizationFunc = null;
@@ -1128,10 +1128,10 @@ public class BlobStore implements Store {
 
   /**
    * Exposed for testing.
-   * @return a boolean value that indicates whether current store is disabled due to I/O error.
+   * Set disabledOnError boolean value in this class.
    */
-  AtomicBoolean getDisabledOnError() {
-    return disabledOnError;
+  void setDisabledOnError(AtomicBoolean disabledOnError) {
+    this.disabledOnError = disabledOnError;
   }
 
   /**

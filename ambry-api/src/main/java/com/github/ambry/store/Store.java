@@ -174,9 +174,7 @@ public interface Store {
   /**
    * @return {@code true} if the store is disabled on error (due to disk I/O issue).
    */
-  default boolean disabledOnError() {
-    return false;
-  }
+  boolean disabledOnError();
 
   /**
    * Shuts down the store
