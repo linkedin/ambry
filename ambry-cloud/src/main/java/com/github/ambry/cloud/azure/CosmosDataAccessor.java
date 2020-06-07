@@ -275,7 +275,7 @@ public class CosmosDataAccessor {
    * Returns {@Null} if the field already has the specified value.
    * @throws DocumentClientException if the record was not found or if the operation failed.
    */
-  ResourceResponse<Document> updateMetadata(BlobId blobId, Map<String, Object> updateFields)
+  ResourceResponse<Document> updateMetadata(BlobId blobId, Map<String, String> updateFields)
       throws DocumentClientException {
 
     // Read the existing record

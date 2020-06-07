@@ -22,6 +22,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
@@ -29,6 +30,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
@@ -46,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -67,6 +70,7 @@ class AzureCloudDestination implements CloudDestination {
   private final AzureMetrics azureMetrics;
   private final int queryBatchSize;
   private final boolean isVcr;
+  private final CloudConfig cloudConfig;
 
   /**
    * Construct an Azure cloud destination from config properties.
@@ -88,6 +92,7 @@ class AzureCloudDestination implements CloudDestination {
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
+    this.cloudConfig = cloudConfig;
     isVcr = cloudConfig.cloudIsVcr;
     logger.info("Created Azure destination");
   }
@@ -117,6 +122,7 @@ class AzureCloudDestination implements CloudDestination {
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     this.isVcr = isVcr;
+    this.cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
   }
 
   /**
@@ -162,30 +168,34 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion) throws CloudStorageException {
+  public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
+      CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
     Map<String, Object> updateFields = new HashMap<>();
     // TODO Frontend support needs to handle the special case of life version = MessageInfo.LIFE_VERSION_FROM_FRONTEND
     updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, deletionTime);
-    return updateBlobMetadata(blobId, updateFields);
+    UpdateResponse updateResponse = updateBlobMetadata(blobId, updateFields, cloudUpdateValidator);
+    return updateResponse.wasUpdated;
   }
 
   @Override
-  public boolean updateBlobExpiration(BlobId blobId, long expirationTime) throws CloudStorageException {
-    return updateBlobMetadata(blobId,
-        Collections.singletonMap(CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime));
+  public short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
+      throws CloudStorageException {
+    UpdateResponse updateResponse =
+        updateBlobMetadata(blobId, Collections.singletonMap(CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime),
+            cloudUpdateValidator);
+    return updateResponse.metadata.containsKey(CloudBlobMetadata.FIELD_LIFE_VERSION) ? Short.parseShort(
+        updateResponse.metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION)) : 0;
   }
 
   @Override
-  public short undeleteBlob(BlobId blobId, short lifeVersion) throws CloudStorageException {
+  public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
+      throws CloudStorageException {
     Map<String, Object> updateFields = new HashMap<>();
     updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, Utils.Infinite_Time);
-    updateBlobMetadata(blobId, updateFields);
-    // We either update lifeVersion or throw error. So this should work for now.
-    // Note that lifeVersion from frontend request can be -1 (MessageInfo.LIFE_VERSION_FROM_FRONTEND).
-    // TODO Frontend support needs to increment and return the current life version in azure.
-    return lifeVersion; // TODO return the real value of life version.
+    UpdateResponse updateResponse = updateBlobMetadata(blobId, updateFields, cloudUpdateValidator);
+    return Short.parseShort(updateResponse.metadata.getOrDefault(CloudBlobMetadata.FIELD_LIFE_VERSION, "0"));
   }
 
   @Override
@@ -259,10 +269,12 @@ class AzureCloudDestination implements CloudDestination {
    * Update the metadata for the specified blob.
    * @param blobId The {@link BlobId} to update.
    * @param updateFields map of fields and new values to update.
-   * @return {@code true} if the update succeeded, {@code false} if no update was needed.
+   * @param cloudUpdateValidator {@link CloudUpdateValidator} passed by the caller to validate the update.
+   * @return {@link UpdateResponse} object containing updated metadata.
    * @throws CloudStorageException if the update fails.
    */
-  private boolean updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields) throws CloudStorageException {
+  private UpdateResponse updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields,
+      CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     updateFields.keySet().forEach(field -> Objects.requireNonNull(updateFields.get(field)));
 
@@ -272,9 +284,9 @@ class AzureCloudDestination implements CloudDestination {
     try {
       boolean updatedStorage = false;
       Map<String, String> metadataMap = null;
+      UpdateResponse updateResponse = null;
       try {
-        AzureBlobDataAccessor.UpdateResponse updateResponse =
-            azureBlobDataAccessor.updateBlobMetadata(blobId, updateFields);
+        updateResponse = azureBlobDataAccessor.updateBlobMetadata(blobId, updateFields, cloudUpdateValidator);
         // Note: if blob does not exist will throw exception with NOT_FOUND status
         metadataMap = updateResponse.metadata;
         updatedStorage = updateResponse.wasUpdated;
@@ -286,32 +298,26 @@ class AzureCloudDestination implements CloudDestination {
           // attempt fails.  So we check for that case here.
           CloudBlobMetadata cosmosMetadata = cosmosDataAccessor.getMetadataOrNull(blobId);
           if (cosmosMetadata != null) {
-            if (cosmosMetadata.isDeletedOrExpired()) {
+            if (cosmosMetadata.isCompactionCandidate(
+                TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours))) {
               logger.warn("Inconsistency: Cosmos contains record for inactive blob {}, removing it.", blobId.getID());
               cosmosDataAccessor.deleteMetadata(cosmosMetadata);
               azureMetrics.blobUpdateRecoverCount.inc();
-              return false;
             } else {
               // If the blob is still active but ABS does not have it, we are in deeper trouble.
               logger.error("Inconsistency: Cosmos contains record for active blob {} that is missing from ABS!",
                   blobId.getID());
-              throw bex;
             }
-          } else {
-            // Blob is not in Cosmos either, so simple NOT_FOUND error.
-            throw bex;
           }
-        } else {
-          // Other type of error, just throw.
-          throw bex;
         }
+        throw bex;
       }
 
       // Note: even if nothing changed in blob storage, still attempt to update Cosmos since this could be a retry
       // of a request where ABS was updated but Cosmos update failed.
       boolean updatedCosmos = false;
       try {
-        ResourceResponse<Document> response = cosmosDataAccessor.updateMetadata(blobId, updateFields);
+        ResourceResponse<Document> response = cosmosDataAccessor.updateMetadata(blobId, metadataMap);
         updatedCosmos = response != null;
       } catch (DocumentClientException dex) {
         if (dex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
@@ -329,11 +335,11 @@ class AzureCloudDestination implements CloudDestination {
         logger.debug("Updated blob {} metadata set fields {} to values {}.", blobId, updateFields.keySet(),
             updateFields.values());
         azureMetrics.blobUpdatedCount.inc();
-        return true;
+        return updateResponse;
       } else {
         logger.debug("Blob {} already has keys {} with values {} in ABS and Cosmos", blobId, updateFields.keySet(),
             updateFields.values());
-        return false;
+        return new UpdateResponse(false, metadataMap);
       }
     } catch (Exception e) {
       azureMetrics.blobUpdateErrorCount.inc();
@@ -437,7 +443,7 @@ class AzureCloudDestination implements CloudDestination {
       statusCode = StatusCodes.INTERNAL_SERVER_ERROR;
     }
     // Everything is retryable except NOT_FOUND
-    boolean isRetryable = (statusCode != StatusCodes.NOTFOUND);
+    boolean isRetryable = (statusCode != StatusCodes.NOTFOUND && !(e instanceof StoreException));
     return new CloudStorageException(message, e, statusCode, isRetryable, retryDelayMs);
   }
 
@@ -459,6 +465,22 @@ class AzureCloudDestination implements CloudDestination {
       default:
         throw new IllegalArgumentException(
             String.format("Unknown cloud replication feed type: %s", azureReplicationFeedType));
+    }
+  }
+
+  /**
+   * Struct returned by updateBlobMetadata that tells the caller whether the metadata was updated
+   * and also returns the (possibly modified) metadata.
+   */
+  static class UpdateResponse {
+    /** Flag indicating whether the metadata was updated. */
+    final boolean wasUpdated;
+    /** The resulting metadata map. */
+    final Map<String, String> metadata;
+
+    UpdateResponse(boolean wasUpdated, Map<String, String> metadata) {
+      this.wasUpdated = wasUpdated;
+      this.metadata = metadata;
     }
   }
 }

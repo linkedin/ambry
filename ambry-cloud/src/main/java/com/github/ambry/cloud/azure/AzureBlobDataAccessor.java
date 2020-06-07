@@ -34,6 +34,7 @@ import com.azure.storage.common.policy.RequestRetryOptions;
 import com.azure.storage.common.policy.RetryPolicyType;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
@@ -303,12 +304,13 @@ public class AzureBlobDataAccessor {
    * Update the metadata for the specified blob.
    * @param blobId The {@link BlobId} to update.
    * @param updateFields Map of field names and new values to modify.
-   * @return a {@link UpdateResponse} with the updated metadata.
+   * @param cloudUpdateValidator {@link CloudUpdateValidator} validator for the update passed by the caller.
+   * @return a {@link AzureCloudDestination.UpdateResponse} with the updated metadata.
    * @throws BlobStorageException if the blob does not exist or an error occurred.
    * @throws IllegalStateException on request timeout.
    */
-  public UpdateResponse updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields)
-      throws BlobStorageException {
+  public AzureCloudDestination.UpdateResponse updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields,
+      CloudUpdateValidator cloudUpdateValidator) throws Exception {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     updateFields.keySet()
         .forEach(field -> Objects.requireNonNull(updateFields.get(field), String.format("%s cannot be null", field)));
@@ -322,6 +324,10 @@ public class AzureBlobDataAccessor {
         // Note: above throws 404 exception if blob does not exist.
         String etag = blobProperties.getETag();
         Map<String, String> metadata = blobProperties.getMetadata();
+
+        if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(metadata), blobId, updateFields)) {
+          return new AzureCloudDestination.UpdateResponse(false, metadata);
+        }
 
         // Update only if any of the values have changed
         Map<String, String> changedFields = updateFields.entrySet()
@@ -340,9 +346,9 @@ public class AzureBlobDataAccessor {
           // Set condition to ensure we don't clobber a concurrent update
           BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(etag);
           blobClient.setMetadataWithResponse(metadata, blobRequestConditions, requestTimeout, Context.NONE);
-          return new UpdateResponse(true, metadata);
+          return new AzureCloudDestination.UpdateResponse(true, metadata);
         } else {
-          return new UpdateResponse(false, metadata);
+          return new AzureCloudDestination.UpdateResponse(false, metadata);
         }
       } finally {
         storageTimer.stop();
@@ -454,21 +460,5 @@ public class AzureBlobDataAccessor {
    */
   private static boolean isNotFoundError(BlobErrorCode errorCode) {
     return (errorCode == BlobErrorCode.BLOB_NOT_FOUND || errorCode == BlobErrorCode.CONTAINER_NOT_FOUND);
-  }
-
-  /**
-   * Struct returned by updateBlobMetadata that tells the caller whether the metadata was updated
-   * and also returns the (possibly modified) metadata.
-   */
-  static class UpdateResponse {
-    /** Flag indicating whether the metadata was updated. */
-    final boolean wasUpdated;
-    /** The resulting metadata map. */
-    final Map<String, String> metadata;
-
-    UpdateResponse(boolean wasUpdated, Map<String, String> metadata) {
-      this.wasUpdated = wasUpdated;
-      this.metadata = metadata;
-    }
   }
 }
