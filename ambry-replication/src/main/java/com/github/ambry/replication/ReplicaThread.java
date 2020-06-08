@@ -660,7 +660,7 @@ public class ReplicaThread implements Runnable {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key from remote: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), storeKey);
       StoreKey convertedKey = storeKeyConverter.getConverted(storeKey);
-      if (convertedKey != null && (skipPredicate == null || !skipPredicate.test(messageInfo))) {
+      if (convertedKey != null && (!replicationConfig.replicationContainerDeletionEnabled || skipPredicate == null || !skipPredicate.test(messageInfo))) {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
     }

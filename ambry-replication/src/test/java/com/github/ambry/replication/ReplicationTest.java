@@ -1340,6 +1340,9 @@ public class ReplicationTest {
    */
   @Test
   public void blockDeprecatedContainerReplicationTest() throws Exception {
+    Properties properties = new Properties();
+    properties.setProperty("replication.container.deletion.enabled", "true");
+    replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));
     MockClusterMap clusterMap = new MockClusterMap();
     Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
     MockHost localHost = localAndRemoteHosts.getFirst();

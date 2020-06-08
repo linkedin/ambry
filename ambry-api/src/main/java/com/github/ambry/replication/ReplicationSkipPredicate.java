@@ -14,17 +14,21 @@
 
 package com.github.ambry.replication;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.store.MessageInfo;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class ReplicationSkipPredicate implements Predicate<MessageInfo> {
   private final AccountService accountService;
   private final ReplicationConfig replicationConfig;
+  private final Logger logger = LoggerFactory.getLogger(getClass());
   /**
    * Construct a ReplicationSkipPredicate object
    * @param accountService the {@link AccountService} associated with this predicate.
@@ -44,15 +48,28 @@ public class ReplicationSkipPredicate implements Predicate<MessageInfo> {
   @Override
   public boolean test(MessageInfo messageInfo) {
     if (accountService != null) {
-      Container container =
-          accountService.getAccountById(messageInfo.getAccountId()).getContainerById(messageInfo.getContainerId());
+      Account account = accountService.getAccountById(messageInfo.getAccountId());
+      if (account == null) {
+        logger.info("Can't get account through accountService : {}", accountService);
+        return false;
+      }
+      Container container = account.getContainerById(messageInfo.getContainerId());
+      if (container == null) {
+        logger.info("Can't get container through account : {}", account);
+        return false;
+      }
       Container.ContainerStatus status = container.getStatus();
       if (status == Container.ContainerStatus.DELETE_IN_PROGRESS &&
           container.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(
               replicationConfig.replicationContainerDeletionRetentionDays) < System.currentTimeMillis()) {
         return false;
       }
-      return status == Container.ContainerStatus.DELETE_IN_PROGRESS || status == Container.ContainerStatus.INACTIVE;
+      if (status == Container.ContainerStatus.DELETE_IN_PROGRESS || status == Container.ContainerStatus.INACTIVE) {
+        logger.info("Container {} will be skipped during replication", container);
+        return true;
+      } else {
+        return false;
+      }
     } else {
       return false;
     }
