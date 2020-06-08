@@ -46,6 +46,7 @@ public class AzureStorageCompactor {
   private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final CosmosDataAccessor cosmosDataAccessor;
   private final int queryLimit;
+  private final int purgeLimit;
   private final int queryBucketDays;
   private final int lookbackDays;
   private final long retentionPeriodMs;
@@ -73,6 +74,7 @@ public class AzureStorageCompactor {
     this.azureMetrics = azureMetrics;
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
     this.queryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
+    this.purgeLimit = cloudConfig.cloudCompactionPurgeLimit;
     this.queryBucketDays = cloudConfig.cloudCompactionQueryBucketDays;
     this.lookbackDays = cloudConfig.cloudCompactionLookbackDays;
     // TODO: change this
@@ -117,6 +119,7 @@ public class AzureStorageCompactor {
 
     long now = System.currentTimeMillis();
     long compactionStartTime = now;
+    // FIXME: incorrect because time limit is for all partitions
     long timeToQuit = now + compactionTimeLimitMs;
     long queryEndTime = now - retentionPeriodMs;
     long queryStartTime = now - TimeUnit.DAYS.toMillis(lookbackDays);
@@ -160,8 +163,8 @@ public class AzureStorageCompactor {
    * @param timeToQuit the time at which compaction should terminate.
    * @return the number of blobs purged or found.
    */
-  public int compactPartition(String partitionPath, String fieldName, long queryStartTime, long queryEndTime,
-      long timeToQuit) throws CloudStorageException {
+  int compactPartition(String partitionPath, String fieldName, long queryStartTime, long queryEndTime, long timeToQuit)
+      throws CloudStorageException {
 
     logger.info("Compacting partition {} for {} in time range {} - {}", partitionPath, fieldName,
         new Date(queryStartTime).toString(), new Date(queryEndTime).toString());
@@ -174,12 +177,19 @@ public class AzureStorageCompactor {
       long bucketEndTime = Math.min(bucketStartTime + bucketTimeRange, queryEndTime);
       int numPurged = compactPartitionBucketed(partitionPath, fieldName, bucketStartTime, bucketEndTime, timeToQuit);
       totalPurged += numPurged;
+
+      updateCompactionProgress(partitionPath, fieldName, bucketEndTime);
+
       bucketStartTime += bucketTimeRange;
       if (isShuttingDown() || System.currentTimeMillis() >= timeToQuit) {
+        logger.debug("Reached time limit or shutting down for partition {}.", partitionPath);
         break;
       }
 
-      updateCompactionProgress(partitionPath, fieldName, bucketEndTime);
+      if (totalPurged >= purgeLimit) {
+        logger.debug("Reached limit for partition {} with {} blobs purged.", partitionPath, totalPurged);
+        break;
+      }
 
       if (numPurged == 0) {
         // TODO: Consider backing off since the last query might have been expensive
@@ -220,15 +230,23 @@ public class AzureStorageCompactor {
       }
       totalPurged += requestAgent.doWithRetries(() -> purgeBlobs(deadBlobs), "PurgeBlobs", partitionPath);
       vcrMetrics.blobCompactionRate.mark(deadBlobs.size());
-      if (deadBlobs.size() < queryLimit) {
-        break;
-      }
+
       // Adjust startTime for next query
       CloudBlobMetadata lastBlob = deadBlobs.get(deadBlobs.size() - 1);
       long latestTime = fieldName.equals(CloudBlobMetadata.FIELD_DELETION_TIME) ? lastBlob.getDeletionTime()
           : lastBlob.getExpirationTime();
       logger.info("Purged partition {} up to {} {}", partitionPath, fieldName, new Date(latestTime));
       queryStartTime = latestTime;
+
+      if (deadBlobs.size() < queryLimit) {
+        // No more dead blobs to query.
+        break;
+      }
+
+      if (totalPurged >= purgeLimit) {
+        // Reached the purge threshold, give other partitions a chance.
+        break;
+      }
     }
     return totalPurged;
   }

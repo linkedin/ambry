@@ -44,6 +44,7 @@ public class CloudConfig {
   public static final String CLOUD_COMPACTION_QUERY_BUCKET_DAYS = "cloud.compaction.query.bucket.days";
   public static final String CLOUD_BLOB_COMPACTION_SHUTDOWN_TIMEOUT_SECS =
       "cloud.blob.compaction.shutdown.timeout.secs";
+  public static final String CLOUD_COMPACTION_PURGE_LIMIT = "cloud.compaction.purge.limit";
   public static final String CLOUD_RECENT_BLOB_CACHE_LIMIT = "cloud.recent.blob.cache.limit";
   public static final String CLOUD_MAX_ATTEMPTS = "cloud.max.attempts";
   public static final String CLOUD_DEFAULT_RETRY_DELAY = "cloud.default.retry.delay";
@@ -72,7 +73,8 @@ public class CloudConfig {
   public static final int DEFAULT_MIN_TTL_DAYS = 14;
   public static final int DEFAULT_RETENTION_DAYS = 7;
   public static final int DEFAULT_COMPACTION_QUERY_LIMIT = 100;
-  public static final int DEFAULT_COMPACTION_BUCKET_TIME_DAYS = 7;
+  public static final int DEFAULT_COMPACTION_QUERY_BUCKET_DAYS = 7;
+  public static final int DEFAULT_COMPACTION_PURGE_LIMIT = 10000;
   public static final int DEFAULT_COMPACTION_LOOKBACK_DAYS = 364; // Multiple of 7
   public static final int DEFAULT_COMPACTION_TIMEOUT = 10;
   public static final int DEFAULT_RECENT_BLOB_CACHE_LIMIT = 10000;
@@ -234,6 +236,13 @@ public class CloudConfig {
   public final int cloudCompactionQueryBucketDays;
 
   /**
+   * Max number of blobs to be purged for a single partition in each round of compaction.
+   */
+  @Config(CLOUD_COMPACTION_PURGE_LIMIT)
+  @Default("10000")
+  public final int cloudCompactionPurgeLimit;
+
+  /**
    * The max size of recently-accessed blob cache in each cloud blob store.
    */
   @Config(CLOUD_RECENT_BLOB_CACHE_LIMIT)
@@ -345,7 +354,9 @@ public class CloudConfig {
     cloudCompactionLookbackDays =
         verifiableProperties.getInt(CLOUD_COMPACTION_LOOKBACK_DAYS, DEFAULT_COMPACTION_LOOKBACK_DAYS);
     cloudCompactionQueryBucketDays =
-        verifiableProperties.getInt(CLOUD_COMPACTION_QUERY_BUCKET_DAYS, DEFAULT_COMPACTION_BUCKET_TIME_DAYS);
+        verifiableProperties.getInt(CLOUD_COMPACTION_QUERY_BUCKET_DAYS, DEFAULT_COMPACTION_QUERY_BUCKET_DAYS);
+    cloudCompactionPurgeLimit =
+        verifiableProperties.getInt(CLOUD_COMPACTION_PURGE_LIMIT, DEFAULT_COMPACTION_PURGE_LIMIT);
     recentBlobCacheLimit = verifiableProperties.getInt(CLOUD_RECENT_BLOB_CACHE_LIMIT, DEFAULT_RECENT_BLOB_CACHE_LIMIT);
     cloudMaxAttempts = verifiableProperties.getInt(CLOUD_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS);
     cloudDefaultRetryDelay = verifiableProperties.getInt(CLOUD_DEFAULT_RETRY_DELAY, DEFAULT_RETRY_DELAY_VALUE);

@@ -211,7 +211,7 @@ class AzureCloudDestination implements CloudDestination {
     for (List<BlobId> batchOfBlobs : chunkedBlobIdList) {
       metadataList.addAll(getBlobMetadataChunked(batchOfBlobs));
     }
-    return metadataList.stream().collect(Collectors.toMap(CloudBlobMetadata::getId, Function.identity()));
+    return metadataList.stream().collect(Collectors.toMap(CloudBlobMetadata::getId, Function.identity(), (x, y) -> x));
   }
 
   @Override

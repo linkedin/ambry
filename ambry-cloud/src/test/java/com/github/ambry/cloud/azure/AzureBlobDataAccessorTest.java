@@ -127,7 +127,7 @@ public class AzureBlobDataAccessorTest {
 
   /** Test normal delete. */
   @Test
-  public void testDelete() throws Exception {
+  public void testMarkDelete() throws Exception {
     mockBlobExistence(true);
     AzureBlobDataAccessor.UpdateResponse response =
         dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("deletionTime", deletionTime));
@@ -239,6 +239,15 @@ public class AzureBlobDataAccessorTest {
     when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
     expectBlobStorageException(
         () -> dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("expirationTime", expirationTime)));
+  }
+
+  /** Test file deletion. */
+  @Test
+  public void testFileDelete() throws Exception {
+    mockBlobExistence(true);
+    assertTrue("Expected delete to return true", dataAccessor.deleteFile("containerName", "fileName"));
+    mockBlobExistence(false);
+    assertFalse("Expected delete to return false", dataAccessor.deleteFile("containerName", "fileName"));
   }
 
   private void mockBlobExistence(boolean exists) {

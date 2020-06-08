@@ -238,16 +238,19 @@ public class AzureBlobDataAccessor {
   }
 
   /**
-   * Delete a file from blob storage.
+   * Delete a file from blob storage, if it exists.
    * @param containerName name of the container containing file to delete.
-   * @param fileName name of the file.
+   * @param fileName name of the file to delete.
+   * @return true if the file was deleted, otherwise false.
    * @throws BlobStorageException for any error on ABS side.
    */
-  void deleteFile(String containerName, String fileName) throws BlobStorageException {
+  boolean deleteFile(String containerName, String fileName) throws BlobStorageException {
     BlockBlobClient blobClient = getBlockBlobClient(containerName, fileName, false);
     if (blobClient.exists()) {
       blobClient.delete();
+      return true;
     }
+    return false;
   }
 
   /**
