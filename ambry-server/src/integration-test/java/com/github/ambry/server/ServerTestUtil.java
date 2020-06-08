@@ -543,7 +543,7 @@ final class ServerTestUtil {
 
       // Bounce servers to make them read the persisted token file.
       cluster.stopServers();
-      cluster.startServers();
+      cluster.reinitServers();
 
       channel.disconnect();
       channel.connect();
@@ -1005,7 +1005,7 @@ final class ServerTestUtil {
         }
       }
     }
-    serverList.get(0).startup();
+    cluster.reinitServer(0);
 
     channel1.disconnect();
     channel1.connect();
@@ -1152,7 +1152,7 @@ final class ServerTestUtil {
         notificationSystem.decrementCreatedReplica(blobIds.get(i).getID(), dataNode.getHostname(), dataNode.getPort());
       }
     }
-    serverList.get(0).startup();
+    cluster.reinitServer(0);
 
     channel1.disconnect();
     channel1.connect();
@@ -1937,7 +1937,7 @@ final class ServerTestUtil {
       checkTtlUpdateStatus(channel2, clusterMap, blobIdFactory, blobIdList.get(10), dataList.get(10), true,
           Utils.Infinite_Time);
 
-      cluster.getServers().get(0).startup();
+      cluster.reinitServer(0);
       // wait for server to recover
       notificationSystem.awaitBlobCreations(blobIdList.get(6).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(7).getID());
@@ -2002,7 +2002,7 @@ final class ServerTestUtil {
       notificationSystem.decrementUpdatedReplica(blobIdList.get(10).getID(), dataNodeId.getHostname(),
           dataNodeId.getPort(), UpdateType.TTL_UPDATE);
 
-      cluster.getServers().get(0).startup();
+      cluster.reinitServer(0);
       notificationSystem.awaitBlobCreations(blobIdList.get(1).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(2).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(3).getID());

@@ -14,6 +14,7 @@
 
 package com.github.ambry.server;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ServerConfig;
@@ -30,7 +31,7 @@ public class AmbryServerSecurityServiceFactory implements ServerSecurityServiceF
   private final ServerMetrics serverMetrics;
 
   public AmbryServerSecurityServiceFactory(VerifiableProperties verifiableProperties, ServerMetrics serverMetrics,
-      ClusterMap clusterMap) {
+      MetricRegistry metricRegistry) {
     this.serverConfig = new ServerConfig(verifiableProperties);
     this.serverMetrics = serverMetrics;
   }

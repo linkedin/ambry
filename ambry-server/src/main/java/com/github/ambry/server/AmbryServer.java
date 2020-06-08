@@ -120,18 +120,18 @@ public class AmbryServer {
   private ServerSecurityService serverSecurityService;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      ClusterSpectatorFactory clusterSpectatorFactory, Time time) throws Exception {
+      ClusterSpectatorFactory clusterSpectatorFactory, Time time) throws InstantiationException {
     this(properties, clusterAgentsFactory, clusterSpectatorFactory, new LoggingNotificationSystem(), time);
   }
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      NotificationSystem notificationSystem, Time time) throws Exception {
+      NotificationSystem notificationSystem, Time time) throws InstantiationException {
     this(properties, clusterAgentsFactory, null, notificationSystem, time);
   }
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       ClusterSpectatorFactory clusterSpectatorFactory, NotificationSystem notificationSystem, Time time)
-      throws Exception {
+      throws InstantiationException {
     this.properties = properties;
     this.clusterAgentsFactory = clusterAgentsFactory;
     this.clusterSpectatorFactory = clusterSpectatorFactory;
@@ -143,10 +143,9 @@ public class AmbryServer {
       logger.info("Initialized clusterMap");
       registry = clusterMap.getMetricRegistry();
       this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
-
       ServerConfig serverConfig = new ServerConfig(properties);
       ServerSecurityServiceFactory serverSecurityServiceFactory =
-          Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, metrics, clusterMap);
+          Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, metrics, registry);
       serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
 
     } catch (Exception e) {
