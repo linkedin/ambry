@@ -29,7 +29,7 @@ import io.netty.util.concurrent.Promise;
 public class Http2BlockingChannelResponseHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
   @Override
   protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
-    Promise<ByteBuf> promise = ctx.channel().attr(Http2BlockingChannel.RESPONSE_PROMISE).get();
+    Promise<ByteBuf> promise = ctx.channel().attr(Http2BlockingChannel.RESPONSE_PROMISE).getAndSet(null);
     if (promise != null) {
       promise.setSuccess(msg.content().retainedDuplicate());
       // Stream channel can't be reused. Release it here.

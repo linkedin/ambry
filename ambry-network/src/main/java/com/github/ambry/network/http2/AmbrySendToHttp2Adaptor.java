@@ -13,10 +13,7 @@
  */
 package com.github.ambry.network.http2;
 
-import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.network.Send;
-import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.router.Callback;
 import com.github.ambry.utils.ByteBufChannel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -37,8 +34,6 @@ import org.slf4j.LoggerFactory;
  */
 @ChannelHandler.Sharable
 public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
-  private static final Logger logger = LoggerFactory.getLogger(AmbrySendToHttp2Adaptor.class);
-
   public AmbrySendToHttp2Adaptor() {
 
   }

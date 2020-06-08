@@ -116,6 +116,8 @@ public class Http2NetworkClient implements NetworkClient {
                     // again as streamChannel close happen in event loop. No impact to main flow.
                     // For netty 4.1.42.Final, streamChannel can be close twice without any exception.
                     releaseAndCloseStreamChannel(streamChannel);
+                    http2ClientResponseHandler.getResponseInfoQueue()
+                        .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
                   }
                   // release related bytebuf
                   requestInfo.getRequest().release();

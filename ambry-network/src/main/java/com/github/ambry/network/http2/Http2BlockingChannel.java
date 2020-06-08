@@ -47,12 +47,10 @@ public class Http2BlockingChannel implements ConnectedChannel {
   private Promise<ByteBuf> responsePromise;
   private final Http2MultiplexedChannelPool http2MultiplexedChannelPool;
   private final Http2ClientConfig http2ClientConfig;
-  private final Http2ClientMetrics http2ClientMetrics;
   final static AttributeKey<Promise<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
 
   public Http2BlockingChannel(Http2MultiplexedChannelPool http2MultiplexedChannelPool) {
     this.http2MultiplexedChannelPool = http2MultiplexedChannelPool;
-    this.http2ClientMetrics = http2MultiplexedChannelPool.getHttp2ClientMetrics();
     this.http2ClientConfig = http2MultiplexedChannelPool.getHttp2ClientConfig();
   }
 
@@ -68,7 +66,6 @@ public class Http2BlockingChannel implements ConnectedChannel {
       throw new IllegalStateException("Can't create NettySslHttp2Factory: ", e);
     }
     this.http2ClientConfig = http2ClientConfig;
-    this.http2ClientMetrics = http2ClientMetrics;
     this.http2MultiplexedChannelPool =
         new Http2MultiplexedChannelPool(new InetSocketAddress(hostName, port), nettySslHttp2Factory,
             Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup(), http2ClientConfig,
