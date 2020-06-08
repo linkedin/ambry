@@ -14,16 +14,11 @@
  */
 package com.github.ambry.network.http2;
 
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
-import io.netty.util.concurrent.Promise;
 
 
 /**
@@ -42,34 +37,7 @@ public class Http2BlockingChannelStreamChannelInitializer extends ChannelInitial
     ChannelPipeline p = ch.pipeline();
     p.addLast(new Http2StreamFrameToHttpObjectCodec(false));
     p.addLast(new HttpObjectAggregator(http2MaxContentLength));
-    p.addLast(new SimpleChannelInboundHandler<FullHttpResponse>() {
-      @Override
-      protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
-        Promise<ByteBuf> promise = ctx.channel().attr(Http2BlockingChannel.RESPONSE_PROMISE).get();
-        if (promise != null) {
-          promise.setSuccess(msg.content().retainedDuplicate());
-          // Stream channel can't be reused. Release it here.
-          releaseStreamChannel(ctx);
-        }
-      }
-
-      @Override
-      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        Promise<ByteBuf> promise = ctx.channel().attr(Http2BlockingChannel.RESPONSE_PROMISE).getAndSet(null);
-        if (promise != null) {
-          promise.setFailure(cause);
-          releaseStreamChannel(ctx);
-        }
-      }
-
-      private void releaseStreamChannel(ChannelHandlerContext ctx) {
-        ctx.channel()
-            .parent()
-            .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
-            .get()
-            .release(ctx.channel());
-      }
-    });
+    p.addLast(new Http2BlockingChannelResponseHandler());
     p.addLast(new AmbrySendToHttp2Adaptor());
   }
 }
