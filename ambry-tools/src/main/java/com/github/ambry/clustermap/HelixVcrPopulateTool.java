@@ -25,7 +25,6 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
-import org.apache.helix.controller.rebalancer.DelayedAutoRebalancer;
 import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
@@ -220,7 +219,6 @@ public class HelixVcrPopulateTool {
       builder.add(partition);
     }
     builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
-    builder.setRebalancerClass(DelayedAutoRebalancer.class.getName());
     return builder.build();
   }
 
