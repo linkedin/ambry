@@ -80,6 +80,8 @@ public class InstanceConfigToDataNodeConfigAdapter implements DataNodeConfigSour
         getHttp2PortStr(instanceConfig), getRackId(instanceConfig), getXid(instanceConfig));
     dataNodeConfig.getSealedReplicas().addAll(getSealedReplicas(instanceConfig));
     dataNodeConfig.getStoppedReplicas().addAll(getStoppedReplicas(instanceConfig));
+    // TODO uncomment this line once 1534 is merged
+    // dataNodeConfig.getDisabledReplicas().addAll(getDisabledReplicas(instanceConfig));
     instanceConfig.getRecord().getMapFields().forEach((mountPath, diskProps) -> {
       if (diskProps.get(DISK_STATE) == null) {
         // Check if this map field actually holds disk properties, since we can't tell from just the field key (the

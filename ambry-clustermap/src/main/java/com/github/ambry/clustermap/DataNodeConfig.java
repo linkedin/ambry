@@ -35,6 +35,7 @@ class DataNodeConfig {
   private final long xid;
   private final Set<String> sealedReplicas = new HashSet<>();
   private final Set<String> stoppedReplicas = new HashSet<>();
+  private final Set<String> disabledReplicas = new HashSet<>();
   private final Map<String, DiskConfig> diskConfigs = new HashMap<>();
 
   /**
@@ -127,6 +128,13 @@ class DataNodeConfig {
    */
   Set<String> getStoppedReplicas() {
     return stoppedReplicas;
+  }
+
+  /**
+   * @return the set of disabled replicas on this server. This set is mutable.
+   */
+  Set<String> getDisabledReplicas() {
+    return disabledReplicas;
   }
 
   /**
