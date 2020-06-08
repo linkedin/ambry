@@ -28,7 +28,6 @@ if (!project.hasProperty('disableShipkit')) {
 
 allprojects {
     group = "com.github.ambry"
-    version = rootProject.version //TODO: fix in https://github.com/shipkit/org.shipkit.shipkit-auto-version
 
     apply plugin: 'eclipse'
     apply plugin: 'idea'
