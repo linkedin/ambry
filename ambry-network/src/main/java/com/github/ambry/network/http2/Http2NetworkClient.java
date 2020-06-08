@@ -162,10 +162,7 @@ public class Http2NetworkClient implements NetworkClient {
             .addListener((GenericFutureListener<Future<Channel>>) future -> {
               if (future.isSuccess()) {
                 Channel streamChannel = future.getNow();
-                streamChannel.parent()
-                    .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
-                    .get()
-                    .release(streamChannel);
+                releaseAndCloseStreamChannel(streamChannel);
                 successCount.incrementAndGet();
               } else {
                 failCount.incrementAndGet();

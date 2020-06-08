@@ -15,6 +15,7 @@
 package com.github.ambry.network.http2;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpResponse;
@@ -24,6 +25,7 @@ import io.netty.util.concurrent.Promise;
 /**
  * Netty handler for {@link Http2BlockingChannel} to handle {@link FullHttpResponse}.
  */
+@ChannelHandler.Sharable
 public class Http2BlockingChannelResponseHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
   @Override
   protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {

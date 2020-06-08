@@ -101,9 +101,8 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
       ChannelInitializer streamChannelInitializer) {
     this(new SimpleChannelPool(createBootStrap(eventLoopGroup, http2ClientConfig, inetSocketAddress),
             new Http2ChannelPoolHandler(sslFactory, inetSocketAddress.getHostName(), inetSocketAddress.getPort(),
-                http2ClientConfig)), eventLoopGroup, ConcurrentHashMap.newKeySet(), inetSocketAddress,
-        new Http2ClientConfig(new VerifiableProperties(new Properties())), http2ClientMetrics,
-        streamChannelInitializer);
+                http2ClientConfig)), eventLoopGroup, ConcurrentHashMap.newKeySet(), inetSocketAddress, http2ClientConfig,
+        http2ClientMetrics, streamChannelInitializer);
   }
 
   /**

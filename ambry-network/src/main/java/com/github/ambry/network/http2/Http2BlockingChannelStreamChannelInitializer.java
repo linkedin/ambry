@@ -25,8 +25,12 @@ import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
  * A ChannelInitializer used to setup stream channel pipeline once stream is created in {@link MultiplexedChannelRecord}.
  */
 public class Http2BlockingChannelStreamChannelInitializer extends ChannelInitializer {
-
   private final int http2MaxContentLength;
+  private static Http2StreamFrameToHttpObjectCodec http2StreamFrameToHttpObjectCodec =
+      new Http2StreamFrameToHttpObjectCodec(false);
+  private static Http2BlockingChannelResponseHandler http2BlockingChannelResponseHandler =
+      new Http2BlockingChannelResponseHandler();
+  private static AmbrySendToHttp2Adaptor ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor();
 
   Http2BlockingChannelStreamChannelInitializer(int http2MaxContentLength) {
     this.http2MaxContentLength = http2MaxContentLength;
@@ -35,9 +39,9 @@ public class Http2BlockingChannelStreamChannelInitializer extends ChannelInitial
   @Override
   protected void initChannel(Channel ch) throws Exception {
     ChannelPipeline p = ch.pipeline();
-    p.addLast(new Http2StreamFrameToHttpObjectCodec(false));
+    p.addLast(http2StreamFrameToHttpObjectCodec);
     p.addLast(new HttpObjectAggregator(http2MaxContentLength));
-    p.addLast(new Http2BlockingChannelResponseHandler());
-    p.addLast(new AmbrySendToHttp2Adaptor());
+    p.addLast(http2BlockingChannelResponseHandler);
+    p.addLast(ambrySendToHttp2Adaptor);
   }
 }
