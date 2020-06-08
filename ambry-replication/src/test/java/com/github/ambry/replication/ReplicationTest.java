@@ -1365,9 +1365,9 @@ public class ReplicationTest {
       // add 2 messages to both hosts.
       storeKeyConverter.setConversionMap(conversionMap);
       storeKeyConverter.convert(conversionMap.keySet());
-      addPutMessagesToReplicasOfPartition(Arrays.asList(b0), Arrays.asList(localHost, remoteHost));
+      //addPutMessagesToReplicasOfPartition(Arrays.asList(b0), Arrays.asList(localHost, remoteHost));
       // add 3 messages to the remote host only
-      addPutMessagesToReplicasOfPartition(Arrays.asList(b1), Collections.singletonList(remoteHost));
+      addPutMessagesToReplicasOfPartition(Arrays.asList(b0,b1), Collections.singletonList(remoteHost));
     }
 
     StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
@@ -1399,12 +1399,12 @@ public class ReplicationTest {
     ReplicaMetadataResponse response =
         replicaThread.getReplicaMetadataResponse(remoteReplicaInfos, new MockConnectionPool.MockConnection(remoteHost, batchSize), remoteNode);
     Set<Pair<Short,Short>> checkSet = new HashSet<>();
-    for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
+    //case1 DELETE_IN_PROGRESS container with retention time qualified.
+    for (int i = 0; i < 2; i++) {
       RemoteReplicaInfo remoteReplicaInfo = remoteReplicaInfos.get(i);
       ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
           response.getReplicaMetadataResponseInfoList().get(i);
       new ResponseHandler(clusterMap).onEvent(remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
-
       for (int j = 0; j < replicaMetadataResponseInfo.getMessageInfoList().size(); j++) {
         short accountId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getAccountId();
         short containerId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getContainerId();
@@ -1416,11 +1416,66 @@ public class ReplicationTest {
         Mockito.when(container.getDeleteTriggerTime()).thenReturn(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(replicationConfig.replicationContainerDeletionRetentionDays));
         Mockito.when(container.getStatus()).thenReturn(Container.ContainerStatus.DELETE_IN_PROGRESS);
       }
-      Set<MessageInfo> remoteMissingStoreKeys =
-          replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
-      assertEquals("All deprecated blobs should be blocked during replication", 0, remoteMissingStoreKeys.size());
+      Set<MessageInfo> remoteMissingStoreKeys = replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+      assertEquals("All DELETE_IN_PROGRESS blobs qualified with retention time should be skipped during replication", 0, remoteMissingStoreKeys.size());
     }
-
+    //case2 DELETE_IN_PROGRESS container with retention time not qualified.
+    for (int i = 2; i < 4; i++) {
+      RemoteReplicaInfo remoteReplicaInfo = remoteReplicaInfos.get(i);
+      ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+          response.getReplicaMetadataResponseInfoList().get(i);
+      new ResponseHandler(clusterMap).onEvent(remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
+      for (int j = 0; j < replicaMetadataResponseInfo.getMessageInfoList().size(); j++) {
+        short accountId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getAccountId();
+        short containerId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getContainerId();
+        checkSet.add(new Pair<>(accountId, containerId));
+        Container container = Mockito.mock(Container.class);
+        Account account = Mockito.mock(Account.class);
+        Mockito.when(account.getContainerById(containerId)).thenReturn(container);
+        Mockito.when(accountService.getAccountById(accountId)).thenReturn(account);
+        Mockito.when(container.getStatus()).thenReturn(Container.ContainerStatus.DELETE_IN_PROGRESS);
+      }
+      Set<MessageInfo> remoteMissingStoreKeys = replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+      assertEquals("All DELETE_IN_PROGRESS blobs not qualified with retention time should not be skipped during replication", 2, remoteMissingStoreKeys.size());
+    }
+    //case3 INACTIVE container
+    for (int i = 4; i < 6; i++) {
+      RemoteReplicaInfo remoteReplicaInfo = remoteReplicaInfos.get(i);
+      ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+          response.getReplicaMetadataResponseInfoList().get(i);
+      new ResponseHandler(clusterMap).onEvent(remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
+      for (int j = 0; j < replicaMetadataResponseInfo.getMessageInfoList().size(); j++) {
+        short accountId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getAccountId();
+        short containerId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getContainerId();
+        checkSet.add(new Pair<>(accountId, containerId));
+        Container container = Mockito.mock(Container.class);
+        Account account = Mockito.mock(Account.class);
+        Mockito.when(account.getContainerById(containerId)).thenReturn(container);
+        Mockito.when(accountService.getAccountById(accountId)).thenReturn(account);
+        Mockito.when(container.getStatus()).thenReturn(Container.ContainerStatus.INACTIVE);
+      }
+      Set<MessageInfo> remoteMissingStoreKeys = replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+      assertEquals("All INACTIVE blobs should be skipped during replication", 0, remoteMissingStoreKeys.size());
+    }
+    //case 4 ACTIVE Container
+    for (int i = 6; i < 8; i++) {
+      RemoteReplicaInfo remoteReplicaInfo = remoteReplicaInfos.get(i);
+      ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+          response.getReplicaMetadataResponseInfoList().get(i);
+      new ResponseHandler(clusterMap).onEvent(remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
+      for (int j = 0; j < replicaMetadataResponseInfo.getMessageInfoList().size(); j++) {
+        short accountId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getAccountId();
+        short containerId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getContainerId();
+        checkSet.add(new Pair<>(accountId, containerId));
+        Container container = Mockito.mock(Container.class);
+        Account account = Mockito.mock(Account.class);
+        Mockito.when(account.getContainerById(containerId)).thenReturn(container);
+        Mockito.when(accountService.getAccountById(accountId)).thenReturn(account);
+        Mockito.when(container.getStatus()).thenReturn(Container.ContainerStatus.ACTIVE);
+      }
+      Set<MessageInfo> remoteMissingStoreKeys = replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+      assertEquals("All non-deprecated blobs should not be skipped during replication", 2, remoteMissingStoreKeys.size());
+    }
   }
 
   /**
