@@ -254,20 +254,27 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     synchronized (helixAdministrationLock) {
       List<String> disabledReplicas = new ArrayList<>(getDisabledReplicas());
       String partitionName = replicaId.getPartitionId().toPathString();
+
+      // 1. invoke Helix native method to enable/disable partition on local node, this will trigger subsequent state
+      //    transition on given replica. This method modifies MapFields in InstanceConfig.
+      InstanceConfig instanceConfig = getInstanceConfig();
+      String resourceNameForPartition = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
+      logger.info("{} replica {} on current node", disable ? "Disabling" : "Enabling", partitionName);
+      instanceConfig.setInstanceEnabledForPartition(resourceNameForPartition, partitionName, !disable);
+
+      // 2. update disabled replica list in InstanceConfig. This modifies ListFields only
       if (!disable && disabledReplicas.contains(partitionName)) {
         logger.info("Removing the partition {} from disabledReplicas list", partitionName);
         disabledReplicas.remove(partitionName);
-        setDisabledReplicas(disabledReplicas);
       } else if (disable && !disabledReplicas.contains(partitionName)) {
         logger.info("Adding the partition {} to disabledReplicas list", partitionName);
         disabledReplicas.add(partitionName);
-        setDisabledReplicas(disabledReplicas);
       }
+      logger.info("Setting InstanceConfig with list of disabled replicas: {}", disabledReplicas.toArray());
+      instanceConfig.getRecord().setListField(DISABLED_REPLICAS_STR, disabledReplicas);
 
-      // invoke Helix native method to enable/disable partition on local node, this will trigger subsequent state transition
-      InstanceConfig instanceConfig = getInstanceConfig();
-      String resourceNameForPartition = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
-      instanceConfig.setInstanceEnabledForPartition(resourceNameForPartition, partitionName, !disable);
+      // 3. set InstanceConfig in Helix to persist replica disabled state
+      helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
       logger.info("Disabled state of partition {} is updated", partitionName);
     }
   }
@@ -467,19 +474,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     InstanceConfig instanceConfig = getInstanceConfig();
     logger.trace("Setting InstanceConfig with list of stopped replicas: {}", stoppedReplicas.toArray());
     instanceConfig.getRecord().setListField(STOPPED_REPLICAS_STR, stoppedReplicas);
-    return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
-  }
-
-  /**
-   * Set the list of disabled replicas in the HelixAdmin. This method is called only after the helixAdministrationLock
-   * is taken.
-   * @param disabledReplicas list of disabled replicas to be set in the HelixAdmin
-   * @return whether the operation succeeded or not
-   */
-  boolean setDisabledReplicas(List<String> disabledReplicas) {
-    InstanceConfig instanceConfig = getInstanceConfig();
-    logger.info("Setting InstanceConfig with list of disabled replicas: {}", disabledReplicas.toArray());
-    instanceConfig.getRecord().setListField(DISABLED_REPLICAS_STR, disabledReplicas);
     return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
 
