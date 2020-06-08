@@ -44,7 +44,7 @@ public class FileSpanTest {
         Offset offset = new Offset(segmentName, offsetInSegment);
         boolean inSpan = segmentName.equals(interveningLogSegmentName) || (segmentName.equals(startLogSegmentName)
             && offsetInSegment >= startOffsetInStartLogSegment) || (segmentName.equals(endLogSegmentName)
-            && offsetInSegment <= endOffsetInEndLogSegment);
+            && offsetInSegment < endOffsetInEndLogSegment);
         assertEquals("inSpan() result not as expected", inSpan, span.inSpan(offset));
       }
     }
