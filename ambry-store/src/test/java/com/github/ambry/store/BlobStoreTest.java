@@ -640,19 +640,17 @@ public class BlobStoreTest {
       deleters.add(new Deleter(id));
     }
     CountDownLatch latch = new CountDownLatch(deleters.size());
-    ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(() -> {
+    ((MockBlobStore) store).setOperationBeforeSynchronization(() -> {
       latch.countDown();
-      try {
-        latch.await();
-      } catch (Exception e) {
-      }
+      latch.await();
+      return null;
     });
     ExecutorService executorService = Executors.newFixedThreadPool(deleters.size());
     try {
       List<Future<CallableResult>> futures = executorService.invokeAll(deleters);
       verifyDeleteFutures(deleters, futures);
     } finally {
-      ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(null);
+      ((MockBlobStore) store).setOperationBeforeSynchronization(null);
       executorService.shutdownNow();
     }
   }
@@ -668,12 +666,10 @@ public class BlobStoreTest {
     assertNotNull(idToDelete);
     int count = 2;
     CountDownLatch latch = new CountDownLatch(count);
-    ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(() -> {
+    ((MockBlobStore) store).setOperationBeforeSynchronization(() -> {
       latch.countDown();
-      try {
-        latch.await();
-      } catch (Exception e) {
-      }
+      latch.await();
+      return null;
     });
     long logEndOffsetBeforeDelete = store.getLogEndOffsetInBytes();
     long indexEndOffsetBeforeDelete = store.getSizeInBytes();
@@ -681,12 +677,9 @@ public class BlobStoreTest {
     try {
       List<Future<Void>> futures = new ArrayList<>();
       for (int i = 0; i < count; i++) {
-        futures.add(executorService.submit(new Callable<Void>() {
-          @Override
-          public Void call() throws Exception {
-            delete(idToDelete);
-            return null;
-          }
+        futures.add(executorService.submit(() -> {
+          delete(idToDelete);
+          return null;
         }));
       }
       int failedCount = 0;
@@ -709,7 +702,7 @@ public class BlobStoreTest {
       assertEquals((long) DELETE_RECORD_SIZE, logEndOffsetAfterDelete - logEndOffsetBeforeDelete);
       assertEquals((long) DELETE_RECORD_SIZE, indexEndOffsetAfterDelete - indexEndOffsetBeforeDelete);
     } finally {
-      ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(null);
+      ((MockBlobStore) store).setOperationBeforeSynchronization(null);
       executorService.shutdownNow();
     }
   }
@@ -724,34 +717,26 @@ public class BlobStoreTest {
     MockId id = getUniqueId();
     final CountDownLatch getEndOffsetLatch = new CountDownLatch(1);
     final CountDownLatch findKeyLatch = new CountDownLatch(1);
-    ((MockBlobStore) store).setBetweenGetEndOffsetAndFindKeyFunc(() -> {
+    ((MockBlobStore) store).setInDeleteBetweenGetEndOffsetAndFindKey(() -> {
       getEndOffsetLatch.countDown();
-      try {
-        findKeyLatch.await();
-      } catch (Exception e) {
-      }
+      findKeyLatch.await();
+      return null;
     });
 
     ExecutorService executorService = Executors.newFixedThreadPool(2);
     try {
-      Future<Void> deleteFuture = executorService.submit(new Callable<Void>() {
-        @Override
-        public Void call() throws Exception {
-          MessageInfo info =
-              new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
-                  MessageInfo.LIFE_VERSION_FROM_FRONTEND);
-          store.delete(Collections.singletonList(info));
-          return null;
-        }
+      Future<Void> deleteFuture = executorService.submit(() -> {
+        MessageInfo info =
+            new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
+                MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+        store.delete(Collections.singletonList(info));
+        return null;
       });
       // Now make sure delete is on the way
       getEndOffsetLatch.await();
-      Future<Void> putFuture = executorService.submit(new Callable<Void>() {
-        @Override
-        public Void call() throws Exception {
-          putOneBlobWithId(id, PUT_RECORD_SIZE, Utils.Infinite_Time);
-          return null;
-        }
+      Future<Void> putFuture = executorService.submit(() -> {
+        putOneBlobWithId(id, PUT_RECORD_SIZE, Utils.Infinite_Time);
+        return null;
       });
       putFuture.get();
       // Now make sure the put is finished then continue delete
@@ -765,7 +750,7 @@ public class BlobStoreTest {
         assertEquals(StoreErrorCodes.ID_Not_Found, ((StoreException) e.getCause()).getErrorCode());
       }
     } finally {
-      ((MockBlobStore) store).setBetweenGetEndOffsetAndFindKeyFunc(null);
+      ((MockBlobStore) store).setInDeleteBetweenGetEndOffsetAndFindKey(null);
       executorService.shutdownNow();
     }
   }
@@ -783,19 +768,17 @@ public class BlobStoreTest {
       ttlUpdaters.add(new TtlUpdater(id));
     }
     CountDownLatch latch = new CountDownLatch(ttlUpdaters.size());
-    ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(() -> {
+    ((MockBlobStore) store).setOperationBeforeSynchronization(() -> {
       latch.countDown();
-      try {
-        latch.await();
-      } catch (Exception e) {
-      }
+      latch.await();
+      return null;
     });
     ExecutorService executorService = Executors.newFixedThreadPool(ttlUpdaters.size());
     try {
       List<Future<CallableResult>> futures = executorService.invokeAll(ttlUpdaters);
       verifyTtlUpdateFutures(ttlUpdaters, futures);
     } finally {
-      ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(null);
+      ((MockBlobStore) store).setOperationBeforeSynchronization(null);
       executorService.shutdownNow();
     }
   }
@@ -810,12 +793,10 @@ public class BlobStoreTest {
     final MockId idToUpdate = put(1, PUT_RECORD_SIZE, expiresAtMs).get(0);
     int count = 2;
     CountDownLatch latch = new CountDownLatch(count);
-    ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(() -> {
+    ((MockBlobStore) store).setOperationBeforeSynchronization(() -> {
       latch.countDown();
-      try {
-        latch.await();
-      } catch (Exception e) {
-      }
+      latch.await();
+      return null;
     });
     long logEndOffsetBeforeUpdate = store.getLogEndOffsetInBytes();
     long indexEndOffsetBeforeUpdate = store.getSizeInBytes();
@@ -823,12 +804,9 @@ public class BlobStoreTest {
     try {
       List<Future<Void>> futures = new ArrayList<>();
       for (int i = 0; i < count; i++) {
-        futures.add(executorService.submit(new Callable<Void>() {
-          @Override
-          public Void call() throws Exception {
-            updateTtl(idToUpdate);
-            return null;
-          }
+        futures.add(executorService.submit(() -> {
+          updateTtl(idToUpdate);
+          return null;
         }));
       }
       int failedCount = 0;
@@ -851,7 +829,7 @@ public class BlobStoreTest {
       assertEquals((long) TTL_UPDATE_RECORD_SIZE, logEndOffsetAfterUpdate - logEndOffsetBeforeUpdate);
       assertEquals((long) TTL_UPDATE_RECORD_SIZE, indexEndOffsetAfterUpdate - indexEndOffsetBeforeUpdate);
     } finally {
-      ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(null);
+      ((MockBlobStore) store).setOperationBeforeSynchronization(null);
       executorService.shutdownNow();
     }
   }
@@ -870,19 +848,17 @@ public class BlobStoreTest {
       undeleters.add(new Undeleter(id));
     }
     CountDownLatch latch = new CountDownLatch(undeleters.size());
-    ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(() -> {
+    ((MockBlobStore) store).setOperationBeforeSynchronization(() -> {
       latch.countDown();
-      try {
-        latch.await();
-      } catch (Exception e) {
-      }
+      latch.await();
+      return null;
     });
     ExecutorService executorService = Executors.newFixedThreadPool(undeleters.size());
     try {
       List<Future<CallableResult>> futures = executorService.invokeAll(undeleters);
       verifyUndeleteFutures(undeleters, futures);
     } finally {
-      ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(null);
+      ((MockBlobStore) store).setOperationBeforeSynchronization(null);
       executorService.shutdownNow();
     }
   }
@@ -898,12 +874,10 @@ public class BlobStoreTest {
     delete(idToUndelete);
     int count = 2;
     CountDownLatch latch = new CountDownLatch(count);
-    ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(() -> {
+    ((MockBlobStore) store).setOperationBeforeSynchronization(() -> {
       latch.countDown();
-      try {
-        latch.await();
-      } catch (Exception e) {
-      }
+      latch.await();
+      return null;
     });
     long logEndOffsetBeforeUndelete = store.getLogEndOffsetInBytes();
     long indexEndOffsetBeforeUndelete = store.getSizeInBytes();
@@ -911,12 +885,9 @@ public class BlobStoreTest {
     try {
       List<Future<Void>> futures = new ArrayList<>();
       for (int i = 0; i < count; i++) {
-        futures.add(executorService.submit(new Callable<Void>() {
-          @Override
-          public Void call() throws Exception {
-            undelete(idToUndelete);
-            return null;
-          }
+        futures.add(executorService.submit(() -> {
+          undelete(idToUndelete);
+          return null;
         }));
       }
       int failedCount = 0;
@@ -939,7 +910,7 @@ public class BlobStoreTest {
       assertEquals((long) UNDELETE_RECORD_SIZE, logEndOffsetAfterUndelete - logEndOffsetBeforeUndelete);
       assertEquals((long) UNDELETE_RECORD_SIZE, indexEndOffsetAfterUndelete - indexEndOffsetBeforeUndelete);
     } finally {
-      ((MockBlobStore) store).setOperationBeforeSynchronizationFunc(null);
+      ((MockBlobStore) store).setOperationBeforeSynchronization(null);
       executorService.shutdownNow();
     }
   }
@@ -3133,12 +3104,12 @@ public class BlobStoreTest {
       doThrow(exception).when(mockPersistentIndex).findMissingKeys(anyList());
     }
 
-    void setOperationBeforeSynchronizationFunc(Runnable runnable) {
-      operationBeforeSynchronizationFunc = runnable;
+    void setOperationBeforeSynchronization(Callable<Void> callable) {
+      operationBeforeSynchronization = callable;
     }
 
-    void setBetweenGetEndOffsetAndFindKeyFunc(Runnable runnable) {
-      betweenGetEndOffsetAndFindKeyFunc = runnable;
+    void setInDeleteBetweenGetEndOffsetAndFindKey(Callable<Void> callable) {
+      inDeleteBetweenGetEndOffsetAndFindKey = callable;
     }
   }
 

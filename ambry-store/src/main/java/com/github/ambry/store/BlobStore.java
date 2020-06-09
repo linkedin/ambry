@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -96,8 +97,8 @@ public class BlobStore implements Store {
   protected PersistentIndex index;
 
   // THIS IS ONLY FOR TEST.
-  volatile protected Runnable operationBeforeSynchronizationFunc = null;
-  volatile protected Runnable betweenGetEndOffsetAndFindKeyFunc = null;
+  volatile protected Callable<Void> operationBeforeSynchronization = null;
+  volatile protected Callable<Void> inDeleteBetweenGetEndOffsetAndFindKey = null;
 
   /**
    * States representing the different scenarios that can occur when a set of messages are to be written to the store.
@@ -435,7 +436,7 @@ public class BlobStore implements Store {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       MessageWriteSetStateInStore state = checkWriteSetStateInStore(messageSetToWrite, null);
       if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
-        maybeCallBeforeSynchronizationFunc();
+        maybeCallBeforeSynchronization();
         synchronized (storeWriteLock) {
           // Validate that log end offset was not changed. If changed, check once again for existing
           // keys in store
@@ -514,7 +515,7 @@ public class BlobStore implements Store {
       List<IndexValue> indexValuesToDelete = new ArrayList<>();
       List<Short> lifeVersions = new ArrayList<>();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
-      maybeCallBetweenGetEndOffsetAndFindKeyFunc();
+      maybeCallInDeleteBetweenGetEndOffsetAndFindKey();
       for (MessageInfo info : infosToDelete) {
         IndexValue value = index.findKey(info.getStoreKey());
         // TODO: Passing a FileSpan the findKey and change the findKey implementation to fully restrict the index
@@ -564,7 +565,7 @@ public class BlobStore implements Store {
           lifeVersions.add(info.getLifeVersion());
         }
       }
-      maybeCallBeforeSynchronizationFunc();
+      maybeCallBeforeSynchronization();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -683,7 +684,7 @@ public class BlobStore implements Store {
         indexValuesToUpdate.add(value);
         lifeVersions.add(value.getLifeVersion());
       }
-      maybeCallBeforeSynchronizationFunc();
+      maybeCallBeforeSynchronization();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -791,7 +792,7 @@ public class BlobStore implements Store {
           metrics.undeleteAuthorizationFailureCount.inc();
         }
       }
-      maybeCallBeforeSynchronizationFunc();
+      maybeCallBeforeSynchronization();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -837,20 +838,22 @@ public class BlobStore implements Store {
   }
 
   /**
-   * Call {@link #operationBeforeSynchronizationFunc} if it's not null. This is for testing only.
+   * Call {@link #operationBeforeSynchronization} if it's not null. This is for testing only.
    */
-  private void maybeCallBeforeSynchronizationFunc() {
-    if (operationBeforeSynchronizationFunc != null) {
-      operationBeforeSynchronizationFunc.run();
+  private void maybeCallBeforeSynchronization() throws Exception {
+    Callable<Void> callable = operationBeforeSynchronization;
+    if (callable != null) {
+      callable.call();
     }
   }
 
   /**
-   * Call {@link #betweenGetEndOffsetAndFindKeyFunc} if it's not null. This is for testing only.
+   * Call {@link #inDeleteBetweenGetEndOffsetAndFindKey} if it's not null. This is for testing only.
    */
-  private void maybeCallBetweenGetEndOffsetAndFindKeyFunc() {
-    if (betweenGetEndOffsetAndFindKeyFunc != null) {
-      betweenGetEndOffsetAndFindKeyFunc.run();
+  private void maybeCallInDeleteBetweenGetEndOffsetAndFindKey() throws Exception {
+    Callable<Void> callable = inDeleteBetweenGetEndOffsetAndFindKey;
+    if (callable != null) {
+      callable.call();
     }
   }
 
