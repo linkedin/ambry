@@ -119,36 +119,52 @@ public class AmbryServer {
   private ParticipantsConsistencyChecker consistencyChecker = null;
   private ScheduledFuture<?> consistencyCheckerTask = null;
   private ScheduledExecutorService consistencyCheckerScheduler = null;
+  private ServerSecurityService serverSecurityService;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      ClusterSpectatorFactory clusterSpectatorFactory, Time time) {
+      ClusterSpectatorFactory clusterSpectatorFactory, Time time) throws InstantiationException {
     this(properties, clusterAgentsFactory, clusterSpectatorFactory, new LoggingNotificationSystem(), time);
   }
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      NotificationSystem notificationSystem, Time time) {
+      NotificationSystem notificationSystem, Time time) throws InstantiationException {
     this(properties, clusterAgentsFactory, null, notificationSystem, time);
   }
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      ClusterSpectatorFactory clusterSpectatorFactory, NotificationSystem notificationSystem, Time time) {
+      ClusterSpectatorFactory clusterSpectatorFactory, NotificationSystem notificationSystem, Time time)
+      throws InstantiationException {
     this.properties = properties;
     this.clusterAgentsFactory = clusterAgentsFactory;
     this.clusterSpectatorFactory = clusterSpectatorFactory;
     this.notificationSystem = notificationSystem;
     this.time = time;
+
+    try {
+      clusterMap = clusterAgentsFactory.getClusterMap();
+      logger.info("Initialized clusterMap");
+      registry = clusterMap.getMetricRegistry();
+      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
+      ServerConfig serverConfig = new ServerConfig(properties);
+      ServerSecurityServiceFactory serverSecurityServiceFactory =
+          Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, metrics, registry);
+      serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
+
+    } catch (Exception e) {
+      logger.error("Error during bootup", e);
+      throw new InstantiationException("failure during bootup " + e);
+    }
   }
+
+
 
   public void startup() throws InstantiationException {
     try {
       logger.info("starting");
-      clusterMap = clusterAgentsFactory.getClusterMap();
-      logger.info("Initialized clusterMap");
       clusterParticipants = clusterAgentsFactory.getClusterParticipants();
       logger.info("Setting up JMX.");
+
       long startTime = SystemTime.getInstance().milliseconds();
-      registry = clusterMap.getMetricRegistry();
-      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 
@@ -235,6 +251,7 @@ public class AmbryServer {
         statsManager.start();
       }
 
+
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
       if (nodeId.hasSSLPort()) {
@@ -254,7 +271,8 @@ public class AmbryServer {
         logger.info("Http2 port {} is enabled. Starting HTTP/2 service. ", nodeId.getHttp2Port());
         RestServerConfig restServerConfig = new RestServerConfig(properties);
         NettyServerRequestResponseChannel requestResponseChannel = new NettyServerRequestResponseChannel(32);
-        RestRequestService restRequestService = new StorageRestRequestService(requestResponseChannel);
+        RestRequestService restRequestService =
+            new StorageRestRequestService(requestResponseChannel);
 
         AmbryServerRequests ambryServerRequestsForHttp2 =
             new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
@@ -272,7 +290,7 @@ public class AmbryServer {
 
         NioServerFactory nioServerFactory =
             new StorageServerNettyFactory(nodeId.getHttp2Port(), properties, registry, restRequestHandlerForHttp2,
-                sslFactory);
+                sslFactory, serverSecurityService, metrics);
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
       }
@@ -373,6 +391,10 @@ public class AmbryServer {
       if (clusterMap != null) {
         clusterMap.close();
       }
+      if (serverSecurityService != null) {
+        serverSecurityService.close();
+      }
+
       logger.info("shutdown completed");
     } catch (Exception e) {
       logger.error("Error while shutting down server", e);

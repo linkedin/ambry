@@ -72,6 +72,7 @@ public class MockCluster {
   private final Properties sslProps;
   private final boolean enableHardDeletes;
   private final Time time;
+  private NotificationSystem notificationSystem;
 
   public MockCluster(Properties serverSslProps, boolean enableHardDeletes, Time time) throws IOException {
     this(serverSslProps, enableHardDeletes, time, 9, 3, 3);
@@ -155,14 +156,16 @@ public class MockCluster {
    * Initialize servers in the cluster.
    * @param notificationSystem {@link NotificationSystem} object.
    */
-  public void initializeServers(NotificationSystem notificationSystem) {
+  public void initializeServers(NotificationSystem notificationSystem) throws InstantiationException {
+    this.notificationSystem = notificationSystem;
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     for (int i = 0; i < dataNodes.size(); i++) {
       if (sslEnabledDataCenterList != null) {
         dataNodes.get(i).setSslEnabledDataCenters(sslEnabledDataCenterList);
       }
-      initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i, notificationSystem,
-          time, null);
+      AmbryServer server = initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i,
+          notificationSystem, time, null);
+      serverList.add(server);
     }
   }
 
@@ -172,7 +175,9 @@ public class MockCluster {
    * @param skipNode Node to be skipped from initialization.
    * @param props Additional properties to be added during startup.
    */
-  public void initializeServers(NotificationSystem notificationSystem, DataNodeId skipNode, Properties props) {
+  public void initializeServers(NotificationSystem notificationSystem, DataNodeId skipNode, Properties props)
+      throws InstantiationException {
+    this.notificationSystem = notificationSystem;
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     for (int i = 0; i < dataNodes.size(); i++) {
       if (dataNodes.get(i).equals(skipNode)) {
@@ -182,9 +187,18 @@ public class MockCluster {
         dataNodes.get(i).setSslEnabledDataCenters(sslEnabledDataCenterList);
       }
       sslProps.putAll(props);
-      initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i, notificationSystem,
-          time, null);
+      AmbryServer server = initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i,
+          notificationSystem, time, null);
+      serverList.add(server);
     }
+  }
+
+  /**
+   * add a server to the serverList.
+   * @param server {@link AmbryServer} object.
+   */
+  public void addServer(AmbryServer server) {
+    serverList.add(server);
   }
 
   public List<AmbryServer> getServers() {
@@ -263,11 +277,11 @@ public class MockCluster {
    * @param notificationSystem {@link NotificationSystem} object.
    * @param time {@link Time} object.
    * @param mockClusterAgentsFactory {@link MockClusterAgentsFactory} object. If null, use the member {@code mockClusterAgentsFactory}.
-   * @return {@link VerifiableProperties} object.
+   * @return {@link AmbryServer} object.
    */
-  public void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,
+  public AmbryServer initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,
       boolean enableDataPrefetch, NotificationSystem notificationSystem, Time time,
-      MockClusterAgentsFactory mockClusterAgentsFactory) {
+      MockClusterAgentsFactory mockClusterAgentsFactory) throws InstantiationException {
     AmbryServer server;
     if (mockClusterAgentsFactory != null) {
       server = new AmbryServer(createInitProperties(dataNodeId, enableDataPrefetch, enableHardDeletes, sslProperties),
@@ -276,7 +290,32 @@ public class MockCluster {
       server = new AmbryServer(createInitProperties(dataNodeId, enableDataPrefetch, enableHardDeletes, sslProperties),
           this.mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time);
     }
-    serverList.add(server);
+    return server;
+  }
+
+  /**
+   * re-initilize and start up a single server.
+   * @throws InstantiationException
+   * @throws IOException
+   */
+  public void reinitServer(int index) throws InstantiationException, IOException {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(index);
+    AmbryServer server =
+        initializeServer(dataNode, sslProps, enableHardDeletes, prefetchDataNodeIndex == index, notificationSystem,
+            time, null);
+    serverList.set(index, server);
+    server.startup();
+  }
+
+  /**
+   * re-initilize and start up all the servers.
+   * @throws InstantiationException
+   * @throws IOException
+   */
+  public void reinitServers() throws InstantiationException, IOException {
+    serverList.clear();
+    initializeServers(notificationSystem);
+    startServers();
   }
 
   /**

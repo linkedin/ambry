@@ -15,10 +15,12 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.ServerSecurityService;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import java.util.Collections;
@@ -40,6 +42,7 @@ public class StorageServerNettyFactory implements NioServerFactory {
   private final PerformanceConfig performanceConfig;
   private final NettyMetrics nettyMetrics;
   final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
+  private final ServerSecurityHandler serverSecurityHandler;
 
   /**
    * Creates a new instance of StorageServerNettyFactory.
@@ -52,7 +55,8 @@ public class StorageServerNettyFactory implements NioServerFactory {
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public StorageServerNettyFactory(int http2Port, VerifiableProperties verifiableProperties,
-      MetricRegistry metricRegistry, final RestRequestHandler requestHandler, SSLFactory sslFactory) {
+      MetricRegistry metricRegistry, final RestRequestHandler requestHandler, SSLFactory sslFactory,
+      ServerSecurityService serverSecurityService, ServerMetrics serverMetrics) {
     if (verifiableProperties == null || metricRegistry == null || requestHandler == null || sslFactory == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of StorageServerNettyFactory");
     }
@@ -61,10 +65,11 @@ public class StorageServerNettyFactory implements NioServerFactory {
     nettyMetrics = new NettyMetrics(metricRegistry);
     Http2ClientConfig http2ClientConfig = new Http2ClientConfig(verifiableProperties);
     ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
+    this.serverSecurityHandler = new ServerSecurityHandler(serverSecurityService, serverMetrics);
 
     Map<Integer, ChannelInitializer<SocketChannel>> initializers = Collections.singletonMap(http2Port,
-        new StorageServerNettyChannelInitializer(nettyConfig, http2ClientConfig, performanceConfig, nettyMetrics, connectionStatsHandler,
-            requestHandler, sslFactory, metricRegistry));
+        new StorageServerNettyChannelInitializer(nettyConfig, http2ClientConfig, performanceConfig, nettyMetrics,
+            connectionStatsHandler, requestHandler, sslFactory, metricRegistry, serverSecurityHandler));
     channelInitializers = Collections.unmodifiableMap(initializers);
   }
 

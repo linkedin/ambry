@@ -114,6 +114,14 @@ public class ServerConfig {
   @Default("0")
   public final long serverParticipantsConsistencyCheckerPeriodSec;
 
+
+  /**
+   * The ServerSecurityServiceFactory that needs to validate connections and requests coming to server.
+   */
+  @Config("server.security.service.factory")
+  @Default("com.github.ambry.server.AmbryServerSecurityServiceFactory")
+  public final String serverSecurityServiceFactory;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
@@ -137,5 +145,7 @@ public class ServerConfig {
         "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
     serverParticipantsConsistencyCheckerPeriodSec =
         verifiableProperties.getLong("server.participants.consistency.checker.period.sec", 0);
+    serverSecurityServiceFactory = verifiableProperties.getString("server.security.service.factory",
+        "com.github.ambry.server.AmbryServerSecurityServiceFactory");
   }
 }
