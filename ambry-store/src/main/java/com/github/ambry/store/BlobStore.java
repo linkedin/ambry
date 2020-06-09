@@ -528,7 +528,7 @@ public class BlobStore implements Store {
           // this end offset would be considered as happening outside of the snapshot.
           String reason =
               value == null ? "it is not present in the index" : "PUT record is out of current offset before check";
-          throw new StoreException("Cannot delete id " + info.getStoreKey() + " becuse " + reason,
+          throw new StoreException("Cannot delete id " + info.getStoreKey() + " because " + reason,
               StoreErrorCodes.ID_Not_Found);
         }
         if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
