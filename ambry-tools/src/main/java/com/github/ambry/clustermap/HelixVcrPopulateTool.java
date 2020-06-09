@@ -25,7 +25,6 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
-import org.apache.helix.controller.rebalancer.DelayedAutoRebalancer;
 import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
@@ -110,7 +109,7 @@ public class HelixVcrPopulateTool {
         }
         String srcZkString = srcZkAndCluster[0];
         String srcClusterName = srcZkAndCluster[1];
-        System.out.println("Updating cluster: " + destClusterName + "by checking " + srcClusterName);
+        System.out.println("Updating cluster: " + destClusterName + " by checking " + srcClusterName);
         updateResourceAndPartition(srcZkString, srcClusterName, destZkString, destClusterName, dryRun);
       } else {
         System.out.println("Updating cluster config for: " + destClusterName);
@@ -200,6 +199,9 @@ public class HelixVcrPopulateTool {
         System.out.println("Will update " + resource + " to new ideal state " + newIdealState.toString());
       } else {
         destAdmin.setResourceIdealState(destClusterName, resource, newIdealState);
+        System.out.println("Updated the ideal state for resource " + resource);
+        destAdmin.rebalance(destClusterName, resource, REPLICA_NUMBER, "", "");
+        System.out.println("Rebalanced resource " + resource + " with REPLICA_NUM: " + REPLICA_NUMBER);
       }
     }
   }
@@ -217,7 +219,6 @@ public class HelixVcrPopulateTool {
       builder.add(partition);
     }
     builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
-    builder.setRebalancerClass(DelayedAutoRebalancer.class.getName());
     return builder.build();
   }
 
