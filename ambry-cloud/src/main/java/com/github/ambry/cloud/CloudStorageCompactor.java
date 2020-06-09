@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -42,6 +43,7 @@ public class CloudStorageCompactor implements Runnable {
   private final AtomicBoolean shutDown = new AtomicBoolean(false);
   private final int numThreads;
   private final AtomicReference<CountDownLatch> doneLatch = new AtomicReference<>();
+  private final ExecutorService executorService;
   private final ExecutorCompletionService<Integer> executorCompletionService;
 
   /**
@@ -58,7 +60,8 @@ public class CloudStorageCompactor implements Runnable {
     this.shutDownTimeoutSecs = cloudConfig.cloudBlobCompactionShutdownTimeoutSecs;
     this.numThreads = cloudConfig.cloudCompactionNumThreads;
     compactionTimeLimitMs = TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours);
-    executorCompletionService = new ExecutorCompletionService<Integer>(Executors.newFixedThreadPool(numThreads));
+    executorService = Executors.newFixedThreadPool(numThreads);
+    executorCompletionService = new ExecutorCompletionService<>(executorService);
     doneLatch.set(new CountDownLatch(0));
   }
 
@@ -81,6 +84,7 @@ public class CloudStorageCompactor implements Runnable {
       success = doneLatch.get().await(shutDownTimeoutSecs, TimeUnit.SECONDS);
     } catch (InterruptedException ex) {
     }
+    executorService.shutdown();
     if (success) {
       logger.info("Compactor shut down successfully.");
       shutDown.set(true);
