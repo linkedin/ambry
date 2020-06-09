@@ -24,6 +24,8 @@ import io.netty.handler.codec.http.FullHttpResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.network.http2.Http2Utils.*;
+
 
 /**
  * Process {@link io.netty.handler.codec.http.FullHttpResponse} translated from HTTP/2 frames
@@ -41,16 +43,15 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
 
   @Override
   protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) {
-
     ByteBuf dup = msg.content().retainedDuplicate();
     // Consume length
     dup.readLong();
-    RequestInfo requestInfo = ctx.channel().attr(Http2NetworkClient.REQUEST_INFO).get();
+    RequestInfo requestInfo = ctx.channel().attr(Http2NetworkClient.REQUEST_INFO).getAndSet(null);
     http2ClientMetrics.http2StreamFirstToAllFrameReadyTime.update(
         System.currentTimeMillis() - requestInfo.getStreamHeaderFrameReceiveTime());
     ResponseInfo responseInfo = new ResponseInfo(requestInfo, null, dup);
     responseInfoQueue.put(responseInfo);
-    releaseAndCloseStreamChannel(ctx);
+    releaseAndCloseStreamChannel(ctx.channel());
   }
 
   /**
@@ -66,16 +67,8 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
     http2ClientMetrics.http2StreamExceptionCount.inc();
-    logger.info("Exception Caught from inbound.", cause.getMessage());
-    releaseAndCloseStreamChannel(ctx);
-  }
-
-  private void releaseAndCloseStreamChannel(ChannelHandlerContext ctx) {
-    logger.debug("Stream channel is being closed. Stream: {}, Parent: {}", ctx.channel(), ctx.channel().parent());
-    ctx.channel()
-        .parent()
-        .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
-        .get()
-        .release(ctx.channel());
+    logger.info("Exception caught from in Http2ClientResponseHandler {} {}. Closing stream channel. Cause: ",
+        ctx.channel().hashCode(), ctx.channel(), cause);
+    releaseAndCloseStreamChannel(ctx.channel());
   }
 }

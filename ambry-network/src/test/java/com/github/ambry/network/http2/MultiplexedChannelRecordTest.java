@@ -43,14 +43,19 @@ public class MultiplexedChannelRecordTest {
   private EventLoopGroup loopGroup;
   private MockChannel channel;
   private Long idleTimeoutMillis;
-  private int maxContentLength;
+  private ChannelInitializer streamChannelInitializer;
 
   @Before
   public void setup() throws Exception {
     loopGroup = new NioEventLoopGroup(4);
     channel = new MockChannel();
     idleTimeoutMillis = 500L;
-    maxContentLength = 1024 * 1024;
+    streamChannelInitializer = new ChannelInitializer() {
+      @Override
+      protected void initChannel(Channel ch) throws Exception {
+        // do nothing
+      }
+    };
   }
 
   @After
@@ -67,8 +72,8 @@ public class MultiplexedChannelRecordTest {
     EmbeddedChannel channel = newHttp2Channel();
     int maxConcurrentStreams = 100;
     int testStreams = 10;
-    MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, maxConcurrentStreams, null,
-        maxContentLength);
+    MultiplexedChannelRecord record =
+        new MultiplexedChannelRecord(channel, maxConcurrentStreams, null, streamChannelInitializer);
 
     List<Promise<Channel>> streamPromises = new ArrayList<>();
 
@@ -107,7 +112,7 @@ public class MultiplexedChannelRecordTest {
     Promise<Channel> channelPromise = new DefaultPromise<>(loopGroup.next());
     channelPromise.setSuccess(channel);
 
-    MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, 0, null, maxContentLength);
+    MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, 0, null, streamChannelInitializer);
 
     assertFalse(record.acquireStream(null));
   }
@@ -120,8 +125,8 @@ public class MultiplexedChannelRecordTest {
     EmbeddedChannel channel = newHttp2Channel();
     int maxConcurrentStreams = 10;
     int totalStreams = 20;
-    MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, maxConcurrentStreams, null,
-        maxContentLength);
+    MultiplexedChannelRecord record =
+        new MultiplexedChannelRecord(channel, maxConcurrentStreams, null, streamChannelInitializer);
 
     List<Promise<Channel>> streamPromises = new ArrayList<>();
 
@@ -153,7 +158,8 @@ public class MultiplexedChannelRecordTest {
   @Test
   public void idleTimerDoesNotApplyBeforeFirstStreamIsCreated() throws InterruptedException {
     EmbeddedChannel channel = newHttp2Channel();
-    MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, 2, idleTimeoutMillis, maxContentLength);
+    MultiplexedChannelRecord record =
+        new MultiplexedChannelRecord(channel, 2, idleTimeoutMillis, streamChannelInitializer);
 
     Thread.sleep(idleTimeoutMillis * 2);
     channel.runPendingTasks();
@@ -167,7 +173,8 @@ public class MultiplexedChannelRecordTest {
   @Test
   public void recordsWithoutInFlightStreamsAreClosedAfterTimeout() throws InterruptedException {
     EmbeddedChannel channel = newHttp2Channel();
-    MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, 1, idleTimeoutMillis, maxContentLength);
+    MultiplexedChannelRecord record =
+        new MultiplexedChannelRecord(channel, 1, idleTimeoutMillis, streamChannelInitializer);
 
     Promise<Channel> streamPromise = channel.eventLoop().newPromise();
     record.acquireStream(streamPromise);
@@ -193,7 +200,8 @@ public class MultiplexedChannelRecordTest {
   @Test
   public void recordsWithReservedStreamsAreNotClosedAfterTimeout() throws InterruptedException {
     EmbeddedChannel channel = newHttp2Channel();
-    MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, 2, idleTimeoutMillis, maxContentLength);
+    MultiplexedChannelRecord record =
+        new MultiplexedChannelRecord(channel, 2, idleTimeoutMillis, streamChannelInitializer);
 
     Promise<Channel> streamPromise = channel.eventLoop().newPromise();
     Promise<Channel> streamPromise2 = channel.eventLoop().newPromise();
@@ -222,7 +230,8 @@ public class MultiplexedChannelRecordTest {
   @Test
   public void acquireRequestResetsCloseTimer() throws InterruptedException {
     EmbeddedChannel channel = newHttp2Channel();
-    MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, 2, idleTimeoutMillis, maxContentLength);
+    MultiplexedChannelRecord record =
+        new MultiplexedChannelRecord(channel, 2, idleTimeoutMillis, streamChannelInitializer);
 
     for (int i = 0; i < 20; ++i) {
       Thread.sleep(idleTimeoutMillis / 10);
@@ -255,7 +264,7 @@ public class MultiplexedChannelRecordTest {
     loopGroup.register(channel).awaitUninterruptibly();
     Promise<Channel> channelPromise = new DefaultPromise<>(loopGroup.next());
 
-    MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, 1, 10000L, maxContentLength);
+    MultiplexedChannelRecord record = new MultiplexedChannelRecord(channel, 1, 10000L, streamChannelInitializer);
 
     record.closeChildChannels();
 

@@ -15,7 +15,6 @@
           "hardwareState": "AVAILABLE",
           "hostname": "localhost",
           "port": 6667,
-          "sslPort" : 7667,
           "http2port" : 8667
         }
       ],

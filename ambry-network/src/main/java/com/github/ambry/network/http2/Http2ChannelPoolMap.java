@@ -16,6 +16,7 @@ package com.github.ambry.network.http2;
 
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.pool.AbstractChannelPoolMap;
 import io.netty.channel.pool.ChannelPool;
@@ -34,13 +35,15 @@ public class Http2ChannelPoolMap extends AbstractChannelPoolMap<InetSocketAddres
   private final SSLFactory sslFactory;
   private final Http2ClientConfig http2ClientConfig;
   private final Http2ClientMetrics http2ClientMetrics;
+  private final ChannelInitializer streamChannelInitializer;
 
   public Http2ChannelPoolMap(SSLFactory sslFactory, EventLoopGroup eventLoopGroup, Http2ClientConfig http2ClientConfig,
-      Http2ClientMetrics http2ClientMetrics) {
+      Http2ClientMetrics http2ClientMetrics, ChannelInitializer streamChannelInitializer) {
     this.sslFactory = sslFactory;
     this.eventLoopGroup = eventLoopGroup;
     this.http2ClientConfig = http2ClientConfig;
     this.http2ClientMetrics = http2ClientMetrics;
+    this.streamChannelInitializer = streamChannelInitializer;
   }
 
   @Override
@@ -48,6 +51,6 @@ public class Http2ChannelPoolMap extends AbstractChannelPoolMap<InetSocketAddres
     log.trace("New pool created for {}", inetSocketAddress);
     http2ClientMetrics.http2NewPoolCount.inc();
     return new Http2MultiplexedChannelPool(inetSocketAddress, sslFactory, eventLoopGroup, http2ClientConfig,
-        http2ClientMetrics);
+        http2ClientMetrics, streamChannelInitializer);
   }
 }
