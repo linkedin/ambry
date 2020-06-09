@@ -114,7 +114,7 @@ public class CloudStorageCompactor implements Runnable {
     int totalBlobsPurged = 0;
     int compactedPartitionCount = 0;
     try {
-      while (true) {
+      while (!partitionSnapshot.isEmpty()) {
         while (compactionInProgress < numThreads) {
           if (partitionSnapshot.isEmpty()) {
             break;
@@ -132,9 +132,6 @@ public class CloudStorageCompactor implements Runnable {
         }
         if (isShuttingDown()) {
           logger.info("Compaction terminated due to shut down.");
-          break;
-        }
-        if (partitionSnapshot.isEmpty()) {
           break;
         }
       }
