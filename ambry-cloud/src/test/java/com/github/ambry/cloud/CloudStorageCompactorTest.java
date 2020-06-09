@@ -73,7 +73,7 @@ public class CloudStorageCompactorTest {
 
     assertEquals(pageSize * 100, compactor.compactPartitions());
 
-    // remove a from map
+    // remove a partition from map
     partitionMap.remove(new MockPartitionId(0, defaultClass));
     assertEquals(pageSize * 99, compactor.compactPartitions());
 
