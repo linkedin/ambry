@@ -39,7 +39,7 @@ public class CloudStorageCompactor implements Runnable {
   private final int shutDownTimeoutSecs;
   private final long compactionTimeLimitMs;
   private final VcrMetrics vcrMetrics;
-  private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+  private final AtomicBoolean shutDown = new AtomicBoolean(false);
   private final int numThreads;
   private final AtomicReference<CountDownLatch> doneLatch = new AtomicReference<>();
   private final ExecutorCompletionService<Integer> executorCompletionService;
@@ -71,7 +71,6 @@ public class CloudStorageCompactor implements Runnable {
    * Shut down the compactor waiting for in progress operations to complete.
    */
   public void shutdown() {
-    shuttingDown.set(true);
     logger.info("Compactor received shutdown request, waiting up to {} seconds for in-flight operations to finish",
         shutDownTimeoutSecs);
 
@@ -84,6 +83,7 @@ public class CloudStorageCompactor implements Runnable {
     }
     if (success) {
       logger.info("Compactor shut down successfully.");
+      shutDown.set(true);
     } else {
       logger.warn("Timed out or interrupted waiting for operations to finish.  If cloud provider uses separate stores"
           + " for data and metadata, some inconsistencies may be present.");
@@ -94,8 +94,8 @@ public class CloudStorageCompactor implements Runnable {
   /**
    * @return whether the compactor is shutting down.
    */
-  boolean isShuttingDown() {
-    return shuttingDown.get();
+  boolean isShutDown() {
+    return shutDown.get();
   }
 
   /**
@@ -135,7 +135,7 @@ public class CloudStorageCompactor implements Runnable {
           logger.info("Compaction terminated due to time limit exceeded.");
           break;
         }
-        if (isShuttingDown()) {
+        if (isShutDown()) {
           logger.info("Compaction terminated due to shut down.");
           break;
         }
@@ -166,7 +166,7 @@ public class CloudStorageCompactor implements Runnable {
    * @return the total number of blobs purged in the partition.
    */
   private int compactPartition(PartitionId partition) throws CloudStorageException {
-    if (isShuttingDown()) {
+    if (isShutDown()) {
       logger.info("Skipping compaction due to shut down.");
       return 0;
     }
