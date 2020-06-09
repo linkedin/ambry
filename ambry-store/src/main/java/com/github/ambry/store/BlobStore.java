@@ -94,8 +94,10 @@ public class BlobStore implements Store {
   // TODO remove this once ZK migration is complete
   private AtomicBoolean isSealed = new AtomicBoolean(false);
   protected PersistentIndex index;
+
   // THIS IS ONLY FOR TEST.
-  protected Runnable operationBeforeSynchronizationFunc = null;
+  volatile protected Runnable operationBeforeSynchronizationFunc = null;
+  volatile protected Runnable betweenGetEndOffsetAndFindKeyFunc = null;
 
   /**
    * States representing the different scenarios that can occur when a set of messages are to be written to the store.
@@ -512,9 +514,17 @@ public class BlobStore implements Store {
       List<IndexValue> indexValuesToDelete = new ArrayList<>();
       List<Short> lifeVersions = new ArrayList<>();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      maybeCallBetweenGetEndOffsetAndFindKeyFunc();
       for (MessageInfo info : infosToDelete) {
         IndexValue value = index.findKey(info.getStoreKey());
-        if (value == null) {
+        // TODO: Passing a FileSpan the findKey and change the findKey implementation to fully restrict the index
+        // searching space to be limited within the given FileSpan.
+        if (value == null || (value.getOffset().compareTo(indexEndOffsetBeforeCheck) >= 0 && value.isPut())) {
+          // A temporary fix to deal with this particular corner case.
+          // Between calling index.getCurrentEndOffset and findKey method, there is a Put record of the same blob
+          // is inserted to index.
+          // index.getCurrentEndOffset should create a virtual snapshot for this delete method. Everything happens after
+          // this end offset would be considered as happening outside of the snapshot.
           throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
               StoreErrorCodes.ID_Not_Found);
         }
@@ -832,6 +842,15 @@ public class BlobStore implements Store {
   private void maybeCallBeforeSynchronizationFunc() {
     if (operationBeforeSynchronizationFunc != null) {
       operationBeforeSynchronizationFunc.run();
+    }
+  }
+
+  /**
+   * Call {@link #betweenGetEndOffsetAndFindKeyFunc} if it's not null. This is for testing only.
+   */
+  private void maybeCallBetweenGetEndOffsetAndFindKeyFunc() {
+    if (betweenGetEndOffsetAndFindKeyFunc != null) {
+      betweenGetEndOffsetAndFindKeyFunc.run();
     }
   }
 

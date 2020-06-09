@@ -715,6 +715,62 @@ public class BlobStoreTest {
   }
 
   /**
+   * Test the case where a Put happens while a Delete is doing the preliminary check.
+   * Since the delete happens before put, delete should return a ID_NOT_FOUND error.
+   * @throws Exception
+   */
+  @Test
+  public void concurrentDeleteAndPutTest() throws Exception {
+    MockId id = getUniqueId();
+    final CountDownLatch getEndOffsetLatch = new CountDownLatch(1);
+    final CountDownLatch findKeyLatch = new CountDownLatch(1);
+    ((MockBlobStore) store).setBetweenGetEndOffsetAndFindKeyFunc(() -> {
+      getEndOffsetLatch.countDown();
+      try {
+        findKeyLatch.await();
+      } catch (Exception e) {
+      }
+    });
+
+    ExecutorService executorService = Executors.newFixedThreadPool(2);
+    try {
+      Future<Void> deleteFuture = executorService.submit(new Callable<Void>() {
+        @Override
+        public Void call() throws Exception {
+          MessageInfo info =
+              new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
+                  MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+          store.delete(Collections.singletonList(info));
+          return null;
+        }
+      });
+      // Now make sure delete is on the way
+      getEndOffsetLatch.await();
+      Future<Void> putFuture = executorService.submit(new Callable<Void>() {
+        @Override
+        public Void call() throws Exception {
+          putOneBlobWithId(id, PUT_RECORD_SIZE, Utils.Infinite_Time);
+          return null;
+        }
+      });
+      putFuture.get();
+      // Now make sure the put is finished then continue delete
+      findKeyLatch.countDown();
+
+      try {
+        deleteFuture.get();
+        fail("Should fail with ID_NOT_FOUND error");
+      } catch (Exception e) {
+        assertTrue(e.getCause() instanceof StoreException);
+        assertEquals(StoreErrorCodes.ID_Not_Found, ((StoreException) e.getCause()).getErrorCode());
+      }
+    } finally {
+      ((MockBlobStore) store).setBetweenGetEndOffsetAndFindKeyFunc(null);
+      executorService.shutdownNow();
+    }
+  }
+
+  /**
    * Tests the case where there are many concurrent ttl updates.
    * @throws Exception
    */
@@ -2052,6 +2108,32 @@ public class BlobStoreTest {
   }
 
   /**
+   * Puts one blob with the given {@link MockId} into the {@link BlobStore}.
+   * @param id the id of the blob.
+   * @param size the size of each blob.
+   * @param expiresAtMs the expiry time (in ms) of each blob.
+   * @throws StoreException
+   */
+  private void putOneBlobWithId(MockId id, int size, long expiresAtMs) throws Exception {
+    List<MessageInfo> infos = new ArrayList<>();
+    List<ByteBuffer> buffers = new ArrayList<>();
+    long crc = random.nextLong();
+    MessageInfo info =
+        new MessageInfo(id, size, false, false, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
+            Utils.Infinite_Time, (short) 0);
+    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(size));
+    infos.add(info);
+    buffers.add(buffer);
+    allKeys.put(id, new Pair<>(info, buffer));
+    if (expiresAtMs != Utils.Infinite_Time && expiresAtMs < time.milliseconds()) {
+      expiredKeys.add(id);
+    } else {
+      liveKeys.add(id);
+    }
+    store.put(new MockMessageWriteSet(infos, buffers));
+  }
+
+  /**
    * Deletes a blob
    * @param idToDelete the {@link MockId} of the blob to DELETE.
    * @return the {@link MessageInfo} associated with the DELETE.
@@ -3053,6 +3135,10 @@ public class BlobStoreTest {
 
     void setOperationBeforeSynchronizationFunc(Runnable runnable) {
       operationBeforeSynchronizationFunc = runnable;
+    }
+
+    void setBetweenGetEndOffsetAndFindKeyFunc(Runnable runnable) {
+      betweenGetEndOffsetAndFindKeyFunc = runnable;
     }
   }
 
