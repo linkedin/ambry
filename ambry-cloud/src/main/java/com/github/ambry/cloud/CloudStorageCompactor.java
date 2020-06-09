@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -123,9 +124,13 @@ public class CloudStorageCompactor implements Runnable {
           executorCompletionService.submit(() -> compactPartition(partitionId));
           compactionInProgress++;
         }
-        totalBlobsPurged += executorCompletionService.take().get();
+        try {
+          totalBlobsPurged += executorCompletionService.take().get();
+          compactedPartitionCount++;
+        } catch (ExecutionException ex) {
+          vcrMetrics.compactionFailureCount.inc();
+        }
         compactionInProgress--;
-        compactedPartitionCount++;
         if (System.currentTimeMillis() >= timeToQuit) {
           logger.info("Compaction terminated due to time limit exceeded.");
           break;
@@ -136,9 +141,13 @@ public class CloudStorageCompactor implements Runnable {
         }
       }
       while (compactionInProgress > 0) {
-        totalBlobsPurged += executorCompletionService.take().get();
+        try {
+          totalBlobsPurged += executorCompletionService.take().get();
+          compactedPartitionCount++;
+        } catch (ExecutionException ex) {
+          vcrMetrics.compactionFailureCount.inc();
+        }
         compactionInProgress--;
-        compactedPartitionCount++;
       }
       doneLatch.get().countDown();
     } catch (Throwable th) {
@@ -156,7 +165,7 @@ public class CloudStorageCompactor implements Runnable {
    * @param partition the {@link PartitionId} to compact.
    * @return the total number of blobs purged in the partition.
    */
-  private int compactPartition(PartitionId partition) {
+  private int compactPartition(PartitionId partition) throws CloudStorageException {
     if (isShuttingDown()) {
       logger.info("Skipping compaction due to shut down.");
       return 0;
@@ -167,7 +176,7 @@ public class CloudStorageCompactor implements Runnable {
     String partitionPath = partition.toPathString();
     if (!partitions.contains(partition)) {
       // Looks like partition was reassigned since the loop started, so skip it
-      logger.warn("Skipping compaction of Partition {} as the partition was reassgined", partition);
+      logger.warn("Skipping compaction of Partition {} as the partition was reassigned", partition);
       return 0;
     }
 
@@ -175,8 +184,7 @@ public class CloudStorageCompactor implements Runnable {
       return cloudDestination.compactPartition(partitionPath);
     } catch (CloudStorageException ex) {
       logger.error("Compaction failed for partition {}", partitionPath, ex);
-      vcrMetrics.compactionFailureCount.inc();
+      throw ex;
     }
-    return 0;
   }
 }
