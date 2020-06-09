@@ -732,15 +732,15 @@ public class BlobStoreTest {
         store.delete(Collections.singletonList(info));
         return null;
       });
-      // Now make sure delete is on the way
-      getEndOffsetLatch.await();
       Future<Void> putFuture = executorService.submit(() -> {
+        // Now make sure delete already get the index's end offset
+        getEndOffsetLatch.await();
         putOneBlobWithId(id, PUT_RECORD_SIZE, Utils.Infinite_Time);
+        // Now make sure the put is inserted into the index before continue delete
+        findKeyLatch.countDown();
         return null;
       });
       putFuture.get();
-      // Now make sure the put is finished then continue delete
-      findKeyLatch.countDown();
 
       try {
         deleteFuture.get();
