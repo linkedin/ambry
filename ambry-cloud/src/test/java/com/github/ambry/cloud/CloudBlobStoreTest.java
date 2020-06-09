@@ -836,7 +836,7 @@ public class CloudBlobStoreTest {
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(),
-            new ResponseHandler(clusterMap), new MockTime(), null);
+            new ResponseHandler(clusterMap), new MockTime(), null, null, null);
 
     for (ReplicaId replica : partitionId.getReplicaIds()) {
       if (replica.getDataNodeId() == remoteHost.dataNodeId) {
