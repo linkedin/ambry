@@ -25,7 +25,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -65,27 +64,23 @@ public class CloudStorageCompactorTest {
     verify(mockDest, times(0)).purgeBlobs(any());
     */
 
-    // add 2 partitions to map
-    int partition1 = 101, partition2 = 102;
-    long compactionEndTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
-    String partitionPath1 = String.valueOf(partition1), partitionPath2 = String.valueOf(partition2);
+    // add 100 partitions to map
     String defaultClass = MockClusterMap.DEFAULT_PARTITION_CLASS;
-    partitionMap.put(new MockPartitionId(partition1, defaultClass), null);
-    partitionMap.put(new MockPartitionId(partition2, defaultClass), null);
+    for (int i = 0; i < 100; i++) {
+      partitionMap.put(new MockPartitionId(i, defaultClass), null);
+      when(mockDest.compactPartition(eq(Integer.toString(i)))).thenReturn(pageSize);
+    }
 
-    when(mockDest.compactPartition(eq(partitionPath1))).thenReturn(pageSize);
-    when(mockDest.compactPartition(eq(partitionPath2))).thenReturn(pageSize * 2);
-    assertEquals(pageSize * 3, compactor.compactPartitions());
+    assertEquals(pageSize * 100, compactor.compactPartitions());
 
-
-    // remove partition2 from map
-    partitionMap.remove(new MockPartitionId(partition2, defaultClass));
-    assertEquals(pageSize, compactor.compactPartitions());
+    // remove a partition from map
+    partitionMap.remove(new MockPartitionId(0, defaultClass));
+    assertEquals(pageSize * 99, compactor.compactPartitions());
 
     // Test shutdown
-    assertFalse("Should not be shutting down yet", compactor.isShuttingDown());
+    assertFalse("Should not be shutting down yet", compactor.isShutDown());
     compactor.shutdown();
-    assertTrue("Should be shutting down now", compactor.isShuttingDown());
+    assertTrue("Should be shutting down now", compactor.isShutDown());
     // TODO: test shutting down with compaction still in progress (more involved)
   }
 
