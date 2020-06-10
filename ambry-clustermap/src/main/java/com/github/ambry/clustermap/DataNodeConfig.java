@@ -61,7 +61,7 @@ class DataNodeConfig {
   }
 
   /**
-    * @return a name that can be used as a unique key for this server.
+   * @return a name that can be used as a unique key for this server.
    */
   String getInstanceName() {
     return instanceName;
@@ -146,10 +146,10 @@ class DataNodeConfig {
 
   @Override
   public String toString() {
-    return "ServerConfig{" + "instanceName='" + instanceName + '\'' + ", hostName='" + hostName + '\'' + ", port="
+    return "DataNodeConfig{" + "instanceName='" + instanceName + '\'' + ", hostName='" + hostName + '\'' + ", port="
         + port + ", datacenterName='" + datacenterName + '\'' + ", sslPort=" + sslPort + ", http2Port=" + http2Port
         + ", rackId='" + rackId + '\'' + ", xid=" + xid + ", sealedReplicas=" + sealedReplicas + ", stoppedReplicas="
-        + stoppedReplicas + ", diskConfigs=" + diskConfigs + '}';
+        + stoppedReplicas + ", disabledReplicas=" + disabledReplicas + ", diskConfigs=" + diskConfigs + '}';
   }
 
   /**
@@ -157,16 +157,16 @@ class DataNodeConfig {
    */
   static class DiskConfig {
     private final HardwareState state;
-    private final long diskCapacity;
+    private final long diskCapacityInBytes;
     private final Map<String, ReplicaConfig> replicaConfigs = new HashMap<>();
 
     /**
      * @param state the configured {@link HardwareState} of the disk.
-     * @param diskCapacity the capacity of the disk in bytes.
+     * @param diskCapacityInBytes the capacity of the disk in bytes.
      */
-    DiskConfig(HardwareState state, long diskCapacity) {
+    DiskConfig(HardwareState state, long diskCapacityInBytes) {
       this.state = state;
-      this.diskCapacity = diskCapacity;
+      this.diskCapacityInBytes = diskCapacityInBytes;
     }
 
     /**
@@ -179,12 +179,12 @@ class DataNodeConfig {
     /**
      * @return the capacity of the disk in bytes.
      */
-    long getDiskCapacity() {
-      return diskCapacity;
+    long getDiskCapacityInBytes() {
+      return diskCapacityInBytes;
     }
 
     /**
-     * @return a map from partition name to {@link ReplicaConfig} for all the repliccas on the server.
+     * @return a map from partition name to {@link ReplicaConfig} for all the replicas on the server.
      *         This map is mutable.
      */
     Map<String, ReplicaConfig> getReplicaConfigs() {
@@ -193,8 +193,8 @@ class DataNodeConfig {
 
     @Override
     public String toString() {
-      return "DiskConfig{" + "state=" + state + ", diskCapacity=" + diskCapacity + ", replicaConfigs=" + replicaConfigs
-          + '}';
+      return "DiskConfig{" + "state=" + state + ", diskCapacity=" + diskCapacityInBytes + ", replicaConfigs="
+          + replicaConfigs + '}';
     }
   }
 
@@ -202,23 +202,23 @@ class DataNodeConfig {
    * Configuration scoped to a single replica on a disk.
    */
   static class ReplicaConfig {
-    private final long replicaCapacity;
+    private final long replicaCapacityInBytes;
     private final String partitionClass;
 
     /**
-     * @param replicaCapacity the capacity of this replica in bytes.
+     * @param replicaCapacityInBytes the capacity of this replica in bytes.
      * @param partitionClass the partition class of this replica.
      */
-    ReplicaConfig(long replicaCapacity, String partitionClass) {
-      this.replicaCapacity = replicaCapacity;
+    ReplicaConfig(long replicaCapacityInBytes, String partitionClass) {
+      this.replicaCapacityInBytes = replicaCapacityInBytes;
       this.partitionClass = partitionClass;
     }
 
     /**
      * @return the capacity of this replica in bytes.
      */
-    long getReplicaCapacity() {
-      return replicaCapacity;
+    long getReplicaCapacityInBytes() {
+      return replicaCapacityInBytes;
     }
 
     /**
@@ -230,8 +230,8 @@ class DataNodeConfig {
 
     @Override
     public String toString() {
-      return "ReplicaConfig{" + "replicaCapacity=" + replicaCapacity + ", partitionClass='" + partitionClass + '\''
-          + '}';
+      return "ReplicaConfig{" + "replicaCapacity=" + replicaCapacityInBytes + ", partitionClass='" + partitionClass
+          + '\'' + '}';
     }
   }
 }

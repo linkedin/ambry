@@ -32,7 +32,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.IdealState;
-import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.spectator.RoutingTableSnapshot;
 import org.slf4j.Logger;
@@ -103,7 +102,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
   }
 
   /**
-   * Handle any {@link InstanceConfig} related change in current datacenter. Several events will trigger instance config
+   * Handle any {@link DataNodeConfig} related change in current datacenter. Several events will trigger instance config
    * change: (1) replica's seal or stop state has changed; (2) new node or new partition is added; (3) new replica is
    * added to existing node; (4) old replica is removed from existing node; (5) data node is deleted from cluster.
    * For now, {@link DynamicClusterChangeHandler} supports (1)~(4). We may consider supporting (5) in the future.
@@ -275,7 +274,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
   }
 
   /**
-   * Add new instances or update existing instances based on {@link InstanceConfig}(s). This may also invoke callbacks
+   * Add new instances or update existing instances based on {@link DataNodeConfig}(s). This may also invoke callbacks
    * in some clustermap change listeners (i.e. {@link PartitionSelectionHelper}, ReplicationManager)
    * @param dataNodeConfigs the {@link DataNodeConfig}(s) used to update in-mem cluster map.
    */
@@ -351,9 +350,9 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
                   helixClusterManagerCallback);
           // Ensure only one AmbryPartition instance exists for specific partition.
           mappedPartition =
-              clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaConfig.getReplicaCapacity());
+              clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaConfig.getReplicaCapacityInBytes());
           ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, dataNode,
-              replicaConfig.getReplicaCapacity());
+              replicaConfig.getReplicaCapacityInBytes());
           // create new replica belonging to this partition or find the existing replica from bootstrapReplicas map.
           AmbryReplica replica;
           if (selfInstanceName.equals(instanceName)) {
@@ -367,7 +366,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
           } else {
             replica =
                 new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
-                    replicaConfig.getReplicaCapacity(), sealedReplicas.contains(partitionName));
+                    replicaConfig.getReplicaCapacityInBytes(), sealedReplicas.contains(partitionName));
           }
           updateReplicaStateAndOverrideIfNeeded(replica, sealedReplicas, stoppedReplicas);
           // add new created replica to "replicasFromInstanceConfig" map
@@ -403,7 +402,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
 
   /**
    * If partition override is enabled, we override replica SEAL/UNSEAL state based on partitionOverrideMap. If disabled,
-   * update replica state according to the info from {@link InstanceConfig}.
+   * update replica state according to the info from {@link DataNodeConfig}.
    * @param replica the {@link ReplicaId} whose states (seal,stop) should be updated.
    * @param sealedReplicas a collection of {@link ReplicaId}(s) that are in SEALED state.
    * @param stoppedReplicas a collection of {@link ReplicaId}(s) that are in STOPPED state.
@@ -425,7 +424,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
 
   /**
    * Create a new instance(node) and initialize disks/replicas on it.
-   * @param dataNodeConfig the {@link InstanceConfig} to create new instance
+   * @param dataNodeConfig the {@link DataNodeConfig} to create new instance
    * @return a list of newly added replicas;
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
@@ -448,9 +447,9 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
   /**
    * Initialize the disks and replicas on the given node. Create partitions if this is the first time a replica of
    * that partition is being constructed. If partition override is enabled, the seal state of replica is determined by
-   * partition info in HelixPropertyStore, if disabled, the seal state is determined by instanceConfig.
+   * partition info in HelixPropertyStore, if disabled, the seal state is determined by {@code dataNodeConfig}.
    * @param datanode the {@link AmbryDataNode} that is being initialized.
-   * @param dataNodeConfig the {@link InstanceConfig} associated with this datanode.
+   * @param dataNodeConfig the {@link DataNodeConfig} associated with this datanode.
    * @return a list of newly added replicas on this node.
    * @throws Exception if creation of {@link AmbryDisk} throws an Exception.
    */
@@ -467,9 +466,9 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
 
       // Create disk
       AmbryDisk disk =
-          new AmbryDisk(clusterMapConfig, datanode, mountPath, diskConfig.getState(), diskConfig.getDiskCapacity());
+          new AmbryDisk(clusterMapConfig, datanode, mountPath, diskConfig.getState(), diskConfig.getDiskCapacityInBytes());
       ambryDataNodeToAmbryDisks.get(datanode).add(disk);
-      clusterChangeHandlerCallback.addClusterWideRawCapacity(diskConfig.getDiskCapacity());
+      clusterChangeHandlerCallback.addClusterWideRawCapacity(diskConfig.getDiskCapacityInBytes());
 
       for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaEntry : diskConfig.getReplicaConfigs().entrySet()) {
         String partitionName = replicaEntry.getKey();
@@ -480,8 +479,8 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
                 helixClusterManagerCallback);
         // Ensure only one AmbryPartition instance exists for specific partition.
         mappedPartition =
-            clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaConfig.getReplicaCapacity());
-        ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaConfig.getReplicaCapacity());
+            clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaConfig.getReplicaCapacityInBytes());
+        ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaConfig.getReplicaCapacityInBytes());
         // Create replica associated with this node and this partition
         boolean isSealed = sealedReplicas.contains(partitionName);
         if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
@@ -492,7 +491,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
         }
         AmbryReplica replica =
             new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
-                replicaConfig.getReplicaCapacity(), isSealed);
+                replicaConfig.getReplicaCapacityInBytes(), isSealed);
         ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);
         clusterChangeHandlerCallback.addReplicasToPartition(mappedPartition, Collections.singletonList(replica));
         addedReplicas.add(replica);

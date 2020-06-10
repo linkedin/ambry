@@ -45,7 +45,7 @@ public class InstanceConfigToDataNodeConfigAdapter implements DataNodeConfigSour
   }
 
   @Override
-  public void addServerConfigChangeListener(DataNodeConfigChangeListener listener) throws Exception {
+  public void addDataNodeConfigChangeListener(DataNodeConfigChangeListener listener) throws Exception {
     helixManager.addInstanceConfigChangeListener((InstanceConfigChangeListener) (instanceConfigs, context) -> {
       Iterable<DataNodeConfig> dataNodeConfigs =
           () -> instanceConfigs.stream().map(this::convert).filter(Objects::nonNull).iterator();

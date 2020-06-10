@@ -23,6 +23,5 @@ interface DataNodeConfigSource {
    * Attach a listener that will be notified when there are new or updated {@link DataNodeConfig}s.
    * @param listener the {@link DataNodeConfigChangeListener} to attach.
    */
-  void addServerConfigChangeListener(DataNodeConfigChangeListener listener) throws Exception;
+  void addDataNodeConfigChangeListener(DataNodeConfigChangeListener listener) throws Exception;
 }
-

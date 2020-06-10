@@ -30,7 +30,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.IdealState;
-import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.spectator.RoutingTableSnapshot;
 import org.slf4j.Logger;
@@ -267,7 +266,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
 
   /**
    * Populate the initial data from the admin connection. Create nodes, disks, partitions and replicas for the entire
-   * cluster. An {@link InstanceConfig} will only be looked at if the xid in it is <= currentXid.
+   * cluster. A {@link DataNodeConfig} will only be looked at if the xid in it is <= currentXid.
    * @param dataNodeConfigs the list of {@link DataNodeConfig}s containing the information about the sealed states of
    *                        replicas.
    * @throws Exception if creation of {@link AmbryDataNode}s or {@link AmbryDisk}s throw an Exception.
@@ -279,7 +278,6 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
       long instanceXid = dataNodeConfig.getXid();
       if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
         logger.info("Adding node {} and its disks and replicas", instanceName);
-        // HTTP2 port null for now, until it's populated to Helix
         AmbryDataNode datanode =
             new AmbryServerDataNode(dataNodeConfig.getDatacenterName(), clusterMapConfig, dataNodeConfig.getHostName(),
                 dataNodeConfig.getPort(), dataNodeConfig.getRackId(), dataNodeConfig.getSslPort(),
@@ -297,7 +295,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
   }
 
   /**
-   * Go over the given list of {@link InstanceConfig}s and update the both sealed and stopped states of replicas.
+   * Go over the given list of {@link DataNodeConfig}s and update the both sealed and stopped states of replicas.
    * A {@link DataNodeConfig} will only be looked at if the xid in it is <= currentXid.
    * @param dataNodeConfigs the list of {@link DataNodeConfig}s containing the up-to-date information about the
    *                        sealed states of replicas.
@@ -362,7 +360,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
   /**
    * Initialize the disks and replicas on the given node. Create partitions if this is the first time a replica of
    * that partition is being constructed. If partition override is enabled, the seal state of replica is determined by
-   * partition info in HelixPropertyStore, if disabled, the seal state is determined by instanceConfig.
+   * partition info in HelixPropertyStore, if disabled, the seal state is determined by {@code dataNodeConfig}.
    * @param datanode the {@link AmbryDataNode} that is being initialized.
    * @param dataNodeConfig the {@link DataNodeConfig} associated with this datanode.
    * @throws Exception if creation of {@link AmbryDisk} throws an Exception.
@@ -379,7 +377,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
 
       // Create disk
       AmbryDisk disk =
-          new AmbryDisk(clusterMapConfig, datanode, mountPath, diskConfig.getState(), diskConfig.getDiskCapacity());
+          new AmbryDisk(clusterMapConfig, datanode, mountPath, diskConfig.getState(), diskConfig.getDiskCapacityInBytes());
       ambryDataNodeToAmbryDisks.get(datanode).add(disk);
       for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaEntry : diskConfig.getReplicaConfigs().entrySet()) {
         String partitionName = replicaEntry.getKey();
@@ -400,7 +398,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
             partitionMap.put(ByteBuffer.wrap(mappedPartition.getBytes()), mappedPartition);
           }
         }
-        ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaConfig.getReplicaCapacity());
+        ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaConfig.getReplicaCapacityInBytes());
         // Create replica associated with this node.
         boolean isSealed;
         if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
@@ -412,7 +410,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
         }
         AmbryReplica replica =
             new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
-                replicaConfig.getReplicaCapacity(), isSealed);
+                replicaConfig.getReplicaCapacityInBytes(), isSealed);
         ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
         ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);
       }
