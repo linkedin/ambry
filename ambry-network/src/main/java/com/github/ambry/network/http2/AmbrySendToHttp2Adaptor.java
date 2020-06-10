@@ -20,6 +20,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
@@ -34,8 +35,11 @@ import org.slf4j.LoggerFactory;
  */
 @ChannelHandler.Sharable
 public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
-  public AmbrySendToHttp2Adaptor() {
+  private static final Logger logger = LoggerFactory.getLogger(AmbrySendToHttp2Adaptor.class);
+  private final boolean forServer;
 
+  public AmbrySendToHttp2Adaptor(boolean forServer) {
+    this.forServer = forServer;
   }
 
   /**
@@ -48,7 +52,15 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
       return;
     }
     Send send = (Send) msg;
-    Http2Headers http2Headers = new DefaultHttp2Headers().method(HttpMethod.POST.asciiName()).scheme("https").path("/");
+
+    Http2Headers http2Headers;
+    if (forServer) {
+      logger.trace("Write content to channel as server {}", ctx.channel());
+      http2Headers = new DefaultHttp2Headers().status(HttpResponseStatus.OK.codeAsText());
+    } else {
+      logger.trace("Write content to channel as client {}", ctx.channel());
+      http2Headers = new DefaultHttp2Headers().method(HttpMethod.POST.asciiName()).scheme("https").path("/");
+    }
     DefaultHttp2HeadersFrame headersFrame = new DefaultHttp2HeadersFrame(http2Headers, false);
     ctx.write(headersFrame);
     // TODO: Use {@link RetainingAsyncWritableChannel} after writeTo(AsyncWritableChannel channel, Callback<Long> callback) is fully implemented.
@@ -60,6 +72,6 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
       return;
     }
     DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(byteBufChannel.getBuf(), true);
-    ctx.write(dataFrame, promise);
+    ctx.writeAndFlush(dataFrame, promise);
   }
 }

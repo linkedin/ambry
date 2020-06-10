@@ -13,9 +13,9 @@
  */
 package com.github.ambry.network;
 
-import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.rest.RestUtils;
+import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.server.EmptyRequest;
+import io.netty.channel.ChannelHandlerContext;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -29,18 +29,21 @@ import org.slf4j.LoggerFactory;
 public class NettyServerRequestResponseChannel implements RequestResponseChannel {
   private static final Logger logger = LoggerFactory.getLogger(NettyServerRequestResponseChannel.class);
   private final ArrayBlockingQueue<NetworkRequest> requestQueue;
+  private final Http2ServerMetrics http2ServerMetrics;
 
-  public NettyServerRequestResponseChannel(int queueSize) {
+  public NettyServerRequestResponseChannel(int queueSize, Http2ServerMetrics http2ServerMetrics) {
     requestQueue = new ArrayBlockingQueue<>(queueSize);
+    this.http2ServerMetrics = http2ServerMetrics;
   }
 
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
     requestQueue.put(request);
+    http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
   }
 
-  /** Send a response back to the socket server to be sent over the network */
+  /** Send a response back via netty outbound handlers */
   @Override
   public void sendResponse(Send payloadToSend, NetworkRequest originalRequest, ServerNetworkResponseMetrics metrics)
       throws InterruptedException {
@@ -49,11 +52,10 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
       throw new IllegalArgumentException("NetworkRequest should be NettyRequest");
     }
 
-    RestResponseChannel restResponseChannel = ((NettyServerRequest) originalRequest).getRestResponseChannel();
-    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, payloadToSend.sizeInBytes());
-    // TODO: add metrics
-    payloadToSend.writeTo(restResponseChannel, (result, exception) -> {
-    });// an extra copy
+    ChannelHandlerContext ctx = ((NettyServerRequest) originalRequest).getCtx();
+    http2ServerMetrics.requestTotalProcessingTime.update(
+        System.currentTimeMillis() - originalRequest.getStartTimeInMs());
+    ctx.pipeline().writeAndFlush(payloadToSend);
   }
 
   /**
