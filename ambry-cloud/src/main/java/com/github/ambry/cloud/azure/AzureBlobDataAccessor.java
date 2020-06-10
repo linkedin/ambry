@@ -191,7 +191,7 @@ public class AzureBlobDataAccessor {
   }
 
   /**
-   * Upload a file to blob storage.
+   * Upload a file to blob storage.  Any existing file with the same name will be replaced.
    * @param containerName name of the container where blob is stored.
    * @param fileName the blob filename.
    * @param inputStream the input stream to use for upload.

@@ -59,15 +59,9 @@ public class CloudStorageCompactorTest {
   public void testCompactPartitions() throws Exception {
     // start with empty map
     assertEquals(0, compactor.compactPartitions());
-    /*
-    verify(mockDest, times(0)).getDeletedBlobs(anyString(), anyLong(), anyLong(), anyInt());
-    verify(mockDest, times(0)).getExpiredBlobs(anyString(), anyLong(), anyLong(), anyInt());
-    verify(mockDest, times(0)).purgeBlobs(any());
-    */
 
     // add 2 partitions to map
     int partition1 = 101, partition2 = 102;
-    long compactionEndTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
     String partitionPath1 = String.valueOf(partition1), partitionPath2 = String.valueOf(partition2);
     String defaultClass = MockClusterMap.DEFAULT_PARTITION_CLASS;
     partitionMap.put(new MockPartitionId(partition1, defaultClass), null);
@@ -76,7 +70,6 @@ public class CloudStorageCompactorTest {
     when(mockDest.compactPartition(eq(partitionPath1))).thenReturn(pageSize);
     when(mockDest.compactPartition(eq(partitionPath2))).thenReturn(pageSize * 2);
     assertEquals(pageSize * 3, compactor.compactPartitions());
-
 
     // remove partition2 from map
     partitionMap.remove(new MockPartitionId(partition2, defaultClass));
@@ -87,27 +80,5 @@ public class CloudStorageCompactorTest {
     compactor.shutdown();
     assertTrue("Should be shutting down now", compactor.isShuttingDown());
     // TODO: test shutting down with compaction still in progress (more involved)
-  }
-
-  /**
-   * Utility method to create a list of CloudBlobMetadata to be returned by getDeadBlobs call.
-   * @param partitionId the partitionId string.
-   * @param numBlobs the number of dead blobs to return.
-   * @param endTime the compaction end time to use.
-   * @param isDeleted true for deleted blobs, false for expired.
-   * @return
-   */
-  private List<CloudBlobMetadata> getDeadBlobsList(String partitionId, int numBlobs, long endTime, boolean isDeleted) {
-    List<CloudBlobMetadata> metadataList = new ArrayList<>();
-    for (int j = 0; j < numBlobs; j++) {
-      CloudBlobMetadata metadata = new CloudBlobMetadata().setPartitionId(partitionId).setId("blob_" + j);
-      if (isDeleted) {
-        metadata.setDeletionTime(endTime - j);
-      } else {
-        metadata.setExpirationTime(endTime - j);
-      }
-      metadataList.add(metadata);
-    }
-    return metadataList;
   }
 }
