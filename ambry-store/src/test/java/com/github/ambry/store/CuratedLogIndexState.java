@@ -624,17 +624,6 @@ class CuratedLogIndexState {
       return null;
     }
     TreeSet<IndexValue> indexValues = allKeys.get(id);
-    /*
-    if (fileSpan != null) {
-      Offset modifiedStart = referenceIndex.floorKey(fileSpan.getStartOffset());
-      Offset modifiedEnd = new Offset(fileSpan.getEndOffset().getName(), fileSpan.getEndOffset().getOffset() + 1);
-      modifiedEnd = referenceIndex.ceilingKey(modifiedEnd);
-      if (modifiedEnd == null) {
-        modifiedEnd = index.getCurrentEndOffset();
-      }
-      fileSpan = new FileSpan(modifiedStart, modifiedEnd);
-    }
-    */
     List<IndexValue> toConsider = new ArrayList<>();
     for (IndexValue value : indexValues) {
       if (isWithinFileSpan(value.getOffset(), fileSpan)) {
