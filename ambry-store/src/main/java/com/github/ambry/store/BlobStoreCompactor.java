@@ -1191,8 +1191,6 @@ class BlobStoreCompactor {
         long referenceTimeMs = compactionLog.getCompactionDetails().getReferenceTimeMs();
         for (IndexSegment indexSegment : srcIndex.getIndexSegments().descendingMap().values()) {
           if (indexSegment.getLastModifiedTimeMs() < referenceTimeMs) {
-            // NOTE: using start offset here because of the way FileSpan is treated in PersistentIndex.findKey().
-            // using this as the end offset for delete includes the whole index segment in the search.
             cutoffOffset = indexSegment.getEndOffset();
             break;
           }
