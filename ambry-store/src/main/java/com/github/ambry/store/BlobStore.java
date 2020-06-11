@@ -1129,9 +1129,10 @@ public class BlobStore implements Store {
   /**
    * Exposed for testing.
    * Set disabledOnError boolean value in this class.
+   * @param disabledOnErrorVal the value set to disabledOnError
    */
-  void setDisabledOnError(AtomicBoolean disabledOnError) {
-    this.disabledOnError = disabledOnError;
+  void setDisabledOnError(boolean disabledOnErrorVal) {
+    disabledOnError.set(disabledOnErrorVal);
   }
 
   /**

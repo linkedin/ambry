@@ -56,7 +56,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.InstanceConfig;
@@ -371,15 +370,14 @@ public class StorageManagerTest {
     storageManager.startBlobStore(localReplica.getPartitionId());
     // 5. store is disabled due to disk I/O error
     BlobStore localStore = (BlobStore) storageManager.getStore(localReplica.getPartitionId());
-    AtomicBoolean mockDisabledOnError = new AtomicBoolean(true);
-    localStore.setDisabledOnError(mockDisabledOnError);
+    localStore.setDisabledOnError(true);
     try {
       mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
       fail("should fail because store is disabled");
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
-    mockDisabledOnError.set(false);
+    localStore.setDisabledOnError(false);
     // 6. success case (verify both replica's state and decommission file)
     mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
     assertEquals("local store state should be set to INACTIVE", ReplicaState.INACTIVE,
