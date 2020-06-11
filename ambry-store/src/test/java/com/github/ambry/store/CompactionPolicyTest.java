@@ -85,6 +85,29 @@ public class CompactionPolicyTest {
   }
 
   /**
+   * Test if currentCompactionPolicy is expected based on storeCompactionPolicySwitchPeriod.
+   */
+  @Test
+  public void testCompactionPolicySwitch() throws Exception {
+    properties.setProperty("store.compaction.triggers", "Periodic");
+    properties.setProperty("store.compaction.policy.switch.period", "3");
+    properties.setProperty("store.compaction.policy.factory", "com.github.ambry.store.HybridCompactionPolicyFactory");
+    config = new StoreConfig(new VerifiableProperties(properties));
+    CompactionPolicyFactory compactionPolicyFactory = Utils.getObj(config.storeCompactionPolicyFactory, config, time);
+    CompactionPolicy newCompactionPolicy = compactionPolicyFactory.getCompactionPolicy();
+    assertTrue("compactionPolicy needs to be Hybrid", newCompactionPolicy instanceof HybridCompactionPolicy);
+    CompactionPolicy currentCompactionPolicy;
+    for (int i = 0; i < config.storeCompactionPolicySwitchPeriod; i++) {
+      currentCompactionPolicy = ((HybridCompactionPolicy) newCompactionPolicy).selectCompactionPolicy();
+      if (i == config.storeCompactionPolicySwitchPeriod - 1) {
+        assertTrue("compactionPolicy needs to be CompactAll", currentCompactionPolicy instanceof CompactAllPolicy);
+      } else {
+        assertTrue("compactionPolicy needs to be StatsBased", currentCompactionPolicy instanceof StatsBasedCompactionPolicy);
+      }
+    }
+  }
+
+  /**
    * Tests {@link CompactionManager#getCompactionDetails(BlobStore)} for different values for {@link BlobStore}'s
    * used capacity
    * @throws StoreException

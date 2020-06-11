@@ -210,6 +210,7 @@ class BlobStoreCompactor {
           deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
         }
       });
+      //TODO: Filter out the INACTIVE containers from deprecatedContainers set if it's already been compacted.
       accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE).forEach((container) -> {
         deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
       });
