@@ -16,7 +16,7 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
-import java.util.AbstractList;
+import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -141,17 +141,7 @@ public class CompositeBlobInfo {
    * @return A list of {@link StoreKey}s.
    */
   public List<StoreKey> getKeys() {
-    return new AbstractList<StoreKey>() {
-      @Override
-      public StoreKey get(int index) {
-        return chunkMetadataList.get(index).getStoreKey();
-      }
-
-      @Override
-      public int size() {
-        return chunkMetadataList.size();
-      }
-    };
+    return Utils.transformList(chunkMetadataList, ChunkMetadata::getStoreKey);
   }
 
   /**
