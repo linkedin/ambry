@@ -82,7 +82,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.commons.BlobId.*;
+import static com.github.ambry.cloud.CloudTestUtil.*;
 import static com.github.ambry.replication.ReplicationTest.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
@@ -110,6 +110,7 @@ public class CloudBlobStoreTest {
   private short refContainerId = 100;
   private long operationTime = System.currentTimeMillis();
   private final int defaultCacheLimit = 1000;
+  private CloudConfig cloudConfig;
 
   /**
    * Run in both VCR and live serving mode.
@@ -133,8 +134,7 @@ public class CloudBlobStoreTest {
    * @param cacheLimit size of the store's recent blob cache.
    * @param start whether to start the store.
    */
-  private void setupCloudStore(boolean inMemoryDestination, boolean requireEncryption, int cacheLimit, boolean start)
-      throws Exception {
+  private void setupCloudStore(boolean inMemoryDestination, boolean requireEncryption, int cacheLimit, boolean start) {
     Properties properties = new Properties();
     // Required clustermap properties
     setBasicProperties(properties);
@@ -144,6 +144,7 @@ public class CloudBlobStoreTest {
         TestCloudBlobCryptoAgentFactory.class.getName());
     properties.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(cacheLimit));
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    cloudConfig = new CloudConfig(verifiableProperties);
     dest = inMemoryDestination ? new LatchBasedInMemoryCloudDestination(Collections.emptyList())
         : mock(CloudDestination.class);
     vcrMetrics = new VcrMetrics(new MetricRegistry());
@@ -188,11 +189,13 @@ public class CloudBlobStoreTest {
     for (int j = 0; j < count; j++) {
       long size = Math.abs(random.nextLong()) % 10000;
       // Permanent and encrypted, should be uploaded and not reencrypted
-      addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, true);
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, true,
+          false, partitionId, operationTime, isVcr);
       expectedUploads++;
       expectedBytesUploaded += size;
       // Permanent and unencrypted
-      addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, false);
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, false,
+          false, partitionId, operationTime, isVcr);
       expectedUploads++;
       expectedBytesUploaded += size;
       if (requireEncryption) {
@@ -209,12 +212,56 @@ public class CloudBlobStoreTest {
     // Try to put the same blobs again (e.g. from another replica).
     // If isVcr is true, they should already be cached.
     messageWriteSet.resetBuffers();
-    store.put(messageWriteSet);
+    for (MessageInfo messageInfo : messageWriteSet.getMessageSetInfo()) {
+      try {
+        MockMessageWriteSet mockMessageWriteSet = new MockMessageWriteSet();
+        CloudTestUtil.addBlobToMessageSet(mockMessageWriteSet, (BlobId) messageInfo.getStoreKey(),
+            messageInfo.getSize(), messageInfo.getExpirationTimeInMs(), operationTime, isVcr);
+        store.put(mockMessageWriteSet);
+        fail("Uploading already uploaded blob shoudl throw error");
+      } catch (StoreException ex) {
+        assertEquals(ex.getErrorCode(), StoreErrorCodes.Already_Exist);
+      }
+    }
     int expectedSkips = isVcr ? expectedUploads : 0;
     assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
     assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
     assertEquals("Unexpected skipped count", expectedSkips, vcrMetrics.blobUploadSkippedCount.getCount());
     verifyCacheHits(2 * expectedUploads, expectedUploads);
+
+    // Try to upload a set of blobs containing duplicates
+    MessageInfo duplicateMessageInfo =
+        messageWriteSet.getMessageSetInfo().get(messageWriteSet.getMessageSetInfo().size() - 1);
+    CloudTestUtil.addBlobToMessageSet(messageWriteSet, (BlobId) duplicateMessageInfo.getStoreKey(),
+        duplicateMessageInfo.getSize(), duplicateMessageInfo.getExpirationTimeInMs(), operationTime, isVcr);
+    try {
+      store.put(messageWriteSet);
+    } catch (IllegalArgumentException iaex) {
+    }
+    verifyCacheHits(2 * expectedUploads, expectedUploads);
+
+    // Verify that a blob marked as deleted is not uploaded.
+    MockMessageWriteSet deletedMessageWriteSet = new MockMessageWriteSet();
+    CloudTestUtil.addBlobToMessageSet(deletedMessageWriteSet, 100, Utils.Infinite_Time, refAccountId, refContainerId,
+        true, true, partitionId, operationTime, isVcr);
+    store.put(deletedMessageWriteSet);
+    expectedSkips++;
+    verifyCacheHits(2 * expectedUploads, expectedUploads);
+    assertEquals(expectedSkips, vcrMetrics.blobUploadSkippedCount.getCount());
+
+    // Verify that a blob that is expiring soon is not uploaded for vcr but is uploaded for frontend.
+    messageWriteSet = new MockMessageWriteSet();
+    CloudTestUtil.addBlobToMessageSet(messageWriteSet, 100, operationTime + cloudConfig.vcrMinTtlDays - 1, refAccountId,
+        refContainerId, true, false, partitionId, operationTime, isVcr);
+    store.put(messageWriteSet);
+    int expectedLookups = (2 * expectedUploads) + 1;
+    if (isVcr) {
+      expectedSkips++;
+    } else {
+      expectedUploads++;
+    }
+    verifyCacheHits(expectedLookups, expectedUploads);
+    assertEquals(expectedSkips, vcrMetrics.blobUploadSkippedCount.getCount());
   }
 
   /** Test the CloudBlobStore delete method. */
@@ -225,40 +272,99 @@ public class CloudBlobStoreTest {
     long now = System.currentTimeMillis();
     Map<BlobId, MessageInfo> messageInfoMap = new HashMap<>();
     for (int j = 0; j < count; j++) {
-      BlobId blobId = getUniqueId(refAccountId, refContainerId, true);
+      BlobId blobId = getUniqueId(refAccountId, refContainerId, true, partitionId);
       messageInfoMap.put(blobId,
-          new MessageInfo(blobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) 1));
+          new MessageInfo(blobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, initLifeVersion()));
     }
     store.delete(new ArrayList<>(messageInfoMap.values()));
-    verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(now), anyShort());
-    verifyCacheHits(count, 0);
+    verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(now), anyShort(), any(CloudUpdateValidator.class));
+    if (isVcr) {
+      verifyCacheHits(count, 0);
+    } else {
+      verifyCacheHits(0, 0);
+    }
 
-    // Call second time with same life version.  If isVcr, should be cached causing deletions to be skipped.
-    store.delete(new ArrayList<>(messageInfoMap.values()));
+    // Call second time with same life version.
+    // If isVcr, should be cached causing deletions to be skipped.
+    // If not isVcr, deletion should fail
+    for (MessageInfo messageInfo : messageInfoMap.values()) {
+      try {
+        store.delete(Collections.singletonList(messageInfo));
+      } catch (StoreException ex) {
+        if (isVcr) {
+          assertEquals(ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+        }
+      }
+    }
     int expectedCount = isVcr ? count : count * 2;
-    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(now), anyShort());
-    verifyCacheHits(count * 2, count);
+    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(now), anyShort(),
+        any(CloudUpdateValidator.class));
+    if (isVcr) {
+      verifyCacheHits(count * 2, count);
+    } else {
+      verifyCacheHits(0, 0);
+    }
 
     // Call again with a smaller life version. If isVcr, should hit the cache again.
     Map<BlobId, MessageInfo> newMessageInfoMap = new HashMap<>();
     for (BlobId blobId : messageInfoMap.keySet()) {
       newMessageInfoMap.put(blobId,
-          new MessageInfo(blobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) 0));
+          new MessageInfo(blobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, initLifeVersion()));
     }
-    store.delete(new ArrayList<>(newMessageInfoMap.values()));
+
+    for (MessageInfo messageInfo : messageInfoMap.values()) {
+      try {
+        store.delete(Collections.singletonList(messageInfo));
+      } catch (StoreException ex) {
+        if (isVcr) {
+          assertEquals(ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+        }
+      }
+    }
     expectedCount = isVcr ? count : count * 3;
-    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(now), anyShort());
-    verifyCacheHits(count * 3, count * 2);
+    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(now), anyShort(),
+        any(CloudUpdateValidator.class));
+    if (isVcr) {
+      verifyCacheHits(count * 3, count * 2);
+    } else {
+      verifyCacheHits(0, 0);
+    }
 
     // Call again with a larger life version. Should not hit cache again.
     for (BlobId blobId : messageInfoMap.keySet()) {
       newMessageInfoMap.put(blobId,
           new MessageInfo(blobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) 2));
     }
-    store.delete(new ArrayList<>(newMessageInfoMap.values()));
-    expectedCount = isVcr ? count * 2 : count * 4;
-    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(now), anyShort());
-    verifyCacheHits(count * 4, count * 2);
+    for (MessageInfo messageInfo : messageInfoMap.values()) {
+      try {
+        store.delete(Collections.singletonList(messageInfo));
+      } catch (StoreException ex) {
+        if (isVcr) {
+          assertEquals(ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+        }
+      }
+    }
+    expectedCount = isVcr ? count : count * 4;
+    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(now), anyShort(),
+        any(CloudUpdateValidator.class));
+    if (isVcr) {
+      verifyCacheHits(count * 4, count * 3);
+    } else {
+      verifyCacheHits(0, 0);
+    }
+
+    // Try to upload a set of blobs containing duplicates
+    List<MessageInfo> messageInfoList = new ArrayList<>(messageInfoMap.values());
+    messageInfoList.add(messageInfoList.get(messageInfoMap.values().size() - 1));
+    try {
+      store.delete(messageInfoList);
+    } catch (IllegalArgumentException iaex) {
+    }
+    if (isVcr) {
+      verifyCacheHits(count * 4, count * 3);
+    } else {
+      verifyCacheHits(0, 0);
+    }
   }
 
   /** Test the CloudBlobStore updateTtl method. */
@@ -268,29 +374,46 @@ public class CloudBlobStoreTest {
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
     for (int j = 0; j < count; j++) {
-      long expirationTime = Math.abs(random.nextLong());
-      addBlobToSet(messageWriteSet, SMALL_BLOB_SIZE, expirationTime, refAccountId, refContainerId, true);
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, SMALL_BLOB_SIZE, -1, refAccountId, refContainerId, true, false,
+          partitionId, operationTime, isVcr);
     }
     store.updateTtl(messageWriteSet.getMessageSetInfo());
-    verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong());
+    verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong(), any(CloudUpdateValidator.class));
     verifyCacheHits(count, 0);
 
     // Call second time, If isVcr, should be cached causing updates to be skipped.
     store.updateTtl(messageWriteSet.getMessageSetInfo());
     int expectedCount = isVcr ? count : count * 2;
-    verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong());
+    verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong(),
+        any(CloudUpdateValidator.class));
     verifyCacheHits(count * 2, count);
 
     // test that if a blob is deleted and then undeleted, the ttlupdate status is preserved in cache.
     MessageInfo messageInfo = messageWriteSet.getMessageSetInfo().get(0);
     store.delete(Collections.singletonList(messageInfo));
-    verify(dest, times(1)).deleteBlob(any(BlobId.class), anyLong(), anyShort());
+    verify(dest, times(1)).deleteBlob(any(BlobId.class), anyLong(), anyShort(), any(CloudUpdateValidator.class));
     store.undelete(messageInfo);
-    verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort());
+    verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     store.updateTtl(Collections.singletonList(messageInfo));
     expectedCount = isVcr ? expectedCount : expectedCount + 1;
-    verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong());
-    verifyCacheHits((count * 2) + 3, count + 1);
+    verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong(),
+        any(CloudUpdateValidator.class));
+    if (isVcr) {
+      verifyCacheHits((count * 2) + 3, count + 1);
+    } else {
+      // delete and undelete should not cause cache lookup for frontend.
+      verifyCacheHits((count * 2) + 1, count + 1);
+    }
+
+    //test that ttl update with non infinite expiration time fails
+    messageWriteSet = new MockMessageWriteSet();
+    CloudTestUtil.addBlobToMessageSet(messageWriteSet, SMALL_BLOB_SIZE, System.currentTimeMillis() + 20000,
+        refAccountId, refContainerId, true, false, partitionId, operationTime, isVcr);
+    try {
+      store.updateTtl(messageWriteSet.getMessageSetInfo());
+    } catch (StoreException ex) {
+      assertEquals(ex.getErrorCode(), StoreErrorCodes.Update_Not_Allowed);
+    }
   }
 
   /** Test the CloudBlobStore undelete method. */
@@ -299,35 +422,43 @@ public class CloudBlobStoreTest {
     setupCloudStore(false, true, defaultCacheLimit, true);
     long now = System.currentTimeMillis();
     MessageInfo messageInfo =
-        new MessageInfo(getUniqueId(refAccountId, refContainerId, true), SMALL_BLOB_SIZE, refAccountId, refContainerId,
-            now, (short) 1);
-    when(dest.undeleteBlob(any(BlobId.class), anyShort())).thenReturn((short) 1);
+        new MessageInfo(getUniqueId(refAccountId, refContainerId, true, partitionId), SMALL_BLOB_SIZE, refAccountId,
+            refContainerId, now, (short) 1);
+    when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class))).thenReturn((short) 1);
     store.undelete(messageInfo);
-    verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort());
+    verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     verifyCacheHits(1, 0);
 
     // Call second time with same life version. If isVcr, should hit cache this time.
-    store.undelete(messageInfo);
+    try {
+      store.undelete(messageInfo);
+    } catch (StoreException ex) {
+      assertEquals(ex.getErrorCode(), StoreErrorCodes.ID_Undeleted);
+    }
     int expectedCount = isVcr ? 1 : 2;
-    verify(dest, times(expectedCount)).undeleteBlob(any(BlobId.class), eq((short) 1));
+    verify(dest, times(expectedCount)).undeleteBlob(any(BlobId.class), eq((short) 1), any(CloudUpdateValidator.class));
     verifyCacheHits(2, 1);
 
-    // Call again with a smaller life version. If isVcr, should hit cache again.
-    when(dest.undeleteBlob(any(BlobId.class), anyShort())).thenReturn((short) 0);
+    // Call again with a smaller life version.
+    when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class))).thenReturn((short) 0);
     messageInfo =
         new MessageInfo(messageInfo.getStoreKey(), SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) 0);
-    store.undelete(messageInfo);
+    try {
+      store.undelete(messageInfo);
+    } catch (StoreException ex) {
+      assertEquals(StoreErrorCodes.ID_Undeleted, ex.getErrorCode());
+    }
     expectedCount = isVcr ? 1 : 3;
-    verify(dest, times(expectedCount)).undeleteBlob(any(BlobId.class), anyShort());
+    verify(dest, times(expectedCount)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     verifyCacheHits(3, 2);
 
     // Call again with a higher life version. Should not hit cache this time.
-    when(dest.undeleteBlob(any(BlobId.class), anyShort())).thenReturn((short) 2);
+    when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class))).thenReturn((short) 2);
     messageInfo =
         new MessageInfo(messageInfo.getStoreKey(), SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) 2);
     store.undelete(messageInfo);
     expectedCount = isVcr ? 2 : 4;
-    verify(dest, times(expectedCount)).undeleteBlob(any(BlobId.class), anyShort());
+    verify(dest, times(expectedCount)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     verifyCacheHits(4, 2);
 
     // undelete for a non existent blob.
@@ -356,13 +487,13 @@ public class CloudBlobStoreTest {
     Map<String, CloudBlobMetadata> metadataMap = new HashMap<>();
     for (int j = 0; j < count; j++) {
       // Blob with metadata
-      BlobId existentBlobId = getUniqueId();
+      BlobId existentBlobId = getUniqueId(refAccountId, refContainerId, false, partitionId);
       keys.add(existentBlobId);
       metadataMap.put(existentBlobId.getID(),
           new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024,
               CloudBlobMetadata.EncryptionOrigin.ROUTER));
       // Blob without metadata
-      BlobId nonexistentBlobId = getUniqueId();
+      BlobId nonexistentBlobId = getUniqueId(refAccountId, refContainerId, false, partitionId);
       keys.add(nonexistentBlobId);
     }
     when(dest.getBlobMetadata(anyList())).thenReturn(metadataMap);
@@ -441,7 +572,7 @@ public class CloudBlobStoreTest {
     // put blobs to fill up cache
     List<StoreKey> blobIdList = new ArrayList<>();
     for (int j = 0; j < cacheSize; j++) {
-      blobIdList.add(getUniqueId());
+      blobIdList.add(getUniqueId(refAccountId, refContainerId, false, partitionId));
       store.addToCache(blobIdList.get(j).getID(), (short) 0, CloudBlobStore.BlobState.CREATED);
     }
 
@@ -455,7 +586,8 @@ public class CloudBlobStoreTest {
     int delta = 5;
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     for (int j = 0; j < delta; j++) {
-      addBlobToSet(messageWriteSet, (BlobId) blobIdList.get(j), SMALL_BLOB_SIZE, Utils.Infinite_Time);
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, (BlobId) blobIdList.get(j), SMALL_BLOB_SIZE,
+          Utils.Infinite_Time, operationTime, isVcr);
     }
     store.updateTtl(messageWriteSet.getMessageSetInfo());
     expectedLookups += delta;
@@ -464,7 +596,7 @@ public class CloudBlobStoreTest {
 
     // put 5 more blobs
     for (int j = cacheSize; j < cacheSize + delta; j++) {
-      blobIdList.add(getUniqueId());
+      blobIdList.add(getUniqueId(refAccountId, refContainerId, false, partitionId));
       store.addToCache(blobIdList.get(j).getID(), (short) 0, CloudBlobStore.BlobState.CREATED);
     }
     // get same 1-5 which should be still cached.
@@ -486,11 +618,11 @@ public class CloudBlobStoreTest {
    * @param expectedHits Expected cache hit count.
    */
   private void verifyCacheHits(int expectedLookups, int expectedHits) {
+    assertEquals("Cache lookup count", expectedLookups, vcrMetrics.blobCacheLookupCount.getCount());
     if (isVcr) {
-      assertEquals("Cache lookup count", expectedLookups, vcrMetrics.blobCacheLookupCount.getCount());
       assertEquals("Cache hit count", expectedHits, vcrMetrics.blobCacheHitCount.getCount());
     } else {
-      assertEquals("Expected no cache lookups (not VCR)", 0, vcrMetrics.blobCacheLookupCount.getCount());
+      //assertEquals("Expected no cache lookups (not VCR)", 0, vcrMetrics.blobCacheLookupCount.getCount());
       assertEquals("Expected no cache hits (not VCR)", 0, vcrMetrics.blobCacheHitCount.getCount());
     }
   }
@@ -500,9 +632,10 @@ public class CloudBlobStoreTest {
   public void testStoreNotStarted() throws Exception {
     // Create store and don't start it.
     setupCloudStore(false, true, defaultCacheLimit, false);
-    List<StoreKey> keys = Collections.singletonList(getUniqueId());
+    List<StoreKey> keys = Collections.singletonList(getUniqueId(refAccountId, refContainerId, false, partitionId));
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    addBlobToSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId, true);
+    CloudTestUtil.addBlobToMessageSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId, true,
+        false, partitionId, operationTime, isVcr);
     try {
       store.put(messageWriteSet);
       fail("Store put should have failed.");
@@ -529,7 +662,8 @@ public class CloudBlobStoreTest {
     CloudDestination exDest = mock(CloudDestination.class);
     when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(
         new CloudStorageException("ouch"));
-    when(exDest.deleteBlob(any(BlobId.class), anyLong(), anyShort())).thenThrow(new CloudStorageException("ouch"));
+    when(exDest.deleteBlob(any(BlobId.class), anyLong(), anyShort(), any(CloudUpdateValidator.class))).thenThrow(
+        new CloudStorageException("ouch"));
     when(exDest.getBlobMetadata(anyList())).thenThrow(new CloudStorageException("ouch"));
     Properties props = new Properties();
     setBasicProperties(props);
@@ -540,9 +674,10 @@ public class CloudBlobStoreTest {
     CloudBlobStore exStore =
         new CloudBlobStore(new VerifiableProperties(props), partitionId, exDest, clusterMap, vcrMetrics);
     exStore.start();
-    List<StoreKey> keys = Collections.singletonList(getUniqueId());
+    List<StoreKey> keys = Collections.singletonList(getUniqueId(refAccountId, refContainerId, false, partitionId));
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    addBlobToSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId, true);
+    CloudTestUtil.addBlobToMessageSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId, true,
+        false, partitionId, operationTime, isVcr);
     try {
       exStore.put(messageWriteSet);
       fail("Store put should have failed.");
@@ -570,15 +705,18 @@ public class CloudBlobStoreTest {
     long retryDelay = 5;
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     BlobId blobId =
-        addBlobToSet(messageWriteSet, SMALL_BLOB_SIZE, Utils.Infinite_Time, refAccountId, refContainerId, false);
+        CloudTestUtil.addBlobToMessageSet(messageWriteSet, SMALL_BLOB_SIZE, Utils.Infinite_Time, refAccountId,
+            refContainerId, false, false, partitionId, operationTime, isVcr);
     List<StoreKey> keys = Collections.singletonList(blobId);
     CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, operationTime, Utils.Infinite_Time, 1024, null);
     CloudStorageException retryableException =
         new CloudStorageException("Server unavailable", null, 500, true, retryDelay);
     when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(retryableException)
         .thenReturn(true);
-    when(exDest.deleteBlob(any(BlobId.class), anyLong(), anyShort())).thenThrow(retryableException).thenReturn(true);
-    when(exDest.updateBlobExpiration(any(BlobId.class), anyLong())).thenThrow(retryableException).thenReturn(true);
+    when(exDest.deleteBlob(any(BlobId.class), anyLong(), anyShort(), any(CloudUpdateValidator.class))).thenThrow(
+        retryableException).thenReturn(true);
+    when(exDest.updateBlobExpiration(any(BlobId.class), anyLong(), any(CloudUpdateValidator.class))).thenThrow(
+        retryableException).thenReturn((short) 1);
     when(exDest.getBlobMetadata(anyList())).thenThrow(retryableException)
         .thenReturn(Collections.singletonMap(metadata.getId(), metadata));
     doThrow(retryableException).doNothing().when(exDest).downloadBlob(any(BlobId.class), any());
@@ -602,7 +740,10 @@ public class CloudBlobStoreTest {
     expectedCacheLookups += 2;
     exStore.delete(messageWriteSet.getMessageSetInfo());
     expectedRetries++;
-    expectedCacheLookups += 2;
+    if (isVcr) {
+      // no cache lookup in case of delete for frontend.
+      expectedCacheLookups += 2;
+    }
     exStore.get(keys, EnumSet.noneOf(StoreGetOptions.class));
     expectedRetries++;
     exStore.downloadBlob(metadata, blobId, new ByteArrayOutputStream());
@@ -615,12 +756,22 @@ public class CloudBlobStoreTest {
     // Rerun the first three, should all skip due to cache hit
     messageWriteSet.resetBuffers();
     int expectedCacheHits = 0;
-    exStore.put(messageWriteSet);
+    try {
+      exStore.put(messageWriteSet);
+    } catch (StoreException ex) {
+      assertEquals(ex.getErrorCode(), StoreErrorCodes.Already_Exist);
+    }
     expectedCacheHits++;
     exStore.updateTtl(messageWriteSet.getMessageSetInfo());
     expectedCacheHits++;
-    exStore.delete(messageWriteSet.getMessageSetInfo());
-    expectedCacheHits++;
+    try {
+      exStore.delete(messageWriteSet.getMessageSetInfo());
+    } catch (StoreException ex) {
+      assertEquals(ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+    }
+    if (isVcr) {
+      expectedCacheHits++;
+    }
     verifyCacheHits(expectedCacheLookups + expectedCacheHits, expectedCacheHits);
   }
 
@@ -685,7 +836,7 @@ public class CloudBlobStoreTest {
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(),
-            new ResponseHandler(clusterMap), new MockTime(), null);
+            new ResponseHandler(clusterMap), new MockTime(), null, null, null);
 
     for (ReplicaId replica : partitionId.getReplicaIds()) {
       if (replica.getDataNodeId() == remoteHost.dataNodeId) {
@@ -777,62 +928,6 @@ public class CloudBlobStoreTest {
   }
 
   /**
-   * Utility method to generate a BlobId and byte buffer for a blob with specified properties and add them to the specified MessageWriteSet.
-   * @param messageWriteSet the {@link MockMessageWriteSet} in which to store the data.
-   * @param size the size of the byte buffer.
-   * @param expiresAtMs the expiration time.
-   * @param accountId the account Id.
-   * @param containerId the container Id.
-   * @param encrypted the encrypted bit.
-   * @return the generated {@link BlobId}.
-   */
-  private BlobId addBlobToSet(MockMessageWriteSet messageWriteSet, long size, long expiresAtMs, short accountId,
-      short containerId, boolean encrypted) {
-    BlobId id = getUniqueId(accountId, containerId, encrypted);
-    long crc = random.nextLong();
-    MessageInfo info = new MessageInfo(id, size, false, true, expiresAtMs, crc, accountId, containerId, operationTime);
-    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
-    messageWriteSet.add(info, buffer);
-    return id;
-  }
-
-  /**
-   * Utility method to add a BlobId and generated byte buffer to the specified MessageWriteSet.
-   * @param messageWriteSet the {@link MockMessageWriteSet} in which to store the data.
-   * @param blobId the blobId to add.
-   * @param size the size of the byte buffer.
-   * @param expiresAtMs the expiration time.
-   */
-  private void addBlobToSet(MockMessageWriteSet messageWriteSet, BlobId blobId, long size, long expiresAtMs) {
-    long crc = random.nextLong();
-    MessageInfo info =
-        new MessageInfo(blobId, size, false, true, expiresAtMs, crc, refAccountId, refContainerId, operationTime);
-    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
-    messageWriteSet.add(info, buffer);
-  }
-
-  /**
-   * Utility method to generate a {@link BlobId} for the reference account and container.
-   * @return the generated {@link BlobId}.
-   */
-  private BlobId getUniqueId() {
-    return getUniqueId(refAccountId, refContainerId, false);
-  }
-
-  /**
-   * Utility method to generate a {@link BlobId} with specified account and container.
-   * @param accountId the account Id.
-   * @param containerId the container Id.
-   * @param encrypted the encrypted bit.
-   * @return the generated {@link BlobId}.
-   */
-  private BlobId getUniqueId(short accountId, short containerId, boolean encrypted) {
-    byte dataCenterId = 66;
-    return new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, encrypted,
-        BlobDataType.DATACHUNK);
-  }
-
-  /**
    * Test cloud store get method.
    * @throws Exception
    */
@@ -855,7 +950,9 @@ public class CloudBlobStoreTest {
     Map<BlobId, ByteBuffer> blobIdToUploadedDataMap = new HashMap<>(count);
     for (int j = 0; j < count; j++) {
       long size = Math.abs(random.nextLong()) % 10000;
-      blobIds.add(addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, false));
+      blobIds.add(
+          CloudTestUtil.addBlobToMessageSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId,
+              false, false, partitionId, operationTime, isVcr));
       ByteBuffer uploadedData = messageWriteSet.getBuffers().get(messageWriteSet.getMessageSetInfo().size() - 1);
       blobIdToUploadedDataMap.put(blobIds.get(j), uploadedData);
     }
@@ -875,7 +972,7 @@ public class CloudBlobStoreTest {
     testGetForExistingBlobs(singleIdList, singleBlobIdToUploadedDataMap);
 
     //test get for one blob that doesnt exist
-    BlobId nonExistentId = getUniqueId(refAccountId, refContainerId, false);
+    BlobId nonExistentId = getUniqueId(refAccountId, refContainerId, false, partitionId);
     singleIdList = Collections.singletonList(nonExistentId);
     testGetWithAtleastOneNonExistentBlob(singleIdList);
 
@@ -1018,7 +1115,7 @@ public class CloudBlobStoreTest {
    * @throws CloudStorageException if upload fails
    */
   private BlobId forceUploadExpiredBlob() throws CloudStorageException {
-    BlobId expiredBlobId = getUniqueId(refAccountId, refContainerId, false);
+    BlobId expiredBlobId = getUniqueId(refAccountId, refContainerId, false, partitionId);
     long size = SMALL_BLOB_SIZE;
     long currentTime = System.currentTimeMillis();
     CloudBlobMetadata expiredBlobMetadata =
@@ -1027,5 +1124,12 @@ public class CloudBlobStoreTest {
     InputStream inputStream = new ByteBufferInputStream(buffer);
     dest.uploadBlob(expiredBlobId, size, expiredBlobMetadata, inputStream);
     return expiredBlobId;
+  }
+
+  /**
+   * @return -1 if not vcr. 0 otherwise.
+   */
+  private short initLifeVersion() {
+    return (short) (isVcr ? 0 : -1);
   }
 }

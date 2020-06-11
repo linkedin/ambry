@@ -298,9 +298,11 @@ public class ClusterChangeHandlerTest {
     instanceConfig.getRecord().setMapFields(diskInfos);
     // we call onInstanceConfigChange() twice
     // 1st call, to verify initialization code path
-    dynamicChangeHandler.onInstanceConfigChange(Collections.singletonList(instanceConfig), null);
+    dynamicChangeHandler.onDataNodeConfigChange(
+        Collections.singleton(InstanceConfigToDataNodeConfigAdapter.convert(instanceConfig, clusterMapConfig)));
     // 2nd call, to verify dynamic update code path
-    dynamicChangeHandler.onInstanceConfigChange(Collections.singletonList(instanceConfig), null);
+    dynamicChangeHandler.onDataNodeConfigChange(
+        Collections.singletonList(InstanceConfigToDataNodeConfigAdapter.convert(instanceConfig, clusterMapConfig)));
     assertEquals("There shouldn't be initialization errors", 0, initFailureCount.getCount());
   }
 

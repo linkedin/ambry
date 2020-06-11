@@ -15,9 +15,14 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
-import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -35,8 +40,11 @@ public class CloudStorageCompactor implements Runnable {
   private final int shutDownTimeoutSecs;
   private final long compactionTimeLimitMs;
   private final VcrMetrics vcrMetrics;
-  private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+  private final AtomicBoolean shutDown = new AtomicBoolean(false);
+  private final int numThreads;
   private final AtomicReference<CountDownLatch> doneLatch = new AtomicReference<>();
+  private final ExecutorService executorService;
+  private final ExecutorCompletionService<Integer> executorCompletionService;
 
   /**
    * Public constructor.
@@ -50,24 +58,22 @@ public class CloudStorageCompactor implements Runnable {
     this.partitions = partitions;
     this.vcrMetrics = vcrMetrics;
     this.shutDownTimeoutSecs = cloudConfig.cloudBlobCompactionShutdownTimeoutSecs;
+    this.numThreads = cloudConfig.cloudCompactionNumThreads;
     compactionTimeLimitMs = TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours);
+    executorService = Executors.newFixedThreadPool(numThreads);
+    executorCompletionService = new ExecutorCompletionService<>(executorService);
     doneLatch.set(new CountDownLatch(0));
   }
 
   @Override
   public void run() {
-    try {
-      compactPartitions();
-    } catch (Throwable th) {
-      logger.error("Hit exception running compaction task", th);
-    }
+    compactPartitions();
   }
 
   /**
    * Shut down the compactor waiting for in progress operations to complete.
    */
   public void shutdown() {
-    shuttingDown.set(true);
     logger.info("Compactor received shutdown request, waiting up to {} seconds for in-flight operations to finish",
         shutDownTimeoutSecs);
 
@@ -78,8 +84,10 @@ public class CloudStorageCompactor implements Runnable {
       success = doneLatch.get().await(shutDownTimeoutSecs, TimeUnit.SECONDS);
     } catch (InterruptedException ex) {
     }
+    executorService.shutdown();
     if (success) {
       logger.info("Compactor shut down successfully.");
+      shutDown.set(true);
     } else {
       logger.warn("Timed out or interrupted waiting for operations to finish.  If cloud provider uses separate stores"
           + " for data and metadata, some inconsistencies may be present.");
@@ -90,8 +98,8 @@ public class CloudStorageCompactor implements Runnable {
   /**
    * @return whether the compactor is shutting down.
    */
-  boolean isShuttingDown() {
-    return shuttingDown.get();
+  boolean isShutDown() {
+    return shutDown.get();
   }
 
   /**
@@ -103,47 +111,84 @@ public class CloudStorageCompactor implements Runnable {
       logger.info("Skipping compaction as no partitions are assigned.");
       return 0;
     }
-    if (isShuttingDown()) {
+    List<PartitionId> partitionSnapshot = new ArrayList<>(partitions);
+    long compactionStartTime = System.currentTimeMillis();
+    long timeToQuit = System.currentTimeMillis() + compactionTimeLimitMs;
+    int compactionInProgress = 0;
+    doneLatch.set(new CountDownLatch(1));
+    int totalBlobsPurged = 0;
+    int compactedPartitionCount = 0;
+    try {
+      while (!partitionSnapshot.isEmpty()) {
+        while (compactionInProgress < numThreads) {
+          if (partitionSnapshot.isEmpty()) {
+            break;
+          }
+          PartitionId partitionId = partitionSnapshot.remove(0);
+          executorCompletionService.submit(() -> compactPartition(partitionId));
+          compactionInProgress++;
+        }
+        try {
+          totalBlobsPurged += executorCompletionService.take().get();
+          compactedPartitionCount++;
+        } catch (ExecutionException ex) {
+          vcrMetrics.compactionFailureCount.inc();
+        }
+        compactionInProgress--;
+        if (System.currentTimeMillis() >= timeToQuit) {
+          logger.info("Compaction terminated due to time limit exceeded.");
+          break;
+        }
+        if (isShutDown()) {
+          logger.info("Compaction terminated due to shut down.");
+          break;
+        }
+      }
+      while (compactionInProgress > 0) {
+        try {
+          totalBlobsPurged += executorCompletionService.take().get();
+          compactedPartitionCount++;
+        } catch (ExecutionException ex) {
+          vcrMetrics.compactionFailureCount.inc();
+        }
+        compactionInProgress--;
+      }
+      doneLatch.get().countDown();
+    } catch (Throwable th) {
+      logger.error("Hit exception running compaction task", th);
+    } finally {
+      long compactionTime = (System.currentTimeMillis() - compactionStartTime) / 1000;
+      logger.info("Purged {} blobs in {} partitions taking {} seconds", totalBlobsPurged, compactedPartitionCount,
+          compactionTime);
+    }
+    return totalBlobsPurged;
+  }
+
+  /**
+   * Purge the inactive blobs in the specified partitions.
+   * @param partition the {@link PartitionId} to compact.
+   * @return the total number of blobs purged in the partition.
+   */
+  private int compactPartition(PartitionId partition) throws CloudStorageException {
+    if (isShutDown()) {
       logger.info("Skipping compaction due to shut down.");
       return 0;
     }
 
-    // TODO: adjust count when compaction uses multiple threads
-    doneLatch.set(new CountDownLatch(1));
+    logger.info("Beginning dead blob compaction for partition {}", partition);
 
-    Set<PartitionId> partitionsSnapshot = new HashSet<>(partitions);
-    logger.info("Beginning dead blob compaction for {} partitions", partitions.size());
-    long now = System.currentTimeMillis();
-    long compactionStartTime = now;
-    long timeToQuit = now + compactionTimeLimitMs;
-    int totalBlobsPurged = 0;
-    for (PartitionId partitionId : partitionsSnapshot) {
-      String partitionPath = partitionId.toPathString();
-      if (!partitions.contains(partitionId)) {
-        // Looks like partition was reassigned since the loop started, so skip it
-        continue;
-      }
-
-      try {
-        totalBlobsPurged += cloudDestination.compactPartition(partitionPath);
-      } catch (CloudStorageException ex) {
-        logger.error("Compaction failed for partition {}", partitionPath, ex);
-        vcrMetrics.compactionFailureCount.inc();
-      }
-
-      if (System.currentTimeMillis() >= timeToQuit) {
-        logger.info("Compaction terminated due to time limit exceeded.");
-        break;
-      }
-      if (isShuttingDown()) {
-        logger.info("Compaction terminated due to shut down.");
-        break;
-      }
+    String partitionPath = partition.toPathString();
+    if (!partitions.contains(partition)) {
+      // Looks like partition was reassigned since the loop started, so skip it
+      logger.warn("Skipping compaction of Partition {} as the partition was reassigned", partition);
+      return 0;
     }
-    doneLatch.get().countDown();
-    long compactionTime = (System.currentTimeMillis() - compactionStartTime) / 1000;
-    logger.info("Purged {} blobs in {} partitions taking {} seconds", totalBlobsPurged, partitionsSnapshot.size(),
-        compactionTime);
-    return totalBlobsPurged;
+
+    try {
+      return cloudDestination.compactPartition(partitionPath);
+    } catch (CloudStorageException ex) {
+      logger.error("Compaction failed for partition {}", partitionPath, ex);
+      throw ex;
+    }
   }
 }

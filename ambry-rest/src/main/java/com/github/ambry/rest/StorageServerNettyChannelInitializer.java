@@ -45,6 +45,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
   private final ConnectionStatsHandler connectionStatsHandler;
   private final RestRequestHandler requestHandler;
   private final SSLFactory sslFactory;
+  private final ServerSecurityHandler serverSecurityHandler;
 
   /**
    * Construct a {@link StorageServerNettyChannelInitializer}.
@@ -59,7 +60,8 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
    */
   public StorageServerNettyChannelInitializer(NettyConfig nettyConfig, Http2ClientConfig http2ClientConfig,
       PerformanceConfig performanceConfig, NettyMetrics nettyMetrics, ConnectionStatsHandler connectionStatsHandler,
-      RestRequestHandler requestHandler, SSLFactory sslFactory, MetricRegistry metricRegistry) {
+      RestRequestHandler requestHandler, SSLFactory sslFactory, MetricRegistry metricRegistry,
+      ServerSecurityHandler serverSecurityHandler) {
     this.nettyConfig = nettyConfig;
     this.performanceConfig = performanceConfig;
     this.http2ClientConfig = http2ClientConfig;
@@ -70,6 +72,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     this.connectionStatsHandler = connectionStatsHandler;
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     this.requestHandler = requestHandler;
+    this.serverSecurityHandler = serverSecurityHandler;
   }
 
   @Override
@@ -93,6 +96,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     int peerPort = peerAddress.getPort();
     SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(peerHost, peerPort, SSLFactory.Mode.SERVER));
     pipeline.addLast("SslHandler", sslHandler);
+    pipeline.addLast("securityChecker", serverSecurityHandler);
     pipeline.addLast(Http2FrameCodecBuilder.forServer()
         .initialSettings(Http2Settings.defaultSettings()
             .maxFrameSize(http2ClientConfig.http2FrameMaxSize)

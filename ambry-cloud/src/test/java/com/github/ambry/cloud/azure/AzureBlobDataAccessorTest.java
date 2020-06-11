@@ -25,6 +25,7 @@ import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.DummyCloudUpdateValidator;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -59,6 +60,7 @@ public class AzureBlobDataAccessorTest {
   private BlockBlobClient mockBlockBlobClient;
   private BlobBatchClient mockBatchClient;
   private AzureMetrics azureMetrics;
+  private DummyCloudUpdateValidator dummyCloudUpdateValidator = new DummyCloudUpdateValidator();
   private int blobSize = 1024;
   private BlobId blobId;
   private long creationTime = System.currentTimeMillis();
@@ -129,8 +131,9 @@ public class AzureBlobDataAccessorTest {
   @Test
   public void testMarkDelete() throws Exception {
     mockBlobExistence(true);
-    AzureBlobDataAccessor.UpdateResponse response =
-        dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("deletionTime", deletionTime));
+    AzureCloudDestination.UpdateResponse response =
+        dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("deletionTime", deletionTime),
+            dummyCloudUpdateValidator);
     assertTrue("Expected was updated", response.wasUpdated);
     assertNotNull("Expected metadata", response.metadata);
   }
@@ -139,8 +142,9 @@ public class AzureBlobDataAccessorTest {
   @Test
   public void testExpire() throws Exception {
     mockBlobExistence(true);
-    AzureBlobDataAccessor.UpdateResponse response =
-        dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("expirationTime", expirationTime));
+    AzureCloudDestination.UpdateResponse response =
+        dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("expirationTime", expirationTime),
+            dummyCloudUpdateValidator);
     assertTrue("Expected was updated", response.wasUpdated);
     assertNotNull("Expected metadata", response.metadata);
   }
@@ -238,7 +242,8 @@ public class AzureBlobDataAccessorTest {
     when(ex.getErrorCode()).thenReturn(BlobErrorCode.BLOB_NOT_FOUND);
     when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenThrow(ex);
     expectBlobStorageException(
-        () -> dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("expirationTime", expirationTime)));
+        () -> dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("expirationTime", expirationTime),
+            eq(dummyCloudUpdateValidator)));
   }
 
   /** Test file deletion. */

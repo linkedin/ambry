@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -94,6 +95,10 @@ public class BlobStore implements Store {
   // TODO remove this once ZK migration is complete
   private AtomicBoolean isSealed = new AtomicBoolean(false);
   protected PersistentIndex index;
+
+  // THIS IS ONLY FOR TEST.
+  volatile protected Callable<Void> operationBeforeSynchronization = null;
+  volatile protected Callable<Void> inDeleteBetweenGetEndOffsetAndFindKey = null;
 
   /**
    * States representing the different scenarios that can occur when a set of messages are to be written to the store.
@@ -431,6 +436,7 @@ public class BlobStore implements Store {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       MessageWriteSetStateInStore state = checkWriteSetStateInStore(messageSetToWrite, null);
       if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
+        maybeCallBeforeSynchronization();
         synchronized (storeWriteLock) {
           // Validate that log end offset was not changed. If changed, check once again for existing
           // keys in store
@@ -509,10 +515,20 @@ public class BlobStore implements Store {
       List<IndexValue> indexValuesToDelete = new ArrayList<>();
       List<Short> lifeVersions = new ArrayList<>();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      maybeCallInDeleteBetweenGetEndOffsetAndFindKey();
       for (MessageInfo info : infosToDelete) {
         IndexValue value = index.findKey(info.getStoreKey());
-        if (value == null) {
-          throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
+        // TODO: Passing a FileSpan the findKey and change the findKey implementation to fully restrict the index
+        // searching space to be limited within the given FileSpan.
+        if (value == null || (value.getOffset().compareTo(indexEndOffsetBeforeCheck) >= 0 && value.isPut())) {
+          // A temporary fix to deal with this particular corner case.
+          // Between calling index.getCurrentEndOffset and findKey method, there is a Put record of the same blob
+          // is inserted to index.
+          // index.getCurrentEndOffset should create a virtual snapshot for this delete method. Everything happens after
+          // this end offset would be considered as happening outside of the snapshot.
+          String reason =
+              value == null ? "it is not present in the index" : "PUT record is out of current offset before check";
+          throw new StoreException("Cannot delete id " + info.getStoreKey() + " because " + reason,
               StoreErrorCodes.ID_Not_Found);
         }
         if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
@@ -551,6 +567,7 @@ public class BlobStore implements Store {
           lifeVersions.add(info.getLifeVersion());
         }
       }
+      maybeCallBeforeSynchronization();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -560,8 +577,8 @@ public class BlobStore implements Store {
             IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
                 EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE,
                     PersistentIndex.IndexEntryType.UNDELETE));
-            if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) > 0) {
-              // Make sure the value is actually after the indeEndOffsetBeforeCheck
+            if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) >= 0) {
+              // Make sure the value is actually after the indexEndOffsetBeforeCheck
               if (value.isDelete() && value.getLifeVersion() == lifeVersions.get(i)) {
                 throw new StoreException(
                     "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
@@ -669,6 +686,7 @@ public class BlobStore implements Store {
         indexValuesToUpdate.add(value);
         lifeVersions.add(value.getLifeVersion());
       }
+      maybeCallBeforeSynchronization();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -776,13 +794,14 @@ public class BlobStore implements Store {
           metrics.undeleteAuthorizationFailureCount.inc();
         }
       }
+      maybeCallBeforeSynchronization();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
               EnumSet.of(PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE));
-          if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) > 0) {
+          if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) >= 0) {
             // Make sure the value is actually after the indexEndOffsetBeforeCheck
             if (value.isUndelete() && value.getLifeVersion() == revisedLifeVersion) {
               // Might get an concurrent undelete from both replication and frontend.
@@ -817,6 +836,26 @@ public class BlobStore implements Store {
           StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();
+    }
+  }
+
+  /**
+   * Call {@link #operationBeforeSynchronization} if it's not null. This is for testing only.
+   */
+  private void maybeCallBeforeSynchronization() throws Exception {
+    Callable<Void> callable = operationBeforeSynchronization;
+    if (callable != null) {
+      callable.call();
+    }
+  }
+
+  /**
+   * Call {@link #inDeleteBetweenGetEndOffsetAndFindKey} if it's not null. This is for testing only.
+   */
+  private void maybeCallInDeleteBetweenGetEndOffsetAndFindKey() throws Exception {
+    Callable<Void> callable = inDeleteBetweenGetEndOffsetAndFindKey;
+    if (callable != null) {
+      callable.call();
     }
   }
 
@@ -903,6 +942,13 @@ public class BlobStore implements Store {
   @Override
   public long getSizeInBytes() {
     return index.getLogUsedCapacity();
+  }
+
+  /**
+   * @return The number of byte been written to log
+   */
+  public long getLogEndOffsetInBytes() {
+    return log.getEndOffset().getOffset();
   }
 
   @Override

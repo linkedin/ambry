@@ -18,6 +18,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.DummyCloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -73,6 +74,7 @@ public class AzureIntegrationTest {
   private VerifiableProperties verifiableProperties;
   private AzureCloudDestination azureDest;
   private CloudRequestAgent cloudRequestAgent;
+  private DummyCloudUpdateValidator dummyCloudUpdateValidator = new DummyCloudUpdateValidator();
   private int blobSize = 1024;
   private byte dataCenterId = 66;
   private short accountId = 101;
@@ -158,7 +160,11 @@ public class AzureIntegrationTest {
 
     // ttl update
     long expirationTime = Utils.Infinite_Time;
-    assertTrue("Expected update to return true", updateBlobExpirationWithRetry(blobId, expirationTime));
+    try {
+      updateBlobExpirationWithRetry(blobId, expirationTime);
+    } catch (Exception ex) {
+      fail("Expected update to be successful");
+    }
     CloudBlobMetadata metadata =
         getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).
             get(blobId.getID());
@@ -167,9 +173,9 @@ public class AzureIntegrationTest {
     // delete blob
     long deletionTime = now + 10000;
     //TODO add a test case here to verify life version after delete.
-    assertTrue("Expected deletion to return true",
-        cloudRequestAgent.doWithRetries(() -> azureDest.deleteBlob(blobId, deletionTime, (short) 0), "DeleteBlob",
-            partitionId.toPathString()));
+    assertTrue("Expected deletion to return true", cloudRequestAgent.doWithRetries(
+        () -> azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator), "DeleteBlob",
+        partitionId.toPathString()));
     metadata =
         getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).get(blobId.getID());
     assertEquals(deletionTime, metadata.getDeletionTime());
@@ -191,9 +197,9 @@ public class AzureIntegrationTest {
     // delete after undelete.
     long newDeletionTime = now + 20000;
     //TODO add a test case here to verify life version after delete.
-    assertTrue("Expected deletion to return true",
-        cloudRequestAgent.doWithRetries(() -> azureDest.deleteBlob(blobId, newDeletionTime, (short) 3), "DeleteBlob",
-            partitionId.toPathString()));
+    assertTrue("Expected deletion to return true", cloudRequestAgent.doWithRetries(
+        () -> azureDest.deleteBlob(blobId, newDeletionTime, (short) 3, dummyCloudUpdateValidator), "DeleteBlob",
+        partitionId.toPathString()));
     metadata =
         getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString()).get(blobId.getID());
     assertEquals(newDeletionTime, metadata.getDeletionTime());
@@ -422,9 +428,9 @@ public class AzureIntegrationTest {
     // Case 1: concurrent modification to blob metadata.
     azureDest.getAzureBlobDataAccessor()
         .setUpdateCallback(() -> concurrentUpdater.getAzureBlobDataAccessor()
-            .updateBlobMetadata(blobId, Collections.singletonMap(fieldName, newUploadTime)));
+            .updateBlobMetadata(blobId, Collections.singletonMap(fieldName, newUploadTime), dummyCloudUpdateValidator));
     try {
-      azureDest.updateBlobExpiration(blobId, ++now);
+      azureDest.updateBlobExpiration(blobId, ++now, dummyCloudUpdateValidator);
       fail("Expected 412 error");
     } catch (CloudStorageException csex) {
       // TODO: check nested exception is BlobStorageException with status code 412
@@ -433,15 +439,19 @@ public class AzureIntegrationTest {
     // Case 2: concurrent modification to Cosmos record.
     azureDest.getCosmosDataAccessor()
         .setUpdateCallback(() -> concurrentUpdater.getCosmosDataAccessor()
-            .updateMetadata(blobId, Collections.singletonMap(fieldName, newUploadTime)));
+            .updateMetadata(blobId, Collections.singletonMap(fieldName, Long.toString(newUploadTime))));
     try {
-      azureDest.updateBlobExpiration(blobId, ++now);
+      azureDest.updateBlobExpiration(blobId, ++now, dummyCloudUpdateValidator);
       fail("Expected 412 error");
     } catch (CloudStorageException csex) {
       assertEquals("Expected update conflict", 2, azureDest.getAzureMetrics().blobUpdateConflictCount.getCount());
     }
     azureDest.getCosmosDataAccessor().setUpdateCallback(null);
-    assertTrue("Expected update to return true", azureDest.updateBlobExpiration(blobId, ++now));
+    try {
+      azureDest.updateBlobExpiration(blobId, ++now, dummyCloudUpdateValidator);
+    } catch (Exception ex) {
+      fail("Expected update to succeed.");
+    }
     assertEquals("Expected no new update conflict", 2, azureDest.getAzureMetrics().blobUpdateConflictCount.getCount());
   }
 
@@ -462,8 +472,11 @@ public class AzureIntegrationTest {
     azureDest.getCosmosDataAccessor().deleteMetadata(cloudBlobMetadata);
 
     // Now update the blob and see if it gets fixed
-    azureDest.updateBlobExpiration(blobId, Utils.Infinite_Time);
-    assertNotNull("Expected Cosmos to have record", azureDest.getCosmosDataAccessor().getMetadataOrNull(blobId));
+    azureDest.updateBlobExpiration(blobId, Utils.Infinite_Time, dummyCloudUpdateValidator);
+    List<CloudBlobMetadata> resultList = azureDest.getCosmosDataAccessor()
+        .queryMetadata(partitionId.toPathString(), "SELECT * FROM c WHERE c.id = '" + blobId.getID() + "'",
+            azureDest.getAzureMetrics().missingKeysQueryTime);
+    assertEquals("Expected record to exist", 1, resultList.size());
   }
 
   /** Test that incomplete compaction get fixed on update. */
@@ -481,13 +494,18 @@ public class AzureIntegrationTest {
 
     // Mark it deleted in the past
     long deletionTime = now - TimeUnit.DAYS.toMillis(7);
-    assertTrue("Expected delete to return true", azureDest.deleteBlob(blobId, deletionTime, (short) 0));
+    assertTrue("Expected delete to return true",
+        azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator));
 
     // Simulate incomplete compaction by purging it from ABS only
     azureDest.getAzureBlobDataAccessor().purgeBlobs(Collections.singletonList(cloudBlobMetadata));
 
     // Try to delete again (to trigger recovery), verify removed from Cosmos
-    assertFalse("Expected delete to return false", azureDest.deleteBlob(blobId, deletionTime, (short) 0));
+    try {
+      azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator);
+    } catch (CloudStorageException cex) {
+      assertEquals("Unexpected error code", HttpConstants.StatusCodes.NOTFOUND, cex.getStatusCode());
+    }
     assertNull("Expected record to be purged from Cosmos", azureDest.getCosmosDataAccessor().getMetadataOrNull(blobId));
   }
 
@@ -516,6 +534,7 @@ public class AzureIntegrationTest {
   /**
    * Test findEntriesSince with CosmosChangeFeedFindTokenFactory.
    */
+  @Ignore
   @Test
   public void testFindEntriesSinceByChangeFeed() throws Exception {
     testFindEntriesSince("com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory");
@@ -597,12 +616,13 @@ public class AzureIntegrationTest {
    * Update blob expiration. Retry with appropriate throttling if required.
    * @param blobId id of the Ambry blob.
    * @param expirationTime the new expiration time.
-   * @return flag indicating whether the blob was updated
+   * @return updated lifeversion.
    * @throws CloudStorageException if update encounters an error.
    */
-  private boolean updateBlobExpirationWithRetry(BlobId blobId, long expirationTime) throws CloudStorageException {
-    return cloudRequestAgent.doWithRetries(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
-        "UpdateBlobExpiration", blobId.getPartition().toPathString());
+  private short updateBlobExpirationWithRetry(BlobId blobId, long expirationTime) throws CloudStorageException {
+    return cloudRequestAgent.doWithRetries(
+        () -> azureDest.updateBlobExpiration(blobId, expirationTime, dummyCloudUpdateValidator), "UpdateBlobExpiration",
+        blobId.getPartition().toPathString());
   }
 
   /**
@@ -629,8 +649,8 @@ public class AzureIntegrationTest {
    * @throws CloudStorageException if updating life version fails.
    */
   private short undeleteBlobWithRetry(BlobId blobId, short lifeVersion) throws CloudStorageException {
-    return cloudRequestAgent.doWithRetries(() -> azureDest.undeleteBlob(blobId, lifeVersion), "Undelete",
-        blobId.getPartition().toPathString());
+    return cloudRequestAgent.doWithRetries(() -> azureDest.undeleteBlob(blobId, lifeVersion, dummyCloudUpdateValidator),
+        "Undelete", blobId.getPartition().toPathString());
   }
 
   /**

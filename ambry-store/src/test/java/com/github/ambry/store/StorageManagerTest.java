@@ -669,6 +669,10 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
+  /**
+   * Test setting blob stop state in two clusters (if server participates into two Helix clusters)
+   * @throws Exception
+   */
   @Test
   public void setBlobStoreStoppedStateWithMultiDelegatesTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
@@ -680,12 +684,12 @@ public class StorageManagerTest {
     storageManager.start();
     PartitionId id = replicas.get(0).getPartitionId();
     // test that any delegate fails to update stop state, then the whole operation fails
-    List<PartitionId> failToUpdateList = storageManager.setBlobStoreStoppedState(Arrays.asList(id), true);
+    List<PartitionId> failToUpdateList = storageManager.setBlobStoreStoppedState(Collections.singletonList(id), true);
     assertEquals("Set store stopped state should fail because one of delegates returns false", id,
         failToUpdateList.get(0));
     // test the success case, both delegates succeed in updating stop state of replica
     mockClusterParticipant2.setStopStateReturnVal = null;
-    failToUpdateList = storageManager.setBlobStoreStoppedState(Arrays.asList(id), true);
+    failToUpdateList = storageManager.setBlobStoreStoppedState(Collections.singletonList(id), true);
     assertTrue("Set store stopped state should succeed", failToUpdateList.isEmpty());
     // verify both delegates have the correct stopped replica list.
     List<String> expectedStoppedReplicas = Collections.singletonList(id.toPathString());
@@ -693,6 +697,33 @@ public class StorageManagerTest {
         mockClusterParticipant1.getStoppedReplicas());
     assertEquals("Stopped replica list from participant 2 is not expected", expectedStoppedReplicas,
         mockClusterParticipant2.getStoppedReplicas());
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
+  }
+
+  /**
+   * Test that, if store is not started, all participants on this node are able to mark it in ERROR state during
+   * OFFLINE -> BOOTSTRAP transition.
+   * @throws Exception
+   */
+  @Test
+  public void multiParticipantsMarkStoreInErrorStateTest() throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    List<ClusterParticipant> participants = Arrays.asList(new MockClusterParticipant(), new MockClusterParticipant());
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, participants);
+    storageManager.start();
+    // stop one of the stores to induce transition failure
+    PartitionId id = replicas.get(0).getPartitionId();
+    storageManager.shutdownBlobStore(id);
+    // verify that both participants throw exception during OFFLINE -> BOOTSTRAP transition
+    for (ClusterParticipant participant : participants) {
+      try {
+        ((MockClusterParticipant) participant).onPartitionBecomeBootstrapFromOffline(id.toPathString());
+        fail("should fail because store is not started");
+      } catch (StateTransitionException e) {
+        assertEquals("Error code doesn't match", StoreNotStarted, e.getErrorCode());
+      }
+    }
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 

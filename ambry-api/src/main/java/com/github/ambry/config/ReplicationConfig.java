@@ -202,6 +202,20 @@ public class ReplicationConfig {
   @Default("false")
   public final boolean replicationEnableHttp2;
 
+  /**
+   * How long (in days) a container must be replicated before it's been deleted during compaction.
+   */
+  @Config("replication.container.deletion.retention.days")
+  @Default("14")
+  public final int replicationContainerDeletionRetentionDays;
+
+  /**
+   * True to enable skip deprecated containers in replication.
+   */
+  @Config("replication.container.deletion.enabled")
+  @Default("false")
+  public final boolean replicationContainerDeletionEnabled;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationStoreTokenFactory =
@@ -247,5 +261,8 @@ public class ReplicationConfig {
     replicationModelType = ReplicationModelType.valueOf(
         verifiableProperties.getString("replication.model.across.datacenters", ReplicationModelType.ALL_TO_ALL.name()));
     replicationEnableHttp2 = verifiableProperties.getBoolean("replication.enable.http2", false);
+    replicationContainerDeletionRetentionDays = verifiableProperties.getInt("replication.container.deletion.retention.days", 14);
+    replicationContainerDeletionEnabled =
+        verifiableProperties.getBoolean("replication.container.deletion.enabled", false);
   }
 }

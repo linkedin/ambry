@@ -68,6 +68,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -111,6 +112,7 @@ public class ReplicaThread implements Runnable {
   private final Condition pauseCondition = lock.newCondition();
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final int maxReplicaCountPerRequest;
+  private final Predicate skipPredicate;
   private volatile boolean allDisabled = false;
   private final PartitionLeaderInfo partitionLeaderInfo;
 
@@ -119,10 +121,10 @@ public class ReplicaThread implements Runnable {
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager) {
+      ReplicaSyncUpManager replicaSyncUpManager, Predicate skipPredicate) {
     this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
-        datacenterName, responseHandler, time, replicaSyncUpManager, null);
+        datacenterName, responseHandler, time, replicaSyncUpManager, null, skipPredicate);
   }
 
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
@@ -130,7 +132,7 @@ public class ReplicaThread implements Runnable {
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager, PartitionLeaderInfo partitionLeaderInfo) {
+      ReplicaSyncUpManager replicaSyncUpManager, PartitionLeaderInfo partitionLeaderInfo, Predicate skipPredicate) {
     this.threadName = threadName;
     this.running = true;
     this.findTokenHelper = findTokenHelper;
@@ -150,6 +152,7 @@ public class ReplicaThread implements Runnable {
     this.datacenterName = datacenterName;
     this.time = time;
     this.replicaSyncUpManager = replicaSyncUpManager;
+    this.skipPredicate = skipPredicate;
     if (replicatingFromRemoteColo) {
       threadThrottleDurationMs = replicationConfig.replicationInterReplicaThreadThrottleSleepDurationMs;
       syncedBackOffCount = replicationMetrics.interColoReplicaSyncedBackoffCount;
@@ -588,7 +591,7 @@ public class ReplicaThread implements Runnable {
    * @throws ReplicationException
    * @throws IOException
    */
-  private ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
+   ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       ConnectedChannel connectedChannel, DataNodeId remoteNode) throws ReplicationException, IOException {
     long replicaMetadataRequestStartTime = SystemTime.getInstance().milliseconds();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
@@ -646,7 +649,7 @@ public class ReplicaThread implements Runnable {
    * @return List of store messages that are missing from the local store
    * @throws StoreException if store error (usually IOError) occurs when getting missing keys.
    */
-  private Set<MessageInfo> getMissingStoreMessages(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
+   Set<MessageInfo> getMissingStoreMessages(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
       DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
@@ -657,7 +660,7 @@ public class ReplicaThread implements Runnable {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key from remote: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), storeKey);
       StoreKey convertedKey = storeKeyConverter.getConverted(storeKey);
-      if (convertedKey != null) {
+      if (convertedKey != null && (!replicationConfig.replicationContainerDeletionEnabled || skipPredicate == null || !skipPredicate.test(messageInfo))) {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
     }
@@ -779,7 +782,7 @@ public class ReplicaThread implements Runnable {
               }
               applyTtlUpdate(info, remoteReplicaInfo);
             } else {
-              // if final state is not delete, then to bump lifeVerion in local store to remote lifeVersion, we have to
+              // if final state is not delete, then to bump lifeVersion in local store to remote lifeVersion, we have to
               // add a undelete, and then add a ttl update.
               shouldInsertTtlUpdate = true;
             }

@@ -45,6 +45,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
@@ -66,10 +67,10 @@ public class ReplicationManager extends ReplicationEngine {
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      ClusterParticipant clusterParticipant) throws ReplicationException {
+      ClusterParticipant clusterParticipant, Predicate skipPredicate) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
-        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager);
+        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, skipPredicate);
     this.storeConfig = storeConfig;
     this.currentNode = dataNode;
     trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;

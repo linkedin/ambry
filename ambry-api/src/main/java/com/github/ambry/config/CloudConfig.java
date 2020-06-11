@@ -58,6 +58,7 @@ public class CloudConfig {
   public static final String VCR_CLUSTER_SPECTATOR_FACTORY_CLASS = "vcr.cluster.spectator.factory.class";
   // Comma separated names of datacenter(s) which the VCR replicate from.
   public static final String VCR_SOURCE_DATACENTERS = "vcr.source.datacenters";
+  public static final String CLOUD_COMPACTION_NUM_THREADS = "cloud.compaction.num.threads";
 
   public static final String DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS =
       "com.github.ambry.cloud.StaticVcrClusterFactory";
@@ -85,6 +86,7 @@ public class CloudConfig {
   public static final int DEFAULT_QUERY_TIMEOUT = 60000;
   public static final int DEFAULT_BATCH_TIMEOUT = 60000;
   public static final int DEFAULT_VCR_PROXY_PORT = 3128;
+  public static final int DEFAULT_CLOUD_COMPACTION_NUM_THREADS = 4;
   public static final String DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS =
       "com.github.ambry.clustermap.HelixClusterSpectatorFactory";
 
@@ -321,6 +323,9 @@ public class CloudConfig {
   @Default("")
   public final Set<String> vcrSourceDatacenters;
 
+  @Config(CLOUD_COMPACTION_NUM_THREADS)
+  public final int cloudCompactionNumThreads;
+
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
     cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
@@ -357,6 +362,8 @@ public class CloudConfig {
         verifiableProperties.getInt(CLOUD_COMPACTION_QUERY_BUCKET_DAYS, DEFAULT_COMPACTION_QUERY_BUCKET_DAYS);
     cloudCompactionPurgeLimit =
         verifiableProperties.getInt(CLOUD_COMPACTION_PURGE_LIMIT, DEFAULT_COMPACTION_PURGE_LIMIT);
+    cloudCompactionNumThreads =
+        verifiableProperties.getInt(CLOUD_COMPACTION_NUM_THREADS, DEFAULT_CLOUD_COMPACTION_NUM_THREADS);
     recentBlobCacheLimit = verifiableProperties.getInt(CLOUD_RECENT_BLOB_CACHE_LIMIT, DEFAULT_RECENT_BLOB_CACHE_LIMIT);
     cloudMaxAttempts = verifiableProperties.getInt(CLOUD_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS);
     cloudDefaultRetryDelay = verifiableProperties.getInt(CLOUD_DEFAULT_RETRY_DELAY, DEFAULT_RETRY_DELAY_VALUE);

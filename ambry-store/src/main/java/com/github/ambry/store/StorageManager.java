@@ -199,13 +199,12 @@ public class StorageManager implements StoreManager {
         startupThread.join();
       }
       metrics.initializeCompactionThreadsTracker(this, diskToDiskManager.size());
-      if (primaryParticipant != null) {
-        primaryParticipant.registerPartitionStateChangeListener(StateModelListenerType.StorageManagerListener,
-            new PartitionStateChangeListenerImpl());
-      }
       if (clusterParticipants != null) {
-        clusterParticipants.forEach(
-            participant -> participant.setInitialLocalPartitions(partitionNameToReplicaId.keySet()));
+        clusterParticipants.forEach(participant -> {
+          participant.registerPartitionStateChangeListener(StateModelListenerType.StorageManagerListener,
+              new PartitionStateChangeListenerImpl());
+          participant.setInitialLocalPartitions(partitionNameToReplicaId.keySet());
+        });
       }
       diskToDiskManager.values().forEach(diskManager -> unexpectedDirs.addAll(diskManager.getUnexpectedDirs()));
       logger.info("Starting storage manager complete");

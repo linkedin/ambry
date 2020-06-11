@@ -15,6 +15,7 @@
 
 package com.github.ambry.frontend;
 
+import com.github.ambry.utils.Utils;
 import java.util.AbstractList;
 import java.util.Collections;
 import java.util.List;
@@ -57,17 +58,7 @@ public class StitchRequestSerDe {
     if (signedChunkIds == null) {
       return Collections.emptyList();
     } else {
-      return new AbstractList<String>() {
-        @Override
-        public String get(int index) {
-          return signedChunkIds.getString(index);
-        }
-
-        @Override
-        public int size() {
-          return signedChunkIds.length();
-        }
-      };
+      return Utils.listView(signedChunkIds::length, signedChunkIds::getString);
     }
   }
 }

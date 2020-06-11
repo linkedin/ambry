@@ -67,7 +67,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
         virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool,
         vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null,
-        storeManager);
+        storeManager, null);
     this.cloudConfig = cloudConfig;
     this.storeConfig = storeConfig;
     this.virtualReplicatorCluster = virtualReplicatorCluster;

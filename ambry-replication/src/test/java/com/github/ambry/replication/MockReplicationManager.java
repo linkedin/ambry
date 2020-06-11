@@ -88,7 +88,7 @@ public class MockReplicationManager extends ReplicationManager {
             return null;
           }
         }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
-        BlobIdTransformer.class.getName(), clusterParticipant);
+        BlobIdTransformer.class.getName(), clusterParticipant, null);
     reset();
   }
 

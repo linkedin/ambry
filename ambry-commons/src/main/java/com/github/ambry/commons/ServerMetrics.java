@@ -157,6 +157,10 @@ public class ServerMetrics {
   public final Histogram serverStartTimeInMs;
   public final Histogram serverShutdownTimeInMs;
 
+  // AmbryServerSecurityService
+  public final Histogram securityServiceValidateConnectionTimeInMs;
+  public final Histogram securityServiceValidateRequestTimeInMs;
+
   public final Meter putBlobRequestRate;
   public final Meter getBlobRequestRate;
   public final Meter getBlobPropertiesRequestRate;
@@ -182,6 +186,10 @@ public class ServerMetrics {
 
   public final Meter putLargeBlobRequestRate;
   public final Meter getLargeBlobRequestRate;
+
+  // AmbryServerSecurityService
+  public final Meter securityServiceValidateConnectionRate;
+  public final Meter securityServiceValidateRequestRate;
 
   public final Counter partitionUnknownError;
   public final Counter diskUnavailableError;
@@ -215,6 +223,9 @@ public class ServerMetrics {
   public final Counter replicationResponseMessageSizeTooHigh;
   public Counter sealedReplicasMismatchCount = null;
   public Counter stoppedReplicasMismatchCount = null;
+  // AmbryServerSecurityService
+  public final Counter serverValidateConnectionSuccess;
+  public final Counter serverValidateConnectionFailure;
 
   public final Map<String, Meter> crossColoFetchBytesRate = new ConcurrentHashMap<>();
   public final Map<String, Meter> crossColoMetadataExchangeBytesRate = new ConcurrentHashMap<>();
@@ -422,6 +433,11 @@ public class ServerMetrics {
       serverShutdownTimeInMs = null;
     }
 
+    securityServiceValidateConnectionTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "SecurityServiceValidateConnectionTimeInMs"));
+    securityServiceValidateRequestTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "SecurityServiceValidateRequestTimeInMs"));
+
     putBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutBlobRequestRate"));
     getBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobRequestRate"));
     getBlobPropertiesRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobPropertiesRequestRate"));
@@ -449,6 +465,11 @@ public class ServerMetrics {
 
     putLargeBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutLargeBlobRequestRate"));
     getLargeBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetLargeBlobRequestRate"));
+
+    securityServiceValidateConnectionRate =
+        registry.meter(MetricRegistry.name(requestClass, "SecurityServiceValidateConnectionRate"));
+    securityServiceValidateRequestRate =
+        registry.meter(MetricRegistry.name(requestClass, "SecurityServiceValidateRequestRate"));
 
     partitionUnknownError = registry.counter(MetricRegistry.name(requestClass, "PartitionUnknownError"));
     diskUnavailableError = registry.counter(MetricRegistry.name(requestClass, "DiskUnavailableError"));
@@ -485,6 +506,10 @@ public class ServerMetrics {
     ttlUpdateRejectedError = registry.counter(MetricRegistry.name(requestClass, "TtlUpdateRejectedError"));
     replicationResponseMessageSizeTooHigh =
         registry.counter(MetricRegistry.name(requestClass, "ReplicationResponseMessageSizeTooHigh"));
+    serverValidateConnectionSuccess =
+        registry.counter(MetricRegistry.name(requestClass, "ServerValidateConnectionSuccess"));
+    serverValidateConnectionFailure =
+        registry.counter(MetricRegistry.name(requestClass, "ServerValidateConnectionFailure"));
   }
 
   public void registerParticipantsMismatchMetrics() {
