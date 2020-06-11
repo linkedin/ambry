@@ -172,4 +172,12 @@ public class ServerSSLTest {
     ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3", PortType.SSL,
         sslCluster, notificationSystem, routerProps);
   }
+
+  @Test
+  public void undeleteCornerCasesTest() throws Exception {
+    sslCluster.startServers();
+    ServerTestUtil.undeleteCornerCasesTest(sslCluster, PortType.SSL, clientSSLConfig1, clientSSLConfig2,
+        clientSSLConfig3, clientSSLSocketFactory1, clientSSLSocketFactory2, clientSSLSocketFactory3, notificationSystem,
+        routerProps, testEncryption);
+  }
 }

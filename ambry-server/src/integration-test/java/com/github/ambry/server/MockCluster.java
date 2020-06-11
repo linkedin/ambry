@@ -369,7 +369,7 @@ public class MockCluster {
     }
   }
 
-  public List<DataNodeId> getOneDataNodeFromEachDatacenter(ArrayList<String> datacenterList) {
+  public List<DataNodeId> getOneDataNodeFromEachDatacenter(List<String> datacenterList) {
     HashSet<String> datacenters = new HashSet<String>();
     List<DataNodeId> toReturn = new ArrayList<DataNodeId>();
     for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
