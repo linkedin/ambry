@@ -118,12 +118,12 @@ public class AzureStorageCompactor {
       long deletionStartTime = Math.max(queryStartTime, checkpoints.get(CloudBlobMetadata.FIELD_DELETION_TIME));
       int numPurged =
           compactPartition(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, deletionStartTime, queryEndTime);
-      logger.info("Purged {} deleted blobs in partition {} up to {}", numPurged, partitionPath, queryEndDate);
+      logger.info("Purged {} deleted blobs in partition {}", numPurged, partitionPath);
       totalBlobsPurged += numPurged;
       long expirationStartTime = Math.max(queryStartTime, checkpoints.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME));
       numPurged =
           compactPartition(partitionPath, CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationStartTime, queryEndTime);
-      logger.info("Purged {} expired blobs in partition {} up to {}", numPurged, partitionPath, queryEndDate);
+      logger.info("Purged {} expired blobs in partition {}", numPurged, partitionPath);
       totalBlobsPurged += numPurged;
     } catch (CloudStorageException ex) {
       logger.error("Compaction failed for partition {}", partitionPath, ex);
@@ -161,8 +161,6 @@ public class AzureStorageCompactor {
       int numPurged = compactPartitionBucketed(partitionPath, fieldName, bucketStartTime, bucketEndTime);
       totalPurged += numPurged;
 
-      updateCompactionProgress(partitionPath, fieldName, bucketEndTime);
-
       bucketStartTime += bucketTimeRange;
       if (isShuttingDown()) {
         logger.debug("Shutting down for partition {}.", partitionPath);
@@ -172,13 +170,6 @@ public class AzureStorageCompactor {
       if (totalPurged >= purgeLimit) {
         logger.debug("Reached limit for partition {} with {} blobs purged.", partitionPath, totalPurged);
         break;
-      }
-
-      if (numPurged == 0) {
-        // TODO: Consider backing off since the last query might have been expensive
-      } else {
-        logger.info("Purged {} blobs in partition {} up to {} {}", totalPurged, partitionPath, fieldName,
-            new Date(bucketEndTime));
       }
     }
     return totalPurged;
@@ -202,12 +193,14 @@ public class AzureStorageCompactor {
     }
 
     int totalPurged = 0;
+    long latestTime = 0;
     while (!isShuttingDown()) {
 
       final long newQueryStartTime = queryStartTime; // just to use in lambda
       List<CloudBlobMetadata> deadBlobs = requestAgent.doWithRetries(
           () -> getDeadBlobs(partitionPath, fieldName, newQueryStartTime, queryEndTime, queryLimit), "GetDeadBlobs",
           partitionPath);
+      // TODO: if nothing returned, can we update progress til queryEndTime?
       if (deadBlobs.isEmpty() || isShuttingDown()) {
         break;
       }
@@ -216,7 +209,7 @@ public class AzureStorageCompactor {
 
       // Adjust startTime for next query
       CloudBlobMetadata lastBlob = deadBlobs.get(deadBlobs.size() - 1);
-      long latestTime = fieldName.equals(CloudBlobMetadata.FIELD_DELETION_TIME) ? lastBlob.getDeletionTime()
+      latestTime = fieldName.equals(CloudBlobMetadata.FIELD_DELETION_TIME) ? lastBlob.getDeletionTime()
           : lastBlob.getExpirationTime();
       logger.info("Purged partition {} up to {} {}", partitionPath, fieldName, new Date(latestTime));
       queryStartTime = latestTime;
@@ -230,6 +223,10 @@ public class AzureStorageCompactor {
         // Reached the purge threshold, give other partitions a chance.
         break;
       }
+    }
+
+    if (totalPurged > 0) {
+      updateCompactionProgress(partitionPath, fieldName, latestTime);
     }
     return totalPurged;
   }

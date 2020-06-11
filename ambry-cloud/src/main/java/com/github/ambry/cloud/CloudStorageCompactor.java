@@ -60,6 +60,7 @@ public class CloudStorageCompactor implements Runnable {
     this.shutDownTimeoutSecs = cloudConfig.cloudBlobCompactionShutdownTimeoutSecs;
     this.numThreads = cloudConfig.cloudCompactionNumThreads;
     compactionTimeLimitMs = TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours);
+    logger.info("Allocating {} threads for compaction", numThreads);
     executorService = Executors.newFixedThreadPool(numThreads);
     executorCompletionService = new ExecutorCompletionService<>(executorService);
     doneLatch.set(new CountDownLatch(0));
@@ -175,9 +176,9 @@ public class CloudStorageCompactor implements Runnable {
       return 0;
     }
 
-    logger.info("Beginning dead blob compaction for partition {}", partition);
-
     String partitionPath = partition.toPathString();
+    logger.info("Beginning dead blob compaction for partition {}", partitionPath);
+
     if (!partitions.contains(partition)) {
       // Looks like partition was reassigned since the loop started, so skip it
       logger.warn("Skipping compaction of Partition {} as the partition was reassigned", partition);
