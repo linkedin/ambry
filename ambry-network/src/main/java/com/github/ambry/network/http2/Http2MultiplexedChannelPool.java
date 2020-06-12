@@ -20,7 +20,6 @@ package com.github.ambry.network.http2;
 import com.github.ambry.commons.NettyUtils;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
-import com.github.ambry.config.VerifiableProperties;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
@@ -43,8 +42,8 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -186,13 +185,16 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
       return promise.setFailure(new IOException("Channel pool is closed!"));
     }
 
+    // Only when number of connections reach http2MinConnectionPerPort, we reuse connections.
     if (parentConnections.size() >= http2ClientConfig.http2MinConnectionPerPort) {
-      // TODO: if warmup is not 100%, new connections are still required.
-      // This is a passive load balance depends on compareAndSet in claimStream().
-      for (MultiplexedChannelRecord multiplexedChannel : parentConnections) {
-        if (acquireStreamOnInitializedConnection(multiplexedChannel, promise)) {
+      List<MultiplexedChannelRecord> multiplexedChannelRecords = new ArrayList<>(parentConnections);
+      Collections.shuffle(multiplexedChannelRecords);
+      // Attempt at most multiplexedChannelRecords.size(). No slip acquire expected.
+      for (MultiplexedChannelRecord multiplexedChannelRecord : multiplexedChannelRecords) {
+        if (acquireStreamOnInitializedConnection(multiplexedChannelRecord, promise)) {
           return promise;
         }
+        log.warn("Stream slip acquire on {}", inetSocketAddress);
         http2ClientMetrics.http2StreamSlipAcquireCount.inc();
       }
     }

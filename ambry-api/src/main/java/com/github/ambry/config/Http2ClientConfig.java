@@ -135,7 +135,8 @@ public class Http2ClientConfig {
 
   public Http2ClientConfig(VerifiableProperties verifiableProperties) {
     idleConnectionTimeoutMs = verifiableProperties.getLong(HTTP2_IDLE_CONNECTION_TIMEOUT_MS, -1);
-    http2MinConnectionPerPort = verifiableProperties.getInt(HTTP2_MIN_CONNECTION_PER_PORT, 2);
+    http2MinConnectionPerPort =
+        verifiableProperties.getIntInRange(HTTP2_MIN_CONNECTION_PER_PORT, 2, 1, Integer.MAX_VALUE);
     http2MaxConcurrentStreamsPerConnection =
         verifiableProperties.getIntInRange(HTTP2_MAX_CONCURRENT_STREAMS_PER_CONNECTION, Integer.MAX_VALUE, 1,
             Integer.MAX_VALUE);
