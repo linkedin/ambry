@@ -185,15 +185,18 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
       return promise.setFailure(new IOException("Channel pool is closed!"));
     }
 
-    List<MultiplexedChannelRecord> multiplexedChannelRecords = new ArrayList<>(parentConnections);
-    Collections.shuffle(multiplexedChannelRecords);
-    // Attempt at most multiplexedChannelRecords.size(). No slip acquire expected.
-    for (MultiplexedChannelRecord multiplexedChannelRecord : multiplexedChannelRecords) {
-      if (acquireStreamOnInitializedConnection(multiplexedChannelRecord, promise)) {
-        return promise;
+    // Only when number of connections reach http2MinConnectionPerPort, we reuse connections.
+    if (parentConnections.size() >= http2ClientConfig.http2MinConnectionPerPort) {
+      List<MultiplexedChannelRecord> multiplexedChannelRecords = new ArrayList<>(parentConnections);
+      Collections.shuffle(multiplexedChannelRecords);
+      // Attempt at most multiplexedChannelRecords.size(). No slip acquire expected.
+      for (MultiplexedChannelRecord multiplexedChannelRecord : multiplexedChannelRecords) {
+        if (acquireStreamOnInitializedConnection(multiplexedChannelRecord, promise)) {
+          return promise;
+        }
+        log.warn("Stream slip acquire on {}", inetSocketAddress);
+        http2ClientMetrics.http2StreamSlipAcquireCount.inc();
       }
-      log.warn("Stream slip acquire on {}", inetSocketAddress);
-      http2ClientMetrics.http2StreamSlipAcquireCount.inc();
     }
 
     // No connection or No available streams on existing connections, establish new connection and add it to set.
