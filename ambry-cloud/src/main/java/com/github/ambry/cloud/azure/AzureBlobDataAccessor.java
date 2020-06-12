@@ -192,7 +192,7 @@ public class AzureBlobDataAccessor {
   }
 
   /**
-   * Upload a file to blob storage.
+   * Upload a file to blob storage.  Any existing file with the same name will be replaced.
    * @param containerName name of the container where blob is stored.
    * @param fileName the blob filename.
    * @param inputStream the input stream to use for upload.
@@ -236,6 +236,22 @@ public class AzureBlobDataAccessor {
         throw e;
       }
     }
+  }
+
+  /**
+   * Delete a file from blob storage, if it exists.
+   * @param containerName name of the container containing file to delete.
+   * @param fileName name of the file to delete.
+   * @return true if the file was deleted, otherwise false.
+   * @throws BlobStorageException for any error on ABS side.
+   */
+  boolean deleteFile(String containerName, String fileName) throws BlobStorageException {
+    BlockBlobClient blobClient = getBlockBlobClient(containerName, fileName, false);
+    if (blobClient.exists()) {
+      blobClient.delete();
+      return true;
+    }
+    return false;
   }
 
   /**

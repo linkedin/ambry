@@ -20,9 +20,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.PartitionInfo;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.junit.Test;
@@ -58,51 +56,34 @@ public class CloudStorageCompactorTest {
   public void testCompactPartitions() throws Exception {
     // start with empty map
     assertEquals(0, compactor.compactPartitions());
-    /*
-    verify(mockDest, times(0)).getDeletedBlobs(anyString(), anyLong(), anyLong(), anyInt());
-    verify(mockDest, times(0)).getExpiredBlobs(anyString(), anyLong(), anyLong(), anyInt());
-    verify(mockDest, times(0)).purgeBlobs(any());
-    */
 
-    // add 100 partitions to map
+    int numPartitions = 40;
+    // add partitions to map
     String defaultClass = MockClusterMap.DEFAULT_PARTITION_CLASS;
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < numPartitions; i++) {
       partitionMap.put(new MockPartitionId(i, defaultClass), null);
       when(mockDest.compactPartition(eq(Integer.toString(i)))).thenReturn(pageSize);
     }
 
-    assertEquals(pageSize * 100, compactor.compactPartitions());
+    assertEquals(pageSize * numPartitions, compactor.compactPartitions());
+    assertEquals(0, vcrMetrics.compactionFailureCount.getCount());
 
     // remove a partition from map
     partitionMap.remove(new MockPartitionId(0, defaultClass));
-    assertEquals(pageSize * 99, compactor.compactPartitions());
+    assertEquals(pageSize * (numPartitions - 1), compactor.compactPartitions());
+    assertEquals(0, vcrMetrics.compactionFailureCount.getCount());
+
+    // Make compaction fail for some partitions
+    CloudStorageException csex = new CloudStorageException("failure", new RuntimeException("Don't hurt me!"));
+    when(mockDest.compactPartition(eq("2"))).thenThrow(csex);
+    when(mockDest.compactPartition(eq("20"))).thenThrow(csex);
+    assertEquals(pageSize * (numPartitions - 3), compactor.compactPartitions());
+    assertEquals(2, vcrMetrics.compactionFailureCount.getCount());
 
     // Test shutdown
     assertFalse("Should not be shutting down yet", compactor.isShutDown());
     compactor.shutdown();
     assertTrue("Should be shutting down now", compactor.isShutDown());
     // TODO: test shutting down with compaction still in progress (more involved)
-  }
-
-  /**
-   * Utility method to create a list of CloudBlobMetadata to be returned by getDeadBlobs call.
-   * @param partitionId the partitionId string.
-   * @param numBlobs the number of dead blobs to return.
-   * @param endTime the compaction end time to use.
-   * @param isDeleted true for deleted blobs, false for expired.
-   * @return
-   */
-  private List<CloudBlobMetadata> getDeadBlobsList(String partitionId, int numBlobs, long endTime, boolean isDeleted) {
-    List<CloudBlobMetadata> metadataList = new ArrayList<>();
-    for (int j = 0; j < numBlobs; j++) {
-      CloudBlobMetadata metadata = new CloudBlobMetadata().setPartitionId(partitionId).setId("blob_" + j);
-      if (isDeleted) {
-        metadata.setDeletionTime(endTime - j);
-      } else {
-        metadata.setExpirationTime(endTime - j);
-      }
-      metadataList.add(metadata);
-    }
-    return metadataList;
   }
 }

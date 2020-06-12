@@ -101,6 +101,7 @@ public class AzureIntegrationTest {
     testProperties.setProperty("clustermap.datacenter.name", "uswest");
     testProperties.setProperty("clustermap.host.name", "localhost");
     testProperties.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
+    testProperties.setProperty(CloudConfig.CLOUD_COMPACTION_LOOKBACK_DAYS, "7");
     testProperties.setProperty(AzureCloudConfig.AZURE_PURGE_BATCH_SIZE, "10");
     verifiableProperties = new VerifiableProperties(testProperties);
     azureDest = getAzureDestination(verifiableProperties);
@@ -269,7 +270,7 @@ public class AzureIntegrationTest {
    * @throws Exception on error
    */
   @Test
-  public void testPurgeDeadBlobs() throws Exception {
+  public void testCompaction() throws Exception {
     cleanup();
 
     int bucketCount = 20;
@@ -330,8 +331,6 @@ public class AzureIntegrationTest {
 
     // run getDeadBlobs query, should return 2 * bucketCount
     String partitionPath = String.valueOf(testPartition);
-    long queryStartTime = 1;
-    long queryEndTime = now - TimeUnit.DAYS.toMillis(retentionPeriodDays);
     int compactedCount = azureDest.compactPartition(partitionPath);
     assertEquals("Unexpected count compacted", 2 * bucketCount, compactedCount);
     cleanup();
@@ -550,6 +549,10 @@ public class AzureIntegrationTest {
         "QueryMetadata", partitionPath);
     int numPurged = purgeBlobsWithRetry(allBlobsInPartition, partitionPath);
     logger.info("Cleaned up {} blobs", numPurged);
+    // Delete compaction checkpoint blob
+    if (azureDest.getAzureBlobDataAccessor().deleteFile(AzureStorageCompactor.CHECKPOINT_CONTAINER, partitionPath)) {
+      logger.info("Deleted compaction checkpoint");
+    }
   }
 
   /**

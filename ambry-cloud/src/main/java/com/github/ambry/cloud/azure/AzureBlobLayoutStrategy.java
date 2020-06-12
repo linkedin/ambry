@@ -99,7 +99,7 @@ public class AzureBlobLayoutStrategy {
 
   /**
    * @return the {@link BlobLayout} for the specified blob.
-   * @param blobMetadata the {@link CloudBlobMetadata for the data blob.
+   * @param blobMetadata the {@link CloudBlobMetadata} for the data blob.
    */
   public BlobLayout getDataBlobLayout(CloudBlobMetadata blobMetadata) {
     return new BlobLayout(getAzureContainerName(blobMetadata), getAzureBlobName(blobMetadata));

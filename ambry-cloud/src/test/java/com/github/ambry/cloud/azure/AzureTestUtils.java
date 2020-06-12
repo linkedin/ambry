@@ -148,11 +148,13 @@ class AzureTestUtils {
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
     when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
-    Iterator<FeedResponse<Document>> iterator = mock(Iterator.class);
     lenient().when(mockBlockingObservable.single()).thenReturn(feedResponse);
-    when(mockBlockingObservable.getIterator()).thenReturn(iterator);
-    when(iterator.hasNext()).thenReturn(true).thenReturn(false);
-    when(iterator.next()).thenReturn(feedResponse);
+    when(mockBlockingObservable.getIterator()).thenAnswer(invocation -> {
+      Iterator<FeedResponse<Document>> feedResponseIterator = mock(Iterator.class);
+      when(feedResponseIterator.hasNext()).thenReturn(true).thenReturn(false);
+      when(feedResponseIterator.next()).thenReturn(feedResponse);
+      return feedResponseIterator;
+    });
     when(feedResponse.getResults()).thenReturn(documentList);
   }
 

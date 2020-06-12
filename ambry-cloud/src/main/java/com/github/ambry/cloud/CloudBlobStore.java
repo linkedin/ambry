@@ -85,7 +85,7 @@ class CloudBlobStore implements Store {
   private final Map<String, BlobLifeState> recentBlobCache;
   private final long minTtlMillis;
   private final boolean requireEncryption;
-  // For live serving mode, implement retries and disable caching
+  // Distinguishes between VCR and live serving mode
   private final boolean isVcr;
   private boolean started;
 
