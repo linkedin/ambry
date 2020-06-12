@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
 
 
 public class HelixControllerManager extends ZKHelixManager implements Runnable {
-  private static Logger logger = LoggerFactory.getLogger(HelixControllerManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(HelixControllerManager.class);
 
   private final CountDownLatch startCountDown = new CountDownLatch(1);
   private final CountDownLatch stopCountDown = new CountDownLatch(1);

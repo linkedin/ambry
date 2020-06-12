@@ -83,7 +83,7 @@ public class NettyRequest implements RestRequest {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   protected final AtomicLong bytesReceived = new AtomicLong(0);
   private final AtomicLong bytesBuffered = new AtomicLong(0);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(NettyRequest.class);
   private final RecvByteBufAllocator recvByteBufAllocator = new DefaultMaxBytesRecvByteBufAllocator();
   private final SSLSession sslSession;
 

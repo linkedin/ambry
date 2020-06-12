@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
  */
 public class MessageSievingInputStream extends InputStream {
   private int sievedStreamSize;
-  private final Logger logger;
+  private static final Logger logger = LoggerFactory.getLogger(MessageSievingInputStream.class);
   private final InputStream sievedStream;
   private boolean hasInvalidMessages;
   private boolean hasDeprecatedMessages;
@@ -63,7 +63,6 @@ public class MessageSievingInputStream extends InputStream {
    */
   public MessageSievingInputStream(InputStream inStream, List<MessageInfo> messageInfoList,
       List<Transformer> transformers, MetricRegistry metricRegistry) throws IOException {
-    this.logger = LoggerFactory.getLogger(getClass());
     this.transformers = transformers;
     singleMessageSieveTime =
         metricRegistry.histogram(MetricRegistry.name(MessageSievingInputStream.class, "SingleMessageSieveTime"));

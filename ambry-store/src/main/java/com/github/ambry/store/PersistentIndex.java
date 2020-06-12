@@ -119,7 +119,7 @@ class PersistentIndex {
   private volatile ConcurrentSkipListMap<Offset, IndexSegment> validIndexSegments = new ConcurrentSkipListMap<>();
   // this is used by addToIndex() and changeIndexSegments() to resolve concurrency b/w them and is not for general use.
   private volatile ConcurrentSkipListMap<Offset, IndexSegment> inFluxIndexSegments = validIndexSegments;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(PersistentIndex.class);
   private final IndexPersistor persistor = new IndexPersistor();
   private final ScheduledFuture<?> persistorTask;
 

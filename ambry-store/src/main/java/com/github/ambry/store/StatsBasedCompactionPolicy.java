@@ -35,7 +35,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
   private final Time time;
   private final StoreConfig storeConfig;
   private final long messageRetentionTimeInMs;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(StatsBasedCompactionPolicy.class);
 
   StatsBasedCompactionPolicy(StoreConfig storeConfig, Time time) {
     this.storeConfig = storeConfig;

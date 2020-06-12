@@ -50,7 +50,7 @@ public class NettyServer implements NioServer {
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
   private final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(NettyServer.class);
 
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;

@@ -46,7 +46,7 @@ class StaticClusterManager implements ClusterMap {
   private final ClusterMapMetrics clusterMapMetrics;
   private final byte localDatacenterId;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(StaticClusterManager.class);
 
   /**
    * How many data nodes to put in a random sample for partition allocation. 2 node samples provided the best balance

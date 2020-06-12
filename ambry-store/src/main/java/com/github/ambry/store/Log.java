@@ -45,7 +45,7 @@ class Log implements Write {
   private final Iterator<Pair<String, String>> segmentNameAndFileNameIterator;
   private final ConcurrentSkipListMap<String, LogSegment> segmentsByName =
       new ConcurrentSkipListMap<>(LogSegmentNameHelper.COMPARATOR);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(Log.class);
   private final AtomicLong remainingUnallocatedSegments = new AtomicLong(0);
   private final String storeId;
 

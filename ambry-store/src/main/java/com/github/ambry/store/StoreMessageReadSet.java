@@ -42,7 +42,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final Offset offset;
   private final MessageInfo info;
   private final AtomicBoolean open = new AtomicBoolean(true);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(BlobReadOptions.class);
   private ByteBuffer prefetchedData;
   private long prefetchedDataRelativeOffset = -1;
 
@@ -180,7 +180,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
 class StoreMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadOptions> readOptions;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(StoreMessageReadSet.class);
 
   StoreMessageReadSet(List<BlobReadOptions> readOptions) {
     Collections.sort(readOptions);

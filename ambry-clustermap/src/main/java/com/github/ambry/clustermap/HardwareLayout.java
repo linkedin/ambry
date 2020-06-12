@@ -41,7 +41,7 @@ class HardwareLayout {
   private final Map<HardwareState, Long> diskInHardStateCount;
   private final ClusterMapConfig clusterMapConfig;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(HardwareLayout.class);
 
   public HardwareLayout(JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     if (logger.isTraceEnabled()) {

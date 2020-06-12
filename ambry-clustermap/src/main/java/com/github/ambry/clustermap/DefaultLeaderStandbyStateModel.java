@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory;
  */
 @StateModelInfo(initialState = "OFFLINE", states = {"LEADER", "STANDBY"})
 public class DefaultLeaderStandbyStateModel extends StateModel {
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(DefaultLeaderStandbyStateModel.class);
 
   DefaultLeaderStandbyStateModel() {
     StateModelParser parser = new StateModelParser();

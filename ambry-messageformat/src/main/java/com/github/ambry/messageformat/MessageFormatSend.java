@@ -53,7 +53,7 @@ public class MessageFormatSend implements Send {
   private int currentWriteIndex;
   private long sizeWrittenFromCurrentIndex;
   private StoreKeyFactory storeKeyFactory;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(MessageFormatSend.class);
   private final static int BUFFERED_INPUT_STREAM_BUFFER_SIZE = 256;
 
   private class SendInfo {

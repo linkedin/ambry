@@ -92,7 +92,7 @@ class IndexSegment {
   private final File indexFile;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final AtomicBoolean sealed = new AtomicBoolean(false);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(IndexSegment.class);
   private final AtomicLong sizeWritten = new AtomicLong(0);
   private final StoreKeyFactory factory;
   private final File bloomFile;

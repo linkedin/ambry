@@ -47,7 +47,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   private StringBuilder sslLogMessage;
 
   private static final long INIT_TIME = -1;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(PublicAccessLogHandler.class);
 
   public PublicAccessLogHandler(PublicAccessLogger publicAccessLogger, NettyMetrics nettyMetrics) {
     this.publicAccessLogger = publicAccessLogger;

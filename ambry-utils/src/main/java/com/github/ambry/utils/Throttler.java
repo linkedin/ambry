@@ -30,7 +30,7 @@ public class Throttler {
   private final Object waitGuard = new Object();
   private long periodStartNs;
   private double observedSoFar;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(Throttler.class);
   private Time time;
   private boolean enabled;
 

@@ -50,7 +50,7 @@ class DataNode implements DataNodeId {
   private final ArrayList<String> sslEnabledDataCenters;
   private final ClusterMapConfig clusterMapConfig;
 
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(DataNode.class);
 
   DataNode(Datacenter datacenter, JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     logger.trace("DataNode {}", jsonObject);

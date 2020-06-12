@@ -22,11 +22,11 @@ import org.slf4j.LoggerFactory;
  */
 public class PublicAccessLogger {
 
-  private Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
+  private static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
 
   private final String[] requestHeaders;
   private final String[] responseHeaders;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(PublicAccessLogger.class);
 
   /**
    * @param requestHeaders the request headers to log.

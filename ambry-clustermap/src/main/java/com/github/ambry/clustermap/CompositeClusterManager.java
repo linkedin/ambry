@@ -39,7 +39,6 @@ class CompositeClusterManager implements ClusterMap {
   final StaticClusterManager staticClusterManager;
   final HelixClusterManager helixClusterManager;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
-  private final Logger logger = LoggerFactory.getLogger(CompositeClusterManager.class);
 
   /**
    * Construct a CompositeClusterManager instance.
@@ -102,9 +101,9 @@ class CompositeClusterManager implements ClusterMap {
         staticWritablePartitionSet.removeAll(partitionsInBoth);
         helixWritablePartitionSet.removeAll(partitionsInBoth);
         staticWritablePartitionSet.forEach(
-            partition -> logger.debug("{} is writable partition in static clustermap only", partition));
+            partition -> LOGGER.debug("{} is writable partition in static clustermap only", partition));
         helixWritablePartitionSet.forEach(
-            partition -> logger.debug("{} is writable partition in helix only", partition));
+            partition -> LOGGER.debug("{} is writable partition in helix only", partition));
       }
     }
     return staticWritablePartitionIds;

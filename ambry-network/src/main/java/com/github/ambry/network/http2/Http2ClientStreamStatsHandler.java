@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
 
 @ChannelHandler.Sharable
 class Http2ClientStreamStatsHandler extends SimpleChannelInboundHandler<Http2Frame> {
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(Http2ClientStreamStatsHandler.class);
   private final Http2ClientMetrics http2ClientMetrics;
 
   public Http2ClientStreamStatsHandler(Http2ClientMetrics http2ClientMetrics) {

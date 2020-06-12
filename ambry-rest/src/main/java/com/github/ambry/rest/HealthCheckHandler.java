@@ -42,7 +42,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
   private final String healthCheckUri;
   private final RestServerState restServerState;
   private final NettyMetrics nettyMetrics;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(HealthCheckHandler.class);
 
   private HttpRequest request;
   private FullHttpResponse response;

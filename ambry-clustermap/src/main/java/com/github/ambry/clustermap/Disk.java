@@ -36,7 +36,7 @@ class Disk implements DiskId {
   private final ResourceStatePolicy diskStatePolicy;
   private long capacityInBytes;
 
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(Disk.class);
 
   Disk(DataNode dataNode, JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     logger.trace("Disk {}", jsonObject);

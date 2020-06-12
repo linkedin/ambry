@@ -48,7 +48,7 @@ class CompactAllPolicy implements CompactionPolicy {
   private final StoreConfig storeConfig;
   private final Time time;
   private final long messageRetentionTimeInMs;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(CompactAllPolicy.class);
 
   CompactAllPolicy(StoreConfig storeConfig, Time time) {
     this.storeConfig = storeConfig;

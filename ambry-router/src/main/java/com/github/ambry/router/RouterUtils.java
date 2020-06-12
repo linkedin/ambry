@@ -45,7 +45,7 @@ import org.slf4j.LoggerFactory;
  */
 class RouterUtils {
 
-  private static Logger logger = LoggerFactory.getLogger(RouterUtils.class);
+  private static final Logger logger = LoggerFactory.getLogger(RouterUtils.class);
 
   /**
    * Get {@link BlobId} from a blob string.

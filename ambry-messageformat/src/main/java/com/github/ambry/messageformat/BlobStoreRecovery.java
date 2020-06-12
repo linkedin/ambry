@@ -36,7 +36,7 @@ import static com.github.ambry.messageformat.MessageFormatRecord.*;
  * from the read interface that represents the underlying store
  */
 public class BlobStoreRecovery implements MessageStoreRecovery {
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(BlobStoreRecovery.class);
 
   @Override
   public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)

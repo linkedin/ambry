@@ -39,7 +39,7 @@ public class CloudDataNode implements DataNodeId {
   private final String dataCenterName;
   private final boolean isSslEnabled;
   private final List<String> sslEnabledDataCenters;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(CloudDataNode.class);
 
   /**
    * Instantiate a CloudDataNode object.

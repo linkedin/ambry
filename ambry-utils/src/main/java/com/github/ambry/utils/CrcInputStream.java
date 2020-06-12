@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
 public class CrcInputStream extends InputStream {
   private Crc32 crc;
   private InputStream stream;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(CrcInputStream.class);
 
   /**
    * Create a CrcInputStream using the specified CRC generator

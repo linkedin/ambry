@@ -44,8 +44,6 @@ public class ReplicaMetadataRequestInfo {
   private static final int HostName_Field_Size_In_Bytes = 4;
   private static final int ReplicaType_Size_In_Bytes = Short.BYTES;
 
-  private final Logger logger = LoggerFactory.getLogger(getClass());
-
   public ReplicaMetadataRequestInfo(PartitionId partitionId, FindToken token, String hostName, String replicaPath,
       ReplicaType replicaType, short requestVersion) {
     if (partitionId == null || token == null || hostName == null || replicaPath == null) {

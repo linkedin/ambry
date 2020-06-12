@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory;
  * Start point for creating an instance of {@link RestServer} and starting/shutting it down.
  */
 public class RestServerMain {
-  private static Logger logger = LoggerFactory.getLogger(RestServerMain.class);
+  private static final Logger logger = LoggerFactory.getLogger(RestServerMain.class);
 
   public static void main(String[] args) {
     final RestServer restServer;

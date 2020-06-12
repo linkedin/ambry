@@ -66,7 +66,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   private final NettyConfig nettyConfig;
   private final PerformanceConfig performanceConfig;
   private final RestRequestHandler requestHandler;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(NettyMessageProcessor.class);
 
   // variables that will live through the life of the channel.
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);

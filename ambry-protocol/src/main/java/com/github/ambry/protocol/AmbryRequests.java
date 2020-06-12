@@ -79,7 +79,6 @@ public class AmbryRequests implements RequestAPI {
   protected StoreManager storeManager;
   protected final ReplicationAPI replicationEngine;
   protected final RequestResponseChannel requestResponseChannel;
-  protected Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   protected final ClusterMap clusterMap;
   protected final DataNodeId currentNode;
   protected final ServerMetrics metrics;
@@ -90,6 +89,7 @@ public class AmbryRequests implements RequestAPI {
   private final boolean enableDataPrefetch;
   private final StoreKeyConverterFactory storeKeyConverterFactory;
 
+  protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
 
   public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,

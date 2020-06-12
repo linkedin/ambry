@@ -30,7 +30,6 @@ public abstract class RequestOrResponse implements SendWithCorrelationId {
   protected short versionId;
   protected String clientId;
   protected ByteBuffer bufferToSend;
-  protected Logger logger = LoggerFactory.getLogger(getClass());
 
   private static final int Request_Response_Size_In_Bytes = 8;
   private static final int Request_Response_Type_Size_In_Bytes = 2;

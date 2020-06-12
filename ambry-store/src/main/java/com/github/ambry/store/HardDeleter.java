@@ -72,7 +72,7 @@ public class HardDeleter implements Runnable {
   private final int scanSizeInBytes;
   private final int messageRetentionSeconds;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(HardDeleter.class);
 
   /* A range of entries is maintained during the hard delete operation. All the entries corresponding to an ongoing
    * hard delete will be from this range. The reason to keep this range is to finish off any incomplete and ongoing

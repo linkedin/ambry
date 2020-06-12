@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
 public class ReplicationSkipPredicate implements Predicate<MessageInfo> {
   private final AccountService accountService;
   private final ReplicationConfig replicationConfig;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(ReplicationSkipPredicate.class);
   /**
    * Construct a ReplicationSkipPredicate object
    * @param accountService the {@link AccountService} associated with this predicate.

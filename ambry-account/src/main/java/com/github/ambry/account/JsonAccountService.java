@@ -45,7 +45,7 @@ import org.slf4j.LoggerFactory;
  */
 final class JsonAccountService extends AbstractAccountService {
 
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(JsonAccountService.class);
 
   /** Location of the account file which this service uses as it's source of accounts.*/
   private final Path accountFile;

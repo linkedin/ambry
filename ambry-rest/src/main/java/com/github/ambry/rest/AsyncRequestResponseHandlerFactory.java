@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
 public class AsyncRequestResponseHandlerFactory implements RestRequestResponseHandlerFactory {
 
   private final AsyncRequestResponseHandler handler;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(AsyncRequestResponseHandlerFactory.class);
 
   /**
    * @param handlerCount the number of request scaling units required.

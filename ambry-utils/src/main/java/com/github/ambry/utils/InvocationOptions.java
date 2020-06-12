@@ -30,7 +30,7 @@ public class InvocationOptions {
   public final String hardwareLayoutFilePath;
   public final String partitionLayoutFilePath;
   public final String serverPropsFilePath;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(InvocationOptions.class);
 
   /**
    * Parses the arguments provided and extracts them into variables that can be retrieved through APIs.

@@ -52,7 +52,7 @@ import org.slf4j.LoggerFactory;
 class PerfNioServer implements NioServer {
   private final LoadCreator loadCreator;
   private final Thread loadCreatorThread;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(PerfNioServer.class);
 
   /**
    * Creates an instance of PerfNioServer.
