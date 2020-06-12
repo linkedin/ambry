@@ -43,6 +43,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
@@ -80,7 +81,6 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
 
   // HTTP/2 physical connection pool.
   private final ChannelPool parentConnectionPool;
-  private final Random random = new Random();
   private final InetSocketAddress inetSocketAddress;
   private final EventLoopGroup eventLoopGroup;
   private final Set<MultiplexedChannelRecord> parentConnections;
@@ -189,11 +189,9 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
     }
 
     List<MultiplexedChannelRecord> multiplexedChannelRecords = new ArrayList<>(parentConnections);
-
+    Collections.shuffle(multiplexedChannelRecords);
     // Attempt at most multiplexedChannelRecords.size(). No slip acquire expected.
-    for (int i = 0; i < multiplexedChannelRecords.size(); i++) {
-      int randomIndex = random.nextInt(multiplexedChannelRecords.size());
-      MultiplexedChannelRecord multiplexedChannelRecord = multiplexedChannelRecords.get(randomIndex);
+    for (MultiplexedChannelRecord multiplexedChannelRecord : multiplexedChannelRecords) {
       if (acquireStreamOnInitializedConnection(multiplexedChannelRecord, promise)) {
         return promise;
       }
