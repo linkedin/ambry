@@ -45,6 +45,7 @@ import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -79,6 +80,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
 
   // HTTP/2 physical connection pool.
   private final ChannelPool parentConnectionPool;
+  private final Random random = new Random();
   private final InetSocketAddress inetSocketAddress;
   private final EventLoopGroup eventLoopGroup;
   private final Set<MultiplexedChannelRecord> parentConnections;
@@ -186,15 +188,17 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
       return promise.setFailure(new IOException("Channel pool is closed!"));
     }
 
-    if (parentConnections.size() >= http2ClientConfig.http2MinConnectionPerPort) {
-      // TODO: if warmup is not 100%, new connections are still required.
-      // This is a passive load balance depends on compareAndSet in claimStream().
-      for (MultiplexedChannelRecord multiplexedChannel : parentConnections) {
-        if (acquireStreamOnInitializedConnection(multiplexedChannel, promise)) {
-          return promise;
-        }
-        http2ClientMetrics.http2StreamSlipAcquireCount.inc();
+    List<MultiplexedChannelRecord> multiplexedChannelRecords = new ArrayList<>(parentConnections);
+
+    // Attempt at most multiplexedChannelRecords.size(). No slip acquire expected.
+    for (int i = 0; i < multiplexedChannelRecords.size(); i++) {
+      int randomIndex = random.nextInt(multiplexedChannelRecords.size());
+      MultiplexedChannelRecord multiplexedChannelRecord = multiplexedChannelRecords.get(randomIndex);
+      if (acquireStreamOnInitializedConnection(multiplexedChannelRecord, promise)) {
+        return promise;
       }
+      log.warn("Stream slip acquire on {}", inetSocketAddress);
+      http2ClientMetrics.http2StreamSlipAcquireCount.inc();
     }
 
     // No connection or No available streams on existing connections, establish new connection and add it to set.
