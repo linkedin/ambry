@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
  * and reports inconsistencies in the views from the two underlying cluster managers.
  */
 class CompositeClusterManager implements ClusterMap {
-  private static final Logger LOGGER = LoggerFactory.getLogger(CompositeClusterManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(CompositeClusterManager.class);
   final StaticClusterManager staticClusterManager;
   final HelixClusterManager helixClusterManager;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
@@ -71,7 +71,7 @@ class CompositeClusterManager implements ClusterMap {
           helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
         }
       } catch (IOException e) {
-        LOGGER.warn("HelixClusterManager could not deserialize partition ID that StaticClusterManager could", e);
+        logger.warn("HelixClusterManager could not deserialize partition ID that StaticClusterManager could", e);
         helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
       }
     }
@@ -101,9 +101,9 @@ class CompositeClusterManager implements ClusterMap {
         staticWritablePartitionSet.removeAll(partitionsInBoth);
         helixWritablePartitionSet.removeAll(partitionsInBoth);
         staticWritablePartitionSet.forEach(
-            partition -> LOGGER.debug("{} is writable partition in static clustermap only", partition));
+            partition -> logger.debug("{} is writable partition in static clustermap only", partition));
         helixWritablePartitionSet.forEach(
-            partition -> LOGGER.debug("{} is writable partition in helix only", partition));
+            partition -> logger.debug("{} is writable partition in helix only", partition));
       }
     }
     return staticWritablePartitionIds;

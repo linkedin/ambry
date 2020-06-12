@@ -26,7 +26,6 @@ public class PublicAccessLogger {
 
   private final String[] requestHeaders;
   private final String[] responseHeaders;
-  private static final Logger logger = LoggerFactory.getLogger(PublicAccessLogger.class);
 
   /**
    * @param requestHeaders the request headers to log.
@@ -35,7 +34,6 @@ public class PublicAccessLogger {
   public PublicAccessLogger(String[] requestHeaders, String[] responseHeaders) {
     this.requestHeaders = requestHeaders;
     this.responseHeaders = responseHeaders;
-    logger.trace("Created PublicAccessLogger for log {}", publicAccessLogger.getName());
   }
 
   public String[] getRequestHeaders() {
