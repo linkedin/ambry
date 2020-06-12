@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * below zero. It does not actually "pool" deallocated buffers.
  */
 public class SimpleByteBufferPool implements ByteBufferPool {
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(SimpleByteBufferPool.class);
   private final long capacity;
   private final Object lock;
   private long availableMemory;

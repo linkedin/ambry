@@ -30,7 +30,7 @@ public class VerifiableProperties {
 
   private final HashSet<String> referenceSet = new HashSet<String>();
   private final Properties props;
-  protected Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(VerifiableProperties.class);
 
   public VerifiableProperties(Properties props) {
     this.props = props;

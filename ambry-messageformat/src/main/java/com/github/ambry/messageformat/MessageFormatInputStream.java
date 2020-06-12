@@ -37,7 +37,6 @@ public abstract class MessageFormatInputStream extends InputStream {
   protected long streamRead = 0;
   ByteBuffer crc = ByteBuffer.allocate(MessageFormatRecord.Crc_Size);
   protected long messageLength;
-  protected Logger logger = LoggerFactory.getLogger(getClass());
 
   @Override
   public int read() throws IOException {

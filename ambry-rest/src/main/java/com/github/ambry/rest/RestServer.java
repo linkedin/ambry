@@ -71,7 +71,7 @@ import org.slf4j.LoggerFactory;
  */
 public class RestServer {
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(RestServer.class);
   private final RestServerMetrics restServerMetrics;
   private final JmxReporter reporter;
   private final AccountService accountService;

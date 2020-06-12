@@ -22,11 +22,10 @@ import org.slf4j.LoggerFactory;
  */
 public class PublicAccessLogger {
 
-  private Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
+  private static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
 
   private final String[] requestHeaders;
   private final String[] responseHeaders;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * @param requestHeaders the request headers to log.
@@ -35,7 +34,6 @@ public class PublicAccessLogger {
   public PublicAccessLogger(String[] requestHeaders, String[] responseHeaders) {
     this.requestHeaders = requestHeaders;
     this.responseHeaders = responseHeaders;
-    logger.trace("Created PublicAccessLogger for log {}", publicAccessLogger.getName());
   }
 
   public String[] getRequestHeaders() {

@@ -48,7 +48,7 @@ class PartitionLayout {
   private final String localDatacenterName;
   private final ClusterMapUtils.PartitionSelectionHelper partitionSelectionHelper;
 
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(PartitionLayout.class);
 
   /**
    * Create a PartitionLayout

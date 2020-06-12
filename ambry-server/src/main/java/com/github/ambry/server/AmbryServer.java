@@ -100,7 +100,7 @@ public class AmbryServer {
   private StatsManager statsManager = null;
   private ReplicationManager replicationManager = null;
   private CloudToStoreReplicationManager cloudToStoreReplicationManager = null;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(AmbryServer.class);
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
   private final ClusterSpectatorFactory clusterSpectatorFactory;

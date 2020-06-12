@@ -78,6 +78,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected final MetricRegistry metricRegistry;
   protected final ReplicationMetrics replicationMetrics;
   protected final FindTokenHelper tokenHelper;
+  // non static logger so that extensions of this class have their own class as the logger name.
+  // little impact since ReplicationEngines are long-lived objects.
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final Map<PartitionId, PartitionInfo> partitionToPartitionInfo;
   protected final Map<String, Set<PartitionInfo>> mountPathToPartitionInfos;

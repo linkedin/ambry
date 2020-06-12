@@ -51,7 +51,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
 
   private final List<AsyncRequestWorker> asyncRequestWorkers = new ArrayList<>();
   private final AtomicInteger currIndex = new AtomicInteger(0);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(AsyncRequestResponseHandler.class);
 
   private AsyncResponseHandler asyncResponseHandler = null;
   private RestRequestService restRequestService = null;
@@ -270,7 +270,7 @@ class AsyncRequestWorker implements Runnable {
   private final AtomicInteger queuedRequestCount = new AtomicInteger(0);
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final AtomicBoolean running = new AtomicBoolean(true);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(AsyncRequestWorker.class);
 
   /**
    * Creates a worker that can process requests.
@@ -531,7 +531,7 @@ class AsyncResponseHandler implements Closeable {
   private final RequestResponseHandlerMetrics metrics;
   private final ConcurrentHashMap<RestRequest, ResponseWriteCallback> responses = new ConcurrentHashMap<>();
   private final AtomicInteger inFlightResponsesCount = new AtomicInteger(0);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(AsyncResponseHandler.class);
 
   /**
    * Creates a AsyncResponseHandler that can handle responses.

@@ -30,7 +30,7 @@ public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
   private final NettyMetrics metrics;
   private final AtomicLong openConnections;
 
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(ConnectionStatsHandler.class);
 
   public ConnectionStatsHandler(NettyMetrics metrics) {
     this.metrics = metrics;

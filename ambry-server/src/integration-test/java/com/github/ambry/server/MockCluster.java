@@ -385,7 +385,7 @@ public class MockCluster {
 }
 
 class ServerShutdown implements Runnable {
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(ServerShutdown.class);
   private final CountDownLatch latch;
   private final AmbryServer server;
 

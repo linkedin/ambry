@@ -31,7 +31,6 @@ import org.slf4j.LoggerFactory;
  * It provides a merged view of the static and helix clusters.
  */
 public class RecoveryTestClusterManager implements ClusterMap {
-  private final Logger logger = LoggerFactory.getLogger(RecoveryTestClusterManager.class);
   final StaticClusterManager staticClusterManager;
   final HelixClusterManager helixClusterManager;
   final Map<AmbryDisk, Disk> ambryDiskToDiskMap;

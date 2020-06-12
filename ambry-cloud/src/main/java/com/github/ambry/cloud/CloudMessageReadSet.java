@@ -36,7 +36,7 @@ class CloudMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadInfo> blobReadInfoList;
   private final CloudBlobStore blobStore;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(CloudMessageReadSet.class);
 
   CloudMessageReadSet(List<BlobReadInfo> blobReadInfoList, CloudBlobStore blobStore) {
     this.blobReadInfoList = blobReadInfoList;

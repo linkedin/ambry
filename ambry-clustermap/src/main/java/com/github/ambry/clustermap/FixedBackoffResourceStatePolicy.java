@@ -33,7 +33,7 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
   private final long retryBackoffMs;
   private final AtomicLong downUntil;
   private final Time time;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(FixedBackoffResourceStatePolicy.class);
 
   FixedBackoffResourceStatePolicy(Object resource, boolean hardDown, int failureCountThreshold, long retryBackoffMs,
       Time time) {

@@ -66,7 +66,7 @@ public class BlobStore implements Store {
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskIOScheduler diskIOScheduler;
   private final DiskSpaceAllocator diskSpaceAllocator;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(BlobStore.class);
   private final Object storeWriteLock = new Object();
   private final StoreConfig config;
   private final long capacityInBytes;

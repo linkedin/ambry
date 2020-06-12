@@ -79,7 +79,7 @@ class FrontendRestRequestService implements RestRequestService {
   private final IdSigningService idSigningService;
   private final AccountService accountService;
   private final AccountAndContainerInjector accountAndContainerInjector;
-  private final Logger logger = LoggerFactory.getLogger(FrontendRestRequestService.class);
+  private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestService.class);
   private final String datacenterName;
   private final String hostname;
   private final String clusterName;

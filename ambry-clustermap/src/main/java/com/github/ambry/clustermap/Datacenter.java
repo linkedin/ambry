@@ -39,7 +39,7 @@ class Datacenter {
   private final long rawCapacityInBytes;
   private boolean rackAware = false;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(Datacenter.class);
 
   Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {

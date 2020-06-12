@@ -50,7 +50,7 @@ public class Partition implements PartitionId {
   long replicaCapacityInBytes;
   String partitionClass;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(Partition.class);
 
   public Partition(long id, String partitionClass, PartitionState partitionState, long replicaCapacityInBytes) {
     logger.trace("Partition {}, {}, {}", id, partitionState, replicaCapacityInBytes);

@@ -35,11 +35,10 @@ import org.slf4j.LoggerFactory;
  * and reports inconsistencies in the views from the two underlying cluster managers.
  */
 class CompositeClusterManager implements ClusterMap {
-  private static final Logger LOGGER = LoggerFactory.getLogger(CompositeClusterManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(CompositeClusterManager.class);
   final StaticClusterManager staticClusterManager;
   final HelixClusterManager helixClusterManager;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
-  private final Logger logger = LoggerFactory.getLogger(CompositeClusterManager.class);
 
   /**
    * Construct a CompositeClusterManager instance.
@@ -72,7 +71,7 @@ class CompositeClusterManager implements ClusterMap {
           helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
         }
       } catch (IOException e) {
-        LOGGER.warn("HelixClusterManager could not deserialize partition ID that StaticClusterManager could", e);
+        logger.warn("HelixClusterManager could not deserialize partition ID that StaticClusterManager could", e);
         helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
       }
     }

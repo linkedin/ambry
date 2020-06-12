@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.messageformat.BlobStoreRecovery;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -30,7 +31,7 @@ import org.slf4j.LoggerFactory;
  * A blocking channel that is used to communicate with a server
  */
 public class BlockingChannel implements ConnectedChannel {
-  protected final Logger logger = LoggerFactory.getLogger(getClass());
+  protected static final Logger logger = LoggerFactory.getLogger(BlockingChannel.class);
   protected final String host;
   protected final int port;
   protected final int readBufferSize;

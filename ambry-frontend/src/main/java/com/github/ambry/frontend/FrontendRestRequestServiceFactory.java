@@ -41,7 +41,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
   private final ClusterMapConfig clusterMapConfig;
   private final Router router;
   private final AccountService accountService;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestServiceFactory.class);
 
   /**
    * Creates a new instance of FrontendRestRequestServiceFactory.

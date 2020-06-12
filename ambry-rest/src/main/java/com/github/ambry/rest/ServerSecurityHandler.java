@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  */
 @ChannelHandler.Sharable
 public class ServerSecurityHandler extends ChannelInboundHandlerAdapter {
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(ServerSecurityHandler.class);
   private final ServerSecurityService serverSecurityService;
   private final ServerMetrics serverMetrics;
 

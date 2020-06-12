@@ -51,7 +51,7 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
 class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
   private final MessageReadSet readSet;
   private final StoreKeyFactory storeKeyFactory;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(BlobStoreHardDeleteIterator.class);
   private int readSetIndex = 0;
   private Map<StoreKey, HardDeleteRecoveryMetadata> recoveryInfoMap;
 

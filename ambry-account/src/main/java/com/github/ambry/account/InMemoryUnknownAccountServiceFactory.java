@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
  * An {@link AccountServiceFactory} that returns an {@link InMemoryUnknownAccountService}.
  */
 public class InMemoryUnknownAccountServiceFactory implements AccountServiceFactory {
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(InMemoryUnknownAccountServiceFactory.class);
 
   /**
    * Constructor.

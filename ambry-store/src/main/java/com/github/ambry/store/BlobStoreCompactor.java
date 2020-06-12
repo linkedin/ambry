@@ -80,7 +80,7 @@ class BlobStoreCompactor {
   private final UUID sessionId;
   private final UUID incarnationId;
   private final AtomicBoolean compactionInProgress = new AtomicBoolean(false);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(BlobStoreCompactor.class);
   private final IndexSegmentValidEntryFilter validEntryFilter;
   private final AccountService accountService;
   private volatile boolean isActive = false;

@@ -46,7 +46,7 @@ class CompactionManager {
   private final CompactionExecutor compactionExecutor;
   private final StorageManagerMetrics metrics;
   private final CompactionPolicy compactionPolicy;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(CompactionManager.class);
 
   private Thread compactionThread;
 

@@ -55,7 +55,7 @@ import static org.junit.Assert.*;
 
 
 public class VcrBackupTest {
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(VcrBackupTest.class);
   private MockNotificationSystem notificationSystem;
   private MockCluster mockCluster;
   private HelixControllerManager helixControllerManager;

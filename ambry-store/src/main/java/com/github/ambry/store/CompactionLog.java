@@ -45,7 +45,7 @@ class CompactionLog implements Closeable {
   private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
   private static final long UNINITIALIZED_TIMESTAMP = -1;
 
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(CompactionLog.class);
 
   /**
    * The {@link Phase} of the current compaction cycle.

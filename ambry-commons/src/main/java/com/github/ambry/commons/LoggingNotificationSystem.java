@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * Logs all events at DEBUG level.
  */
 public class LoggingNotificationSystem implements NotificationSystem {
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(LoggingNotificationSystem.class);
 
   @Override
   public void close() throws IOException {

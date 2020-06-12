@@ -49,7 +49,7 @@ import org.slf4j.LoggerFactory;
  */
 class NettyMultipartRequest extends NettyRequest {
   private final Queue<HttpContent> rawRequestContents = new LinkedBlockingQueue<>();
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(NettyMultipartRequest.class);
   private final long maxSizeAllowedInBytes;
   //For Multipart request, bytes received in http content can be different from blob bytes received.
   private final AtomicLong blobBytesReceived = new AtomicLong(0);

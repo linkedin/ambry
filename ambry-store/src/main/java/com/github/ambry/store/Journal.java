@@ -72,7 +72,7 @@ class Journal {
   private final int maxEntriesToReturn;
   private final AtomicInteger currentNumberOfEntries;
   private final String dataDir;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(Journal.class);
   private boolean inBootstrapMode = false;
 
   /**

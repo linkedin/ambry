@@ -40,7 +40,7 @@ class GetReplicasHandler {
 
   private final FrontendMetrics metrics;
   private final ClusterMap clusterMap;
-  private final Logger logger = LoggerFactory.getLogger(GetReplicasHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(GetReplicasHandler.class);
 
   /**
    * Instantiate a handler to handle {@link RestUtils.SubResource#Replicas} operations.

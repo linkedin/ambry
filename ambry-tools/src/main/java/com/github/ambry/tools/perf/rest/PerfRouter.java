@@ -56,7 +56,7 @@ class PerfRouter implements Router {
   private final byte[] usermetadata;
   private final byte[] chunk;
   private volatile boolean routerOpen = true;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(PerfRouter.class);
 
   /**
    * Creates an instance of PerfRouter with configuration as specified in {@code perfRouterConfig}.

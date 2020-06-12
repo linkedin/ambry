@@ -38,7 +38,7 @@ public class PerfNioServerFactory implements NioServerFactory {
   private final PerfConfig perfConfig;
   private final PerfNioServerMetrics perfNioServerMetrics;
   private final RestRequestHandler requestHandler;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(PerfNioServerFactory.class);
 
   /**
    * Creates a new instance of PerfNioServerFactory.

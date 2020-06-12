@@ -63,7 +63,7 @@ public class VcrServer {
   private NetworkServer networkServer = null;
   private ScheduledExecutorService scheduler = null;
   private VcrReplicationManager vcrReplicationManager = null;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(VcrServer.class);
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
   private ClusterMap clusterMap;

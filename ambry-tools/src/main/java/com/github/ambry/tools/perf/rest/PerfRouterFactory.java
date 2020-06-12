@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
 public class PerfRouterFactory implements RouterFactory {
   private final PerfConfig perfConfig;
   private final PerfRouterMetrics perfRouterMetrics;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(PerfRouterFactory.class);
 
   /**
    * Creates an instance of PerfRouterFactory.

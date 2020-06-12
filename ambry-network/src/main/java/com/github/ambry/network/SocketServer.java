@@ -60,7 +60,7 @@ public class SocketServer implements NetworkServer {
   private final ArrayList<Processor> processors;
   private volatile ArrayList<Acceptor> acceptors;
   private final SocketRequestResponseChannel requestResponseChannel;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(SocketServer.class);
   private final ServerNetworkMetrics metrics;
   private final HashMap<PortType, Port> ports;
   private SSLFactory sslFactory;
@@ -206,7 +206,6 @@ abstract class AbstractServerThread implements Runnable {
   private final CountDownLatch startupLatch;
   private final CountDownLatch shutdownLatch;
   private final AtomicBoolean alive;
-  protected Logger logger = LoggerFactory.getLogger(getClass());
 
   public AbstractServerThread() throws IOException {
     startupLatch = new CountDownLatch(1);
@@ -263,7 +262,7 @@ class Acceptor extends AbstractServerThread {
   private final java.nio.channels.Selector nioSelector;
   private static final long selectTimeOutMs = 500;
   private final ServerNetworkMetrics metrics;
-  protected Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(Acceptor.class);
 
   public Acceptor(int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
       ServerNetworkMetrics metrics) throws IOException {
@@ -395,6 +394,7 @@ class Processor extends AbstractServerThread {
   private final ServerNetworkMetrics metrics;
   private static final long pollTimeoutMs = 300;
   private final NetworkConfig networkConfig;
+  private static final Logger logger = LoggerFactory.getLogger(Processor.class);
 
   Processor(int id, int maxRequestSize, RequestResponseChannel channel, ServerNetworkMetrics metrics,
       SSLFactory sslFactory, NetworkConfig networkConfig) throws IOException {

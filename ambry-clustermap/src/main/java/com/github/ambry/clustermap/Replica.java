@@ -41,7 +41,7 @@ class Replica implements ReplicaId {
   private final ReplicaType replicaType;
   private final ClusterMapConfig clusterMapConfig;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(Replica.class);
 
   Replica(Partition partition, Disk disk, ClusterMapConfig clusterMapConfig) {
     if (logger.isTraceEnabled()) {

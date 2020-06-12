@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
  * Used purely for testing purposes
  */
 public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(EchoMethodHandler.class);
   public static final String IS_CHUNKED = "is_chunked_header";
   public static final String DISCONNECT_URI = "disconnect";
   public static final String CLOSE_URI = "close";

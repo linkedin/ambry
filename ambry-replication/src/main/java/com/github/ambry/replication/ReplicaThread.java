@@ -95,7 +95,7 @@ public class ReplicaThread implements Runnable {
   private final ReplicationMetrics replicationMetrics;
   private final String threadName;
   private final NotificationSystem notification;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(ReplicaThread.class);
   private final StoreKeyConverter storeKeyConverter;
   private final Transformer transformer;
   private final MetricRegistry metricRegistry;
