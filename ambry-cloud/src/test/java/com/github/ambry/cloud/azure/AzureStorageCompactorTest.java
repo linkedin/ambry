@@ -71,6 +71,7 @@ public class AzureStorageCompactorTest {
   private final String partitionPath = String.valueOf(partition);
   private final int numBlobsPerQuery = 50;
   private final int numQueryBuckets = 4; // number of time range buckets to use
+  private final long testTime = System.currentTimeMillis();
   private Properties configProps = new Properties();
   private List<CloudBlobMetadata> blobMetadataList = new ArrayList<>(numBlobsPerQuery);
   private AzureStorageCompactor azureStorageCompactor;
@@ -105,10 +106,9 @@ public class AzureStorageCompactorTest {
 
     // Mocks for getDeadBlobs query
     List<Document> docList = new ArrayList<>();
-    long creationTime = System.currentTimeMillis();
     for (int j = 0; j < numBlobsPerQuery; j++) {
       BlobId blobId = generateBlobId();
-      CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
+      CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, testTime, Utils.Infinite_Time, blobSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       blobMetadataList.add(inputMetadata);
       docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata));
@@ -127,7 +127,7 @@ public class AzureStorageCompactorTest {
     Observable<StoredProcedureResponse> mockBulkDeleteResponse = getMockBulkDeleteResponse(1);
     when(mockumentClient.executeStoredProcedure(anyString(), any(RequestOptions.class), any())).thenReturn(
         mockBulkDeleteResponse);
-    String checkpointJson = objectMapper.writeValueAsString(azureStorageCompactor.emptyCheckpoints);
+    String checkpointJson = objectMapper.writeValueAsString(AzureStorageCompactor.emptyCheckpoints);
     mockCheckpointDownload(true, checkpointJson);
   }
 
@@ -144,10 +144,12 @@ public class AzureStorageCompactorTest {
     int expectedNumQUeries = numQueryBuckets * 2;
     int expectedPurged = numBlobsPerQuery * expectedNumQUeries;
     assertEquals(expectedPurged, azureStorageCompactor.compactPartition(partitionPath));
-    verify(mockumentClient, times(expectedNumQUeries)).queryDocuments(eq(collectionLink), any(SqlQuerySpec.class), any());
+    verify(mockumentClient, times(expectedNumQUeries)).queryDocuments(eq(collectionLink), any(SqlQuerySpec.class),
+        any());
     verify(mockumentClient, times(expectedNumQUeries)).executeStoredProcedure(
         eq(collectionLink + CosmosDataAccessor.BULK_DELETE_SPROC), any(), any());
-    verify(mockBlobBatchClient, times(expectedNumQUeries)).submitBatchWithResponse(any(BlobBatch.class), anyBoolean(), any(), any());
+    verify(mockBlobBatchClient, times(expectedNumQUeries)).submitBatchWithResponse(any(BlobBatch.class), anyBoolean(),
+        any(), any());
   }
 
   /** Test compaction on checkpoint not found. */
@@ -157,7 +159,8 @@ public class AzureStorageCompactorTest {
     int expectedNumQUeries = numQueryBuckets * 2;
     int expectedPurged = numBlobsPerQuery * expectedNumQUeries;
     assertEquals(expectedPurged, azureStorageCompactor.compactPartition(partitionPath));
-    verify(mockumentClient, times(expectedNumQUeries)).queryDocuments(eq(collectionLink), any(SqlQuerySpec.class), any());
+    verify(mockumentClient, times(expectedNumQUeries)).queryDocuments(eq(collectionLink), any(SqlQuerySpec.class),
+        any());
   }
 
   /** Test compaction on error reading checkpoint. */
@@ -253,7 +256,7 @@ public class AzureStorageCompactorTest {
     // No checkpoint
     mockCheckpointDownload(false, null);
     checkpoints = azureStorageCompactor.getCompactionProgress(partitionPath);
-    assertEquals("Expected empty checkpoint", azureStorageCompactor.emptyCheckpoints, checkpoints);
+    assertEquals("Expected empty checkpoint", AzureStorageCompactor.emptyCheckpoints, checkpoints);
   }
 
   /** Test compaction progress methods, error cases */
@@ -262,7 +265,7 @@ public class AzureStorageCompactorTest {
     // Corrupted checkpoint
     mockCheckpointDownload(true, "You can't do this!");
     Map<String, Long> checkpoints = azureStorageCompactor.getCompactionProgress(partitionPath);
-    assertEquals(azureStorageCompactor.emptyCheckpoints, checkpoints);
+    assertEquals(AzureStorageCompactor.emptyCheckpoints, checkpoints);
     assertEquals(1, azureMetrics.compactionProgressReadErrorCount.getCount());
 
     // Upload error
@@ -273,6 +276,43 @@ public class AzureStorageCompactorTest {
     long now = System.currentTimeMillis();
     azureStorageCompactor.updateCompactionProgress(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, now);
     assertEquals(1, azureMetrics.compactionProgressWriteErrorCount.getCount());
+  }
+
+  /** Test compaction checkpoint behavior */
+  @Test
+  public void testCompactionCheckpoints() throws Exception {
+    AzureStorageCompactor compactorSpy = spy(azureStorageCompactor);
+    doReturn(true).when(compactorSpy).updateCompactionProgress(anyString(), anyString(), anyLong());
+    String fieldName = CloudBlobMetadata.FIELD_DELETION_TIME;
+    long startTime = testTime - TimeUnit.DAYS.toMillis(numBlobsPerQuery);
+    long endTime = testTime;
+
+    // When dead blobs query returns results, progress gets updated to last record's dead time
+    List<Document> docList = new ArrayList<>();
+    long lastDeadTime = 0;
+    for (int j = 0; j < numBlobsPerQuery; j++) {
+      BlobId blobId = generateBlobId();
+      CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, testTime, Utils.Infinite_Time, blobSize,
+          CloudBlobMetadata.EncryptionOrigin.NONE);
+      lastDeadTime = startTime + TimeUnit.HOURS.toMillis(j);
+      inputMetadata.setDeletionTime(lastDeadTime);
+      blobMetadataList.add(inputMetadata);
+      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata));
+    }
+    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
+    mockObservableForQuery(docList, mockResponse);
+    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
+        mockResponse);
+    compactorSpy.compactPartition(partitionPath, fieldName, startTime, endTime);
+    verify(compactorSpy, atLeastOnce()).updateCompactionProgress(eq(partitionPath), eq(fieldName), eq(lastDeadTime));
+    verify(compactorSpy, never()).updateCompactionProgress(eq(partitionPath), eq(fieldName), eq(endTime));
+
+    // When dead blobs query returns no results, progress gets updated to queryEndtime
+    mockResponse = getMockedObservableForQueryWithNoResults();
+    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
+        mockResponse);
+    compactorSpy.compactPartition(partitionPath, fieldName, startTime, endTime);
+    verify(compactorSpy).updateCompactionProgress(eq(partitionPath), eq(fieldName), eq(endTime));
   }
 
   private void mockCheckpointDownload(boolean exists, String checkpointValue) throws IOException {
