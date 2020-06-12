@@ -29,6 +29,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -50,7 +51,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.*;
+import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.getInstanceName;
 import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.HelixAdminOperation.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
@@ -716,7 +719,6 @@ public class HelixBootstrapUpgradeToolTest {
   @Test
   public void testResetPartitionAdminOp() throws Exception {
     assumeTrue(!dcStr.equals("DC1") && !dcStr.equals("DC0"));
-    String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
     // Test regular bootstrap.
     long expectedResourceCount =
         (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
@@ -738,6 +740,53 @@ public class HelixBootstrapUpgradeToolTest {
     } catch (HelixException e) {
       // expected
     }
+  }
+
+  /**
+   * Test listing sealed partitions in Helix cluster.
+   * @throws Exception
+   */
+  @Test
+  public void testListSealedPartitions() throws Exception {
+    assumeTrue(!dcStr.equals("DC1"));
+    String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+    // Test regular bootstrap
+    long expectedResourceCount =
+        (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
+    Set<String> sealedPartitions =
+        HelixBootstrapUpgradeUtil.listSealedPartition(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+            CLUSTER_NAME_PREFIX, dcStr);
+    assertEquals("Sealed partition set should be empty initially", Collections.emptySet(), sealedPartitions);
+    // randomly choose 20 partitions to mark as sealed
+    int[] intArray = new Random().ints(0, 100).distinct().limit(20).toArray();
+    Set<String> selectedSealedPartitionSet = new HashSet<>();
+    for (int id : intArray) {
+      selectedSealedPartitionSet.add(String.valueOf(id));
+    }
+    // update the sealed lists in Helix
+    for (ZkInfo zkInfo : dcsToZkInfo.values()) {
+      ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+      for (String instanceName : admin.getInstancesInCluster(clusterName)) {
+        InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, instanceName);
+        Set<String> localReplicas = new HashSet<>();
+        for (Map<String, String> diskInfo : instanceConfig.getRecord().getMapFields().values()) {
+          String replicaStrs = diskInfo.get(REPLICAS_STR);
+          for (String replicaStr : replicaStrs.split(REPLICAS_DELIM_STR)) {
+            localReplicas.add(replicaStr.split(REPLICAS_STR_SEPARATOR)[0]);
+          }
+        }
+        // derive the intersection of localReplicas set and selectedSealedPartitionSet
+        localReplicas.retainAll(selectedSealedPartitionSet);
+        instanceConfig.getRecord().setListField(SEALED_STR, new ArrayList<>(localReplicas));
+        admin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+      }
+    }
+    // query sealed partition in Helix again
+    sealedPartitions =
+        HelixBootstrapUpgradeUtil.listSealedPartition(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+            CLUSTER_NAME_PREFIX, dcStr);
+    assertEquals("Mismatch in sealed partition set", selectedSealedPartitionSet, sealedPartitions);
   }
 
   /**
@@ -788,8 +837,8 @@ public class HelixBootstrapUpgradeToolTest {
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
-      String getPath = ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH;
-      ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
+      ZNRecord zNRecord =
+          propertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
       if (!activeDcSet.contains(zkInfo.getDcName())) {
         assertNull(zNRecord);
       } else {
@@ -891,8 +940,8 @@ public class HelixBootstrapUpgradeToolTest {
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
-      String getPath = ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH;
-      ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
+      ZNRecord zNRecord =
+          propertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
       if (!activeDcSet.contains(zkInfo.getDcName())) {
         assertNull(zNRecord);
       } else {
