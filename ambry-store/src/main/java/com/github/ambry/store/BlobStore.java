@@ -581,15 +581,24 @@ public class BlobStore implements Store {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           int i = 0;
           for (MessageInfo info : infosToDelete) {
-            IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
-                EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE,
-                    PersistentIndex.IndexEntryType.UNDELETE));
+            IndexValue value =
+                index.findKey(info.getStoreKey(), fileSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
             if (value != null) {
-              if (value.isDelete() && value.getLifeVersion() == lifeVersions.get(i)) {
-                throw new StoreException(
-                    "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
-                    StoreErrorCodes.ID_Deleted);
+              // There are several possible cases that can exist here. Delete has be follow either PUT, TTL_UPDATE or UNDELETE.
+              // let EOBC be end offset before check, and [RECORD] means RECORD is optional
+              // 1. PUT [TTL_UPDATE DELETE UNDELETE] EOBC DELETE
+              // 2. PUT EOBC TTL_UPDATE
+              // 3. PUT EOBC DELETE UNDELETE: this is really extreme case
+              // From these cases, we can have value being DELETE, TTL_UPDATE AND UNDELETE, we have to deal with them accordingly.
+              if (value.getLifeVersion() == lifeVersions.get(i)) {
+                if (value.isDelete()) {
+                  throw new StoreException(
+                      "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                      StoreErrorCodes.ID_Deleted);
+                }
+                // value being ttl update is fine, we can just append DELETE to it.
               } else {
+                // For the extreme case, we log it out and throw an exception.
                 logger.warn("Concurrent operation for id " + info.getStoreKey() + " in store " + dataDir
                     + ". Newly added value " + value);
                 throw new StoreException(

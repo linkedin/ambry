@@ -775,6 +775,54 @@ public class BlobStoreTest {
   }
 
   /**
+   * Test the case where a TTL_UPDATE happens while a Delete is doing the preliminary check.
+   * @throws Exception
+   */
+  @Test
+  public void concurrentDeleteAndTtlUpdateTest() throws Exception {
+    MockId id = put(1, PUT_RECORD_SIZE, expiresAtMs).get(0);
+    final CountDownLatch getEndOffsetLatch = new CountDownLatch(1);
+    final CountDownLatch findKeyLatch = new CountDownLatch(1);
+    ((MockBlobStore) store).setInDeleteBetweenGetEndOffsetAndFindKey(() -> {
+      getEndOffsetLatch.countDown();
+      findKeyLatch.await();
+      return null;
+    });
+
+    long logEndOffsetBeforeDelete = store.getLogEndOffsetInBytes();
+    long indexEndOffsetBeforeDelete = store.getSizeInBytes();
+    ExecutorService executorService = Executors.newFixedThreadPool(2);
+    try {
+      Future<Void> deleteFuture = executorService.submit(() -> {
+        delete(id);
+        return null;
+      });
+      Future<Void> ttlUpdateFuture = executorService.submit(() -> {
+        // Now make sure delete already get the index's end offset
+        getEndOffsetLatch.await();
+        updateTtl(id);
+        // Now make sure the put is inserted into the index before continue delete
+        findKeyLatch.countDown();
+        return null;
+      });
+      ttlUpdateFuture.get();
+      deleteFuture.get();
+      long logEndOffsetAfterDelete = store.getLogEndOffsetInBytes();
+      long indexEndOffsetAfterDelete = store.getSizeInBytes();
+      assertEquals((long) TTL_UPDATE_RECORD_SIZE + DELETE_RECORD_SIZE,
+          logEndOffsetAfterDelete - logEndOffsetBeforeDelete);
+      assertEquals((long) TTL_UPDATE_RECORD_SIZE + DELETE_RECORD_SIZE,
+          indexEndOffsetAfterDelete - indexEndOffsetBeforeDelete);
+      StoreInfo storeInfo = store.get(Arrays.asList(id), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
+      assertTrue(storeInfo.getMessageReadSetInfo().get(0).isDeleted());
+      assertTrue(storeInfo.getMessageReadSetInfo().get(0).isTtlUpdated());
+    } finally {
+      ((MockBlobStore) store).setInDeleteBetweenGetEndOffsetAndFindKey(null);
+      executorService.shutdownNow();
+    }
+  }
+
+  /**
    * Tests the case where there are many concurrent ttl updates.
    * @throws Exception
    */
