@@ -244,7 +244,9 @@ public class Selector implements Selectable {
       metrics.selectorNioCloseErrorCount.inc();
       logger.error("Exception closing nioSelector:", e);
     }
-    executorPool.shutdown();
+    if (executorPool != null) {
+      executorPool.shutdown();
+    }
   }
 
   /**
