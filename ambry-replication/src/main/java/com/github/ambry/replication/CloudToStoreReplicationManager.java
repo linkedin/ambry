@@ -240,8 +240,13 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   /**
    * Randomly select a {@link DataNodeId} from list of {@code vcrNodes}.
    * @return randomly selected {@link DataNodeId} object.
+   * @throws ReplicationException if there are no vcr nodes.
    */
-  private DataNodeId getCloudDataNode() {
+  private DataNodeId getCloudDataNode() throws ReplicationException {
+    if (vcrNodes.get().size() == 0) {
+      logger.error("No vcr node found to replicate partition from cloud.");
+      throw new ReplicationException("No vcr node found to replicate partition from cloud.");
+    }
     return vcrNodes.get().toArray(new CloudDataNode[0])[Utils.getRandomShort(new Random()) % vcrNodes.get().size()];
   }
 
