@@ -119,7 +119,9 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
         } else {
           logger.info("Instance config change triggered from {}", dcName);
         }
-        logger.debug("Detailed instance configs in {} are: {}", dcName, configs);
+        if (logger.isDebugEnabled()) {
+          configs.forEach(config -> logger.debug("Detailed data node config in {} is: {}", dcName, config));
+        }
         try {
           addOrUpdateInstanceInfos(configs);
         } catch (Exception e) {
@@ -318,8 +320,8 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
     final List<ReplicaId> removedReplicas = new ArrayList<>();
     String instanceName = dataNodeConfig.getInstanceName();
     logger.info("Updating replicas info for existing node {}", instanceName);
-    Set<String> sealedReplicas = dataNodeConfig.getStoppedReplicas();
-    Set<String> stoppedReplicas = dataNodeConfig.getSealedReplicas();
+    Set<String> sealedReplicas = dataNodeConfig.getSealedReplicas();
+    Set<String> stoppedReplicas = dataNodeConfig.getStoppedReplicas();
     AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
     ConcurrentHashMap<String, AmbryReplica> currentReplicasOnNode = ambryDataNodeToAmbryReplicas.get(dataNode);
     ConcurrentHashMap<String, AmbryReplica> replicasFromInstanceConfig = new ConcurrentHashMap<>();
@@ -356,8 +358,8 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
               new AmbryPartition(Long.parseLong(partitionName), replicaConfig.getPartitionClass(),
                   helixClusterManagerCallback);
           // Ensure only one AmbryPartition instance exists for specific partition.
-          mappedPartition =
-              clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaConfig.getReplicaCapacityInBytes());
+          mappedPartition = clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition,
+              replicaConfig.getReplicaCapacityInBytes());
           ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, dataNode,
               replicaConfig.getReplicaCapacityInBytes());
           // create new replica belonging to this partition or find the existing replica from bootstrapReplicas map.
@@ -472,8 +474,8 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
       DataNodeConfig.DiskConfig diskConfig = diskEntry.getValue();
 
       // Create disk
-      AmbryDisk disk =
-          new AmbryDisk(clusterMapConfig, datanode, mountPath, diskConfig.getState(), diskConfig.getDiskCapacityInBytes());
+      AmbryDisk disk = new AmbryDisk(clusterMapConfig, datanode, mountPath, diskConfig.getState(),
+          diskConfig.getDiskCapacityInBytes());
       ambryDataNodeToAmbryDisks.get(datanode).add(disk);
       clusterChangeHandlerCallback.addClusterWideRawCapacity(diskConfig.getDiskCapacityInBytes());
 
@@ -485,9 +487,10 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
             new AmbryPartition(Long.parseLong(partitionName), replicaConfig.getPartitionClass(),
                 helixClusterManagerCallback);
         // Ensure only one AmbryPartition instance exists for specific partition.
-        mappedPartition =
-            clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition, replicaConfig.getReplicaCapacityInBytes());
-        ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaConfig.getReplicaCapacityInBytes());
+        mappedPartition = clusterChangeHandlerCallback.addPartitionIfAbsent(mappedPartition,
+            replicaConfig.getReplicaCapacityInBytes());
+        ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode,
+            replicaConfig.getReplicaCapacityInBytes());
         // Create replica associated with this node and this partition
         boolean isSealed = sealedReplicas.contains(partitionName);
         if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
