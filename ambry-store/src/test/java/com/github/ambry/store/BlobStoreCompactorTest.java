@@ -47,8 +47,6 @@ import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.ArgumentMatcher;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 
 import static com.github.ambry.store.StoreTestUtils.*;
@@ -993,7 +991,8 @@ public class BlobStoreCompactorTest {
       Container container = Mockito.mock(Container.class);
       Mockito.when(container.getParentAccountId()).thenReturn(indexEntry.getValue().getAccountId());
       Mockito.when(container.getId()).thenReturn(indexEntry.getValue().getContainerId());
-      Mockito.when(container.getDeleteTriggerTime()).thenReturn(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(config.storeContainerDeletionRetentionDays));
+      Mockito.when(container.getDeleteTriggerTime())
+          .thenReturn(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(config.storeContainerDeletionRetentionDays));
       deleteInProgressSet.add(container);
       deletedInProgressKeys.add((MockId) indexEntry.getKey());
       cleanedUpSize += indexEntry.getValue().getSize();
@@ -1371,11 +1370,11 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests when the PUT DELETE and UNDELETE are located in different log segments.
+   * Tests when the PUT DELETE and UNDELETE are located in different log segments and the undelete is the final state.
    * @throws Exception
    */
   @Test
-  public void undeleteCrossLogSegmentTest() throws Exception {
+  public void undeleteCrossLogSegmentTest_UndeleteAsFinal() throws Exception {
     Assume.assumeTrue(withUndelete);
     refreshState(false, false);
     int numPuts = (int) Math.floorDiv(state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE,
@@ -1395,6 +1394,98 @@ public class BlobStoreCompactorTest {
     // and the other half in the second. Then we have all the UNDELETEs in the third log segment.
     List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
     compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+
+    // For all the keys, in entries, there should only have two index value left, one Put, one Undelete.
+    for (IndexEntry entry : entries) {
+      List<IndexValue> values = state.index.findAllIndexValuesForKey(entry.getKey(), null);
+      assertNotNull(values);
+      assertEquals(2, values.size());
+      IndexValue undelete = values.get(0);
+      IndexValue put = values.get(1);
+      assertTrue(undelete.isUndelete());
+      assertFalse(undelete.isDelete());
+      assertEquals((short) 1, undelete.getLifeVersion());
+      IndexValue expected = entry.getValue();
+      assertEquals(expected.isPut(), put.isPut());
+      assertEquals(expected.getLifeVersion(), put.getLifeVersion());
+      assertEquals(expected.getAccountId(), put.getAccountId());
+      assertEquals(expected.getContainerId(), put.getContainerId());
+      assertEquals(expected.getSize(), put.getSize());
+      assertEquals(expected.getExpiresAtMs(), put.getExpiresAtMs());
+      assertEquals(expected.getOperationTimeInMs(), put.getOperationTimeInMs());
+    }
+  }
+
+  /**
+   * Tests when the PUT DELETE and UNDELETE are located in different log segments and the delete is the final state.
+   * @throws Exception
+   */
+  @Test
+  public void undeleteCrossLogSegmentTest_DeleteAsFinal() throws Exception {
+    Assume.assumeTrue(withUndelete);
+    for (long deleteReferenceTime : new long[]{-1, 0}) {
+      refreshState(false, false);
+      int numPuts = (int) Math.floorDiv(state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE,
+          CuratedLogIndexState.PUT_RECORD_SIZE + (CuratedLogIndexState.DELETE_RECORD_SIZE) / 2) - 1;
+      List<IndexEntry> entries =
+          state.addPutEntries(numPuts, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+      for (IndexEntry entry : entries) {
+        state.addDeleteEntry((MockId) entry.getKey());
+      }
+      for (IndexEntry entry : entries) {
+        state.addUndeleteEntry((MockId) entry.getKey());
+      }
+      writeDataToMeetRequiredSegmentCount(state.index.getLogSegmentCount() + 1, null);
+      for (IndexEntry entry : entries) {
+        state.addDeleteEntry((MockId) entry.getKey());
+      }
+      writeDataToMeetRequiredSegmentCount(state.index.getLogSegmentCount() + 1, null);
+      state.reloadIndex(true, false);
+
+      List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+      long realDeleteReferenceTime = deleteReferenceTime < 0 ? state.time.milliseconds() : deleteReferenceTime;
+      compactAndVerify(segmentsUnderCompaction, realDeleteReferenceTime, true);
+
+      for (IndexEntry entry : entries) {
+        List<IndexValue> values = state.index.findAllIndexValuesForKey(entry.getKey(), null);
+        assertNotNull(values);
+        IndexValue delete = values.get(0);
+        assertFalse(delete.isUndelete());
+        assertTrue(delete.isDelete());
+        assertEquals((short) 1, delete.getLifeVersion());
+        if (deleteReferenceTime < 0) {
+          assertEquals(1, values.size());
+        } else {
+          assertEquals(2, values.size());
+          IndexValue put = values.get(1);
+          IndexValue expected = entry.getValue();
+          assertEquals(expected.isPut(), put.isPut());
+          assertEquals(expected.getLifeVersion(), put.getLifeVersion());
+          assertEquals(expected.getAccountId(), put.getAccountId());
+          assertEquals(expected.getContainerId(), put.getContainerId());
+          assertEquals(expected.getSize(), put.getSize());
+          assertEquals(expected.getExpiresAtMs(), put.getExpiresAtMs());
+          assertEquals(expected.getOperationTimeInMs(), put.getOperationTimeInMs());
+        }
+      }
+    }
+  }
+
+  /**
+   * Tests some recovery scenarios related to UNDELETE records in particular
+   * @throws Exception
+   */
+  @Test
+  public void undeleteSpecificRecoveryTest() throws Exception {
+    Assume.assumeTrue(withUndelete);
+    bundleReadBuffer = null;
+    // close testing
+    doUndeleteSrcDupTest();
+    doUndeleteTgtDupTest();
+    // crash testing
+    throwExceptionInsteadOfClose = true;
+    doUndeleteSrcDupTest();
+    doUndeleteTgtDupTest();
   }
 
   // helpers
@@ -2529,6 +2620,137 @@ public class BlobStoreCompactorTest {
     compactWithRecoveryAndVerify(state.log, diskIOScheduler, state.index, segmentsUnderCompaction,
         state.time.milliseconds(), false, true);
     verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
+  }
+
+  /**
+   * Tests the case where close/crash creates a situation where duplicates, including undeletes, will be detected during
+   * the search for copy candidates in the srcIndex
+   * @throws Exception
+   */
+  private void doUndeleteSrcDupTest() throws Exception {
+    List<MockId> ids = createLogSegmentWithDuplicateOfUndelete();
+    List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    Log log = new InterruptionInducingLog(Integer.MAX_VALUE, 1);
+    compactWithRecoveryAndVerify(log, DISK_IO_SCHEDULER, state.index, segmentsUnderCompaction,
+        state.time.milliseconds(), true, true);
+
+    MockId pu = ids.get(0);
+    MockId pd = ids.get(1);
+    MockId pt = ids.get(2);
+    List<IndexValue> values = state.index.findAllIndexValuesForKey(pu, null);
+    assertNotNull(values);
+    assertEquals(3, values.size());
+    assertTrue(values.get(0).isUndelete());
+    assertEquals(1, values.get(0).getLifeVersion());
+    assertTrue(values.get(1).isTtlUpdate());
+    assertTrue(values.get(2).isPut());
+    values = state.index.findAllIndexValuesForKey(pd, null);
+    assertNotNull(values);
+    assertEquals(1, values.size());
+    assertTrue(values.get(0).isDelete());
+    values = state.index.findAllIndexValuesForKey(pt, null);
+    assertNotNull(values);
+    assertEquals(2, values.size());
+    assertTrue(values.get(0).isTtlUpdate());
+    assertTrue(values.get(1).isPut());
+  }
+
+  /**
+   * Tests the case where close/crash creates a situation where duplicates, includeing undeletes, will be detected during
+   * the search for copy candidates in the tgtIndex
+   * @throws Exception
+   */
+  private void doUndeleteTgtDupTest() throws Exception {
+    List<MockId> ids = createLogSegmentWithDuplicateOfUndelete();
+    MockId pu = ids.get(0);
+    MockId pd = ids.get(1);
+    MockId pt = ids.get(2);
+
+    List<String> segmentsUnderCompaction = getLogSegments(1, 1);
+    DiskIOScheduler diskIOScheduler;
+    if (throwExceptionInsteadOfClose) {
+      // pu + pd + pt should span two segment, give it another one for margin.
+      diskIOScheduler = new InterruptionInducingDiskIOScheduler(3, Integer.MAX_VALUE);
+    } else {
+      // For pu, it's 1 PUT + 1 TTL_UPDATE + 1 UNDELETE
+      // For pd, it's 1 DELETE
+      // For pt, it's 1 PUT + 1 TTL_UPDATE
+      long totalBytes = 2 * CuratedLogIndexState.PUT_RECORD_SIZE + 2 * CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE
+          + CuratedLogIndexState.UNDELETE_RECORD_SIZE + CuratedLogIndexState.DELETE_RECORD_SIZE;
+      totalBytes += 2 * CuratedLogIndexState.PUT_RECORD_SIZE; // Give another put for margin.
+      diskIOScheduler = new InterruptionInducingDiskIOScheduler(Integer.MAX_VALUE, totalBytes);
+    }
+    Log log = new InterruptionInducingLog(Integer.MAX_VALUE, 1);
+    compactWithRecoveryAndVerify(state.log, diskIOScheduler, state.index, segmentsUnderCompaction,
+        state.time.milliseconds(), true, true);
+
+    List<IndexValue> values = state.index.findAllIndexValuesForKey(pu, null);
+    assertNotNull(values);
+    assertEquals(3, values.size());
+    assertTrue(values.get(0).isUndelete());
+    assertEquals(1, values.get(0).getLifeVersion());
+    assertTrue(values.get(1).isTtlUpdate());
+    assertTrue(values.get(2).isPut());
+    values = state.index.findAllIndexValuesForKey(pd, null);
+    assertNotNull(values);
+    assertEquals(1, values.size());
+    assertTrue(values.get(0).isDelete());
+    values = state.index.findAllIndexValuesForKey(pt, null);
+    assertNotNull(values);
+    assertEquals(2, values.size());
+    assertTrue(values.get(0).isTtlUpdate());
+    assertTrue(values.get(1).isPut());
+  }
+
+  private List<MockId> createLogSegmentWithDuplicateOfUndelete() throws Exception {
+    refreshState(false, false);
+    int numPuts =
+        (int) ((state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE) / (CuratedLogIndexState.PUT_RECORD_SIZE));
+    List<IndexEntry> entries = state.addPutEntries(numPuts, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    // We will construct log such as
+    // First log segment will be all PUTs, and some of them will be compacted by adding DELETEs in the end
+    // Second log segment will contain certain records, such that the records will be compacted and fitted in a single
+    // compacted segment with first log segment. And certain records will be inserted to make sure it meets some corner
+    // cases, which wil be commented below.
+    assertEquals(1, state.index.getLogSegmentCount());
+
+    int numRecordToCompact = 0;
+    MockId pu =
+        (MockId) state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0).getKey();
+    state.makePermanent(pu, false);
+    state.addDeleteEntry(pu);
+    state.addUndeleteEntry(pu);
+    numRecordToCompact += 3;
+    // LifeVersion in source index > candidate.
+    // Here we have a P0, T0, D0 and U1. These records will be compacted to P0, T1, U1. When it recovers, the U1 will be in
+    // source index, and P0, T0, U1 will be tested alreadyExists against U1. (D0 is not valid).
+
+    MockId pd =
+        (MockId) state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0).getKey();
+    state.makePermanent(pd, false);
+    state.addDeleteEntry(pd);
+    numRecordToCompact += 1;
+    // LifeVersion in source index = candidate. Delete is final
+    // Here we have a P0, T0 and D0. These records will be compacted to D0. When it recovers, the D0 will be in the source
+    // index and P0 and T0 will be tested alreadyExists against D0.
+
+    MockId pt =
+        (MockId) state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0).getKey();
+    state.makePermanent(pt, false);
+    numRecordToCompact += 2;
+    // LifeVersion in source index = candidate. TtlUpdate is final
+    // Here we have a P0, T0. These records will be both copied over. When it recovers, the T0 will be in the source
+    // index and P0 and T0 will be tested alreadyExists against T0.
+
+    // LifeVersion in source index < candidate is too common that it's already been tested in other test functions.
+    writeDataToMeetRequiredSegmentCount(2, null);
+
+    assertTrue(numRecordToCompact < numPuts);
+    for (int i = 0; i < numRecordToCompact; i++) {
+      state.addDeleteEntry((MockId) entries.get(i).getKey());
+    }
+    writeDataToMeetRequiredSegmentCount(4, null);
+    return Arrays.asList(pu, pd, pt);
   }
 
   // support class helpers
