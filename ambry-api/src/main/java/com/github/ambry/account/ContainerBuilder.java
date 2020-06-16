@@ -33,7 +33,7 @@ public class ContainerBuilder {
   private short parentAccountId;
 
   // optional
-  private long deleteTriggerTime = System.currentTimeMillis();
+  private long deleteTriggerTime = CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE;
   private boolean encrypted = ENCRYPTED_DEFAULT_VALUE;
   private boolean previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
   private boolean cacheable = CACHEABLE_DEFAULT_VALUE;

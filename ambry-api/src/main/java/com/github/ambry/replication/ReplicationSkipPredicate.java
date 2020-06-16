@@ -61,7 +61,7 @@ public class ReplicationSkipPredicate implements Predicate<MessageInfo> {
       Container.ContainerStatus status = container.getStatus();
       if (status == Container.ContainerStatus.DELETE_IN_PROGRESS &&
           container.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(
-              replicationConfig.replicationContainerDeletionRetentionDays) < System.currentTimeMillis()) {
+              replicationConfig.replicationContainerDeletionRetentionDays) <= System.currentTimeMillis()) {
         logger.debug("Container {} is not qualified with retention time yet", container);
         return false;
       }
