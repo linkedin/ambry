@@ -1472,6 +1472,77 @@ public class BlobStoreCompactorTest {
   }
 
   /**
+   * Test the case when there are multiple deletes in the log.
+   * @throws Exception
+   */
+  @Test
+  public void deleteWithOlderVersionTest() throws Exception {
+    Assume.assumeTrue(withUndelete);
+    // 1. Compact all the puts and deletes with delete reference time being 0
+    List<IndexEntry> entries = createDeleteWithOlderVersion();
+    int numPuts = entries.size();
+    long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
+    long realBytesBeforeCompaction =
+        logSegmentSizeSumBeforeCompaction - LogSegment.HEADER_SIZE * state.index.getLogSegmentCount();
+    List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    compactAndVerify(segmentsUnderCompaction, 0, true);
+    long compactedBytes =
+        numPuts * (CuratedLogIndexState.DELETE_RECORD_SIZE + CuratedLogIndexState.UNDELETE_RECORD_SIZE);
+    long logSegmentSizeSumAfterCompaction = getSumOfLogSegmentEndOffsets();
+    long realBytesAfterCompaction =
+        logSegmentSizeSumAfterCompaction - LogSegment.HEADER_SIZE * state.index.getLogSegmentCount();
+    assertEquals(compactedBytes, realBytesBeforeCompaction - realBytesAfterCompaction);
+
+    for (IndexEntry entry : entries) {
+      List<IndexValue> values = state.index.findAllIndexValuesForKey(entry.getKey(), null);
+      assertNotNull(values);
+      assertEquals(2, values.size());
+      assertEquals((short) 1, values.get(0).getLifeVersion());
+      assertTrue(values.get(0).isDelete());
+      assertTrue(values.get(1).isPut());
+    }
+
+    // 2. Compact all the puts and deletes with delete reference time being now.
+    entries = createDeleteWithOlderVersion();
+    numPuts = entries.size();
+    logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
+    realBytesBeforeCompaction =
+        logSegmentSizeSumBeforeCompaction - LogSegment.HEADER_SIZE * state.index.getLogSegmentCount();
+    segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+    compactedBytes = numPuts * (CuratedLogIndexState.DELETE_RECORD_SIZE + CuratedLogIndexState.UNDELETE_RECORD_SIZE
+        + CuratedLogIndexState.PUT_RECORD_SIZE);
+    logSegmentSizeSumAfterCompaction = getSumOfLogSegmentEndOffsets();
+    realBytesAfterCompaction =
+        logSegmentSizeSumAfterCompaction - LogSegment.HEADER_SIZE * state.index.getLogSegmentCount();
+    assertEquals(compactedBytes, realBytesBeforeCompaction - realBytesAfterCompaction);
+
+    for (IndexEntry entry : entries) {
+      List<IndexValue> values = state.index.findAllIndexValuesForKey(entry.getKey(), null);
+      assertNotNull(values);
+      assertEquals(1, values.size());
+      assertEquals((short) 1, values.get(0).getLifeVersion());
+      assertTrue(values.get(0).isDelete());
+    }
+
+    // 3. Compact only the deletes, with delete reference time being now.
+    entries = createDeleteWithOlderVersion();
+    numPuts = entries.size();
+    logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
+    realBytesBeforeCompaction =
+        logSegmentSizeSumBeforeCompaction - LogSegment.HEADER_SIZE * state.index.getLogSegmentCount();
+    segmentsUnderCompaction = getLogSegments(1, state.index.getLogSegmentCount() - 2);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+    // there is one put at the beginning of the second log segment.
+    compactedBytes = numPuts * (CuratedLogIndexState.DELETE_RECORD_SIZE + CuratedLogIndexState.UNDELETE_RECORD_SIZE)
+        + CuratedLogIndexState.PUT_RECORD_SIZE;
+    logSegmentSizeSumAfterCompaction = getSumOfLogSegmentEndOffsets();
+    realBytesAfterCompaction =
+        logSegmentSizeSumAfterCompaction - LogSegment.HEADER_SIZE * state.index.getLogSegmentCount();
+    assertEquals(compactedBytes, realBytesBeforeCompaction - realBytesAfterCompaction);
+  }
+
+  /**
    * Tests some recovery scenarios related to UNDELETE records in particular
    * @throws Exception
    */
@@ -2700,6 +2771,26 @@ public class BlobStoreCompactorTest {
     assertEquals(2, values.size());
     assertTrue(values.get(0).isTtlUpdate());
     assertTrue(values.get(1).isPut());
+  }
+
+  private List<IndexEntry> createDeleteWithOlderVersion() throws Exception {
+    refreshState(false, false);
+    int numPuts =
+        (int) ((state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE) / CuratedLogIndexState.PUT_RECORD_SIZE + 1);
+    List<IndexEntry> entries = state.addPutEntries(numPuts, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    assertEquals(2, state.index.getLogSegmentCount());
+    for (IndexEntry entry : entries) {
+      state.addDeleteEntry((MockId) entry.getKey());
+      state.addUndeleteEntry((MockId) entry.getKey());
+    }
+    // Now delete it again
+    for (IndexEntry entry : entries) {
+      state.addDeleteEntry((MockId) entry.getKey());
+    }
+    // Here we have four records for earch id, P0, D0, U1, D1. Compact them with 0 being delete reference time, it should
+    // be compacted to P0, D1.
+    writeDataToMeetRequiredSegmentCount(state.index.getLogSegmentCount() + 1, null);
+    return entries;
   }
 
   private List<MockId> createLogSegmentWithDuplicateOfUndelete() throws Exception {
