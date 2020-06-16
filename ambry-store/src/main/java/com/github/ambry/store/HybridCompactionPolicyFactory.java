@@ -16,7 +16,7 @@ package com.github.ambry.store;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 
-public class HybridCompactionPolicyFactory implements CompactionPolicyFactory{
+public class HybridCompactionPolicyFactory implements CompactionPolicyFactory {
   private final StoreConfig storeConfig;
   private final Time time;
 
@@ -24,6 +24,7 @@ public class HybridCompactionPolicyFactory implements CompactionPolicyFactory{
     this.storeConfig = storeConfig;
     this.time = time;
   }
+
   public CompactionPolicy getCompactionPolicy() {
     return new HybridCompactionPolicy(storeConfig, time);
   }

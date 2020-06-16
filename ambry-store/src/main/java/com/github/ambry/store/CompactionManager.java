@@ -196,7 +196,8 @@ class CompactionManager {
   CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
     ReplicaId replicaId = blobStore.getReplicaId();
     if (compactionPolicyFactory != null && compactionPolicyFactory instanceof HybridCompactionPolicyFactory) {
-      SafeCounterWithoutLock safeCounterWithoutLock = replicaToCounterMap.getOrDefault(replicaId, new SafeCounterWithoutLock(storeConfig));
+      SafeCounterWithoutLock safeCounterWithoutLock =
+          replicaToCounterMap.getOrDefault(replicaId, new SafeCounterWithoutLock(storeConfig));
       safeCounterWithoutLock.incrementAndGet();
       replicaToCounterMap.put(replicaId, safeCounterWithoutLock);
     }

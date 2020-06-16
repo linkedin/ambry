@@ -36,8 +36,8 @@ public class HybridCompactionPolicy implements CompactionPolicy {
 
   @Override
   public CompactionDetails getCompactionDetails(long totalCapacity, long usedCapacity, long segmentCapacity,
-      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats, SafeCounterWithoutLock safeCounterWithoutLock)
-      throws StoreException {
+      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats,
+      SafeCounterWithoutLock safeCounterWithoutLock) throws StoreException {
     CompactionPolicy compactionPolicy = selectCompactionPolicy(safeCounterWithoutLock);
     logger.info("Current compaction policy is : {}", compactionPolicy);
     return compactionPolicy.getCompactionDetails(totalCapacity, usedCapacity, segmentCapacity, segmentHeaderSize,
