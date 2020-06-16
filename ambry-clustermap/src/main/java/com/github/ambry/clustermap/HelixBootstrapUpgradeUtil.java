@@ -1333,6 +1333,7 @@ public class HelixBootstrapUpgradeUtil {
     CountDownLatch sealedPartitionLatch = new CountDownLatch(adminForDc.size());
     AtomicInteger errorCount = new AtomicInteger();
     Map<String, Set<String>> dcToSealedPartitions = new ConcurrentHashMap<>();
+    Map<String, Set<String>> nodeToNonExistentReplicas = new ConcurrentHashMap<>();
     for (Datacenter dc : staticClusterMap.hardwareLayout.getDatacenters()) {
       HelixAdmin admin = adminForDc.get(dc.getName());
       if (admin == null) {
@@ -1344,7 +1345,7 @@ public class HelixBootstrapUpgradeUtil {
           "Cluster not found in ZK " + dataCenterToZkAddress.get(dc.getName()));
       Utils.newThread(() -> {
         try {
-          getSealedPartitionsInDc(dc, dcToSealedPartitions);
+          getSealedPartitionsInDc(dc, dcToSealedPartitions, nodeToNonExistentReplicas);
         } catch (Throwable t) {
           logger.error("[{}] error message: {}", dc.getName().toUpperCase(), t.getMessage());
           errorCount.getAndIncrement();
@@ -1364,6 +1365,12 @@ public class HelixBootstrapUpgradeUtil {
     info("========================= Sealed Partitions across All DCs =========================");
     info("Total number of sealed partitions in cluster = {}", sealedPartitionsInCluster.size());
     info("Sealed partitions are {}", sealedPartitionsInCluster.toString());
+    if (!nodeToNonExistentReplicas.isEmpty()) {
+      info("Following {} nodes have sealed replica that are not actually present", nodeToNonExistentReplicas.size());
+      for (Map.Entry<String, Set<String>> entry : nodeToNonExistentReplicas.entrySet()) {
+        info("{} has non-existent replicas: {}", entry.getKey(), entry.getValue().toString());
+      }
+    }
     info("Successfully aggregate sealed from cluster {} in Helix", clusterName);
     return sealedPartitionsInCluster;
   }
@@ -1373,14 +1380,20 @@ public class HelixBootstrapUpgradeUtil {
    * @param dc the datacenter where sealed partitions come from.
    * @param dcToSealedPartitions a map to track sealed partitions in each dc. This entry associated with given dc will
    *                             be populated in this method.
+   * @param nodeToNonExistentReplicas a map to track if any replica is in sealed list but not actually on local node.
    */
-  private void getSealedPartitionsInDc(Datacenter dc, Map<String, Set<String>> dcToSealedPartitions) {
+  private void getSealedPartitionsInDc(Datacenter dc, Map<String, Set<String>> dcToSealedPartitions,
+      Map<String, Set<String>> nodeToNonExistentReplicas) {
     String dcName = dc.getName();
     dcToSealedPartitions.put(dcName, new HashSet<>());
     HelixAdmin admin = adminForDc.get(dcName);
     Set<String> allInstancesInHelix = new HashSet<>(admin.getInstancesInCluster(clusterName));
     for (DataNodeId dataNodeId : dc.getDataNodes()) {
       DataNode dataNode = (DataNode) dataNodeId;
+      Set<String> replicasOnNode = staticClusterMap.getReplicas(dataNode)
+          .stream()
+          .map(replicaId -> replicaId.getPartitionId().toPathString())
+          .collect(Collectors.toSet());
       String instanceName = getInstanceName(dataNode);
       ensureOrThrow(allInstancesInHelix.contains(instanceName), "Instance not present in Helix " + instanceName);
       InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, instanceName);
@@ -1389,6 +1402,10 @@ public class HelixBootstrapUpgradeUtil {
         for (String sealedReplica : sealedReplicas) {
           info("Replica {} is sealed on {}", sealedReplica, instanceName);
           dcToSealedPartitions.get(dcName).add(sealedReplica);
+          if (!replicasOnNode.contains(sealedReplica)) {
+            logger.warn("Replica {} is in sealed list but not on node {}", sealedReplica, replicasOnNode);
+            nodeToNonExistentReplicas.computeIfAbsent(instanceName, key -> new HashSet<>()).add(sealedReplica);
+          }
         }
       }
     }
