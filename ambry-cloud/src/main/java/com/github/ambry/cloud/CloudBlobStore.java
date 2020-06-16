@@ -538,7 +538,7 @@ class CloudBlobStore implements Store {
    */
   private boolean preDeleteValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
       throws StoreException {
-    validateAccountAndContainer(Collections.singletonMap(metadata.getId(), metadata), Collections.singletonList(key));
+    validateAccountAndContainer(Collections.singletonMap(key.getID(), metadata), Collections.singletonList(key));
     short requestedLifeVersion = (short) updateFields.get(FIELD_LIFE_VERSION);
     if (isVcr) {
       // This is a delete request from vcr. Apply delete only if incoming life version is more recent. Don't throw
@@ -571,7 +571,7 @@ class CloudBlobStore implements Store {
    */
   private boolean preTtlUpdateValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
       throws StoreException {
-    validateAccountAndContainer(Collections.singletonMap(metadata.getId(), metadata), Collections.singletonList(key));
+    validateAccountAndContainer(Collections.singletonMap(key.getID(), metadata), Collections.singletonList(key));
     long now = System.currentTimeMillis();
     if (isVcr) {
       // For vcr don't update ttl if already updated. Don't throw any exception because replication relies on
@@ -601,7 +601,7 @@ class CloudBlobStore implements Store {
    */
   private boolean preUndeleteValidation(CloudBlobMetadata metadata, StoreKey key, Map<String, Object> updateFields)
       throws StoreException {
-    validateAccountAndContainer(Collections.singletonMap(metadata.getId(), metadata), Collections.singletonList(key));
+    validateAccountAndContainer(Collections.singletonMap(key.getID(), metadata), Collections.singletonList(key));
     short requestedLifeVersion = (short) updateFields.get(FIELD_LIFE_VERSION);
     if (isVcr) {
       // This is an undelete request from vcr. Apply undelete only if incoming life version is more recent. Don't throw
