@@ -1413,7 +1413,7 @@ public class ReplicationTest {
         Account account = Mockito.mock(Account.class);
         Mockito.when(account.getContainerById(containerId)).thenReturn(container);
         Mockito.when(accountService.getAccountById(accountId)).thenReturn(account);
-        Mockito.when(container.getDeleteTriggerTime()).thenReturn(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(replicationConfig.replicationContainerDeletionRetentionDays));
+        Mockito.when(container.getDeleteTriggerTime()).thenReturn(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(replicationConfig.replicationContainerDeletionRetentionDays + 1));
         Mockito.when(container.getStatus()).thenReturn(Container.ContainerStatus.DELETE_IN_PROGRESS);
       }
       Set<MessageInfo> remoteMissingStoreKeys = replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
@@ -1434,6 +1434,7 @@ public class ReplicationTest {
         Mockito.when(account.getContainerById(containerId)).thenReturn(container);
         Mockito.when(accountService.getAccountById(accountId)).thenReturn(account);
         Mockito.when(container.getStatus()).thenReturn(Container.ContainerStatus.DELETE_IN_PROGRESS);
+        Mockito.when(container.getDeleteTriggerTime()).thenReturn(System.currentTimeMillis());
       }
       Set<MessageInfo> remoteMissingStoreKeys = replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
       assertEquals("All DELETE_IN_PROGRESS blobs not qualified with retention time should not be skipped during replication", 2, remoteMissingStoreKeys.size());

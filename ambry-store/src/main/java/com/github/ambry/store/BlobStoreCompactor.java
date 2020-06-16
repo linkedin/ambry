@@ -205,7 +205,7 @@ class BlobStoreCompactor {
     deprecatedContainers.clear();
     if (accountService != null) {
       accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
-        if (container.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(config.storeContainerDeletionRetentionDays) >= System.currentTimeMillis()) {
+        if (container.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(config.storeContainerDeletionRetentionDays) <= System.currentTimeMillis()) {
           deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
         }
       });
