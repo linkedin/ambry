@@ -13,12 +13,15 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -47,7 +50,8 @@ class CompactionManager {
   private final StorageManagerMetrics metrics;
   private final CompactionPolicy compactionPolicy;
   private static final Logger logger = LoggerFactory.getLogger(CompactionManager.class);
-
+  private final Map<ReplicaId, SafeCounterWithoutLock> replicaToCounterMap;
+  private final CompactionPolicyFactory compactionPolicyFactory;
   private Thread compactionThread;
 
   /**
@@ -65,6 +69,7 @@ class CompactionManager {
     this.stores.addAll(stores);
     this.time = time;
     this.metrics = metrics;
+    this.replicaToCounterMap = new HashMap<>();
     if (!storeConfig.storeCompactionTriggers[0].isEmpty()) {
       EnumSet<Trigger> triggers = EnumSet.noneOf(Trigger.class);
       for (String trigger : storeConfig.storeCompactionTriggers) {
@@ -73,14 +78,14 @@ class CompactionManager {
       compactionExecutor = new CompactionExecutor(triggers, storeConfig.storeCompactionMinBufferSize == 0 ? 0
           : Math.max(storeConfig.storeCompactionOperationsBytesPerSec, storeConfig.storeCompactionMinBufferSize));
       try {
-        CompactionPolicyFactory compactionPolicyFactory =
-            Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
+        compactionPolicyFactory = Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
         compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
       } catch (Exception e) {
         throw new IllegalStateException("Error creating compaction policy using compactionPolicyFactory "
             + storeConfig.storeCompactionPolicyFactory);
       }
     } else {
+      compactionPolicyFactory = null;
       compactionExecutor = null;
       compactionPolicy = null;
     }
@@ -174,14 +179,28 @@ class CompactionManager {
   }
 
   /**
+   * Get the current replicaToCounterMap policy.
+   * @return {@link this.replicaToCounterMap}
+   */
+  Map<ReplicaId, SafeCounterWithoutLock> getReplicaToCounterMap(){
+    return this.replicaToCounterMap;
+  }
+
+  /**
    * Get compaction details for a given {@link BlobStore} if any
    * @param blobStore the {@link BlobStore} for which compaction details are requested
    * @return the {@link CompactionDetails} containing the details about log segments that needs to be compacted.
    * {@code null} if compaction is not required
    * @throws StoreException when {@link BlobStore} is not started
    */
-  private CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
-    return blobStore.getCompactionDetails(compactionPolicy);
+  CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
+    ReplicaId replicaId = blobStore.getReplicaId();
+    if (compactionPolicyFactory != null && compactionPolicyFactory instanceof HybridCompactionPolicyFactory) {
+      SafeCounterWithoutLock safeCounterWithoutLock = replicaToCounterMap.getOrDefault(replicaId, new SafeCounterWithoutLock(storeConfig));
+      safeCounterWithoutLock.incrementAndGet();
+      replicaToCounterMap.put(replicaId, safeCounterWithoutLock);
+    }
+    return blobStore.getCompactionDetails(compactionPolicy, replicaToCounterMap.get(replicaId));
   }
 
   /**

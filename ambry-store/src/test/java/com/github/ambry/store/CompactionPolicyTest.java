@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
@@ -48,6 +49,7 @@ public class CompactionPolicyTest {
   private static final long DEFAULT_USED_CAPACITY_IN_BYTES = CAPACITY_IN_BYTES * 6 / 10;
   private static final long DEFAULT_MAX_BLOB_SIZE = CAPACITY_IN_BYTES / 100;
   private static final long SEGMENT_HEADER_SIZE = CAPACITY_IN_BYTES / 50;
+  private static final String MOUNT_PATH = "/tmp/";
 
   // the properties that will used to generate a StoreConfig. Clear before use if required.
   private final Properties properties = new Properties();
@@ -85,26 +87,43 @@ public class CompactionPolicyTest {
   }
 
   /**
-   * Test if currentCompactionPolicy is expected based on storeCompactionPolicySwitchPeriod.
+   * Tests HybridCompactionPolicy which runs {@link StatsBasedCompactionPolicy} more frequently and {@link CompactAllPolicy} regularly.
+   * @throws StoreException
    */
   @Test
-  public void testCompactionPolicySwitch() throws Exception {
+  public void testHybridCompactionPolicy() throws StoreException {
+    // with compaction enabled.
     properties.setProperty("store.compaction.triggers", "Periodic");
     properties.setProperty("store.compaction.policy.switch.period", "3");
     properties.setProperty("store.compaction.policy.factory", "com.github.ambry.store.HybridCompactionPolicyFactory");
     config = new StoreConfig(new VerifiableProperties(properties));
-    CompactionPolicyFactory compactionPolicyFactory = Utils.getObj(config.storeCompactionPolicyFactory, config, time);
-    CompactionPolicy newCompactionPolicy = compactionPolicyFactory.getCompactionPolicy();
-    assertTrue("compactionPolicy needs to be Hybrid", newCompactionPolicy instanceof HybridCompactionPolicy);
-    CompactionPolicy currentCompactionPolicy;
-    for (int i = 0; i < config.storeCompactionPolicySwitchPeriod; i++) {
-      currentCompactionPolicy = ((HybridCompactionPolicy) newCompactionPolicy).selectCompactionPolicy();
-      if (i == config.storeCompactionPolicySwitchPeriod - 1) {
-        assertTrue("compactionPolicy needs to be CompactAll", currentCompactionPolicy instanceof CompactAllPolicy);
-      } else {
-        assertTrue("compactionPolicy needs to be StatsBased", currentCompactionPolicy instanceof StatsBasedCompactionPolicy);
-      }
+    MetricRegistry metricRegistry = new MetricRegistry();
+    CompactionManager compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore),
+        new StorageManagerMetrics(metricRegistry), time);
+    StoreMetrics metrics = new StoreMetrics(metricRegistry);
+
+    int numStores = 5;
+    for (int i = 1; i <= numStores; i++) {
+      MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(DEFAULT_MAX_BLOB_SIZE);
+      MockBlobStore blobStore =
+          new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, SEGMENT_CAPACITY_IN_BYTES, SEGMENT_HEADER_SIZE,
+              DEFAULT_USED_CAPACITY_IN_BYTES, mockBlobStoreStats);      //BlobStore store = Mockito.mock(BlobStore.class);
+      ReplicaId replicaId = blobStore.getReplicaId();
+      compactionManager.getCompactionDetails(blobStore);
+      assertEquals("Counter value should match with expectation", 1 % config.storeCompactionPolicySwitchPeriod,
+          compactionManager.getReplicaToCounterMap().get(replicaId).getValue());
+      compactionManager.getCompactionDetails(blobStore);
+      assertEquals("Counter value should match with expectation", 2 % config.storeCompactionPolicySwitchPeriod,
+          compactionManager.getReplicaToCounterMap().get(replicaId).getValue());
+      compactionManager.getCompactionDetails(blobStore);
+      assertEquals("Counter value should match with expectation", 3 % config.storeCompactionPolicySwitchPeriod,
+          compactionManager.getReplicaToCounterMap().get(replicaId).getValue());
+//      compactionManager.getCompactionDetails(blobStore);
+//      assertEquals("Counter value should match with expectation", 4 % config.storeCompactionPolicySwitchPeriod,
+//          compactionManager.getReplicaToCounterMap().get(replicaId).getValue());
     }
+    assertEquals("map size should equals to number of stores", numStores,
+        compactionManager.getReplicaToCounterMap().size());
   }
 
   /**
@@ -305,12 +324,12 @@ public class CompactionPolicyTest {
   // verification helper methods
 
   /**
-   * Verifies {@link BlobStore#getCompactionDetails(CompactionPolicy)} returns expected values i.e. {@code expectedCompactionDetails}
+   * Verifies {@link BlobStore#getCompactionDetails(CompactionPolicy, SafeCounterWithoutLock)} returns expected values i.e. {@code expectedCompactionDetails}
    * @throws StoreException
    */
   static void verifyCompactionDetails(CompactionDetails expectedCompactionDetails, BlobStore blobStore,
       CompactionPolicy compactionPolicy) throws StoreException {
-    CompactionDetails compactionDetails = blobStore.getCompactionDetails(compactionPolicy);
+    CompactionDetails compactionDetails = blobStore.getCompactionDetails(compactionPolicy, null);
     if (expectedCompactionDetails == null) {
       assertNull("CompactionDetails expected to be null ", compactionDetails);
     } else {
@@ -345,9 +364,9 @@ class MockBlobStore extends BlobStore {
   }
 
   @Override
-  CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy) throws StoreException {
+  CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy, SafeCounterWithoutLock safeCounterWithoutLock) throws StoreException {
     return compactionPolicy.getCompactionDetails(capacityInBytes, usedCapacity, segmentCapacity, segmentHeaderSize,
-        logSegmentsNotInJournal, mockBlobStoreStats);
+        logSegmentsNotInJournal, mockBlobStoreStats, safeCounterWithoutLock);
   }
 
   MockBlobStoreStats getBlobStoreStats() {

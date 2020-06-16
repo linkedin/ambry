@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * StatsBasedCompactionPolicy calculates the cost benefit ratio for every potential candidate to compact and finds the
- * best one to be compacted to be returned for {@link #getCompactionDetails(long, long, long, long, List, BlobStoreStats)}
+ * best one to be compacted to be returned for {@link #getCompactionDetails(long, long, long, long, List, BlobStoreStats, SafeCounterWithoutLock)}
  */
 class StatsBasedCompactionPolicy implements CompactionPolicy {
 
@@ -45,7 +45,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
 
   @Override
   public CompactionDetails getCompactionDetails(long totalCapacity, long usedCapacity, long segmentCapacity,
-      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats)
+      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats, SafeCounterWithoutLock safeCounterWithoutLock)
       throws StoreException {
     CompactionDetails details = null;
     logger.trace("UsedCapacity {} vs TotalCapacity {}", usedCapacity, totalCapacity);

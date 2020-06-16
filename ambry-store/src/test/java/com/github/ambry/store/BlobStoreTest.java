@@ -421,7 +421,7 @@ public class BlobStoreTest {
       //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
       //that the store is now read-write
       time.sleep(TimeUnit.DAYS.toMillis(8));
-      store.compact(store.getCompactionDetails(new CompactAllPolicy(defaultConfig, time)),
+      store.compact(store.getCompactionDetails(new CompactAllPolicy(defaultConfig, time), null),
           new byte[PUT_RECORD_SIZE * 2 + 1]);
       verify(replicaStatusDelegate, times(2)).unseal(replicaId);
 
