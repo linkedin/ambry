@@ -50,7 +50,7 @@ class CompactionManager {
   private final StorageManagerMetrics metrics;
   private final CompactionPolicy compactionPolicy;
   private static final Logger logger = LoggerFactory.getLogger(CompactionManager.class);
-  private final Map<ReplicaId, SafeCounterWithoutLock> replicaToCounterMap;
+  private final Map<ReplicaId, CompactionPolicyCounter> replicaToCounterMap;
   private final CompactionPolicyFactory compactionPolicyFactory;
   private Thread compactionThread;
 
@@ -182,7 +182,7 @@ class CompactionManager {
    * Get the current replicaToCounterMap policy.
    * @return {@link this.replicaToCounterMap}
    */
-  Map<ReplicaId, SafeCounterWithoutLock> getReplicaToCounterMap(){
+  Map<ReplicaId, CompactionPolicyCounter> getReplicaToCounterMap(){
     return this.replicaToCounterMap;
   }
 
@@ -196,10 +196,10 @@ class CompactionManager {
   CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
     ReplicaId replicaId = blobStore.getReplicaId();
     if (compactionPolicyFactory != null && compactionPolicyFactory instanceof HybridCompactionPolicyFactory) {
-      SafeCounterWithoutLock safeCounterWithoutLock =
-          replicaToCounterMap.getOrDefault(replicaId, new SafeCounterWithoutLock(storeConfig));
-      safeCounterWithoutLock.incrementAndGet();
-      replicaToCounterMap.put(replicaId, safeCounterWithoutLock);
+      CompactionPolicyCounter compactionPolicyCounter =
+          replicaToCounterMap.getOrDefault(replicaId, new CompactionPolicyCounter(storeConfig));
+      compactionPolicyCounter.increment();
+      replicaToCounterMap.put(replicaId, compactionPolicyCounter);
     }
     return blobStore.getCompactionDetails(compactionPolicy, replicaToCounterMap.get(replicaId));
   }

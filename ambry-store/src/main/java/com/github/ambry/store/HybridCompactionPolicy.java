@@ -37,11 +37,11 @@ public class HybridCompactionPolicy implements CompactionPolicy {
   @Override
   public CompactionDetails getCompactionDetails(long totalCapacity, long usedCapacity, long segmentCapacity,
       long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats,
-      SafeCounterWithoutLock safeCounterWithoutLock) throws StoreException {
-    CompactionPolicy compactionPolicy = selectCompactionPolicy(safeCounterWithoutLock);
+      CompactionPolicyCounter compactionPolicyCounter) throws StoreException {
+    CompactionPolicy compactionPolicy = selectCompactionPolicy(compactionPolicyCounter);
     logger.info("Current compaction policy is : {}", compactionPolicy);
     return compactionPolicy.getCompactionDetails(totalCapacity, usedCapacity, segmentCapacity, segmentHeaderSize,
-        logSegmentsNotInJournal, blobStoreStats, safeCounterWithoutLock);
+        logSegmentsNotInJournal, blobStoreStats, compactionPolicyCounter);
   }
 
   /**
@@ -49,12 +49,12 @@ public class HybridCompactionPolicy implements CompactionPolicy {
    * @return CompactAllPolicy if the round number of compaction reach to storeConfig.storeCompactionPolicySwitchPeriod.
    * Othewise @return StatsBasedCompactionPolicy.
    */
-  CompactionPolicy selectCompactionPolicy(SafeCounterWithoutLock safeCounterWithoutLock) {
-    if (safeCounterWithoutLock != null && safeCounterWithoutLock.getValue() == 0) {
+  CompactionPolicy selectCompactionPolicy(CompactionPolicyCounter compactionPolicyCounter) {
+    if (compactionPolicyCounter != null && compactionPolicyCounter.getValue() == 0) {
       logger.trace("Return CompactAllPolicy this round");
       return new CompactAllPolicy(storeConfig, time);
     } else {
-      if (safeCounterWithoutLock == null) {
+      if (compactionPolicyCounter == null) {
         logger.trace("Counter is null");
       } else {
         logger.trace("Return StatsBasedCompactionPolicy this round");

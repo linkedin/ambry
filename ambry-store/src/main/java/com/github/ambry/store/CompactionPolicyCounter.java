@@ -18,28 +18,22 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
- * A thread safe counter implemented with {@link AtomicInteger}.
+ * A counter used to switch {@link CompactAllPolicy}.
  */
-public class SafeCounterWithoutLock {
-  private StoreConfig storeConfig;
+public class CompactionPolicyCounter {
+  private final StoreConfig storeConfig;
 
-  SafeCounterWithoutLock(StoreConfig storeConfig) {
+  CompactionPolicyCounter(StoreConfig storeConfig) {
     this.storeConfig = storeConfig;
   }
 
-  private final AtomicInteger counter = new AtomicInteger(0);
+  private int counter;
 
   public int getValue() {
-    return counter.get();
+    return counter;
   }
 
-  public int incrementAndGet() {
-    while (true) {
-      int existingValue = getValue();
-      int newValue = (existingValue + 1) % storeConfig.storeCompactionPolicySwitchPeriod;
-      if (counter.compareAndSet(existingValue, newValue)) {
-        return newValue;
-      }
-    }
+  public void increment() {
+    counter = (counter + 1) % storeConfig.storeCompactionPolicySwitchPeriod;
   }
 }

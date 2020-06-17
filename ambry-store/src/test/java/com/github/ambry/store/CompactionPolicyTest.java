@@ -324,7 +324,7 @@ public class CompactionPolicyTest {
   // verification helper methods
 
   /**
-   * Verifies {@link BlobStore#getCompactionDetails(CompactionPolicy, SafeCounterWithoutLock)} returns expected values i.e. {@code expectedCompactionDetails}
+   * Verifies {@link BlobStore#getCompactionDetails(CompactionPolicy, CompactionPolicyCounter)} returns expected values i.e. {@code expectedCompactionDetails}
    * @throws StoreException
    */
   static void verifyCompactionDetails(CompactionDetails expectedCompactionDetails, BlobStore blobStore,
@@ -364,9 +364,9 @@ class MockBlobStore extends BlobStore {
   }
 
   @Override
-  CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy, SafeCounterWithoutLock safeCounterWithoutLock) throws StoreException {
+  CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy, CompactionPolicyCounter compactionPolicyCounter) throws StoreException {
     return compactionPolicy.getCompactionDetails(capacityInBytes, usedCapacity, segmentCapacity, segmentHeaderSize,
-        logSegmentsNotInJournal, mockBlobStoreStats, safeCounterWithoutLock);
+        logSegmentsNotInJournal, mockBlobStoreStats, compactionPolicyCounter);
   }
 
   MockBlobStoreStats getBlobStoreStats() {
