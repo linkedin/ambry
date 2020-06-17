@@ -45,6 +45,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 /**
  * Component that removes the "dead" data from the set of provided log segments and reclaims space.
  * <p/>
@@ -85,7 +86,7 @@ class BlobStoreCompactor {
   private final AccountService accountService;
   private volatile boolean isActive = false;
   private PersistentIndex srcIndex;
-  private final Set<Pair<Short,Short>> deprecatedContainers;
+  private final Set<Pair<Short, Short>> deprecatedContainers;
 
   private Log tgtLog;
   private PersistentIndex tgtIndex;
@@ -116,8 +117,7 @@ class BlobStoreCompactor {
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
       StoreMetrics srcMetrics, StoreMetrics tgtMetrics, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, Log srcLog, Time time, UUID sessionId, UUID incarnationId,
-      AccountService accountService)
-      throws IOException, StoreException {
+      AccountService accountService) throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
@@ -205,7 +205,8 @@ class BlobStoreCompactor {
     deprecatedContainers.clear();
     if (accountService != null) {
       accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
-        if (container.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(config.storeContainerDeletionRetentionDays) <= System.currentTimeMillis()) {
+        if (container.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(config.storeContainerDeletionRetentionDays)
+            <= System.currentTimeMillis()) {
           deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
         }
       });
@@ -767,16 +768,27 @@ class BlobStoreCompactor {
               }
             } else if (srcValue.isUndelete()) {
               if (valueFromTgtIdx != null) {
-                tgtIndex.markAsUndeleted(srcIndexEntry.getKey(), fileSpan, srcValue.getOperationTimeInMs(),
-                    srcValue.getLifeVersion());
-              } else {
-                IndexValue tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getFlags(),
-                    srcValue.getExpiresAtMs(), srcValue.getOperationTimeInMs(), srcValue.getAccountId(),
-                    srcValue.getContainerId(), srcValue.getLifeVersion());
-                tgtValue.setFlag(IndexValue.Flags.Undelete_Index);
-                tgtValue.clearOriginalMessageOffset();
-                tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
+                // Here don't use markAsUndelete method. In markAsUndelete, multiple sanity check would be applied. But
+                // target index might only contain incomplete blob history, which would fail sanity check.
+                // Here we do a different check to make sure we don't insert undelete with lower lifeVersion.
+                if (valueFromTgtIdx.isUndelete()) {
+                  throw new StoreException(
+                      "Id " + srcIndexEntry.getKey() + " already has undelete " + valueFromTgtIdx + " in index "
+                          + dataDir, StoreErrorCodes.ID_Undeleted);
+                }
+                // Undelete would increase the life version
+                if (valueFromTgtIdx.getLifeVersion() >= srcValue.getLifeVersion()) {
+                  throw new StoreException(
+                      "Id " + srcIndexEntry.getKey() + " has bad lifeversion " + valueFromTgtIdx + " in index "
+                          + dataDir, StoreErrorCodes.Life_Version_Conflict);
+                }
               }
+              IndexValue tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getFlags(),
+                  srcValue.getExpiresAtMs(), srcValue.getOperationTimeInMs(), srcValue.getAccountId(),
+                  srcValue.getContainerId(), srcValue.getLifeVersion());
+              tgtValue.setFlag(IndexValue.Flags.Undelete_Index);
+              tgtValue.clearOriginalMessageOffset();
+              tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
             } else if (srcValue.isTtlUpdate()) {
               if (valueFromTgtIdx != null) {
                 tgtIndex.markAsPermanent(srcIndexEntry.getKey(), fileSpan, null, srcValue.getOperationTimeInMs(),
@@ -1061,9 +1073,9 @@ class BlobStoreCompactor {
 
       List<IndexEntry> copyCandidates = getValidIndexEntries(indexSegment, allIndexEntries);
       int validEntriesSize = copyCandidates.size();
-      copyCandidates.removeIf(
-          copyCandidate -> isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(),
-              checkAlreadyCopied) || (config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
+      copyCandidates.removeIf(copyCandidate ->
+          isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
+              config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),
@@ -1348,9 +1360,9 @@ class BlobStoreCompactor {
         boolean checkAlreadyCopied) throws StoreException {
       List<IndexEntry> copyCandidates = getValidIndexEntries(indexSegment);
       int validEntriesSize = copyCandidates.size();
-      copyCandidates.removeIf(
-          copyCandidate -> isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(),
-              checkAlreadyCopied) || (config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
+      copyCandidates.removeIf(copyCandidate ->
+          isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
+              config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of entries, {} are valid and {} will be copied in this round", validEntriesSize,

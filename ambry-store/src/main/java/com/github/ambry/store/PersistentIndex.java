@@ -324,15 +324,13 @@ class PersistentIndex {
           // removes from the tracking structure if a delete was being expected for the key
           deleteExpectedKeys.remove(info.getStoreKey());
         } else if (info.isUndeleted()) {
-          markAsUndeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info.getOperationTimeMs(),
-              info.getLifeVersion());
+          markAsUndeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info,
+              info.getOperationTimeMs(), info.getLifeVersion());
           logger.info(
               "Index : {} updated message with key {} by inserting undelete entry of size {} ttl {} lifeVersion {}",
               dataDir, info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.getLifeVersion());
           if (value == null) {
-            // Undelete record indicates that a put and/or a delete record were expected.
-            throw new StoreException("Put record were expected but were not encountered for key: " + info.getStoreKey(),
-                StoreErrorCodes.Initialization_Error);
+            deleteExpectedKeys.add(info.getStoreKey());
           }
         } else if (info.isTtlUpdated()) {
           markAsPermanent(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info,
@@ -428,7 +426,7 @@ class PersistentIndex {
       if (segmentToRemove.getEndOffset().compareTo(journalFirstOffset) >= 0) {
         throw new IllegalArgumentException(
             "End Offset of the one of the segments to remove [" + segmentToRemove.getFile() + "] is"
-                + " higher than the first offset in the journal" );
+                + " higher than the first offset in the journal");
       }
     }
 
@@ -722,15 +720,22 @@ class PersistentIndex {
    */
   void validateSanityForUndelete(StoreKey key, List<IndexValue> values, short lifeVersion) throws StoreException {
     if (values == null || values.isEmpty()) {
-      throw new StoreException("Id " + key + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
+      throw new StoreException("Id " + key + " not found in " + dataDir, StoreErrorCodes.ID_Not_Found);
     }
     if (!IndexValue.hasLifeVersion(lifeVersion)) {
       validateSanityForUndeleteWithoutLifeVersion(key, values);
       return;
     }
-    // This is from recovery or replication, make sure the last value is a put and the first value's lifeVersion is strictly
-    // less than the given lifeVersion. We don't care about the first value's type, it can be a put, ttl_update or delete, it
-    // can even be an undelete.
+    // This is from replication. For replication, undelete should be permitted only when
+    // 1. The oldest record is PUT
+    // 2. the latest record's lifeVersion is less then undelete's lifeVersion.
+    // 3. Replication doesn't care if the latest record is delete or not. In local, we can have a PUT record when
+    // the remote has PUT, DELETE, UNDELETE. When replicating from remote, local has to insert UNDELETE, where
+    // there is no prior DELETE.
+    // 4. Replication doesn't care if the latest record is expired or not. In local, we can have a PUT record when
+    // the remove has PUT, DELETE, UNDELETE TTL_UPDATE. When replicating from remote, PUT might already have expired.
+    // But later we will apply TTL_UPDATE. The alternative idea is to change the logic of checking expiration from
+    // comparing current time to comparing operation time.
     IndexValue latestValue = values.get(0);
     IndexValue oldestValue = values.get(values.size() - 1);
     if (!oldestValue.isPut()) {
@@ -746,35 +751,33 @@ class PersistentIndex {
           "LifeVersion conflict in index. Id " + key + " LifeVersion: " + latestValue.getLifeVersion()
               + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
     }
-    maybeChangeExpirationDate(oldestValue, values);
-    if (isExpired(oldestValue)) {
-      throw new StoreException("Id " + key + " already expired in index " + dataDir, StoreErrorCodes.TTL_Expired);
-    }
   }
 
   /**
    * Ensure that the previous {@link IndexValue}s is structured correctly for undeleting the {@code key} when there is
    * no lifeVersion provided.
    * <p/>
-   * Undelete should be permitted only when the last value is a Put and first record is a Delete, and the Put record
-   * hasn't expired yet.
+   * Undelete should be permitted only when
+   * <ol>
+   *   <li>The earliest record is PUT</li>
+   *   <li>The latest record is DELETE</li>
+   *   <li>DELETE hasn't reached it's retention date</li>
+   *   <li>Key is not expired</li>
+   * </ol>
    * @param key the key to be undeleted.
    * @param values the previous {@link IndexValue}s in reversed order.
    */
   void validateSanityForUndeleteWithoutLifeVersion(StoreKey key, List<IndexValue> values) throws StoreException {
-    // When it's valid to undelete this key
-    // P/T + D
-    // P/T + D + U + D
     if (values.size() == 1) {
       IndexValue value = values.get(0);
       if (value.isDelete() || value.isTtlUpdate()) {
-        throw new StoreException("Id " + key + " is compacted in index" + dataDir,
+        throw new StoreException("Id " + key + " is compacted in index " + dataDir,
             StoreErrorCodes.ID_Deleted_Permanently);
       } else if (value.isPut()) {
         throw new StoreException("Id " + key + " is not deleted yet in index " + dataDir,
             StoreErrorCodes.ID_Not_Deleted);
       } else {
-        throw new IdUndeletedStoreException("Id " + key + " is already undeleted in index" + dataDir,
+        throw new IdUndeletedStoreException("Id " + key + " is already undeleted in index " + dataDir,
             value.getLifeVersion());
       }
     }
@@ -783,7 +786,7 @@ class PersistentIndex {
     IndexValue latestValue = values.get(0);
     IndexValue oldestValue = values.get(values.size() - 1);
     if (latestValue.isUndelete()) {
-      throw new IdUndeletedStoreException("Id " + key + " is already undeleted in index" + dataDir,
+      throw new IdUndeletedStoreException("Id " + key + " is already undeleted in index " + dataDir,
           latestValue.getLifeVersion());
     }
     if (!oldestValue.isPut() || !latestValue.isDelete()) {
@@ -980,7 +983,7 @@ class PersistentIndex {
    * @throws StoreException if there is any problem writing the index record
    */
   IndexValue markAsUndeleted(StoreKey id, FileSpan fileSpan, long operationTimeMs) throws StoreException {
-    return markAsUndeleted(id, fileSpan, operationTimeMs, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+    return markAsUndeleted(id, fileSpan, null, operationTimeMs, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
   }
 
   /**
@@ -988,27 +991,47 @@ class PersistentIndex {
    * @param id the {@link StoreKey} of the blob
    * @param fileSpan the file span represented by this entry in the log
    * @param operationTimeMs the time of the update operation
+   * @param info this needs to be non-null in the case of recovery and replicateion. Can be {@code null} otherwise. Used if the PUT
+   *             record could not be found
    * @param lifeVersion lifeVersion of this undelete record.
    * @return the {@link IndexValue} of the undelete record
    * @throws StoreException if there is any problem writing the index record
    */
-  IndexValue markAsUndeleted(StoreKey id, FileSpan fileSpan, long operationTimeMs, short lifeVersion)
+  IndexValue markAsUndeleted(StoreKey id, FileSpan fileSpan, MessageInfo info, long operationTimeMs, short lifeVersion)
       throws StoreException {
     boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
     validateFileSpan(fileSpan, true);
-    List<IndexValue> values =
-        findAllIndexValuesForKey(id, null, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
-    validateSanityForUndelete(id, values, lifeVersion);
-    // This value is the delete IndexValue
-    IndexValue value = values.get(0);
-    maybeChangeExpirationDate(value, values);
-    lifeVersion = hasLifeVersion ? lifeVersion : (short) (value.getLifeVersion() + 1);
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
-    IndexValue newValue =
-        new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(), operationTimeMs,
-            value.getAccountId(), value.getContainerId(), lifeVersion);
-    newValue.setNewOffset(fileSpan.getStartOffset());
-    newValue.setNewSize(size);
+    IndexValue newValue;
+    if (info != null) {
+      // This is from recovery. In recovery, we don't need to do any sanity check because
+      // 1. we already know the IndexValue has it's source in the log.
+      // 2. some sanity check will fail.
+      //    assume we have P, D, U, D in the log, then a compaction cycle compact P and first D,
+      //    then we only have U and second D. U in this case, will have no prior records.
+      if (!hasLifeVersion) {
+        throw new StoreException("MessageInfo of undelete carries invalid lifeVersion",
+            StoreErrorCodes.Initialization_Error);
+      }
+      newValue =
+          new IndexValue(size, fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE, info.getExpirationTimeInMs(),
+              info.getOperationTimeMs(), info.getAccountId(), info.getContainerId(), lifeVersion);
+      if (info.isTtlUpdated()) {
+        newValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
+      }
+    } else {
+      List<IndexValue> values =
+          findAllIndexValuesForKey(id, null, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
+      validateSanityForUndelete(id, values, lifeVersion);
+      IndexValue value = values.get(0);
+      maybeChangeExpirationDate(value, values);
+      lifeVersion = hasLifeVersion ? lifeVersion : (short) (value.getLifeVersion() + 1);
+      newValue =
+          new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(), operationTimeMs,
+              value.getAccountId(), value.getContainerId(), lifeVersion);
+      newValue.setNewOffset(fileSpan.getStartOffset());
+      newValue.setNewSize(size);
+    }
     newValue.setFlag(IndexValue.Flags.Undelete_Index);
     newValue.clearFlag(IndexValue.Flags.Delete_Index);
     newValue.clearOriginalMessageOffset();
@@ -1286,7 +1309,7 @@ class PersistentIndex {
             dataDir);
         // if the shutdown was clean, the offset should always be lesser or equal to the logEndOffsetOnStartup
         throw new IllegalArgumentException(
-            "Invalid token. Provided offset is outside the log range after clean shutdown" );
+            "Invalid token. Provided offset is outside the log range after clean shutdown");
       }
     }
     return storeToken;
@@ -1457,7 +1480,7 @@ class PersistentIndex {
       // We would never have given away a token with a segmentStartOffset of the latest segment.
       throw new IllegalArgumentException(
           "Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset
-              + " is of the last segment" );
+              + " is of the last segment");
     }
 
     Offset newTokenSegmentStartOffset = null;
@@ -1536,7 +1559,7 @@ class PersistentIndex {
         throw new IllegalStateException(
             "Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset
                 + " is of the latest segment and not found in journal with range [" + journalFirstOffsetBeforeCheck
-                + ", " + journalLastOffsetBeforeCheck + "]" );
+                + ", " + journalLastOffsetBeforeCheck + "]");
       } else {
         // Read and populate from the first key in the segment with this segmentStartOffset
         if (segmentToProcess.getEntriesSince(null, findEntriesCondition, messageEntries, currentTotalSizeOfEntries)) {
@@ -1780,7 +1803,7 @@ class PersistentIndex {
     }
     if (checkWithinSingleSegment && !fileSpan.getStartOffset().getName().equals(fileSpan.getEndOffset().getName())) {
       throw new IllegalArgumentException(
-          "The FileSpan provided [" + fileSpan + "] does not lie within a single log " + "segment" );
+          "The FileSpan provided [" + fileSpan + "] does not lie within a single log " + "segment");
     }
   }
 

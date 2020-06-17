@@ -408,8 +408,7 @@ public class IndexTest {
    * @throws StoreException
    */
   private void ttlUpdateKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
-    assertTrue("targetKey is already ttlUpdated",
-        !state.index.findKey(key).isTtlUpdate());
+    assertTrue("targetKey is already ttlUpdated", !state.index.findKey(key).isTtlUpdate());
     short actualLifeVersion = state.index.findKey(key).getLifeVersion();
     assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
         actualLifeVersion);
@@ -434,8 +433,7 @@ public class IndexTest {
     StoreKey targetKey = null;
     for (StoreKey key : state.deletedKeys) {
       IndexValue value = state.index.findKey(key);
-      if (!value.isTtlUpdate() && !state.index.isExpired(value)
-          && state.getExpectedValue((MockId) key, true) != null) {
+      if (!value.isTtlUpdate() && !state.index.isExpired(value) && state.getExpectedValue((MockId) key, true) != null) {
         targetKey = key;
         break;
       }
@@ -2165,6 +2163,73 @@ public class IndexTest {
     // has been a ttl update
     infos.add(new MessageInfo(id, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, id.getAccountId(),
         id.getContainerId(), state.time.milliseconds()));
+
+    if (PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3) {
+      // There are 5 UNDELETE  2 DELETE  2 TTL_UPDATE  1 PUT
+      state.appendToLog(
+          5 * UNDELETE_RECORD_SIZE + 2 * DELETE_RECORD_SIZE + 2 * TTL_UPDATE_RECORD_SIZE + PUT_RECORD_SIZE);
+      // 1 UNDELETE for a compacted PUT and DELETE
+      id = state.getUniqueId();
+      infos.add(
+          new MessageInfo(id, UNDELETE_RECORD_SIZE, false, false, true, Utils.Infinite_Time, null, id.getAccountId(),
+              id.getContainerId(), state.time.milliseconds(), (short) 1));
+      // 1 DELETE for the undelete above
+      infos.add(
+          new MessageInfo(id, DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time, null, id.getAccountId(),
+              id.getContainerId(), state.time.milliseconds(), (short) 1));
+
+      // 1 PUT (will be expired when recovering)
+      id = state.getUniqueId();
+      infos.add(
+          new MessageInfo(id, PUT_RECORD_SIZE, 0, id.getAccountId(), id.getContainerId(), state.time.milliseconds()));
+      // 1 DELETE and UNDELETE for this id
+      infos.add(new MessageInfo(id, DELETE_RECORD_SIZE, true, false, id.getAccountId(), id.getContainerId(),
+          state.time.milliseconds()));
+      infos.add(
+          new MessageInfo(id, UNDELETE_RECORD_SIZE, false, false, true, Utils.Infinite_Time, null, id.getAccountId(),
+              id.getContainerId(), state.time.milliseconds(), (short) 1));
+      // 1 TTL update for this id
+      infos.add(
+          new MessageInfo(id, TTL_UPDATE_RECORD_SIZE, false, true, false, Utils.Infinite_Time, null, id.getAccountId(),
+              id.getContainerId(), state.time.milliseconds(), (short) 1));
+
+      // 1 UNDELETE for DELETE (not ttlupdate) not in infos
+      id = null;
+      for (MockId mockId : state.deletedKeys) {
+        if (!state.ttlUpdatedKeys.contains(mockId)) {
+          id = mockId;
+          break;
+        }
+      }
+      assertNotNull(id);
+      infos.add(
+          new MessageInfo(id, UNDELETE_RECORD_SIZE, false, false, true, Utils.Infinite_Time, null, id.getAccountId(),
+              id.getContainerId(), state.time.milliseconds(), (short) 1));
+      // 1 TTL update
+      infos.add(
+          new MessageInfo(id, TTL_UPDATE_RECORD_SIZE, false, true, false, Utils.Infinite_Time, null, id.getAccountId(),
+              id.getContainerId(), state.time.milliseconds(), (short) 1));
+
+      // 1 UNDELETE for DELETE (ttlupdated) not in infos
+      id = null;
+      for (MockId mockId : state.deletedKeys) {
+        if (state.ttlUpdatedKeys.contains(mockId)) {
+          id = mockId;
+          break;
+        }
+      }
+      assertNotNull(id);
+      infos.add(
+          new MessageInfo(id, UNDELETE_RECORD_SIZE, false, false, true, Utils.Infinite_Time, null, id.getAccountId(),
+              id.getContainerId(), state.time.milliseconds(), (short) 1));
+
+      // 1 UNDELETE for UNDELETE not in infos
+      id = state.undeletedKeys.iterator().next();
+      short lifeVersion = (short) (state.getExpectedValue(id, false).getLifeVersion() + 1);
+      infos.add(
+          new MessageInfo(id, UNDELETE_RECORD_SIZE, false, false, true, Utils.Infinite_Time, null, id.getAccountId(),
+              id.getContainerId(), state.time.milliseconds(), lifeVersion));
+    }
     return infos;
   }
 
@@ -2176,6 +2241,8 @@ public class IndexTest {
     PersistentIndex.IndexEntryType toSearchFor = PersistentIndex.IndexEntryType.PUT;
     if (info.isDeleted()) {
       toSearchFor = PersistentIndex.IndexEntryType.DELETE;
+    } else if (info.isUndeleted()) {
+      toSearchFor = PersistentIndex.IndexEntryType.UNDELETE;
     } else if (info.isTtlUpdated()) {
       toSearchFor = PersistentIndex.IndexEntryType.TTL_UPDATE;
     }
@@ -2193,12 +2260,15 @@ public class IndexTest {
     // not known at the time of the info generation from the log that the id was previously updated
     if (info.isTtlUpdated()) {
       assertTrue("Inconsistent ttl update state ", value.isTtlUpdate());
+      assertEquals("Inconsistent expiresAtMs", info.getExpirationTimeInMs(), value.getExpiresAtMs());
     }
-    assertEquals("Inconsistent expiresAtMs", info.getExpirationTimeInMs(), value.getExpiresAtMs());
     assertEquals("Incorrect accountId", info.getAccountId(), value.getAccountId());
     assertEquals("Incorrect containerId", info.getContainerId(), value.getContainerId());
     assertEquals("Incorrect operationTimeMs", Utils.getTimeInMsToTheNearestSec(info.getOperationTimeMs()),
         value.getOperationTimeInMs());
+    assertEquals("Inconsistent lifeVersion", info.getLifeVersion(), value.getLifeVersion());
+    assertEquals(info.isUndeleted(), value.isUndelete());
+    assertEquals(info.isDeleted(), value.isDelete());
   }
 
   /**

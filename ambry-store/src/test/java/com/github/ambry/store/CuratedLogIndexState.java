@@ -488,7 +488,7 @@ class CuratedLogIndexState {
     newValue.setFlag(IndexValue.Flags.Undelete_Index);
     newValue.clearFlag(IndexValue.Flags.Delete_Index);
     if (hasLifeVersion) {
-      index.markAsUndeleted(idToUndelete, fileSpan, newValue.getOperationTimeInMs(), lifeVersion);
+      index.markAsUndeleted(idToUndelete, fileSpan, null, newValue.getOperationTimeInMs(), lifeVersion);
     } else {
       index.markAsUndeleted(idToUndelete, fileSpan, newValue.getOperationTimeInMs());
     }
