@@ -551,7 +551,7 @@ class CloudBlobStore implements Store {
       // This is a delete request from frontend
       if (metadata.isDeleted()) {
         throw new StoreException(
-            "Cannot delete id " + metadata.getId() + " since it is already marked as deleted in cloud.",
+            "Cannot delete id " + key.getID() + " since it is already marked as deleted in cloud.",
             StoreErrorCodes.ID_Deleted);
       }
       // this is delete request from frontend, we use life version only for validation.
