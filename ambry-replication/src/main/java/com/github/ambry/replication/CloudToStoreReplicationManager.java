@@ -37,6 +37,7 @@ import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -45,7 +46,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -69,7 +69,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   private final ClusterParticipant clusterParticipant;
   private static final String cloudReplicaTokenFileName = "cloudReplicaTokens";
   private AtomicReference<ConcurrentHashMap<String, CloudDataNode>> instanceNameToCloudDataNode;
-  private AtomicReference<ConcurrentSkipListSet<CloudDataNode>> vcrNodes;
+  private AtomicReference<List<CloudDataNode>> vcrNodes;
   private final Object notificationLock = new Object();
   private final boolean trackPerDatacenterLagInMetric;
 
@@ -106,7 +106,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     this.vcrClusterSpectator = vcrClusterSpectator;
     this.clusterParticipant = clusterParticipant;
     this.instanceNameToCloudDataNode = new AtomicReference<>(new ConcurrentHashMap<>());
-    this.vcrNodes = new AtomicReference<>(new ConcurrentSkipListSet<>());
+    this.vcrNodes = new AtomicReference<>(new ArrayList<>());
     this.persistor =
         new DiskTokenPersistor(cloudReplicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, storeManager);
@@ -243,11 +243,11 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    * @throws ReplicationException if there are no vcr nodes.
    */
   private DataNodeId getCloudDataNode() throws ReplicationException {
-    if (vcrNodes.get().size() == 0) {
-      logger.error("No vcr node found to replicate partition from cloud.");
-      throw new ReplicationException("No vcr node found to replicate partition from cloud.");
+    List<CloudDataNode> nodes = vcrNodes.get();
+    if (nodes.isEmpty()) {
+      throw new ReplicationException("No VCR node found to replicate partition from cloud.");
     }
-    return vcrNodes.get().toArray(new CloudDataNode[0])[Utils.getRandomShort(new Random()) % vcrNodes.get().size()];
+    return nodes.get(Utils.getRandomShort(new Random()) % nodes.size());
   }
 
   /**
@@ -257,10 +257,10 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    * Note that this method is not thread safe in the wake of arriving helix notifications.
    * @param newVcrNodes Set of new vcr nodes.
    */
-  private void handleChangeInVcrNodes(ConcurrentSkipListSet<CloudDataNode> newVcrNodes) {
+  private void handleChangeInVcrNodes(Set<CloudDataNode> newVcrNodes) {
     Set<CloudDataNode> removedNodes = new HashSet<>(vcrNodes.get());
     removedNodes.removeAll(newVcrNodes);
-    vcrNodes.set(newVcrNodes);
+    vcrNodes.set(new ArrayList<>(newVcrNodes));
     logger.info("Handling VCR nodes change. The removed vcr nodes: {}", removedNodes);
     List<PartitionId> partitionsOnRemovedNodes = getPartitionsOnNodes(removedNodes);
     for (PartitionId partitionId : partitionsOnRemovedNodes) {
@@ -283,7 +283,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     @Override
     public void onInstanceConfigChange(List<InstanceConfig> instanceConfigs, NotificationContext context) {
       logger.info("Instance config change notification received with instanceConfigs: {}", instanceConfigs);
-      ConcurrentSkipListSet<CloudDataNode> newVcrNodes = new ConcurrentSkipListSet<>();
+      Set<CloudDataNode> newVcrNodes = new HashSet<>();
       ConcurrentHashMap<String, CloudDataNode> newInstanceNameToCloudDataNode = new ConcurrentHashMap<>();
 
       // create a new list of available vcr nodes.
@@ -314,7 +314,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     @Override
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
       logger.info("Live instance change notification received. liveInstances: {}", liveInstances);
-      ConcurrentSkipListSet<CloudDataNode> newVcrNodes = new ConcurrentSkipListSet<>();
+      Set<CloudDataNode> newVcrNodes = new HashSet<>();
       // react to change in liveness of vcr nodes if the instance was earlier reported by helix as part of
       // {@code onInstanceConfigChange} notification.
       synchronized (notificationLock) {
