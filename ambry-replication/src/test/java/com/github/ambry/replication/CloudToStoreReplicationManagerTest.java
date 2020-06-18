@@ -45,17 +45,21 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONObject;
 import org.junit.Test;
-import org.mockito.Mockito;
+import org.mockito.internal.util.reflection.FieldSetter;
 
 import static com.github.ambry.clustermap.CloudReplica.*;
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -87,7 +91,7 @@ public class CloudToStoreReplicationManagerTest {
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
-    mockScheduler = Mockito.mock(ScheduledExecutorService.class);
+    mockScheduler = mock(ScheduledExecutorService.class);
     storeKeyFactory = new StoreKeyFactory() {
       @Override
       public StoreKey getStoreKey(DataInputStream stream) throws IOException {
@@ -207,5 +211,41 @@ public class CloudToStoreReplicationManagerTest {
     assertNull("Cloud replica should be removed and no thread is assigned to it", remoteReplicaInfo.getReplicaThread());
     cloudToStoreReplicationManager.shutdown();
     storageManager.shutdown();
+  }
+
+  /** Test {@code CloudToStoreReplicationManager#getCloudDataNode} */
+  @Test
+  public void testGetCloudDataNode() throws NoSuchFieldException, ReplicationException {
+    CloudToStoreReplicationManager mockCloudToStoreReplicationManager = mock(CloudToStoreReplicationManager.class);
+    List<DataNodeId> dataNodeIds = new ArrayList<>();
+    Port port = new Port(1000, PortType.PLAINTEXT);
+    AtomicReference<List<DataNodeId>> vcrNodes = new AtomicReference<>();
+    vcrNodes.set(dataNodeIds);
+    FieldSetter.setField(mockCloudToStoreReplicationManager,
+        CloudToStoreReplicationManager.class.getDeclaredField("vcrNodes"), vcrNodes);
+    when(mockCloudToStoreReplicationManager.getCloudDataNode()).thenCallRealMethod();
+
+    // test getCloudDataNode() with empty vcrNodes
+    try {
+      mockCloudToStoreReplicationManager.getCloudDataNode();
+      fail("Calling getCloudDataNode when there are no vcrNodes should throw exception.");
+    } catch (ReplicationException rex) {
+    }
+
+    // add vcr nodes.
+    for (int i = 0; i < 100; i++) {
+      dataNodeIds.add(new MockDataNodeId("hosname" + i, Collections.singletonList(port), null, null));
+    }
+
+    // Make sure that calling getCloudDataNode() doesn't return the same node every time.
+    try {
+      Set<String> dataNodeIdSet = new HashSet<>();
+      for (int i = 0; i < 5; i++) {
+        dataNodeIdSet.add(mockCloudToStoreReplicationManager.getCloudDataNode().getHostname());
+      }
+      assertTrue("getCloudDataNode shouldn't return same every time", dataNodeIdSet.size() > 1);
+    } catch (ReplicationException rex) {
+      fail("getCloudDataNode shouldn't fail if vcrNodes is not empty");
+    }
   }
 }

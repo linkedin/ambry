@@ -72,6 +72,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   private AtomicReference<List<CloudDataNode>> vcrNodes;
   private final Object notificationLock = new Object();
   private final boolean trackPerDatacenterLagInMetric;
+  private static final Random random = new Random();
 
   /**
    * Constructor for {@link CloudToStoreReplicationManager}
@@ -242,12 +243,12 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    * @return randomly selected {@link DataNodeId} object.
    * @throws ReplicationException if there are no vcr nodes.
    */
-  private DataNodeId getCloudDataNode() throws ReplicationException {
+  DataNodeId getCloudDataNode() throws ReplicationException {
     List<CloudDataNode> nodes = vcrNodes.get();
     if (nodes.isEmpty()) {
       throw new ReplicationException("No VCR node found to replicate partition from cloud.");
     }
-    return nodes.get(Utils.getRandomShort(new Random()) % nodes.size());
+    return nodes.get(Utils.getRandomShort(random) % nodes.size());
   }
 
   /**
