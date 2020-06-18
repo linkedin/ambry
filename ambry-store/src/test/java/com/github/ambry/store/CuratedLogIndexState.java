@@ -225,6 +225,20 @@ class CuratedLogIndexState {
    * @throws StoreException
    */
   List<IndexEntry> addPutEntries(int count, long size, long expiresAtMs) throws StoreException {
+    return addPutEntries(count, size, expiresAtMs, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+  }
+
+  /**
+   * Adds {@code count} number of put entries each of size {@code size} and that expire at {@code expiresAtMs} to the
+   * index (both real and reference).
+   * @param count the number of PUT entries to add.
+   * @param size the size of each PUT entry.
+   * @param expiresAtMs the time at which each of the PUT entries expires.
+   * @param lifeVersion the lifeVersion of each PUT
+   * @return the list of the added entries.
+   * @throws StoreException
+   */
+  List<IndexEntry> addPutEntries(int count, long size, long expiresAtMs, short lifeVersion) throws StoreException {
     if (count <= 0) {
       throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
     }
@@ -244,6 +258,9 @@ class CuratedLogIndexState {
       IndexValue value =
           new IndexValue(size, fileSpan.getStartOffset(), expiresAtMs, time.milliseconds(), id.getAccountId(),
               id.getContainerId());
+      if (IndexValue.hasLifeVersion(lifeVersion)) {
+        value.setNewLifeVersion(lifeVersion);
+      }
       IndexEntry entry = new IndexEntry(id, value);
       indexEntries.add(entry);
       logOrder.put(fileSpan.getStartOffset(), new Pair<>(id, new LogEntry(dataWritten, value)));
@@ -488,7 +505,7 @@ class CuratedLogIndexState {
     newValue.setFlag(IndexValue.Flags.Undelete_Index);
     newValue.clearFlag(IndexValue.Flags.Delete_Index);
     if (hasLifeVersion) {
-      index.markAsUndeleted(idToUndelete, fileSpan, newValue.getOperationTimeInMs(), lifeVersion);
+      index.markAsUndeleted(idToUndelete, fileSpan, null, newValue.getOperationTimeInMs(), lifeVersion);
     } else {
       index.markAsUndeleted(idToUndelete, fileSpan, newValue.getOperationTimeInMs());
     }
