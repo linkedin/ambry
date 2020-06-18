@@ -1326,7 +1326,7 @@ public class HelixBootstrapUpgradeUtil {
 
   /**
    * Get sealed partitions from Helix cluster.
-   * @return the total number of sealed partitions across all DCs.
+   * @return a set of sealed partitions across all DCs.
    */
   private Set<String> getSealedPartitionsInHelixCluster() throws Exception {
     info("Aggregating sealed partitions from cluster {} in Helix", clusterName);
@@ -1403,7 +1403,7 @@ public class HelixBootstrapUpgradeUtil {
           info("Replica {} is sealed on {}", sealedReplica, instanceName);
           dcToSealedPartitions.get(dcName).add(sealedReplica);
           if (!replicasOnNode.contains(sealedReplica)) {
-            logger.warn("Replica {} is in sealed list but not on node {}", sealedReplica, replicasOnNode);
+            logger.warn("Replica {} is in sealed list but not on node {}", sealedReplica, instanceName);
             nodeToNonExistentReplicas.computeIfAbsent(instanceName, key -> new HashSet<>()).add(sealedReplica);
           }
         }
