@@ -1007,7 +1007,7 @@ class PersistentIndex {
       // This is from recovery. In recovery, we don't need to do any sanity check because
       // 1. we already know the IndexValue has it's source in the log.
       // 2. some sanity check will fail.
-      //    assume we have P, D, U, D in the log, then a compaction cycle compact P and first D,
+      //    assume we have P, D, U, D in the log, then a compaction cycle compacted P and first D,
       //    then we only have U and second D. U in this case, will have no prior records.
       if (!hasLifeVersion) {
         throw new StoreException("MessageInfo of undelete carries invalid lifeVersion",
