@@ -2064,7 +2064,6 @@ final class ServerTestUtil {
       SSLSocketFactory clientSSLSocketFactory2, SSLSocketFactory clientSSLSocketFactory3,
       MockNotificationSystem notificationSystem, Properties routerProps, boolean testEncryption) {
     MockClusterMap clusterMap = cluster.getClusterMap();
-    BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
     byte[] usermetadata = new byte[1000];
     byte[] data = new byte[31870];
     byte[] encryptionKey = new byte[100];
