@@ -55,7 +55,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     ChannelHandlerContext ctx = ((NettyServerRequest) originalRequest).getCtx();
     http2ServerMetrics.requestTotalProcessingTime.update(
         System.currentTimeMillis() - originalRequest.getStartTimeInMs());
-    ctx.pipeline().writeAndFlush(payloadToSend);
+    ctx.channel().writeAndFlush(payloadToSend);
   }
 
   /**

@@ -18,6 +18,7 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.network.http2.Http2ServerStreamHandler;
+import com.github.ambry.rest.ConnectionStatsHandler;
 import com.github.ambry.rest.ServerSecurityHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -47,6 +48,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
   private final Http2ClientConfig http2ClientConfig;
   private final Http2ServerMetrics http2ServerMetrics;
   private final SSLFactory sslFactory;
+  private final ConnectionStatsHandler connectionStatsHandler;
   private final ServerSecurityHandler serverSecurityHandler;
   private final Http2ServerStreamHandler http2ServerStreamHandler;
   private final CloseOnExceptionHandler closeOnExceptionHandler;
@@ -56,17 +58,19 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
    * @param http2ClientConfig configs that http2 client used.
    * @param http2ServerMetrics http2ServerMetrics
    * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances.
+   * @param connectionStatsHandler handler to stats connections.
    * @param http2ServerStreamHandler handler initializer for http2 stream channel.
    * @param serverSecurityHandler security validation handler for new HTTP2 connection.
    */
   public StorageServerNettyChannelInitializer(Http2ClientConfig http2ClientConfig,
-      Http2ServerMetrics http2ServerMetrics, SSLFactory sslFactory, Http2ServerStreamHandler http2ServerStreamHandler,
-      ServerSecurityHandler serverSecurityHandler) {
+      Http2ServerMetrics http2ServerMetrics, SSLFactory sslFactory, ConnectionStatsHandler connectionStatsHandler,
+      Http2ServerStreamHandler http2ServerStreamHandler, ServerSecurityHandler serverSecurityHandler) {
     this.http2ClientConfig = http2ClientConfig;
     this.http2ServerMetrics = http2ServerMetrics;
     // For http2, SSL encrypted is required. sslFactory should not be null.
     Objects.requireNonNull(sslFactory);
     this.sslFactory = sslFactory;
+    this.connectionStatsHandler = connectionStatsHandler;
     this.http2ServerStreamHandler = http2ServerStreamHandler;
     this.serverSecurityHandler = serverSecurityHandler;
     this.closeOnExceptionHandler = new CloseOnExceptionHandler();
@@ -87,12 +91,13 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
     ChannelPipeline pipeline = ch.pipeline();
     // connection stats handler to track connection related metrics
+    pipeline.addLast("ConnectionStatsHandler", connectionStatsHandler);
     InetSocketAddress peerAddress = ch.remoteAddress();
     String peerHost = peerAddress.getHostName();
     int peerPort = peerAddress.getPort();
     SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(peerHost, peerPort, SSLFactory.Mode.SERVER));
     pipeline.addLast("SslHandler", sslHandler);
-    pipeline.addLast("securityChecker", serverSecurityHandler);
+    pipeline.addLast("SecurityChecker", serverSecurityHandler);
     pipeline.addLast(Http2FrameCodecBuilder.forServer()
         .initialSettings(Http2Settings.defaultSettings()
             .maxFrameSize(http2ClientConfig.http2FrameMaxSize)

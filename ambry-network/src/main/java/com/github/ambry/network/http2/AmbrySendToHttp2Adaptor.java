@@ -15,6 +15,7 @@ package com.github.ambry.network.http2;
 
 import com.github.ambry.network.Send;
 import com.github.ambry.utils.ByteBufChannel;
+import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
@@ -47,6 +48,10 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
    */
   @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+    if (!ctx.channel().isOpen()) {
+      logger.debug("Channel closed when write. Channel: {}", ctx.channel());
+      promise.setFailure(new ChannelException("Channel has been closed when write."));
+    }
     if (!(msg instanceof Send)) {
       ctx.write(msg, promise);
       return;
