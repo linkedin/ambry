@@ -243,7 +243,7 @@ public class CloudToStoreReplicationManagerTest {
       for (int i = 0; i < 5; i++) {
         dataNodeIdSet.add(mockCloudToStoreReplicationManager.getCloudDataNode().getHostname());
       }
-      assertTrue("getCloudDataNode shouldn't return same every time", dataNodeIdSet.size() > 1);
+      assertTrue("getCloudDataNode shouldn't return same node every time", dataNodeIdSet.size() > 1);
     } catch (ReplicationException rex) {
       fail("getCloudDataNode shouldn't fail if vcrNodes is not empty");
     }
