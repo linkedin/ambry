@@ -354,88 +354,7 @@ public class IndexTest {
   }
 
   /**
-   * Tests and verifies an undelete with an expected life version
-   * @param targetKey the {@link StoreKey} to look up
-   * @param expectedLifeVersion the expected lifeVersion
-   * @param expectTtlUpdateSet true when expecting ttl update flag is set from returned {@link IndexValue}
-   * @throws StoreException
-   */
-  private void undeleteKeyAndVerify(StoreKey targetKey, short expectedLifeVersion, boolean expectTtlUpdateSet)
-      throws StoreException {
-    assertTrue("targetKey is not deleted", state.index.findKey(targetKey).isDelete());
-    assertTrue("targetKey is undeleted early", !state.index.findKey(targetKey).isUndelete());
-    IndexValue prevValue = state.index.findKey(targetKey);
-    assertEquals("Life version isn't " + (expectedLifeVersion - 1) + " but " + prevValue.getLifeVersion(),
-        expectedLifeVersion - 1, prevValue.getLifeVersion());
-    state.appendToLog(UNDELETE_RECORD_SIZE);
-    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), UNDELETE_RECORD_SIZE);
-    long operationTime = state.time.milliseconds();
-    state.index.markAsUndeleted(targetKey, fileSpan, operationTime);
-    IndexValue value = state.index.findKey(targetKey);
-    checkUndelete(value, expectTtlUpdateSet, expectedLifeVersion, ((MockId) targetKey).getAccountId(),
-        ((MockId) targetKey).getContainerId(), UNDELETE_RECORD_SIZE, fileSpan.getStartOffset(),
-        prevValue.getExpiresAtMs(), operationTime);
-  }
-
-  private void checkUndelete(IndexValue value, boolean expectedTtlUpdate, short expectedLifeVersion,
-      short expectedAccountId, short expectedContainerId, long expectedSize, Offset expectedOffset,
-      long expectedExpiresAtMs, long expectedOperationTime) {
-    assertNotNull(value);
-    assertTrue(value.isUndelete());
-    assertFalse(value.isDelete());
-    assertEquals(expectedTtlUpdate, value.isTtlUpdate());
-    assertEquals(expectedLifeVersion, value.getLifeVersion());
-    assertEquals(expectedAccountId, value.getAccountId());
-    assertEquals(expectedContainerId, value.getContainerId());
-    assertEquals(expectedSize, value.getSize());
-    assertEquals(expectedOffset, value.getOffset());
-    assertEquals(expectedExpiresAtMs, value.getExpiresAtMs());
-    assertEquals(expectedOperationTime, value.getOperationTimeInMs());
-  }
-
-  /**
-   * Tests and verifies a delete with an expected life version
-   * @param key the {@link StoreKey} to look up
-   * @param expectedLifeVersion the expected lifeVersion
-   * @throws StoreException
-   */
-  private void deleteKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
-    assertTrue("targetKey is already deleted", !state.index.findKey(key).isDelete());
-    short actualLifeVersion = state.index.findKey(key).getLifeVersion();
-    assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
-        actualLifeVersion);
-    state.appendToLog(DELETE_RECORD_SIZE);
-    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), DELETE_RECORD_SIZE);
-    state.index.markAsDeleted(key, fileSpan, System.currentTimeMillis());
-    assertTrue("targetKey is undeleted", !state.index.findKey(key).isUndelete());
-    assertTrue("targetKey is not deleted", state.index.findKey(key).isDelete());
-    actualLifeVersion = state.index.findKey(key).getLifeVersion();
-    assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
-        actualLifeVersion);
-  }
-
-  /**
-   * Tests and verifies a ttlUpdate with an expected life version
-   * @param key the {@link StoreKey} to look up
-   * @param expectedLifeVersion the expected lifeVersion
-   * @throws StoreException
-   */
-  private void ttlUpdateKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
-    assertTrue("targetKey is already ttlUpdated", !state.index.findKey(key).isTtlUpdate());
-    short actualLifeVersion = state.index.findKey(key).getLifeVersion();
-    assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
-        actualLifeVersion);
-    state.appendToLog(TTL_UPDATE_RECORD_SIZE);
-    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), TTL_UPDATE_RECORD_SIZE);
-    state.index.markAsPermanent(key, fileSpan, System.currentTimeMillis());
-    assertTrue("targetKey is not ttlUpdated", state.index.findKey(key).isTtlUpdate());
-    actualLifeVersion = state.index.findKey(key).getLifeVersion();
-    assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
-        actualLifeVersion);
-  }
-
-  /**
-   * Tests Undelete basic operation
+   * Tests Undelete basic operation when it's invoked from frontend.
    * @throws StoreException
    */
   @Test
@@ -1784,6 +1703,87 @@ public class IndexTest {
         assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
       }
     }
+  }
+
+  /**
+   * Tests and verifies an undelete with an expected life version
+   * @param targetKey the {@link StoreKey} to look up
+   * @param expectedLifeVersion the expected lifeVersion
+   * @param expectTtlUpdateSet true when expecting ttl update flag is set from returned {@link IndexValue}
+   * @throws StoreException
+   */
+  private void undeleteKeyAndVerify(StoreKey targetKey, short expectedLifeVersion, boolean expectTtlUpdateSet)
+      throws StoreException {
+    assertTrue("targetKey is not deleted", state.index.findKey(targetKey).isDelete());
+    assertTrue("targetKey is undeleted early", !state.index.findKey(targetKey).isUndelete());
+    IndexValue prevValue = state.index.findKey(targetKey);
+    assertEquals("Life version isn't " + (expectedLifeVersion - 1) + " but " + prevValue.getLifeVersion(),
+        expectedLifeVersion - 1, prevValue.getLifeVersion());
+    state.appendToLog(UNDELETE_RECORD_SIZE);
+    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), UNDELETE_RECORD_SIZE);
+    long operationTime = state.time.milliseconds();
+    state.index.markAsUndeleted(targetKey, fileSpan, operationTime);
+    IndexValue value = state.index.findKey(targetKey);
+    checkUndelete(value, expectTtlUpdateSet, expectedLifeVersion, ((MockId) targetKey).getAccountId(),
+        ((MockId) targetKey).getContainerId(), UNDELETE_RECORD_SIZE, fileSpan.getStartOffset(),
+        prevValue.getExpiresAtMs(), operationTime);
+  }
+
+  private void checkUndelete(IndexValue value, boolean expectedTtlUpdate, short expectedLifeVersion,
+      short expectedAccountId, short expectedContainerId, long expectedSize, Offset expectedOffset,
+      long expectedExpiresAtMs, long expectedOperationTime) {
+    assertNotNull(value);
+    assertTrue(value.isUndelete());
+    assertFalse(value.isDelete());
+    assertEquals(expectedTtlUpdate, value.isTtlUpdate());
+    assertEquals(expectedLifeVersion, value.getLifeVersion());
+    assertEquals(expectedAccountId, value.getAccountId());
+    assertEquals(expectedContainerId, value.getContainerId());
+    assertEquals(expectedSize, value.getSize());
+    assertEquals(expectedOffset, value.getOffset());
+    assertEquals(expectedExpiresAtMs, value.getExpiresAtMs());
+    assertEquals(expectedOperationTime, value.getOperationTimeInMs());
+  }
+
+  /**
+   * Tests and verifies a delete with an expected life version
+   * @param key the {@link StoreKey} to look up
+   * @param expectedLifeVersion the expected lifeVersion
+   * @throws StoreException
+   */
+  private void deleteKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
+    assertTrue("targetKey is already deleted", !state.index.findKey(key).isDelete());
+    short actualLifeVersion = state.index.findKey(key).getLifeVersion();
+    assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
+        actualLifeVersion);
+    state.appendToLog(DELETE_RECORD_SIZE);
+    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), DELETE_RECORD_SIZE);
+    state.index.markAsDeleted(key, fileSpan, System.currentTimeMillis());
+    assertTrue("targetKey is undeleted", !state.index.findKey(key).isUndelete());
+    assertTrue("targetKey is not deleted", state.index.findKey(key).isDelete());
+    actualLifeVersion = state.index.findKey(key).getLifeVersion();
+    assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
+        actualLifeVersion);
+  }
+
+  /**
+   * Tests and verifies a ttlUpdate with an expected life version
+   * @param key the {@link StoreKey} to look up
+   * @param expectedLifeVersion the expected lifeVersion
+   * @throws StoreException
+   */
+  private void ttlUpdateKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
+    assertTrue("targetKey is already ttlUpdated", !state.index.findKey(key).isTtlUpdate());
+    short actualLifeVersion = state.index.findKey(key).getLifeVersion();
+    assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
+        actualLifeVersion);
+    state.appendToLog(TTL_UPDATE_RECORD_SIZE);
+    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), TTL_UPDATE_RECORD_SIZE);
+    state.index.markAsPermanent(key, fileSpan, System.currentTimeMillis());
+    assertTrue("targetKey is not ttlUpdated", state.index.findKey(key).isTtlUpdate());
+    actualLifeVersion = state.index.findKey(key).getLifeVersion();
+    assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
+        actualLifeVersion);
   }
 
   /**
