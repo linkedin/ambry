@@ -13,14 +13,12 @@
  */
 package com.github.ambry.server;
 
-import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -83,7 +81,7 @@ public class ServerPlaintextTest {
     System.out.println("ServerPlaintextTest::cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
 
-  //@Test
+  @Test
   public void endToEndTest() throws Exception {
     plaintextCluster.startServers();
     DataNodeId dataNodeId = plaintextCluster.getGeneralDataNode();
@@ -94,7 +92,7 @@ public class ServerPlaintextTest {
   /**
    * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
    */
-  //@Test
+  @Test
   public void endToEndTestWithPrefetch() throws Exception {
     plaintextCluster.startServers();
     DataNodeId dataNodeId = plaintextCluster.getPrefetchDataNode();
@@ -122,7 +120,7 @@ public class ServerPlaintextTest {
     zkInfo.shutdown();
   }
 
-  //@Test
+  @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest() throws Exception {
     plaintextCluster.startServers();
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
@@ -135,7 +133,7 @@ public class ServerPlaintextTest {
         notificationSystem, testEncryption);
   }
 
-  //@Test
+  @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest() throws Exception {
     // this test uses router to Put and direct GetRequest to verify Gets. So, no way to get access to encryptionKey against
     // which to compare the GetResponse. Hence skipping encryption flow for this test
@@ -144,5 +142,16 @@ public class ServerPlaintextTest {
       ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "", PortType.PLAINTEXT,
           plaintextCluster, notificationSystem, routerProps);
     }
+  }
+
+  /**
+   * Test some corner cases of undelete
+   * @throws Exception
+   */
+  @Test
+  public void undeleteCornerCasesTest() throws Exception {
+    plaintextCluster.startServers();
+    ServerTestUtil.undeleteCornerCasesTest(plaintextCluster, PortType.PLAINTEXT, null, null, null, null, null, null,
+        notificationSystem, routerProps, testEncryption);
   }
 }

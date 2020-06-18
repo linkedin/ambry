@@ -79,6 +79,7 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.protocol.UndeleteRequest;
@@ -91,6 +92,8 @@ import com.github.ambry.router.NonBlockingRouterFactory;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterErrorCode;
+import com.github.ambry.router.RouterException;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
@@ -98,6 +101,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.HelixControllerManager;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -122,12 +126,15 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import javax.net.ssl.SSLSocketFactory;
 
 import static org.junit.Assert.*;
@@ -530,6 +537,7 @@ final class ServerTestUtil {
       stream = channel.receive().getInputStream();
       undeleteResponse = UndeleteResponse.readFrom(new DataInputStream(stream));
       assertEquals("Undelete blob should fail", ServerErrorCode.Blob_Already_Undeleted, undeleteResponse.getError());
+      assertEquals("LifeVersion Mismatch", (short) 1, undeleteResponse.getLifeVersion());
 
       // get an undeleted blob, which should succeed
       getRequest1 = new GetRequest(1, "clientid1", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
@@ -2051,6 +2059,286 @@ final class ServerTestUtil {
     }
   }
 
+  static void undeleteCornerCasesTest(MockCluster cluster, PortType portType, SSLConfig clientSSLConfig1,
+      SSLConfig clientSSLConfig2, SSLConfig clientSSLConfig3, SSLSocketFactory clientSSLSocketFactory1,
+      SSLSocketFactory clientSSLSocketFactory2, SSLSocketFactory clientSSLSocketFactory3,
+      MockNotificationSystem notificationSystem, Properties routerProps, boolean testEncryption) {
+    MockClusterMap clusterMap = cluster.getClusterMap();
+    byte[] usermetadata = new byte[1000];
+    byte[] data = new byte[31870];
+    byte[] encryptionKey = new byte[100];
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    BlobProperties properties = new BlobProperties(31870, "serviceid1", accountId, containerId, testEncryption);
+    TestUtils.RANDOM.nextBytes(usermetadata);
+    TestUtils.RANDOM.nextBytes(data);
+    if (testEncryption) {
+      TestUtils.RANDOM.nextBytes(encryptionKey);
+    }
+    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+    Map<String, List<DataNodeId>> dataNodesPerDC =
+        clusterMap.getDataNodes().stream().collect(Collectors.groupingBy(d -> d.getDatacenterName()));
+    Map<String, Pair<SSLConfig, SSLSocketFactory>> sslSettingPerDC = new HashMap<>();
+    sslSettingPerDC.put("DC1", new Pair<>(clientSSLConfig1, clientSSLSocketFactory1));
+    sslSettingPerDC.put("DC2", new Pair<>(clientSSLConfig2, clientSSLSocketFactory2));
+    sslSettingPerDC.put("DC3", new Pair<>(clientSSLConfig3, clientSSLSocketFactory3));
+
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    DataNodeId dataNodeId = dataNodesPerDC.get("DC1").get(0);
+    Router router = null;
+    try {
+      Properties routerProperties = getRouterProps("DC1");
+      routerProperties.putAll(routerProps);
+      VerifiableProperties routerVerifiableProps = new VerifiableProperties(routerProperties);
+      AccountService accountService = new InMemAccountService(false, true);
+      router = new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, new MockNotificationSystem(clusterMap),
+          getSSLFactoryIfRequired(routerVerifiableProps), accountService).getRouter();
+
+      // channels to all datanodes
+      List<ConnectedChannel> channels = new ArrayList<>();
+      for (Map.Entry<String, List<DataNodeId>> entry : dataNodesPerDC.entrySet()) {
+        Pair<SSLConfig, SSLSocketFactory> pair = sslSettingPerDC.get(entry.getKey());
+        for (DataNodeId node : entry.getValue()) {
+          ConnectedChannel connectedChannel =
+              getBlockingChannelBasedOnPortType(portType, node, pair.getSecond(), pair.getFirst());
+          connectedChannel.connect();
+          channels.add(connectedChannel);
+        }
+      }
+
+      //////////////////////////////////////////////////////
+      // Corner case 1: When only one datacenter has delete
+      //////////////////////////////////////////////////////
+      BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
+          BlobId.BlobDataType.DATACHUNK);
+      ConnectedChannel channel =
+          getBlockingChannelBasedOnPortType(portType, dataNodeId, clientSSLSocketFactory1, clientSSLConfig1);
+      channel.connect();
+
+      PutRequest putRequest =
+          new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+              properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      channel.send(putRequest);
+
+      InputStream putResponseStream = channel.receive().getInputStream();
+      PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
+      assertEquals(ServerErrorCode.No_Error, response.getError());
+
+      notificationSystem.awaitBlobCreations(blobId1.toString());
+
+      // Now stop the replications this partition.
+      PartitionId partitionId = blobId1.getPartition();
+      controlReplicationForPartition(channels, partitionId, false);
+
+      // Now send the delete to two data nodes in the same DC
+      List<DataNodeId> toBeDeleteDataNodes = dataNodesPerDC.values().stream().findFirst().get();
+      Pair<SSLConfig, SSLSocketFactory> pair = sslSettingPerDC.get(toBeDeleteDataNodes.get(0).getDatacenterName());
+      ConnectedChannel channel1 =
+          getBlockingChannelBasedOnPortType(portType, toBeDeleteDataNodes.get(0), pair.getSecond(), pair.getFirst());
+      channel1.connect();
+      ConnectedChannel channel2 =
+          getBlockingChannelBasedOnPortType(portType, toBeDeleteDataNodes.get(1), pair.getSecond(), pair.getFirst());
+      channel2.connect();
+      DeleteRequest deleteRequest1 = new DeleteRequest(1, "deleteClient", blobId1, System.currentTimeMillis());
+      channel1.send(deleteRequest1);
+      DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(channel1.receive().getInputStream()));
+      assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
+      DeleteRequest deleteRequest2 =
+          new DeleteRequest(1, "deleteClient", blobId1, deleteRequest1.getDeletionTimeInMs());
+      channel2.send(deleteRequest2);
+      deleteResponse = DeleteResponse.readFrom(new DataInputStream(channel2.receive().getInputStream()));
+      assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
+
+      // Now send the undelete operation through router, and it should fail because of not deleted error.
+      Future<Void> future = router.undeleteBlob(blobId1.toString(), "service", null);
+      try {
+        future.get();
+        fail("Undelete blob " + blobId1.toString() + " should fail");
+      } catch (ExecutionException e) {
+        assertTrue(e.getCause() instanceof RouterException);
+        assertEquals(RouterErrorCode.BlobNotDeleted, ((RouterException) e.getCause()).getErrorCode());
+      }
+
+      // Now see if either data node 1 or data node 2 has undelete or not, if so, undelete would replicate. If not,
+      // delete would replicate.
+      List<PartitionRequestInfo> partitionRequestInfoList = getPartitionRequestInfoListFromBlobId(blobId1);
+      boolean hasUndelete = false;
+      for (ConnectedChannel connectedChannel : new ConnectedChannel[]{channel1, channel2}) {
+        GetRequest getRequest =
+            new GetRequest(1, "clientId1", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
+                GetOption.Include_All);
+        channel1.send(getRequest);
+        GetResponse getResponse =
+            GetResponse.readFrom(new DataInputStream(channel1.receive().getInputStream()), clusterMap);
+        assertEquals(ServerErrorCode.No_Error, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+        MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
+        hasUndelete =
+            getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getLifeVersion() == (short) 1;
+        if (hasUndelete) {
+          break;
+        }
+      }
+
+      // Now restart the replication
+      controlReplicationForPartition(channels, partitionId, true);
+      if (hasUndelete) {
+        notificationSystem.awaitBlobUndeletes(blobId1.toString());
+      } else {
+        notificationSystem.awaitBlobDeletions(blobId1.toString());
+      }
+
+      for (ConnectedChannel connectedChannel : channels) {
+        GetRequest getRequest =
+            new GetRequest(1, "clientId1", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
+                GetOption.Include_All);
+        connectedChannel.send(getRequest);
+        GetResponse getResponse =
+            GetResponse.readFrom(new DataInputStream(connectedChannel.receive().getInputStream()), clusterMap);
+        assertEquals(ServerErrorCode.No_Error, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+        MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
+        if (hasUndelete) {
+          assertEquals((short) 1,
+              getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getLifeVersion());
+          assertTrue(getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).isUndeleted());
+          assertFalse(getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).isDeleted());
+        } else {
+          assertEquals((short) 0,
+              getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getLifeVersion());
+          assertTrue(getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).isDeleted());
+          assertFalse(getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).isUndeleted());
+        }
+      }
+
+      /////////////////////////////////////////////////////////////
+      // Corner case 2: two data nodes have different life versions
+      ////////////////////////////////////////////////////////////
+      BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
+          BlobId.BlobDataType.DATACHUNK);
+      putRequest =
+          new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+              properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      channel.send(putRequest);
+      putResponseStream = channel.receive().getInputStream();
+      response = PutResponse.readFrom(new DataInputStream(putResponseStream));
+      assertEquals(ServerErrorCode.No_Error, response.getError());
+      notificationSystem.awaitBlobCreations(blobId2.toString());
+
+      // Now delete this blob on all servers.
+      DeleteRequest deleteRequest = new DeleteRequest(1, "deleteClient", blobId2, System.currentTimeMillis());
+      channel.send(deleteRequest);
+      deleteResponse = DeleteResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
+      assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
+      notificationSystem.awaitBlobDeletions(blobId2.toString());
+
+      // Now stop the replication
+      partitionId = blobId2.getPartition();
+      controlReplicationForPartition(channels, partitionId, false);
+
+      // Now send the undelete to two data nodes in the same DC and then send delete
+      UndeleteRequest undeleteRequest = new UndeleteRequest(1, "undeleteClient", blobId2, System.currentTimeMillis());
+      channel1.send(undeleteRequest);
+      UndeleteResponse undeleteResponse =
+          UndeleteResponse.readFrom(new DataInputStream(channel1.receive().getInputStream()));
+      assertEquals(ServerErrorCode.No_Error, undeleteResponse.getError());
+      assertEquals((short) 1, undeleteResponse.getLifeVersion());
+      undeleteRequest = new UndeleteRequest(1, "undeleteClient", blobId2, undeleteRequest.getOperationTimeMs());
+      channel2.send(undeleteRequest);
+      undeleteResponse = UndeleteResponse.readFrom(new DataInputStream(channel2.receive().getInputStream()));
+      assertEquals(ServerErrorCode.No_Error, undeleteResponse.getError());
+      assertEquals((short) 1, undeleteResponse.getLifeVersion());
+
+      deleteRequest1 = new DeleteRequest(1, "deleteClient", blobId2, System.currentTimeMillis());
+      channel1.send(deleteRequest1);
+      deleteResponse = DeleteResponse.readFrom(new DataInputStream(channel1.receive().getInputStream()));
+      assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
+      deleteRequest2 = new DeleteRequest(1, "deleteClient", blobId2, deleteRequest1.getDeletionTimeInMs());
+      channel2.send(deleteRequest2);
+      deleteResponse = DeleteResponse.readFrom(new DataInputStream(channel2.receive().getInputStream()));
+      assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
+
+      // Now send the undelete operation through router, and it should fail because of lifeVersion conflict error.
+      future = router.undeleteBlob(blobId2.toString(), "service", null);
+      try {
+        future.get();
+        fail("Undelete blob " + blobId2.toString() + " should fail");
+      } catch (ExecutionException e) {
+        assertTrue(e.getCause() instanceof RouterException);
+        assertEquals(RouterErrorCode.LifeVersionConflict, ((RouterException) e.getCause()).getErrorCode());
+      }
+
+      // Now restart the replication
+      controlReplicationForPartition(channels, partitionId, true);
+      notificationSystem.awaitBlobUndeletes(blobId2.toString());
+
+      // Now after replication is resumed, the undelete of lifeversion 2 will eventually be replicated to all servers.
+      partitionRequestInfoList = getPartitionRequestInfoListFromBlobId(blobId2);
+      for (ConnectedChannel connectedChannel : channels) {
+        // Even if the notificationSystem acknowledged the undelete, it might be triggered by undelete at lifeversion 1.
+        // So check in a loop with a time out.
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(10);
+        while (true) {
+          GetRequest getRequest =
+              new GetRequest(1, "clientId1", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
+                  GetOption.Include_All);
+          connectedChannel.send(getRequest);
+          GetResponse getResponse =
+              GetResponse.readFrom(new DataInputStream(connectedChannel.receive().getInputStream()), clusterMap);
+          assertEquals(ServerErrorCode.No_Error, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+          MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
+          if (getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getLifeVersion() == 2) {
+            assertTrue(getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).isUndeleted());
+            assertFalse(getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).isDeleted());
+            break;
+          } else {
+            Thread.sleep(1000);
+            if (System.currentTimeMillis() > deadline) {
+              throw new TimeoutException(
+                  "Fail to get blob " + blobId2 + " at lifeversion 2 at " + connectedChannel.getRemoteHost());
+            }
+          }
+        }
+      }
+
+      for (ConnectedChannel connectedChannel : channels) {
+        connectedChannel.disconnect();
+      }
+      channel1.disconnect();
+      channel2.disconnect();
+      channel.disconnect();
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail();
+    } finally {
+      if (router != null) {
+        try {
+          router.close();
+        } catch (Exception e) {
+        }
+      }
+    }
+  }
+
+  private static void controlReplicationForPartition(List<ConnectedChannel> channels, PartitionId partitionId,
+      boolean enable) throws Exception {
+    for (ConnectedChannel connectedChannel : channels) {
+      AdminRequest adminRequest =
+          new AdminRequest(AdminRequestOrResponseType.ReplicationControl, partitionId, 1, "clientid2");
+      ReplicationControlAdminRequest controlRequest =
+          new ReplicationControlAdminRequest(Collections.emptyList(), enable, adminRequest);
+      connectedChannel.send(controlRequest);
+      AdminResponse adminResponse =
+          AdminResponse.readFrom(new DataInputStream(connectedChannel.receive().getInputStream()));
+      assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
+    }
+  }
+
+  private static List<PartitionRequestInfo> getPartitionRequestInfoListFromBlobId(BlobId blobId) {
+    return Collections.singletonList(
+        new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId)));
+  }
+
   /**
    * Fetches the put record size in log
    * @param properties {@link BlobProperties} associated with the put
@@ -2354,6 +2642,33 @@ final class ServerTestUtil {
           sslSocketFactory, sslConfig);
     } else if (targetPort.getPortType() == PortType.HTTP2) {
       channel = new Http2BlockingChannel(hostName, targetPort.getPort(), sslConfig,
+          new Http2ClientConfig(new VerifiableProperties(new Properties())),
+          new Http2ClientMetrics(new MetricRegistry()));
+    }
+    return channel;
+  }
+
+  /**
+   * Returns BlockingChannel, SSLBlockingChannel or Http2BlockingChannel depending on whether the port type is PlainText,
+   * SSL or HTTP2 port for the given targetPort
+   * @param portType The type of port to connect to
+   * @param dataNodeId To which {@link MockDataNodeId} to connect
+   * @param sslSocketFactory the {@link SSLSocketFactory}.
+   * @param sslConfig the {@link SSLConfig}.
+   * @return ConnectedChannel
+   */
+  private static ConnectedChannel getBlockingChannelBasedOnPortType(PortType portType, DataNodeId dataNodeId,
+      SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
+    ConnectedChannel channel = null;
+    String hostName = dataNodeId.getHostname();
+    if (portType == PortType.PLAINTEXT) {
+      channel = new BlockingChannel(hostName, dataNodeId.getPort(), 10000, 10000, 10000, 2000);
+    } else if (portType == PortType.SSL) {
+      channel =
+          new SSLBlockingChannel(hostName, dataNodeId.getSSLPort(), new MetricRegistry(), 10000, 10000, 10000, 4000,
+              sslSocketFactory, sslConfig);
+    } else if (portType == PortType.HTTP2) {
+      channel = new Http2BlockingChannel(hostName, dataNodeId.getHttp2Port(), sslConfig,
           new Http2ClientConfig(new VerifiableProperties(new Properties())),
           new Http2ClientMetrics(new MetricRegistry()));
     }

@@ -16,6 +16,7 @@ package com.github.ambry.network;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.ConnectException;
@@ -35,7 +36,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -109,7 +109,7 @@ public class Selector implements Selectable {
     unreadyConnections = new HashSet<>();
     this.networkConfig = networkConfig;
     if (networkConfig.selectorExecutorPoolSize > 0) {
-      executorPool = Executors.newFixedThreadPool(networkConfig.selectorExecutorPoolSize);
+      executorPool = Utils.newScheduler(networkConfig.selectorExecutorPoolSize, "selector-executor-pool-", false);
     } else {
       executorPool = null;
     }
@@ -242,6 +242,9 @@ public class Selector implements Selectable {
     } catch (IOException e) {
       metrics.selectorNioCloseErrorCount.inc();
       logger.error("Exception closing nioSelector:", e);
+    }
+    if (executorPool != null) {
+      executorPool.shutdown();
     }
   }
 
