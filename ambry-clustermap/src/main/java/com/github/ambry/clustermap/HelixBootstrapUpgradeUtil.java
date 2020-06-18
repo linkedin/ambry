@@ -147,7 +147,13 @@ public class HelixBootstrapUpgradeUtil {
   private static final String ALL = "all";
 
   enum HelixAdminOperation {
-    BootstrapCluster, ValidateCluster, UpdateIdealState, DisablePartition, EnablePartition, ResetPartition
+    BootstrapCluster,
+    ValidateCluster,
+    UpdateIdealState,
+    DisablePartition,
+    EnablePartition,
+    ResetPartition,
+    ListSealedPartition
   }
 
   /**
@@ -294,6 +300,26 @@ public class HelixBootstrapUpgradeUtil {
             HelixAdminOperation.ValidateCluster);
     clusterMapToHelixMapper.validateAndClose();
     clusterMapToHelixMapper.logSummary();
+  }
+
+  /**
+   * List all sealed partitions in Helix cluster.
+   * @param hardwareLayoutPath the path to the hardware layout file.
+   * @param partitionLayoutPath the path to the partition layout file.
+   * @param zkLayoutPath the path to the zookeeper layout file.
+   * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
+   *                          will give the cluster name in Helix to bootstrap or upgrade.
+   * @param dcs the comma-separated list of data centers that needs to be upgraded/bootstrapped.
+   * @return a set of sealed partitions in cluster
+   * @throws Exception
+   */
+  static Set<String> listSealedPartition(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+      String clusterNamePrefix, String dcs) throws Exception {
+    HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil =
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
+            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, null,
+            null, null, HelixAdminOperation.ListSealedPartition);
+    return helixBootstrapUpgradeUtil.getSealedPartitionsInHelixCluster();
   }
 
   /**
@@ -1275,6 +1301,93 @@ public class HelixBootstrapUpgradeUtil {
       }
       for (HelixAdmin admin : adminForDc.values()) {
         admin.close();
+      }
+    }
+  }
+
+  /**
+   * Get sealed partitions from Helix cluster.
+   * @return a set of sealed partitions across all DCs.
+   */
+  private Set<String> getSealedPartitionsInHelixCluster() throws Exception {
+    info("Aggregating sealed partitions from cluster {} in Helix", clusterName);
+    CountDownLatch sealedPartitionLatch = new CountDownLatch(adminForDc.size());
+    AtomicInteger errorCount = new AtomicInteger();
+    Map<String, Set<String>> dcToSealedPartitions = new ConcurrentHashMap<>();
+    Map<String, Set<String>> nodeToNonExistentReplicas = new ConcurrentHashMap<>();
+    for (Datacenter dc : staticClusterMap.hardwareLayout.getDatacenters()) {
+      HelixAdmin admin = adminForDc.get(dc.getName());
+      if (admin == null) {
+        info("Skipping {}", dc.getName());
+        continue;
+      }
+      ensureOrThrow(zkClientForDc.get(dc.getName()) == null ? admin.getClusters().contains(clusterName)
+              : ZKUtil.isClusterSetup(clusterName, zkClientForDc.get(dc.getName())),
+          "Cluster not found in ZK " + dataCenterToZkAddress.get(dc.getName()));
+      Utils.newThread(() -> {
+        try {
+          getSealedPartitionsInDc(dc, dcToSealedPartitions, nodeToNonExistentReplicas);
+        } catch (Throwable t) {
+          logger.error("[{}] error message: {}", dc.getName().toUpperCase(), t.getMessage());
+          errorCount.getAndIncrement();
+        } finally {
+          sealedPartitionLatch.countDown();
+        }
+      }, false).start();
+    }
+    sealedPartitionLatch.await(10, TimeUnit.MINUTES);
+    ensureOrThrow(errorCount.get() == 0, "Error occurred when aggregating sealed partitions in cluster " + clusterName);
+    Set<String> sealedPartitionsInCluster = new HashSet<>();
+    info("========================= Summary =========================");
+    for (Map.Entry<String, Set<String>> entry : dcToSealedPartitions.entrySet()) {
+      info("Dc {} has {} sealed partitions.", entry.getKey(), entry.getValue().size());
+      sealedPartitionsInCluster.addAll(entry.getValue());
+    }
+    info("========================= Sealed Partitions across All DCs =========================");
+    info("Total number of sealed partitions in cluster = {}", sealedPartitionsInCluster.size());
+    info("Sealed partitions are {}", sealedPartitionsInCluster.toString());
+    if (!nodeToNonExistentReplicas.isEmpty()) {
+      info("Following {} nodes have sealed replica that are not actually present", nodeToNonExistentReplicas.size());
+      for (Map.Entry<String, Set<String>> entry : nodeToNonExistentReplicas.entrySet()) {
+        info("{} has non-existent replicas: {}", entry.getKey(), entry.getValue().toString());
+      }
+    }
+    info("Successfully aggregate sealed from cluster {} in Helix", clusterName);
+    return sealedPartitionsInCluster;
+  }
+
+  /**
+   * Get sealed partitions from given datacenter.
+   * @param dc the datacenter where sealed partitions come from.
+   * @param dcToSealedPartitions a map to track sealed partitions in each dc. This entry associated with given dc will
+   *                             be populated in this method.
+   * @param nodeToNonExistentReplicas a map to track if any replica is in sealed list but not actually on local node.
+   */
+  private void getSealedPartitionsInDc(Datacenter dc, Map<String, Set<String>> dcToSealedPartitions,
+      Map<String, Set<String>> nodeToNonExistentReplicas) {
+    String dcName = dc.getName();
+    dcToSealedPartitions.put(dcName, new HashSet<>());
+    HelixAdmin admin = adminForDc.get(dcName);
+    Set<String> allInstancesInHelix = new HashSet<>(admin.getInstancesInCluster(clusterName));
+    for (DataNodeId dataNodeId : dc.getDataNodes()) {
+      DataNode dataNode = (DataNode) dataNodeId;
+      Set<String> replicasOnNode = staticClusterMap.getReplicas(dataNode)
+          .stream()
+          .map(replicaId -> replicaId.getPartitionId().toPathString())
+          .collect(Collectors.toSet());
+      String instanceName = getInstanceName(dataNode);
+      ensureOrThrow(allInstancesInHelix.contains(instanceName), "Instance not present in Helix " + instanceName);
+      InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, instanceName);
+      List<String> sealedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
+      if (sealedReplicas != null) {
+        for (String sealedReplica : sealedReplicas) {
+          info("Replica {} is sealed on {}", sealedReplica, instanceName);
+          dcToSealedPartitions.get(dcName).add(sealedReplica);
+          if (!replicasOnNode.contains(sealedReplica)) {
+            logger.warn("Replica {} is in sealed list but not on node {}", sealedReplica, instanceName);
+            nodeToNonExistentReplicas.computeIfAbsent(instanceName, key -> new HashSet<>()).add(sealedReplica);
+          }
+        }
       }
     }
   }
