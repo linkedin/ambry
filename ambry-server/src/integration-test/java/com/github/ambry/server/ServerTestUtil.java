@@ -2085,7 +2085,7 @@ final class ServerTestUtil {
     sslSettingPerDC.put("DC3", new Pair<>(clientSSLConfig3, clientSSLSocketFactory3));
 
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
-    DataNodeId dataNodeId = cluster.getOneDataNodeFromEachDatacenter(Arrays.asList("DC1")).get(0);
+    DataNodeId dataNodeId = dataNodesPerDC.get("DC1").get(0);
     Router router = null;
     try {
       Properties routerProperties = getRouterProps("DC1");
@@ -2173,14 +2173,9 @@ final class ServerTestUtil {
         GetResponse getResponse =
             GetResponse.readFrom(new DataInputStream(channel1.receive().getInputStream()), clusterMap);
         assertEquals(ServerErrorCode.No_Error, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
-        try {
-          BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
-          hasUndelete = getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getLifeVersion()
-              == (short) 1;
-        } catch (MessageFormatException e) {
-          e.printStackTrace();
-          fail();
-        }
+        MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
+        hasUndelete =
+            getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getLifeVersion() == (short) 1;
         if (hasUndelete) {
           break;
         }
@@ -2286,7 +2281,8 @@ final class ServerTestUtil {
         long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(10);
         while (true) {
           GetRequest getRequest =
-              new GetRequest(1, "clientId1", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.Include_All);
+              new GetRequest(1, "clientId1", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
+                  GetOption.Include_All);
           connectedChannel.send(getRequest);
           GetResponse getResponse =
               GetResponse.readFrom(new DataInputStream(connectedChannel.receive().getInputStream()), clusterMap);
@@ -2299,7 +2295,8 @@ final class ServerTestUtil {
           } else {
             Thread.sleep(1000);
             if (System.currentTimeMillis() > deadline) {
-              throw new TimeoutException("Fail to get blob " + blobId2 + " at lifeversion 2 at " + connectedChannel.getRemoteHost());
+              throw new TimeoutException(
+                  "Fail to get blob " + blobId2 + " at lifeversion 2 at " + connectedChannel.getRemoteHost());
             }
           }
         }
