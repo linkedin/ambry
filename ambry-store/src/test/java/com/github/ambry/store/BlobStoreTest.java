@@ -15,9 +15,13 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.clustermap.AmbryReplica;
+import com.github.ambry.clustermap.HelixFactory;
+import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
@@ -40,6 +44,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -57,12 +62,19 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import org.apache.helix.HelixAdmin;
+import org.apache.helix.model.IdealState;
+import org.apache.helix.model.InstanceConfig;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
@@ -353,6 +365,7 @@ public class BlobStoreTest {
       storeStatsScheduler = Utils.newScheduler(1, false);
       setupTestState(false, false);
     }
+    properties.setProperty("store.set.local.partition.state.enabled", Boolean.toString(true));
     //Setup threshold test properties, replicaId, mock write status delegate
     StoreConfig defaultConfig = changeThreshold(65, 5, true);
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
@@ -363,8 +376,8 @@ public class BlobStoreTest {
     //Restart store
     reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
 
-    //Check that after start, because ReplicaId defaults to non-sealed, delegate is not called
-    verifyZeroInteractions(replicaStatusDelegate);
+    //Check that after start, replicaStatusDelegate is called to enable replica if it was previously disabled
+    verify(replicaStatusDelegate, times(1)).enableReplica(replicaId);
 
     //Verify that putting in data that doesn't go over the threshold doesn't trigger the delegate
     put(1, 50, Utils.Infinite_Time);
@@ -403,7 +416,7 @@ public class BlobStoreTest {
       //Need to restart blob otherwise compaction will ignore segments in journal (which are all segments right now).
       //By restarting, only last segment will be in journal
       reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
-      verifyNoMoreInteractions(replicaStatusDelegate);
+      verify(replicaStatusDelegate, times(4)).enableReplica(replicaId);
 
       //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
       //that the store is now read-write
@@ -418,6 +431,7 @@ public class BlobStoreTest {
       verify(replicaStatusDelegate, times(3)).unseal(replicaId);
     }
     store.shutdown();
+    properties.setProperty("store.set.local.partition.state.enabled", Boolean.toString(false));
   }
 
   /**
@@ -1826,6 +1840,94 @@ public class BlobStoreTest {
   }
 
   /**
+   * Test that replica is correctly disabled when store is shut down due to disk I/O error.
+   * @throws Exception
+   */
+  @Test
+  public void storeErrorTriggerDisableReplicaTest() throws Exception {
+    final String RESOURCE_NAME = "0";
+    final String CLUSTER_NAME = "BlobStoreTest";
+    // setup testing environment
+    store.shutdown();
+    List<TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
+    zkInfoList.add(new TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
+    JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
+    properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
+    properties.setProperty("clustermap.datacenter.name", "DC1");
+    properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    properties.setProperty("store.io.error.count.to.trigger.shutdown", "1");
+    properties.setProperty("store.replica.status.delegate.enable", "true");
+    properties.setProperty("store.set.local.partition.state.enabled", "true");
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    InstanceConfig instanceConfig = new InstanceConfig("localhost");
+    Map<String, List<String>> listMap = new HashMap<>();
+    listMap.put(storeId, null);
+    ZNRecord znRecord = new ZNRecord("localhost");
+    znRecord.setListFields(listMap);
+    IdealState idealState = new IdealState(znRecord);
+    idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
+    // mock helix related components
+    HelixAdmin mockHelixAdmin = Mockito.mock(HelixAdmin.class);
+    when(mockHelixAdmin.getInstanceConfig(eq(CLUSTER_NAME), anyString())).thenReturn(instanceConfig);
+    when(mockHelixAdmin.getResourcesInCluster(eq(CLUSTER_NAME))).thenReturn(Collections.singletonList(RESOURCE_NAME));
+    when(mockHelixAdmin.getResourceIdealState(eq(CLUSTER_NAME), eq(RESOURCE_NAME))).thenReturn(idealState);
+    HelixFactory mockHelixFactory = Mockito.mock(HelixFactory.class);
+    when(mockHelixFactory.getZKHelixManager(anyString(), anyString(), any(), anyString())).thenReturn(null);
+    when(mockHelixFactory.getHelixAdmin(anyString())).thenReturn(mockHelixAdmin);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
+    MockHelixParticipant mockParticipant = new MockHelixParticipant(clusterMapConfig, mockHelixFactory);
+    mockParticipant.overrideDisableReplicaMethod = false;
+    ReplicaStatusDelegate replicaStatusDelegate = new ReplicaStatusDelegate(mockParticipant);
+    BlobStore testStore = createBlobStore(getMockAmbryReplica(clusterMapConfig, tempDirStr),
+        new StoreConfig(new VerifiableProperties(properties)), Collections.singletonList(replicaStatusDelegate));
+    testStore.start();
+    assertTrue("Store should start successfully", testStore.isStarted());
+
+    // create corrupted write set
+    MessageInfo corruptedInfo = new MessageInfo(getUniqueId(), PUT_RECORD_SIZE, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
+    MessageWriteSet corruptedWriteSet = new MockMessageWriteSet(Collections.singletonList(corruptedInfo),
+        Collections.singletonList(ByteBuffer.allocate(PUT_RECORD_SIZE)),
+        new StoreException(StoreException.IO_ERROR_STR, StoreErrorCodes.IOError));
+
+    // 1. mock failure case
+    when(mockHelixAdmin.getInstanceConfig(eq(CLUSTER_NAME), anyString())).thenReturn(null);
+    // trigger store exception when calling store.put()
+    try {
+      testStore.put(corruptedWriteSet);
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    assertNull("Disabled partition list should be null as disabling replica didn't succeed",
+        instanceConfig.getDisabledPartitions(RESOURCE_NAME));
+
+    // 2. mock success case
+    when(mockHelixAdmin.getInstanceConfig(eq(CLUSTER_NAME), anyString())).thenReturn(instanceConfig);
+    testStore.start();
+    assertTrue("Store should start successfully", testStore.isStarted());
+    try {
+      testStore.put(corruptedWriteSet);
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    assertEquals("Disabled partition name is not expected", storeId,
+        instanceConfig.getDisabledPartitions(RESOURCE_NAME).get(0));
+    // verify "DISABLED" list in InstanceConfig has correct partition id.
+    assertEquals("Disabled replica list is not expected", Collections.singletonList(storeId),
+        getDisabledReplicas(instanceConfig));
+    // 3. mock disk is replaced case, restart should succeed
+    testStore.start();
+    assertNull("Disabled partition list should be null as restart will enable same replica",
+        instanceConfig.getDisabledPartitions(RESOURCE_NAME));
+    assertTrue("Disabled replica list should be empty", getDisabledReplicas(instanceConfig).isEmpty());
+    testStore.shutdown();
+    reloadStore();
+  }
+
+  /**
    * Test both success and failure cases when deleting store files.
    * @throws Exception
    */
@@ -3034,6 +3136,10 @@ public class BlobStoreTest {
 
   private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
     return StoreTestUtils.createMockReplicaId(storeId, LOG_CAPACITY, filePath);
+  }
+
+  private AmbryReplica getMockAmbryReplica(ClusterMapConfig clusterMapConfig, String filePath) {
+    return StoreTestUtils.createMockAmbryReplica(storeId, 1024 * 1024 * 1024L, filePath, false);
   }
 
   /**

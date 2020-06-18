@@ -32,6 +32,8 @@ import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import org.apache.helix.HelixAdmin;
+import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -70,6 +72,7 @@ public class ClusterMapUtils {
   static final String RACKID_STR = "rackId";
   static final String SEALED_STR = "SEALED";
   static final String STOPPED_REPLICAS_STR = "STOPPED";
+  static final String DISABLED_REPLICAS_STR = "DISABLED";
   static final String AVAILABLE_STR = "AVAILABLE";
   static final String READ_ONLY_STR = "RO";
   static final String READ_WRITE_STR = "RW";
@@ -199,6 +202,17 @@ public class ClusterMapUtils {
   }
 
   /**
+   * Get the list of disabled replicas on a given instance. This is guaranteed to return a non-null list. It would return
+   * an empty list if there are no disabled replicas or if the field itself is absent for this instance.
+   * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
+   * @return the list of disabled replicas.
+   */
+  public static List<String> getDisabledReplicas(InstanceConfig instanceConfig) {
+    List<String> disabledReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.DISABLED_REPLICAS_STR);
+    return disabledReplicas == null ? new ArrayList<>() : disabledReplicas;
+  }
+
+  /**
    * Get the rack id associated with the given instance (if any).
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the rack id associated with the given instance.
@@ -245,6 +259,25 @@ public class ClusterMapUtils {
   static long getXid(InstanceConfig instanceConfig) {
     String xid = instanceConfig.getRecord().getSimpleField(XID_STR);
     return xid == null ? DEFAULT_XID : Long.parseLong(xid);
+  }
+
+  /**
+   * Get resource name associated with given partition.
+   * @param helixAdmin the {@link HelixAdmin} to access resources in cluster
+   * @param clusterName the name of cluster in which the partition resides
+   * @param partitionName name of partition
+   * @return resource name associated with given partition. {@code null} if not found.
+   */
+  static String getResourceNameOfPartition(HelixAdmin helixAdmin, String clusterName, String partitionName) {
+    String result = null;
+    for (String resourceName : helixAdmin.getResourcesInCluster(clusterName)) {
+      IdealState idealState = helixAdmin.getResourceIdealState(clusterName, resourceName);
+      if (idealState.getPartitionSet().contains(partitionName)) {
+        result = resourceName;
+        break;
+      }
+    }
+    return result;
   }
 
   /**

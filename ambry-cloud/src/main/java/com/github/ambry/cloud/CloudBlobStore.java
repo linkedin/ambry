@@ -851,6 +851,11 @@ class CloudBlobStore implements Store {
   }
 
   @Override
+  public boolean disabledOnError() {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public void shutdown() {
     recentBlobCache.clear();
     started = false;

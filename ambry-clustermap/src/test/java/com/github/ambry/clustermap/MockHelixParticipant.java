@@ -24,26 +24,26 @@ import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 import org.mockito.Mockito;
 
-import static org.mockito.Mockito.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static org.mockito.Mockito.*;
 
 
 public class MockHelixParticipant extends HelixParticipant {
   public static MetricRegistry metricRegistry = new MetricRegistry();
   public Boolean updateNodeInfoReturnVal = null;
   public PartitionStateChangeListener mockStatsManagerListener = null;
+  public boolean overrideDisableReplicaMethod = true;
   CountDownLatch listenerLatch = null;
   ReplicaState replicaState = ReplicaState.OFFLINE;
   ReplicaId currentReplica = null;
   ReplicaSyncUpManager replicaSyncUpService = null;
   private Set<ReplicaId> sealedReplicas = new HashSet<>();
   private Set<ReplicaId> stoppedReplicas = new HashSet<>();
+  private Set<ReplicaId> disabledReplicas = new HashSet<>();
   private PartitionStateChangeListener mockReplicationManagerListener;
 
   public MockHelixParticipant(ClusterMapConfig clusterMapConfig) {
-    super(clusterMapConfig, new MockHelixManagerFactory(), metricRegistry,
-        parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
-            clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
+    this(clusterMapConfig, new MockHelixManagerFactory());
     // create mock state change listener for ReplicationManager
     mockReplicationManagerListener = Mockito.mock(PartitionStateChangeListener.class);
     // mock Bootstrap-To-Standby change
@@ -81,6 +81,12 @@ public class MockHelixParticipant extends HelixParticipant {
     }).when(mockReplicationManagerListener).onPartitionBecomeOfflineFromInactive(any(String.class));
   }
 
+  public MockHelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) {
+    super(clusterMapConfig, helixFactory, metricRegistry,
+        parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
+            clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
+  }
+
   @Override
   public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
     // no op
@@ -104,6 +110,19 @@ public class MockHelixParticipant extends HelixParticipant {
       stoppedReplicas.removeAll(replicaIds);
     }
     return true;
+  }
+
+  @Override
+  public void setReplicaDisabledState(ReplicaId replicaId, boolean disable) {
+    if (overrideDisableReplicaMethod) {
+      if (disable) {
+        disabledReplicas.add(replicaId);
+      } else {
+        disabledReplicas.remove(replicaId);
+      }
+    } else {
+      super.setReplicaDisabledState(replicaId, disable);
+    }
   }
 
   @Override

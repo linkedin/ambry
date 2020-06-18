@@ -787,6 +787,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public boolean disabledOnError() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void shutdown() throws StoreException {
       throw new IllegalStateException("Not implemented");
     }

@@ -285,12 +285,17 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
-    public long getEndPositionOfLastPut() throws StoreException {
+    public long getEndPositionOfLastPut() {
       throw new UnsupportedOperationException("Method not supported");
     }
 
     @Override
     public boolean recoverFromDecommission() {
+      throw new UnsupportedOperationException("Method not supported");
+    }
+
+    @Override
+    public boolean disabledOnError() {
       throw new UnsupportedOperationException("Method not supported");
     }
 

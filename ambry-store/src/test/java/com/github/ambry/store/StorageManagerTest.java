@@ -347,7 +347,18 @@ public class StorageManagerTest {
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
     }
-    // 3. store not started exception
+    // 3. not found store should throw exception (induced by removing the store)
+    ReplicaId replicaToRemove = localReplicas.get(localReplicas.size() - 1);
+    storageManager.controlCompactionForBlobStore(replicaToRemove.getPartitionId(), false);
+    storageManager.shutdownBlobStore(replicaToRemove.getPartitionId());
+    storageManager.getDiskManager(replicaToRemove.getPartitionId()).removeBlobStore(replicaToRemove.getPartitionId());
+    try {
+      mockHelixParticipant.onPartitionBecomeInactiveFromStandby(replicaToRemove.getPartitionId().toPathString());
+      fail("should fail because store is not found");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
+    }
+    // 4. store not started exception
     ReplicaId localReplica = localReplicas.get(0);
     storageManager.shutdownBlobStore(localReplica.getPartitionId());
     try {
@@ -357,7 +368,17 @@ public class StorageManagerTest {
       assertEquals("Error code doesn't match", StoreNotStarted, e.getErrorCode());
     }
     storageManager.startBlobStore(localReplica.getPartitionId());
-    // 4. success case (verify both replica's state and decommission file)
+    // 5. store is disabled due to disk I/O error
+    BlobStore localStore = (BlobStore) storageManager.getStore(localReplica.getPartitionId());
+    localStore.setDisabledOnError(true);
+    try {
+      mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
+      fail("should fail because store is disabled");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
+    }
+    localStore.setDisabledOnError(false);
+    // 6. success case (verify both replica's state and decommission file)
     mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
     assertEquals("local store state should be set to INACTIVE", ReplicaState.INACTIVE,
         storageManager.getStore(localReplica.getPartitionId()).getCurrentState());
@@ -365,7 +386,7 @@ public class StorageManagerTest {
     assertTrue("Decommission file is not found in local replica's dir", decommissionFile.exists());
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
 
-    // 5. mock disable compaction failure
+    // 7. mock disable compaction failure
     mockHelixParticipant = new MockClusterParticipant();
     MockStorageManager mockStorageManager =
         new MockStorageManager(localNode, Collections.singletonList(mockHelixParticipant));
@@ -1228,6 +1249,7 @@ public class StorageManagerTest {
     properties.put("disk.manager.enable.segment.pooling", "true");
     properties.put("store.compaction.triggers", "Periodic,Admin");
     properties.put("store.replica.status.delegate.enable", "true");
+    properties.put("store.set.local.partition.state.enabled", "true");
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("clustermap.port", "2200");
     properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
@@ -1282,6 +1304,7 @@ public class StorageManagerTest {
     Boolean updateNodeInfoReturnVal = null;
     Set<ReplicaId> sealedReplicas = new HashSet<>();
     Set<ReplicaId> stoppedReplicas = new HashSet<>();
+    Set<ReplicaId> disabledReplicas = new HashSet<>();
     private Boolean setSealStateReturnVal;
     private Boolean setStopStateReturnVal;
 
@@ -1333,6 +1356,15 @@ public class StorageManagerTest {
         stoppedReplicas.removeAll(replicaIds);
       }
       return true;
+    }
+
+    @Override
+    public void setReplicaDisabledState(ReplicaId replicaId, boolean disable) {
+      if (disable) {
+        disabledReplicas.add(replicaId);
+      } else {
+        disabledReplicas.remove(replicaId);
+      }
     }
 
     @Override

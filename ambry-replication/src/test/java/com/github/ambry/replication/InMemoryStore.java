@@ -180,7 +180,7 @@ class InMemoryStore implements Store {
   }
 
   @Override
-  public void start() throws StoreException {
+  public void start() {
     started = true;
   }
 
@@ -328,8 +328,7 @@ class InMemoryStore implements Store {
     MessageInfo latestInfo = deleteInfo;
     if (info.getLifeVersion() == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
       if (deleteInfo == null) {
-        throw new StoreException(
-            "Id " + key + " requires first value to be a put and last value to be a delete",
+        throw new StoreException("Id " + key + " requires first value to be a put and last value to be a delete",
             StoreErrorCodes.ID_Not_Deleted);
       }
       lifeVersion = (short) (deleteInfo.getLifeVersion() + 1);
@@ -453,7 +452,7 @@ class InMemoryStore implements Store {
   }
 
   @Override
-  public long getEndPositionOfLastPut() throws StoreException {
+  public long getEndPositionOfLastPut() {
     throw new UnsupportedOperationException("Method not supported");
   }
 
@@ -463,7 +462,12 @@ class InMemoryStore implements Store {
   }
 
   @Override
-  public void shutdown() throws StoreException {
+  public boolean disabledOnError() {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public void shutdown() {
     started = false;
   }
 

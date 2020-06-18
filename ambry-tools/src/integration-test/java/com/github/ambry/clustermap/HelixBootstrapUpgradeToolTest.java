@@ -50,6 +50,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.*;
 import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.HelixAdminOperation.*;
 import static com.github.ambry.clustermap.TestUtils.*;

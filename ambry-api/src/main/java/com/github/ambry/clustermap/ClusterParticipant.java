@@ -17,6 +17,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -50,6 +51,13 @@ public interface ClusterParticipant extends AutoCloseable {
   boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean markStop);
 
   /**
+   * Set or reset the disabled state of the given replica
+   * @param replicaId the {@link ReplicaId} whose disabled state will be updated.
+   */
+  default void setReplicaDisabledState(ReplicaId replicaId, boolean disable) {
+  }
+
+  /**
    * Get a list of replicas that are marked as sealed (read-only).
    * @return a list of all sealed replicas.
    */
@@ -60,6 +68,14 @@ public interface ClusterParticipant extends AutoCloseable {
    * @return a list of all stopped replicas.
    */
   List<String> getStoppedReplicas();
+
+  /**
+   * Get a list of replicas that have been disabled.
+   * @return a list of all disabled replicas.
+   */
+  default List<String> getDisabledReplicas() {
+    return Collections.emptyList();
+  }
 
   /**
    * Register a listener for leadership changes in partitions of this node.
