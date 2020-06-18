@@ -799,27 +799,8 @@ class PersistentIndex {
       throw new StoreException("Id " + key + " already permanently deleted in index " + dataDir,
           StoreErrorCodes.ID_Deleted_Permanently);
     }
-    maybeChangeExpirationDate(oldestValue, values);
-    if (isExpired(oldestValue)) {
+    if (isExpired(latestValue)) {
       throw new StoreException("Id " + key + " already expired in index " + dataDir, StoreErrorCodes.TTL_Expired);
-    }
-  }
-
-  /**
-   * Change the target's expiration date and set the ttl_update_index to be true if there is a ttl index in given list.
-   * @param target the {@link IndexValue} to change expiration date.
-   * @param allValues the given list of {@link IndexValue}s.
-   */
-  void maybeChangeExpirationDate(IndexValue target, List<IndexValue> allValues) {
-    if (target.isTtlUpdate() && target.getExpiresAtMs() == Utils.Infinite_Time) {
-      return;
-    }
-    for (IndexValue v : allValues) {
-      if (v.isTtlUpdate()) {
-        target.setExpiresAtMs(v.getExpiresAtMs());
-        target.setFlag(IndexValue.Flags.Ttl_Update_Index);
-        return;
-      }
     }
   }
 
@@ -1002,6 +983,8 @@ class PersistentIndex {
     boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
     validateFileSpan(fileSpan, true);
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
+    List<IndexValue> values =
+        findAllIndexValuesForKey(id, null, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
     IndexValue newValue;
     if (info != null) {
       // This is from recovery. In recovery, we don't need to do any sanity check because
@@ -1016,15 +999,12 @@ class PersistentIndex {
       newValue =
           new IndexValue(size, fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE, info.getExpirationTimeInMs(),
               info.getOperationTimeMs(), info.getAccountId(), info.getContainerId(), lifeVersion);
-      if (info.isTtlUpdated()) {
+      if (info.isTtlUpdated() || (values != null && values.get(0).isTtlUpdate())) {
         newValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
       }
     } else {
-      List<IndexValue> values =
-          findAllIndexValuesForKey(id, null, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
       validateSanityForUndelete(id, values, lifeVersion);
       IndexValue value = values.get(0);
-      maybeChangeExpirationDate(value, values);
       lifeVersion = hasLifeVersion ? lifeVersion : (short) (value.getLifeVersion() + 1);
       newValue =
           new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(), operationTimeMs,

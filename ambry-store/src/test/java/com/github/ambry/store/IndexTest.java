@@ -2131,6 +2131,7 @@ public class IndexTest {
     activeSegmentInfos.add(
         new MessageInfo(idToUpdateAndDeleteAcrossSegments, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
             udAccountId, udContainerId, state.time.milliseconds()));
+    state.ttlUpdatedKeys.add(idToUpdateAndDeleteAcrossSegments);
     // 1 PUT record that will remain and covers almost the rest of the active segment.
     long size =
         activeSegment.getCapacityInBytes() - activeSegment.getEndOffset() - (CuratedLogIndexState.DELETE_RECORD_SIZE
@@ -2142,18 +2143,19 @@ public class IndexTest {
     // 1 DELETE record for the PUT in the previous segment
     state.appendToLog(CuratedLogIndexState.DELETE_RECORD_SIZE);
     nextSegmentInfos.add(
-        new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
-            pdAccountId, pdContainerId, state.time.milliseconds()));
+        new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, false,
+            Utils.Infinite_Time, null, pdAccountId, pdContainerId, state.time.milliseconds(), (short) 5));
     // 1 TTL update for the PUT in the previous segment
     state.appendToLog(CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE);
     nextSegmentInfos.add(
         new MessageInfo(idToCreateAndUpdateAcrossSegments, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
-            puAccountId, puContainerId, state.time.milliseconds()));
+            false, Utils.Infinite_Time, null, puAccountId, puContainerId, state.time.milliseconds(), (short) 6));
+    state.ttlUpdatedKeys.add(idToUpdateAndDeleteAcrossSegments);
     // 1 DELETE for the TTL update in the previous segment
     state.appendToLog(CuratedLogIndexState.DELETE_RECORD_SIZE);
     nextSegmentInfos.add(
-        new MessageInfo(idToUpdateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
-            udAccountId, udContainerId, state.time.milliseconds()));
+        new MessageInfo(idToUpdateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, false,
+            Utils.Infinite_Time, null, udAccountId, udContainerId, state.time.milliseconds(), (short) 7));
     final AtomicInteger returnTracker = new AtomicInteger(0);
     state.recovery = (read, startOffset, endOffset, factory) -> {
       switch (returnTracker.getAndIncrement()) {
@@ -2197,10 +2199,12 @@ public class IndexTest {
     infos.add(
         new MessageInfo(idToUpdate, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, idToUpdate.getAccountId(),
             idToUpdate.getContainerId(), state.time.milliseconds()));
+    state.ttlUpdatedKeys.add(idToUpdate);
     // 1 TTL update for a PUT not in the infos (will be deleted)
     MockId idToUpdateAndDelete = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment(), false);
     infos.add(new MessageInfo(idToUpdateAndDelete, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
         idToUpdateAndDelete.getAccountId(), idToUpdateAndDelete.getContainerId(), state.time.milliseconds()));
+    state.ttlUpdatedKeys.add(idToUpdateAndDelete);
     // 1 DELETE for a PUT not in the infos
     // ttl updated is false because when the delete record is read, the MessageInfo constructed will not know if there
     // has been a ttl update
@@ -2230,6 +2234,7 @@ public class IndexTest {
     infos.add(
         new MessageInfo(idToCreateUpdateAndDelete, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, accountId,
             containerId, state.time.milliseconds()));
+    state.ttlUpdatedKeys.add(idToCreateUpdateAndDelete);
     // 1 DELETE for a PUT + ttl update in the infos
     infos.add(
         new MessageInfo(idToCreateUpdateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, accountId,
@@ -2237,6 +2242,7 @@ public class IndexTest {
     // 1 TTL update for a PUT in the infos (won't get deleted)
     infos.add(new MessageInfo(idToCreateAndUpdate, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
         idToCreateAndUpdate.getAccountId(), idToCreateAndUpdate.getContainerId(), state.time.milliseconds()));
+    state.ttlUpdatedKeys.add(idToCreateAndUpdate);
     // 1 expired PUT
     id = state.getUniqueId();
     infos.add(new MessageInfo(id, CuratedLogIndexState.PUT_RECORD_SIZE, 0, id.getAccountId(), id.getContainerId(),
@@ -2284,11 +2290,12 @@ public class IndexTest {
       infos.add(
           new MessageInfo(id, TTL_UPDATE_RECORD_SIZE, false, true, false, Utils.Infinite_Time, null, id.getAccountId(),
               id.getContainerId(), state.time.milliseconds(), (short) 1));
+      state.ttlUpdatedKeys.add(id);
 
       // 1 UNDELETE for DELETE (not ttlupdate) not in infos
       id = null;
       for (MockId mockId : state.deletedKeys) {
-        if (!state.ttlUpdatedKeys.contains(mockId)) {
+        if (!state.ttlUpdatedKeys.contains(mockId) && !state.getExpectedValue(mockId, false).isTtlUpdate()) {
           id = mockId;
           break;
         }
@@ -2301,6 +2308,7 @@ public class IndexTest {
       infos.add(
           new MessageInfo(id, TTL_UPDATE_RECORD_SIZE, false, true, false, Utils.Infinite_Time, null, id.getAccountId(),
               id.getContainerId(), state.time.milliseconds(), (short) 1));
+      state.ttlUpdatedKeys.add(id);
 
       // 1 UNDELETE for DELETE (ttlupdated) not in infos
       id = null;
@@ -2358,7 +2366,7 @@ public class IndexTest {
     assertEquals("Incorrect containerId", info.getContainerId(), value.getContainerId());
     assertEquals("Incorrect operationTimeMs", Utils.getTimeInMsToTheNearestSec(info.getOperationTimeMs()),
         value.getOperationTimeInMs());
-    assertEquals("Inconsistent lifeVersion", info.getLifeVersion(), value.getLifeVersion());
+    assertEquals("Inconsistent lifeVersion for info " + info, info.getLifeVersion(), value.getLifeVersion());
     assertEquals(info.isUndeleted(), value.isUndelete());
     assertEquals(info.isDeleted(), value.isDelete());
   }
