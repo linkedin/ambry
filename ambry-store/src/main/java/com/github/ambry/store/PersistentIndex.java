@@ -330,6 +330,13 @@ class PersistentIndex {
               "Index : {} updated message with key {} by inserting undelete entry of size {} ttl {} lifeVersion {}",
               dataDir, info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.getLifeVersion());
           if (value == null) {
+            // This undelete was forced even though there was no equivalent PUT record - this means that we MUST see
+            // a DELETE for this key (because the PUT record is gone, compaction must have cleaned it up because a
+            // DELETE must have been present). This also works when there are multiple DELETE and UNDELETE for the same
+            // key. For instance, if we have UNDELETE, DELETE and then UNDELETE. The first UNDELETE would expect a DELETE
+            // to follow given that the PUT is gone. Then recovery would encounter the first DELETE and remove the key
+            // from the expected list. But the second UNDELETE would once again expect to see a DELETE follow. If there
+            // is not DELETE after second UNDELETE, an exception would be thrown.
             deleteExpectedKeys.add(info.getStoreKey());
           }
         } else if (info.isTtlUpdated()) {
@@ -733,7 +740,7 @@ class PersistentIndex {
     // the remote has PUT, DELETE, UNDELETE. When replicating from remote, local has to insert UNDELETE, where
     // there is no prior DELETE.
     // 4. Replication doesn't care if the latest record is expired or not. In local, we can have a PUT record when
-    // the remove has PUT, DELETE, UNDELETE TTL_UPDATE. When replicating from remote, PUT might already have expired.
+    // the remote has PUT, DELETE, UNDELETE TTL_UPDATE. When replicating from remote, PUT might already have expired.
     // But later we will apply TTL_UPDATE. The alternative idea is to change the logic of checking expiration from
     // comparing current time to comparing operation time.
     IndexValue latestValue = values.get(0);
@@ -972,7 +979,7 @@ class PersistentIndex {
    * @param id the {@link StoreKey} of the blob
    * @param fileSpan the file span represented by this entry in the log
    * @param operationTimeMs the time of the update operation
-   * @param info this needs to be non-null in the case of recovery and replicateion. Can be {@code null} otherwise. Used if the PUT
+   * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise. Used if the PUT
    *             record could not be found
    * @param lifeVersion lifeVersion of this undelete record.
    * @return the {@link IndexValue} of the undelete record
@@ -993,7 +1000,7 @@ class PersistentIndex {
       //    assume we have P, D, U, D in the log, then a compaction cycle compacted P and first D,
       //    then we only have U and second D. U in this case, will have no prior records.
       if (!hasLifeVersion) {
-        throw new StoreException("MessageInfo of undelete carries invalid lifeVersion",
+        throw new StoreException("MessageInfo of undelete carries invalid lifeVersion " + lifeVersion,
             StoreErrorCodes.Initialization_Error);
       }
       newValue =
