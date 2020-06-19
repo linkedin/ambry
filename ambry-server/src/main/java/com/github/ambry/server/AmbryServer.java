@@ -32,9 +32,9 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.Http2ClientConfig;
+import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StatsManagerConfig;
@@ -51,6 +51,7 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.network.http2.Http2BlockingChannelPool;
 import com.github.ambry.network.http2.Http2ClientMetrics;
+import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestHandlerPool;
@@ -58,12 +59,9 @@ import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationSkipPredicate;
+import com.github.ambry.rest.NettyMetrics;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
-import com.github.ambry.rest.RestRequestHandler;
-import com.github.ambry.rest.RestRequestResponseHandlerFactory;
-import com.github.ambry.rest.RestRequestService;
-import com.github.ambry.rest.StorageServerNettyFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -114,7 +112,6 @@ public class AmbryServer {
   private ServerMetrics metrics = null;
   private Time time;
   private RequestHandlerPool requestHandlerPoolForHttp2;
-  private RestRequestHandler restRequestHandlerForHttp2;
   private NioServer nettyHttp2Server;
   private ParticipantsConsistencyChecker consistencyChecker = null;
   private ScheduledFuture<?> consistencyCheckerTask = null;
@@ -149,14 +146,11 @@ public class AmbryServer {
       ServerSecurityServiceFactory serverSecurityServiceFactory =
           Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, metrics, registry);
       serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
-
     } catch (Exception e) {
       logger.error("Error during bootup", e);
       throw new InstantiationException("failure during bootup " + e);
     }
   }
-
-
 
   public void startup() throws InstantiationException {
     try {
@@ -251,7 +245,6 @@ public class AmbryServer {
         statsManager.start();
       }
 
-
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
       if (nodeId.hasSSLPort()) {
@@ -268,11 +261,14 @@ public class AmbryServer {
 
       // Start netty http2 server
       if (nodeId.hasHttp2Port()) {
-        logger.info("Http2 port {} is enabled. Starting HTTP/2 service. ", nodeId.getHttp2Port());
-        RestServerConfig restServerConfig = new RestServerConfig(properties);
-        NettyServerRequestResponseChannel requestResponseChannel = new NettyServerRequestResponseChannel(32);
-        RestRequestService restRequestService =
-            new StorageRestRequestService(requestResponseChannel);
+        NettyConfig nettyConfig = new NettyConfig(properties);
+        NettyMetrics nettyMetrics = new NettyMetrics(registry);
+        Http2ServerMetrics http2ServerMetrics = new Http2ServerMetrics(registry);
+        Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
+
+        logger.info("Http2 port {} is enabled. Starting HTTP/2 service.", nodeId.getHttp2Port());
+        NettyServerRequestResponseChannel requestResponseChannel =
+            new NettyServerRequestResponseChannel(networkConfig.queuedMaxRequests, http2ServerMetrics);
 
         AmbryServerRequests ambryServerRequestsForHttp2 =
             new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
@@ -282,15 +278,9 @@ public class AmbryServer {
             new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, requestResponseChannel,
                 ambryServerRequestsForHttp2);
 
-        RestRequestResponseHandlerFactory restRequestHandlerFactory =
-            Utils.getObj(restServerConfig.restServerRequestResponseHandlerFactory,
-                restServerConfig.restServerRequestHandlerScalingUnitCount, registry, restRequestService);
-        restRequestHandlerForHttp2 = restRequestHandlerFactory.getRestRequestHandler();
-        restRequestHandlerForHttp2.start();
-
         NioServerFactory nioServerFactory =
-            new StorageServerNettyFactory(nodeId.getHttp2Port(), properties, registry, restRequestHandlerForHttp2,
-                sslFactory, serverSecurityService, metrics);
+            new StorageServerNettyFactory(nodeId.getHttp2Port(), requestResponseChannel, sslFactory, nettyConfig,
+                http2ClientConfig, metrics, nettyMetrics, http2ServerMetrics, serverSecurityService);
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
       }
@@ -356,9 +346,6 @@ public class AmbryServer {
       }
       if (nettyHttp2Server != null) {
         nettyHttp2Server.shutdown();
-      }
-      if (restRequestHandlerForHttp2 != null) {
-        restRequestHandlerForHttp2.shutdown();
       }
       if (requestHandlerPoolForHttp2 != null) {
         requestHandlerPoolForHttp2.shutdown();

@@ -13,11 +13,10 @@
  */
 package com.github.ambry.network;
 
-import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
 import java.io.InputStream;
 
 
@@ -25,18 +24,20 @@ import java.io.InputStream;
  * A wrapper class at the network layer for NettyRequest based RestRequest.
  */
 public class NettyServerRequest extends AbstractByteBufHolder<NettyServerRequest> implements NetworkRequest {
+  private final ChannelHandlerContext ctx;
   private final InputStream inputStream;
-  private final RestResponseChannel restResponseChannel;
-  private final RestRequest restRequest;
   private final long startTimeInMs;
   private final ByteBuf content;
 
-  public NettyServerRequest(RestRequest restRequest, RestResponseChannel restResponseChannel, ByteBuf content) {
-    this.restRequest = restRequest;
-    this.restResponseChannel = restResponseChannel;
+  public NettyServerRequest(ChannelHandlerContext ctx, ByteBuf content) {
+    this.ctx = ctx;
     this.content = content;
     this.inputStream = new NettyByteBufDataInputStream(content);
     this.startTimeInMs = System.currentTimeMillis();
+  }
+
+  ChannelHandlerContext getCtx() {
+    return ctx;
   }
 
   @Override
@@ -49,14 +50,6 @@ public class NettyServerRequest extends AbstractByteBufHolder<NettyServerRequest
     return startTimeInMs;
   }
 
-  public RestRequest getRestRequest() {
-    return restRequest;
-  }
-
-  public RestResponseChannel getRestResponseChannel() {
-    return restResponseChannel;
-  }
-
   @Override
   public ByteBuf content() {
     return content;
@@ -64,7 +57,7 @@ public class NettyServerRequest extends AbstractByteBufHolder<NettyServerRequest
 
   @Override
   public NettyServerRequest replace(ByteBuf content) {
-    return new NettyServerRequest(getRestRequest(), getRestResponseChannel(), content);
+    return new NettyServerRequest(ctx, content);
   }
 }
 

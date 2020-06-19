@@ -26,11 +26,11 @@ import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
  */
 public class Http2BlockingChannelStreamChannelInitializer extends ChannelInitializer {
   private final int http2MaxContentLength;
-  private static Http2StreamFrameToHttpObjectCodec http2StreamFrameToHttpObjectCodec =
+  private static final Http2StreamFrameToHttpObjectCodec http2StreamFrameToHttpObjectCodec =
       new Http2StreamFrameToHttpObjectCodec(false);
-  private static Http2BlockingChannelResponseHandler http2BlockingChannelResponseHandler =
+  private static final Http2BlockingChannelResponseHandler http2BlockingChannelResponseHandler =
       new Http2BlockingChannelResponseHandler();
-  private static AmbrySendToHttp2Adaptor ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor();
+  private static final AmbrySendToHttp2Adaptor ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor(false);
 
   Http2BlockingChannelStreamChannelInitializer(int http2MaxContentLength) {
     this.http2MaxContentLength = http2MaxContentLength;

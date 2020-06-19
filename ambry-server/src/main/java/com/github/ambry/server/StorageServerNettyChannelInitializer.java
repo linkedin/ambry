@@ -12,13 +12,17 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.rest;
+package com.github.ambry.server;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
-import com.github.ambry.config.NettyConfig;
-import com.github.ambry.config.PerformanceConfig;
+import com.github.ambry.network.http2.Http2ServerMetrics;
+import com.github.ambry.network.http2.Http2ServerStreamHandler;
+import com.github.ambry.rest.ConnectionStatsHandler;
+import com.github.ambry.rest.ServerSecurityHandler;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.WriteBufferWaterMark;
@@ -31,48 +35,45 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.ssl.SslHandler;
 import java.net.InetSocketAddress;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
- * A {@link ChannelInitializer} to be used with {@link StorageServerNettyFactory}. Calling {@link #initChannel(SocketChannel)}
+ * A {@link ChannelInitializer} to be used with StorageServerNettyFactory. Calling {@link #initChannel(SocketChannel)}
  * adds the necessary handlers to a channel's pipeline so that it may handle requests.
  */
 public class StorageServerNettyChannelInitializer extends ChannelInitializer<SocketChannel> {
-  private final NettyConfig nettyConfig;
-  private final PerformanceConfig performanceConfig;
+  private static final Logger logger = LoggerFactory.getLogger(StorageServerNettyChannelInitializer.class);
   private final Http2ClientConfig http2ClientConfig;
-  private final NettyMetrics nettyMetrics;
-  private final ConnectionStatsHandler connectionStatsHandler;
-  private final RestRequestHandler requestHandler;
+  private final Http2ServerMetrics http2ServerMetrics;
   private final SSLFactory sslFactory;
+  private final ConnectionStatsHandler connectionStatsHandler;
   private final ServerSecurityHandler serverSecurityHandler;
+  private final Http2ServerStreamHandler http2ServerStreamHandler;
+  private final CloseOnExceptionHandler closeOnExceptionHandler;
 
   /**
    * Construct a {@link StorageServerNettyChannelInitializer}.
-   * @param nettyConfig the config to use when instantiating certain handlers on this pipeline.
    * @param http2ClientConfig configs that http2 client used.
-   * @param performanceConfig the config to use when evaluating ambry service level objectives that include latency.
-   * @param nettyMetrics the {@link NettyMetrics} object to use.
-   * @param connectionStatsHandler the {@link ConnectionStatsHandler} to use.
-   * @param requestHandler the {@link RestRequestHandler} to handle requests on this pipeline.
-   * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
-   *                   or {@code null} if SSL is not enabled in this pipeline.
+   * @param http2ServerMetrics http2ServerMetrics
+   * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances.
+   * @param connectionStatsHandler handler to stats connections.
+   * @param http2ServerStreamHandler handler initializer for http2 stream channel.
+   * @param serverSecurityHandler security validation handler for new HTTP2 connection.
    */
-  public StorageServerNettyChannelInitializer(NettyConfig nettyConfig, Http2ClientConfig http2ClientConfig,
-      PerformanceConfig performanceConfig, NettyMetrics nettyMetrics, ConnectionStatsHandler connectionStatsHandler,
-      RestRequestHandler requestHandler, SSLFactory sslFactory, MetricRegistry metricRegistry,
-      ServerSecurityHandler serverSecurityHandler) {
-    this.nettyConfig = nettyConfig;
-    this.performanceConfig = performanceConfig;
+  public StorageServerNettyChannelInitializer(Http2ClientConfig http2ClientConfig,
+      Http2ServerMetrics http2ServerMetrics, SSLFactory sslFactory, ConnectionStatsHandler connectionStatsHandler,
+      Http2ServerStreamHandler http2ServerStreamHandler, ServerSecurityHandler serverSecurityHandler) {
     this.http2ClientConfig = http2ClientConfig;
-    this.nettyMetrics = nettyMetrics;
+    this.http2ServerMetrics = http2ServerMetrics;
     // For http2, SSL encrypted is required. sslFactory should not be null.
     Objects.requireNonNull(sslFactory);
     this.sslFactory = sslFactory;
     this.connectionStatsHandler = connectionStatsHandler;
-    RestRequestMetricsTracker.setDefaults(metricRegistry);
-    this.requestHandler = requestHandler;
+    this.http2ServerStreamHandler = http2ServerStreamHandler;
     this.serverSecurityHandler = serverSecurityHandler;
+    this.closeOnExceptionHandler = new CloseOnExceptionHandler();
   }
 
   @Override
@@ -90,21 +91,40 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
     ChannelPipeline pipeline = ch.pipeline();
     // connection stats handler to track connection related metrics
-    pipeline.addLast("connectionStatsHandler", connectionStatsHandler);
+    pipeline.addLast("ConnectionStatsHandler", connectionStatsHandler);
     InetSocketAddress peerAddress = ch.remoteAddress();
     String peerHost = peerAddress.getHostName();
     int peerPort = peerAddress.getPort();
     SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(peerHost, peerPort, SSLFactory.Mode.SERVER));
     pipeline.addLast("SslHandler", sslHandler);
-    pipeline.addLast("securityChecker", serverSecurityHandler);
-    pipeline.addLast(Http2FrameCodecBuilder.forServer()
+    pipeline.addLast("SecurityChecker", serverSecurityHandler);
+    pipeline.addLast("Http2FrameCodec", Http2FrameCodecBuilder.forServer()
         .initialSettings(Http2Settings.defaultSettings()
             .maxFrameSize(http2ClientConfig.http2FrameMaxSize)
             .initialWindowSize(http2ClientConfig.http2InitialWindowSize))
         .frameLogger(new Http2FrameLogger(LogLevel.DEBUG, "server"))
-        .build())
-        .addLast("Http2MultiplexHandler", new Http2MultiplexHandler(
-            new Http2StreamHandler(nettyMetrics, nettyConfig, performanceConfig, http2ClientConfig, requestHandler)));
+        .build());
+    pipeline.addLast("Http2MultiplexHandler", new Http2MultiplexHandler(http2ServerStreamHandler));
+    pipeline.addLast("CloseOnExceptionHandler", closeOnExceptionHandler);
+  }
+
+  @ChannelHandler.Sharable
+  private final class CloseOnExceptionHandler extends ChannelInboundHandlerAdapter {
+    /**
+     * Netty calls this function when channel becomes inactive. The channel becomes inactive AFTER it is closed (either by
+     * the local or the remote end). One case is when server shutdown.
+     */
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) {
+      logger.info("Parent channel {} become inactive.", ctx.channel());
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+      http2ServerMetrics.http2ParentExceptionCount.inc();
+      logger.warn("Parent channel {} exception: ", ctx.channel(), cause);
+      ctx.channel().close();
+    }
   }
 }
 
