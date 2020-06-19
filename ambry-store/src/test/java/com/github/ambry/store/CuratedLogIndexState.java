@@ -915,9 +915,9 @@ class CuratedLogIndexState {
           assertTrue("Duplicated DELETE record for " + id, deleteSeen == null || !deleteSeen);
           keyToDeleteSeenMap.put(id, true);
         } else if (value.isUndelete()) {
-          short prevLifeVersion = keyToLifeVersionMap.put(id, value.getLifeVersion());
+          Short prevLifeVersion = keyToLifeVersionMap.put(id, value.getLifeVersion());
           short currentLifeVersion = value.getLifeVersion();
-          if (PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3) {
+          if (PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3 && prevLifeVersion != null) {
             assertTrue("Undelete's lifeVersion should be greater than previous one, Undelete: " + currentLifeVersion
                 + " Previous: " + prevLifeVersion, prevLifeVersion < currentLifeVersion);
           }
