@@ -25,6 +25,7 @@ import com.codahale.metrics.MetricRegistry;
 public class Http2ServerMetrics {
 
   public final Histogram requestEnqueueTime;
+  public final Histogram requestQueuingTime;
   public final Histogram requestTotalProcessingTime;
 
   public final Counter requestResponseChannelErrorCount;
@@ -32,11 +33,10 @@ public class Http2ServerMetrics {
   public final Counter http2StreamExceptionCount;
 
   public Http2ServerMetrics(MetricRegistry registry) {
-    requestEnqueueTime =
-        registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "RequestEnqueueTime"));
+    requestEnqueueTime = registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "RequestEnqueueTime"));
+    requestQueuingTime = registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "RequestQueuingTime"));
     requestTotalProcessingTime =
         registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "RequestTotalProcessingTime"));
-
 
     requestResponseChannelErrorCount =
         registry.counter(MetricRegistry.name(Http2NetworkClient.class, "RequestResponseChannelErrorCount"));

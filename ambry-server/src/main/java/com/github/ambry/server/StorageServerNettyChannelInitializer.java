@@ -98,13 +98,14 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(peerHost, peerPort, SSLFactory.Mode.SERVER));
     pipeline.addLast("SslHandler", sslHandler);
     pipeline.addLast("SecurityChecker", serverSecurityHandler);
-    pipeline.addLast(Http2FrameCodecBuilder.forServer()
+    pipeline.addLast("Http2FrameCodec", Http2FrameCodecBuilder.forServer()
         .initialSettings(Http2Settings.defaultSettings()
             .maxFrameSize(http2ClientConfig.http2FrameMaxSize)
             .initialWindowSize(http2ClientConfig.http2InitialWindowSize))
         .frameLogger(new Http2FrameLogger(LogLevel.DEBUG, "server"))
-        .build()).addLast("Http2MultiplexHandler", new Http2MultiplexHandler(http2ServerStreamHandler));
-    pipeline.addLast(closeOnExceptionHandler);
+        .build());
+    pipeline.addLast("Http2MultiplexHandler", new Http2MultiplexHandler(http2ServerStreamHandler));
+    pipeline.addLast("CloseOnExceptionHandler", closeOnExceptionHandler);
   }
 
   @ChannelHandler.Sharable

@@ -36,7 +36,7 @@ public class NettyServerRequest extends AbstractByteBufHolder<NettyServerRequest
     this.startTimeInMs = System.currentTimeMillis();
   }
 
-  public ChannelHandlerContext getCtx() {
+  ChannelHandlerContext getCtx() {
     return ctx;
   }
 

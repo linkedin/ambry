@@ -39,6 +39,10 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
   private static final Logger logger = LoggerFactory.getLogger(AmbrySendToHttp2Adaptor.class);
   private final boolean forServer;
 
+  /**
+   * @param forServer if true, the handler is used as server side outbound handler. Otherwise, it's use as client side
+   *                  outbound handler.
+   */
   public AmbrySendToHttp2Adaptor(boolean forServer) {
     this.forServer = forServer;
   }
@@ -77,6 +81,7 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
       return;
     }
     DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(byteBufChannel.getBuf(), true);
-    ctx.writeAndFlush(dataFrame, promise);
+    // Caller should call writeAndFlush().
+    ctx.write(dataFrame, promise);
   }
 }

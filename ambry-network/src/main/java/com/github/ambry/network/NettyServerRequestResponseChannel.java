@@ -71,6 +71,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   public NetworkRequest receiveRequest() throws InterruptedException {
 
     NetworkRequest request = requestQueue.take();
+    http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
     if (request.equals(EmptyRequest.getInstance())) {
       logger.debug("Request handler {} received shut down command ", request);
     } else {

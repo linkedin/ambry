@@ -46,6 +46,7 @@ public class AmbryNetworkRequestHandler extends SimpleChannelInboundHandler<Full
     try {
       requestResponseChannel.sendRequest(new NettyServerRequest(ctx, dup));
     } catch (InterruptedException e) {
+      dup.release();
       http2ServerMetrics.requestResponseChannelErrorCount.inc();
       logger.warn("Can't send NettyServerRequest to requestResponseChannel. Cause: ", e);
     }
