@@ -1408,7 +1408,7 @@ class BlobStoreCompactor {
       // --------------------+-------------------+----------------------------------------------|
       // Undelete(c)         | Put(f)            | Exception                                    |
       //                     | Delete(f)         | false                                        |
-      //                     | Undelete(f)       | c==f&&!isExpired(Uc)?true:false              |
+      //                     | Undelete(f)       | c==f&&!isExpired(Uf)?true:false              |
       // ----------------------------------------------------------------------------------------
       List<IndexEntry> validEntries = new ArrayList<>();
       Iterator<IndexEntry> iterator = indexSegment.getIterator();
@@ -1443,7 +1443,7 @@ class BlobStoreCompactor {
                 "Undelete's latest state can't be put for key" + currentKey + " in store " + dataDir);
           }
           if (currentLatestState.isUndelete() && currentLatestState.getLifeVersion() == currentValue.getLifeVersion()
-              && !srcIndex.isExpired(currentValue)) {
+              && !srcIndex.isExpired(currentLatestState)) {
             validEntries.add(entry);
           }
         } else if (currentValue.isDelete()) {
