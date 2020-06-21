@@ -30,6 +30,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -67,7 +68,7 @@ public class ReplicationManager extends ReplicationEngine {
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      ClusterParticipant clusterParticipant, Predicate skipPredicate) throws ReplicationException {
+      ClusterParticipant clusterParticipant, Predicate<MessageInfo> skipPredicate) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, skipPredicate);

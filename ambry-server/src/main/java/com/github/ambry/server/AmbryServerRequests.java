@@ -76,7 +76,7 @@ public class AmbryServerRequests extends AmbryRequests {
       EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY, ReplicaState.INACTIVE, ReplicaState.BOOTSTRAP);
   static final Set<RequestOrResponseType> UPDATE_REQUEST_TYPES =
       EnumSet.of(RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest,
-          RequestOrResponseType.UndeleteResponse);
+          RequestOrResponseType.UndeleteRequest);
 
   private static final Logger logger = LoggerFactory.getLogger(AmbryServerRequests.class);
 

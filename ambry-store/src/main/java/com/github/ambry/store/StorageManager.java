@@ -51,6 +51,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
+import static com.github.ambry.store.LogSegment.*;
 
 
 /**
@@ -476,16 +477,40 @@ public class StorageManager implements StoreManager {
         // able to get new replica from storageManager without querying Helix
       } else {
         // if the replica is already on current node, there are 3 cases need to discuss:
-        // 1. replica was initially present in clustermap;
-        // 2. replica was dynamically added to this node but may fail during BOOTSTRAP -> STANDBY transition
+        // 1. replica was initially present in clustermap and this is a regular reboot.
+        // 2. replica was dynamically added to this node but may fail during BOOTSTRAP -> STANDBY transition.
         // 3. replica is on current node but its disk is offline. The replica is not able to start.
+        // 4. replica was initially present in clustermap but it's current being recreated due to disk failure before.
+
         // For case 1 and 2, OFFLINE -> BOOTSTRAP is complete, we leave remaining actions (if there any) to other transition.
         // For case 3, we should throw exception to make replica stay in ERROR state (thus, frontends won't pick this replica)
-        if (getStore(replica.getPartitionId(), false) == null) {
+        // For case 4, we check it's current used capacity and put it in BOOTSTRAP state if necessary. This is to ensure
+        //             it catches up with peers before serving PUT traffic (or being selected as LEADER)
+        Store store = getStore(replica.getPartitionId(), false);
+        if (store == null) {
           throw new StateTransitionException(
               "Store " + partitionName + " didn't start correctly, replica should be set to ERROR state",
               StoreNotStarted);
         }
+        // if store's used capacity is less than or equal to header size, we create a bootstrap_in_progress file and force
+        // it to stay in BOOTSTRAP state when catching up with peers.
+        long storeUsedCapacity = store.getSizeInBytes();
+        if (storeUsedCapacity <= HEADER_SIZE) {
+          logger.info(
+              "Store {} has used capacity {} less than or equal to {} bytes, consider it recently created and make it go through bootstrap process.",
+              partitionName, storeUsedCapacity, HEADER_SIZE);
+          try {
+            File bootstrapFile = new File(replica.getReplicaPath(), BlobStore.BOOTSTRAP_FILE_NAME);
+            if (!bootstrapFile.exists()) {
+              bootstrapFile.createNewFile();
+            }
+          } catch (IOException e) {
+            logger.error("Failed to create bootstrap file for store {}", partitionName);
+            throw new StateTransitionException("Failed to create bootstrap file for " + partitionName,
+                ReplicaOperationFailure);
+          }
+        }
+        store.setCurrentState(ReplicaState.BOOTSTRAP);
       }
     }
 

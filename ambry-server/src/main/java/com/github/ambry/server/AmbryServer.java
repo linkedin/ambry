@@ -62,6 +62,7 @@ import com.github.ambry.replication.ReplicationSkipPredicate;
 import com.github.ambry.rest.NettyMetrics;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -220,7 +221,7 @@ public class AmbryServer {
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
 
-      Predicate skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
+      Predicate<MessageInfo> skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
               clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
