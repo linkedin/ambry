@@ -33,16 +33,16 @@ public class Http2ServerMetrics {
   public final Counter http2StreamExceptionCount;
 
   public Http2ServerMetrics(MetricRegistry registry) {
-    requestEnqueueTime = registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "RequestEnqueueTime"));
-    requestQueuingTime = registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "RequestQueuingTime"));
+    requestEnqueueTime = registry.histogram(MetricRegistry.name(Http2ServerMetrics.class, "RequestEnqueueTime"));
+    requestQueuingTime = registry.histogram(MetricRegistry.name(Http2ServerMetrics.class, "RequestQueuingTime"));
     requestTotalProcessingTime =
-        registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "RequestTotalProcessingTime"));
+        registry.histogram(MetricRegistry.name(Http2ServerMetrics.class, "RequestTotalProcessingTime"));
 
     requestResponseChannelErrorCount =
-        registry.counter(MetricRegistry.name(Http2NetworkClient.class, "RequestResponseChannelErrorCount"));
+        registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "RequestResponseChannelErrorCount"));
     http2ParentExceptionCount =
-        registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2ParentExceptionCount"));
+        registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "Http2ParentExceptionCount"));
     http2StreamExceptionCount =
-        registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamExceptionCount"));
+        registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "Http2StreamExceptionCount"));
   }
 }
