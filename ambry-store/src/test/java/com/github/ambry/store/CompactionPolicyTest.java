@@ -101,29 +101,28 @@ public class CompactionPolicyTest {
     CompactionManager compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore),
         new StorageManagerMetrics(metricRegistry), time);
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
-
     int numStores = 5;
     for (int i = 1; i <= numStores; i++) {
-      MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(DEFAULT_MAX_BLOB_SIZE);
+      MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(DEFAULT_MAX_BLOB_SIZE, i);
       MockBlobStore blobStore =
           new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, SEGMENT_CAPACITY_IN_BYTES, SEGMENT_HEADER_SIZE,
               DEFAULT_USED_CAPACITY_IN_BYTES, mockBlobStoreStats);      //BlobStore store = Mockito.mock(BlobStore.class);
-      ReplicaId replicaId = blobStore.getReplicaId();
+      String blobId = mockBlobStoreStats.getStoreId();
       compactionManager.getCompactionDetails(blobStore);
       assertEquals("Counter value should match with expectation", 1 % config.storeCompactionPolicySwitchPeriod,
-          compactionManager.getReplicaToCounterMap().get(replicaId).getValue());
+      ((HybridCompactionPolicy)compactionManager.getCompactionPolicy()).getBlobToCounterMap().get(blobId).getValue());
       compactionManager.getCompactionDetails(blobStore);
       assertEquals("Counter value should match with expectation", 2 % config.storeCompactionPolicySwitchPeriod,
-          compactionManager.getReplicaToCounterMap().get(replicaId).getValue());
+          ((HybridCompactionPolicy)compactionManager.getCompactionPolicy()).getBlobToCounterMap().get(blobId).getValue());
       compactionManager.getCompactionDetails(blobStore);
       assertEquals("Counter value should match with expectation", 3 % config.storeCompactionPolicySwitchPeriod,
-          compactionManager.getReplicaToCounterMap().get(replicaId).getValue());
+          ((HybridCompactionPolicy)compactionManager.getCompactionPolicy()).getBlobToCounterMap().get(blobId).getValue());
 //      compactionManager.getCompactionDetails(blobStore);
 //      assertEquals("Counter value should match with expectation", 4 % config.storeCompactionPolicySwitchPeriod,
 //          compactionManager.getReplicaToCounterMap().get(replicaId).getValue());
     }
     assertEquals("map size should equals to number of stores", numStores,
-        compactionManager.getReplicaToCounterMap().size());
+        ((HybridCompactionPolicy)compactionManager.getCompactionPolicy()).getBlobToCounterMap().size());
   }
 
   /**
@@ -324,12 +323,12 @@ public class CompactionPolicyTest {
   // verification helper methods
 
   /**
-   * Verifies {@link BlobStore#getCompactionDetails(CompactionPolicy, CompactionPolicyCounter)} returns expected values i.e. {@code expectedCompactionDetails}
+   * Verifies {@link BlobStore#getCompactionDetails(CompactionPolicy)} returns expected values i.e. {@code expectedCompactionDetails}
    * @throws StoreException
    */
   static void verifyCompactionDetails(CompactionDetails expectedCompactionDetails, BlobStore blobStore,
       CompactionPolicy compactionPolicy) throws StoreException {
-    CompactionDetails compactionDetails = blobStore.getCompactionDetails(compactionPolicy, null);
+    CompactionDetails compactionDetails = blobStore.getCompactionDetails(compactionPolicy);
     if (expectedCompactionDetails == null) {
       assertNull("CompactionDetails expected to be null ", compactionDetails);
     } else {
@@ -354,8 +353,8 @@ class MockBlobStore extends BlobStore {
 
   MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, long capacityInBytes, long segmentCapacity,
       long segmentHeaderSize, long usedCapacity, MockBlobStoreStats mockBlobStoreStats) {
-    super(StoreTestUtils.createMockReplicaId("", 0, null), config, null, null, null, null, metrics, metrics, null, null,
-        null, null, time, new InMemAccountService(false, false));
+    super(StoreTestUtils.createMockReplicaId(mockBlobStoreStats.getStoreId(), 0, null), config, null, null, null, null,
+        metrics, metrics, null, null, null, null, time, new InMemAccountService(false, false));
     this.capacityInBytes = capacityInBytes;
     this.segmentCapacity = segmentCapacity;
     this.segmentHeaderSize = segmentHeaderSize;
@@ -364,9 +363,9 @@ class MockBlobStore extends BlobStore {
   }
 
   @Override
-  CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy, CompactionPolicyCounter compactionPolicyCounter) throws StoreException {
+  CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy) throws StoreException {
     return compactionPolicy.getCompactionDetails(capacityInBytes, usedCapacity, segmentCapacity, segmentHeaderSize,
-        logSegmentsNotInJournal, mockBlobStoreStats, compactionPolicyCounter);
+        logSegmentsNotInJournal, mockBlobStoreStats);
   }
 
   MockBlobStoreStats getBlobStoreStats() {
@@ -381,10 +380,17 @@ class MockBlobStoreStats extends BlobStoreStats {
 
   NavigableMap<String, Long> validDataSizeByLogSegments;
   private long maxBlobSize;
+  private String storeId = "";
 
   MockBlobStoreStats(long maxBlobSize) {
     super("", null, 0, 0, 0, 0, 0, null, null, null, null, null);
     this.maxBlobSize = maxBlobSize;
+  }
+
+  MockBlobStoreStats(long maxBlobSize, int i) {
+    super("storeId" + i, null, 0, 0, 0, 0, 0, null, null, null, null, null);
+    this.maxBlobSize = maxBlobSize;
+    this.storeId = "storeId" + i;
   }
 
   @Override
@@ -400,5 +406,9 @@ class MockBlobStoreStats extends BlobStoreStats {
   @Override
   long getMaxBlobSize() {
     return maxBlobSize;
+  }
+
+  String getStoreId(){
+    return this.storeId;
   }
 }

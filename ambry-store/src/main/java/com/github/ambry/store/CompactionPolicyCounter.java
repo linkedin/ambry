@@ -14,13 +14,12 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
-import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
  * A counter used to switch {@link CompactAllPolicy}.
  */
-public class CompactionPolicyCounter {
+class CompactionPolicyCounter {
   private final StoreConfig storeConfig;
 
   CompactionPolicyCounter(StoreConfig storeConfig) {

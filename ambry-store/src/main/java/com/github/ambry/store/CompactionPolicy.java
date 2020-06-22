@@ -37,6 +37,6 @@ interface CompactionPolicy {
    * @throws StoreException
    */
   CompactionDetails getCompactionDetails(long totalCapacity, long usedCapacity, long segmentCapacity,
-      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats, CompactionPolicyCounter compactionPolicyCounter)
+      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats)
       throws StoreException;
 }

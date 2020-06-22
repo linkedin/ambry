@@ -15,7 +15,9 @@ package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,20 +30,27 @@ public class HybridCompactionPolicy implements CompactionPolicy {
   private final Time time;
   private final StoreConfig storeConfig;
   private static final Logger logger = LoggerFactory.getLogger(HybridCompactionPolicy.class);
+  private final Map<String, CompactionPolicyCounter> blobToCounterMap;
 
   HybridCompactionPolicy(StoreConfig storeConfig, Time time) {
     this.storeConfig = storeConfig;
     this.time = time;
+    this.blobToCounterMap = new HashMap<>();
   }
 
   @Override
   public CompactionDetails getCompactionDetails(long totalCapacity, long usedCapacity, long segmentCapacity,
-      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats,
-      CompactionPolicyCounter compactionPolicyCounter) throws StoreException {
-    CompactionPolicy compactionPolicy = selectCompactionPolicy(compactionPolicyCounter);
-    logger.info("Current compaction policy is : {}", compactionPolicy);
-    return compactionPolicy.getCompactionDetails(totalCapacity, usedCapacity, segmentCapacity, segmentHeaderSize,
-        logSegmentsNotInJournal, blobStoreStats, compactionPolicyCounter);
+      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats)
+      throws StoreException {
+    String storeId = blobStoreStats.getStoreId();
+    CompactionPolicyCounter compactionPolicyCounter =
+        blobToCounterMap.getOrDefault(storeId, new CompactionPolicyCounter(storeConfig));
+    compactionPolicyCounter.increment();
+    blobToCounterMap.put(storeId, compactionPolicyCounter);
+    CompactionPolicy selectCompactionPolicy = selectCompactionPolicy(compactionPolicyCounter);
+    logger.info("Current compaction policy is : {}", selectCompactionPolicy);
+    return selectCompactionPolicy.getCompactionDetails(totalCapacity, usedCapacity, segmentCapacity, segmentHeaderSize,
+        logSegmentsNotInJournal, blobStoreStats);
   }
 
   /**
@@ -61,6 +70,10 @@ public class HybridCompactionPolicy implements CompactionPolicy {
       }
       return new StatsBasedCompactionPolicy(storeConfig, time);
     }
+  }
+
+  Map<String, CompactionPolicyCounter> getBlobToCounterMap() {
+    return this.blobToCounterMap;
   }
 }
 

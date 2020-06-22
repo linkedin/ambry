@@ -1026,9 +1026,9 @@ public class BlobStore implements Store {
    * {@code null} if there isn't anything to compact
    * @throws StoreException on any issues while reading entries from index
    */
-  CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy, CompactionPolicyCounter compactionPolicyCounter) throws StoreException {
+  CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy) throws StoreException {
     return compactionPolicy.getCompactionDetails(capacityInBytes, index.getLogUsedCapacity(), log.getSegmentCapacity(),
-        LogSegment.HEADER_SIZE, index.getLogSegmentsNotInJournal(), blobStoreStats, compactionPolicyCounter);
+        LogSegment.HEADER_SIZE, index.getLogSegmentsNotInJournal(), blobStoreStats);
   }
 
   /**

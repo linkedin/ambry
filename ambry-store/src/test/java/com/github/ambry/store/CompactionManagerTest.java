@@ -527,7 +527,7 @@ public class CompactionManagerTest {
     }
 
     @Override
-    CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy, CompactionPolicyCounter compactionPolicyCounter) throws StoreException {
+    CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy) throws StoreException {
       if (exceptionToThrowOnGetCompactionDetails != null) {
         throw exceptionToThrowOnGetCompactionDetails;
       }

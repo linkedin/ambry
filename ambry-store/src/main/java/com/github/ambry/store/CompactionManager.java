@@ -179,14 +179,6 @@ class CompactionManager {
   }
 
   /**
-   * Get the current replicaToCounterMap policy.
-   * @return {@link this.replicaToCounterMap}
-   */
-  Map<ReplicaId, CompactionPolicyCounter> getReplicaToCounterMap(){
-    return this.replicaToCounterMap;
-  }
-
-  /**
    * Get compaction details for a given {@link BlobStore} if any
    * @param blobStore the {@link BlobStore} for which compaction details are requested
    * @return the {@link CompactionDetails} containing the details about log segments that needs to be compacted.
@@ -194,14 +186,7 @@ class CompactionManager {
    * @throws StoreException when {@link BlobStore} is not started
    */
   CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
-    ReplicaId replicaId = blobStore.getReplicaId();
-    if (compactionPolicyFactory != null && compactionPolicyFactory instanceof HybridCompactionPolicyFactory) {
-      CompactionPolicyCounter compactionPolicyCounter =
-          replicaToCounterMap.getOrDefault(replicaId, new CompactionPolicyCounter(storeConfig));
-      compactionPolicyCounter.increment();
-      replicaToCounterMap.put(replicaId, compactionPolicyCounter);
-    }
-    return blobStore.getCompactionDetails(compactionPolicy, replicaToCounterMap.get(replicaId));
+    return blobStore.getCompactionDetails(compactionPolicy);
   }
 
   /**
@@ -223,6 +208,13 @@ class CompactionManager {
    */
   Set<BlobStore> getAllStores() {
     return stores;
+  }
+
+  /**
+   * @return {@link CompactionPolicy} in compaction manager.
+   */
+  CompactionPolicy getCompactionPolicy() {
+    return compactionPolicy;
   }
 
   /**
