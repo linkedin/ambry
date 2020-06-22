@@ -550,8 +550,7 @@ class CloudBlobStore implements Store {
     if (requestedLifeVersion == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
       // This is a delete request from frontend
       if (metadata.isDeleted()) {
-        throw new StoreException(
-            "Cannot delete id " + key.getID() + " since it is already marked as deleted in cloud.",
+        throw new StoreException("Cannot delete id " + key.getID() + " since it is already marked as deleted in cloud.",
             StoreErrorCodes.ID_Deleted);
       }
       // this is delete request from frontend, we use life version only for validation.
@@ -783,10 +782,14 @@ class CloudBlobStore implements Store {
           requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key)),
               "FindKey", partitionId.toPathString());
       CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataListMap.get(key.getID());
-      return new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
-          cloudBlobMetadata.isExpired(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
-          (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
-          cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
+      if (cloudBlobMetadata != null) {
+        return new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
+            cloudBlobMetadata.isExpired(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
+            (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
+            cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
+      } else {
+        throw new StoreException(String.format("FindKey couldn't find key: %s", key), StoreErrorCodes.ID_Not_Found);
+      }
     } catch (CloudStorageException e) {
       throw new StoreException(e, StoreErrorCodes.IOError);
     }
