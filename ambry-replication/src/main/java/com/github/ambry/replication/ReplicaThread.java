@@ -698,7 +698,7 @@ public class ReplicaThread implements Runnable {
    * @param remoteKeyToLocalKeyMap map mapping remote keys to local key equivalents
    * @throws StoreException
    */
-  private void processReplicaMetadataResponse(Set<MessageInfo> missingRemoteStoreMessages,
+  void processReplicaMetadataResponse(Set<MessageInfo> missingRemoteStoreMessages,
       ReplicaMetadataResponseInfo replicaMetadataResponseInfo, RemoteReplicaInfo remoteReplicaInfo,
       DataNodeId remoteNode, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap) throws StoreException {
     long startTime = SystemTime.getInstance().milliseconds();
@@ -824,7 +824,7 @@ public class ReplicaThread implements Runnable {
    * @return the map from the {@link StoreKeyConverter#convert(Collection)} call
    * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
    */
-  private Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response)
+  Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response)
       throws IOException {
     try {
       List<StoreKey> storeKeysToConvert = new ArrayList<>();
