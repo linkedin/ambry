@@ -63,6 +63,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.HelixManager;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
@@ -1864,6 +1865,7 @@ public class BlobStoreTest {
     properties.setProperty("store.set.local.partition.state.enabled", "true");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     InstanceConfig instanceConfig = new InstanceConfig("localhost");
+    instanceConfig.setPort("2222");
     Map<String, List<String>> listMap = new HashMap<>();
     listMap.put(storeId, null);
     ZNRecord znRecord = new ZNRecord("localhost");
@@ -1871,13 +1873,15 @@ public class BlobStoreTest {
     IdealState idealState = new IdealState(znRecord);
     idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
     // mock helix related components
-    HelixAdmin mockHelixAdmin = Mockito.mock(HelixAdmin.class);
+    HelixAdmin mockHelixAdmin = mock(HelixAdmin.class);
     when(mockHelixAdmin.getInstanceConfig(eq(CLUSTER_NAME), anyString())).thenReturn(instanceConfig);
     when(mockHelixAdmin.getResourcesInCluster(eq(CLUSTER_NAME))).thenReturn(Collections.singletonList(RESOURCE_NAME));
     when(mockHelixAdmin.getResourceIdealState(eq(CLUSTER_NAME), eq(RESOURCE_NAME))).thenReturn(idealState);
-    HelixFactory mockHelixFactory = Mockito.mock(HelixFactory.class);
-    when(mockHelixFactory.getZKHelixManager(anyString(), anyString(), any(), anyString())).thenReturn(null);
-    when(mockHelixFactory.getHelixAdmin(anyString())).thenReturn(mockHelixAdmin);
+    HelixManager mockHelixManager = mock(HelixManager.class);
+    when(mockHelixManager.getClusterManagmentTool()).thenReturn(mockHelixAdmin);
+    HelixFactory mockHelixFactory = mock(HelixFactory.class);
+    when(mockHelixFactory.getZkHelixManagerAndConnect(anyString(), anyString(), any(), anyString())).thenReturn(
+        mockHelixManager);
     MockHelixParticipant.metricRegistry = new MetricRegistry();
     MockHelixParticipant mockParticipant = new MockHelixParticipant(clusterMapConfig, mockHelixFactory);
     mockParticipant.overrideDisableReplicaMethod = false;

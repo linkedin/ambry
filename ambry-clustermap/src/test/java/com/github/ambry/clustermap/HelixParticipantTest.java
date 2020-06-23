@@ -29,6 +29,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
+import org.apache.helix.InstanceType;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -106,7 +107,10 @@ public class HelixParticipantTest {
     helixParticipant.participate(Collections.emptyList(), null);
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
-    InstanceConfig instanceConfig = new InstanceConfig("someInstanceId");
+    DataNodeConfig dataNodeConfig =
+        new DataNodeConfig(instanceName, hostname, port, "DC0", null, null, null, ClusterMapUtils.DEFAULT_XID);
+    InstanceConfig instanceConfig =
+        new InstanceConfigToDataNodeConfigAdapter.Converter(clusterMapConfig).convert(dataNodeConfig);
     helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
 
     //Make sure the current sealedReplicas list is empty
@@ -198,13 +202,14 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipantDummy =
         new HelixParticipant(clusterMapConfigDummy, helixManagerFactory, new MetricRegistry(),
             getDefaultZkConnectStr(clusterMapConfigDummy), true);
-    HelixParticipant helixParticipantSpy = Mockito.spy(helixParticipant);
     helixParticipant.participate(Collections.emptyList(), null);
     helixParticipantDummy.participate(Collections.emptyList(), null);
-    helixParticipantSpy.participate(Collections.emptyList(), null);
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
-    InstanceConfig instanceConfig = new InstanceConfig("testInstanceId");
+    DataNodeConfig dataNodeConfig =
+        new DataNodeConfig(instanceName, hostname, port, "DC0", null, null, null, ClusterMapUtils.DEFAULT_XID);
+    InstanceConfig instanceConfig =
+        new InstanceConfigToDataNodeConfigAdapter.Converter(clusterMapConfig).convert(dataNodeConfig);
     helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
     helixAdmin.setInstanceConfig(clusterName, instanceNameDummy, null);
 
@@ -239,8 +244,10 @@ public class HelixParticipantTest {
     assertTrue(stoppedReplicas.contains(partitionId2));
 
     //Invoke setReplicaStoppedState to add replicaId1, replicaId2 again, ensure no more set operations performed on stopped list
-    helixParticipantSpy.setReplicaStoppedState(Arrays.asList(replicaId1, replicaId2), true);
-    verify(helixParticipantSpy, never()).setStoppedReplicas(anyList());
+    int countBefore = ((MockHelixAdmin) helixParticipant.getHelixAdmin()).getSetInstanceConfigCallCount();
+    helixParticipant.setReplicaStoppedState(Arrays.asList(replicaId1, replicaId2), true);
+    assertEquals("setInstanceConfig should not have been called", countBefore,
+        ((MockHelixAdmin) helixParticipant.getHelixAdmin()).getSetInstanceConfigCallCount());
 
     //Add replicaId1 again as well as replicaId3 to ensure new replicaId is correctly added and no duplicates in the stopped list
     helixParticipant.setReplicaStoppedState(Arrays.asList(replicaId1, replicaId3), true);
@@ -259,9 +266,11 @@ public class HelixParticipantTest {
     assertFalse(stoppedReplicas.contains(partitionId2));
 
     //Removing replicaIds which have already been removed doesn't hurt anything and will not update InstanceConfig in Helix
-    helixParticipantSpy.setReplicaStoppedState(Arrays.asList(replicaId1, replicaId2), false);
-    verify(helixParticipantSpy, never()).setStoppedReplicas(anyList());
-    stoppedReplicas = helixParticipantSpy.getStoppedReplicas();
+    countBefore = ((MockHelixAdmin) helixParticipant.getHelixAdmin()).getSetInstanceConfigCallCount();
+    helixParticipant.setReplicaStoppedState(Arrays.asList(replicaId1, replicaId2), false);
+    assertEquals("setInstanceConfig should not have been called", countBefore,
+        ((MockHelixAdmin) helixParticipant.getHelixAdmin()).getSetInstanceConfigCallCount());
+    stoppedReplicas = helixParticipant.getStoppedReplicas();
     listIsExpectedSize(stoppedReplicas, 1, listName);
     assertTrue(stoppedReplicas.contains(partitionId3));
 
@@ -287,7 +296,7 @@ public class HelixParticipantTest {
     }
     // Connect failure.
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    helixManagerFactory.getHelixManager().beBad = true;
+    helixManagerFactory.getHelixManager(InstanceType.PARTICIPANT).beBad = true;
     HelixParticipant helixParticipant =
         new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
             getDefaultZkConnectStr(clusterMapConfig), true);
@@ -357,8 +366,12 @@ public class HelixParticipantTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
         getDefaultZkConnectStr(clusterMapConfig), true);
+    assertTrue(helixManagerFactory.getHelixManager(InstanceType.SPECTATOR).isConnected());
+    assertFalse(helixManagerFactory.getHelixManager(InstanceType.PARTICIPANT).isConnected());
+
     participant.participate(Collections.emptyList(), null);
-    MockHelixManagerFactory.MockHelixManager helixManager = helixManagerFactory.getHelixManager();
+    MockHelixManagerFactory.MockHelixManager helixManager =
+        helixManagerFactory.getHelixManager(InstanceType.PARTICIPANT);
     assertTrue(helixManager.isConnected());
     assertEquals(stateModelDef, helixManager.getStateModelDef());
     assertEquals(AmbryStateModelFactory.class, helixManager.getStateModelFactory().getClass());

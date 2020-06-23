@@ -69,7 +69,6 @@ public class InstanceConfigToDataNodeConfigAdapterTest extends DataNodeConfigSou
   public void testSetGetListener() throws Exception {
     InstanceConfigToDataNodeConfigAdapter source =
         new InstanceConfigToDataNodeConfigAdapter(helixManager, clusterMapConfig);
-    source.setHelixAdmin(helixManager.getClusterManagmentTool());
     // set up 10 node configs and attach a listener.
     Set<DataNodeConfig> allConfigs = new HashSet<>();
     for (int i = 0; i < 10; i++) {
@@ -109,10 +108,5 @@ public class InstanceConfigToDataNodeConfigAdapterTest extends DataNodeConfigSou
       assertEquals("get() call returned incorrect result", config, source.get(config.getInstanceName()));
     }
     assertNull("Should not receive non-existent instance", source.get("abc"));
-
-    source.setHelixAdmin(null);
-    TestUtils.assertException(NullPointerException.class, () -> source.set(createConfig(1, 1)), null);
-    String firstInstance = allConfigs.iterator().next().getInstanceName();
-    TestUtils.assertException(NullPointerException.class, () -> source.get(firstInstance), null);
   }
 }

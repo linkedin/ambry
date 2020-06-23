@@ -68,9 +68,8 @@ public class HelixClusterSpectator implements ClusterSpectator {
       // only handle vcr clusters for now
       if (dcZkInfo.getReplicaType() == ReplicaType.CLOUD_BACKED) {
         HelixManager helixManager =
-            helixFactory.getZKHelixManager(cloudConfig.vcrClusterName, selfInstanceName, InstanceType.SPECTATOR,
-                dcZkInfo.getZkConnectStrs().get(0));
-        helixManager.connect();
+            helixFactory.getZkHelixManagerAndConnect(cloudConfig.vcrClusterName, selfInstanceName,
+                InstanceType.SPECTATOR, dcZkInfo.getZkConnectStrs().get(0));
 
         helixManager.addInstanceConfigChangeListener(this);
         helixManager.addLiveInstanceChangeListener(this);

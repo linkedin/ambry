@@ -54,6 +54,7 @@ public class MockHelixAdmin implements HelixAdmin {
   // A map of partitionId to instanceName associated with leader replica
   private Map<String, String> partitionToLeaderReplica = new HashMap<>();
   private long totalDiskCapacity;
+  private int setInstanceConfigCallCount = 0;
 
   /**
    * Get the instances that have replicas for the given partition.
@@ -146,6 +147,7 @@ public class MockHelixAdmin implements HelixAdmin {
 
   @Override
   public boolean setInstanceConfig(String clusterName, String instanceName, InstanceConfig instanceConfig) {
+    setInstanceConfigCallCount++;
     instanceNameToinstanceConfigs.put(instanceName, instanceConfig);
     return true;
   }
@@ -396,6 +398,13 @@ public class MockHelixAdmin implements HelixAdmin {
    */
   long getTotalDiskCapacity() {
     return totalDiskCapacity;
+  }
+
+  /**
+   * @return the number of calls to the {@link #setInstanceConfig} method.
+   */
+  public int getSetInstanceConfigCallCount() {
+    return setInstanceConfigCallCount;
   }
 
   /**

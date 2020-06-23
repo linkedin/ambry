@@ -165,11 +165,8 @@ class DatacenterInitializer {
     if (dcZkInfo.getDcName().equals(clusterMapConfig.clusterMapDatacenterName)) {
       manager = Objects.requireNonNull(localManager, "localManager should have been set");
     } else {
-      manager = helixFactory.getZKHelixManager(clusterMapConfig.clusterMapClusterName, selfInstanceName,
+      manager = helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName, selfInstanceName,
           InstanceType.SPECTATOR, zkConnectStr);
-      logger.info("Connecting to Helix manager at {}", zkConnectStr);
-      manager.connect();
-      logger.info("Established connection to Helix manager at {}", zkConnectStr);
     }
     HelixClusterChangeHandler clusterChangeHandler;
     String clusterChangeHandlerType = clusterMapConfig.clusterMapClusterChangeHandlerType;

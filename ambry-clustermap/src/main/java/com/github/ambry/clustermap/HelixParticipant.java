@@ -24,7 +24,6 @@ import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -66,9 +65,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private final ClusterMapConfig clusterMapConfig;
   private final Map<String, ReplicaState> localPartitionAndState = new ConcurrentHashMap<>();
   private HelixManager manager;
-  private String instanceName;
-  private HelixAdmin helixAdmin;
-  private ReplicaSyncUpManager replicaSyncUpManager;
+  private final String instanceName;
+  private final ReplicaSyncUpManager replicaSyncUpManager;
+  private final InstanceConfigToDataNodeConfigAdapter dataNodeConfigSource;
+  private final HelixAdmin helixAdmin;
   private volatile boolean disablePartitionsComplete = false;
   final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
 
@@ -93,12 +93,20 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     if (clusterName.isEmpty()) {
       throw new IllegalStateException("Cluster name is empty in clusterMapConfig");
     }
-    // HelixAdmin is initialized in constructor allowing caller to do any administrative operations in Helix
-    // before participating.
-    helixAdmin = helixFactory.getHelixAdmin(this.zkConnectStr);
-    manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, this.zkConnectStr);
+    manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
     replicaSyncUpManager = new AmbryReplicaSyncUpManager(clusterMapConfig);
     partitionStateChangeListeners = new HashMap<>();
+    try {
+      // since reading/writing from zookeeper does not rely on HelixManager being a PARTICIPANT, we can share the
+      // SPECTATOR instance that is also used by HelixClusterManager. This avoids the need to start participating in a
+      // cluster before reading/writing from zookeeper.
+      HelixManager spectatorManager =
+          helixFactory.getZkHelixManagerAndConnect(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
+      helixAdmin = spectatorManager.getClusterManagmentTool();
+      dataNodeConfigSource = new InstanceConfigToDataNodeConfigAdapter(spectatorManager, clusterMapConfig);
+    } catch (Exception exception) {
+      throw new IllegalStateException("Error setting up administration facilities", exception);
+    }
   }
 
   @Override
@@ -123,15 +131,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         new AmbryStateModelFactory(clusterMapConfig, this));
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports, callback);
     try {
-      synchronized (helixAdministrationLock) {
-        // close the temporary helixAdmin used in the process of starting StorageManager
-        // this is to ensure there is only one valid helixAdmin
-        helixAdmin.close();
-        // register server as a participant
-        manager.connect();
-        // reassign the helixAdmin from ZKHelixManager, which is the actual helixAdmin after participation
-        helixAdmin = manager.getClusterManagmentTool();
-      }
+      // register server as a participant
+      manager.connect();
     } catch (Exception e) {
       throw new IOException("Exception while connecting to the Helix manager", e);
     }
@@ -154,17 +155,15 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
           "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
     }
     synchronized (helixAdministrationLock) {
-      List<String> sealedReplicas = new ArrayList<>(getSealedReplicas());
+      DataNodeConfig config = getDataNodeConfig();
       String partitionId = replicaId.getPartitionId().toPathString();
       boolean success = true;
-      if (!isSealed && sealedReplicas.contains(partitionId)) {
+      if (!isSealed && config.getSealedReplicas().remove(partitionId)) {
         logger.trace("Removing the partition {} from sealedReplicas list", partitionId);
-        sealedReplicas.remove(partitionId);
-        success = setSealedReplicas(sealedReplicas);
-      } else if (isSealed && !sealedReplicas.contains(partitionId)) {
+        success = dataNodeConfigSource.set(config);
+      } else if (isSealed && config.getSealedReplicas().add(partitionId)) {
         logger.trace("Adding the partition {} to sealedReplicas list", partitionId);
-        sealedReplicas.add(partitionId);
-        success = setSealedReplicas(sealedReplicas);
+        success = dataNodeConfigSource.set(config);
       }
       logger.trace("Set sealed state of partition {} is completed", partitionId);
       return success;
@@ -183,14 +182,13 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     }
     boolean setStoppedResult;
     synchronized (helixAdministrationLock) {
-      logger.info("Getting stopped replicas from instanceConfig");
-      List<String> stoppedListInHelix = getStoppedReplicas();
-      Set<String> stoppedSet = new HashSet<>(stoppedListInHelix);
-      boolean stoppedSetUpdated =
-          markStop ? stoppedSet.addAll(replicasToUpdate) : stoppedSet.removeAll(replicasToUpdate);
+      logger.info("Getting stopped replicas from Helix");
+      DataNodeConfig config = getDataNodeConfig();
+      boolean stoppedSetUpdated = markStop ? config.getStoppedReplicas().addAll(replicasToUpdate)
+          : config.getStoppedReplicas().removeAll(replicasToUpdate);
       if (stoppedSetUpdated) {
-        logger.info("Updating the stopped list in Helix InstanceConfig");
-        setStoppedResult = setStoppedReplicas(new ArrayList<>(stoppedSet));
+        logger.info("Updating the stopped list in Helix to {}", config.getStoppedReplicas());
+        setStoppedResult = dataNodeConfigSource.set(config);
       } else {
         logger.info("No replicas should be added or removed, no need to update the stopped list");
         setStoppedResult = true;
@@ -215,7 +213,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    */
   @Override
   public List<String> getSealedReplicas() {
-    return ClusterMapUtils.getSealedReplicas(getInstanceConfig());
+    // TODO refactor these getter methods to return set instead of list.
+    return new ArrayList<>(getDataNodeConfig().getSealedReplicas());
   }
 
   /**
@@ -223,12 +222,12 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    */
   @Override
   public List<String> getStoppedReplicas() {
-    return ClusterMapUtils.getStoppedReplicas(getInstanceConfig());
+    return new ArrayList<>(getDataNodeConfig().getStoppedReplicas());
   }
 
   @Override
   public List<String> getDisabledReplicas() {
-    return ClusterMapUtils.getDisabledReplicas(getInstanceConfig());
+    return new ArrayList<>(getDataNodeConfig().getDisabledReplicas());
   }
 
   @Override
@@ -285,11 +284,13 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
       // 3. set InstanceConfig in Helix to persist replica disabled state
       helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+      // TODO Have this method use DataNodeConfig for disabled replicas and InstanceConfig for enabled instances.
       logger.info("Disabled state of partition {} is updated", partitionName);
     }
   }
 
   /**
+   * Exposed for testing
    * @return {@link HelixAdmin} that manages current data node.
    */
   public HelixAdmin getHelixAdmin() {
@@ -304,82 +305,53 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
-   * Add new replica info into {@link InstanceConfig} of current data node.
-   * @param replicaId new replica whose info should be added into {@link InstanceConfig}.
+   * Add new replica info into {@link DataNodeConfig} of current data node.
+   * @param replicaId new replica whose info should be added into {@link DataNodeConfig}.
    * @return {@code true} replica info is successfully added. {@code false} otherwise.
    */
   private boolean addNewReplicaInfo(ReplicaId replicaId) {
     boolean additionResult = true;
+    DataNodeConfig dataNodeConfig = getDataNodeConfig();
     String partitionName = replicaId.getPartitionId().toPathString();
-    String newReplicaInfo =
-        String.join(REPLICAS_STR_SEPARATOR, partitionName, String.valueOf(replicaId.getCapacityInBytes()),
-            replicaId.getPartitionId().getPartitionClass()) + REPLICAS_DELIM_STR;
-    InstanceConfig instanceConfig = getInstanceConfig();
-    Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
-    Map<String, String> diskInfo = mountPathToDiskInfos.get(replicaId.getMountPath());
-    Map<String, String> diskInfoToAdd;
+    DataNodeConfig.ReplicaConfig replicaConfigToAdd = new DataNodeConfig.ReplicaConfig(replicaId.getCapacityInBytes(),
+        replicaId.getPartitionId().getPartitionClass());
+    DataNodeConfig.DiskConfig diskConfig = dataNodeConfig.getDiskConfigs().get(replicaId.getMountPath());
     boolean newReplicaInfoAdded = false;
-    boolean duplicateFound = false;
-    if (diskInfo != null) {
-      // add replica to an existing disk (need to sort replicas by partition id)
-      diskInfoToAdd = diskInfo;
-      String replicasStr = diskInfo.get(REPLICAS_STR);
-      String[] replicaInfos = replicasStr.split(REPLICAS_DELIM_STR);
-      StringBuilder replicasStrBuilder = new StringBuilder();
-      long idToAdd = Long.parseLong(partitionName);
-      for (String replicaInfo : replicaInfos) {
-        String[] infos = replicaInfo.split(REPLICAS_STR_SEPARATOR);
-        long currentId = Long.parseLong(infos[0]);
-        if (currentId == idToAdd) {
-          logger.info("Partition {} is already on instance {}, skipping adding it into InstanceConfig in Helix.",
-              partitionName, instanceName);
-          duplicateFound = true;
-          break;
-        } else if (currentId < idToAdd || newReplicaInfoAdded) {
-          replicasStrBuilder.append(replicaInfo).append(REPLICAS_DELIM_STR);
-        } else {
-          // newReplicaInfo already contains delimiter, no need to append REPLICAS_DELIM_STR
-          replicasStrBuilder.append(newReplicaInfo);
-          replicasStrBuilder.append(replicaInfo).append(REPLICAS_DELIM_STR);
-          newReplicaInfoAdded = true;
-        }
-      }
-      if (!duplicateFound && !newReplicaInfoAdded) {
-        // this means new replica id is larger than all existing replicas' ids
-        replicasStrBuilder.append(newReplicaInfo);
+    if (diskConfig != null) {
+      // add replica to an existing disk
+      if (diskConfig.getReplicaConfigs().containsKey(partitionName)) {
+        logger.info("Partition {} is already on instance {}, skipping adding it into configs in Helix.", partitionName,
+            instanceName);
+      } else {
+        diskConfig.getReplicaConfigs().put(partitionName, replicaConfigToAdd);
         newReplicaInfoAdded = true;
-      }
-      if (newReplicaInfoAdded) {
-        diskInfoToAdd.put(REPLICAS_STR, replicasStrBuilder.toString());
       }
     } else {
       // add replica onto a brand new disk
-      diskInfoToAdd = new HashMap<>();
       logger.info("Adding info of new replica {} to the new disk {}", replicaId.getPartitionId().toPathString(),
           replicaId.getDiskId());
-      diskInfoToAdd.put(DISK_CAPACITY_STR, Long.toString(replicaId.getDiskId().getRawCapacityInBytes()));
-      diskInfoToAdd.put(DISK_STATE, AVAILABLE_STR);
-      diskInfoToAdd.put(REPLICAS_STR, newReplicaInfo);
+      DataNodeConfig.DiskConfig diskConfigToAdd =
+          new DataNodeConfig.DiskConfig(HardwareState.AVAILABLE, replicaId.getDiskId().getRawCapacityInBytes());
+      diskConfigToAdd.getReplicaConfigs().put(partitionName, replicaConfigToAdd);
+      dataNodeConfig.getDiskConfigs().put(replicaId.getMountPath(), diskConfigToAdd);
       newReplicaInfoAdded = true;
     }
     if (newReplicaInfoAdded) {
-      // we update InstanceConfig only when new replica info is added (skip updating if replica is already present)
-      instanceConfig.getRecord().setMapField(replicaId.getMountPath(), diskInfoToAdd);
-      logger.info("Updating config: {} in Helix by adding partition {}", instanceConfig, partitionName);
-      additionResult = helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+      logger.info("Updating config: {} in Helix by adding partition {}", dataNodeConfig, partitionName);
+      additionResult = dataNodeConfigSource.set(dataNodeConfig);
     }
     return additionResult;
   }
 
   /**
-   * Remove old/existing replica info from {@link InstanceConfig} that associates with current data node.
+   * Remove old/existing replica info from {@link DataNodeConfig} that associates with current data node.
    * @param replicaId the {@link ReplicaId} whose info should be removed.
+   * @param dataNodeConfig {@link DataNodeConfig} to update.
    * @return {@code true} replica info is successfully removed. {@code false} otherwise.
    */
   private boolean removeOldReplicaInfo(ReplicaId replicaId) {
     boolean removalResult = true;
-    boolean instanceConfigUpdated = false;
-    boolean replicaFound;
+    boolean dataNodeConfigUpdated = false;
     if (!disablePartitionsComplete) {
       // block here until there is a ZNode associated with current node has been created under /PROPERTYSTORE/AdminConfig/
       try {
@@ -390,46 +362,21 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       }
       disablePartitionsComplete = true;
     }
-    InstanceConfig instanceConfig = getInstanceConfig();
+    DataNodeConfig dataNodeConfig = getDataNodeConfig();
     String partitionName = replicaId.getPartitionId().toPathString();
-    List<String> stoppedReplicas = instanceConfig.getRecord().getListField(STOPPED_REPLICAS_STR);
-    List<String> sealedReplicas = instanceConfig.getRecord().getListField(SEALED_STR);
-    stoppedReplicas = stoppedReplicas == null ? new ArrayList<>() : stoppedReplicas;
-    sealedReplicas = sealedReplicas == null ? new ArrayList<>() : sealedReplicas;
-    if (stoppedReplicas.remove(partitionName) || sealedReplicas.remove(partitionName)) {
+    boolean removedFromStopped = dataNodeConfig.getStoppedReplicas().remove(partitionName);
+    boolean removedFromSealed = dataNodeConfig.getSealedReplicas().remove(partitionName);
+    if (removedFromStopped || removedFromSealed) {
       logger.info("Removing partition {} from stopped and sealed list", partitionName);
-      instanceConfig.getRecord().setListField(STOPPED_REPLICAS_STR, stoppedReplicas);
-      instanceConfig.getRecord().setListField(SEALED_STR, sealedReplicas);
-      instanceConfigUpdated = true;
+      dataNodeConfigUpdated = true;
     }
-    Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
-    Map<String, String> diskInfo = mountPathToDiskInfos.get(replicaId.getMountPath());
-    if (diskInfo != null) {
-      String replicasStr = diskInfo.get(REPLICAS_STR);
-      if (!replicasStr.isEmpty()) {
-        List<String> replicaInfos = new ArrayList<>(Arrays.asList(replicasStr.split(REPLICAS_DELIM_STR)));
-        // if any element is removed, that means old replica is found in replicasStr.
-        replicaFound = replicaInfos.removeIf(info -> (info.split(REPLICAS_STR_SEPARATOR)[0]).equals(partitionName));
-
-        // We update InstanceConfig only when replica is found in current instanceConfig. (This is to avoid unnecessary
-        // notification traffic due to InstanceConfig change)
-        if (replicaFound) {
-          StringBuilder newReplicasStrBuilder = new StringBuilder();
-          // note that old replica info has been removed from "replicaInfos"
-          for (String replicaInfo : replicaInfos) {
-            newReplicasStrBuilder.append(replicaInfo).append(REPLICAS_DELIM_STR);
-          }
-          // update diskInfo and MountPathToDisk map
-          diskInfo.put(REPLICAS_STR, newReplicasStrBuilder.toString());
-          // update InstanceConfig
-          instanceConfig.getRecord().setMapField(replicaId.getMountPath(), diskInfo);
-          instanceConfigUpdated = true;
-        }
-      }
+    DataNodeConfig.DiskConfig diskConfig = dataNodeConfig.getDiskConfigs().get(replicaId.getMountPath());
+    if (diskConfig != null) {
+      dataNodeConfigUpdated = diskConfig.getReplicaConfigs().remove(partitionName) != null;
     }
-    if (instanceConfigUpdated) {
-      logger.info("Updating config: {} in Helix by removing partition {}", instanceConfig, partitionName);
-      removalResult = helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+    if (dataNodeConfigUpdated) {
+      logger.info("Updating config: {} in Helix by removing partition {}", dataNodeConfig, partitionName);
+      removalResult = dataNodeConfigSource.set(dataNodeConfig);
     } else {
       logger.warn("Partition {} is not found on instance {}, skipping removing it from InstanceConfig in Helix.",
           partitionName, instanceName);
@@ -503,29 +450,15 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
-   * Set the list of sealed replicas in the HelixAdmin. This method is called only after the helixAdministrationLock
-   * is taken.
-   * @param sealedReplicas list of sealed replicas to be set in the HelixAdmin
-   * @return whether the operation succeeded or not
+   * @return {@link DataNodeConfig} of current participant (The method also checks the existence of the config).
    */
-  private boolean setSealedReplicas(List<String> sealedReplicas) {
-    InstanceConfig instanceConfig = getInstanceConfig();
-    logger.trace("Setting InstanceConfig with list of sealed replicas: {}", sealedReplicas.toArray());
-    instanceConfig.getRecord().setListField(SEALED_STR, sealedReplicas);
-    return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
-  }
-
-  /**
-   * Set the list of stopped replicas in the HelixAdmin. This method is called only after the helixAdministrationLock
-   * is taken.
-   * @param stoppedReplicas list of stopped replicas to be set in the HelixAdmin
-   * @return whether the operation succeeded or not
-   */
-  boolean setStoppedReplicas(List<String> stoppedReplicas) {
-    InstanceConfig instanceConfig = getInstanceConfig();
-    logger.trace("Setting InstanceConfig with list of stopped replicas: {}", stoppedReplicas.toArray());
-    instanceConfig.getRecord().setListField(STOPPED_REPLICAS_STR, stoppedReplicas);
-    return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+  private DataNodeConfig getDataNodeConfig() {
+    DataNodeConfig dataNodeConfig = dataNodeConfigSource.get(instanceName);
+    if (dataNodeConfig == null) {
+      throw new IllegalStateException(
+          "No config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
+    }
+    return dataNodeConfig;
   }
 
   @Override

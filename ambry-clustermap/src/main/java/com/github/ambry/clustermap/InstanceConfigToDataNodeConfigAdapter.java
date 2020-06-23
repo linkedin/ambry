@@ -16,6 +16,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Singleton;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,7 +41,7 @@ public class InstanceConfigToDataNodeConfigAdapter implements DataNodeConfigSour
   private final HelixManager helixManager;
   private final Converter converter;
   private final String clusterName;
-  private volatile HelixAdmin helixAdmin = null;
+  private final Singleton<HelixAdmin> helixAdmin;
 
   /**
    * @param helixManager the {@link HelixManager} to use as the source of truth for {@link InstanceConfig}s.
@@ -50,6 +51,7 @@ public class InstanceConfigToDataNodeConfigAdapter implements DataNodeConfigSour
     this.helixManager = helixManager;
     this.converter = new Converter(clusterMapConfig);
     clusterName = clusterMapConfig.clusterMapClusterName;
+    helixAdmin = new Singleton<>(helixManager::getClusterManagmentTool);
   }
 
   @Override
@@ -64,21 +66,13 @@ public class InstanceConfigToDataNodeConfigAdapter implements DataNodeConfigSour
   @Override
   public boolean set(DataNodeConfig config) {
     InstanceConfig instanceConfig = converter.convert(config);
-    return getHelixAdmin().setInstanceConfig(clusterName, instanceConfig.getInstanceName(), instanceConfig);
+    return helixAdmin.get().setInstanceConfig(clusterName, instanceConfig.getInstanceName(), instanceConfig);
   }
 
   @Override
   public DataNodeConfig get(String instanceName) {
-    InstanceConfig instanceConfig = getHelixAdmin().getInstanceConfig(clusterName, instanceName);
+    InstanceConfig instanceConfig = helixAdmin.get().getInstanceConfig(clusterName, instanceName);
     return instanceConfig != null ? converter.convert(instanceConfig) : null;
-  }
-
-  void setHelixAdmin(HelixAdmin helixAdmin) {
-    this.helixAdmin = helixAdmin;
-  }
-
-  private HelixAdmin getHelixAdmin() {
-    return Objects.requireNonNull(helixAdmin, "helixAdmin not set");
   }
 
   static class Converter {
