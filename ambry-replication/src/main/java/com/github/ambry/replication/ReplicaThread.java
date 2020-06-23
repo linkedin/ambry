@@ -741,6 +741,10 @@ public class ReplicaThread implements Runnable {
       } else {
         // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
         // deleted yet locally
+        // if the blob is from deprecated container, then nothing needs to be done.
+        if (skipPredicate != null && skipPredicate.test(messageInfo)) {
+          continue;
+        }
         MessageInfo localMessageInfo = remoteReplicaInfo.getLocalStore().findKey(localKey);
         boolean deletedLocally = localMessageInfo.isDeleted();
         boolean ttlUpdatedLocally = localMessageInfo.isTtlUpdated();
