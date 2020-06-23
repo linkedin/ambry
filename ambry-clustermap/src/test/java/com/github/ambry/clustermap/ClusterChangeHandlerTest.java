@@ -297,12 +297,12 @@ public class ClusterChangeHandlerTest {
     diskInfos.put("INVALID_MOUNT_PATH", invalidEntry);
     instanceConfig.getRecord().setMapFields(diskInfos);
     // we call onInstanceConfigChange() twice
+    InstanceConfigToDataNodeConfigAdapter.Converter converter =
+        new InstanceConfigToDataNodeConfigAdapter.Converter(clusterMapConfig);
     // 1st call, to verify initialization code path
-    dynamicChangeHandler.onDataNodeConfigChange(
-        Collections.singleton(InstanceConfigToDataNodeConfigAdapter.convert(instanceConfig, clusterMapConfig)));
+    dynamicChangeHandler.onDataNodeConfigChange(Collections.singleton(converter.convert(instanceConfig)));
     // 2nd call, to verify dynamic update code path
-    dynamicChangeHandler.onDataNodeConfigChange(
-        Collections.singletonList(InstanceConfigToDataNodeConfigAdapter.convert(instanceConfig, clusterMapConfig)));
+    dynamicChangeHandler.onDataNodeConfigChange(Collections.singletonList(converter.convert(instanceConfig)));
     assertEquals("There shouldn't be initialization errors", 0, initFailureCount.getCount());
   }
 

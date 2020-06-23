@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ClusterMessagingService;
 import org.apache.helix.ConfigAccessor;
@@ -69,7 +70,7 @@ class MockHelixManager implements HelixManager {
   private boolean isConnected = false;
   private LiveInstanceChangeListener liveInstanceChangeListener;
   private ExternalViewChangeListener externalViewChangeListener;
-  private InstanceConfigChangeListener instanceConfigChangeListener;
+  private final List<InstanceConfigChangeListener> instanceConfigChangeListeners = new CopyOnWriteArrayList<>();
   private IdealStateChangeListener idealStateChangeListener;
   private RoutingTableProvider routingTableProvider;
   private final MockHelixAdmin mockAdmin;
@@ -89,11 +90,27 @@ class MockHelixManager implements HelixManager {
    */
   MockHelixManager(String instanceName, InstanceType instanceType, String zkAddr, MockHelixCluster helixCluster,
       Map<String, ZNRecord> znRecordMap, Exception beBadException) {
+    this(instanceName, instanceType, zkAddr, helixCluster.getClusterName(),
+        helixCluster.getHelixAdminFactory().getHelixAdmin(zkAddr), znRecordMap, beBadException);
+  }
+
+  /**
+   * Instantiate a MockHelixManager.
+   * @param instanceName the name of the instance associated with this manager.
+   * @param instanceType the {@link InstanceType} of the requester.
+   * @param zkAddr the address identifying the zk service to which this request is to be made.
+   * @param clusterName the cluster name for this manager.
+   * @param helixAdmin the {@link HelixAdmin} that can be used to change configs.
+   * @param znRecordMap a map that contains ZNode path and its {@link ZNRecord} associated with HelixPropertyStore in this manager.
+   * @param beBadException the {@link Exception} that this manager will throw on listener registrations.
+   */
+  MockHelixManager(String instanceName, InstanceType instanceType, String zkAddr, String clusterName,
+      MockHelixAdmin helixAdmin, Map<String, ZNRecord> znRecordMap, Exception beBadException) {
     this.instanceName = instanceName;
     this.instanceType = instanceType;
-    mockAdmin = helixCluster.getHelixAdminFactory().getHelixAdmin(zkAddr);
+    this.clusterName = clusterName;
+    mockAdmin = helixAdmin;
     mockAdmin.addHelixManager(this);
-    clusterName = helixCluster.getClusterName();
     dataAccessor = new MockHelixDataAccessor(clusterName, mockAdmin);
     this.beBadException = beBadException;
     this.znRecordMap = znRecordMap;
@@ -197,7 +214,8 @@ class MockHelixManager implements HelixManager {
     if (init) {
       notificationContext.setType(NotificationContext.Type.INIT);
     }
-    instanceConfigChangeListener.onInstanceConfigChange(mockAdmin.getInstanceConfigs(clusterName), notificationContext);
+    instanceConfigChangeListeners.forEach(
+        listener -> listener.onInstanceConfigChange(mockAdmin.getInstanceConfigs(clusterName), notificationContext));
   }
 
   void triggerIdealStateNotification(boolean init) throws InterruptedException {
@@ -251,7 +269,7 @@ class MockHelixManager implements HelixManager {
   @Override
   public void addInstanceConfigChangeListener(InstanceConfigChangeListener instanceConfigChangeListener)
       throws Exception {
-    this.instanceConfigChangeListener = instanceConfigChangeListener;
+    this.instanceConfigChangeListeners.add(instanceConfigChangeListener);
     triggerConfigChangeNotification(true);
   }
 
