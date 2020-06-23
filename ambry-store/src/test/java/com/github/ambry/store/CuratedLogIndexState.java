@@ -458,27 +458,42 @@ class CuratedLogIndexState {
   }
 
   /**
-   * Adds a delete entry in the index (real and reference) for {@code idToDelete}.
-   * @param idToDelete the id to be deleted.
+   * Adds a undelete entry in the index (real and reference) for {@code idToUndelete}.
+   * @param idToUndelete the id to be undeleted.
    * @return the {@link FileSpan} of the added entries.
-   * @throws IOException
    * @throws StoreException
    */
-  FileSpan addUndeleteEntry(MockId idToDelete) throws StoreException {
-    return addUndeleteEntry(idToDelete, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+  FileSpan addUndeleteEntry(MockId idToUndelete) throws StoreException {
+    return addUndeleteEntry(idToUndelete, null, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
   }
 
   /**
    * Adds an undelete entry in the index (real and reference) for {@code idToDelete}.
-   * @param idToUndelete the id to be deleted.
+   * @param idToUndelete the id to be undeleted.
+   * @param lifeVersion the lifeVersion for undeleted entry.
    * @return the {@link FileSpan} of the added entries.
    * @throws StoreException
    */
   FileSpan addUndeleteEntry(MockId idToUndelete, short lifeVersion) throws StoreException {
+    return addUndeleteEntry(idToUndelete, null, lifeVersion);
+  }
+
+  /**
+   * Adds an undelete entry in the index (real and reference) for {@code idToDelete}.
+   * @param idToUndelete the id to be undeleted.
+   * @param info The {@link MessageInfo} to use when there is no previous value for {@code idToUndelete}.
+   * @param lifeVersion the lifeVersion for undeleted entry.
+   * @return the {@link FileSpan} of the added entries.
+   * @throws StoreException
+   */
+  FileSpan addUndeleteEntry(MockId idToUndelete, MessageInfo info, short lifeVersion) throws StoreException {
     IndexValue value = getExpectedValue(idToUndelete, false);
     boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
-    if (value == null) {
+    if (value == null && info == null) {
       throw new IllegalArgumentException(idToUndelete + " does not exist in the index");
+    }
+    if (info != null && !hasLifeVersion) {
+      throw new IllegalArgumentException("Invalid lifeVersion " + lifeVersion + " when info is present");
     }
 
     // add undelete to log
@@ -496,16 +511,23 @@ class CuratedLogIndexState {
 
     // After compaction, undelete record would not be kept without Put and Delete record, so don't bother to forcely
     // add the undelete record to log.
-    short undelLifeVersion = hasLifeVersion ? lifeVersion : (short) (value.getLifeVersion() + 1);
-    IndexValue newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
-        time.milliseconds(), value.getAccountId(), value.getContainerId(), undelLifeVersion);
-    newValue.setNewOffset(startOffset);
-    newValue.setNewSize(CuratedLogIndexState.UNDELETE_RECORD_SIZE);
+    IndexValue newValue;
+    if (value != null) {
+      short undelLifeVersion = hasLifeVersion ? lifeVersion : (short) (value.getLifeVersion() + 1);
+      newValue = new IndexValue(UNDELETE_RECORD_SIZE, startOffset, value.getFlags(), value.getExpiresAtMs(),
+          time.milliseconds(), value.getAccountId(), value.getContainerId(), undelLifeVersion);
+    } else {
+      newValue = new IndexValue(UNDELETE_RECORD_SIZE, startOffset, IndexValue.FLAGS_DEFAULT_VALUE,
+          info.getExpirationTimeInMs(), time.milliseconds(), info.getAccountId(), info.getContainerId(), lifeVersion);
+      if (info.isTtlUpdated()) {
+        newValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
+      }
+    }
     newValue.clearOriginalMessageOffset();
     newValue.setFlag(IndexValue.Flags.Undelete_Index);
     newValue.clearFlag(IndexValue.Flags.Delete_Index);
-    if (hasLifeVersion) {
-      index.markAsUndeleted(idToUndelete, fileSpan, null, newValue.getOperationTimeInMs(), lifeVersion);
+    if (info != null || hasLifeVersion) {
+      index.markAsUndeleted(idToUndelete, fileSpan, info, newValue.getOperationTimeInMs(), lifeVersion);
     } else {
       index.markAsUndeleted(idToUndelete, fileSpan, newValue.getOperationTimeInMs());
     }
