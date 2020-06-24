@@ -11,13 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.tools.admin;
+package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageCompactor;
 import com.github.ambry.cloud.VcrMetrics;
-import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
@@ -25,8 +23,12 @@ import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -40,8 +42,9 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Tool to purge dead blobs for an Ambry partition from Azure storage.
- * Usage: java -cp /path/to/ambry.jar AzureCompactionTool <-propsFile <property-file-path> [-purge] partitionPath
+ * Tool to purge dead blobs for an Ambry partition from Azure storage,
+ * or to report the compaction progress of all partitions.
+ * Usage: java -cp /path/to/ambry.jar AzureCompactionTool -propsFile <property-file-path> [-purge partitionPath...]
  */
 public class AzureCompactionTool {
 
@@ -67,20 +70,21 @@ public class AzureCompactionTool {
     ToolUtils.addClusterMapProperties(properties);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 
+    // User needs to specify this option to actually delete blobs
+    boolean testMode = !optionSet.has(PURGE_OPTION);
+
     List<String> partitions = (List<String>) optionSet.nonOptionArguments();
-    if (partitions.isEmpty()) {
+    if (!testMode && partitions.isEmpty()) {
       printHelpAndExit(parser);
     }
 
     Set<PartitionId> partitionIdSet =
         partitions.stream().map(path -> new PartitionPathId(path)).collect(Collectors.toSet());
 
-    // User needs to specify this option to actually delete blobs
-    boolean testMode = !optionSet.has(PURGE_OPTION);
-
-    CloudDestination azureDest = null;
+    AzureCloudDestination azureDest = null;
     try {
-      azureDest = new AzureCloudDestinationFactory(verifiableProperties, new MetricRegistry()).getCloudDestination();
+      azureDest = (AzureCloudDestination) new AzureCloudDestinationFactory(verifiableProperties,
+          new MetricRegistry()).getCloudDestination();
       CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
       CloudStorageCompactor compactor =
           new CloudStorageCompactor(azureDest, cloudConfig, partitionIdSet, new VcrMetrics(new MetricRegistry()));
@@ -92,8 +96,13 @@ public class AzureCompactionTool {
       }));
 
       if (testMode) {
-        // TODO: once we have Cosmos compactionCheckpoint table, can query it and dump results into sortable table.
-        // Probably need to move this class to com.github.ambry.cloud.azure package.
+        DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(ZoneId.systemDefault());
+        List<Pair<String, Long>> progressList = azureDest.getAzureStorageCompactor().getAllCompactionProgress();
+        progressList.forEach(pair -> {
+          String progress = dateTimeFormatter.format(Instant.ofEpochMilli(pair.getSecond()));
+          // TODO: write to user specified output file
+          System.out.println(pair.getFirst() + "\t" + progress);
+        });
       } else {
         compactor.compactPartitions();
       }

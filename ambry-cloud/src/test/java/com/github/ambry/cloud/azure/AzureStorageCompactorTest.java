@@ -30,11 +30,13 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.Document;
+import com.microsoft.azure.cosmosdb.DocumentClientException;
 import com.microsoft.azure.cosmosdb.FeedOptions;
 import com.microsoft.azure.cosmosdb.FeedResponse;
 import com.microsoft.azure.cosmosdb.RequestOptions;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import com.microsoft.azure.cosmosdb.StoredProcedureResponse;
+import com.microsoft.azure.cosmosdb.internal.HttpConstants;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -97,10 +99,11 @@ public class AzureStorageCompactorTest {
 
   private void buildCompactor(Properties configProps) throws Exception {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
+    VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
     AzureBlobDataAccessor azureBlobDataAccessor =
         new AzureBlobDataAccessor(mockServiceClient, mockBlobBatchClient, clusterName, azureMetrics);
-    CosmosDataAccessor cosmosDataAccessor = new CosmosDataAccessor(mockumentClient, collectionLink, azureMetrics);
-    VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
+    CosmosDataAccessor cosmosDataAccessor =
+        new CosmosDataAccessor(mockumentClient, collectionLink, vcrMetrics, azureMetrics);
     azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
 
@@ -215,9 +218,9 @@ public class AzureStorageCompactorTest {
     assertEquals(0, azureMetrics.blobDeleteErrorCount.getCount());
   }
 
-  /** Test purgeBlobs error */
+  /** Test purgeBlobs with ABS error */
   @Test
-  public void testPurgeError() throws Exception {
+  public void testPurgeWithStorageError() throws Exception {
     // Unsuccessful case
     BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_ARCHIVED);
     BlobBatch mockBatch = mock(BlobBatch.class);
@@ -225,6 +228,21 @@ public class AzureStorageCompactorTest {
     when(mockResponse.getStatusCode()).thenThrow(ex);
     when(mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
     when(mockBatch.deleteBlob(anyString(), anyString())).thenReturn(mockResponse);
+    try {
+      azureStorageCompactor.purgeBlobs(blobMetadataList);
+      fail("Expected CloudStorageException");
+    } catch (CloudStorageException bex) {
+    }
+    assertEquals(0, azureMetrics.blobDeletedCount.getCount());
+    assertEquals(numBlobsPerQuery, azureMetrics.blobDeleteErrorCount.getCount());
+  }
+
+  /** Test purgeBlobs with Cosmos bulk delete error */
+  @Test
+  public void testPurgeWithCosmosBulkDeleteError() throws Exception {
+    Exception mockException =
+        new RuntimeException(new DocumentClientException(HttpConstants.StatusCodes.TOO_MANY_REQUESTS));
+    doThrow(mockException).when(mockumentClient).executeStoredProcedure(anyString(), any(RequestOptions.class), any());
     try {
       azureStorageCompactor.purgeBlobs(blobMetadataList);
       fail("Expected CloudStorageException");

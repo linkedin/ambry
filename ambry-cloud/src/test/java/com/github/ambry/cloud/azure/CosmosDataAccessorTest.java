@@ -15,6 +15,7 @@ package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -68,7 +69,8 @@ public class CosmosDataAccessorTest {
     blobMetadata = new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
         CloudBlobMetadata.EncryptionOrigin.NONE);
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    cosmosAccessor = new CosmosDataAccessor(mockumentClient, "ambry/metadata", azureMetrics);
+    VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
+    cosmosAccessor = new CosmosDataAccessor(mockumentClient, "ambry/metadata", vcrMetrics, azureMetrics);
   }
 
   /**
