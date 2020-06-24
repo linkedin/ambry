@@ -108,6 +108,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mock;
 import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.MockClusterMap.*;
@@ -1417,6 +1418,9 @@ public class ReplicationTest {
       }
       Set<MessageInfo> remoteMissingStoreKeys = replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
       assertEquals("All DELETE_IN_PROGRESS blobs qualified with retention time should be skipped during replication", 0, remoteMissingStoreKeys.size());
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
+          remoteNode, remoteKeyToLocalKeyMap);
     }
     //case2 DELETE_IN_PROGRESS container with retention time not qualified.
     for (int i = 2; i < 4; i++) {
@@ -1437,6 +1441,9 @@ public class ReplicationTest {
       }
       Set<MessageInfo> remoteMissingStoreKeys = replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
       assertEquals("All DELETE_IN_PROGRESS blobs not qualified with retention time should not be skipped during replication", 2, remoteMissingStoreKeys.size());
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
+          remoteNode, remoteKeyToLocalKeyMap);
     }
     //case3 INACTIVE container
     for (int i = 4; i < 6; i++) {
@@ -1456,6 +1463,9 @@ public class ReplicationTest {
       }
       Set<MessageInfo> remoteMissingStoreKeys = replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
       assertEquals("All INACTIVE blobs should be skipped during replication", 0, remoteMissingStoreKeys.size());
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
+          remoteNode, remoteKeyToLocalKeyMap);
     }
     //case 4 ACTIVE Container
     for (int i = 6; i < 8; i++) {
@@ -1475,6 +1485,9 @@ public class ReplicationTest {
       }
       Set<MessageInfo> remoteMissingStoreKeys = replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
       assertEquals("All non-deprecated blobs should not be skipped during replication", 2, remoteMissingStoreKeys.size());
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
+          remoteNode, remoteKeyToLocalKeyMap);
     }
   }
 
