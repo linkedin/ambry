@@ -87,7 +87,7 @@ class AzureCloudDestination implements CloudDestination {
     this.azureBlobDataAccessor =
         new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
     this.queryBatchSize = azureCloudConfig.cosmosQueryBatchSize;
-    this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, azureMetrics);
+    this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, vcrMetrics, azureMetrics);
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureReplicationFeed =
@@ -114,9 +114,10 @@ class AzureCloudDestination implements CloudDestination {
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
-    this.cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
-    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
+    this.cosmosDataAccessor =
+        new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, vcrMetrics, azureMetrics);
+    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureReplicationFeed =

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.storage.blob.BlobContainerClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.ambry.cloud.CloudBlobMetadata;
@@ -20,15 +21,19 @@ import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.utils.Pair;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
@@ -51,6 +56,7 @@ public class AzureStorageCompactor {
   private final int purgeLimit;
   private final int queryBucketDays;
   private final int lookbackDays;
+  private final int numThreads;
   private final long retentionPeriodMs;
   private final VcrMetrics vcrMetrics;
   private final AzureMetrics azureMetrics;
@@ -86,6 +92,7 @@ public class AzureStorageCompactor {
     this.purgeLimit = cloudConfig.cloudCompactionPurgeLimit;
     this.queryBucketDays = cloudConfig.cloudCompactionQueryBucketDays;
     this.lookbackDays = cloudConfig.cloudCompactionLookbackDays;
+    this.numThreads = cloudConfig.cloudCompactionNumThreads;
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
   }
 
@@ -275,10 +282,10 @@ public class AzureStorageCompactor {
       int deletedCount = deletedBlobs.size();
       azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size() - deletedCount);
       if (deletedCount > 0) {
-        azureMetrics.blobDeletedCount.inc(deletedCount);
         // Record as time per single blob deletion
         azureMetrics.blobDeletionTime.update((t1 - t0) / deletedCount, TimeUnit.MILLISECONDS);
       } else {
+        // Note: should not get here since purgeBlobs throws exception if any blob exists and could not be deleted.
         return 0;
       }
 
@@ -287,6 +294,7 @@ public class AzureStorageCompactor {
       long t2 = System.currentTimeMillis();
       // Record as time per single record deletion
       azureMetrics.documentDeleteTime.update((t2 - t1) / deletedCount, TimeUnit.MILLISECONDS);
+      azureMetrics.blobDeletedCount.inc(deletedCount);
       return deletedCount;
     } catch (Exception ex) {
       azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size());
@@ -302,13 +310,11 @@ public class AzureStorageCompactor {
    */
   Map<String, Long> getCompactionProgress(String partitionPath) throws CloudStorageException {
     // TODO: change return type to POJO with getters and serde methods
-    String payload = requestAgent.doWithRetries(
-        () -> {
-          ByteArrayOutputStream baos = new ByteArrayOutputStream(CHECKPOINT_BUFFER_SIZE);
-          boolean hasCheckpoint = azureBlobDataAccessor.downloadFile(CHECKPOINT_CONTAINER, partitionPath, baos, false);
-          return hasCheckpoint ? baos.toString() : null;
-        },
-        "Download compaction checkpoint", partitionPath);
+    String payload = requestAgent.doWithRetries(() -> {
+      ByteArrayOutputStream baos = new ByteArrayOutputStream(CHECKPOINT_BUFFER_SIZE);
+      boolean hasCheckpoint = azureBlobDataAccessor.downloadFile(CHECKPOINT_CONTAINER, partitionPath, baos, false);
+      return hasCheckpoint ? baos.toString() : null;
+    }, "Download compaction checkpoint", partitionPath);
     if (payload == null) {
       return new HashMap(emptyCheckpoints);
     }
@@ -361,6 +367,35 @@ public class AzureStorageCompactor {
     }
   }
 
-  // TODO: method that returns checkpoints for all partitions by iterating through the checkpoint container
-  // Utility can sort the results to show which partitions are furthest behind.
+  /**
+   * Retrieve the compaction progress for all partitions, sorted by furthest behind.
+   * @return a list of pairs each containing a partition and its latest progress time.
+   * @throws Exception
+   */
+  List<Pair<String, Long>> getAllCompactionProgress() throws Exception {
+    // Read all checkpoint files and dump results into sortable table.
+    BlobContainerClient containerClient =
+        azureBlobDataAccessor.getStorageClient().getBlobContainerClient(CHECKPOINT_CONTAINER);
+    List<String> checkpoints = new ArrayList<>();
+    containerClient.listBlobs().forEach(item -> {
+      checkpoints.add(item.getName());
+    });
+    logger.info("Retrieving checkpoints for {} partitions", checkpoints.size());
+    List<Pair<String, Long>> partitionProgressList = Collections.synchronizedList(new ArrayList<>());
+    ForkJoinPool forkJoinPool = new ForkJoinPool(numThreads);
+    forkJoinPool.submit(() -> {
+      checkpoints.parallelStream().forEach(partition -> {
+        try {
+          Map<String, Long> map = getCompactionProgress(partition);
+          long progressTime = Collections.min(map.values());
+          partitionProgressList.add(new Pair(partition, progressTime));
+        } catch (CloudStorageException cse) {
+          logger.error("Failed for partition {}", partition, cse);
+        }
+      });
+    }).get();
+
+    Collections.sort(partitionProgressList, Comparator.comparingLong(Pair::getSecond));
+    return partitionProgressList;
+  }
 }

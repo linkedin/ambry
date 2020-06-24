@@ -15,8 +15,12 @@ package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudRequestAgent;
+import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.AccessCondition;
 import com.microsoft.azure.cosmosdb.ChangeFeedOptions;
@@ -45,6 +49,7 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -67,6 +72,7 @@ public class CosmosDataAccessor {
   static final String PROPERTY_DELETED = "deleted";
 
   private final AsyncDocumentClient asyncDocumentClient;
+  private final CloudRequestAgent requestAgent;
   private final String cosmosCollectionLink;
   private final AzureMetrics azureMetrics;
   private Callable<?> updateCallback = null;
@@ -76,7 +82,8 @@ public class CosmosDataAccessor {
   private boolean bulkDeleteEnabled = false;
 
   /** Production constructor */
-  CosmosDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics) {
+  CosmosDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, VcrMetrics vcrMetrics,
+      AzureMetrics azureMetrics) {
     // Set up CosmosDB connection, including retry options and any proxy setting
     ConnectionPolicy connectionPolicy = new ConnectionPolicy();
     // TODO: would like to use different timeouts for queries and single-doc reads/writes
@@ -98,6 +105,7 @@ public class CosmosDataAccessor {
         .withConnectionPolicy(connectionPolicy)
         .withConsistencyLevel(ConsistencyLevel.Session)
         .build();
+    requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
 
     this.cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
     this.continuationTokenLimitKb = azureCloudConfig.cosmosContinuationTokenLimitKb;
@@ -107,7 +115,8 @@ public class CosmosDataAccessor {
   }
 
   /** Test constructor */
-  CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, AzureMetrics azureMetrics) {
+  CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, VcrMetrics vcrMetrics,
+      AzureMetrics azureMetrics) {
     this.asyncDocumentClient = asyncDocumentClient;
     this.cosmosCollectionLink = cosmosCollectionLink;
     this.continuationTokenLimitKb = AzureCloudConfig.DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT;
@@ -115,6 +124,8 @@ public class CosmosDataAccessor {
     this.purgeBatchSize = AzureCloudConfig.DEFAULT_PURGE_BATCH_SIZE;
     this.azureMetrics = azureMetrics;
     this.bulkDeleteEnabled = true;
+    CloudConfig testCloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
+    requestAgent = new CloudRequestAgent(testCloudConfig, vcrMetrics);
   }
 
   /** Visible for testing */
@@ -133,20 +144,25 @@ public class CosmosDataAccessor {
     }
     logger.info("CosmosDB connection test succeeded.");
 
-    // Check for existence of BulkDelete stored procedure.
-    // Source: https://github.com/Azure/azure-cosmosdb-js-server/blob/master/samples/stored-procedures/bulkDelete.js
-    String sprocLink = cosmosCollectionLink + BULK_DELETE_SPROC;
-    try {
-      ResourceResponse<StoredProcedure> spResponse =
-          asyncDocumentClient.readStoredProcedure(sprocLink, null).toBlocking().single();
-      if (spResponse.getResource() == null) {
-        logger.error("Did not find stored procedure {}, falling back to individual record deletions", sprocLink);
-      } else {
-        logger.info("Found stored procedure {}, will use it.", sprocLink);
-        bulkDeleteEnabled = true;
+    if (purgeBatchSize > 1) {
+      // Check for existence of BulkDelete stored procedure.
+      // Source: https://github.com/Azure/azure-cosmosdb-js-server/blob/master/samples/stored-procedures/bulkDelete.js
+      String sprocLink = cosmosCollectionLink + BULK_DELETE_SPROC;
+      try {
+        ResourceResponse<StoredProcedure> spResponse =
+            asyncDocumentClient.readStoredProcedure(sprocLink, null).toBlocking().single();
+        if (spResponse.getResource() == null) {
+          logger.error("Did not find stored procedure {}, falling back to individual record deletions", sprocLink);
+        } else {
+          logger.info("Found stored procedure {}, will use it with batch size {}.", sprocLink, purgeBatchSize);
+          bulkDeleteEnabled = true;
+        }
+      } catch (Exception ex) {
+        logger.error("Did not find stored procedure {}, falling back to individual record deletions", sprocLink, ex);
       }
-    } catch (Exception ex) {
-      logger.error("Did not find stored procedure {}, falling back to individual record deletions", sprocLink, ex);
+    } else {
+      logger.info("Cosmos purge batch size = 1 ==> disabling bulk deletes.");
+      bulkDeleteEnabled = false;
     }
   }
 
@@ -194,9 +210,27 @@ public class CosmosDataAccessor {
    * @throws DocumentClientException if the operation failed.
    */
   void deleteMetadata(List<CloudBlobMetadata> blobMetadataList) throws DocumentClientException {
+    String partitionPath = blobMetadataList.get(0).getPartitionId();
     if (bulkDeleteEnabled) {
       for (List<CloudBlobMetadata> batchOfBlobs : Utils.partitionList(blobMetadataList, purgeBatchSize)) {
-        bulkDeleteMetadata(batchOfBlobs);
+        // Retry each batch since there may be many of them.
+        try {
+          requestAgent.doWithRetries(() -> {
+            try {
+              return bulkDeleteMetadata(batchOfBlobs);
+            } catch (DocumentClientException dex) {
+              throw new CloudStorageException("BulkDelete failed", dex, dex.getStatusCode(), true,
+                  dex.getRetryAfterInMilliseconds());
+            }
+          }, "BulkDelete", partitionPath);
+        } catch (CloudStorageException cse) {
+          if (cse.getCause() != null && cse.getCause() instanceof DocumentClientException) {
+            throw (DocumentClientException) cse.getCause();
+          } else {
+            throw new IllegalStateException("Unexpected error in BulkDelete partition " + partitionPath,
+                cse.getCause());
+          }
+        }
       }
     } else {
       for (CloudBlobMetadata metadata : blobMetadataList) {
@@ -208,9 +242,10 @@ public class CosmosDataAccessor {
   /**
    * Delete the blob metadata documents from CosmosDB using the BulkDelete stored procedure.
    * @param blobMetadataList the list of blob metadata documents to delete.
+   * @return the number of documents deleted.
    * @throws DocumentClientException if the operation failed.
    */
-  private void bulkDeleteMetadata(List<CloudBlobMetadata> blobMetadataList) throws DocumentClientException {
+  private int bulkDeleteMetadata(List<CloudBlobMetadata> blobMetadataList) throws DocumentClientException {
     String partitionPath = blobMetadataList.get(0).getPartitionId();
     RequestOptions options = getRequestOptions(partitionPath);
 
@@ -235,6 +270,7 @@ public class CosmosDataAccessor {
         logger.info("Bulk delete partition {} request charge {} for {} records", partitionPath, requestCharge,
             deleteCount);
       }
+      return deleteCount;
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
         throw (DocumentClientException) rex.getCause();
