@@ -1383,7 +1383,7 @@ public class ReplicationTest {
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
-    Predicate skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
+    Predicate<MessageInfo> skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
@@ -1397,7 +1397,6 @@ public class ReplicationTest {
     DataNodeId remoteNode = remoteReplicaInfos.get(0).getReplicaId().getDataNodeId();
     ReplicaMetadataResponse response = replicaThread.getReplicaMetadataResponse(remoteReplicaInfos,
         new MockConnectionPool.MockConnection(remoteHost, batchSize), remoteNode);
-    Set<Pair<Short, Short>> checkSet = new HashSet<>();
     //case1 DELETE_IN_PROGRESS container with retention time qualified.
     for (int i = 0; i < 2; i++) {
       RemoteReplicaInfo remoteReplicaInfo = remoteReplicaInfos.get(i);
@@ -1406,7 +1405,6 @@ public class ReplicationTest {
       for (int j = 0; j < replicaMetadataResponseInfo.getMessageInfoList().size(); j++) {
         short accountId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getAccountId();
         short containerId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getContainerId();
-        checkSet.add(new Pair<>(accountId, containerId));
         Container container = Mockito.mock(Container.class);
         Account account = Mockito.mock(Account.class);
         Mockito.when(account.getContainerById(containerId)).thenReturn(container);
@@ -1432,7 +1430,6 @@ public class ReplicationTest {
       for (int j = 0; j < replicaMetadataResponseInfo.getMessageInfoList().size(); j++) {
         short accountId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getAccountId();
         short containerId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getContainerId();
-        checkSet.add(new Pair<>(accountId, containerId));
         Container container = Mockito.mock(Container.class);
         Account account = Mockito.mock(Account.class);
         Mockito.when(account.getContainerById(containerId)).thenReturn(container);
@@ -1457,7 +1454,6 @@ public class ReplicationTest {
       for (int j = 0; j < replicaMetadataResponseInfo.getMessageInfoList().size(); j++) {
         short accountId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getAccountId();
         short containerId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getContainerId();
-        checkSet.add(new Pair<>(accountId, containerId));
         Container container = Mockito.mock(Container.class);
         Account account = Mockito.mock(Account.class);
         Mockito.when(account.getContainerById(containerId)).thenReturn(container);
@@ -1479,7 +1475,6 @@ public class ReplicationTest {
       for (int j = 0; j < replicaMetadataResponseInfo.getMessageInfoList().size(); j++) {
         short accountId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getAccountId();
         short containerId = replicaMetadataResponseInfo.getMessageInfoList().get(j).getContainerId();
-        checkSet.add(new Pair<>(accountId, containerId));
         Container container = Mockito.mock(Container.class);
         Account account = Mockito.mock(Account.class);
         Mockito.when(account.getContainerById(containerId)).thenReturn(container);
@@ -1781,7 +1776,10 @@ public class ReplicationTest {
 
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
         idsToExpectByPartition.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()),
-        responses.stream().map(k -> k.getMissingStoreKeys()).flatMap(Collection::stream).collect(Collectors.toSet()));
+        responses.stream()
+            .map(ReplicaThread.ExchangeMetadataResponse::getMissingStoreKeys)
+            .flatMap(Collection::stream)
+            .collect(Collectors.toSet()));
 
     // Now delete a message in the remote before doing the Get requests (for every partition). Remove these keys from
     // expected key set. Even though they are requested, they should not go into the local store. However, this cycle

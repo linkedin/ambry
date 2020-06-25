@@ -43,6 +43,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.store.StorageManager.*;
+
 
 /**
  * Manages all the stores on a disk.
@@ -346,12 +348,7 @@ class DiskManager {
         partitionToReplicaMap.put(replica.getPartitionId(), replica);
         // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
         // BOOTSTRAP -> STANDBY transition)
-        File bootstrapFile = new File(replica.getReplicaPath(), BlobStore.BOOTSTRAP_FILE_NAME);
-        if (!bootstrapFile.exists()) {
-          // if not present, create one. (it's possible the bootstrap file exists because node may crash immediately
-          // after the file was created last time)
-          bootstrapFile.createNewFile();
-        }
+        createBootstrapFileIfAbsent(replica);
         logger.info("New store is successfully added into DiskManager.");
         succeed = true;
       }
