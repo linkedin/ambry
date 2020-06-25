@@ -29,11 +29,12 @@ public class ReplicationSkipPredicate implements Predicate<MessageInfo> {
   private final AccountService accountService;
   private final ReplicationConfig replicationConfig;
   private static final Logger logger = LoggerFactory.getLogger(ReplicationSkipPredicate.class);
+
   /**
    * Construct a ReplicationSkipPredicate object
    * @param accountService the {@link AccountService} associated with this predicate.
    */
-  public ReplicationSkipPredicate(AccountService accountService, ReplicationConfig replicationConfig){
+  public ReplicationSkipPredicate(AccountService accountService, ReplicationConfig replicationConfig) {
     this.accountService = accountService;
     this.replicationConfig = replicationConfig;
   }
@@ -50,12 +51,12 @@ public class ReplicationSkipPredicate implements Predicate<MessageInfo> {
     if (accountService != null) {
       Account account = accountService.getAccountById(messageInfo.getAccountId());
       if (account == null) {
-        logger.info("Can't get account through accountService : {}", accountService);
+        logger.trace("Can't get account through accountService : {}", accountService);
         return false;
       }
       Container container = account.getContainerById(messageInfo.getContainerId());
       if (container == null) {
-        logger.info("Can't get container through account : {}", account);
+        logger.trace("Can't get container through account : {}", account);
         return false;
       }
       Container.ContainerStatus status = container.getStatus();
@@ -66,7 +67,7 @@ public class ReplicationSkipPredicate implements Predicate<MessageInfo> {
         return false;
       }
       if (status == Container.ContainerStatus.DELETE_IN_PROGRESS || status == Container.ContainerStatus.INACTIVE) {
-        logger.info("Container {} will be skipped during replication", container);
+        logger.trace("Container {} will be skipped during replication", container);
         return true;
       } else {
         logger.debug("Container {} is Active", container);

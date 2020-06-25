@@ -233,6 +233,7 @@ final class ServerTestUtil {
       putResponseStream = channel.receive().getInputStream();
       PutResponse response4 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       assertEquals(ServerErrorCode.No_Error, response4.getError());
+      cluster.time.sleep(10000);
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -404,7 +405,7 @@ final class ServerTestUtil {
       }
 
       checkTtlUpdateStatus(channel, clusterMap, blobIdFactory, blobId2, data, false, ttlUpdateBlobExpiryTimeMs);
-      updateBlobTtl(channel, blobId2);
+      updateBlobTtl(channel, blobId2, cluster.time.milliseconds());
       checkTtlUpdateStatus(channel, clusterMap, blobIdFactory, blobId2, data, true, Utils.Infinite_Time);
 
       // fetch blob that does not exist
@@ -669,7 +670,7 @@ final class ServerTestUtil {
     for (BlobId blobId : blobIds) {
       notificationSystem.awaitBlobCreations(blobId.getID());
       if (doTtlUpdate) {
-        updateBlobTtl(channel, blobId);
+        updateBlobTtl(channel, blobId, cluster.time.milliseconds());
       }
     }
     HelixControllerManager helixControllerManager =
@@ -917,7 +918,7 @@ final class ServerTestUtil {
     channelToBlobIds.entrySet().stream().map(entry -> CompletableFuture.supplyAsync(() -> {
       try {
         for (BlobId blobId : entry.getValue()) {
-          updateBlobTtl(entry.getKey(), blobId);
+          updateBlobTtl(entry.getKey(), blobId, cluster.time.milliseconds());
         }
         return null;
       } catch (Throwable e) {
@@ -1465,7 +1466,7 @@ final class ServerTestUtil {
     for (int i = 0; i < numberOfVerifierThreads; i++) {
       Thread thread = new Thread(
           new Verifier(payloadQueue, verifierLatch, totalRequests, verifiedRequests, cluster.getClusterMap(),
-              cancelTest, portType, connectionPool, notificationSystem));
+              cancelTest, portType, connectionPool, notificationSystem, cluster.time));
       thread.start();
     }
     assertTrue("Did not verify in 2 minutes", verifierLatch.await(2, TimeUnit.MINUTES));
@@ -1705,7 +1706,7 @@ final class ServerTestUtil {
 
       checkTtlUpdateStatus(channel3, clusterMap, blobIdFactory, blobIdList.get(5), dataList.get(5), false,
           getExpiryTimeMs(propertyList.get(5)));
-      updateBlobTtl(channel3, blobIdList.get(5));
+      updateBlobTtl(channel3, blobIdList.get(5), cluster.time.milliseconds());
       expectedTokenSize += getUpdateRecordSize(blobIdList.get(5), SubRecord.Type.TTL_UPDATE);
       checkTtlUpdateStatus(channel3, clusterMap, blobIdFactory, blobIdList.get(5), dataList.get(5), true,
           Utils.Infinite_Time);
@@ -1940,7 +1941,7 @@ final class ServerTestUtil {
 
       checkTtlUpdateStatus(channel2, clusterMap, blobIdFactory, blobIdList.get(10), dataList.get(10), false,
           getExpiryTimeMs(propertyList.get(10)));
-      updateBlobTtl(channel2, blobIdList.get(10));
+      updateBlobTtl(channel2, blobIdList.get(10), cluster.time.milliseconds());
       expectedTokenSize += getUpdateRecordSize(blobIdList.get(10), SubRecord.Type.TTL_UPDATE);
       checkTtlUpdateStatus(channel2, clusterMap, blobIdFactory, blobIdList.get(10), dataList.get(10), true,
           Utils.Infinite_Time);
@@ -2320,6 +2321,127 @@ final class ServerTestUtil {
     }
   }
 
+  static void undeleteRecoveryTest(Port targetPort, MockCluster cluster, SSLConfig clientSSLConfig,
+      SSLSocketFactory clientSSLSocketFactory) {
+    try {
+      MockClusterMap clusterMap = cluster.getClusterMap();
+      BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
+      byte[] usermetadata = new byte[1000];
+      byte[] data = new byte[31870];
+      byte[] encryptionKey = new byte[100];
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+
+      BlobProperties properties = new BlobProperties(31870, "serviceid1", accountId, containerId, false);
+      TestUtils.RANDOM.nextBytes(usermetadata);
+      TestUtils.RANDOM.nextBytes(data);
+      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+      short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+
+      BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
+          BlobId.BlobDataType.DATACHUNK);
+
+      // put blob 1
+      PutRequest putRequest =
+          new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+              properties.getBlobSize(), BlobType.DataBlob, null);
+      ConnectedChannel channel =
+          getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory, clientSSLConfig);
+      channel.connect();
+      channel.send(putRequest);
+      PutResponse response = PutResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
+      assertEquals(ServerErrorCode.No_Error, response.getError());
+
+      for (int i = 0; i < 2; i++) {
+        // delete blob 1
+        deleteBlob(channel, blobId1, cluster.time.milliseconds());
+        // undelete blob 1
+        undeleteBlob(channel, blobId1, cluster.time.milliseconds(), (short) (i + 1));
+      }
+
+      // put blob 2 that is expired
+      long ttl = 24 * 60 * 60;
+      BlobProperties propertiesExpired =
+          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, ttl, accountId, containerId, false, null);
+      BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          propertiesExpired.getAccountId(), propertiesExpired.getContainerId(), partitionIds.get(0), false,
+          BlobId.BlobDataType.DATACHUNK);
+
+      PutRequest putRequest2 = new PutRequest(1, "client1", blobId2, propertiesExpired, ByteBuffer.wrap(usermetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob, null);
+      channel.send(putRequest2);
+      PutResponse response2 = PutResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
+      assertEquals(ServerErrorCode.No_Error, response2.getError());
+
+      for (int i = 0; i < 2; i++) {
+        // delete blob 2
+        deleteBlob(channel, blobId2, cluster.time.milliseconds());
+        // undelete blob 2
+        undeleteBlob(channel, blobId2, cluster.time.milliseconds(), (short) (i + 1));
+      }
+
+      // ttl update blob 2
+      updateBlobTtl(channel, blobId2, cluster.time.milliseconds());
+      cluster.time.sleep(ttl + 10000);
+
+      // Now stops the server and remove all the index files for this partition and test its recovery.
+      channel.disconnect();
+      AmbryServer server = cluster.getServers().get(0);
+      server.shutdown();
+      server.awaitShutdown();
+
+      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", channel.getRemotePort());
+      for (ReplicaId replica : partitionIds.get(0).getReplicaIds()) {
+        if (replica.getDataNodeId().equals(dataNode)) {
+          for (File file : new File(replica.getReplicaPath()).listFiles(
+              (file, filename) -> filename.endsWith("index"))) {
+            file.delete();
+          }
+        }
+      }
+      cluster.reinitServer(0);
+      channel = getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory, clientSSLConfig);
+
+      // Now verify that we can fetch blob1 and blob2.
+      for (BlobId blobId : new BlobId[]{blobId1, blobId2}) {
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(10);
+
+        while (true) {
+          // get blob properties
+          ArrayList<BlobId> ids = new ArrayList<BlobId>();
+          ids.add(blobId);
+          ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+          PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionIds.get(0), ids);
+          partitionRequestInfoList.add(partitionRequestInfo);
+          GetRequest getRequest =
+              new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
+                  GetOption.None);
+          channel.send(getRequest);
+          GetResponse getResponse =
+              GetResponse.readFrom(new DataInputStream(channel.receive().getInputStream()), clusterMap);
+          assertEquals(ServerErrorCode.No_Error, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+          if (getResponse.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.No_Error) {
+            BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
+            assertEquals(31870, propertyOutput.getBlobSize());
+            assertEquals("serviceid1", propertyOutput.getServiceId());
+            assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
+            assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
+          } else {
+            Thread.sleep(1000);
+            if (System.currentTimeMillis() > deadline) {
+              throw new TimeoutException("Fail to get blob " + blobId + " at  " + channel.getRemoteHost());
+            }
+          }
+        }
+      }
+      channel.disconnect();
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail();
+    }
+  }
+
   private static void controlReplicationForPartition(List<ConnectedChannel> channels, PartitionId partitionId,
       boolean enable) throws Exception {
     for (ConnectedChannel connectedChannel : channels) {
@@ -2554,16 +2676,45 @@ final class ServerTestUtil {
    * Updates the TTL of the given {@code blobId}
    * @param channel the {@link ConnectedChannel} to make the {@link GetRequest} on.
    * @param blobId the ID of the blob to TTL update
+   * @param ts the operation time
    * @throws IOException
    */
-  static void updateBlobTtl(ConnectedChannel channel, BlobId blobId) throws IOException {
-    TtlUpdateRequest ttlUpdateRequest =
-        new TtlUpdateRequest(1, "updateBlobTtl", blobId, Utils.Infinite_Time, SystemTime.getInstance().milliseconds());
+  static void updateBlobTtl(ConnectedChannel channel, BlobId blobId, long ts) throws IOException {
+    TtlUpdateRequest ttlUpdateRequest = new TtlUpdateRequest(1, "updateBlobTtl", blobId, Utils.Infinite_Time, ts);
     channel.send(ttlUpdateRequest);
     InputStream stream = channel.receive().getInputStream();
     TtlUpdateResponse ttlUpdateResponse = TtlUpdateResponse.readFrom(new DataInputStream(stream));
     assertEquals("Unexpected ServerErrorCode for TtlUpdateRequest", ServerErrorCode.No_Error,
         ttlUpdateResponse.getError());
+  }
+
+  static void deleteBlob(ConnectedChannel channel, BlobId blobId, long ts) throws Exception {
+    deleteBlob(channel, blobId, ts, ServerErrorCode.No_Error);
+  }
+
+  static void deleteBlob(ConnectedChannel channel, BlobId blobId, long ts, ServerErrorCode expectedErrorCode)
+      throws Exception {
+    DeleteRequest deleteRequest = new DeleteRequest(1, "deleteClient", blobId, ts);
+    channel.send(deleteRequest);
+    DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
+    assertEquals("Unexpected ServerErrorCode for DeleteRequest", expectedErrorCode, deleteResponse.getError());
+  }
+
+  static void undeleteBlob(ConnectedChannel channel, BlobId blobId, long ts, short lifeVersion) throws Exception {
+    undeleteBlob(channel, blobId, ts, ServerErrorCode.No_Error, lifeVersion);
+  }
+
+  static void undeleteBlob(ConnectedChannel channel, BlobId blobId, long ts, ServerErrorCode expectedErrorCode,
+      short lifeVersion) throws Exception {
+    UndeleteRequest undeleteRequest = new UndeleteRequest(1, "undeleteClient", blobId, ts);
+    channel.send(undeleteRequest);
+    UndeleteResponse undeleteResponse =
+        UndeleteResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
+    assertEquals("Unexpected ServerErrorCode for UndeleteRequest", expectedErrorCode, undeleteResponse.getError());
+    if (undeleteResponse.getError() == ServerErrorCode.No_Error
+        || undeleteResponse.getError() == ServerErrorCode.Blob_Already_Undeleted) {
+      assertEquals(lifeVersion, undeleteResponse.getLifeVersion());
+    }
   }
 
   /**

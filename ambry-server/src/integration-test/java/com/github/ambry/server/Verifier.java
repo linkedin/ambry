@@ -32,6 +32,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
@@ -59,10 +60,11 @@ class Verifier implements Runnable {
   private PortType portType;
   private ConnectionPool connectionPool;
   private MockNotificationSystem notificationSystem;
+  private Time time;
 
   Verifier(BlockingQueue<Payload> payloadQueue, CountDownLatch completedLatch, AtomicInteger totalRequests,
       AtomicInteger requestsVerified, MockClusterMap clusterMap, AtomicBoolean cancelTest, PortType portType,
-      ConnectionPool connectionPool, MockNotificationSystem notificationSystem) {
+      ConnectionPool connectionPool, MockNotificationSystem notificationSystem, Time time) {
     this.payloadQueue = payloadQueue;
     this.completedLatch = completedLatch;
     this.totalRequests = totalRequests;
@@ -72,6 +74,7 @@ class Verifier implements Runnable {
     this.portType = portType;
     this.connectionPool = connectionPool;
     this.notificationSystem = notificationSystem;
+    this.time = time;
   }
 
   @Override
@@ -250,7 +253,7 @@ class Verifier implements Runnable {
 
               if (payload.blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
                 // ttl update, check and wait for replication
-                ServerTestUtil.updateBlobTtl(channel1, new BlobId(payload.blobId, clusterMap));
+                ServerTestUtil.updateBlobTtl(channel1, new BlobId(payload.blobId, clusterMap), time.milliseconds());
                 ServerTestUtil.checkTtlUpdateStatus(channel1, clusterMap, new BlobIdFactory(clusterMap), blobId, payload.blob, true, Utils.Infinite_Time);
                 notificationSystem.awaitBlobUpdates(payload.blobId, UpdateType.TTL_UPDATE);
                 BlobProperties old = payload.blobProperties;
