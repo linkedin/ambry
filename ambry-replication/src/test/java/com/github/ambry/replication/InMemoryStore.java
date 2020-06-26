@@ -176,12 +176,12 @@ class InMemoryStore implements Store {
     log = new DummyLog(buffers);
     this.listener = listener;
     this.id = id;
-    started = true;
   }
 
   @Override
   public void start() {
     started = true;
+    currentState = ReplicaState.STANDBY;
   }
 
   @Override
@@ -233,7 +233,7 @@ class InMemoryStore implements Store {
   @Override
   public void delete(List<MessageInfo> infos) throws StoreException {
     List<MessageInfo> infosToDelete = new ArrayList<>(infos.size());
-    List<InputStream> inputStreams = new ArrayList();
+    List<InputStream> inputStreams = new ArrayList<>();
     try {
       for (MessageInfo info : infos) {
         short lifeVersion = info.getLifeVersion();
@@ -469,6 +469,7 @@ class InMemoryStore implements Store {
   @Override
   public void shutdown() {
     started = false;
+    currentState = ReplicaState.OFFLINE;
   }
 
   @Override

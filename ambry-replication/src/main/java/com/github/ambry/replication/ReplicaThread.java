@@ -112,7 +112,7 @@ public class ReplicaThread implements Runnable {
   private final Condition pauseCondition = lock.newCondition();
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final int maxReplicaCountPerRequest;
-  private final Predicate skipPredicate;
+  private final Predicate<MessageInfo> skipPredicate;
   private volatile boolean allDisabled = false;
   private final PartitionLeaderInfo partitionLeaderInfo;
 
@@ -121,7 +121,7 @@ public class ReplicaThread implements Runnable {
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager, Predicate skipPredicate) {
+      ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate) {
     this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, null, skipPredicate);
@@ -132,7 +132,8 @@ public class ReplicaThread implements Runnable {
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager, PartitionLeaderInfo partitionLeaderInfo, Predicate skipPredicate) {
+      ReplicaSyncUpManager replicaSyncUpManager, PartitionLeaderInfo partitionLeaderInfo,
+      Predicate<MessageInfo> skipPredicate) {
     this.threadName = threadName;
     this.running = true;
     this.findTokenHelper = findTokenHelper;
@@ -340,7 +341,7 @@ public class ReplicaThread implements Runnable {
         ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
         boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
         if (replicationDisabledPartitions.contains(replicaId.getPartitionId()) || replicaId.isDown() || inBackoff
-            || !remoteReplicaInfo.getLocalStore().isStarted()) {
+            || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE) {
           continue;
         }
         activeReplicasPerNode.add(remoteReplicaInfo);
@@ -591,7 +592,7 @@ public class ReplicaThread implements Runnable {
    * @throws ReplicationException
    * @throws IOException
    */
-   ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
+  ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       ConnectedChannel connectedChannel, DataNodeId remoteNode) throws ReplicationException, IOException {
     long replicaMetadataRequestStartTime = SystemTime.getInstance().milliseconds();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
@@ -649,7 +650,7 @@ public class ReplicaThread implements Runnable {
    * @return List of store messages that are missing from the local store
    * @throws StoreException if store error (usually IOError) occurs when getting missing keys.
    */
-   Set<MessageInfo> getMissingStoreMessages(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
+  Set<MessageInfo> getMissingStoreMessages(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
       DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
@@ -663,7 +664,8 @@ public class ReplicaThread implements Runnable {
       if (skipPredicate == null) {
         logger.debug("SkipPredicate is null");
       }
-      if (convertedKey != null && (!replicationConfig.replicationContainerDeletionEnabled || skipPredicate == null || !skipPredicate.test(messageInfo))) {
+      if (convertedKey != null && (!replicationConfig.replicationContainerDeletionEnabled || skipPredicate == null
+          || !skipPredicate.test(messageInfo))) {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
     }

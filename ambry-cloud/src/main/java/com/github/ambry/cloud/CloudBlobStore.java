@@ -88,6 +88,7 @@ class CloudBlobStore implements Store {
   // Distinguishes between VCR and live serving mode
   private final boolean isVcr;
   private boolean started;
+  private volatile ReplicaState currentState = ReplicaState.OFFLINE;
 
   /**
    * Constructor for CloudBlobStore
@@ -133,6 +134,7 @@ class CloudBlobStore implements Store {
 
   @Override
   public void start() {
+    currentState = ReplicaState.STANDBY;
     started = true;
     logger.debug("Started store: {}", this.toString());
   }
@@ -840,7 +842,7 @@ class CloudBlobStore implements Store {
 
   @Override
   public ReplicaState getCurrentState() {
-    throw new UnsupportedOperationException("Method not supported");
+    return currentState;
   }
 
   @Override
@@ -861,6 +863,7 @@ class CloudBlobStore implements Store {
   @Override
   public void shutdown() {
     recentBlobCache.clear();
+    currentState = ReplicaState.OFFLINE;
     started = false;
     logger.info("Stopped store: {}", this.toString());
   }

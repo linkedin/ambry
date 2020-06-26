@@ -44,6 +44,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -68,6 +69,7 @@ import org.mockito.Mockito;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
+import static com.github.ambry.store.BlobStoreTest.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -317,9 +319,29 @@ public class StorageManagerTest {
     // 5. verify that new added store has bootstrap file
     assertTrue("There should be a bootstrap file indicating store is in BOOTSTRAP state",
         newAddedStore.isBootstrapInProgress());
+    assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP,
+        newAddedStore.getCurrentState());
 
-    // 6. test that state transition should succeed for existing replicas
+    // 6. test that state transition should succeed for existing non-empty replicas (we write some data into store beforehand)
+    MockId id = new MockId(TestUtils.getRandomString(MOCK_ID_STRING_LENGTH), Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM));
+    MessageInfo info =
+        new MessageInfo(id, PUT_RECORD_SIZE, id.getAccountId(), id.getContainerId(), Utils.Infinite_Time);
+    MessageWriteSet writeSet = new MockMessageWriteSet(Collections.singletonList(info),
+        Collections.singletonList(ByteBuffer.allocate(PUT_RECORD_SIZE)));
+    Store storeToWrite = storageManager.getStore(localReplicas.get(1).getPartitionId());
+    storeToWrite.put(writeSet);
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(localReplicas.get(1).getPartitionId().toPathString());
+    assertFalse("There should not be any bootstrap file for existing non-empty store",
+        storeToWrite.isBootstrapInProgress());
+    assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP,
+        storeToWrite.getCurrentState());
+
+    // 7. test that for new created (empty) store, state transition puts it into BOOTSTRAP state
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(localReplicas.get(0).getPartitionId().toPathString());
+    assertTrue("There should be a bootstrap file because store is empty and probably recreated",
+        localStore.isBootstrapInProgress());
+    assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP, localStore.getCurrentState());
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 

@@ -17,9 +17,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.AmbryReplica;
 import com.github.ambry.clustermap.HelixFactory;
+import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
@@ -74,6 +74,7 @@ import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.clustermap.ReplicaState.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
@@ -85,6 +86,10 @@ import static org.mockito.Mockito.*;
  */
 @RunWith(Parameterized.class)
 public class BlobStoreTest {
+  // deliberately do not divide the capacities perfectly.
+  static final int PUT_RECORD_SIZE = 53;
+  static final int MOCK_ID_STRING_LENGTH = 10;
+
   private static final StoreKeyFactory STORE_KEY_FACTORY;
 
   static {
@@ -95,15 +100,12 @@ public class BlobStoreTest {
     }
   }
 
-  private static final int MOCK_ID_STRING_LENGTH = 10;
   private static final MockId randomMockId =
       new MockId(TestUtils.getRandomString(MOCK_ID_STRING_LENGTH), (short) 0, (short) 0);
   // setupTestState() is coupled to these numbers. Changing them *will* cause setting test state or tests to fail.
   private static final long LOG_CAPACITY = 90000;
   private static final long SEGMENT_CAPACITY = 9000;
   private static final int MAX_IN_MEM_ELEMENTS = 5;
-  // deliberately do not divide the capacities perfectly.
-  private static final int PUT_RECORD_SIZE = 53;
   private static int DELETE_RECORD_SIZE;
   private static int TTL_UPDATE_RECORD_SIZE;
   private static int UNDELETE_RECORD_SIZE;
@@ -381,7 +383,7 @@ public class BlobStoreTest {
 
     //Verify that putting in data that doesn't go over the threshold doesn't trigger the delegate
     put(1, 50, Utils.Infinite_Time);
-    verifyNoMoreInteractions(replicaStatusDelegate);
+    verify(replicaStatusDelegate, times(0)).seal(replicaId);
 
     //Verify that after putting in enough data, the store goes to read only
     // setupTestState already have created 3 log segments, there we create another 4 segments, it should
@@ -392,9 +394,9 @@ public class BlobStoreTest {
     //Assumes ClusterParticipant sets replicaId status to true
     replicaId.setSealedState(true);
 
-    //Change config threshold but with delegate disabled, verify that nothing happens
+    //Change config threshold but with delegate disabled, verify that nothing happens (store doesn't get unsealed)
     reloadStore(changeThreshold(99, 1, false), replicaId, Collections.singletonList(replicaStatusDelegate));
-    verifyNoMoreInteractions(replicaStatusDelegate);
+    verify(replicaStatusDelegate, times(0)).unseal(replicaId);
 
     //Change config threshold to higher, see that it gets changed to unsealed on reset
     reloadStore(changeThreshold(99, 1, true), replicaId, Collections.singletonList(replicaStatusDelegate));
@@ -479,6 +481,7 @@ public class BlobStoreTest {
     replicaId.setSealedState(true);
     reloadStore(changeThreshold(99, 1, true), replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
     assertTrue("Replica should be unsealed", sealedReplicas1.isEmpty() && sealedReplicas2.isEmpty());
+    assertEquals("After startup, store should be in STANDBY state", STANDBY, store.getCurrentState());
 
     // verify store still updates sealed lists even though replica state is already sealed. ("replicaId.setSealedState(true)")
     // lower the threshold to make replica sealed again
@@ -2040,6 +2043,35 @@ public class BlobStoreTest {
     assertFalse("Decommission file should be deleted", decommissionFile.exists());
   }
 
+  /**
+   * Test that if {@link HelixParticipant} is adopted, store state is set to OFFLINE after startup (which will be updated
+   * by Helix state transition later)
+   * @throws Exception
+   */
+  @Test
+  public void resolveStoreInitialStateTest() throws Exception {
+    store.shutdown();
+    properties.setProperty(StoreConfig.storeReplicaStatusDelegateEnableName, "true");
+    File storeDir = StoreTestUtils.createTempDirectory("store-" + storeId);
+    File reserveDir = StoreTestUtils.createTempDirectory("reserve-pool");
+    reserveDir.deleteOnExit();
+    DiskSpaceAllocator diskAllocator =
+        new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    MetricRegistry registry = new MetricRegistry();
+    StoreMetrics metrics = new StoreMetrics(registry);
+    HelixParticipant mockHelixParticipant = Mockito.mock(HelixParticipant.class);
+    ReplicaStatusDelegate delegate = new ReplicaStatusDelegate(mockHelixParticipant);
+    BlobStore testStore =
+        new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
+            diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete,
+            Collections.singletonList(delegate), time, new InMemAccountService(false, false));
+    testStore.start();
+    assertEquals("Store current state should be OFFLINE if HelixParticipant is adopted", OFFLINE,
+        testStore.getCurrentState());
+    testStore.shutdown();
+  }
+
   // helpers
   // general
 
@@ -2773,7 +2805,7 @@ public class BlobStoreTest {
     }
     assertFalse("Store should be shutdown", store.isStarted());
     store = createBlobStore(replicaId, config, delegates);
-    assertEquals("Store should be in OFFLINE state after creation", ReplicaState.OFFLINE, store.getCurrentState());
+    assertEquals("Store should be in OFFLINE state after creation", OFFLINE, store.getCurrentState());
     assertFalse("Store should not be started", store.isStarted());
     store.start();
     assertTrue("Store should be started", store.isStarted());
@@ -2789,7 +2821,7 @@ public class BlobStoreTest {
   private void verifyStartupSuccess(BlobStore blobStore) throws StoreException {
     blobStore.start();
     assertTrue("Store has not been started", blobStore.isStarted());
-    assertEquals("Store current state should be STANDBY after it is successfully started", ReplicaState.STANDBY,
+    assertEquals("Store current state should be STANDBY after it is successfully started", STANDBY,
         blobStore.getCurrentState());
     blobStore.shutdown();
   }

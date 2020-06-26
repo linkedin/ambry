@@ -80,6 +80,7 @@ public class MockHost {
                   (Function<PartitionId, List<MessageInfo>>) partitionId2 -> new ArrayList<>()),
                   buffersByPartition.computeIfAbsent(partitionId1,
                       (Function<PartitionId, List<ByteBuffer>>) partitionId22 -> new ArrayList<>()), listener));
+          store.start();
           RemoteReplicaInfo remoteReplicaInfo =
               new RemoteReplicaInfo(peerReplicaId, replicaId, store, new MockFindToken(0, 0), Long.MAX_VALUE,
                   SystemTime.getInstance(), new Port(peerReplicaId.getDataNodeId().getPort(), PortType.PLAINTEXT));

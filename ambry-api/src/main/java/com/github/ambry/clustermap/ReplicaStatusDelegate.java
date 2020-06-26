@@ -93,4 +93,11 @@ public class ReplicaStatusDelegate {
   public List<String> getSealedReplicas() {
     return clusterParticipant.getSealedReplicas();
   }
+
+  /**
+   * @return the {@link ClusterParticipant} used by this {@link ReplicaStatusDelegate}
+   */
+  public ClusterParticipant getClusterParticipant() {
+    return clusterParticipant;
+  }
 }

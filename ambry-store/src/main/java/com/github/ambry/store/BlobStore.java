@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
@@ -258,9 +259,7 @@ public class BlobStore implements Store {
         onSuccess();
         disabledOnError.set(false);
         started = true;
-        // This is to be compatible with static clustermap. If static cluster manager is adopted, all replicas are supposed to be STANDBY
-        // and router relies on failure detector to track liveness of replicas(stores).
-        currentState = ReplicaState.STANDBY;
+        resolveStoreInitialState();
         if (replicaId != null) {
           replicaId.markDiskUp();
         }
@@ -1102,6 +1101,7 @@ public class BlobStore implements Store {
         index.close(skipDiskFlush);
         log.close(skipDiskFlush);
         metrics.deregisterMetrics(storeId);
+        currentState = ReplicaState.OFFLINE;
         started = false;
       } catch (Exception e) {
         logger.error("Store : {} shutdown of store failed for directory ", dataDir, e);
@@ -1233,6 +1233,22 @@ public class BlobStore implements Store {
           throw new IllegalArgumentException("WriteSet contains duplicates. Duplicate detected: " + info.getStoreKey());
         }
       }
+    }
+  }
+
+  /**
+   * Resolve initial state of current store.
+   */
+  private void resolveStoreInitialState() {
+    // Determine if HelixParticipant is adopted.
+    if (replicaStatusDelegates != null && !replicaStatusDelegates.isEmpty() && replicaStatusDelegates.get(0)
+        .getClusterParticipant() instanceof HelixParticipant) {
+      // If store is managed by Helix, Helix controller will update its state after participation.
+      currentState = ReplicaState.OFFLINE;
+    } else {
+      // This is to be compatible with static clustermap. If static cluster manager is adopted, all replicas are supposed to be STANDBY
+      // and router relies on failure detector to track liveness of replicas(stores).
+      currentState = ReplicaState.STANDBY;
     }
   }
 
