@@ -50,7 +50,6 @@ class CompactionManager {
   private final StorageManagerMetrics metrics;
   private final CompactionPolicy compactionPolicy;
   private static final Logger logger = LoggerFactory.getLogger(CompactionManager.class);
-  private final Map<ReplicaId, CompactionPolicyCounter> replicaToCounterMap;
   private final CompactionPolicyFactory compactionPolicyFactory;
   private Thread compactionThread;
 
@@ -69,7 +68,6 @@ class CompactionManager {
     this.stores.addAll(stores);
     this.time = time;
     this.metrics = metrics;
-    this.replicaToCounterMap = new HashMap<>();
     if (!storeConfig.storeCompactionTriggers[0].isEmpty()) {
       EnumSet<Trigger> triggers = EnumSet.noneOf(Trigger.class);
       for (String trigger : storeConfig.storeCompactionTriggers) {

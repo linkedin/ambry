@@ -33,10 +33,11 @@ interface CompactionPolicy {
    *                                {@link Journal}
    * @param blobStoreStats {@link BlobStoreStats} pertaining to the {@link BlobStore} for which
    * {@link CompactionDetails} are requested
+   * @param dataDir
    * @return {@link CompactionDetails} containing the details of segments to be compacted
    * @throws StoreException
    */
   CompactionDetails getCompactionDetails(long totalCapacity, long usedCapacity, long segmentCapacity,
-      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats)
+      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats, String dataDir)
       throws StoreException;
 }

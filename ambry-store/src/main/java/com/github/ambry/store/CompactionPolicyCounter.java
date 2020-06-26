@@ -32,6 +32,10 @@ class CompactionPolicyCounter {
     return counter;
   }
 
+  public void setValue(int val) {
+    this.counter = val;
+  }
+
   public void increment() {
     counter = (counter + 1) % storeConfig.storeCompactionPolicySwitchPeriod;
   }
