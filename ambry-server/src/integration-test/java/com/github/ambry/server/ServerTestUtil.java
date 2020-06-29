@@ -1585,7 +1585,11 @@ final class ServerTestUtil {
       Properties routerProps, boolean testEncryption) {
     // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainText port
     try {
-      int expectedTokenSize = 0;
+      // The header size of a LogSegment. This shouldn't be here since it breaks the interface of Log. But to satisfy the test cases
+      // we will use this number here.
+      // This also means we only have one log segment for this partition. If we put more operations to the partition and it excceeds
+      // the log segment capacity, this number will have to be increased.
+      int expectedTokenSize = 18;
       MockClusterMap clusterMap = cluster.getClusterMap();
       BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
       ArrayList<BlobProperties> propertyList = new ArrayList<>();
@@ -2402,6 +2406,7 @@ final class ServerTestUtil {
       }
       cluster.reinitServer(0);
       channel = getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory, clientSSLConfig);
+      channel.connect();
 
       // Now verify that we can fetch blob1 and blob2.
       for (BlobId blobId : new BlobId[]{blobId1, blobId2}) {
@@ -2420,13 +2425,13 @@ final class ServerTestUtil {
           channel.send(getRequest);
           GetResponse getResponse =
               GetResponse.readFrom(new DataInputStream(channel.receive().getInputStream()), clusterMap);
-          assertEquals(ServerErrorCode.No_Error, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
           if (getResponse.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.No_Error) {
             BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
             assertEquals(31870, propertyOutput.getBlobSize());
             assertEquals("serviceid1", propertyOutput.getServiceId());
             assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
             assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
+            break;
           } else {
             Thread.sleep(1000);
             if (System.currentTimeMillis() > deadline) {
