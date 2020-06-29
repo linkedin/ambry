@@ -1081,13 +1081,6 @@ public class BlobStore implements Store {
     return replicaStatusDelegates;
   }
 
-  /**
-   * @return a {@link ReplicaId} associated with this store
-   */
-  public ReplicaId getReplicaId() {
-    return replicaId;
-  }
-
   @Override
   public void shutdown() throws StoreException {
     shutdown(false);

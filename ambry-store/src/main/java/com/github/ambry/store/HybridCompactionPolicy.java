@@ -99,9 +99,11 @@ public class HybridCompactionPolicy implements CompactionPolicy {
    * Recover the {@link CompactionPolicySwitchInfo} from backup file.
    * {
    *   "compactionPolicyCounter" : {
+   *     "storeCompactionPolicySwitchPeriod" : 3,
+   *     "counter" : 1,
    *     "value" : 1
    *   },
-   *   "lastCompactionTime" : 1593128052284
+   *   "lastCompactAllTime" : 1593463435900
    * }
    * @param file the backup file stores {@link CompactionPolicySwitchInfo}
    */

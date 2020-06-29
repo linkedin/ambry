@@ -82,7 +82,7 @@ public class StoreConfig {
   public final int storeDeletedMessageRetentionDays;
 
   /**
-   * How often the HybridCompactionPolicy swith from StatsBasedCompactionPolicy to CompactAllPolicy.
+   * How often the HybridCompactionPolicy switch from StatsBasedCompactionPolicy to CompactAllPolicy.
    */
   @Config("store.compaction.policy.switch.period")
   @Default("7")
