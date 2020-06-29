@@ -13,20 +13,26 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.config.StoreConfig;
+import org.codehaus.jackson.annotate.JsonAutoDetect;
+import org.codehaus.jackson.annotate.JsonPropertyOrder;
 
 
 /**
  * A counter used to switch {@link CompactAllPolicy}.
  */
+@JsonPropertyOrder({"storeCompactionPolicySwitchPeriod", "counter"})
+@JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
 class CompactionPolicyCounter {
-  private final StoreConfig storeConfig;
+  private int storeCompactionPolicySwitchPeriod;
+  private int counter;
 
-  CompactionPolicyCounter(StoreConfig storeConfig) {
-    this.storeConfig = storeConfig;
+  CompactionPolicyCounter(int storeCompactionPolicySwitchPeriod) {
+    this.storeCompactionPolicySwitchPeriod = storeCompactionPolicySwitchPeriod;
   }
 
-  private int counter;
+  //make sure objectMapper can work correctly
+  CompactionPolicyCounter() {
+  }
 
   public int getValue() {
     return counter;
@@ -37,6 +43,6 @@ class CompactionPolicyCounter {
   }
 
   public void increment() {
-    counter = (counter + 1) % storeConfig.storeCompactionPolicySwitchPeriod;
+    counter = (counter + 1) % storeCompactionPolicySwitchPeriod;
   }
 }

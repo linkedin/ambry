@@ -31,6 +31,10 @@ public class CompactionPolicySwitchInfo {
     this.lastCompactAllTime = lastCompactAllTime;
   }
 
+  //make sure objectMapper can work correctly
+  CompactionPolicySwitchInfo() {
+  }
+
   CompactionPolicyCounter getCompactionPolicyCounter() {
     return this.compactionPolicyCounter;
   }
