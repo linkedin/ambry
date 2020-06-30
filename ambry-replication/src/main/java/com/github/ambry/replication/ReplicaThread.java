@@ -308,10 +308,10 @@ public class ReplicaThread implements Runnable {
    *  Here is a table listing on what is exchanged between local and remote replicas based on their roles (leader or
    *  standby) when {@link ReplicationModelType is LEADER_BASED}.
    *
-   *                   |   Local Leader	    |    Local Standby	  |     Remote Leader	  |  Remote Standby
-   *      --------------------------------------------------------------------------------------------------
-   *       Leader: 	   |        ---         |  metadata and data  |   metadata and data	|   metadata only
-   *       Standby: 	 |  metadata and data |  metadata and data	|   metadata only	    |   metadata only
+   *              |   Local Leader    |     Local Standby   |   Remote Leader   |  Remote Standby
+   *            -------------------------------------------------------------------------------------
+   *     Leader:  |        ---        |  metadata and data  | metadata and data |   metadata only
+   *     Standby: | metadata and data |  metadata and data  | metadata only     |   metadata only
    *
    */
   public void replicate() {
@@ -1330,7 +1330,7 @@ public class ReplicaThread implements Runnable {
       RemoteReplicaInfo remoteReplicaInfo = remoteReplicaInfos.get(i);
       ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
       ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
-      // Check if local replica and remote replica are leaders for this partition.
+      // Check if local replica and remote replica are leaders for their partition.
       if (leaderBasedReplicationAdmin.isLeaderPair(localReplica, remoteReplica)) {
         leaderReplicaInfosOutput.add(remoteReplicaInfo);
         exchangeMetadataResponseListForLeaderReplicaInfosOutput.add(exchangeMetadataResponseList.get(i));
@@ -1384,13 +1384,13 @@ public class ReplicaThread implements Runnable {
     try {
       ExchangeMetadataResponse exchangeMetadataResponse = remoteReplicaInfo.getExchangeMetadataResponse();
       if (!exchangeMetadataResponse.isEmpty()) {
-
         Set<MessageInfo> receivedStoreMessagesWithUpdatesPending =
             exchangeMetadataResponse.getReceivedStoreMessagesWithUpdatesPending();
         Set<MessageInfo> receivedMessagesWithUpdatesCompleted = new HashSet<>();
 
-        // 1. Go through messages whose blobs are received now (via other replicas) and compare blob metadata of
-        // remote message info with local blob in store and reconcile delete, ttl_update and undelete states
+        // 1. Go through messages for this replica whose keys were previously missing in local store and are now received
+        // (via other replica threads) and compare the message infos with message infos of keys in local store to apply
+        // updates to them (if needed) to reconcile delete, ttl_update and undelete states.
         for (MessageInfo messageInfo : receivedStoreMessagesWithUpdatesPending) {
           BlobId localStoreKey =
               (BlobId) exchangeMetadataResponse.remoteKeyToLocalKeyMap.get(messageInfo.getStoreKey());
@@ -1408,8 +1408,8 @@ public class ReplicaThread implements Runnable {
         if (exchangeMetadataResponse.isEmpty()) {
           remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
           remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
-          logger.trace("Updating token {} and lag {} for partition {} in Remote replica: {}",
-              exchangeMetadataResponse.remoteToken, exchangeMetadataResponse.localLagFromRemoteInBytes,
+          logger.trace("Thread name: {}, updating token {} and lag {} for partition {} for Remote replica {}",
+              threadName, exchangeMetadataResponse.remoteToken, exchangeMetadataResponse.localLagFromRemoteInBytes,
               remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
           remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
         }
@@ -1418,7 +1418,7 @@ public class ReplicaThread implements Runnable {
       if (e.getErrorCode() == StoreErrorCodes.Store_Not_Started) {
         logger.info("Local store not started for remote replica: {}", remoteReplicaInfo.getReplicaId());
       } else {
-        logger.error("Exception occurred while updating blob information for Remote replica: {}, partition: {}",
+        logger.error("Exception occurred while updating blob from Remote replica {} for partition: {}",
             remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getReplicaId().getPartitionId().toString(), e);
         replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
       }

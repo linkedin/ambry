@@ -1,3 +1,17 @@
+/**
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
@@ -234,6 +248,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (PartitionId partitionId : replicationManager.partitionToPartitionInfo.keySet()) {
       localHost.addStore(partitionId, null);
       Store localStore = localHost.getStore(partitionId);
+      localStore.start();
       List<RemoteReplicaInfo> remoteReplicaInfos =
           replicationManager.partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos();
       remoteReplicaInfos.forEach(remoteReplicaInfo -> remoteReplicaInfo.setLocalStore(localStore));
@@ -273,17 +288,17 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
             remoteNodeInRemoteDC);
 
     // Replicate with remoteHost2 in remote data center.
-    List<ReplicaThread.ExchangeMetadataResponse> responseForRemoteNodeInRemoteDC =
+    List<ReplicaThread.ExchangeMetadataResponse> responseListForRemoteNodeInRemoteDC =
         crossColoReplicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHostInRemoteDC, batchSize),
             remoteReplicaInfosForRemoteDC);
 
     // Metadata requests should be sent to both leader and standby replicas.
     assertEquals("Response should contain a response for each replica", remoteReplicaInfosForRemoteDC.size(),
-        responseForRemoteNodeInRemoteDC.size());
+        responseListForRemoteNodeInRemoteDC.size());
 
     // verify that missing messages size equals to the min{batch size, number of PUT messages} placed on remote hosts
     int expectedIndex = batchSize - 1;
-    for (ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse : responseForRemoteNodeInRemoteDC) {
+    for (ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse : responseListForRemoteNodeInRemoteDC) {
       assertEquals("mismatch in number of missing messages", batchSize,
           exchangeMetadataResponse.missingStoreMessages.size());
     }
@@ -291,7 +306,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // Filter leader replicas to fetch missing keys
     List<RemoteReplicaInfo> leaderReplicas = new ArrayList<>();
     List<ReplicaThread.ExchangeMetadataResponse> exchangeMetadataResponseListForLeaderReplicas = new ArrayList<>();
-    crossColoReplicaThread.getLeaderReplicaList(remoteReplicaInfosForRemoteDC, responseForRemoteNodeInRemoteDC,
+    crossColoReplicaThread.getLeaderReplicaList(remoteReplicaInfosForRemoteDC, responseListForRemoteNodeInRemoteDC,
         leaderReplicas, exchangeMetadataResponseListForLeaderReplicas);
 
     // verify that only leader replicas in remoteHost2 are chosen for fetching missing messages.
@@ -311,13 +326,14 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (int i = 0; i < remoteReplicaInfosForRemoteDC.size(); i++) {
       if (leaderReplicasOnLocalAndRemoteNodes.contains(remoteReplicaInfosForRemoteDC.get(i).getReplicaId())) {
         assertEquals("remote token mismatch for leader replicas", remoteReplicaInfosForRemoteDC.get(i).getToken(),
-            responseForRemoteNodeInRemoteDC.get(i).remoteToken);
+            responseListForRemoteNodeInRemoteDC.get(i).remoteToken);
       } else {
         assertEquals("missing keys in metadata response should be stored for standby replicas",
             remoteReplicaInfosForRemoteDC.get(i).getExchangeMetadataResponse().missingStoreMessages.size(),
-            responseForRemoteNodeInRemoteDC.get(i).missingStoreMessages.size());
+            responseListForRemoteNodeInRemoteDC.get(i).missingStoreMessages.size());
         assertThat("remote token should not move forward for standby replicas until missing keys are fetched",
-            remoteReplicaInfosForRemoteDC.get(i).getToken(), not(responseForRemoteNodeInRemoteDC.get(i).remoteToken));
+            remoteReplicaInfosForRemoteDC.get(i).getToken(),
+            not(responseListForRemoteNodeInRemoteDC.get(i).remoteToken));
       }
     }
 
@@ -344,9 +360,9 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
 
     // Remote token for all cross-colo replicas (leader and standby) should have moved forward now as the missing keys
     // for standbys are received via intra-dc replication.
-    for (int i = 0; i < responseForRemoteNodeInRemoteDC.size(); i++) {
+    for (int i = 0; i < responseListForRemoteNodeInRemoteDC.size(); i++) {
       assertEquals("mismatch in remote token set for cross colo replicas",
-          remoteReplicaInfosForRemoteDC.get(i).getToken(), (responseForRemoteNodeInRemoteDC.get(i).remoteToken));
+          remoteReplicaInfosForRemoteDC.get(i).getToken(), (responseListForRemoteNodeInRemoteDC.get(i).remoteToken));
     }
 
     // verify replication metrics to track number of cross colo get requests and cross colo bytes fetch rate for standby
@@ -408,6 +424,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (PartitionId partitionId : replicationManager.partitionToPartitionInfo.keySet()) {
       localHost.addStore(partitionId, null);
       Store localStore = localHost.getStore(partitionId);
+      localStore.start();
       List<RemoteReplicaInfo> remoteReplicaInfos =
           replicationManager.partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos();
       remoteReplicaInfos.forEach(remoteReplicaInfo -> remoteReplicaInfo.setLocalStore(localStore));
@@ -615,6 +632,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (PartitionId partitionId : replicationManager.partitionToPartitionInfo.keySet()) {
       localHost.addStore(partitionId, null);
       Store localStore = localHost.getStore(partitionId);
+      localStore.start();
       List<RemoteReplicaInfo> remoteReplicaInfos =
           replicationManager.partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos();
       remoteReplicaInfos.forEach(remoteReplicaInfo -> remoteReplicaInfo.setLocalStore(localStore));
@@ -800,6 +818,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (PartitionId partitionId : replicationManager.partitionToPartitionInfo.keySet()) {
       localHost.addStore(partitionId, null);
       Store localStore = localHost.getStore(partitionId);
+      localStore.start();
       List<RemoteReplicaInfo> remoteReplicaInfos =
           replicationManager.partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos();
       remoteReplicaInfos.forEach(remoteReplicaInfo -> remoteReplicaInfo.setLocalStore(localStore));
@@ -990,6 +1009,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (PartitionId partitionId : replicationManager.partitionToPartitionInfo.keySet()) {
       localHost.addStore(partitionId, null);
       Store localStore = localHost.getStore(partitionId);
+      localStore.start();
       List<RemoteReplicaInfo> remoteReplicaInfos =
           replicationManager.partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos();
       remoteReplicaInfos.forEach(remoteReplicaInfo -> remoteReplicaInfo.setLocalStore(localStore));

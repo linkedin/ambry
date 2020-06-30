@@ -575,8 +575,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       try {
         // Get the peer leader replicas from all data centers for this partition
         Set<ReplicaId> peerLeaderReplicas = getPeerLeaderReplicaSet(partitionName);
-        logger.info("Adding leader Partition {} with list of peer leader replicas {}", partitionName,
-            peerLeaderReplicas);
+        logger.info("Adding leader Partition {} and list of peer leader replicas {} on node {} to an in-memory map",
+            partitionName, peerLeaderReplicas, dataNodeId);
         leaderPartitionToPeerLeaderReplicas.put(partitionName, peerLeaderReplicas);
       } finally {
         rwLockForLeaderReplicaUpdates.writeLock().unlock();
@@ -592,7 +592,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       // threads updating existing leader partitions (refreshPeerLeadersForAllPartitions())
       rwLockForLeaderReplicaUpdates.writeLock().lock();
       try {
-        logger.info("Removing leader Partition {}", partitionName);
+        logger.info("Removing leader Partition {} on node {} from an in-memory map", partitionName, dataNodeId);
         leaderPartitionToPeerLeaderReplicas.remove(partitionName);
       } finally {
         rwLockForLeaderReplicaUpdates.writeLock().unlock();
@@ -619,8 +619,9 @@ public abstract class ReplicationEngine implements ReplicationAPI {
           Set<ReplicaId> previousPeerLeaderReplicas = entry.getValue();
           Set<ReplicaId> currentPeerLeaderReplicas = getPeerLeaderReplicaSet(partitionName);
           if (!previousPeerLeaderReplicas.equals(currentPeerLeaderReplicas)) {
-            logger.info("Refreshing leader Partition {} with list of peer leader replicas {}", partitionName,
-                currentPeerLeaderReplicas);
+            logger.info(
+                "Refreshing leader Partition {} and list of peer leader replicas {} on node {} in an in-memory map",
+                partitionName, currentPeerLeaderReplicas, dataNodeId);
             leaderPartitionToPeerLeaderReplicas.put(partitionName, currentPeerLeaderReplicas);
           }
         }
