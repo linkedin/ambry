@@ -66,8 +66,8 @@ public class HybridCompactionPolicy implements CompactionPolicy {
     String storeId = blobStoreStats.getStoreId();
     CompactionPolicySwitchInfo compactionPolicySwitchInfo = getCompactionPolicySwitchInfo(storeId, dataDir, blobStoreStats);
     CompactionPolicy selectCompactionPolicy =
-        selectCompactionPolicyAndUpdateCompactionPolicySwitchInfo(compactionPolicySwitchInfo);
-    logger.info("Current compaction policy  is : {}", selectCompactionPolicy);
+        selectCompactionPolicyAndUpdateCompactionPolicySwitchInfo(compactionPolicySwitchInfo, storeId, dataDir);
+    logger.info("Current compaction policy  is : {} for store : {}, dataDir : {}", selectCompactionPolicy, storeId, dataDir);
     backUpCompactionPolicyInfo(dataDir, compactionPolicySwitchInfo);
     compactionPolicySwitchInfo.getCompactionPolicyCounter().increment();
     return selectCompactionPolicy.getCompactionDetails(totalCapacity, usedCapacity, segmentCapacity, segmentHeaderSize,
@@ -119,23 +119,26 @@ public class HybridCompactionPolicy implements CompactionPolicy {
 
   /**
    * Selects which compaction policy to use for current compaction cycle.
+   * @param compactionPolicySwitchInfo the info to determine which {@link CompactionPolicy} to use this round.
+   * @param storeId id of the BlobStore
+   * @param dataDir The directory to store the file.
    * @return {@link CompactionPolicy} to use for current compaction cycle(Selects between {@link StatsBasedCompactionPolicy} and {@link CompactAllPolicy}).
    */
   CompactionPolicy selectCompactionPolicyAndUpdateCompactionPolicySwitchInfo(
-      CompactionPolicySwitchInfo compactionPolicySwitchInfo) {
+      CompactionPolicySwitchInfo compactionPolicySwitchInfo, String storeId, String dataDir) {
     if (compactionPolicySwitchInfo == null) {
-      logger.trace("CompactionPolicySwitchInfo is null");
+      logger.trace("CompactionPolicySwitchInfo is null for store : {}, dataDir : {}", storeId, dataDir);
       return new StatsBasedCompactionPolicy(storeConfig, time);
     }
     if (readyToTriggerCompactionAllPolicy(compactionPolicySwitchInfo)) {
-      logger.trace("Return CompactAllPolicy this round");
+      logger.trace("Return CompactAllPolicy this round for store : {}, dataDir : {}", storeId, dataDir);
       updateCompactionInfoWhenCompactAll(compactionPolicySwitchInfo);
       return new CompactAllPolicy(storeConfig, time);
     } else {
       if (compactionPolicySwitchInfo.getCompactionPolicyCounter() == null) {
-        logger.trace("Counter is null");
+        logger.trace("Counter is null for store : {}, dataDir : {}", storeId, dataDir);
       } else {
-        logger.trace("Return StatsBasedCompactionPolicy this round");
+        logger.trace("Return StatsBasedCompactionPolicy this round for store : {}, dataDir : {}", storeId, dataDir);
       }
       return new StatsBasedCompactionPolicy(storeConfig, time);
     }
@@ -178,10 +181,11 @@ public class HybridCompactionPolicy implements CompactionPolicy {
    */
   private void backUpCompactionPolicyInfo(String dataDir, CompactionPolicySwitchInfo compactionPolicySwitchInfo) {
     if (dataDir != null && !dataDir.isEmpty()) {
-      File tempFile = new File(Paths.get(dataDir, COMPACT_POLICY_INFO_PATH).toString());
+      File tempFile = new File(Paths.get(dataDir, COMPACT_POLICY_INFO_PATH + ".temp").toString());
       try {
         tempFile.createNewFile();
         objectMapper.defaultPrettyPrintingWriter().writeValue(tempFile, compactionPolicySwitchInfo);
+        tempFile.renameTo(new File(Paths.get(dataDir, COMPACT_POLICY_INFO_PATH).toString()));
       } catch (IOException e) {
         logger.error("Exception while store compaction policy info for local report. Output file path - {}",
             tempFile.getAbsolutePath(), e);
