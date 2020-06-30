@@ -570,7 +570,7 @@ public class ReplicationTest extends ReplicationTestHelper {
         PartitionId existingPartition = mockReplicaId.getPartitionId();
         mockHelixParticipant.onPartitionBecomeLeaderFromStandby(existingPartition.toPathString());
         Set<ReplicaId> peerLeaderReplicasInReplicationManager =
-            replicationManager.leaderBasedReplicationAdmin.getPeerLeaderReplicasByPartition()
+            replicationManager.leaderBasedReplicationAdmin.getLeaderPartitionToPeerLeaderReplicas()
                 .get(existingPartition.toPathString());
         Set<ReplicaId> peerLeaderReplicasInClusterMap =
             existingPartition.getReplicaIdsByState(ReplicaState.LEADER, null).stream().collect(Collectors.toSet());
@@ -610,7 +610,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(existingPartition.toPathString());
     Map<String, Set<ReplicaId>> peerLeaderReplicasByPartition =
-        replicationManager.leaderBasedReplicationAdmin.getPeerLeaderReplicasByPartition();
+        replicationManager.leaderBasedReplicationAdmin.getLeaderPartitionToPeerLeaderReplicas();
     assertTrue(
         "Partition is not present in the map of partition to peer leader replicas after it moved from standby to leader",
         peerLeaderReplicasByPartition.containsKey(existingPartition.toPathString()));

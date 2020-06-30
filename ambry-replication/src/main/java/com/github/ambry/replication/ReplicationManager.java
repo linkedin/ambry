@@ -39,17 +39,12 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -65,7 +60,6 @@ public class ReplicationManager extends ReplicationEngine {
   private final StoreConfig storeConfig;
   private final DataNodeId currentNode;
   private final boolean trackPerPartitionLagInMetric;
-  protected LeaderBasedReplicationAdmin leaderBasedReplicationAdmin = null;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
@@ -93,8 +87,9 @@ public class ReplicationManager extends ReplicationEngine {
     this.currentNode = dataNode;
     trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
+    // make sure leaderBasedReplicationAdmin is constructed before creating ReplicaThreads since it is passed to them
     if (replicationConfig.replicationModelAcrossDatacenters.equals(ReplicationModelType.LEADER_BASED)) {
-      logger.info("Leader-based replication model is being used for cross colo replication!");
+      logger.info("Leader-based cross colo replication model is being used");
       leaderBasedReplicationAdmin = new LeaderBasedReplicationAdmin();
     }
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
@@ -107,7 +102,7 @@ public class ReplicationManager extends ReplicationEngine {
         if (peerReplicas != null) {
           List<RemoteReplicaInfo> remoteReplicas = createRemoteReplicaInfos(peerReplicas, replicaId);
           updatePartitionInfoMaps(remoteReplicas, replicaId);
-          addRemoteReplicaInfoToReplicaThread(remoteReplicas, false, leaderBasedReplicationAdmin);
+          addRemoteReplicaInfoToReplicaThread(remoteReplicas, false);
         }
       } else {
         logger.error("Not replicating to partition {} because an initialized store could not be found", partition);
@@ -180,7 +175,7 @@ public class ReplicationManager extends ReplicationEngine {
         updatePartitionInfoMaps(remoteReplicaInfos, replicaId);
       }
       logger.info("Assigning thread for {}", replicaId.getPartitionId());
-      addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true, leaderBasedReplicationAdmin);
+      addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
       // No need to update persistor to explicitly persist tokens for new replica because background persistor will
       // periodically persist all tokens including new added replica's
       logger.info("{} is successfully added into replication manager", replicaId.getPartitionId());
@@ -324,7 +319,7 @@ public class ReplicationManager extends ReplicationEngine {
               replicaInfosToAdd.add(remoteReplicaInfo);
             }
           }
-          addRemoteReplicaInfoToReplicaThread(replicaInfosToAdd, true, leaderBasedReplicationAdmin);
+          addRemoteReplicaInfoToReplicaThread(replicaInfosToAdd, true);
 
           // 4. remove replicaInfo from existing partitionInfo and replica-threads
           List<RemoteReplicaInfo> replicaInfosToRemove = new ArrayList<>();
@@ -482,143 +477,6 @@ public class ReplicationManager extends ReplicationEngine {
       // here we attempt to remove replica from replication manager. If replica doesn't exist, log info but don't fail
       // the transition
       removeReplica(replica);
-    }
-  }
-
-  /**
-   * To co-ordinate replication between leader and standby replicas of a partition during leader based replication.
-   */
-  class LeaderBasedReplicationAdmin {
-
-    //Maintains the list of leader partitions on local node and their corresponding peer leaders in remote data centers
-    private final Map<String, Set<ReplicaId>> peerLeaderReplicasByPartition = new ConcurrentHashMap<>();
-    private final ReadWriteLock rwLockForLeaderReplicaUpdates = new ReentrantReadWriteLock();
-
-    LeaderBasedReplicationAdmin() {
-      // We can't initialize the peerLeaderReplicasByPartition map on startup because we don't know the leader partitions
-      // on local server until it has finished participating with Helix. The map will be updated after server participates
-      // with Helix and receives LEADER transition notifications via onPartitionBecomeLeaderFromStandby().
-    }
-
-    /**
-     * Go through remote replicas for this partition and compare messages written to local store with the missing messages
-     * found during previous meta data exchange. If there are matching messages (based on store key), remove them from the missing message set.
-     * This is used during leader-based replication to update token for standby replicas. Standby replicas store the
-     * missing messages in metadata exchange, track them through intra-dc replication and update token when all the
-     * missing messages are written to store.
-     * @param partitionId partition ID of the messages written to store
-     * @param messageInfoList list of messages written to store
-     */
-    void onMessageWriteForPartition(PartitionId partitionId, List<MessageInfo> messageInfoList) {
-      partitionToPartitionInfo.computeIfPresent(partitionId, (k, v) -> {
-        v.updateReplicaInfosOnMessageWrite(messageInfoList);
-        return v;
-      });
-    }
-
-    /**
-     * Add a leader partition and its set of peer leader replicas. This method is thread safe.
-     * @param partitionName name of the partition to be added
-     */
-    public void addLeaderPartition(String partitionName) {
-
-      // Read-write lock avoids contention from threads removing old leader partitions (removePartition()) and
-      // threads updating existing leader partitions (refreshPeerLeadersForAllPartitions())
-      rwLockForLeaderReplicaUpdates.writeLock().lock();
-      try {
-        // Get the peer leader replicas from all data centers for this partition
-        Set<ReplicaId> peerLeaderReplicas = getPeerLeaderReplicaSet(partitionName);
-        logger.info("Adding leader Partition {} with list of peer leader replicas {}", partitionName,
-            peerLeaderReplicas);
-        peerLeaderReplicasByPartition.put(partitionName, peerLeaderReplicas);
-      } finally {
-        rwLockForLeaderReplicaUpdates.writeLock().unlock();
-      }
-    }
-
-    /**
-     * Remove a partition from the map of leader partitions. This method is thread safe.
-     * @param partitionName name of the partition to be removed
-     */
-    public void removeLeaderPartition(String partitionName) {
-      // Read-write lock avoids contention from threads adding new leaders (addPartition()) and
-      // threads updating existing leader partitions (refreshPeerLeadersForAllPartitions())
-      rwLockForLeaderReplicaUpdates.writeLock().lock();
-      try {
-        logger.info("Removing leader Partition {}", partitionName);
-        peerLeaderReplicasByPartition.remove(partitionName);
-      } finally {
-        rwLockForLeaderReplicaUpdates.writeLock().unlock();
-      }
-    }
-
-    /**
-     * Refreshes the list of remote leaders for all leader partitions by querying the latest information from
-     * RoutingTableSnapshots of all data centers. This method is thread safe.
-     */
-    public void refreshPeerLeadersForLeaderPartitions() {
-      // Read-write lock usage: Avoids contention between threads doing the following activities:
-      // 1. Adding new leaders (in addPeerLeadersByPartition())
-      // 2. Removing old leaders (in removePartition())
-      // 3. Refreshing remote leader set for existing leaders (current method).
-      // Explanation for point 3: Multiple threads from different cluster change handlers (we have one cluster change handler for each DC)
-      // can trigger onRoutingTableUpdate() in parallel which calls this method to refresh leader partitions.
-      // We need to make sure that the sequence of gathering remote leaders (from RoutingTableSnapshot of each DC) and updating the map is an atomic operation.
-
-      rwLockForLeaderReplicaUpdates.writeLock().lock();
-      try {
-        for (Map.Entry<String, Set<ReplicaId>> entry : peerLeaderReplicasByPartition.entrySet()) {
-          String partitionName = entry.getKey();
-          Set<ReplicaId> previousPeerLeaderReplicas = entry.getValue();
-          Set<ReplicaId> currentPeerLeaderReplicas = getPeerLeaderReplicaSet(partitionName);
-          if (!previousPeerLeaderReplicas.equals(currentPeerLeaderReplicas)) {
-            logger.info("Refreshing leader Partition {} with list of peer leader replicas {}", partitionName,
-                currentPeerLeaderReplicas);
-            peerLeaderReplicasByPartition.put(partitionName, currentPeerLeaderReplicas);
-          }
-        }
-      } finally {
-        rwLockForLeaderReplicaUpdates.writeLock().unlock();
-      }
-    }
-
-    /**
-     * Get a map of partitions to their sets of peer leader replicas (this method is only by ReplicationTest for now)
-     * @return an unmodifiable map of peer leader replicas stored by partition
-     */
-    public Map<String, Set<ReplicaId>> getPeerLeaderReplicasByPartition() {
-      return Collections.unmodifiableMap(peerLeaderReplicasByPartition);
-    }
-
-    /**
-     * Checks if provided local and remote replicas are leaders of their partition.
-     * @param localReplica local replica
-     * @param remoteReplica remote replica
-     * @return true if local and remote replica are leaders of their partition.
-     */
-    public boolean isLeaderPair(ReplicaId localReplica, ReplicaId remoteReplica) {
-      rwLockForLeaderReplicaUpdates.readLock().lock();
-      try {
-        String partitionName = localReplica.getPartitionId().toPathString();
-        return peerLeaderReplicasByPartition.getOrDefault(partitionName, Collections.emptySet())
-            .contains(remoteReplica);
-      } finally {
-        rwLockForLeaderReplicaUpdates.readLock().unlock();
-      }
-    }
-
-    /**
-     * Retrieves the set of peer leader replicas (in remote data centers) for the given leader partition on this node
-     * @param leaderPartitionName leader partition name
-     * @return set of peer leader replicas
-     */
-    Set<ReplicaId> getPeerLeaderReplicaSet(String leaderPartitionName) {
-      ReplicaId localReplica = storeManager.getReplica(leaderPartitionName);
-      PartitionId leaderPartition = localReplica.getPartitionId();
-      Set<ReplicaId> peerLeaderReplicaSet =
-          new HashSet<>(leaderPartition.getReplicaIdsByState(ReplicaState.LEADER, null));
-      peerLeaderReplicaSet.remove(localReplica);
-      return peerLeaderReplicaSet;
     }
   }
 }

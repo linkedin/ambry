@@ -302,11 +302,11 @@ public class ReplicaThread implements Runnable {
    *       the local store to filter the ones missing locally
    *    2. Fetch missing keys: to fetch the blobs missing locally from remote replica by issuing GET requests and add them to
    *       the local store
-   *  Depending on the {@link ReplicationModelType}, the second step to fetch missing keys for cross-colo replication
-   *  happens in either all-to-all fashion (i.e. fetched from all replicas) or is limited to only leader replica pairs
-   *  (i.e both local and remote replicas are leaders of their partition).
-   *  Here is a table listing more details on what is exchanged between local and remote replicas based on their roles
-   *  (leader or standby) when {@link ReplicationModelType is LEADER_BASED}.
+   *  During cross-colo replication, depending on the {@link ReplicationModelType}, the second step to fetch missing
+   *  keys happens in either all-to-all fashion (i.e. fetched from all cross colo replicas) or is limited to only leader
+   *  replica pairs (i.e both local and remote replicas should be leaders of their partition).
+   *  Here is a table listing on what is exchanged between local and remote replicas based on their roles (leader or
+   *  standby) when {@link ReplicationModelType is LEADER_BASED}.
    *
    *                   |   Local Leader	    |    Local Standby	  |     Remote Leader	  |  Remote Standby
    *      --------------------------------------------------------------------------------------------------
@@ -433,8 +433,8 @@ public class ReplicaThread implements Runnable {
 
         if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
           // Get a list of inactive standby replicas whose missing keys haven't arrived for long time.
-          // Use case: In leader-based replication, standby replicas don't send GET requests for missing keys found in
-          // metadata exchange and expect them to come via leader in local data center through intra-dc replication.
+          // Use case: In leader-based cross colo replication, standby replicas don't send GET requests for missing keys
+          // found in metadata exchange and expect them to come via leader <-> leader replication.
           // This is a safety condition to ensure that standby replicas are not stuck waiting for the keys to come from leader
           // by fetching the missing keys themselves.
           // TODO: As an improvement to this, we can first fetch missing blobs from local leader/other replicas in intra-dc first.

@@ -146,7 +146,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
 
         //verify that map of peerLeaderReplicasByPartition in PartitionLeaderInfo is updated correctly
         Set<ReplicaId> peerLeaderReplicasInPartitionLeaderInfo =
-            replicationManager.leaderBasedReplicationAdmin.getPeerLeaderReplicasByPartition()
+            replicationManager.leaderBasedReplicationAdmin.getLeaderPartitionToPeerLeaderReplicas()
                 .get(existingPartition.toPathString());
         Set<ReplicaId> peerLeaderReplicasInClusterMap =
             new HashSet<>(existingPartition.getReplicaIdsByState(ReplicaState.LEADER, null));
@@ -168,7 +168,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
 
         //verify that new remote leader is reflected in the peerLeaderReplicasByPartition map
         peerLeaderReplicasInPartitionLeaderInfo =
-            replicationManager.leaderBasedReplicationAdmin.getPeerLeaderReplicasByPartition()
+            replicationManager.leaderBasedReplicationAdmin.getLeaderPartitionToPeerLeaderReplicas()
                 .get(existingPartition.toPathString());
         peerLeaderReplicasInClusterMap =
             new HashSet<>(existingPartition.getReplicaIdsByState(ReplicaState.LEADER, null));

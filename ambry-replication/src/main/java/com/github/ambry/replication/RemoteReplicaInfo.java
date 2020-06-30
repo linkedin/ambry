@@ -21,7 +21,6 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -248,17 +247,13 @@ public class RemoteReplicaInfo {
    * @param messagesWrittenToStore list of messages written to local store
    */
   synchronized void updateMissingMessagesInMetadataResponse(List<MessageInfo> messagesWrittenToStore) {
-
     Set<MessageInfo> missingStoreMessages = exchangeMetadataResponse.getMissingStoreMessages();
     if (missingStoreMessages != null && !missingStoreMessages.isEmpty()) {
       Set<StoreKey> keysWrittenToStore =
           messagesWrittenToStore.stream().map(MessageInfo::getStoreKey).collect(Collectors.toSet());
-      Set<MessageInfo> missingMessagesFoundInStore = new HashSet<>();
-      for (MessageInfo messageInfo : missingStoreMessages) {
-        if (keysWrittenToStore.contains(messageInfo.getStoreKey())) {
-          missingMessagesFoundInStore.add(messageInfo);
-        }
-      }
+      Set<MessageInfo> missingMessagesFoundInStore = missingStoreMessages.stream()
+          .filter(message -> keysWrittenToStore.contains(message.getStoreKey()))
+          .collect(Collectors.toSet());
       exchangeMetadataResponse.removeMissingStoreMessages(missingMessagesFoundInStore);
     }
   }
