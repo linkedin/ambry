@@ -33,7 +33,7 @@ interface CompactionPolicy {
    *                                {@link Journal}
    * @param blobStoreStats {@link BlobStoreStats} pertaining to the {@link BlobStore} for which
    * {@link CompactionDetails} are requested
-   * @param dataDir The directory to use to store compactionPolicyInfo
+   * @param dataDir The directory to use to store {@link CompactionPolicySwitchInfo}
    * @return {@link CompactionDetails} containing the details of segments to be compacted
    * @throws StoreException
    */

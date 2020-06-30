@@ -97,36 +97,6 @@ public class CompactionPolicyTest {
     dataDirPath = Paths.get(MOUNT_PATH).toAbsolutePath();
   }
 
-  private void cleanupBackupFiles() throws IOException {
-    if (dataDirPath == null) {
-      return;
-    }
-    File backupDir = dataDirPath.toFile();
-
-    // First get all the file with temp file suffix and remove all of them
-    FileFilter tempFileFilter = (File pathname) -> pathname.getName().startsWith("storeId");
-    File[] files = backupDir.listFiles(tempFileFilter);
-    if (files != null) {
-      for (File file : files) {
-        File deleteFile = new File(MOUNT_PATH + file.getName() + File.separator + "compactionPolicyInfo.json");
-        logger.trace("Delete temp file {}", deleteFile.getName());
-        deleteFile(deleteFile.toPath());
-      }
-    }
-  }
-
-  private void deleteFile(Path toDelete) {
-    try {
-      Files.delete(toDelete);
-    } catch (NoSuchFileException e) {
-      logger.error("File doesn't exist while deleting: {}", toDelete.toString(), e);
-    } catch (IOException e) {
-      logger.error("Encounter an I/O error while deleting file: {}", toDelete.toString(), e);
-    } catch (Exception e) {
-      logger.error("Encounter an unexpected error while deleting file: {}", toDelete.toString(), e);
-    }
-  }
-
   /**
    * Tests HybridCompactionPolicy which runs {@link StatsBasedCompactionPolicy} more frequently and {@link CompactAllPolicy} regularly.
    * @throws StoreException
@@ -136,7 +106,8 @@ public class CompactionPolicyTest {
     cleanupBackupFiles();
     // with compaction enabled.
     properties.setProperty("store.compaction.triggers", "Periodic");
-    properties.setProperty("store.compaction.policy.switch.period", "3");
+    properties.setProperty("store.compaction.policy.switch.counter.days", "3");
+    properties.setProperty("store.compaction.policy.switch.timestamp.days", "7");
     properties.setProperty("store.compaction.policy.factory", "com.github.ambry.store.HybridCompactionPolicyFactory");
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
@@ -156,54 +127,54 @@ public class CompactionPolicyTest {
         tmpFile.mkdir();
       }
       compactionManager.getCompactionDetails(blobStore);
-      assertEquals("Counter value should match with expectation", 1 % config.storeCompactionPolicySwitchPeriod,
+      assertEquals("Counter value should match with expectation", 1 % config.storeCompactionPolicySwitchCounterDays,
           ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap()
               .get(blobId)
               .getCompactionPolicyCounter()
-              .getValue());
+              .getCounter());
       compactionManager.getCompactionDetails(blobStore);
-      assertEquals("Counter value should match with expectation", 2 % config.storeCompactionPolicySwitchPeriod,
+      assertEquals("Counter value should match with expectation", 2 % config.storeCompactionPolicySwitchCounterDays,
           ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap()
               .get(blobId)
               .getCompactionPolicyCounter()
-              .getValue());
+              .getCounter());
       compactionManager.getCompactionDetails(blobStore);
-      assertEquals("Counter value should match with expectation", 3 % config.storeCompactionPolicySwitchPeriod,
+      assertEquals("Counter value should match with expectation", 3 % config.storeCompactionPolicySwitchCounterDays,
           ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap()
               .get(blobId)
               .getCompactionPolicyCounter()
-              .getValue());
+              .getCounter());
       //set last compactAll kick off time to current time to trigger compactAllPolicy
       ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap()
           .get(blobId)
           .setLastCompactAllTime(
-              System.currentTimeMillis() - TimeUnit.DAYS.toMillis(config.storeCompactionPolicySwitchPeriod));
+              System.currentTimeMillis() - TimeUnit.DAYS.toMillis(config.storeCompactionPolicySwitchCounterDays));
       compactionManager.getCompactionDetails(blobStore);
       assertEquals("TimeStamp will be set to the compactAllPolicy kick off time",
-          1 % config.storeCompactionPolicySwitchPeriod,
+          1 % config.storeCompactionPolicySwitchCounterDays,
           ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap()
               .get(blobId)
               .getCompactionPolicyCounter()
-              .getValue());
+              .getCounter());
       //set last compactAll kick off time to current time to trigger compactAllPolicy
       ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap()
           .get(blobId)
           .setLastCompactAllTime(
-              System.currentTimeMillis() - TimeUnit.DAYS.toMillis(config.storeCompactionPolicySwitchPeriod));
+              System.currentTimeMillis() - TimeUnit.DAYS.toMillis(config.storeCompactionPolicySwitchTimestampDays));
       compactionManager.getCompactionDetails(blobStore);
       assertEquals("TimeStamp will be set to the compactAllPolicy kick off time",
-          1 % config.storeCompactionPolicySwitchPeriod,
+          1 % config.storeCompactionPolicySwitchTimestampDays,
           ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap()
               .get(blobId)
               .getCompactionPolicyCounter()
-              .getValue());
+              .getCounter());
       //add one more round to check if compaction will be recovered from backup file
       compactionManager.getCompactionDetails(blobStore);
-      assertEquals("Counter value should match with expectation", 2 % config.storeCompactionPolicySwitchPeriod,
+      assertEquals("Counter value should match with expectation", 2 % config.storeCompactionPolicySwitchCounterDays,
           ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap()
               .get(blobId)
               .getCompactionPolicyCounter()
-              .getValue());
+              .getCounter());
     }
     //check BlobToCompactionPolicySwitchInfoMap match with expectation.
     assertEquals("map size should equals to number of stores", numStores,
@@ -218,11 +189,11 @@ public class CompactionPolicyTest {
     String blobId = mockBlobStoreStats.getStoreId();
     ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap().clear();
     compactionManager.getCompactionDetails(blobStore);
-    assertEquals("Counter value should match with expectation", 2 % config.storeCompactionPolicySwitchPeriod,
+    assertEquals("Counter value should match with expectation", 2 % config.storeCompactionPolicySwitchCounterDays,
         ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap()
             .get(blobId)
             .getCompactionPolicyCounter()
-            .getValue());
+            .getCounter());
   }
 
   /**
@@ -341,6 +312,43 @@ public class CompactionPolicyTest {
         new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, SEGMENT_CAPACITY_IN_BYTES, SEGMENT_HEADER_SIZE,
             DEFAULT_USED_CAPACITY_IN_BYTES, mockBlobStoreStats);
     return new Pair<>(blobStore, config);
+  }
+
+  /**
+   * Clean up the backup files.
+   */
+  private void cleanupBackupFiles() {
+    if (dataDirPath == null) {
+      return;
+    }
+    File backupDir = dataDirPath.toFile();
+
+    // First get all the file with temp file suffix and remove all of them
+    FileFilter tempFileFilter = (File pathname) -> pathname.getName().startsWith("storeId");
+    File[] files = backupDir.listFiles(tempFileFilter);
+    if (files != null) {
+      for (File file : files) {
+        File deleteFile = new File(MOUNT_PATH + file.getName() + File.separator + "compactionPolicyInfo.json");
+        logger.trace("Delete temp file {}", deleteFile.getName());
+        deleteFile(deleteFile.toPath());
+      }
+    }
+  }
+
+  /**
+   * Delete the files.
+   * @param toDelete files need to be deleted.
+   */
+  private void deleteFile(Path toDelete) {
+    try {
+      Files.delete(toDelete);
+    } catch (NoSuchFileException e) {
+      logger.error("File doesn't exist while deleting: {}", toDelete.toString(), e);
+    } catch (IOException e) {
+      logger.error("Encounter an I/O error while deleting file: {}", toDelete.toString(), e);
+    } catch (Exception e) {
+      logger.error("Encounter an unexpected error while deleting file: {}", toDelete.toString(), e);
+    }
   }
 
   /**

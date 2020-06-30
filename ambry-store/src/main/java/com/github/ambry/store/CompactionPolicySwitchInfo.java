@@ -26,23 +26,42 @@ public class CompactionPolicySwitchInfo {
   private CompactionPolicyCounter compactionPolicyCounter;
   private long lastCompactAllTime;
 
+  /**
+   * Constructor to create {@link CompactionPolicySwitchInfo} object.
+   * @param compactionPolicyCounter Counter used to switch {@link CompactAllPolicy}
+   * @param lastCompactAllTime last time when {@link CompactAllPolicy} has been selected.
+   */
   CompactionPolicySwitchInfo(CompactionPolicyCounter compactionPolicyCounter, long lastCompactAllTime) {
     this.compactionPolicyCounter = compactionPolicyCounter;
     this.lastCompactAllTime = lastCompactAllTime;
   }
 
-  //make sure objectMapper can work correctly
+  /**
+   * make sure objectMapper can work correctly
+   */
   CompactionPolicySwitchInfo() {
   }
 
+  /**
+   * Get current {@link CompactionPolicyCounter}
+   * @return {@link CompactionPolicyCounter}
+   */
   CompactionPolicyCounter getCompactionPolicyCounter() {
     return this.compactionPolicyCounter;
   }
 
+  /**
+   * Get the last time when {@link CompactAllPolicy} has been selected.
+   * @return the last time when {@link CompactAllPolicy} has been selected.
+   */
   long getLastCompactAllTime() {
     return this.lastCompactAllTime;
   }
 
+  /**
+   * Set the last time when {@link CompactAllPolicy} has been selected.
+   * @param lastCompactAllTime last time when {@link CompactAllPolicy} has been selected.
+   */
   void setLastCompactAllTime(long lastCompactAllTime) {
     this.lastCompactAllTime = lastCompactAllTime;
   }

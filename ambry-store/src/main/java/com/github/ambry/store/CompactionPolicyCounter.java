@@ -20,29 +20,42 @@ import org.codehaus.jackson.annotate.JsonPropertyOrder;
 /**
  * A counter used to switch {@link CompactAllPolicy}.
  */
-@JsonPropertyOrder({"storeCompactionPolicySwitchPeriod", "counter"})
+@JsonPropertyOrder({"storeCompactionPolicySwitchCounterDays", "counter"})
 @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
 class CompactionPolicyCounter {
-  private int storeCompactionPolicySwitchPeriod;
+  private int storeCompactionPolicySwitchCounterDays;
   private int counter;
 
-  CompactionPolicyCounter(int storeCompactionPolicySwitchPeriod) {
-    this.storeCompactionPolicySwitchPeriod = storeCompactionPolicySwitchPeriod;
+  CompactionPolicyCounter(int storeCompactionPolicySwitchCounterDays) {
+    this.storeCompactionPolicySwitchCounterDays = storeCompactionPolicySwitchCounterDays;
   }
 
-  //make sure objectMapper can work correctly
+  /**
+   * make sure objectMapper can work correctly
+   */
   CompactionPolicyCounter() {
   }
 
-  public int getValue() {
+  /**
+   * Gets the current counter.
+   * @return the value of the counter.
+   */
+  public int getCounter() {
     return counter;
   }
 
-  public void setValue(int val) {
-    this.counter = val;
+  /**
+   * Set the current counter value;
+   * @param counter the counter value to determine which {@link CompactionPolicy} to use for each compaction cycle.
+   */
+  public void setCounter(int counter) {
+    this.counter = counter;
   }
 
+  /**
+   * Increment the counter value each compaction cycle and mod storeCompactionPolicySwitchPeriodDays.
+   */
   public void increment() {
-    counter = (counter + 1) % storeCompactionPolicySwitchPeriod;
+    counter = (counter + 1) % storeCompactionPolicySwitchCounterDays;
   }
 }
