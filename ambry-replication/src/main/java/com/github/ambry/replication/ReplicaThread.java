@@ -298,15 +298,19 @@ public class ReplicaThread implements Runnable {
   /**
    * Do replication for replicas grouped by {@link DataNodeId}
    * A replication cycle between two replicas involves the following steps:
-   *    1. Exchange metadata : to fetch the blobs added to remote replica since the last synchronization offset and go through
-   *       the local store to filter the ones missing locally
-   *    2. Fetch missing keys: to fetch the blobs missing locally from remote replica by issuing GET requests and add them to
+   *    1. Exchange metadata : fetch the metadata of blobs added to remote replica since the last synchronization point
+   *    and filter the ones missing in local store.
+   *    2. Fetch missing blobs: fetch the missing blobs by issuing GET request to remote replica and write them to
    *       the local store
-   *  During cross-colo replication, depending on the {@link ReplicationModelType}, the second step to fetch missing
-   *  keys happens in either all-to-all fashion (i.e. fetched from all cross colo replicas) or is limited to only leader
-   *  replica pairs (i.e both local and remote replicas should be leaders of their partition).
-   *  Here is a table listing on what is exchanged between local and remote replicas based on their roles (leader or
-   *  standby) when {@link ReplicationModelType is LEADER_BASED}.
+   *
+   *  During cross-colo replication, depending on the {@link ReplicationModelType}, the missing blobs are either fetched
+   *  from all remote replicas (if modelType == ALL_TO_ALL) or only fetched for local leader replicas from their remote
+   *  leader replicas (if modelType == LEADER_BASED). In the latter case, non-leader replica pairs (leader <-> standby,
+   *  standby <-> leader, standby <-> standby) will get their missing blobs from their corresponding leader<->leader
+   *  exchanges and intra-dc replication.
+   *
+   *  Here is a table listing on what is exchanged between local and remote replicas based on their roles
+   *  (leader/standby) when {@link ReplicationModelType is LEADER_BASED}.
    *
    *              |   Local Leader    |     Local Standby   |   Remote Leader   |  Remote Standby
    *            -------------------------------------------------------------------------------------
@@ -351,40 +355,40 @@ public class ReplicaThread implements Runnable {
       long replicationStartTimeInMs = time.milliseconds();
       long startTimeInMs = replicationStartTimeInMs;
 
-      // use a variable to track current replica list to replicate (for logging purpose)
-      List<RemoteReplicaInfo> currentReplicaList = new ArrayList<>();
-      try {
-        // Get a list of active replicas that needs be included for this replication cycle
-        List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
-        for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
-          ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-          boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
-          if (replicationDisabledPartitions.contains(replicaId.getPartitionId()) || replicaId.isDown() || inBackoff
-              || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE) {
+      // Get a list of active replicas that needs be included for this replication cycle
+      List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
+      for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
+        ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+        boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
+        if (replicationDisabledPartitions.contains(replicaId.getPartitionId()) || replicaId.isDown() || inBackoff
+            || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE) {
+          continue;
+        }
+
+        if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
+          // In leader-based cross colo replication, missing blobs are only exchanged between leader replica pairs (i.e.
+          // local replica and remote replica are leaders of their partition). For all non-leader replica pairs (i.e.
+          // leader <-> standby, standby <-> leader, standby <-> standby), we expect their missing keys to come from
+          // leader pair exchanges via intra-dc replication.
+
+          // Check and process missing keys (if any) for non-leader replica pairs from their metadata exchanges in
+          // previous replication cycle. These keys should most likely be now obtained now their corresponding
+          // leader<->leader replication.
+          processMissingKeysFromPreviousMetadataResponse(remoteReplicaInfo);
+
+          // If we still have some missing keys from previous metadata exchange, don't include the remote replica for
+          // current replication cycle to avoid sending duplicate metadata request.
+          if (containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo)) {
             continue;
           }
-
-          if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
-            // In leader-based cross colo replication, missing blobs are only exchanged between leader replica pairs (i.e.
-            // local replica and remote replica are leaders of their partition). For all non-leader replica pairs (i.e.
-            // leader <-> standby, standby <-> leader, standby <-> standby), we expect their missing keys to come from
-            // leader pair exchanges via intra-dc replication.
-
-            // Check and process missing keys of standby replicas from metadata exchange of previous replication cycle
-            // which might be now obtained from local leader via intra-dc replication.
-            processMissingKeysFromPreviousMetadataResponse(remoteReplicaInfo);
-
-            // If we still have some missing keys from previous metadata exchange, don't include this replica for
-            // current replication cycle to avoid sending duplicate metadata request.
-            if (containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo)) {
-              continue;
-            }
-          }
-          activeReplicasPerNode.add(remoteReplicaInfo);
         }
-        logger.trace("Replicating from {} RemoteReplicaInfos.", activeReplicasPerNode.size());
+        activeReplicasPerNode.add(remoteReplicaInfo);
+      }
+      logger.trace("Replicating from {} RemoteReplicaInfos.", activeReplicasPerNode.size());
 
-        currentReplicaList = activeReplicasPerNode;
+      // use a variable to track current replica list to replicate (for logging purpose)
+      List<RemoteReplicaInfo> currentReplicaList = activeReplicasPerNode;
+      try {
         if (activeReplicasPerNode.size() > 0) {
           allCaughtUp = false;
           // if maxReplicaCountPerRequest > 0, split remote replicas on same node into multiple lists; otherwise there is
@@ -392,7 +396,7 @@ public class ReplicaThread implements Runnable {
           List<List<RemoteReplicaInfo>> activeReplicaSubLists =
               maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicasPerNode, maxReplicaCountPerRequest)
                   : Collections.singletonList(activeReplicasPerNode);
-          // we checkout ConnectedChannel once and replicate remote replicas in batch via same ConnectedChannel
+
           connectedChannel =
               connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
                   replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
@@ -564,9 +568,9 @@ public class ReplicaThread implements Runnable {
                 processReplicaMetadataResponse(remoteMissingStoreMessages, replicaMetadataResponseInfo,
                     remoteReplicaInfo, remoteNode, remoteKeyToLocalKeyMap);
 
-                // Get a remote key to local key sub map for missing keys of this replica. It will be stored along with
-                // missing store messages in ExchangeMetadataResponse. This is needed during leader based replication where
-                // metadata response is stored for standby replicas to track the missing keys via intra-dc replication.
+                // Get the converted keys for the missing keys of this replica (to store them along with missing keys in
+                // the exchange metadata response). For leader based replication, these are used during processing
+                // of missing keys for non-leader replica pairs which will come later via leader<->leader replication.
                 Map<StoreKey, StoreKey> remoteKeyToLocalKeySubMap = new HashMap<>();
                 remoteMissingStoreMessages.forEach(remoteMissingStoreMessage -> {
                   StoreKey remoteKey = remoteMissingStoreMessage.getStoreKey();
@@ -651,11 +655,9 @@ public class ReplicaThread implements Runnable {
             if (exchangeMetadataResponse.serverErrorCode.equals(ServerErrorCode.No_Error)) {
 
               // If leader-based replication is enabled, store the meta data exchange received for the remote replica as
-              // standby replicas will not send GET request for the missing store keys and track them
-              // via intra-dc replication.
+              // standby replicas will not send GET request for the missing store keys and track them from leader <->
+              // leader exchanges and intra-dc replication.
 
-              // make a copy of the exchange metadata response since we don't want to touch the original while the
-              // we are using it to fetch missing keys in fixMissingStoreKeys()
               ExchangeMetadataResponse exchangeMetadataResponseCopyToCache =
                   new ExchangeMetadataResponse(new HashSet<>(exchangeMetadataResponse.missingStoreMessages),
                       exchangeMetadataResponse.remoteToken, exchangeMetadataResponse.localLagFromRemoteInBytes,
@@ -1139,12 +1141,12 @@ public class ReplicaThread implements Runnable {
               totalBlobsFixed += messageInfoList.size();
 
               if (leaderBasedReplicationAdmin != null) {
-                // If leader based replication is enabled, standby replicas won't fetch the missing blobs
-                // found in their metadata exchange and expect them to come via local leader in intra-dc replication.
-                // However, we store the metadata exchange information (missing blobs, remote token, etc) for standby replicas
-                // in order to advance remote token after their missing blobs are written to store via intra-dc replication.
-                // Whenever any blobs are written to local store, inform all the replicas of the partition so that the
-                // standby replicas can update their missing blob information and advance token if needed.
+                // If leader based replication is enabled, we will only fetch missing blobs for local leaders from their
+                // remote leaders. For non-leader replicas pairs (leader <-> standby, standby <-> leader, standby <->
+                // standby), we will store the missing keys and track them via leader<->leader exchanges and intra-dc
+                // replication.
+                // Notify all the replicas of the partition on newly written messages so that non-leader replica pairs
+                // can update their missing keys and advance token if needed.
                 leaderBasedReplicationAdmin.onMessageWriteForPartition(partitionResponseInfo.getPartition(),
                     messageInfoList);
               }
@@ -1532,16 +1534,16 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
-     * Checks if there are any remote messages received in this meta data exchange missing in the local store.
-     * @return set of missing store messages in previous metadata exchange
+     * Checks if there are any missing store messages in this meta data exchange.
+     * @return set of missing store messages
      */
     synchronized boolean hasMissingStoreMessages() {
       return missingStoreMessages != null && !missingStoreMessages.isEmpty();
     }
 
     /**
-     * Get remote messages received in this metadata exchange which are missing on local store.
-     * @return set of missing store messages in previous metadata exchange
+     * Get missing store messages in this metadata exchange.
+     * @return set of missing store messages
      */
     synchronized Set<MessageInfo> getMissingStoreMessages() {
       return missingStoreMessages;
@@ -1550,9 +1552,8 @@ public class ReplicaThread implements Runnable {
     /**
      * Removes missing store messages (who blobs are now written to local store) from 'missingStoreMessages' set and
      * adds them to 'receivedStoreMessagesWithUpdatesPending' set. Replica threads will go through
-     * receivedStoreMessagesWithUpdatesPending set in next replication cycle and compare
-     * message info of these remote messages with message info of matching blobs in local store and
-     * reconcile blob properties like ttl_update/delete/undelete.
+     * receivedStoreMessagesWithUpdatesPending set and compare message info of these remote messages with message info
+     * of matching blobs in local store to reconcile blob properties ttl_update/delete/undelete.
      * @param messagesWrittenToStore messages that needs to be removed from missingStoreMessages set and added to
      *                     receivedStoreMessagesWithUpdatesPending.
      */
