@@ -19,6 +19,7 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -51,7 +52,7 @@ public class ServerPlaintextTest {
 
     Properties serverProperties = new Properties();
     TestSSLUtils.addHttp2Properties(serverProperties, SSLFactory.Mode.SERVER, true);
-    plaintextCluster = new MockCluster(serverProperties, false, SystemTime.getInstance());
+    plaintextCluster = new MockCluster(serverProperties, false, new MockTime(SystemTime.getInstance().milliseconds()));
     notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);
   }
@@ -153,5 +154,18 @@ public class ServerPlaintextTest {
     plaintextCluster.startServers();
     ServerTestUtil.undeleteCornerCasesTest(plaintextCluster, PortType.PLAINTEXT, null, null, null, null, null, null,
         notificationSystem, routerProps, testEncryption);
+  }
+
+  /**
+   * Test index recovery for undelete.
+   * @throws Exception
+   */
+  @Test
+  public void undeleteRecoveryTest() throws Exception {
+    assumeTrue(!testEncryption);
+    plaintextCluster.startServers();
+    DataNodeId dataNodeId = plaintextCluster.getGeneralDataNode();
+    ServerTestUtil.undeleteRecoveryTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), plaintextCluster, null,
+        null);
   }
 }

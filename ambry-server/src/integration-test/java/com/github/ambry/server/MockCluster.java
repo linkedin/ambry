@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockClusterSpectatorFactory;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
@@ -71,8 +72,8 @@ public class MockCluster {
   private final List<String> sslEnabledDataCenterList;
   private final Properties sslProps;
   private final boolean enableHardDeletes;
-  private final Time time;
   private NotificationSystem notificationSystem;
+  final Time time;
 
   public MockCluster(Properties serverSslProps, boolean enableHardDeletes, Time time) throws IOException {
     this(serverSslProps, enableHardDeletes, time, 9, 3, 3);
@@ -253,12 +254,13 @@ public class MockCluster {
     props.setProperty("store.data.flush.interval.seconds", "1");
     props.setProperty("store.enable.hard.delete", Boolean.toString(enableHardDeletes));
     props.setProperty("store.deleted.message.retention.days", "1");
+    props.setProperty("store.validate.authorization", "true");
+    props.setProperty("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 10));
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.validate.message.stream", "true");
     props.setProperty("clustermap.cluster.name", "test");
     props.setProperty("clustermap.datacenter.name", "DC1");
     props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("store.validate.authorization", "true");
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     props.setProperty("server.enable.store.data.prefetch", Boolean.toString(enableDataPrefetch));
     props.setProperty("server.handle.undelete.request.enabled", "true");

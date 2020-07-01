@@ -21,6 +21,7 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import java.io.File;
@@ -65,7 +66,8 @@ public class ServerHttp2Test {
     serverSSLProps = new Properties();
     TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     TestSSLUtils.addHttp2Properties(serverSSLProps, SSLFactory.Mode.SERVER, false);
-    http2Cluster = new MockCluster(serverSSLProps, false, SystemTime.getInstance(), 1, 1, 2);
+    http2Cluster =
+        new MockCluster(serverSSLProps, false, new MockTime(SystemTime.getInstance().milliseconds()), 1, 1, 2);
     notificationSystem = new MockNotificationSystem(http2Cluster.getClusterMap());
     http2Cluster.initializeServers(notificationSystem);
     http2Cluster.startServers();
