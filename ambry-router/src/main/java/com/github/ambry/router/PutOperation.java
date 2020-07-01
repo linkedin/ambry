@@ -1323,8 +1323,8 @@ class PutOperation {
         ChunkPutRequestInfo info = entry.getValue();
         if (time.milliseconds() - info.startTimeMs > routerConfig.routerRequestTimeoutMs) {
           onErrorResponse(info.replicaId, TrackedRequestFinalState.FAILURE);
-          logger.debug("PutRequest with correlationId {} in flight has expired for replica {} ", correlationId,
-              info.replicaId.getDataNodeId());
+          logger.warn("PutRequest with correlationId {} in flight has expired for replica {} {}", correlationId,
+              info.replicaId.getDataNodeId(), info);
           // Do not notify this as a failure to the response handler, as this timeout could simply be due to
           // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
           // response and the response handler will be notified accordingly.
@@ -1357,7 +1357,7 @@ class PutOperation {
         requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
         if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
-          logger.trace("Making request with correlationId {} to a remote replica {} in {} ", correlationId,
+          logger.debug("Making request with correlationId {} to a remote replica {} in {} ", correlationId,
               replicaId.getDataNodeId(), replicaId.getDataNodeId().getDatacenterName());
           routerMetrics.crossColoRequestCount.inc();
         } else {

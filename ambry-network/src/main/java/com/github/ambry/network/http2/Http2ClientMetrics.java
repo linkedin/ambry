@@ -36,6 +36,7 @@ public class Http2ClientMetrics {
   public final Histogram http2ClientSendTime;
   public final Histogram http2ClientSendAndPollTime;
   public final Histogram http2ResponseFrameCount;
+  public final Histogram requestToNetworkClientLatencyMs;
 
   public final Counter http2NewPoolCount;
   public final Counter http2NewConnectionCount;
@@ -76,6 +77,8 @@ public class Http2ClientMetrics {
         registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2ClientSendAndPollTime"));
     http2ResponseFrameCount =
         registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2ResponseFrameCount"));
+    requestToNetworkClientLatencyMs =
+        registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "RequestToNetworkClientLatencyMs"));
 
     http2NewPoolCount = registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2NewPoolCount"));
     http2NewConnectionCount =

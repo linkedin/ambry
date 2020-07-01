@@ -248,7 +248,8 @@ project(':ambry-network') {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
-                project(':ambry-clustermap')
+                project(':ambry-clustermap'),
+                project(':ambry-protocol')
         compile "io.netty:netty-all:$nettyVersion"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
         compile "io.netty:netty-transport-native-epoll:$nettyVersion"

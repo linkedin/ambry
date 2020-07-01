@@ -20,6 +20,7 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.RequestOrResponse;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -38,7 +39,9 @@ import io.netty.util.concurrent.GenericFutureListener;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,6 +62,7 @@ public class Http2NetworkClient implements NetworkClient {
   private final Http2ClientConfig http2ClientConfig;
   private final Http2StreamFrameToHttpObjectCodec http2StreamFrameToHttpObjectCodec;
   private final AmbrySendToHttp2Adaptor ambrySendToHttp2Adaptor;
+  private final Map<Integer, Channel> correlationIdInFlightToChannelMap;
   static final AttributeKey<RequestInfo> REQUEST_INFO = AttributeKey.newInstance("RequestInfo");
 
   public Http2NetworkClient(Http2ClientMetrics http2ClientMetrics, Http2ClientConfig http2ClientConfig,
@@ -79,17 +83,24 @@ public class Http2NetworkClient implements NetworkClient {
     this.pools = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics,
         new StreamChannelInitializer());
     this.http2ClientMetrics = http2ClientMetrics;
+    correlationIdInFlightToChannelMap = new ConcurrentHashMap<>();
   }
 
   @Override
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop,
       int pollTimeoutMs) {
     long startTime = System.currentTimeMillis();
+
     List<ResponseInfo> readyResponseInfos = new ArrayList<>();
     // Send request
     http2ClientMetrics.http2ClientSendRate.mark(requestsToSend.size());
     for (RequestInfo requestInfo : requestsToSend) {
       long streamInitiateTime = System.currentTimeMillis();
+
+      RequestOrResponse request = (RequestOrResponse) (requestInfo.getRequest());
+      long waitingTime = streamInitiateTime - request.requestCreateTime;
+      http2ClientMetrics.requestToNetworkClientLatencyMs.update(waitingTime);
+
       this.pools.get(InetSocketAddress.createUnresolved(requestInfo.getHost(), requestInfo.getPort().getPort()))
           .acquire()
           .addListener((GenericFutureListener<Future<Channel>>) future -> {
@@ -97,6 +108,7 @@ public class Http2NetworkClient implements NetworkClient {
               http2ClientMetrics.http2StreamAcquireTime.update(System.currentTimeMillis() - streamInitiateTime);
               long streamAcquiredTime = System.currentTimeMillis();
               Channel streamChannel = future.getNow();
+              correlationIdInFlightToChannelMap.put(requestInfo.getRequest().getCorrelationId(), streamChannel);
               streamChannel.attr(REQUEST_INFO).set(requestInfo);
               if (!streamChannel.isWritable() || !streamChannel.parent().isWritable()) {
                 http2ClientMetrics.http2StreamNotWritableCount.inc();
@@ -106,12 +118,25 @@ public class Http2NetworkClient implements NetworkClient {
               streamChannel.writeAndFlush(requestInfo.getRequest()).addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
-                  // Listener will be notified after data is removed from ChannelOutboundBuffer (netty's send buffer)
+                  // Listener will be notified right after data is removed from ChannelOutboundBuffer (netty's send buffer)
                   // After removing from ChannelOutboundBuffer, it goes to OS send buffer.
                   if (future.isSuccess()) {
-                    http2ClientMetrics.http2StreamWriteAndFlushTime.update(
-                        System.currentTimeMillis() - streamAcquiredTime);
+                    long writeAndFlushUsedTime = System.currentTimeMillis() - streamAcquiredTime;
+                    http2ClientMetrics.http2StreamWriteAndFlushTime.update(writeAndFlushUsedTime);
                     requestInfo.setStreamSendTime(System.currentTimeMillis());
+                    if (writeAndFlushUsedTime > http2ClientConfig.http2WriteAndFlushTimeoutMs) {
+                      // This usually happens if remote can't accept data in time.
+                      logger.warn(
+                          "WriteAndFlush exceeds http2RequestTimeoutMs {}ms, used time: {}ms, stream channel {}",
+                          http2ClientConfig.http2WriteAndFlushTimeoutMs, writeAndFlushUsedTime, streamChannel);
+                      if (http2ClientConfig.http2DropRequestOnWriteAndFlushTimeout) {
+                        releaseAndCloseStreamChannel(streamChannel);
+                        http2ClientResponseHandler.getResponseInfoQueue()
+                            .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
+                        correlationIdInFlightToChannelMap.remove(requestInfo.getRequest().getCorrelationId());
+                        // Don't need to call requestInfo.getRequest().release(), because netty write handler decreases refcnt.
+                      }
+                    }
                     // When success, handler would release the request.
                   } else {
                     http2ClientMetrics.http2StreamWriteAndFlushErrorCount.inc();
@@ -124,6 +149,7 @@ public class Http2NetworkClient implements NetworkClient {
                     releaseAndCloseStreamChannel(streamChannel);
                     http2ClientResponseHandler.getResponseInfoQueue()
                         .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
+                    correlationIdInFlightToChannelMap.remove(requestInfo.getRequest().getCorrelationId());
                     // release related bytebuf
                     requestInfo.getRequest().release();
                   }
@@ -144,6 +170,12 @@ public class Http2NetworkClient implements NetworkClient {
     if (requestsToDrop.size() != 0) {
       logger.warn("Number of requestsToDrop: {}", requestsToDrop.size());
       http2ClientMetrics.http2RequestsToDropCount.inc(requestsToDrop.size());
+      for (int correlationId : requestsToDrop) {
+        Channel streamChannel = correlationIdInFlightToChannelMap.remove(correlationId);
+        if (streamChannel != null) {
+          releaseAndCloseStreamChannel(streamChannel);
+        }
+      }
     }
 
     http2ClientResponseHandler.getResponseInfoQueue().poll(readyResponseInfos, pollTimeoutMs);

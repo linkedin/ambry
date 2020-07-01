@@ -268,18 +268,21 @@ public class MultiplexedChannelRecord {
     for (int attempt = 0; attempt < 5; ++attempt) {
 
       if (state != RecordState.OPEN) {
+        log.warn("claimStream fail because state is closed. ");
         return false;
       }
 
       int currentlyAvailable = numOfAvailableStreams.get();
 
       if (currentlyAvailable <= 0) {
+        log.warn("claimStream fail because currentlyAvailable: {}. ", currentlyAvailable);
         return false;
       }
       if (numOfAvailableStreams.compareAndSet(currentlyAvailable, currentlyAvailable - 1)) {
         return true;
       }
     }
+    log.warn("claimStream fail because attempt failed. ");
 
     return false;
   }
