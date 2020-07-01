@@ -148,7 +148,7 @@ public class CompactionPolicyTest {
       ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap()
           .get(blobId)
           .setLastCompactAllTime(
-              System.currentTimeMillis() - TimeUnit.DAYS.toMillis(config.storeCompactionPolicySwitchCounterDays));
+              System.currentTimeMillis() - TimeUnit.DAYS.toMillis(config.storeCompactionPolicySwitchTimestampDays));
       compactionManager.getCompactionDetails(blobStore);
       assertEquals("TimeStamp will be set to the compactAllPolicy kick off time",
           1 % config.storeCompactionPolicySwitchCounterDays,
@@ -189,7 +189,7 @@ public class CompactionPolicyTest {
     String blobId = mockBlobStoreStats.getStoreId();
     ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap().clear();
     compactionManager.getCompactionDetails(blobStore);
-    assertEquals("Counter value should match with expectation", 2 % config.storeCompactionPolicySwitchCounterDays,
+    assertEquals("Counter value should match with expectation", 3 % config.storeCompactionPolicySwitchCounterDays,
         ((HybridCompactionPolicy) compactionManager.getCompactionPolicy()).getBlobToCompactionPolicySwitchInfoMap()
             .get(blobId)
             .getCompactionPolicyCounter()

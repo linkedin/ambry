@@ -68,8 +68,8 @@ public class HybridCompactionPolicy implements CompactionPolicy {
     CompactionPolicy selectCompactionPolicy =
         selectCompactionPolicyAndUpdateCompactionPolicySwitchInfo(compactionPolicySwitchInfo, storeId, dataDir);
     logger.info("Current compaction policy  is : {} for store : {}, dataDir : {}", selectCompactionPolicy, storeId, dataDir);
-    backUpCompactionPolicyInfo(dataDir, compactionPolicySwitchInfo);
     compactionPolicySwitchInfo.getCompactionPolicyCounter().increment();
+    backUpCompactionPolicyInfo(dataDir, compactionPolicySwitchInfo);
     return selectCompactionPolicy.getCompactionDetails(totalCapacity, usedCapacity, segmentCapacity, segmentHeaderSize,
         logSegmentsNotInJournal, blobStoreStats, dataDir);
   }
