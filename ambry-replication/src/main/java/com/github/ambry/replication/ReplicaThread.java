@@ -429,7 +429,7 @@ public class ReplicaThread implements Runnable {
 
             startTimeInMs = time.milliseconds();
             if (replicaSubList.size() > 0) {
-              fixMissingStoreKeys(connectedChannel, replicaSubList, exchangeMetadataResponseList);
+              fixMissingStoreKeys(connectedChannel, replicaSubList, exchangeMetadataResponseList, false);
             }
             fixMissingStoreKeysTimeInMs = time.milliseconds() - startTimeInMs;
           }
@@ -465,7 +465,7 @@ public class ReplicaThread implements Runnable {
                 "Sending GET request to fetch missing keys for standby remote replicas {} timed out on no progress",
                 currentReplicaList);
             fixMissingStoreKeys(connectedChannel, standbyReplicasTimedOutOnNoProgress,
-                exchangeMetadataResponseListForInactiveReplicas);
+                exchangeMetadataResponseListForInactiveReplicas, true);
             fixMissingStoreKeysTimeInMs = time.milliseconds() - startTimeInMs;
           }
         }
@@ -579,8 +579,7 @@ public class ReplicaThread implements Runnable {
 
                 ExchangeMetadataResponse exchangeMetadataResponse =
                     new ExchangeMetadataResponse(remoteMissingStoreMessages, replicaMetadataResponseInfo.getFindToken(),
-                        replicaMetadataResponseInfo.getRemoteReplicaLagInBytes(), time.seconds(),
-                        remoteKeyToLocalKeySubMap);
+                        replicaMetadataResponseInfo.getRemoteReplicaLagInBytes(), remoteKeyToLocalKeySubMap, time);
 
                 // update replication lag in ReplicaSyncUpManager
                 if (replicaSyncUpManager != null
@@ -661,8 +660,7 @@ public class ReplicaThread implements Runnable {
               ExchangeMetadataResponse exchangeMetadataResponseCopyToCache =
                   new ExchangeMetadataResponse(new HashSet<>(exchangeMetadataResponse.missingStoreMessages),
                       exchangeMetadataResponse.remoteToken, exchangeMetadataResponse.localLagFromRemoteInBytes,
-                      exchangeMetadataResponse.metadataReceivedTimeSec,
-                      exchangeMetadataResponse.remoteKeyToLocalKeyMap);
+                      exchangeMetadataResponse.remoteKeyToLocalKeyMap, time);
               remoteReplicaInfo.setExchangeMetadataResponse(exchangeMetadataResponseCopyToCache);
 
               // It is possible that some of the missing keys found in exchange metadata response are written in parallel
@@ -690,11 +688,14 @@ public class ReplicaThread implements Runnable {
    * @param replicasToReplicatePerNode The information about the replicas that is being replicated
    * @param exchangeMetadataResponseList The missing keys in the local stores whose message needs to be retrieved
    *                                     from the remote stores
+   * @param remoteColoGetRequestForStandby boolean which indicates if we are getting missing keys for standby or
+   *                                       non-leader replica pairs during leader-based replication.
    * @throws IOException
    * @throws ReplicationException
    */
   void fixMissingStoreKeys(ConnectedChannel connectedChannel, List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<ExchangeMetadataResponse> exchangeMetadataResponseList) throws IOException, ReplicationException {
+      List<ExchangeMetadataResponse> exchangeMetadataResponseList, boolean remoteColoGetRequestForStandby)
+      throws IOException, ReplicationException {
     long fixMissingStoreKeysStartTimeInMs = time.milliseconds();
     try {
       if (exchangeMetadataResponseList.size() != replicasToReplicatePerNode.size()
@@ -706,9 +707,9 @@ public class ReplicaThread implements Runnable {
       DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
       GetResponse getResponse =
           getMessagesForMissingKeys(connectedChannel, exchangeMetadataResponseList, replicasToReplicatePerNode,
-              remoteNode);
+              remoteNode, remoteColoGetRequestForStandby);
       writeMessagesToLocalStoreAndAdvanceTokens(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode,
-          remoteNode);
+          remoteNode, remoteColoGetRequestForStandby);
     } finally {
       long fixMissingStoreKeysTime = time.milliseconds() - fixMissingStoreKeysStartTimeInMs;
       replicationMetrics.updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, replicatingFromRemoteColo,
@@ -998,6 +999,8 @@ public class ReplicaThread implements Runnable {
    * @param exchangeMetadataResponseList The list of metadata response from the remote node
    * @param replicasToReplicatePerNode The list of remote replicas for the remote node
    * @param remoteNode The remote node from which replication needs to happen
+   * @param remoteColoGetRequestForStandby boolean which indicates if we are getting missing keys for standby or
+   *                                       non-leader replica pairs during leader-based replication.
    * @return The response that contains the missing messages; or null if no request was issued because there were no
    * keys missing.
    * @throws ReplicationException
@@ -1005,7 +1008,7 @@ public class ReplicaThread implements Runnable {
    */
   private GetResponse getMessagesForMissingKeys(ConnectedChannel connectedChannel,
       List<ExchangeMetadataResponse> exchangeMetadataResponseList, List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      DataNodeId remoteNode) throws ReplicationException, IOException {
+      DataNodeId remoteNode, boolean remoteColoGetRequestForStandby) throws ReplicationException, IOException {
     List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
@@ -1035,17 +1038,6 @@ public class ReplicaThread implements Runnable {
         ChannelOutput channelOutput = connectedChannel.receive();
         getResponse = GetResponse.readFrom(new DataInputStream(channelOutput.getInputStream()), clusterMap);
         long getRequestTime = time.milliseconds() - startTime;
-        boolean remoteColoGetRequestForStandby = false;
-        if (leaderBasedReplicationAdmin != null && replicatingFromRemoteColo) {
-          // If leader-based replication is enabled, we should ideally send cross colo GET requests only between leaders.
-          // However, if standby replicas time out waiting for their keys to come from leader, we send cross colo GETs
-          // for them. Set 'remoteColoGetRequestForStandby' to true so that we track number of such cross colo GETs for standby replicas.
-          ReplicaId localReplica = replicasToReplicatePerNode.get(0).getLocalReplicaId();
-          ReplicaId remoteReplica = replicasToReplicatePerNode.get(0).getReplicaId();
-          if (!leaderBasedReplicationAdmin.isLeaderPair(localReplica, remoteReplica)) {
-            remoteColoGetRequestForStandby = true;
-          }
-        }
         replicationMetrics.updateGetRequestTime(getRequestTime, replicatingFromRemoteColo, replicatingOverSsl,
             datacenterName, remoteColoGetRequestForStandby);
         if (getResponse.getError() != ServerErrorCode.No_Error) {
@@ -1070,11 +1062,13 @@ public class ReplicaThread implements Runnable {
    *                    simply advance the tokens for every store.
    * @param replicasToReplicatePerNode The list of remote replicas for the remote node
    * @param remoteNode The remote node from which replication needs to happen
+   * @param remoteColoGetRequestForStandby boolean which indicates if we are getting missing keys for standby or
+   *                                       non-leader replica pairs during leader-based replication.
    * @throws IOException
    */
   private void writeMessagesToLocalStoreAndAdvanceTokens(List<ExchangeMetadataResponse> exchangeMetadataResponseList,
-      GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode)
-      throws IOException {
+      GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode,
+      boolean remoteColoGetRequestForStandby) throws IOException {
     int partitionResponseInfoIndex = 0;
     long totalBytesFixed = 0;
     long totalBlobsFixed = 0;
@@ -1184,19 +1178,8 @@ public class ReplicaThread implements Runnable {
       }
     }
     long batchStoreWriteTime = time.milliseconds() - startTime;
-    boolean remoteColoRequestForStandby = false;
-    if (leaderBasedReplicationAdmin != null && replicatingFromRemoteColo) {
-      // If leader-based replication is enabled, we should ideally send cross colo get requests only between leaders.
-      // However, if standby replicas time out waiting for their keys to come from leader, we send cross colo gets
-      // for them. Set 'remoteColoRequestForStandby' to true so that we track bytes rate of cross colo gets for standby replicas.
-      ReplicaId localReplica = replicasToReplicatePerNode.get(0).getLocalReplicaId();
-      ReplicaId remoteReplica = replicasToReplicatePerNode.get(0).getReplicaId();
-      if (!leaderBasedReplicationAdmin.isLeaderPair(localReplica, remoteReplica)) {
-        remoteColoRequestForStandby = true;
-      }
-    }
     replicationMetrics.updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed,
-        replicatingFromRemoteColo, replicatingOverSsl, datacenterName, remoteColoRequestForStandby);
+        replicatingFromRemoteColo, replicatingOverSsl, datacenterName, remoteColoGetRequestForStandby);
   }
 
   /**
@@ -1348,16 +1331,16 @@ public class ReplicaThread implements Runnable {
    */
   List<RemoteReplicaInfo> getRemoteStandbyReplicasTimedOutOnNoProgress(List<RemoteReplicaInfo> remoteReplicaInfos) {
 
-    // Use case: In leader-based replication, standby replicas don't send replication GET requests for missing keys
-    // found in their metadata exchange and expect them to come from leader in local data center via intra-dc replication.
-    // However, if for any reason, their missing blobs never arrive via local leader, this is a safety feature to fetch
-    // the blobs themselves in order to avoid being stuck.
+    // Use case: In leader-based cross colo replication, non-leader replica pairs don't fetch blobs for missing keys
+    // found in metadata exchange and expect them to come from leader<->leader replication and intra-dc replication.
+    // However, if for any reason, some of their missing blobs never arrive via local leader, this is a safety feature
+    // for standbys to fetch the blobs themselves in order to avoid being stuck.
 
     // Example scenario: For DELETE after PUT use case in remote data center, it is possible that standby replicas get
     // only PUT record in its replication cycle (DELETE record will come in next cycle) while leader gets both
-    // PUT and DELETE together in its replication cycle. Due to that, leader doesn't fetch
-    // the deleted blob from remote data center and the blob is never replicated from leader to standby.
-    // As a result, the PUT record in standby's missing blobs set is never emptied.
+    // PUT and DELETE together in its replication cycle. Due to that, deleted blob is not fetched by leader and is not
+    // replicated from leader to standby. As a result, the corresponding PUT record in standby's missing blobs set is
+    // never received.
 
     // Time out period is configurable via replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds. If
     // replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds == -1, this safety feature is disabled.
@@ -1365,9 +1348,12 @@ public class ReplicaThread implements Runnable {
     List<RemoteReplicaInfo> remoteReplicasTimedOut = new ArrayList<>();
     if (replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds != -1) {
       for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
+        ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
+        ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
         ExchangeMetadataResponse exchangeMetadataResponse = remoteReplicaInfo.getExchangeMetadataResponse();
-        if (exchangeMetadataResponse.hasMissingStoreMessages()
-            && (time.seconds() - exchangeMetadataResponse.metadataReceivedTimeSec)
+        if (!leaderBasedReplicationAdmin.isLeaderPair(localReplica, remoteReplica)
+            && exchangeMetadataResponse.hasMissingStoreMessages()
+            && (time.seconds() - exchangeMetadataResponse.lastMissingMessageReceivedTimeSec)
             > replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds) {
           remoteReplicasTimedOut.add(remoteReplicaInfo);
         }
@@ -1507,19 +1493,22 @@ public class ReplicaThread implements Runnable {
     final FindToken remoteToken;
     final long localLagFromRemoteInBytes;
     final ServerErrorCode serverErrorCode;
-    // Time (in secs) at which the metadata response was received. This is used in leader-based cross colo replication
-    // to do cross colo fetches for non-leader replica pairs if their missing stored keys are not received within
-    // replicationConfig.replicationWaitTimeForCrossColoFetchForStandbyReplicasMs.
-    final long metadataReceivedTimeSec;
+    final Time time;
+    // Time (in secs) at which last missing message was received. This is used in leader-based cross colo replication
+    // to do cross colo fetches for non-leader replica pairs if there are still few missing local store messages and
+    // there is no progress on them for ReplicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds
+    // since the time the last missing message was received(lastMissingMessageReceivedTimeSec).
+    long lastMissingMessageReceivedTimeSec;
 
     ExchangeMetadataResponse(Set<MessageInfo> missingStoreMessages, FindToken remoteToken,
-        long localLagFromRemoteInBytes, long metadataReceivedTimeSec, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap) {
+        long localLagFromRemoteInBytes, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap, Time time) {
       this.missingStoreMessages = missingStoreMessages;
       this.remoteKeyToLocalKeyMap = remoteKeyToLocalKeyMap;
       this.remoteToken = remoteToken;
       this.localLagFromRemoteInBytes = localLagFromRemoteInBytes;
-      this.metadataReceivedTimeSec = metadataReceivedTimeSec;
       this.serverErrorCode = ServerErrorCode.No_Error;
+      this.time = time;
+      this.lastMissingMessageReceivedTimeSec = time.seconds();
       this.receivedStoreMessagesWithUpdatesPending = new HashSet<>();
     }
 
@@ -1529,7 +1518,8 @@ public class ReplicaThread implements Runnable {
       this.remoteToken = null;
       this.localLagFromRemoteInBytes = -1;
       this.serverErrorCode = errorCode;
-      this.metadataReceivedTimeSec = -1;
+      this.lastMissingMessageReceivedTimeSec = -1;
+      this.time = null;
       this.receivedStoreMessagesWithUpdatesPending = null;
     }
 
@@ -1559,10 +1549,15 @@ public class ReplicaThread implements Runnable {
      */
     synchronized void removeMissingStoreMessages(Set<MessageInfo> messagesWrittenToStore) {
       if (missingStoreMessages != null && receivedStoreMessagesWithUpdatesPending != null) {
+        boolean missingMessagesReceived = false;
         for (MessageInfo messageToRemove : messagesWrittenToStore) {
           if (missingStoreMessages.remove(messageToRemove)) {
             receivedStoreMessagesWithUpdatesPending.add(messageToRemove);
+            missingMessagesReceived = true;
           }
+        }
+        if (missingMessagesReceived) {
+          lastMissingMessageReceivedTimeSec = time.seconds();
         }
       }
     }

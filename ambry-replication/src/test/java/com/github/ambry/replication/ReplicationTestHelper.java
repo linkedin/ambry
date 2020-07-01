@@ -406,7 +406,7 @@ public class ReplicationTestHelper {
       replicasToReplicate.get(remoteHost.dataNodeId).get(i).setToken(response.get(i).remoteToken);
     }
     replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-        replicasToReplicate.get(remoteHost.dataNodeId), response);
+        replicasToReplicate.get(remoteHost.dataNodeId), response, false);
     for (int i = 0; i < response.size(); i++) {
       assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
           replicasToReplicate.get(remoteHost.dataNodeId).get(i).getToken());
@@ -516,7 +516,7 @@ public class ReplicationTestHelper {
     // Do Get request to fix missing keys
     testSetup.replicaThread.fixMissingStoreKeys(
         new MockConnectionPool.MockConnection(testSetup.remoteHost, 10, testSetup.remoteConversionMap),
-        singleReplicaList, responses);
+        singleReplicaList, responses, false);
 
     // Verify
     String[] expectedResults = expectedStr.equals("") ? new String[0] : expectedStr.split("\\s");

@@ -318,7 +318,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // fetch missing keys for leader replicas from remoteHost2
     if (leaderReplicas.size() > 0) {
       crossColoReplicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHostInRemoteDC, batchSize),
-          leaderReplicas, exchangeMetadataResponseListForLeaderReplicas);
+          leaderReplicas, exchangeMetadataResponseListForLeaderReplicas, false);
     }
 
     // verify that the remote token will be moved for leader replicas and will remain 0 for standby replicas as
@@ -346,7 +346,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
 
     // fetch missing keys from remoteHost1
     intraColoReplicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHostInLocalDC, batchSize),
-        remoteReplicaInfosForLocalDC, responseForRemoteNodeInLocalDC);
+        remoteReplicaInfosForLocalDC, responseForRemoteNodeInLocalDC, false);
 
     for (int i = 0; i < responseForRemoteNodeInLocalDC.size(); i++) {
       assertEquals("mismatch in remote token set for intra colo replicas",
@@ -899,7 +899,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     if (leaderReplicas.size() > 0) {
       crossColoReplicaThread.fixMissingStoreKeys(
           new MockConnectionPool.MockConnection(remoteHostInRemoteDC, numOfMessages), leaderReplicas,
-          exchangeMetadataResponseListForLeaderReplicas);
+          exchangeMetadataResponseListForLeaderReplicas, false);
     }
 
     // verify that the remote token will be moved for leader replicas and will remain 0 for standby replicas as
@@ -928,7 +928,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // fetch missing keys from remoteHost1
     intraColoReplicaThread.fixMissingStoreKeys(
         new MockConnectionPool.MockConnection(remoteHostInLocalDC, numOfMessagesToBeFetchedFromRemoteHost1),
-        remoteReplicaInfosForLocalDC, responseForRemoteNodeInLocalDC);
+        remoteReplicaInfosForLocalDC, responseForRemoteNodeInLocalDC, false);
 
     // verify that remote token has moved forward for all partitions since it is intra-dc replication.
     for (int i = 0; i < responseForRemoteNodeInLocalDC.size(); i++) {
@@ -959,7 +959,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // fetch missing keys from remoteHost1
     intraColoReplicaThread.fixMissingStoreKeys(
         new MockConnectionPool.MockConnection(remoteHostInLocalDC, numOfMessagesToBeFetchedFromRemoteHost1),
-        remoteReplicaInfosForLocalDC, responseForRemoteNodeInLocalDC);
+        remoteReplicaInfosForLocalDC, responseForRemoteNodeInLocalDC, false);
 
     // verify remote token for intra-dc replicas
     for (int i = 0; i < responseForRemoteNodeInLocalDC.size(); i++) {
@@ -1142,7 +1142,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // fetch missing keys for leader replicas from remoteNodeInRemoteDC
     if (leaderReplicas.size() > 0) {
       crossColoReplicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHostInRemoteDC, batchSize),
-          leaderReplicas, exchangeMetadataResponseListForLeaderReplicas);
+          leaderReplicas, exchangeMetadataResponseListForLeaderReplicas, false);
     }
 
     // Verify that the remote token will move forward only for leader replicas
@@ -1166,7 +1166,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
         intraColoReplicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHostInLocalDC, batchSize),
             remoteReplicaInfosForLocalDC);
     intraColoReplicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHostInLocalDC, batchSize),
-        remoteReplicaInfosForLocalDC, responseForRemoteNodeInLocalDC);
+        remoteReplicaInfosForLocalDC, responseForRemoteNodeInLocalDC, false);
 
     // Verify that the remote token for all intra-colo replicas has been moved
     for (int i = 0; i < responseForRemoteNodeInLocalDC.size(); i++) {

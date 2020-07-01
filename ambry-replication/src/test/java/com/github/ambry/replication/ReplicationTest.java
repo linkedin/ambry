@@ -1520,7 +1520,7 @@ public class ReplicationTest extends ReplicationTestHelper {
         remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
       }
       replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-          remoteReplicaInfos, response);
+          remoteReplicaInfos, response, false);
       for (int i = 0; i < response.size(); i++) {
         assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
             remoteReplicaInfos.get(i).getToken());
@@ -1661,7 +1661,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     }
 
     testSetup.replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-        testSetup.replicasToReplicate.get(remoteHost.dataNodeId), responses);
+        testSetup.replicasToReplicate.get(remoteHost.dataNodeId), responses, false);
 
     Assert.assertEquals(idsToExpectByPartition.keySet(), localHost.infosByPartition.keySet());
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
@@ -1754,7 +1754,7 @@ public class ReplicationTest extends ReplicationTestHelper {
             msgInfoToExpire.getContainerId(), msgInfoToExpire.getOperationTimeMs(), msgInfoToExpire.getLifeVersion()));
 
     testSetup.replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-        testSetup.replicasToReplicate.get(remoteHost.dataNodeId), responses);
+        testSetup.replicasToReplicate.get(remoteHost.dataNodeId), responses, false);
 
     Assert.assertEquals(idsToExpectByPartition.keySet(), localHost.infosByPartition.keySet());
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
@@ -1840,7 +1840,7 @@ public class ReplicationTest extends ReplicationTestHelper {
 
   /**
    * Tests {@link ReplicaThread#exchangeMetadata(ConnectedChannel, List)} and
-   * {@link ReplicaThread#fixMissingStoreKeys(ConnectedChannel, List, List)} for valid puts, deletes, expired keys and
+   * {@link ReplicaThread#fixMissingStoreKeys(ConnectedChannel, List, List, boolean)} for valid puts, deletes, expired keys and
    * corrupt blobs.
    * @throws Exception
    */
@@ -1978,7 +1978,7 @@ public class ReplicationTest extends ReplicationTestHelper {
       }
     }
     replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-        replicasToReplicate.get(remoteHost.dataNodeId), response);
+        replicasToReplicate.get(remoteHost.dataNodeId), response, false);
     for (int i = 0; i < response.size(); i++) {
       assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
           replicasToReplicate.get(remoteHost.dataNodeId).get(i).getToken());
@@ -2200,7 +2200,7 @@ public class ReplicationTest extends ReplicationTestHelper {
         replicaThread1.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost1, batchSize),
             replicasToReplicate1.get(remoteHost1.dataNodeId));
     replicaThread1.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost1, batchSize),
-        replicasToReplicate1.get(remoteHost1.dataNodeId), response);
+        replicasToReplicate1.get(remoteHost1.dataNodeId), response, false);
     for (PartitionId partitionId : partitionIds) {
       List<MessageInfo> allMessageInfos = localAndRemoteHosts.getSecond().infosByPartition.get(partitionId);
       long expectedLag =
@@ -2212,7 +2212,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     response = replicaThread1.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost1, batchSize),
         replicasToReplicate1.get(remoteHost1.dataNodeId));
     replicaThread1.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost1, batchSize),
-        replicasToReplicate1.get(remoteHost1.dataNodeId), response);
+        replicasToReplicate1.get(remoteHost1.dataNodeId), response, false);
     for (PartitionId partitionId : partitionIds) {
       assertEquals("Replication lag should equal to 0", 0,
           replicaThread1.getReplicationMetrics().getMaxLagForPartition(partitionId));
@@ -2235,7 +2235,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     response = replicaThread2.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
         replicasToReplicate2.get(remoteHost2.dataNodeId));
     replicaThread2.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
-        replicasToReplicate2.get(remoteHost2.dataNodeId), response);
+        replicasToReplicate2.get(remoteHost2.dataNodeId), response, false);
     // verify replica of special partition has completed bootstrap and becomes standby
     assertEquals("Store state is not expected", ReplicaState.STANDBY,
         specialReplicaInfo.getLocalStore().getCurrentState());
@@ -2412,7 +2412,7 @@ public class ReplicationTest extends ReplicationTestHelper {
       remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
     }
     replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize), remoteReplicaInfos,
-        response);
+        response, false);
     for (int i = 0; i < response.size(); i++) {
       assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
           remoteReplicaInfos.get(i).getToken());
@@ -2747,7 +2747,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     }
 
     replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize), remoteReplicaInfos,
-        response);
+        response, false);
 
     // Before exchange metadata, the number of message infos in local host is 8. Exchange metadata would add another 8.
     for (Map.Entry<PartitionId, List<MessageInfo>> localInfoEntry : localHost.infosByPartition.entrySet()) {
