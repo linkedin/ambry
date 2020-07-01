@@ -44,6 +44,7 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -258,6 +259,17 @@ class IndexSegment {
    */
   File getFile() {
     return indexFile;
+  }
+
+  /**
+   * @return number of IndexEntry items in this segment.
+   */
+  int size() {
+    if (sealed.get()) {
+      return numberOfEntries(serEntries);
+    } else {
+      return getNumberOfItems();
+    }
   }
 
   /**
@@ -1022,15 +1034,51 @@ class IndexSegment {
   }
 
   /**
-   * Return an {@link Iterator<IndexEntry>} from a sealed IndexSegment.
+   * Return an {@link Iterator<IndexEntry>} from an IndexSegment that iterates over all the {@link IndexEntry}s in the same
+   * order of {@link StoreKey}. And when the {@link StoreKey}s are the same, it iterates over the entry in the same order
+   * as {@link Offset}.
+   *
+   * When the {@link IndexSegment} is unsealed, newly added entries don't effect the iterator. Iterator takes a snapshot
+   * of existing entries while creating this iterator.
+   *
+   * This {@link Iterator<IndexEntry>} is a readonly iterator. Invoking {@link Iterator#remove()} would end up throwing
+   * an {@link UnsupportedOperationException}.
+   *
+   * The {@link IndexEntry} returned by this iterator is an identical deep clone of the entry in the segment. Changing
+   * the returned entry won't change the entry in the segment.
    * @return an {@link Iterator<IndexEntry>}.
    */
-  Iterator<IndexEntry> getIterator() {
+  Iterator<IndexEntry> iterator() {
     if (!sealed.get()) {
-      throw new IllegalStateException(
-          "IndexSegment at " + indexFile.getAbsolutePath() + " is not sealed to get iterator");
+      return new UnsealedIndexSegmentEntryIterator();
     }
     return new SealedIndexSegmentEntryIterator();
+  }
+
+  /**
+   * Return an {@link ListIterator<IndexEntry>} from an IndexSegment that iterates over all the {@link IndexEntry}s in the same
+   * order of {@link StoreKey}. And when the {@link StoreKey}s are the same, it iterates over the entry in the same order
+   * as {@link Offset}.
+   *
+   * When the {@link IndexSegment} is unsealed, newly added entries don't effect the iterator. Iterator takes a snapshot
+   * of existing entries while creating this iterator. However, this snapshot can still be out of sync with what you intend
+   * to do. For example
+   * <pre>
+   *   indexSegment.addEntry(entry, offset);
+   *   int size = indexSegment.size();
+   *   ListIterator &lt IndexEntry &gt listiter = indexSegment.listIterator(size);
+   * </pre>
+   * Unfortunately, the listiter returned by this method in the example might not contain the entry you just added before
+   * invoking {@link #listIterator}. The reason is if there is an entry added between {@link #size()} and {@link #listIterator},
+   * then the size is no up to date then.
+   *
+   * @return an {@link Iterator<IndexEntry>}.
+   */
+  ListIterator<IndexEntry> listIterator(int idx) {
+    if (!sealed.get()) {
+      return new UnsealedIndexSegmentEntryListIterator(idx);
+    }
+    return new SealedIndexSegmentEntryListIterator(idx);
   }
 
   /**
@@ -1185,33 +1233,173 @@ class IndexSegment {
   }
 
   /**
-   * An {@link IndexEntry} {@link Iterator} for a sealed {@link IndexSegment}. This {@link Iterator} should
-   * only be used in the compaction so that the {@link IndexSegment} should be sealed already.
+   * An {@link IndexEntry} {@link Iterator} for a sealed {@link IndexSegment}.
    */
-  class SealedIndexSegmentEntryIterator implements Iterator<IndexEntry> {
-    private int currentIdx = 0;
-    private ByteBuffer mmap = serEntries.duplicate();
-    private int numberOfEntries = numberOfEntries(mmap);
-    private byte[] valueBuf = new byte[valueSize];
+  private class SealedIndexSegmentEntryIterator implements Iterator<IndexEntry> {
+    protected int cursor = 0;
+    protected ByteBuffer mmap = serEntries.duplicate();
+    protected int numberOfEntries = numberOfEntries(mmap);
+    protected byte[] valueBuf = new byte[valueSize];
 
     @Override
     public boolean hasNext() {
-      return currentIdx < numberOfEntries;
+      return cursor < numberOfEntries;
     }
 
     @Override
     public IndexEntry next() {
+      if (cursor < 0 || cursor > numberOfEntries) {
+        throw new NoSuchElementException();
+      }
       try {
-        StoreKey key = getKeyAt(mmap, currentIdx);
+        StoreKey key = getKeyAt(mmap, cursor);
         mmap.get(valueBuf);
         return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
       } catch (Exception e) {
-        String message = "Failed to read index entry at " + currentIdx;
+        String message = "Failed to read index entry at " + cursor;
         logger.error(message, e);
         throw new IllegalStateException(message, e);
       } finally {
-        currentIdx++;
+        cursor++;
       }
+    }
+  }
+
+  /**
+   * An {@link IndexEntry} {@link ListIterator} for a sealed {@link IndexSegment}.
+   */
+  private class SealedIndexSegmentEntryListIterator extends SealedIndexSegmentEntryIterator
+      implements ListIterator<IndexEntry> {
+
+    SealedIndexSegmentEntryListIterator(int currentIndex) {
+      this.cursor = currentIndex;
+    }
+
+    @Override
+    public boolean hasPrevious() {
+      return cursor != 0;
+    }
+
+    @Override
+    public IndexEntry previous() {
+      try {
+        int i = cursor - 1;
+        StoreKey key = getKeyAt(mmap, i);
+        mmap.get(valueBuf);
+        return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
+      } catch (Exception e) {
+        String message = "Failed to read index entry at " + cursor;
+        logger.error(message, e);
+        throw new IllegalStateException(message, e);
+      } finally {
+        cursor--;
+      }
+    }
+
+    @Override
+    public int nextIndex() {
+      return cursor;
+    }
+
+    @Override
+    public int previousIndex() {
+      return cursor - 1;
+    }
+
+    @Override
+    public void remove() {
+      throw new UnsupportedOperationException("Remove unsupported");
+    }
+
+    @Override
+    public void set(IndexEntry indexEntry) {
+      throw new UnsupportedOperationException("Set unsupported");
+    }
+
+    @Override
+    public void add(IndexEntry indexEntry) {
+      throw new UnsupportedOperationException("Add unsupported");
+    }
+  }
+
+  /**
+   * An {@link IndexEntry} {@link Iterator} for a unsealed {@link IndexSegment}.
+   */
+  private class UnsealedIndexSegmentEntryIterator implements Iterator<IndexEntry> {
+    protected final ArrayList<IndexEntry> entries = new ArrayList<>();
+    protected final Iterator<IndexEntry> it;
+
+    UnsealedIndexSegmentEntryIterator() {
+      NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexMap = index;
+      StoreKey keyCursor = indexMap.firstKey();
+      while (keyCursor != null) {
+        ConcurrentSkipListSet<IndexValue> indexValues = indexMap.get(keyCursor);
+        Iterator<IndexValue> it = indexValues.iterator();
+        while (it.hasNext()) {
+          entries.add(new IndexEntry(keyCursor, it.next()));
+        }
+        keyCursor = indexMap.higherKey(keyCursor);
+      }
+      it = entries.iterator();
+    }
+
+    @Override
+    public boolean hasNext() {
+      return it.hasNext();
+    }
+
+    @Override
+    public IndexEntry next() {
+      IndexEntry cur = it.next();
+      return new IndexEntry(cur.getKey(), new IndexValue(cur.getValue()));
+    }
+  }
+
+  /**
+   * An {@link IndexEntry} {@link ListIterator} for a unsealed {@link IndexSegment}.
+   */
+  private class UnsealedIndexSegmentEntryListIterator extends UnsealedIndexSegmentEntryIterator
+      implements ListIterator<IndexEntry> {
+    private final ListIterator<IndexEntry> listiter;
+
+    UnsealedIndexSegmentEntryListIterator(int currentIndex) {
+      super();
+      listiter = entries.listIterator(currentIndex);
+    }
+
+    @Override
+    public boolean hasPrevious() {
+      return listiter.hasPrevious();
+    }
+
+    @Override
+    public IndexEntry previous() {
+      return listiter.previous();
+    }
+
+    @Override
+    public int nextIndex() {
+      return listiter.nextIndex();
+    }
+
+    @Override
+    public int previousIndex() {
+      return listiter.previousIndex();
+    }
+
+    @Override
+    public void remove() {
+      throw new UnsupportedOperationException("Remove unsupported");
+    }
+
+    @Override
+    public void set(IndexEntry indexEntry) {
+      throw new UnsupportedOperationException("Set unsupported");
+    }
+
+    @Override
+    public void add(IndexEntry indexEntry) {
+      throw new UnsupportedOperationException("Add unsupported");
     }
   }
 }

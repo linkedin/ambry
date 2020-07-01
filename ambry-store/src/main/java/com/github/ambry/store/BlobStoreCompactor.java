@@ -1412,7 +1412,7 @@ class BlobStoreCompactor {
       //                     | Undelete(f)       | c==f&&!isExpired(Uf)?true:false              |
       // ----------------------------------------------------------------------------------------
       List<IndexEntry> validEntries = new ArrayList<>();
-      Iterator<IndexEntry> iterator = indexSegment.getIterator();
+      Iterator<IndexEntry> iterator = indexSegment.iterator();
       StoreKey previousKey = null;
       IndexValue previousLatestState = null;
       while (iterator.hasNext()) {
