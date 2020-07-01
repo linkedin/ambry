@@ -433,8 +433,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           indexSegment.size());
       forEachValidIndexEntry(indexSegment, referenceTimeInMs, deletedKeys, entry -> {
         IndexValue indexValue = entry.getValue();
-        if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !indexValue.isFlagSet(
-            IndexValue.Flags.Delete_Index)) {
+        if (!indexValue.isDelete() && !indexValue.isTtlUpdate()) {
           // delete and TTL update records does not count towards valid data size for usage (containers)
           updateNestedMapHelper(validDataSizePerContainer, "A[" + indexValue.getAccountId() + "]",
               "C[" + indexValue.getContainerId() + "]", indexValue.getSize());
@@ -743,8 +742,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   private void processEntryForContainerBucket(ScanResults results, IndexEntry indexEntry,
       Map<StoreKey, Long> deletedKeys) {
     IndexValue indexValue = indexEntry.getValue();
-    if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !indexValue.isFlagSet(
-        IndexValue.Flags.Delete_Index)) {
+    if (!indexValue.isTtlUpdate() && !indexValue.isDelete()) {
       // delete and TTL update records does not count towards valid data size for usage (containers)
       results.updateContainerBaseBucket("A[" + indexValue.getAccountId() + "]",
           "C[" + indexValue.getContainerId() + "]", indexValue.getSize());
@@ -773,7 +771,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       Map<StoreKey, Long> deletedKeys) throws StoreException {
     IndexValue indexValue = indexEntry.getValue();
     results.updateLogSegmentBaseBucket(indexValue.getOffset().getName(), indexValue.getSize());
-    if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+    if (!indexValue.isDelete()) {
       long expOrDelTimeInMs = indexValue.getExpiresAtMs();
       if (deletedKeys.containsKey(indexEntry.getKey())) {
         long deleteTimeInMs = deletedKeys.get(indexEntry.getKey());
@@ -781,8 +779,8 @@ class BlobStoreStats implements StoreStats, Closeable {
             expOrDelTimeInMs != Utils.Infinite_Time && expOrDelTimeInMs < deleteTimeInMs ? expOrDelTimeInMs
                 : deleteTimeInMs;
       }
-      if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) || !isTtlUpdateEntryValid(indexEntry.getKey(),
-          indexValue, expOrDelTimeInMs == Utils.Infinite_Time ? expOrDelTimeInMs : expOrDelTimeInMs + 1, deletedKeys)) {
+      if (!indexValue.isTtlUpdate() || !isTtlUpdateEntryValid(indexEntry.getKey(), indexValue,
+          expOrDelTimeInMs == Utils.Infinite_Time ? expOrDelTimeInMs : expOrDelTimeInMs + 1, deletedKeys)) {
         handleLogSegmentBucketUpdate(results, indexValue, expOrDelTimeInMs, SUBTRACT);
       }
     }
@@ -838,7 +836,7 @@ class BlobStoreStats implements StoreStats, Closeable {
             if (newValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
               // new delete
               processNewDelete(currentScanResults, newValue, entry.getSecond());
-            } else if (newValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+            } else if (newValue.isTtlUpdate()) {
               // new ttl update
               processNewTtlUpdate(currentScanResults, newValue, entry.getSecond());
             } else {
@@ -973,8 +971,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           IndexValue indexValue = entry.getValue();
           if (indexValue.getOffset().compareTo(startOffset) >= 0 && indexValue.getOffset().compareTo(endOffset) < 0) {
             // index value is not yet processed and should be processed
-            if (indexValue.isFlagSet(IndexValue.Flags.Delete_Index) || indexValue.isFlagSet(
-                IndexValue.Flags.Ttl_Update_Index)) {
+            if (indexValue.isDelete() || indexValue.isTtlUpdate()) {
               IndexValue originalPut;
               if (indexValue.getOriginalMessageOffset() == indexValue.getOffset().getOffset()) {
                 // update record with no put record due to compaction and legacy bugs
@@ -989,9 +986,9 @@ class BlobStoreStats implements StoreStats, Closeable {
               }
               if (originalPut == null) {
                 newScanResults.updateLogSegmentBaseBucket(indexValue.getOffset().getName(), indexValue.getSize());
-              } else if (indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              } else if (indexValue.isDelete()) {
                 processNewDelete(newScanResults, indexValue, originalPut);
-              } else if (indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+              } else if (indexValue.isTtlUpdate()) {
                 processNewTtlUpdate(newScanResults, indexValue, originalPut);
               }
             } else {
@@ -999,8 +996,7 @@ class BlobStoreStats implements StoreStats, Closeable {
               processNewPut(newScanResults, indexValue);
             }
           }
-          if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index) && !indexValue.isFlagSet(
-              IndexValue.Flags.Ttl_Update_Index)) {
+          if (!indexValue.isDelete() && !indexValue.isTtlUpdate()) {
             seenPuts.put(entry.getKey(), entry.getValue());
           }
         }
