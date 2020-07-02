@@ -252,6 +252,7 @@ class IndexValue implements Comparable<IndexValue> {
     return ((getFlags() & (1 << flag.ordinal())) != 0);
   }
 
+
   /**
    * Helper function for isFlagSet(Flags.Ttl_Update_Index).
    * @return true when the Ttl_Update_Index is set.

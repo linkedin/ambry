@@ -836,9 +836,9 @@ public class BlobStore implements Store {
         logger.trace("Store : {} undelete mark written to log", dataDir);
         FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
         // we still use lifeVersion from message info here so that we can re-verify the sanity of undelete request in persistent index.
-        index.markAsUndeleted(info.getStoreKey(), fileSpan, null, info.getOperationTimeMs(),
+        IndexValue newUndelete = index.markAsUndeleted(info.getStoreKey(), fileSpan, null, info.getOperationTimeMs(),
             lifeVersionFromMessageInfo);
-        // TODO: update blobstore stats for undelete (2020-02-10)
+        blobStoreStats.handleNewUndeleteEntry(newUndelete, null);
       }
       onSuccess();
       return revisedLifeVersion;
