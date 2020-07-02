@@ -186,7 +186,7 @@ public class StoreMetrics {
     blobStoreStatsIndexScannerErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsIndexScannerErrorCount"));
     blobStoreRecoverCompactionPolicySwitchInfoErrorCount =
-        registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "blobStoreRecoverCompactionPolicySwitchInfoErrorCount"));
+        registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreRecoverCompactionPolicySwitchInfoErrorCount"));
     blobStoreStatsQueueProcessorErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsQueueProcessorErrorCount"));
     statsOnDemandScanTotalTimeMs =
