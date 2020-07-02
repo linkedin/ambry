@@ -1118,6 +1118,20 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   /**
+   * @return the storeId for this {@link BlobStore}.
+   */
+  String getStoreId() {
+    return this.storeId;
+  }
+
+  /**
+   * @return the {@link StoreMetrics} for this {@link BlobStore}.
+   */
+  StoreMetrics getMetrics() {
+    return this.metrics;
+  }
+
+  /**
    * An action to take on a single {@link IndexEntry}
    */
   @FunctionalInterface

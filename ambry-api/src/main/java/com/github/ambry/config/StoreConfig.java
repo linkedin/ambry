@@ -82,6 +82,20 @@ public class StoreConfig {
   public final int storeDeletedMessageRetentionDays;
 
   /**
+   * How often the HybridCompactionPolicy switch from StatsBasedCompactionPolicy to CompactAllPolicy based on timestamp.
+   */
+  @Config("store.compaction.policy.switch.timestamp.days")
+  @Default("7")
+  public final int storeCompactionPolicySwitchTimestampDays;
+
+  /**
+   * How often the HybridCompactionPolicy switch from StatsBasedCompactionPolicy to CompactAllPolicy based on counter value.
+   */
+  @Config("store.compaction.policy.switch.counter.days")
+  @Default("7")
+  public final int storeCompactionPolicySwitchCounterDays;
+
+  /**
    * How long (in days) a container must be in DELETE_IN_PROGRESS state before it's been deleted during compaction.
    */
   @Config("store.container.deletion.retention.days")
@@ -347,6 +361,8 @@ public class StoreConfig {
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
     storeDeletedMessageRetentionDays = verifiableProperties.getInt("store.deleted.message.retention.days", 7);
+    storeCompactionPolicySwitchTimestampDays = verifiableProperties.getIntInRange("store.compaction.policy.switch.timestamp.days", 7, 1, 14);
+    storeCompactionPolicySwitchCounterDays = verifiableProperties.getIntInRange("store.compaction.policy.switch.counter.days", 7, 1, 14);
     storeContainerDeletionRetentionDays = verifiableProperties.getInt("store.container.deletion.retention.days", 14);
     storeHardDeleteOperationsBytesPerSec =
         verifiableProperties.getIntInRange("store.hard.delete.operations.bytes.per.sec", 100 * 1024, 1,
@@ -409,4 +425,3 @@ public class StoreConfig {
         verifiableProperties.getBoolean("store.set.local.partition.state.enabled", false);
   }
 }
-

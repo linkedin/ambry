@@ -1027,7 +1027,7 @@ public class BlobStore implements Store {
    */
   CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy) throws StoreException {
     return compactionPolicy.getCompactionDetails(capacityInBytes, index.getLogUsedCapacity(), log.getSegmentCapacity(),
-        LogSegment.HEADER_SIZE, index.getLogSegmentsNotInJournal(), blobStoreStats);
+        LogSegment.HEADER_SIZE, index.getLogSegmentsNotInJournal(), blobStoreStats, dataDir);
   }
 
   /**

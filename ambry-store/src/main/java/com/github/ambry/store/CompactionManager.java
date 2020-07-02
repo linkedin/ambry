@@ -47,7 +47,7 @@ class CompactionManager {
   private final StorageManagerMetrics metrics;
   private final CompactionPolicy compactionPolicy;
   private static final Logger logger = LoggerFactory.getLogger(CompactionManager.class);
-
+  private final CompactionPolicyFactory compactionPolicyFactory;
   private Thread compactionThread;
 
   /**
@@ -73,14 +73,14 @@ class CompactionManager {
       compactionExecutor = new CompactionExecutor(triggers, storeConfig.storeCompactionMinBufferSize == 0 ? 0
           : Math.max(storeConfig.storeCompactionOperationsBytesPerSec, storeConfig.storeCompactionMinBufferSize));
       try {
-        CompactionPolicyFactory compactionPolicyFactory =
-            Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
+        compactionPolicyFactory = Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
         compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
       } catch (Exception e) {
         throw new IllegalStateException("Error creating compaction policy using compactionPolicyFactory "
             + storeConfig.storeCompactionPolicyFactory);
       }
     } else {
+      compactionPolicyFactory = null;
       compactionExecutor = null;
       compactionPolicy = null;
     }
@@ -180,7 +180,7 @@ class CompactionManager {
    * {@code null} if compaction is not required
    * @throws StoreException when {@link BlobStore} is not started
    */
-  private CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
+  CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
     return blobStore.getCompactionDetails(compactionPolicy);
   }
 
@@ -203,6 +203,13 @@ class CompactionManager {
    */
   Set<BlobStore> getAllStores() {
     return stores;
+  }
+
+  /**
+   * @return {@link CompactionPolicy} in compaction manager.
+   */
+  CompactionPolicy getCompactionPolicy() {
+    return compactionPolicy;
   }
 
   /**

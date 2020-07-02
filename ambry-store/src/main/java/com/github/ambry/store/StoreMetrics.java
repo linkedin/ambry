@@ -76,6 +76,7 @@ public class StoreMetrics {
   public final Counter keyInFindEntriesAbsent;
   public final Counter duplicateKeysInBatch;
   public final Counter storeIoErrorTriggeredShutdownCount;
+  public final Counter blobStoreRecoverCompactionPolicySwitchInfoErrorCount;
 
   // Compaction related metrics
   public final Counter compactionFixStateCount;
@@ -184,6 +185,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferIoCount"));
     blobStoreStatsIndexScannerErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsIndexScannerErrorCount"));
+    blobStoreRecoverCompactionPolicySwitchInfoErrorCount =
+        registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "blobStoreRecoverCompactionPolicySwitchInfoErrorCount"));
     blobStoreStatsQueueProcessorErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsQueueProcessorErrorCount"));
     statsOnDemandScanTotalTimeMs =
