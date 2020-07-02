@@ -35,6 +35,7 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -44,8 +45,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -60,7 +59,6 @@ public class ReplicationManager extends ReplicationEngine {
   protected boolean started = false;
   private final StoreConfig storeConfig;
   private final DataNodeId currentNode;
-  private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final boolean trackPerPartitionLagInMetric;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
@@ -69,13 +67,31 @@ public class ReplicationManager extends ReplicationEngine {
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       ClusterParticipant clusterParticipant, Predicate<MessageInfo> skipPredicate) throws ReplicationException {
+    this(replicationConfig, clusterMapConfig, storeConfig, storeManager, storeKeyFactory, clusterMap, scheduler,
+        dataNode, connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory, transformerClassName,
+        clusterParticipant, skipPredicate, null, SystemTime.getInstance());
+  }
+
+  public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
+      StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
+      ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
+      MetricRegistry metricRegistry, NotificationSystem requestNotification,
+      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
+      ClusterParticipant clusterParticipant, Predicate<MessageInfo> skipPredicate, FindTokenHelper findTokenHelper,
+      Time time) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
-        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, skipPredicate);
+        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, skipPredicate,
+        findTokenHelper, time);
     this.storeConfig = storeConfig;
     this.currentNode = dataNode;
     trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
+    // make sure leaderBasedReplicationAdmin is constructed before creating ReplicaThreads since it is passed to them
+    if (replicationConfig.replicationModelAcrossDatacenters.equals(ReplicationModelType.LEADER_BASED)) {
+      logger.info("Leader-based cross colo replication model is being used");
+      leaderBasedReplicationAdmin = new LeaderBasedReplicationAdmin();
+    }
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
     // initialize all partitions
     for (ReplicaId replicaId : replicaIds) {
@@ -221,6 +237,7 @@ public class ReplicationManager extends ReplicationEngine {
       RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(remoteReplica, replicaId, store, findToken,
           TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
           SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
+
       replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerPartitionLagInMetric);
       remoteReplicaInfos.add(remoteReplicaInfo);
     }
@@ -340,9 +357,11 @@ public class ReplicationManager extends ReplicationEngine {
             "Replication manager startup is interrupted while handling routing table change");
       }
 
-      // Refreshes the remote leader information for all local leader partitions maintained in an in-mem structure in PartitionLeaderInfo.
-      // Thread safety is ensured in the method PartitionLeaderInfo.refreshPeerLeadersForAllPartitions().
-      partitionLeaderInfo.refreshPeerLeadersForAllPartitions();
+      if (leaderBasedReplicationAdmin != null) {
+        // Refreshes the remote leader information for all local leader partitions maintained in the in-mem structure in LeaderBasedReplicationAdmin.
+        // Thread safety is ensured in LeaderBasedReplicationAdmin::refreshPeerLeadersForAllPartitions().
+        leaderBasedReplicationAdmin.refreshPeerLeadersForLeaderPartitions();
+      }
     }
   }
 
@@ -399,18 +418,22 @@ public class ReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeLeaderFromStandby(String partitionName) {
       logger.info("Partition state change notification from Standby to Leader received for partition {}",
           partitionName);
-      // Add the leader partition (and its remote leaders) information to an in-mem structure maintained in PartitionLeaderInfo.
-      // PartitionLeaderInfo::addPartition is thread safe.
-      partitionLeaderInfo.addPartition(partitionName);
+      if (leaderBasedReplicationAdmin != null) {
+        // Add the leader partition (and its peer leaders) information to the in-mem structure maintained in
+        // leaderBasedReplicationAdmin. LeaderBasedReplicationAdmin::addLeaderPartition is thread safe.
+        leaderBasedReplicationAdmin.addLeaderPartition(partitionName);
+      }
     }
 
     @Override
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
-      // Remove the leader partition from an in-mem structure maintained in PartitionLeaderInfo.
-      // PartitionLeaderInfo::removePartition is thread safe.
-      partitionLeaderInfo.removePartition(partitionName);
+      if (leaderBasedReplicationAdmin != null) {
+        // Remove the leader partition from the in-mem structure maintained in leaderBasedReplicationAdmin.
+        // LeaderBasedReplicationAdmin::removeLeaderPartition is thread safe.
+        leaderBasedReplicationAdmin.removeLeaderPartition(partitionName);
+      }
     }
 
     @Override

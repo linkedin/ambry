@@ -144,6 +144,20 @@ public class ReplicationMetrics {
   private final Map<String, Set<RemoteReplicaInfo>> remoteReplicaInfosByDc = new ConcurrentHashMap<>();
   private final Map<String, LongSummaryStatistics> dcToReplicaLagStats = new ConcurrentHashMap<>();
 
+  // Metric to track number of cross colo replication get requests sent by standby replicas. This is applicable during
+  // leader-based replication.
+  // Use case: If leader-based replication is enabled, we should see ideally send cross colo gets only for leader replicas.
+  // However, if standby replicas time out waiting for their keys to come from leader, we send cross colo gets for them.
+  // This metric tracks number of such cross colo get requests for Standby replicas.
+  public final Map<String, Counter> interColoReplicationGetRequestCountForStandbyReplicas = new ConcurrentHashMap<>();
+
+  // Metric to track cross colo replication bytes fetch rate for standby replicas. This is applicable during
+  // leader-based replication.
+  // Use case: If leader-based replication is enabled, we should see ideally send cross colo gets only for leader replicas.
+  // However, if standby replicas time out waiting for their keys to come from leader, we send cross colo gets for them.
+  // This metric tracks cross colo get requests bytes rate for Standby replicas.
+  public final Map<String, Meter> interColoReplicationFetchBytesRateForStandbyReplicas = new ConcurrentHashMap<>();
+
   public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds) {
     intraColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesRate"));
@@ -358,6 +372,16 @@ public class ReplicationMetrics {
     Histogram sslInterColoTotalReplicationTimePerDC = registry.histogram(
         MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-TotalReplicationTime"));
     sslInterColoTotalReplicationTime.put(datacenter, sslInterColoTotalReplicationTimePerDC);
+    Counter interColoReplicationGetRequestCountForStandbyReplicasPerDC = registry.counter(
+        MetricRegistry.name(ReplicaThread.class,
+            "Inter-" + datacenter + "-ReplicationGetRequestCountForStandbyReplicas"));
+    interColoReplicationGetRequestCountForStandbyReplicas.put(datacenter,
+        interColoReplicationGetRequestCountForStandbyReplicasPerDC);
+    Meter interColoReplicationFetchBytesRateForStandbyReplicasPerDC = registry.meter(
+        MetricRegistry.name(ReplicaThread.class,
+            "Inter-" + datacenter + "-ReplicationFetchBytesRateForStandbyReplicas"));
+    interColoReplicationFetchBytesRateForStandbyReplicas.put(datacenter,
+        interColoReplicationFetchBytesRateForStandbyReplicasPerDC);
   }
 
   /**
@@ -661,7 +685,8 @@ public class ReplicationMetrics {
     }
   }
 
-  public void updateGetRequestTime(long getRequestTime, boolean remoteColo, boolean sslEnabled, String datacenter) {
+  public void updateGetRequestTime(long getRequestTime, boolean remoteColo, boolean sslEnabled, String datacenter,
+      boolean remoteColoGetRequestForStandby) {
     if (remoteColo) {
       interColoReplicationGetRequestCount.get(datacenter).inc();
       interColoGetRequestTime.get(datacenter).update(getRequestTime);
@@ -669,6 +694,9 @@ public class ReplicationMetrics {
         sslInterColoGetRequestTime.get(datacenter).update(getRequestTime);
       } else {
         plainTextInterColoGetRequestTime.get(datacenter).update(getRequestTime);
+      }
+      if (remoteColoGetRequestForStandby) {
+        interColoReplicationGetRequestCountForStandbyReplicas.get(datacenter).inc();
       }
     } else {
       intraColoReplicationGetRequestCount.inc();
@@ -682,7 +710,7 @@ public class ReplicationMetrics {
   }
 
   public void updateBatchStoreWriteTime(long batchStoreWriteTime, long totalBytesFixed, long totalBlobsFixed,
-      boolean remoteColo, boolean sslEnabled, String datacenter) {
+      boolean remoteColo, boolean sslEnabled, String datacenter, boolean remoteColoRequestForStandby) {
     if (remoteColo) {
       interColoReplicationBytesRate.get(datacenter).mark(totalBytesFixed);
       interColoBlobsReplicatedCount.get(datacenter).inc(totalBlobsFixed);
@@ -695,6 +723,10 @@ public class ReplicationMetrics {
         plainTextInterColoReplicationBytesRate.get(datacenter).mark(totalBytesFixed);
         plainTextInterColoBlobsReplicatedCount.get(datacenter).inc(totalBlobsFixed);
         plainTextInterColoBatchStoreWriteTime.get(datacenter).update(batchStoreWriteTime);
+      }
+
+      if (remoteColoRequestForStandby) {
+        interColoReplicationFetchBytesRateForStandbyReplicas.get(datacenter).mark(totalBytesFixed);
       }
     } else {
       intraColoReplicationBytesRate.mark(totalBytesFixed);

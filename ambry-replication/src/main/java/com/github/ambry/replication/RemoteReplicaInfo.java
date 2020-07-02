@@ -17,9 +17,14 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.network.Port;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /*
  * The token persist logic ensures that a token corresponding to an entry in the store is never persisted in the
@@ -44,7 +49,7 @@ import java.util.Objects;
 public class RemoteReplicaInfo {
   private final ReplicaId replicaId;
   private final ReplicaId localReplicaId;
-  private final Store localStore;
+  private Store localStore;
   private final Port port;
   private final Time time;
   // tracks the point up to which a node is in sync with a remote replica
@@ -97,6 +102,16 @@ public class RemoteReplicaInfo {
 
   Port getPort() {
     return this.port;
+  }
+
+  /**
+   * Set the store information.
+   * This is ONLY used in UNIT TESTs to set mock in-memory local store for using in replication. For production
+   * code, {@link Store} will be provided during construction of this object from StorageManager.
+   * @param localStore Underlying store to store blobs
+   */
+  void setLocalStore(Store localStore) {
+    this.localStore = localStore;
   }
 
   /**
@@ -208,7 +223,7 @@ public class RemoteReplicaInfo {
   }
 
   /**
-   * Get the meta data response information received for this replica in the most recent replication cycle.
+   * Get the meta data response received for this replica in the most recent replication cycle.
    * @return exchangeMetadataResponse contains the meta data response (missing keys, token info, local lag from remote, etc.).
    */
   synchronized ReplicaThread.ExchangeMetadataResponse getExchangeMetadataResponse() {
@@ -216,15 +231,31 @@ public class RemoteReplicaInfo {
   }
 
   /**
-   * Set the meta data exchange information received for this replica in the most recent replication cycle.
-   * Replica threads calls this method to store the metadata responses during replication cycles.
+   * Set the meta data response received for this replica in the most recent replication cycle.
    * @param exchangeMetadataResponse contains meta data response (missing keys, token info, local lag from remote, etc.).
    */
   synchronized void setExchangeMetadataResponse(ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse) {
-    // We are having this thread safe to avoid conflict between replica thread setting new exchangeMetadataResponse
-    // and replica threads updating the missing store messages in current exchangeMetadataResponse after they are
-    // written to local store via intra-dc replication (method will be added in future PR).
+    // Synchronized to avoid conflict between replica threads setting new exchangeMetadataResponse received for this replica
+    // and replica threads going through existing metadata response (via updateMissingMessagesInMetadataResponse()) to
+    // to compare newly written messages to store with missing message set in metadata response.
     this.exchangeMetadataResponse = exchangeMetadataResponse;
+  }
+
+  /**
+   * Update missing store messages found for this replica in its recent exchange metadata response by comparing
+   * (based on the store key) with messages that are written to store by other replica threads.
+   * @param messagesWrittenToStore list of messages written to local store
+   */
+  synchronized void updateMissingMessagesInMetadataResponse(List<MessageInfo> messagesWrittenToStore) {
+    Set<MessageInfo> missingStoreMessages = exchangeMetadataResponse.getMissingStoreMessages();
+    if (missingStoreMessages != null && !missingStoreMessages.isEmpty()) {
+      Set<StoreKey> keysWrittenToStore =
+          messagesWrittenToStore.stream().map(MessageInfo::getStoreKey).collect(Collectors.toSet());
+      Set<MessageInfo> missingMessagesFoundInStore = missingStoreMessages.stream()
+          .filter(message -> keysWrittenToStore.contains(message.getStoreKey()))
+          .collect(Collectors.toSet());
+      exchangeMetadataResponse.removeMissingStoreMessages(missingMessagesFoundInStore);
+    }
   }
 
   /**

@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -59,13 +60,22 @@ public class MockPartitionId implements PartitionId {
     for (MockDataNodeId dataNode : dataNodes) {
       MockReplicaId replicaId = new MockReplicaId(dataNode.getPort(), this, dataNode, mountPathIndexToUse);
       replicaIds.add(replicaId);
-      if (dataCenters.contains(dataNode.getDatacenterName())) {
+    }
+
+    List<ReplicaId> duplicate = new ArrayList<>(replicaIds);
+    Collections.shuffle(duplicate);
+    for (ReplicaId replicaId : duplicate) {
+      MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
+      if (dataCenters.contains(mockReplicaId.getDataNodeId().getDatacenterName())) {
         replicaAndState.put(replicaId, ReplicaState.STANDBY);
+        mockReplicaId.setReplicaState(ReplicaState.STANDBY);
       } else {
-        dataCenters.add(dataNode.getDatacenterName());
+        dataCenters.add(mockReplicaId.getDataNodeId().getDatacenterName());
         replicaAndState.put(replicaId, ReplicaState.LEADER);
+        mockReplicaId.setReplicaState(ReplicaState.LEADER);
       }
     }
+
     for (ReplicaId replicaId : replicaIds) {
       ((MockReplicaId) replicaId).setPeerReplicas(replicaIds);
     }
@@ -154,7 +164,7 @@ public class MockPartitionId implements PartitionId {
    * @param replicaId the {@link ReplicaId} to use.
    * @param state the {@link ReplicaState} to set.
    */
-  public void setReplicaState(ReplicaId replicaId, ReplicaState state){
+  public void setReplicaState(ReplicaId replicaId, ReplicaState state) {
     replicaAndState.computeIfPresent(replicaId, (k, v) -> state);
   }
 

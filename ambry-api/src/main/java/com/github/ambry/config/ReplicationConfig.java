@@ -26,6 +26,9 @@ public class ReplicationConfig {
 
   public static final String REPLICATION_CLOUD_TOKEN_FACTORY = "replication.cloud.token.factory";
   public static final String REPLICA_TOKEN_FILE_NAME = "replicaTokens";
+  public static final String REPLICATION_MODEL_ACROSS_DATACENTERS = "replication.model.across.datacenters";
+  public static final String REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS =
+      "replication.standby.wait.timeout.to.trigger.cross.colo.fetch.seconds";
 
   /**
    * The factory class the replication uses to creates its tokens
@@ -190,9 +193,9 @@ public class ReplicationConfig {
    * If set to "ALL_TO_ALL", inter colo replication will be in an all-to-all fashion, i.e. each replica talks to all other replicas irrespective of their state.
    * Intra colo replication will continue as all-to-all fashion in both the models.
    */
-  @Config("replication.model.across.datacenters")
+  @Config(REPLICATION_MODEL_ACROSS_DATACENTERS)
   @Default("ALL_TO_ALL")
-  public final ReplicationModelType replicationModelType;
+  public final ReplicationModelType replicationModelAcrossDatacenters;
 
   /**
    * Use http2 connection for replication if this is true.
@@ -215,6 +218,19 @@ public class ReplicationConfig {
   @Config("replication.container.deletion.enabled")
   @Default("false")
   public final boolean replicationContainerDeletionEnabled;
+
+  /**
+   * The time (in seconds) for standby replicas to wait before fetching missing keys from replicas in cross colo
+   * data centers. This is applicable during leader based replication where standby replicas don't fetch the missing
+   * keys found in metadata exchange from cross colo replicas and expect them to come from leader replica in
+   * local data center via intra-dc replication. This time out ensures that standby replicas are not stuck indefinitely
+   * waiting for the missing keys to come via intra-dc replication by doing cross colo fetch themselves.
+   * Default value is 120 seconds. If configured to -1, this timeout doesn't take effect, i.e. cross colo fetch for
+   * standby replicas is never done.
+   */
+  @Config(REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS)
+  @Default("120")
+  public final int replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
@@ -258,11 +274,15 @@ public class ReplicationConfig {
     replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);
     String vcrRecoveryPartitions = verifiableProperties.getString("replication.vcr.recovery.partitions", "");
     replicationVcrRecoveryPartitions = Utils.splitString(vcrRecoveryPartitions, ",", HashSet::new);
-    replicationModelType = ReplicationModelType.valueOf(
-        verifiableProperties.getString("replication.model.across.datacenters", ReplicationModelType.ALL_TO_ALL.name()));
+    replicationModelAcrossDatacenters = ReplicationModelType.valueOf(
+        verifiableProperties.getString(REPLICATION_MODEL_ACROSS_DATACENTERS, ReplicationModelType.ALL_TO_ALL.name()));
     replicationEnableHttp2 = verifiableProperties.getBoolean("replication.enable.http2", false);
-    replicationContainerDeletionRetentionDays = verifiableProperties.getInt("replication.container.deletion.retention.days", 14);
+    replicationContainerDeletionRetentionDays =
+        verifiableProperties.getInt("replication.container.deletion.retention.days", 14);
     replicationContainerDeletionEnabled =
         verifiableProperties.getBoolean("replication.container.deletion.enabled", false);
+    replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds =
+        verifiableProperties.getIntInRange(REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS, 120,
+            -1, Integer.MAX_VALUE);
   }
 }

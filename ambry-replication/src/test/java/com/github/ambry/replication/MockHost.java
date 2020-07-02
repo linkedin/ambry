@@ -52,6 +52,28 @@ public class MockHost {
   }
 
   /**
+   * Adds an in-memory store to a partition if not present already
+   * @param partitionId partition id
+   * @param listener listener for store events
+   */
+  void addStore(PartitionId partitionId, ReplicationTest.StoreEventListener listener) {
+    storesByPartition.computeIfAbsent(partitionId, partitionId1 -> new InMemoryStore(partitionId,
+        infosByPartition.computeIfAbsent(partitionId1,
+            (Function<PartitionId, List<MessageInfo>>) partitionId2 -> new ArrayList<>()),
+        buffersByPartition.computeIfAbsent(partitionId1,
+            (Function<PartitionId, List<ByteBuffer>>) partitionId22 -> new ArrayList<>()), listener));
+  }
+
+  /**
+   * Gets the in-memory store for the partition
+   * @param partitionId partition id
+   * @return in-memory store
+   */
+  InMemoryStore getStore(PartitionId partitionId) {
+    return storesByPartition.get(partitionId);
+  }
+
+  /**
    * Adds a message to {@code id} with the provided details.
    * @param id the {@link PartitionId} to add the message to.
    * @param messageInfo the {@link MessageInfo} of the message.
