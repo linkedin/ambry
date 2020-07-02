@@ -56,7 +56,7 @@ public class MockHost {
    * @param partitionId partition id
    * @param listener listener for store events
    */
-  public void addStore(PartitionId partitionId, ReplicationTest.StoreEventListener listener) {
+  void addStore(PartitionId partitionId, ReplicationTest.StoreEventListener listener) {
     storesByPartition.computeIfAbsent(partitionId, partitionId1 -> new InMemoryStore(partitionId,
         infosByPartition.computeIfAbsent(partitionId1,
             (Function<PartitionId, List<MessageInfo>>) partitionId2 -> new ArrayList<>()),
@@ -69,7 +69,7 @@ public class MockHost {
    * @param partitionId partition id
    * @return in-memory store
    */
-  public InMemoryStore getStore(PartitionId partitionId) {
+  InMemoryStore getStore(PartitionId partitionId) {
     return storesByPartition.get(partitionId);
   }
 

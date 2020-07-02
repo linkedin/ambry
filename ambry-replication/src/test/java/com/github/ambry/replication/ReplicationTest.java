@@ -573,7 +573,7 @@ public class ReplicationTest extends ReplicationTestHelper {
             replicationManager.leaderBasedReplicationAdmin.getLeaderPartitionToPeerLeaderReplicas()
                 .get(existingPartition.toPathString());
         Set<ReplicaId> peerLeaderReplicasInClusterMap =
-            existingPartition.getReplicaIdsByState(ReplicaState.LEADER, null).stream().collect(Collectors.toSet());
+            new HashSet<>(existingPartition.getReplicaIdsByState(ReplicaState.LEADER, null));
         peerLeaderReplicasInClusterMap.remove(mockReplicaId);
         assertThat(
             "Mismatch in list of leader peer replicas stored by partition in replication manager and cluster map",
