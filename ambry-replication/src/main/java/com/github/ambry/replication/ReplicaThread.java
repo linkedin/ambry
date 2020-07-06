@@ -360,8 +360,15 @@ public class ReplicaThread implements Runnable {
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
         ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
         boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
-        if (replicationDisabledPartitions.contains(replicaId.getPartitionId()) || replicaId.isDown() || inBackoff
-            || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE) {
+        if (replicaId.isDown() || inBackoff
+            || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
+            || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
+          logger.debug(
+              "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
+                  + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
+              replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
+              remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
+              replicationDisabledPartitions.contains(replicaId.getPartitionId()));
           continue;
         }
 
@@ -880,7 +887,8 @@ public class ReplicaThread implements Runnable {
         // it is deleted in the remote store and not deleted yet locally.
 
         // if the blob is from deprecated container, then nothing needs to be done.
-        if (replicationConfig.replicationContainerDeletionEnabled && skipPredicate != null && skipPredicate.test(messageInfo)) {
+        if (replicationConfig.replicationContainerDeletionEnabled && skipPredicate != null && skipPredicate.test(
+            messageInfo)) {
           continue;
         }
         applyUpdatesToBlobInLocalStore(messageInfo, remoteReplicaInfo, localKey);

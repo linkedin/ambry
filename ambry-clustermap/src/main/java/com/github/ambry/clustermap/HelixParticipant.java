@@ -279,6 +279,19 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     }
   }
 
+  @Override
+  public boolean resetPartitionState(String partitionName) {
+    boolean result = true;
+    try {
+      String resourceName = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
+      helixAdmin.resetPartition(clusterName, instanceName, resourceName, Collections.singletonList(partitionName));
+    } catch (Exception e) {
+      logger.error("Exception occurred when resetting partition " + partitionName, e);
+      result = false;
+    }
+    return result;
+  }
+
   /**
    * @return {@link HelixAdmin} that manages current data node.
    */

@@ -102,7 +102,6 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -121,6 +120,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
@@ -158,14 +158,15 @@ final class ServerTestUtil {
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
       BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
-      byte[] usermetadata = new byte[1000];
+      byte[] userMetadata = new byte[1000];
       byte[] data = new byte[31870];
       byte[] encryptionKey = new byte[100];
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
 
-      BlobProperties properties = new BlobProperties(31870, "serviceid1", accountId, containerId, testEncryption);
-      TestUtils.RANDOM.nextBytes(usermetadata);
+      BlobProperties properties =
+          new BlobProperties(31870, "serviceid1", accountId, containerId, testEncryption, cluster.time.milliseconds());
+      TestUtils.RANDOM.nextBytes(userMetadata);
       TestUtils.RANDOM.nextBytes(data);
       if (testEncryption) {
         TestUtils.RANDOM.nextBytes(encryptionKey);
@@ -189,7 +190,7 @@ final class ServerTestUtil {
           BlobId.BlobDataType.DATACHUNK);
       // put blob 1
       PutRequest putRequest =
-          new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+          new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(userMetadata), Unpooled.wrappedBuffer(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       ConnectedChannel channel =
           getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory, clientSSLConfig);
@@ -201,11 +202,11 @@ final class ServerTestUtil {
 
       // put blob 2 with an expiry time and apply TTL update later
       BlobProperties propertiesForTtlUpdate =
-          new BlobProperties(31870, "serviceid1", "ownerid", "image/png", false, TestUtils.TTL_SECS, accountId,
-              containerId, testEncryption, null);
+          new BlobProperties(31870, "serviceid1", "ownerid", "image/png", false, TestUtils.TTL_SECS,
+              cluster.time.milliseconds(), accountId, containerId, testEncryption, null);
       long ttlUpdateBlobExpiryTimeMs = getExpiryTimeMs(propertiesForTtlUpdate);
       PutRequest putRequest2 =
-          new PutRequest(1, "client1", blobId2, propertiesForTtlUpdate, ByteBuffer.wrap(usermetadata),
+          new PutRequest(1, "client1", blobId2, propertiesForTtlUpdate, ByteBuffer.wrap(userMetadata),
               Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
               testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest2);
@@ -215,18 +216,17 @@ final class ServerTestUtil {
 
       // put blob 3
       PutRequest putRequest3 =
-          new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+          new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(userMetadata), Unpooled.wrappedBuffer(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest3);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       assertEquals(ServerErrorCode.No_Error, response3.getError());
-
       // put blob 4 that is expired
       BlobProperties propertiesExpired =
-          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId, testEncryption,
-              null);
-      PutRequest putRequest4 = new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(usermetadata),
+          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, cluster.time.milliseconds(), accountId,
+              containerId, testEncryption, null);
+      PutRequest putRequest4 = new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(userMetadata),
           Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest4);
@@ -236,7 +236,7 @@ final class ServerTestUtil {
       cluster.time.sleep(10000);
 
       // get blob properties
-      ArrayList<BlobId> ids = new ArrayList<BlobId>();
+      ArrayList<BlobId> ids = new ArrayList<>();
       MockPartitionId partition =
           (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(blobId1);
@@ -330,7 +330,7 @@ final class ServerTestUtil {
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
-        assertArrayEquals(usermetadata, userMetadataOutput.array());
+        assertArrayEquals(userMetadata, userMetadataOutput.array());
         if (testEncryption) {
           assertNotNull("MessageMetadata should not have been null",
               resp2.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -341,7 +341,7 @@ final class ServerTestUtil {
               resp2.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
         }
       } catch (MessageFormatException e) {
-        assertEquals(false, true);
+        fail();
       }
 
       // get blob info
@@ -359,7 +359,7 @@ final class ServerTestUtil {
       assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
       // verify user metadata
       ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(responseStream);
-      assertArrayEquals(usermetadata, userMetadataOutput.array());
+      assertArrayEquals(userMetadata, userMetadataOutput.array());
       if (testEncryption) {
         assertNotNull("MessageMetadata should not have been null",
             resp3.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
@@ -410,7 +410,7 @@ final class ServerTestUtil {
 
       // fetch blob that does not exist
       // get blob properties
-      ids = new ArrayList<BlobId>();
+      ids = new ArrayList<>();
       partition = (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           clusterMap.getLocalDatacenterId(), properties.getAccountId(), properties.getContainerId(), partition, false,
@@ -438,7 +438,7 @@ final class ServerTestUtil {
 
       // put a blob on a stopped store, which should fail
       putRequest =
-          new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+          new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(userMetadata), Unpooled.wrappedBuffer(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest);
       putResponseStream = channel.receive().getInputStream();
@@ -446,10 +446,10 @@ final class ServerTestUtil {
       assertEquals("Put blob on stopped store should fail", ServerErrorCode.Replica_Unavailable, response.getError());
 
       // get a blob properties on a stopped store, which should fail
-      ids = new ArrayList<BlobId>();
+      ids = new ArrayList<>();
       partition = (MockPartitionId) blobId1.getPartition();
       ids.add(blobId1);
-      partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+      partitionRequestInfoList = new ArrayList<>();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       getRequest1 =
@@ -486,7 +486,7 @@ final class ServerTestUtil {
 
       // put a blob on a restarted store , which should succeed
       PutRequest putRequest5 =
-          new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+          new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(userMetadata), Unpooled.wrappedBuffer(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest5);
       putResponseStream = channel.receive().getInputStream();
@@ -494,7 +494,7 @@ final class ServerTestUtil {
       assertEquals("Put blob on restarted store should succeed", ServerErrorCode.No_Error, response5.getError());
 
       // get a blob on a restarted store , which should succeed
-      ids = new ArrayList<BlobId>();
+      ids = new ArrayList<>();
       PartitionId partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(blobId1);
       partitionRequestInfoList = new ArrayList<>();
@@ -649,9 +649,10 @@ final class ServerTestUtil {
     byte[] data = new byte[blobSize];
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    long ttl = doTtlUpdate ? System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1) : Utils.Infinite_Time;
+    long ttl = doTtlUpdate ? TimeUnit.DAYS.toMillis(1) : Utils.Infinite_Time;
     BlobProperties properties =
-        new BlobProperties(blobSize, "serviceid1", null, null, false, ttl, accountId, containerId, false, null);
+        new BlobProperties(blobSize, "serviceid1", null, null, false, ttl, cluster.time.milliseconds(), accountId,
+            containerId, false, null);
     TestUtils.RANDOM.nextBytes(userMetadata);
     TestUtils.RANDOM.nextBytes(data);
 
@@ -720,8 +721,8 @@ final class ServerTestUtil {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties properties =
-        new BlobProperties(100, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId, false,
-            null);
+        new BlobProperties(100, "serviceid1", null, null, false, TestUtils.TTL_SECS, cluster.time.milliseconds(),
+            accountId, containerId, false, null);
     long expectedExpiryTimeMs = getExpiryTimeMs(properties);
     TestUtils.RANDOM.nextBytes(usermetadata);
     TestUtils.RANDOM.nextBytes(data);
@@ -778,12 +779,13 @@ final class ServerTestUtil {
         ServerErrorCode.No_Error);
     // Test the case where a put arrives with the same id as one in the server, but the blob is not identical.
     BlobProperties differentProperties =
-        new BlobProperties(properties.getBlobSize(), properties.getServiceId(), accountId, containerId, testEncryption);
+        new BlobProperties(properties.getBlobSize(), properties.getServiceId(), accountId, containerId, testEncryption,
+            cluster.time.milliseconds());
     testLatePutRequest(blobIds.get(0), differentProperties, usermetadata, data, encryptionKey, channel1, channel2,
         channel3, ServerErrorCode.Blob_Already_Exists);
-    byte[] differentUsermetadata = Arrays.copyOf(usermetadata, usermetadata.length);
-    differentUsermetadata[0] = (byte) ~differentUsermetadata[0];
-    testLatePutRequest(blobIds.get(0), properties, differentUsermetadata, data, encryptionKey, channel1, channel2,
+    byte[] differentUserMetadata = Arrays.copyOf(usermetadata, usermetadata.length);
+    differentUserMetadata[0] = (byte) ~differentUserMetadata[0];
+    testLatePutRequest(blobIds.get(0), properties, differentUserMetadata, data, encryptionKey, channel1, channel2,
         channel3, ServerErrorCode.Blob_Already_Exists);
     byte[] differentData = Arrays.copyOf(data, data.length);
     differentData[0] = (byte) ~differentData[0];
@@ -1414,8 +1416,8 @@ final class ServerTestUtil {
     for (int i = 0; i < numberOfRequestsToSend; i++) {
       int size = new Random().nextInt(5000);
       final BlobProperties properties =
-          new BlobProperties(size, "service1", "owner id check", "image/jpeg", false, TestUtils.TTL_SECS, accountId,
-              containerId, false, null);
+          new BlobProperties(size, "service1", "owner id check", "image/jpeg", false, TestUtils.TTL_SECS,
+              cluster.time.milliseconds(), accountId, containerId, false, null);
       final byte[] metadata = new byte[new Random().nextInt(1000)];
       final byte[] blob = new byte[size];
       TestUtils.RANDOM.nextBytes(metadata);
@@ -1490,13 +1492,14 @@ final class ServerTestUtil {
     assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
 
     // put a blob on a stopped store, which should fail
-    byte[] usermetadata = new byte[1000];
+    byte[] userMetadata = new byte[1000];
     byte[] data = new byte[3187];
-    BlobProperties properties = new BlobProperties(3187, "serviceid1", accountId, containerId, false);
+    BlobProperties properties =
+        new BlobProperties(3187, "serviceid1", accountId, containerId, false, cluster.time.milliseconds());
     BlobId blobId2 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         clusterMap.getLocalDatacenterId(), accountId, containerId, partitionId, false, BlobId.BlobDataType.DATACHUNK);
     PutRequest putRequest2 =
-        new PutRequest(1, "clientId2", blobId2, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+        new PutRequest(1, "clientId2", blobId2, properties, ByteBuffer.wrap(userMetadata), Unpooled.wrappedBuffer(data),
             properties.getBlobSize(), BlobType.DataBlob, null);
     channel.send(putRequest2);
     InputStream putResponseStream = channel.receive().getInputStream();
@@ -1504,9 +1507,9 @@ final class ServerTestUtil {
     assertEquals("Put blob on stopped store should fail", ServerErrorCode.Replica_Unavailable, response2.getError());
 
     // get a blob properties on a stopped store, which should fail
-    ArrayList<BlobId> ids = new ArrayList<BlobId>();
+    ArrayList<BlobId> ids = new ArrayList<>();
     ids.add(blobId1);
-    ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+    ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
     PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
     partitionRequestInfoList.add(partitionRequestInfo);
     GetRequest getRequest1 =
@@ -1543,7 +1546,7 @@ final class ServerTestUtil {
 
     // put a blob on a restarted store , which should succeed
     putRequest2 =
-        new PutRequest(1, "clientId2", blobId2, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+        new PutRequest(1, "clientId2", blobId2, properties, ByteBuffer.wrap(userMetadata), Unpooled.wrappedBuffer(data),
             properties.getBlobSize(), BlobType.DataBlob, null);
     channel.send(putRequest2);
     putResponseStream = channel.receive().getInputStream();
@@ -1604,8 +1607,8 @@ final class ServerTestUtil {
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
         propertyList.add(
-            new BlobProperties(1000, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId,
-                testEncryption, null));
+            new BlobProperties(1000, "serviceid1", null, null, false, TestUtils.TTL_SECS, cluster.time.milliseconds(),
+                accountId, containerId, testEncryption, null));
         blobIdList.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
             clusterMap.getLocalDatacenterId(), accountId, containerId, partition, false,
             BlobId.BlobDataType.DATACHUNK));
@@ -1987,7 +1990,7 @@ final class ServerTestUtil {
       cluster.getServers().get(0).awaitShutdown();
 
       File mountFile = new File(clusterMap.getReplicaIds(dataNodeId).get(0).getMountPath());
-      for (File toDelete : mountFile.listFiles()) {
+      for (File toDelete : Objects.requireNonNull(mountFile.listFiles())) {
         deleteFolderContent(toDelete, true);
       }
       notificationSystem.decrementCreatedReplica(blobIdList.get(1).getID(), dataNodeId.getHostname(),
@@ -2069,20 +2072,21 @@ final class ServerTestUtil {
       SSLSocketFactory clientSSLSocketFactory2, SSLSocketFactory clientSSLSocketFactory3,
       MockNotificationSystem notificationSystem, Properties routerProps, boolean testEncryption) {
     MockClusterMap clusterMap = cluster.getClusterMap();
-    byte[] usermetadata = new byte[1000];
+    byte[] userMetadata = new byte[1000];
     byte[] data = new byte[31870];
     byte[] encryptionKey = new byte[100];
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties properties = new BlobProperties(31870, "serviceid1", accountId, containerId, testEncryption);
-    TestUtils.RANDOM.nextBytes(usermetadata);
+    BlobProperties properties =
+        new BlobProperties(31870, "serviceid1", accountId, containerId, testEncryption, cluster.time.milliseconds());
+    TestUtils.RANDOM.nextBytes(userMetadata);
     TestUtils.RANDOM.nextBytes(data);
     if (testEncryption) {
       TestUtils.RANDOM.nextBytes(encryptionKey);
     }
     short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     Map<String, List<DataNodeId>> dataNodesPerDC =
-        clusterMap.getDataNodes().stream().collect(Collectors.groupingBy(d -> d.getDatacenterName()));
+        clusterMap.getDataNodes().stream().collect(Collectors.groupingBy(DataNodeId::getDatacenterName));
     Map<String, Pair<SSLConfig, SSLSocketFactory>> sslSettingPerDC = new HashMap<>();
     sslSettingPerDC.put("DC1", new Pair<>(clientSSLConfig1, clientSSLSocketFactory1));
     sslSettingPerDC.put("DC2", new Pair<>(clientSSLConfig2, clientSSLSocketFactory2));
@@ -2122,7 +2126,7 @@ final class ServerTestUtil {
       channel.connect();
 
       PutRequest putRequest =
-          new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+          new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(userMetadata), Unpooled.wrappedBuffer(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest);
 
@@ -2222,7 +2226,7 @@ final class ServerTestUtil {
           properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
           BlobId.BlobDataType.DATACHUNK);
       putRequest =
-          new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+          new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(userMetadata), Unpooled.wrappedBuffer(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest);
       putResponseStream = channel.receive().getInputStream();
@@ -2329,15 +2333,14 @@ final class ServerTestUtil {
       SSLSocketFactory clientSSLSocketFactory) {
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
-      BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
-      byte[] usermetadata = new byte[1000];
+      byte[] userMetadata = new byte[1000];
       byte[] data = new byte[31870];
-      byte[] encryptionKey = new byte[100];
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
 
-      BlobProperties properties = new BlobProperties(31870, "serviceid1", accountId, containerId, false);
-      TestUtils.RANDOM.nextBytes(usermetadata);
+      BlobProperties properties =
+          new BlobProperties(31870, "serviceid1", accountId, containerId, false, cluster.time.milliseconds());
+      TestUtils.RANDOM.nextBytes(userMetadata);
       TestUtils.RANDOM.nextBytes(data);
       List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
@@ -2348,7 +2351,7 @@ final class ServerTestUtil {
 
       // put blob 1
       PutRequest putRequest =
-          new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
+          new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(userMetadata), Unpooled.wrappedBuffer(data),
               properties.getBlobSize(), BlobType.DataBlob, null);
       ConnectedChannel channel =
           getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory, clientSSLConfig);
@@ -2364,15 +2367,18 @@ final class ServerTestUtil {
         undeleteBlob(channel, blobId1, cluster.time.milliseconds(), (short) (i + 1));
       }
 
-      // put blob 2 that is expired
-      long ttl = 24 * 60 * 60;
+      // put blob 2 that is expired (Add additional 5 secs to avoid Blob_Update_Not_Allowed failure as TtlUpdate op time
+      // is also cluster.time.milliseconds(). Theoretically, it should succeed as op time = expiry time - buffer time.
+      // However, the index value converts ms to sec when putting a blob, so the milliseconds part of initial put blob
+      // time is wiped out and makes op time > expiry time - buffer time. Adding some time should avoid this failure.)
+      long ttl = 24 * 60 * 60 + 5;
       BlobProperties propertiesExpired =
-          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, ttl, accountId, containerId, false, null);
+          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, ttl, cluster.time.milliseconds(), accountId,
+              containerId, false, null);
       BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
           propertiesExpired.getAccountId(), propertiesExpired.getContainerId(), partitionIds.get(0), false,
           BlobId.BlobDataType.DATACHUNK);
-
-      PutRequest putRequest2 = new PutRequest(1, "client1", blobId2, propertiesExpired, ByteBuffer.wrap(usermetadata),
+      PutRequest putRequest2 = new PutRequest(1, "client1", blobId2, propertiesExpired, ByteBuffer.wrap(userMetadata),
           Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob, null);
       channel.send(putRequest2);
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
@@ -2398,8 +2404,8 @@ final class ServerTestUtil {
       MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", channel.getRemotePort());
       for (ReplicaId replica : partitionIds.get(0).getReplicaIds()) {
         if (replica.getDataNodeId().equals(dataNode)) {
-          for (File file : new File(replica.getReplicaPath()).listFiles(
-              (file, filename) -> filename.endsWith("index"))) {
+          for (File file : Objects.requireNonNull(
+              new File(replica.getReplicaPath()).listFiles((file, filename) -> filename.endsWith("index")))) {
             file.delete();
           }
         }
@@ -2414,9 +2420,9 @@ final class ServerTestUtil {
 
         while (true) {
           // get blob properties
-          ArrayList<BlobId> ids = new ArrayList<BlobId>();
+          ArrayList<BlobId> ids = new ArrayList<>();
           ids.add(blobId);
-          ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+          ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
           PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionIds.get(0), ids);
           partitionRequestInfoList.add(partitionRequestInfo);
           GetRequest getRequest =

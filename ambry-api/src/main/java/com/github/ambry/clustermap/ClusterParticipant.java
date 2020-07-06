@@ -110,6 +110,15 @@ public interface ClusterParticipant extends AutoCloseable {
   }
 
   /**
+   * Reset given partition to initial state.
+   * @param partitionName the partition to reset.
+   * @return whether reset operation succeeded or not.
+   */
+  default boolean resetPartitionState(String partitionName) {
+    return true;
+  }
+
+  /**
    * @return a map of registered state change listeners (if there are any) in this cluster participant.
    */
   Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners();

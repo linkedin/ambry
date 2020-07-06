@@ -162,7 +162,7 @@ public class ReplicationManager extends ReplicationEngine {
    */
   public boolean addReplica(ReplicaId replicaId) {
     if (partitionToPartitionInfo.containsKey(replicaId.getPartitionId())) {
-      logger.error("Partition {} already exists in replication manager, rejecting adding replica request.",
+      logger.warn("Partition {} already exists in replication manager, rejecting adding replica request.",
           replicaId.getPartitionId());
       return false;
     }

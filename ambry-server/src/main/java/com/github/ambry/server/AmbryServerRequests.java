@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
@@ -67,6 +68,7 @@ import org.slf4j.LoggerFactory;
 public class AmbryServerRequests extends AmbryRequests {
   private final ServerConfig serverConfig;
   private final StatsManager statsManager;
+  private final ClusterParticipant clusterParticipant;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
   // POST requests are allowed on stores states: { LEADER, STANDBY }
@@ -83,12 +85,14 @@ public class AmbryServerRequests extends AmbryRequests {
   AmbryServerRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
       NotificationSystem operationNotification, ReplicationAPI replicationEngine, StoreKeyFactory storeKeyFactory,
-      ServerConfig serverConfig, StoreKeyConverterFactory storeKeyConverterFactory, StatsManager statsManager) {
+      ServerConfig serverConfig, StoreKeyConverterFactory storeKeyConverterFactory, StatsManager statsManager,
+      ClusterParticipant clusterParticipant) {
     super(storeManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics, findTokenHelper,
         operationNotification, replicationEngine, storeKeyFactory, serverConfig.serverEnableStoreDataPrefetch,
         storeKeyConverterFactory);
     this.serverConfig = serverConfig;
     this.statsManager = statsManager;
+    this.clusterParticipant = clusterParticipant;
 
     for (RequestOrResponseType requestType : EnumSet.of(RequestOrResponseType.PutRequest,
         RequestOrResponseType.GetRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.UndeleteRequest,
@@ -408,11 +412,21 @@ public class AmbryServerRequests extends AmbryRequests {
       logger.debug("Validate request fails for {} with error code {} when trying to start store", partitionId, error);
       return error;
     }
+    // 1. temporarily disable metadata request to add replica to ReplicationManager after starting the store
+    Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
+    controlRequestForPartitions(EnumSet.of(RequestOrResponseType.ReplicaMetadataRequest), partitionIds, false);
     if (!storeManager.startBlobStore(partitionId)) {
       logger.error("Starting BlobStore fails on {}", partitionId);
       return ServerErrorCode.Unknown_Error;
     }
-    Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
+    // 2. add replica to replication manager if needed
+    if (replicationEngine instanceof ReplicationManager) {
+      // attempt to add replica to ReplicationManager in case the store was not started during server startup
+      // we don't check the result of adding replica as it returns false when replica is already present, which is the
+      // most common case
+      ((ReplicationManager) replicationEngine).addReplica(storeManager.getReplica(partitionId.toPathString()));
+    }
+    // 3. enable requests on this store
     controlRequestForPartitions(
         EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest,
             RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
@@ -421,20 +435,30 @@ public class AmbryServerRequests extends AmbryRequests {
       logger.error("Could not enable replication on {}", partitionIds);
       return ServerErrorCode.Unknown_Error;
     }
-    if (storeManager.controlCompactionForBlobStore(partitionId, true)) {
-      error = ServerErrorCode.No_Error;
-      logger.info("Store is successfully started and functional for partition: {}", partitionId);
-      List<PartitionId> failToUpdateList =
-          storeManager.setBlobStoreStoppedState(Collections.singletonList(partitionId), false);
-      if (!failToUpdateList.isEmpty()) {
-        logger.warn("Fail to remove BlobStore(s) {} from stopped list after start operation completed",
-            failToUpdateList.toArray());
+    // startBlobStore should guarantee that store is started, so return value shouldn't be null
+    Store store = storeManager.getStore(partitionId);
+    // 4. reset partition state if it's offline (will trigger state transition)
+    if (store.getCurrentState() == ReplicaState.OFFLINE && clusterParticipant != null) {
+      if (!clusterParticipant.resetPartitionState(partitionId.toPathString())) {
+        logger.error("Failed to reset partition {}", partitionId);
+        return ServerErrorCode.Unknown_Error;
       }
-    } else {
-      error = ServerErrorCode.Unknown_Error;
-      logger.error("Enable compaction fails on given BlobStore {}", partitionId);
     }
-    return error;
+    // 5. remove replica from stopped list (if Helix is adopted)
+    List<PartitionId> failToUpdateList =
+        storeManager.setBlobStoreStoppedState(Collections.singletonList(partitionId), false);
+    if (!failToUpdateList.isEmpty() && clusterParticipant != null) {
+      logger.error("Fail to remove BlobStore(s) {} from stopped list after start operation completed",
+          failToUpdateList.toArray());
+      return ServerErrorCode.Unknown_Error;
+    }
+    // 6. enable compaction on this store
+    if (!storeManager.controlCompactionForBlobStore(partitionId, true)) {
+      logger.error("Enable compaction fails on given BlobStore {}", partitionId);
+      return ServerErrorCode.Unknown_Error;
+    }
+    logger.info("Store is successfully started and functional for partition: {}", partitionId);
+    return ServerErrorCode.No_Error;
   }
 
   /**
@@ -475,13 +499,13 @@ public class AmbryServerRequests extends AmbryRequests {
         false);
     // Shutdown the BlobStore completely
     if (storeManager.shutdownBlobStore(partitionId)) {
-      error = ServerErrorCode.No_Error;
       logger.info("Store is successfully shutdown for partition: {}", partitionId);
       List<PartitionId> failToUpdateList =
           storeManager.setBlobStoreStoppedState(Collections.singletonList(partitionId), true);
-      if (!failToUpdateList.isEmpty()) {
-        logger.warn("Fail to add BlobStore(s) {} to stopped list after stop operation completed",
+      if (!failToUpdateList.isEmpty() && clusterParticipant != null) {
+        logger.error("Fail to add BlobStore(s) {} to stopped list after stop operation completed",
             failToUpdateList.toArray());
+        error = ServerErrorCode.Unknown_Error;
       }
     } else {
       error = ServerErrorCode.Unknown_Error;
