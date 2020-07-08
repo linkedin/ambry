@@ -22,11 +22,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import org.apache.helix.HelixAdmin;
@@ -35,6 +33,7 @@ import org.apache.helix.model.InstanceConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.junit.AfterClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -57,6 +56,7 @@ public class HelixParticipantTest {
   private final String clusterName = "HelixParticipantTestCluster";
   private final JSONObject zkJson;
   private final String stateModelDef;
+  private static final List<ZkInfo> zkInfoList = new ArrayList<>();
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -65,18 +65,24 @@ public class HelixParticipantTest {
   }
 
   public HelixParticipantTest(String stateModelDef) {
-    List<ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new ZkInfo(null, "DC0", (byte) 0, 2199, false));
     zkJson = constructZkLayoutJSON(zkInfoList);
     props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.port", "2200");
+    props.setProperty("clustermap.port", "2300");
     props.setProperty("clustermap.cluster.name", clusterName);
     props.setProperty("clustermap.datacenter.name", "DC0");
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.state.model.definition", stateModelDef);
     this.stateModelDef = stateModelDef;
     helixManagerFactory = new MockHelixManagerFactory();
+  }
+
+  @AfterClass
+  public static void destroy() {
+    for (ZkInfo zkInfo : zkInfoList) {
+      zkInfo.shutdown();
+    }
   }
 
   /**
@@ -377,6 +383,7 @@ public class HelixParticipantTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
         getDefaultZkConnectStr(clusterMapConfig), true);
+    participant.markDisablePartitionComplete();
     // create InstanceConfig for local node. Also, put existing replica into sealed list
     List<String> sealedList = new ArrayList<>();
     sealedList.add(existingReplica.getPartitionId().toPathString());
@@ -487,34 +494,6 @@ public class HelixParticipantTest {
     instanceConfig.getRecord()
         .setListField(ClusterMapUtils.SEALED_STR, sealedReplicas == null ? new ArrayList<>() : sealedReplicas);
     return instanceConfig;
-  }
-
-  /**
-   * Verify updated {@link InstanceConfig}. If {@param shouldExist} is true, verify that replica is present in InstanceConfig.
-   * If false, InstanceConfig should not contain given replica info.
-   * @param instanceConfig the updated {@link InstanceConfig} to verify.
-   * @param replicaId the replica whose info should/shouldn't exist in InstanceConfig
-   * @param shouldExist whether given replica should exist in InstanceConfig.
-   */
-  private void verifyReplicaInfoInInstanceConfig(InstanceConfig instanceConfig, ReplicaId replicaId,
-      boolean shouldExist) {
-    Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
-    Map<String, String> diskInfo = mountPathToDiskInfos.get(replicaId.getMountPath());
-    Set<String> replicasOnDisk = new HashSet<>();
-    for (String replicaInfo : diskInfo.get(REPLICAS_STR).split(REPLICAS_DELIM_STR)) {
-      replicasOnDisk.add(replicaInfo.split(REPLICAS_STR_SEPARATOR)[0]);
-    }
-    List<String> sealedList = getSealedReplicas(instanceConfig);
-    List<String> stoppedList = getStoppedReplicas(instanceConfig);
-    String partitionName = replicaId.getPartitionId().toPathString();
-    if (shouldExist) {
-      assertTrue("New replica is not found in InstanceConfig", replicasOnDisk.contains(partitionName));
-    } else {
-      assertFalse("Old replica should not exist in InstanceConfig", replicasOnDisk.contains(partitionName));
-      // make sure the replica is not present in sealed/stopped list
-      assertFalse("Old replica should not exist in sealed/stopped list",
-          sealedList.contains(partitionName) || stoppedList.contains(partitionName));
-    }
   }
 
   private ReplicaId createMockAmbryReplica(String partitionIdString) {

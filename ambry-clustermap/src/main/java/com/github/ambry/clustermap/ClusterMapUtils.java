@@ -57,8 +57,9 @@ public class ClusterMapUtils {
   // detailed new replica infos (capacity, mount path, etc) which will be added to target server.
   // Note that, root path in Helix is "/ClusterName/PROPERTYSTORE", so the full path is (use partition override as example)
   // "/ClusterName/PROPERTYSTORE/AdminConfigs/PartitionOverride"
-  public static final String PARTITION_OVERRIDE_ZNODE_PATH = "/AdminConfigs/" + PARTITION_OVERRIDE_STR;
-  public static final String REPLICA_ADDITION_ZNODE_PATH = "/AdminConfigs/" + REPLICA_ADDITION_STR;
+  public static final String ADMIN_CONFIG_ZNODE_PATH = "/AdminConfigs/";
+  public static final String PARTITION_OVERRIDE_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + PARTITION_OVERRIDE_STR;
+  public static final String REPLICA_ADDITION_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + REPLICA_ADDITION_STR;
   static final String DISK_CAPACITY_STR = "capacityInBytes";
   static final String DISK_STATE = "diskState";
   static final String PARTITION_STATE = "state";
