@@ -704,7 +704,7 @@ public class HelixBootstrapUpgradeToolTest {
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(properties));
     HelixPropertyStore<ZNRecord> helixPropertyStore =
         CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig, null);
-    String path = ADMIN_CONFIG_ZNODE_PATH + getInstanceName(removedReplica.getDataNodeId());
+    String path = PARTITION_DISABLED_ZNODE_PATH + getInstanceName(removedReplica.getDataNodeId());
     assertTrue("ZNode is not found for disabled partition node.",
         helixPropertyStore.exists(path, AccessOption.PERSISTENT));
     helixPropertyStore.close();

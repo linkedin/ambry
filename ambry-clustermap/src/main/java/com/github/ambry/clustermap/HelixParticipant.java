@@ -299,7 +299,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * Mark disablePartitionsComplete = true, this is exposed for testing only.
    */
-  void markDisablePartitionComplete() {
+  protected void markDisablePartitionComplete() {
     disablePartitionsComplete = true;
   }
 
@@ -449,7 +449,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(properties));
     HelixPropertyStore<ZNRecord> helixPropertyStore =
         CommonUtils.createHelixPropertyStore(zkConnectStr, propertyStoreConfig, null);
-    String path = ADMIN_CONFIG_ZNODE_PATH + instanceName;
+    String path = PARTITION_DISABLED_ZNODE_PATH + instanceName;
     int count = 1;
     while (!helixPropertyStore.exists(path, AccessOption.PERSISTENT)) {
       // Thread.sleep() pauses the current thread but does not release any locks

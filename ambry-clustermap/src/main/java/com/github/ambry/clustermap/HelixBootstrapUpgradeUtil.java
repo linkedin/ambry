@@ -1085,7 +1085,7 @@ public class HelixBootstrapUpgradeUtil {
           CommonUtils.createHelixPropertyStore(zkConnectStr, propertyStoreConfig, null);
       for (InstanceConfig instanceConfig : instancesWithDisabledPartition) {
         ZNRecord znRecord = new ZNRecord(instanceConfig.getInstanceName());
-        String path = ADMIN_CONFIG_ZNODE_PATH + instanceConfig.getInstanceName();
+        String path = PARTITION_DISABLED_ZNODE_PATH + instanceConfig.getInstanceName();
         if (!helixPropertyStore.create(path, znRecord, AccessOption.PERSISTENT)) {
           logger.error("Failed to create a ZNode to mark disabling partition complete for {} in datacenter {}.",
               instanceConfig.getHostName(), dcName);
