@@ -69,7 +69,7 @@ public class HelixParticipantTest {
     zkJson = constructZkLayoutJSON(zkInfoList);
     props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.port", "2300");
+    props.setProperty("clustermap.port", "2200");
     props.setProperty("clustermap.cluster.name", clusterName);
     props.setProperty("clustermap.datacenter.name", "DC0");
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
