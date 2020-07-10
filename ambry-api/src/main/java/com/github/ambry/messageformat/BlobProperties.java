@@ -50,6 +50,20 @@ public class BlobProperties {
   /**
    * @param blobSize The size of the blob in bytes
    * @param serviceId The service id that is creating this blob
+   * @param accountId accountId of the user who owns the blob
+   * @param containerId containerId of the blob
+   * @param isEncrypted {@code true} if the blob is encrypted, {@code false} otherwise
+   * @param creationTimeInMs The time at which the blob is created.
+   */
+  public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, boolean isEncrypted,
+      long creationTimeInMs) {
+    this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, creationTimeInMs, accountId, containerId,
+        isEncrypted, null);
+  }
+
+  /**
+   * @param blobSize The size of the blob in bytes
+   * @param serviceId The service id that is creating this blob
    * @param ownerId The owner of the blob (For example , memberId or groupId)
    * @param contentType The content type of the blob (eg: mime). Can be Null
    * @param isPrivate Is the blob secure
