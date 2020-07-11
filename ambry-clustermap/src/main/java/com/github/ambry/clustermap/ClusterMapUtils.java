@@ -89,7 +89,6 @@ public class ClusterMapUtils {
   static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
   static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
-  static final long MAX_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final int CURRENT_SCHEMA_VERSION = 0;
   private static final Logger logger = LoggerFactory.getLogger(ClusterMapUtils.class);
 
@@ -392,14 +391,15 @@ public class ClusterMapUtils {
   /**
    * Validate the disk capacity.
    * @param diskCapacityInBytes the disk capacity to validate.
+   * @param maxDiskCapacityInBytes max allowed capacity of a disk.
    */
-  static void validateDiskCapacity(long diskCapacityInBytes) {
+  static void validateDiskCapacity(long diskCapacityInBytes, long maxDiskCapacityInBytes) {
     if (diskCapacityInBytes < MIN_DISK_CAPACITY_IN_BYTES) {
       throw new IllegalStateException(
           "Invalid disk capacity: " + diskCapacityInBytes + " is less than " + MIN_DISK_CAPACITY_IN_BYTES);
-    } else if (diskCapacityInBytes > MAX_DISK_CAPACITY_IN_BYTES) {
+    } else if (diskCapacityInBytes > maxDiskCapacityInBytes) {
       throw new IllegalStateException(
-          "Invalid disk capacity: " + diskCapacityInBytes + " is more than " + MAX_DISK_CAPACITY_IN_BYTES);
+          "Invalid disk capacity: " + diskCapacityInBytes + " is more than " + maxDiskCapacityInBytes);
     }
   }
 
