@@ -267,6 +267,9 @@ public class ClusterMapConfig {
   @Default("{}")
   public final JSONObject clustermapRecoveryTestHardwareLayout;
 
+  /**
+   * Max capacity of a disk in bytes.
+   */
   @Config(CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES)
   public final long clustermapMaxDiskCapacityInBytes;
 
@@ -325,6 +328,7 @@ public class ClusterMapConfig {
     clustermapRecoveryTestPartitionLayout =
         new JSONObject(verifiableProperties.getString("clustermap.recovery.test.partition.layout", "{}"));
     clustermapMaxDiskCapacityInBytes =
-        verifiableProperties.getLong(CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES, 10L * 1024 * 1024 * 1024 * 1024);
+        verifiableProperties.getLongInRange(CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES, 20L * 1024 * 1024 * 1024 * 1024, 0,
+            Long.MAX_VALUE);
   }
 }
