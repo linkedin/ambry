@@ -69,19 +69,23 @@ class DecryptJob implements CryptoJob {
   public void run() {
     decryptJobMetricsTracker.onJobProcessingStart();
     Exception exception = null;
-    ByteBuffer decryptedBlobContent = null;
+    ByteBuf decryptedBlobContent = null;
     ByteBuffer decryptedUserMetadata = null;
     try {
       Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
       Object perBlobKey = cryptoService.decryptKey(encryptedPerBlobKey, containerKey);
       if (encryptedBlobContent != null) {
-        decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent.nioBuffer(), perBlobKey);
+        decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent, perBlobKey);
       }
       if (encryptedUserMetadata != null) {
         decryptedUserMetadata = cryptoService.decrypt(encryptedUserMetadata, perBlobKey);
       }
     } catch (Exception e) {
       exception = e;
+      if (decryptedBlobContent != null) {
+        decryptedBlobContent.release();
+        decryptedBlobContent = null;
+      }
     } finally {
       // After decryption, we release the ByteBuf;
       if (encryptedBlobContent != null) {
@@ -108,10 +112,10 @@ class DecryptJob implements CryptoJob {
    */
   class DecryptJobResult {
     private final BlobId blobId;
-    private final ByteBuffer decryptedBlobContent;
+    private final ByteBuf decryptedBlobContent;
     private final ByteBuffer decryptedUserMetadata;
 
-    DecryptJobResult(BlobId blobId, ByteBuffer decryptedBlobContent, ByteBuffer decryptedUserMetadata) {
+    DecryptJobResult(BlobId blobId, ByteBuf decryptedBlobContent, ByteBuffer decryptedUserMetadata) {
       this.blobId = blobId;
       this.decryptedBlobContent = decryptedBlobContent;
       this.decryptedUserMetadata = decryptedUserMetadata;
@@ -121,7 +125,7 @@ class DecryptJob implements CryptoJob {
       return blobId;
     }
 
-    ByteBuffer getDecryptedBlobContent() {
+    ByteBuf getDecryptedBlobContent() {
       return decryptedBlobContent;
     }
 

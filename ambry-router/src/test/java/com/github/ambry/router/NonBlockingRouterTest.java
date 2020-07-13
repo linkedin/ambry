@@ -343,6 +343,7 @@ public class NonBlockingRouterTest {
       router.deleteBlob(blobId, null).get();
       try {
         router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+        fail("Get blob should fail");
       } catch (ExecutionException e) {
         RouterException r = (RouterException) e.getCause();
         Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());

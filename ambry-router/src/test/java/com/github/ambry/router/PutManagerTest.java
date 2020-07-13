@@ -45,6 +45,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -123,12 +124,10 @@ public class PutManagerTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{
-        {false, MessageFormatRecord.Metadata_Content_Version_V2},
+    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
         {false, MessageFormatRecord.Metadata_Content_Version_V3},
         {true, MessageFormatRecord.Metadata_Content_Version_V2},
-        {true, MessageFormatRecord.Metadata_Content_Version_V3}
-    });
+        {true, MessageFormatRecord.Metadata_Content_Version_V3}});
   }
 
   /**
@@ -1130,10 +1129,13 @@ public class PutManagerTest {
             (result, exception) -> {
               assertNull("Exception should not be thrown", exception);
               assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
-              assertArrayEquals("Content mismatch", requestAndResult.putContent,
-                  result.getDecryptedBlobContent().array());
+              ByteBuf decryptedBlobContent = result.getDecryptedBlobContent();
+              byte[] blobContent = new byte[decryptedBlobContent.readableBytes()];
+              decryptedBlobContent.readBytes(blobContent);
+              assertArrayEquals("Content mismatch", requestAndResult.putContent, blobContent);
               assertArrayEquals("UserMetadata mismatch", requestAndResult.putUserMetadata,
                   result.getDecryptedUserMetadata().array());
+              decryptedBlobContent.release();
             }).run();
       }
     }
@@ -1174,8 +1176,10 @@ public class PutManagerTest {
           assertEquals("BlobId mismatch", dataBlobPutRequest.getBlobId(), result.getBlobId());
           Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
               result.getDecryptedUserMetadata().array());
-          dataBlobLength.set(result.getDecryptedBlobContent().remaining());
-          result.getDecryptedBlobContent().get(content, offset.get(), dataBlobLength.get());
+          ByteBuf decryptedBlobContent = result.getDecryptedBlobContent();
+          dataBlobLength.set(decryptedBlobContent.readableBytes());
+          decryptedBlobContent.readBytes(content, offset.get(), dataBlobLength.get());
+          decryptedBlobContent.release();
         }).run();
       }
       if (metadataContentVersion <= MessageFormatRecord.Metadata_Content_Version_V2 && key != lastKey) {

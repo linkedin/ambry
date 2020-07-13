@@ -19,8 +19,8 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.PooledByteBufAllocator;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -113,6 +113,8 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
    * @throws {@link GeneralSecurityException} on any exception with encryption
    */
   public ByteBuf encrypt(ByteBuf toEncrypt, SecretKeySpec key, byte[] iv) throws GeneralSecurityException {
+    ByteBuf encryptedContent = null;
+    ByteBuf temp = null;
     try {
       Cipher encrypter = Cipher.getInstance(GCM_CRYPTO_INSTANCE, "BC");
       if (iv == null) {
@@ -123,33 +125,32 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
       int outputSize = encrypter.getOutputSize(toEncrypt.readableBytes());
 
       // stick with heap memory for now so to compare with the java.nio.ByteBuffer.
-      ByteBuf encryptedContent =
-          ByteBufAllocator.DEFAULT.heapBuffer(IVRecord_Format_V1.getIVRecordSize(iv) + outputSize);
+      encryptedContent = PooledByteBufAllocator.DEFAULT.ioBuffer(IVRecord_Format_V1.getIVRecordSize(iv) + outputSize);
       IVRecord_Format_V1.serializeIVRecord(encryptedContent, iv);
 
-      boolean toRelease = false;
+      ByteBuffer toEncryptBuffer;
       if (toEncrypt.nioBufferCount() != 1) {
-        toRelease = true;
-        ByteBuf temp = ByteBufAllocator.DEFAULT.heapBuffer(toEncrypt.readableBytes());
+        temp = PooledByteBufAllocator.DEFAULT.ioBuffer(toEncrypt.readableBytes());
         temp.writeBytes(toEncrypt);
-        toEncrypt = temp;
+        toEncryptBuffer = temp.nioBuffer();
+      } else {
+        toEncryptBuffer = toEncrypt.nioBuffer();
       }
-      try {
-        ByteBuffer toEncryptBuffer = toEncrypt.nioBuffer();
-        ByteBuffer encryptedContentBuffer = encryptedContent.nioBuffer(encryptedContent.writerIndex(),
-            encryptedContent.capacity() - encryptedContent.writerIndex());
-        int n = encrypter.doFinal(toEncryptBuffer, encryptedContentBuffer);
-        encryptedContent.writerIndex(encryptedContent.writerIndex() + n);
-        return encryptedContent;
-      } finally {
-        if (toRelease) {
-          toEncrypt.release();
-        } else {
-          toEncrypt.skipBytes(toEncrypt.readableBytes());
-        }
-      }
+      ByteBuffer encryptedContentBuffer = encryptedContent.nioBuffer(encryptedContent.writerIndex(),
+          encryptedContent.capacity() - encryptedContent.writerIndex());
+      int n = encrypter.doFinal(toEncryptBuffer, encryptedContentBuffer);
+      encryptedContent.writerIndex(encryptedContent.writerIndex() + n);
+      toEncrypt.skipBytes(toEncrypt.readableBytes());
+      return encryptedContent;
     } catch (Exception e) {
+      if (encryptedContent != null) {
+        encryptedContent.release();
+      }
       throw new GeneralSecurityException("Exception thrown while encrypting data", e);
+    } finally {
+      if (temp != null) {
+        temp.release();
+      }
     }
   }
 
@@ -170,36 +171,38 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
 
   @Override
   public ByteBuf decrypt(ByteBuf toDecrypt, SecretKeySpec key) throws GeneralSecurityException {
+    ByteBuf decryptedContent = null;
+    ByteBuf temp = null;
     try {
       Cipher decrypter = Cipher.getInstance(GCM_CRYPTO_INSTANCE, "BC");
       byte[] iv = deserializeIV(new ByteBufInputStream(toDecrypt));
       decrypter.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
       int outputSize = decrypter.getOutputSize(toDecrypt.readableBytes());
-      ByteBuf decryptedContent = ByteBufAllocator.DEFAULT.heapBuffer(outputSize);
+      decryptedContent = PooledByteBufAllocator.DEFAULT.ioBuffer(outputSize);
 
-      boolean toRelease = false;
+      ByteBuffer toDecryptBuffer;
       if (toDecrypt.nioBufferCount() != 1) {
-        toRelease = true;
-        ByteBuf temp = ByteBufAllocator.DEFAULT.heapBuffer(toDecrypt.readableBytes());
+        temp = PooledByteBufAllocator.DEFAULT.ioBuffer(toDecrypt.readableBytes());
         temp.writeBytes(toDecrypt);
-        toDecrypt = temp;
+        toDecryptBuffer = temp.nioBuffer();
+      } else {
+        toDecryptBuffer = toDecrypt.nioBuffer();
       }
 
-      try {
-        ByteBuffer toDecryptBuffer = toDecrypt.nioBuffer();
-        ByteBuffer decryptedContentBuffer = decryptedContent.nioBuffer(0, outputSize);
-        int n = decrypter.doFinal(toDecryptBuffer, decryptedContentBuffer);
-        decryptedContent.writerIndex(decryptedContent.writerIndex() + n);
-        return decryptedContent;
-      } finally {
-        if (toRelease) {
-          toDecrypt.release();
-        } else {
-          toDecrypt.skipBytes(toDecrypt.readableBytes());
-        }
-      }
+      ByteBuffer decryptedContentBuffer = decryptedContent.nioBuffer(0, outputSize);
+      int n = decrypter.doFinal(toDecryptBuffer, decryptedContentBuffer);
+      decryptedContent.writerIndex(decryptedContent.writerIndex() + n);
+      toDecrypt.skipBytes(toDecrypt.readableBytes());
+      return decryptedContent;
     } catch (Exception e) {
+      if (toDecrypt != null) {
+        toDecrypt.release();
+      }
       throw new GeneralSecurityException("Exception thrown while decrypting data", e);
+    } finally {
+      if (temp != null) {
+        temp.release();
+      }
     }
   }
 
