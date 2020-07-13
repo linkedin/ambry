@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Collectors;
 import org.apache.helix.BaseDataAccessor;
 import org.apache.helix.HelixException;
 import org.apache.helix.store.HelixPropertyListener;
@@ -70,12 +71,7 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
 
   @Override
   public void subscribe(String parentPath, HelixPropertyListener listener) {
-    Set<HelixPropertyListener> listeners = pathToListeners.get(parentPath);
-    if (listeners == null) {
-      listeners = new HashSet<>();
-      pathToListeners.put(parentPath, listeners);
-    }
-    listeners.add(listener);
+    pathToListeners.computeIfAbsent(parentPath, k -> new HashSet<>()).add(listener);
   }
 
   @Override
@@ -126,10 +122,12 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
       pathToRecords.clear();
       pathToStats.clear();
       notifyListeners("/", HelixStoreOperator.StoreOperationType.DELETE);
-      return true;
     } else {
-      throw new IllegalStateException("Not implemented");
+      pathToRecords.remove(path);
+      pathToStats.remove(path);
+      notifyListeners(path, HelixStoreOperator.StoreOperationType.DELETE);
     }
+    return true;
   }
 
   @Override
@@ -182,7 +180,11 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
 
   @Override
   public List<T> getChildren(String parentPath, List<Stat> stats, int options) {
-    throw new IllegalStateException("Not implemented");
+    return pathToRecords.entrySet()
+        .stream()
+        .filter(e -> e.getKey().startsWith(parentPath))
+        .map(Map.Entry::getValue)
+        .collect(Collectors.toList());
   }
 
   @Override
@@ -258,25 +260,26 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
    * @param operationType The type of the operation that was conducted on the path.
    */
   private void notifyListeners(String path, HelixStoreOperator.StoreOperationType operationType) {
-    Set<HelixPropertyListener> listeners = pathToListeners.get(path);
-    if (listeners != null) {
-      for (HelixPropertyListener listener : listeners) {
-        switch (operationType) {
-          case WRITE:
-            listener.onDataChange(path);
-            break;
-          case CREATE:
-            listener.onDataCreate(path);
-            break;
-          case DELETE:
-            listener.onDataDelete(path);
-            break;
+    pathToListeners.forEach((parentPath, listeners) -> {
+      if (path.startsWith(parentPath)) {
+        for (HelixPropertyListener listener : listeners) {
+          switch (operationType) {
+            case WRITE:
+              listener.onDataChange(path);
+              break;
+            case CREATE:
+              listener.onDataCreate(path);
+              break;
+            case DELETE:
+              listener.onDataDelete(path);
+              break;
 
-          default:
-            throw new IllegalArgumentException("Unrecognized store operation type " + operationType);
+            default:
+              throw new IllegalArgumentException("Unrecognized store operation type " + operationType);
+          }
         }
       }
-    }
+    });
   }
 
   /**

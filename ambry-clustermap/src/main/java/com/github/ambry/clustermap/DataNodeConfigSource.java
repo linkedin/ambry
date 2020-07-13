@@ -24,4 +24,17 @@ interface DataNodeConfigSource {
    * @param listener the {@link DataNodeConfigChangeListener} to attach.
    */
   void addDataNodeConfigChangeListener(DataNodeConfigChangeListener listener) throws Exception;
+
+  /**
+   * Set a {@link DataNodeConfig} in the source of truth store.
+   * @param config the {@link DataNodeConfig} to persist.
+   * @return {@code true} if the config was successfully set.
+   */
+  boolean set(DataNodeConfig config);
+
+  /**
+   * @param instanceName the instance name to look up.
+   * @return the {@link DataNodeConfig} for the specified instance.
+   */
+  DataNodeConfig get(String instanceName);
 }

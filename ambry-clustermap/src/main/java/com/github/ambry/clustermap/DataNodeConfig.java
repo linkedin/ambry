@@ -18,6 +18,7 @@ package com.github.ambry.clustermap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 
@@ -112,6 +113,7 @@ class DataNodeConfig {
   /**
    * @return the xid for this server. After {@link SimpleClusterChangeHandler} is retired, this field will be removed.
    */
+  @Deprecated
   long getXid() {
     return xid;
   }
@@ -152,6 +154,27 @@ class DataNodeConfig {
         + stoppedReplicas + ", disabledReplicas=" + disabledReplicas + ", diskConfigs=" + diskConfigs + '}';
   }
 
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    DataNodeConfig that = (DataNodeConfig) o;
+    return Objects.equals(instanceName, that.instanceName) && Objects.equals(hostName, that.hostName) && Objects.equals(
+        datacenterName, that.datacenterName) && port == that.port && Objects.equals(sslPort, that.sslPort)
+        && Objects.equals(http2Port, that.http2Port) && Objects.equals(rackId, that.rackId) && xid == that.xid
+        && sealedReplicas.equals(that.sealedReplicas) && stoppedReplicas.equals(that.stoppedReplicas)
+        && disabledReplicas.equals(that.disabledReplicas) && diskConfigs.equals(that.diskConfigs);
+  }
+
+  @Override
+  public int hashCode() {
+    return instanceName.hashCode();
+  }
+
   /**
    * Configuration scoped to a single disk on a server.
    */
@@ -184,7 +207,7 @@ class DataNodeConfig {
     }
 
     /**
-     * @return a map from partition name to {@link ReplicaConfig} for all the replicas on the server.
+     * @return a map from partition id to {@link ReplicaConfig} for all the replicas on the server.
      *         This map is mutable.
      */
     Map<String, ReplicaConfig> getReplicaConfigs() {
@@ -195,6 +218,19 @@ class DataNodeConfig {
     public String toString() {
       return "DiskConfig{" + "state=" + state + ", diskCapacity=" + diskCapacityInBytes + ", replicaConfigs="
           + replicaConfigs + '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      DiskConfig that = (DiskConfig) o;
+      return diskCapacityInBytes == that.diskCapacityInBytes && state == that.state && Objects.equals(replicaConfigs,
+          that.replicaConfigs);
     }
   }
 
@@ -232,6 +268,19 @@ class DataNodeConfig {
     public String toString() {
       return "ReplicaConfig{" + "replicaCapacity=" + replicaCapacityInBytes + ", partitionClass='" + partitionClass
           + '\'' + '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      ReplicaConfig that = (ReplicaConfig) o;
+      return replicaCapacityInBytes == that.replicaCapacityInBytes && Objects.equals(partitionClass,
+          that.partitionClass);
     }
   }
 }

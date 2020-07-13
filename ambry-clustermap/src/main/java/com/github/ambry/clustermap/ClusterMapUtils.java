@@ -35,6 +35,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -74,6 +75,7 @@ public class ClusterMapUtils {
   static final String STOPPED_REPLICAS_STR = "STOPPED";
   static final String DISABLED_REPLICAS_STR = "DISABLED";
   static final String AVAILABLE_STR = "AVAILABLE";
+  static final String UNAVAILABLE_STR = "UNAVAILABLE";
   static final String READ_ONLY_STR = "RO";
   static final String READ_WRITE_STR = "RW";
   static final String ZKCONNECT_STR = "zkConnectStr";
@@ -175,7 +177,17 @@ public class ClusterMapUtils {
    *         is assumed to be 0, and 0 is returned.
    */
   static int getSchemaVersion(InstanceConfig instanceConfig) {
-    String schemaVersionStr = instanceConfig.getRecord().getSimpleField(SCHEMA_VERSION_STR);
+    return getSchemaVersion(instanceConfig.getRecord());
+  }
+
+  /**
+   * Get the schema version associated with the given instance (if any).
+   * @param znRecord the {@link ZNRecord} associated with the interested instance.
+   * @return the schema version of the information stored. If the field is absent in the InstanceConfig, the version
+   *         is assumed to be 0, and 0 is returned.
+   */
+  static int getSchemaVersion(ZNRecord znRecord) {
+    String schemaVersionStr = znRecord.getSimpleField(SCHEMA_VERSION_STR);
     return schemaVersionStr == null ? 0 : Integer.parseInt(schemaVersionStr);
   }
 
@@ -186,7 +198,17 @@ public class ClusterMapUtils {
    * @return the list of sealed replicas.
    */
   static List<String> getSealedReplicas(InstanceConfig instanceConfig) {
-    List<String> sealedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
+    return getSealedReplicas(instanceConfig.getRecord());
+  }
+
+  /**
+   * Get the list of sealed replicas on a given instance. This is guaranteed to return a non-null list. It would return
+   * an empty list if there are no sealed replicas or if the field itself is absent for this instance.
+   * @param znRecord the {@link ZNRecord} associated with the interested instance.
+   * @return the list of sealed replicas.
+   */
+  static List<String> getSealedReplicas(ZNRecord znRecord) {
+    List<String> sealedReplicas = znRecord.getListField(ClusterMapUtils.SEALED_STR);
     return sealedReplicas == null ? new ArrayList<>() : sealedReplicas;
   }
 
@@ -197,7 +219,17 @@ public class ClusterMapUtils {
    * @return the list of stopped replicas.
    */
   static List<String> getStoppedReplicas(InstanceConfig instanceConfig) {
-    List<String> stoppedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.STOPPED_REPLICAS_STR);
+    return getStoppedReplicas(instanceConfig.getRecord());
+  }
+
+  /**
+   * Get the list of stopped replicas on a given instance. This is guaranteed to return a non-null list. It would return
+   * an empty list if there are no stopped replicas or if the field itself is absent for this instance.
+   * @param znRecord the {@link ZNRecord} associated with the interested instance.
+   * @return the list of stopped replicas.
+   */
+  static List<String> getStoppedReplicas(ZNRecord znRecord) {
+    List<String> stoppedReplicas = znRecord.getListField(ClusterMapUtils.STOPPED_REPLICAS_STR);
     return stoppedReplicas == null ? new ArrayList<>() : stoppedReplicas;
   }
 
@@ -208,7 +240,17 @@ public class ClusterMapUtils {
    * @return the list of disabled replicas.
    */
   public static List<String> getDisabledReplicas(InstanceConfig instanceConfig) {
-    List<String> disabledReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.DISABLED_REPLICAS_STR);
+    return getDisabledReplicas(instanceConfig.getRecord());
+  }
+
+  /**
+   * Get the list of disabled replicas on a given instance. This is guaranteed to return a non-null list. It would return
+   * an empty list if there are no disabled replicas or if the field itself is absent for this instance.
+   * @param znRecord the {@link ZNRecord} associated with the interested instance.
+   * @return the list of disabled replicas.
+   */
+  public static List<String> getDisabledReplicas(ZNRecord znRecord) {
+    List<String> disabledReplicas = znRecord.getListField(ClusterMapUtils.DISABLED_REPLICAS_STR);
     return disabledReplicas == null ? new ArrayList<>() : disabledReplicas;
   }
 
@@ -218,7 +260,16 @@ public class ClusterMapUtils {
    * @return the rack id associated with the given instance.
    */
   static String getRackId(InstanceConfig instanceConfig) {
-    return instanceConfig.getRecord().getSimpleField(RACKID_STR);
+    return getRackId(instanceConfig.getRecord());
+  }
+
+  /**
+   * Get the rack id associated with the given instance (if any).
+   * @param znRecord the {@link ZNRecord} associated with the interested instance.
+   * @return the rack id associated with the given instance.
+   */
+  static String getRackId(ZNRecord znRecord) {
+    return znRecord.getSimpleField(RACKID_STR);
   }
 
   /**
@@ -236,7 +287,16 @@ public class ClusterMapUtils {
    * @return the ssl port associated with the given instance.
    */
   public static Integer getSslPortStr(InstanceConfig instanceConfig) {
-    String sslPortStr = instanceConfig.getRecord().getSimpleField(SSL_PORT_STR);
+    return getSslPortStr(instanceConfig.getRecord());
+  }
+
+  /**
+   * Get the ssl port associated with the given instance (if any).
+   * @param znRecord the {@link ZNRecord} associated with the interested instance.
+   * @return the ssl port associated with the given instance.
+   */
+  static Integer getSslPortStr(ZNRecord znRecord) {
+    String sslPortStr = znRecord.getSimpleField(SSL_PORT_STR);
     return sslPortStr == null ? null : Integer.valueOf(sslPortStr);
   }
 
@@ -246,7 +306,16 @@ public class ClusterMapUtils {
    * @return the http2 port associated with the given instance.
    */
   public static Integer getHttp2PortStr(InstanceConfig instanceConfig) {
-    String http2PortStr = instanceConfig.getRecord().getSimpleField(HTTP2_PORT_STR);
+    return getHttp2PortStr(instanceConfig.getRecord());
+  }
+
+  /**
+   * Get the http2 port associated with the given instance (if any).
+   * @param znRecord the {@link ZNRecord} associated with the interested instance.
+   * @return the http2 port associated with the given instance.
+   */
+  static Integer getHttp2PortStr(ZNRecord znRecord) {
+    String http2PortStr = znRecord.getSimpleField(HTTP2_PORT_STR);
     return http2PortStr == null ? null : Integer.valueOf(http2PortStr);
   }
 
