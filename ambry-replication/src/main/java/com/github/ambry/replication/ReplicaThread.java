@@ -885,7 +885,7 @@ public class ReplicaThread implements Runnable {
             messageInfo)) {
           continue;
         }
-        if(localMessageInfoMap == null) {
+        if (localMessageInfoMap == null) {
           // This makes sure that the potentially expensive findKeys() method isn't called for a replication loop, if
           // all the keys being processed are missing in local store.
           localMessageInfoMap = remoteReplicaInfo.getLocalStore()

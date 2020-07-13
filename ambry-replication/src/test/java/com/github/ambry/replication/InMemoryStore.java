@@ -404,15 +404,10 @@ class InMemoryStore implements Store {
   }
 
   @Override
-  public MessageInfo findKey(StoreKey key) throws StoreException {
-    return getMergedMessageInfo(key, messageInfos);
-  }
-
-  @Override
   public Map<StoreKey, MessageInfo> findKeys(List<? extends StoreKey> storeKeys) throws StoreException {
     Map<StoreKey, MessageInfo> map = new HashMap<>();
     for (StoreKey storeKey : storeKeys) {
-      map.put(storeKey, findKey(storeKey));
+      map.put(storeKey, getMergedMessageInfo(storeKey, messageInfos));
     }
     return map;
   }

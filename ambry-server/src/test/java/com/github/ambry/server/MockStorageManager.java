@@ -225,15 +225,10 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
-    public MessageInfo findKey(StoreKey key) throws StoreException {
-      return new MessageInfo(key, 1, Utils.Infinite_Time, (short) 0, (short) 0, 0);
-    }
-
-    @Override
     public Map<StoreKey, MessageInfo> findKeys(List<? extends StoreKey> storeKeys) throws StoreException {
       Map<StoreKey, MessageInfo> map = new HashMap<>();
       for (StoreKey storeKey : storeKeys) {
-        map.put(storeKey, findKey(storeKey));
+        map.put(storeKey, new MessageInfo(storeKey, 1, Utils.Infinite_Time, (short) 0, (short) 0, 0));
       }
       return map;
     }
