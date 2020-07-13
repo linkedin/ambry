@@ -935,6 +935,19 @@ public class BlobStore implements Store {
   }
 
   @Override
+  public Map<StoreKey, MessageInfo> findKeys(List<? extends StoreKey> storeKeys) {
+    Map<StoreKey, MessageInfo> messageInfoMap = new HashMap<>();
+    for (StoreKey storeKey : storeKeys) {
+      try {
+        messageInfoMap.put(storeKey, findKey(storeKey));
+      } catch (StoreException stEx) {
+        logger.info("Key %s not found in findKey", storeKey.getID());
+      }
+    }
+    return messageInfoMap;
+  }
+
+  @Override
   public StoreStats getStoreStats() {
     return blobStoreStats;
   }

@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -795,6 +796,28 @@ class CloudBlobStore implements Store {
     } catch (CloudStorageException e) {
       throw new StoreException(e, StoreErrorCodes.IOError);
     }
+  }
+
+  @Override
+  public Map<StoreKey, MessageInfo> findKeys(List<? extends StoreKey> storeKeys) throws StoreException {
+    Map<StoreKey, MessageInfo> map = new HashMap<>();
+    try {
+      Map<String, CloudBlobMetadata> cloudBlobMetadataMap =
+          requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata((List<BlobId>) storeKeys), "FindKeys",
+              partitionId.toPathString());
+      for (StoreKey key : storeKeys) {
+        CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataMap.get(key.getID());
+        if (cloudBlobMetadata != null) {
+          map.put(key, new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
+              cloudBlobMetadata.isExpired(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(),
+              null, (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
+              cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion()));
+        }
+      }
+    } catch (CloudStorageException e) {
+      throw new StoreException(e, StoreErrorCodes.IOError);
+    }
+    return map;
   }
 
   @Override
