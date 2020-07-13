@@ -163,9 +163,9 @@ class DataNodeConfig {
       return false;
     }
     DataNodeConfig that = (DataNodeConfig) o;
-    return port == that.port && xid == that.xid && Objects.equals(instanceName, that.instanceName) && Objects.equals(
-        hostName, that.hostName) && Objects.equals(datacenterName, that.datacenterName) && Objects.equals(sslPort,
-        that.sslPort) && Objects.equals(http2Port, that.http2Port) && Objects.equals(rackId, that.rackId)
+    return Objects.equals(instanceName, that.instanceName) && Objects.equals(hostName, that.hostName) && Objects.equals(
+        datacenterName, that.datacenterName) && port == that.port && Objects.equals(sslPort, that.sslPort)
+        && Objects.equals(http2Port, that.http2Port) && Objects.equals(rackId, that.rackId) && xid == that.xid
         && sealedReplicas.equals(that.sealedReplicas) && stoppedReplicas.equals(that.stoppedReplicas)
         && disabledReplicas.equals(that.disabledReplicas) && diskConfigs.equals(that.diskConfigs);
   }
