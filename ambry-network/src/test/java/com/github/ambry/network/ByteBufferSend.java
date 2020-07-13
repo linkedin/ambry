@@ -13,6 +13,8 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.utils.AbstractByteBufHolder;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
@@ -22,10 +24,10 @@ import java.nio.channels.WritableByteChannel;
  * A byte buffer version of Send that sends a materialized byte buffer. This breaks the contract of Send (only
  * materialize onto the network) and so is only suitable for use in tests.
  */
-public class ByteBufferSend implements Send {
+public class ByteBufferSend extends AbstractByteBufHolder<ByteBufferSend> implements Send {
   private final ByteBuffer buffer;
 
-  public ByteBufferSend(ByteBuffer byteBuffer) throws IOException {
+  public ByteBufferSend(ByteBuffer byteBuffer) {
     this.buffer = byteBuffer.duplicate();
   }
 
@@ -42,5 +44,15 @@ public class ByteBufferSend implements Send {
   @Override
   public long sizeInBytes() {
     return buffer.limit();
+  }
+
+  @Override
+  public ByteBuf content() {
+    return null;
+  }
+
+  @Override
+  public ByteBufferSend replace(ByteBuf content) {
+    return null;
   }
 }

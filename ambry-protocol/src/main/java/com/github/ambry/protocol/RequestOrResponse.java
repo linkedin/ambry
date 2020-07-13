@@ -14,8 +14,15 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.network.SendWithCorrelationId;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
+import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
 import java.nio.charset.Charset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,12 +31,15 @@ import org.slf4j.LoggerFactory;
 /**
  * Request Response for serialization and de-serialization
  */
-public abstract class RequestOrResponse implements SendWithCorrelationId {
+public abstract class RequestOrResponse extends AbstractByteBufHolder<RequestOrResponse>
+    implements SendWithCorrelationId {
   protected final RequestOrResponseType type;
   protected final int correlationId;
   protected short versionId;
   protected String clientId;
-  protected ByteBuffer bufferToSend;
+  protected ByteBuf bufferToSend;
+  protected ByteBuffer byteBufferToSend;
+  protected static final Logger logger = LoggerFactory.getLogger(RequestOrResponse.class);
 
   private static final int Request_Response_Size_In_Bytes = 8;
   private static final int Request_Response_Type_Size_In_Bytes = 2;
@@ -66,11 +76,43 @@ public abstract class RequestOrResponse implements SendWithCorrelationId {
     if (bufferToSend == null) {
       throw new IllegalStateException("Buffer to send should not be null");
     }
-    bufferToSend.putLong(sizeInBytes());
-    bufferToSend.putShort((short) type.ordinal());
-    bufferToSend.putShort(versionId);
-    bufferToSend.putInt(correlationId);
+    bufferToSend.writeLong(sizeInBytes());
+    bufferToSend.writeShort((short) type.ordinal());
+    bufferToSend.writeShort(versionId);
+    bufferToSend.writeInt(correlationId);
     Utils.serializeString(bufferToSend, clientId, Charset.defaultCharset());
+  }
+
+  protected void prepareBuffer() {
+    if (bufferToSend == null) {
+      bufferToSend = PooledByteBufAllocator.DEFAULT.ioBuffer((int) sizeInBytes());
+      writeHeader();
+    }
+  }
+
+  @Override
+  public long writeTo(WritableByteChannel channel) throws IOException {
+    if (byteBufferToSend == null) {
+      prepareBuffer();
+      byteBufferToSend = bufferToSend.nioBuffer();
+    }
+    return byteBufferToSend.hasRemaining() ? channel.write(byteBufferToSend) : 0;
+  }
+
+  @Override
+  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
+    if (bufferToSend == null) {
+      prepareBuffer();
+    }
+    channel.write(bufferToSend, callback);
+  }
+
+  @Override
+  public boolean isSendComplete() {
+    if (byteBufferToSend != null) {
+      return !byteBufferToSend.hasRemaining();
+    }
+    return (bufferToSend != null && bufferToSend.readableBytes() == 0);
   }
 
   public long sizeInBytes() {
@@ -78,6 +120,27 @@ public abstract class RequestOrResponse implements SendWithCorrelationId {
     return Request_Response_Size_In_Bytes + Request_Response_Type_Size_In_Bytes + Request_Response_Version_Size_In_Bytes
         + Correlation_Id_Size_In_Bytes + ClientId_Field_Size_In_Bytes + clientId.length();
   }
-}
 
+  @Override
+  public ByteBuf content() {
+    if (bufferToSend == null) {
+      prepareBuffer();
+    }
+    return bufferToSend;
+  }
+
+  @Override
+  public RequestOrResponse replace(ByteBuf buf) {
+    return null;
+  }
+
+  @Override
+  public boolean release() {
+    ByteBuf buf = content();
+    if (buf != null) {
+      return buf.release();
+    }
+    return false;
+  }
+}
 

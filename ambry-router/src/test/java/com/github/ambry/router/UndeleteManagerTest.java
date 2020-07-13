@@ -364,9 +364,11 @@ public class UndeleteManagerTest {
     BlobId id = new BlobId(blobId, clusterMap);
     for (MockServer server : serverLayout.getMockServers()) {
       if (!server.getBlobs().get(blobId).isDeleted()) {
-        server.send(
+        DeleteRequest deleteRequest =
             new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-                id, time.milliseconds())).release();
+                id, time.milliseconds());
+        server.send(deleteRequest).release();
+        deleteRequest.release();
       }
     }
   }

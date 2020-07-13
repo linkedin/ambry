@@ -36,8 +36,6 @@ public class TtlUpdateRequest extends RequestOrResponse {
   private final long expiresAtMs;
   private final long operationTimeInMs;
 
-  private int sizeSent;
-
   /**
    * Helper to construct TtlUpdateRequest from a stream
    * @param stream the stream to read data from
@@ -80,30 +78,14 @@ public class TtlUpdateRequest extends RequestOrResponse {
     this.blobId = blobId;
     this.expiresAtMs = expiresAtMs;
     this.operationTimeInMs = operationTimeMs;
-    sizeSent = 0;
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel) throws IOException {
-    long written = 0;
-    if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
-      writeHeader();
-      bufferToSend.put(blobId.toBytes());
-      bufferToSend.putLong(expiresAtMs);
-      bufferToSend.putLong(operationTimeInMs);
-      bufferToSend.flip();
-    }
-    if (bufferToSend.remaining() > 0) {
-      written = channel.write(bufferToSend);
-      sizeSent += written;
-    }
-    return written;
-  }
-
-  @Override
-  public boolean isSendComplete() {
-    return sizeSent == sizeInBytes();
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeBytes(blobId.toBytes());
+    bufferToSend.writeLong(expiresAtMs);
+    bufferToSend.writeLong(operationTimeInMs);
   }
 
   /**

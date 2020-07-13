@@ -15,6 +15,8 @@ package com.github.ambry.network;
 
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufHolder;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 
@@ -23,7 +25,7 @@ import java.nio.channels.WritableByteChannel;
  * Any data that needs to be sent over the network can implement
  * this interface
  */
-public interface Send {
+public interface Send extends ByteBufHolder {
   /**
    * Writes content into the provided channel
    * @param channel The channel into which data needs to be written to
@@ -52,7 +54,9 @@ public interface Send {
   long sizeInBytes();
 
   /**
-   * Release all the resource this object holds. Make this a default method so subclasses don't have to override it.
+   * Return the data which is held by this {@link ByteBufHolder}. The result could be null, if it's null,
+   * please use writeTo methods to write the content to remote peer.
    */
-  default void release() {}
+  @Override
+  ByteBuf content();
 }

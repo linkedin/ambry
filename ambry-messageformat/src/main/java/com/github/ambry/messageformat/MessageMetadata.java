@@ -15,6 +15,7 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -53,17 +54,18 @@ public class MessageMetadata {
   }
 
   /**
-   * Serialize the MessageMetadata into the given {@link ByteBuffer}
-   * @param outputBuffer the {@link ByteBuffer} to which to write the serialized bytes into.
+   * Serialize the MessageMetadata into the given {@link ByteBuf}
+   * @param outputBuf the {@link ByteBuf} to which to write the serialized bytes into.
    */
-  public void serializeMessageMetadata(ByteBuffer outputBuffer) {
+  public void serializeMessageMetadata(ByteBuf outputBuf) {
     switch (version) {
       case MESSAGE_METADATA_VERSION_V1:
-        outputBuffer.putShort(version);
+        outputBuf.writeShort(version);
         if (encryptionKey != null) {
-          outputBuffer.putInt(encryptionKey.remaining()).put(encryptionKey);
+          outputBuf.writeInt(encryptionKey.remaining());
+          outputBuf.writeBytes(encryptionKey);
         } else {
-          outputBuffer.putInt(0);
+          outputBuf.writeInt(0);
         }
         break;
       default:

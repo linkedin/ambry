@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -48,7 +49,7 @@ public class SocketRequestResponseChannelTest {
     }
   }
 
-  class MockSend implements Send {
+  class MockSend extends AbstractByteBufHolder<MockSend> implements Send {
     public int sendcall = 1;
 
     @Override
@@ -65,6 +66,16 @@ public class SocketRequestResponseChannelTest {
     @Override
     public long sizeInBytes() {
       return 10;
+    }
+
+    @Override
+    public ByteBuf content() {
+      return null;
+    }
+
+    @Override
+    public MockSend replace(ByteBuf content) {
+      return null;
     }
   }
 

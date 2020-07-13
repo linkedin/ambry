@@ -98,10 +98,10 @@ public class CatchupStatusAdminRequest extends AdminRequest {
   }
 
   @Override
-  protected void serializeIntoBuffer() {
-    super.serializeIntoBuffer();
-    bufferToSend.putShort(VERSION_V2);
-    bufferToSend.putLong(acceptableLagInBytes);
-    bufferToSend.putShort(numReplicasCaughtUpPerPartition);
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeShort(VERSION_V2);
+    bufferToSend.writeLong(acceptableLagInBytes);
+    bufferToSend.writeShort(numReplicasCaughtUpPerPartition);
   }
 }

@@ -695,6 +695,19 @@ public class Utils {
   }
 
   /**
+   * Serializes a nullable string into {@link ByteBuf} using the default charset.
+   *
+   * @param outputBuf The output buffer to serialize the value to
+   * @param value The value to serialize
+   */
+  public static void serializeNullableString(ByteBuf outputBuf, String value) {
+    if (value == null) {
+      outputBuf.writeInt(0);
+    } else {
+      serializeString(outputBuf, value, Charset.defaultCharset());
+    }
+  }
+  /**
    * Serializes a string into byte buffer
    * @param outputBuffer The output buffer to serialize the value to
    * @param value The value to serialize
@@ -706,6 +719,17 @@ public class Utils {
     outputBuffer.put(valueArray);
   }
 
+  /**
+   * Serializes a string into {@link ByteBuf}
+   * @param outputBuf The output {@link ByteBuf} to serialize the value to
+   * @param value The value to serialize
+   * @param charset {@link Charset} to be used to encode
+   */
+  public static void serializeString(ByteBuf outputBuf, String value, Charset charset) {
+    byte[] valueArray = value.getBytes(charset);
+    outputBuf.writeInt(valueArray.length);
+    outputBuf.writeBytes(valueArray);
+  }
   /**
    * Deserializes a string from byte buffer
    * @param inputBuffer The input buffer to deserialize the value from

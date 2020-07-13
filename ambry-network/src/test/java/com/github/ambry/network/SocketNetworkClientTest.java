@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Time;
@@ -654,7 +655,7 @@ public class SocketNetworkClientTest {
  * A mock implementation of the {@link Send} interface that simply stores a correlation id that can be used to
  * identify this request.
  */
-class MockSend implements SendWithCorrelationId {
+class MockSend extends AbstractByteBufHolder<MockSend> implements SendWithCorrelationId {
   private final ByteBuffer buf;
   private final int correlationId;
   private final int size;
@@ -705,6 +706,16 @@ class MockSend implements SendWithCorrelationId {
   @Override
   public String toString() {
     return "MockSend{" + "buf=" + buf + ", correlationId=" + correlationId + ", size=" + size + '}';
+  }
+
+  @Override
+  public ByteBuf content() {
+    return null;
+  }
+
+  @Override
+  public MockSend replace(ByteBuf content) {
+    return null;
   }
 }
 

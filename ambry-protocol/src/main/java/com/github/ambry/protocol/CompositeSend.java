@@ -16,6 +16,8 @@ package com.github.ambry.protocol;
 import com.github.ambry.network.Send;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
+import com.github.ambry.utils.AbstractByteBufHolder;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
@@ -24,7 +26,7 @@ import java.util.List;
 /**
  * Holds multiple Send instances and sends them over the network
  */
-public class CompositeSend implements Send {
+public class CompositeSend extends AbstractByteBufHolder<CompositeSend> implements Send {
 
   private final List<Send> compositeSendList;
   private long totalSizeToWrite;
@@ -76,5 +78,16 @@ public class CompositeSend implements Send {
   @Override
   public long sizeInBytes() {
     return totalSizeToWrite;
+  }
+
+  @Override
+  public ByteBuf content() {
+    // TODO: Actually support ByteBufHolder for CompositeSend
+    return null;
+  }
+
+  @Override
+  public CompositeSend replace(ByteBuf content) {
+    return null;
   }
 }

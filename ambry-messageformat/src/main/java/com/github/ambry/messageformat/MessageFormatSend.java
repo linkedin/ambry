@@ -19,9 +19,11 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
+import io.netty.buffer.ByteBuf;
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -42,7 +44,7 @@ import static com.github.ambry.messageformat.MessageFormatRecord.*;
  * to the network channel
  */
 
-public class MessageFormatSend implements Send {
+public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> implements Send {
 
   private MessageReadSet readSet;
   private MessageFormatFlags flag;
@@ -55,6 +57,17 @@ public class MessageFormatSend implements Send {
   private StoreKeyFactory storeKeyFactory;
   private static final Logger logger = LoggerFactory.getLogger(MessageFormatSend.class);
   private final static int BUFFERED_INPUT_STREAM_BUFFER_SIZE = 256;
+
+  @Override
+  public ByteBuf content() {
+    // TODO: Actually support ByteBufHolder for MessageFormatSend
+    return null;
+  }
+
+  @Override
+  public MessageFormatSend replace(ByteBuf content) {
+    return null;
+  }
 
   private class SendInfo {
     private long relativeOffset;
@@ -270,7 +283,7 @@ public class MessageFormatSend implements Send {
 
   @Override
   public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
-      readSet.writeTo(channel, callback);
+    readSet.writeTo(channel, callback);
   }
 
   @Override

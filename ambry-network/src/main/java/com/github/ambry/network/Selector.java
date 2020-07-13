@@ -782,6 +782,9 @@ public class Selector implements Selectable {
       NetworkSend networkSend = transmission.getNetworkSend();
       if (sendComplete) {
         logger.trace("Finished writing, registering for read on connection {}", transmission.getRemoteSocketAddress());
+        // Release the NetworkSend resource here, not in the SocketNetworkClient, because SocketServer uses Selector
+        // as well, and SocketServer doesn't has a callback to release the resource.
+        networkSend.getPayload().release();
         transmission.onSendComplete();
         metrics.sendInFlight.dec();
         transmission.clearSend();

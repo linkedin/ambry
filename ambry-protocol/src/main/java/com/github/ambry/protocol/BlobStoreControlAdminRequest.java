@@ -85,10 +85,10 @@ public class BlobStoreControlAdminRequest extends AdminRequest {
   }
 
   @Override
-  protected void serializeIntoBuffer() {
-    super.serializeIntoBuffer();
-    bufferToSend.putShort(VERSION_V1);
-    bufferToSend.putShort(numReplicasCaughtUpPerPartition);
-    bufferToSend.put((byte) storeControlAction.ordinal());
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeShort(VERSION_V1);
+    bufferToSend.writeShort(numReplicasCaughtUpPerPartition);
+    bufferToSend.writeByte((byte) storeControlAction.ordinal());
   }
 }

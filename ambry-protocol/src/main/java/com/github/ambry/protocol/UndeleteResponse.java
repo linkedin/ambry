@@ -13,14 +13,10 @@
  */
 package com.github.ambry.protocol;
 
-import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.router.Callback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 
 
 /**
@@ -90,29 +86,10 @@ public class UndeleteResponse extends Response {
     return new UndeleteResponse(correlationId, clientId, lifeVersion, error);
   }
 
-  private void prepareBuffer() {
-    if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
-      writeHeader();
-      bufferToSend.putShort(lifeVersion);
-      bufferToSend.flip();
-    }
-  }
-
   @Override
-  public long writeTo(WritableByteChannel channel) throws IOException {
-    long written = 0;
-    prepareBuffer();
-    if (bufferToSend.remaining() > 0) {
-      written = channel.write(bufferToSend);
-    }
-    return written;
-  }
-
-  @Override
-  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) {
-    prepareBuffer();
-    channel.write(bufferToSend, callback);
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeShort(lifeVersion);
   }
 
   @Override

@@ -96,14 +96,14 @@ public class ReplicationControlAdminRequest extends AdminRequest {
   }
 
   @Override
-  protected void serializeIntoBuffer() {
-    super.serializeIntoBuffer();
-    bufferToSend.putShort(VERSION_V1);
-    bufferToSend.putInt(origins.size());
+  protected void prepareBuffer() {
+    super.prepareBuffer();
+    bufferToSend.writeShort(VERSION_V1);
+    bufferToSend.writeInt(origins.size());
     for (String origin : origins) {
       Utils.serializeString(bufferToSend, origin, StandardCharsets.UTF_8);
     }
-    bufferToSend.put(enable ? (byte) 1 : 0);
+    bufferToSend.writeByte(enable ? (byte) 1 : 0);
   }
 
   private long computeSizeInBytes() {

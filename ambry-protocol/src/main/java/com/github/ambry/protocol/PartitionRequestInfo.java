@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.store.StoreKey;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -75,6 +76,13 @@ public class PartitionRequestInfo {
     byteBuffer.putInt(blobIds.size());
     for (BlobId blobId : blobIds) {
       byteBuffer.put(blobId.toBytes());
+    }
+  }
+
+  public void writeTo(ByteBuf byteBuf) {
+    byteBuf.writeInt(blobIds.size());
+    for (BlobId blobId : blobIds) {
+      byteBuf.writeBytes(blobId.toBytes());
     }
   }
 

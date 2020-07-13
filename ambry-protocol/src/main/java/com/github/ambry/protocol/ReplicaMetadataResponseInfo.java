@@ -21,6 +21,7 @@ import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -125,16 +126,16 @@ public class ReplicaMetadataResponseInfo {
     }
   }
 
-  public void writeTo(ByteBuffer buffer) {
-    buffer.put(partitionId.getBytes());
+  public void writeTo(ByteBuf buf) {
+    buf.writeBytes(partitionId.getBytes());
     if (responseVersion == ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6) {
-      buffer.putShort((short) replicaType.ordinal());
+      buf.writeShort((short) replicaType.ordinal());
     }
-    buffer.putShort((short) errorCode.ordinal());
+    buf.writeShort((short) errorCode.ordinal());
     if (errorCode == ServerErrorCode.No_Error) {
-      buffer.put(token.toBytes());
-      messageInfoAndMetadataListSerde.serializeMessageInfoAndMetadataList(buffer);
-      buffer.putLong(remoteReplicaLagInBytes);
+      buf.writeBytes(token.toBytes());
+      messageInfoAndMetadataListSerde.serializeMessageInfoAndMetadataList(buf);
+      buf.writeLong(remoteReplicaLagInBytes);
     }
   }
 

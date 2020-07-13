@@ -98,6 +98,11 @@ public class Http2NetworkClient implements NetworkClient {
               long streamAcquiredTime = System.currentTimeMillis();
               Channel streamChannel = future.getNow();
               streamChannel.attr(REQUEST_INFO).set(requestInfo);
+              if (!streamChannel.isWritable() || !streamChannel.parent().isWritable()) {
+                http2ClientMetrics.http2StreamNotWritableCount.inc();
+                logger.warn("Stream {} {} not writable. BytesBeforeWritable {} {}", streamChannel.hashCode(),
+                    streamChannel, streamChannel.bytesBeforeWritable(), streamChannel.parent().bytesBeforeWritable());
+              }
               streamChannel.writeAndFlush(requestInfo.getRequest()).addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
@@ -107,6 +112,7 @@ public class Http2NetworkClient implements NetworkClient {
                     http2ClientMetrics.http2StreamWriteAndFlushTime.update(
                         System.currentTimeMillis() - streamAcquiredTime);
                     requestInfo.setStreamSendTime(System.currentTimeMillis());
+                    // When success, handler would release the request.
                   } else {
                     http2ClientMetrics.http2StreamWriteAndFlushErrorCount.inc();
                     logger.warn("Stream {} {} writeAndFlush fail. Cause: ", streamChannel.hashCode(), streamChannel,
@@ -118,9 +124,9 @@ public class Http2NetworkClient implements NetworkClient {
                     releaseAndCloseStreamChannel(streamChannel);
                     http2ClientResponseHandler.getResponseInfoQueue()
                         .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
+                    // release related bytebuf
+                    requestInfo.getRequest().release();
                   }
-                  // release related bytebuf
-                  requestInfo.getRequest().release();
                 }
               });
             } else {

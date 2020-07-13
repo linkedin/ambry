@@ -16,6 +16,7 @@ package com.github.ambry.messageformat;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -82,5 +83,27 @@ public class BlobPropertiesSerDe {
     outputBuffer.putShort(properties.getAccountId());
     outputBuffer.putShort(properties.getContainerId());
     outputBuffer.put(properties.isEncrypted() ? (byte) 1 : (byte) 0);
+  }
+
+  /**
+   * Serialize {@link BlobProperties} to {@link ByteBuf} in the {@link #VERSION_3}
+   * @param outputBuf the {@link ByteBuf} to which {@link BlobProperties} needs to be serialized
+   * @param properties the {@link BlobProperties} that needs to be serialized
+   */
+  public static void serializeBlobProperties(ByteBuf outputBuf, BlobProperties properties) {
+    if (!outputBuf.isWritable(getBlobPropertiesSerDeSize(properties))) {
+      throw new IllegalArgumentException("Output buffer does not have sufficient space to serialize blob properties");
+    }
+    outputBuf.writeShort(VERSION_3);
+    outputBuf.writeLong(properties.getTimeToLiveInSeconds());
+    outputBuf.writeByte(properties.isPrivate() ? (byte) 1 : (byte) 0);
+    outputBuf.writeLong(properties.getCreationTimeInMs());
+    outputBuf.writeLong(properties.getBlobSize());
+    Utils.serializeNullableString(outputBuf, properties.getContentType());
+    Utils.serializeNullableString(outputBuf, properties.getOwnerId());
+    Utils.serializeNullableString(outputBuf, properties.getServiceId());
+    outputBuf.writeShort(properties.getAccountId());
+    outputBuf.writeShort(properties.getContainerId());
+    outputBuf.writeByte(properties.isEncrypted() ? (byte) 1 : (byte) 0);
   }
 }

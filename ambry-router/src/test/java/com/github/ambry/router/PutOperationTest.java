@@ -134,6 +134,7 @@ public class PutOperationTest {
         responseInfo.getError() == null ? PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()))
             : null;
     op.handleResponse(responseInfo, putResponse);
+    requestInfos.get(0).getRequest().release();
     responseInfo.release();
     // 2.
     PutRequest putRequest = (PutRequest) requestInfos.get(1).getRequest();
@@ -141,6 +142,7 @@ public class PutOperationTest {
     ByteBufferChannel bufChannel = new ByteBufferChannel(buf);
     // read it out (which also marks this request as complete).
     putRequest.writeTo(bufChannel);
+    putRequest.release();
     byte[] expectedRequestContent = buf.array();
 
     //3.
@@ -153,6 +155,7 @@ public class PutOperationTest {
       putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
           new NettyByteBufDataInputStream(responseInfo.content())) : null;
       op.handleResponse(responseInfo, putResponse);
+      requestInfos.get(i).getRequest().release();
       responseInfo.release();
     }
     // fill the first PutChunk with the last chunk.
@@ -166,6 +169,7 @@ public class PutOperationTest {
     buf = ByteBuffer.allocate((int) savedRequest.sizeInBytes());
     bufChannel = new ByteBufferChannel(buf);
     savedRequest.writeTo(bufChannel);
+    savedRequest.release();
     byte[] savedRequestContent = buf.array();
 
     // reset the correlation id as they will be different between the two requests.
@@ -182,6 +186,7 @@ public class PutOperationTest {
       putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
           new NettyByteBufDataInputStream(responseInfo.content())) : null;
       op.handleResponse(responseInfo, putResponse);
+      requestInfos.get(i).getRequest().release();
       responseInfo.release();
     }
     requestInfos.clear();
@@ -196,6 +201,7 @@ public class PutOperationTest {
             : null;
     op.handleResponse(responseInfo, putResponse);
     responseInfo.release();
+    requestInfos.forEach(info -> info.getRequest().release());
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
   }
 
@@ -249,6 +255,8 @@ public class PutOperationTest {
     Assert.assertEquals("Failure count should be 1", 1,
         ((SimpleOperationTracker) putChunk.getOperationTrackerInUse()).getFailedCount());
     mockServer.resetServerErrors();
+    // Release all the other requests
+    requestInfos.forEach(info -> info.getRequest().release());
   }
 
   /**

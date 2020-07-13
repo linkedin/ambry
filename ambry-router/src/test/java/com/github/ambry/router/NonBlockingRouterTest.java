@@ -1311,10 +1311,12 @@ public class NonBlockingRouterTest {
     BlobId id = new BlobId(blobId, mockClusterMap);
     for (MockServer server : serverLayout.getMockServers()) {
       if (!server.getBlobs().containsKey(blobId)) {
-        server.send(
+        PutRequest putRequest =
             new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, id,
                 putBlobProperties, ByteBuffer.wrap(putUserMetadata), Unpooled.wrappedBuffer(putContent),
-                putContent.length, BlobType.DataBlob, null)).release();
+                putContent.length, BlobType.DataBlob, null);
+        server.send(putRequest).release();
+        putRequest.release();
       }
     }
   }
@@ -1348,10 +1350,12 @@ public class NonBlockingRouterTest {
     BlobId id = new BlobId(blobId, mockClusterMap);
     for (MockServer server : serverLayout.getMockServers()) {
       if (!server.getBlobs().containsKey(blobId)) {
-        server.send(
+        PutRequest putRequest =
             new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, id,
                 putBlobProperties, ByteBuffer.wrap(putUserMetadata), Unpooled.wrappedBuffer(serializedContent),
-                serializedContent.remaining(), BlobType.MetadataBlob, null)).release();
+                serializedContent.remaining(), BlobType.MetadataBlob, null);
+        server.send(putRequest).release();
+        putRequest.release();
       }
     }
   }
@@ -1366,9 +1370,11 @@ public class NonBlockingRouterTest {
     BlobId id = new BlobId(blobId, mockClusterMap);
     for (MockServer server : serverLayout.getMockServers()) {
       if (!server.getBlobs().get(blobId).isDeleted()) {
-        server.send(
+        DeleteRequest deleteRequest =
             new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-                id, mockTime.milliseconds())).release();
+                id, mockTime.milliseconds());
+        server.send(deleteRequest).release();
+        deleteRequest.release();
       }
     }
   }
@@ -1383,9 +1389,11 @@ public class NonBlockingRouterTest {
     BlobId id = new BlobId(blobId, mockClusterMap);
     for (MockServer server : serverLayout.getMockServers()) {
       if (!server.getBlobs().get(blobId).isUndeleted()) {
-        server.send(
+        UndeleteRequest undeleteRequest =
             new UndeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-                id, mockTime.milliseconds())).release();
+                id, mockTime.milliseconds());
+        server.send(undeleteRequest).release();
+        undeleteRequest.release();
       }
     }
   }

@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.store.MessageInfo;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -87,10 +88,10 @@ public class PartitionResponseInfo {
     }
   }
 
-  public void writeTo(ByteBuffer byteBuffer) {
-    byteBuffer.put(partitionId.getBytes());
-    messageInfoAndMetadataListSerde.serializeMessageInfoAndMetadataList(byteBuffer);
-    byteBuffer.putShort((short) errorCode.ordinal());
+  public void writeTo(ByteBuf byteBuf) {
+    byteBuf.writeBytes(partitionId.getBytes());
+    messageInfoAndMetadataListSerde.serializeMessageInfoAndMetadataList(byteBuf);
+    byteBuf.writeShort((short) errorCode.ordinal());
   }
 
   public long sizeInBytes() {

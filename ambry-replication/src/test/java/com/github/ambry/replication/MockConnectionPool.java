@@ -35,8 +35,10 @@ import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
@@ -95,7 +97,7 @@ public class MockConnectionPool implements ConnectionPool {
    */
   public static class MockConnection implements ConnectedChannel {
 
-    class MockSend implements Send {
+    class MockSend extends AbstractByteBufHolder<MockSend> implements Send {
 
       private final List<ByteBuffer> buffers;
       private final int size;
@@ -129,6 +131,16 @@ public class MockConnectionPool implements ConnectionPool {
       @Override
       public long sizeInBytes() {
         return size;
+      }
+
+      @Override
+      public ByteBuf content() {
+        return null;
+      }
+
+      @Override
+      public MockSend replace(ByteBuf content) {
+        return null;
       }
     }
 
