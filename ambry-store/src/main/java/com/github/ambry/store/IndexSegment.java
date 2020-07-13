@@ -69,7 +69,7 @@ import org.slf4j.LoggerFactory;
  * the memory mapped file. If the index is in memory, a normal map
  * lookup is performed to find key.
  */
-class IndexSegment {
+class IndexSegment implements Iterable<IndexEntry> {
   static final String INDEX_SEGMENT_FILE_NAME_SUFFIX = "index";
   static final String BLOOM_FILE_NAME_SUFFIX = "bloom";
 
@@ -1048,7 +1048,7 @@ class IndexSegment {
    * the returned entry won't change the entry in the segment.
    * @return an {@link Iterator<IndexEntry>}.
    */
-  Iterator<IndexEntry> iterator() {
+  public Iterator<IndexEntry> iterator() {
     if (!sealed.get()) {
       return new UnsealedIndexSegmentEntryIterator();
     }
@@ -1248,7 +1248,7 @@ class IndexSegment {
 
     @Override
     public IndexEntry next() {
-      if (cursor < 0 || cursor > numberOfEntries) {
+      if (cursor < 0 || cursor >= numberOfEntries) {
         throw new NoSuchElementException();
       }
       try {
@@ -1256,9 +1256,8 @@ class IndexSegment {
         mmap.get(valueBuf);
         return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
       } catch (Exception e) {
-        String message = "Failed to read index entry at " + cursor;
-        logger.error(message, e);
-        throw new IllegalStateException(message, e);
+        throw new IllegalStateException(
+            "Failed to read index entry at " + cursor + " in index segment file " + indexFile.getAbsolutePath(), e);
       } finally {
         cursor++;
       }
@@ -1282,15 +1281,17 @@ class IndexSegment {
 
     @Override
     public IndexEntry previous() {
+      if (cursor <= 0 || cursor > numberOfEntries) {
+        throw new NoSuchElementException();
+      }
       try {
         int i = cursor - 1;
         StoreKey key = getKeyAt(mmap, i);
         mmap.get(valueBuf);
         return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
       } catch (Exception e) {
-        String message = "Failed to read index entry at " + cursor;
-        logger.error(message, e);
-        throw new IllegalStateException(message, e);
+        throw new IllegalStateException(
+            "Failed to read index entry at " + cursor + " in index segment file " + indexFile.getAbsolutePath(), e);
       } finally {
         cursor--;
       }
