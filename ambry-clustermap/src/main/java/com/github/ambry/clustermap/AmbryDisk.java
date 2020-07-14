@@ -29,6 +29,7 @@ class AmbryDisk implements DiskId, Resource {
   private final String mountPath;
   private final long rawCapacityBytes;
   private final ResourceStatePolicy resourceStatePolicy;
+  private final long maxCapacityInBytes;
 
   /**
    * Instantiate an AmbryDisk object.
@@ -47,6 +48,7 @@ class AmbryDisk implements DiskId, Resource {
     ResourceStatePolicyFactory resourceStatePolicyFactory =
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, state, clusterMapConfig);
     this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
+    this.maxCapacityInBytes = clusterMapConfig.clustermapMaxDiskCapacityInBytes;
     validate();
   }
 
@@ -64,7 +66,7 @@ class AmbryDisk implements DiskId, Resource {
     if (!mountPathFile.isAbsolute()) {
       throw new IllegalStateException("Mount path has to be an absolute path.");
     }
-    ClusterMapUtils.validateDiskCapacity(rawCapacityBytes);
+    ClusterMapUtils.validateDiskCapacity(rawCapacityBytes, maxCapacityInBytes);
   }
 
   @Override

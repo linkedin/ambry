@@ -35,6 +35,7 @@ class Disk implements DiskId {
   private final String mountPath;
   private final ResourceStatePolicy diskStatePolicy;
   private long capacityInBytes;
+  private long maxCapacityInBytes;
 
   private static final Logger logger = LoggerFactory.getLogger(Disk.class);
 
@@ -53,6 +54,7 @@ class Disk implements DiskId {
           e);
     }
     this.capacityInBytes = jsonObject.getLong("capacityInBytes");
+    this.maxCapacityInBytes = clusterMapConfig.clustermapMaxDiskCapacityInBytes;
     validate();
   }
 
@@ -131,7 +133,7 @@ class Disk implements DiskId {
     logger.trace("begin validate.");
     validateDataNode();
     validateMountPath();
-    ClusterMapUtils.validateDiskCapacity(capacityInBytes);
+    ClusterMapUtils.validateDiskCapacity(capacityInBytes, maxCapacityInBytes);
     logger.trace("complete validate.");
   }
 

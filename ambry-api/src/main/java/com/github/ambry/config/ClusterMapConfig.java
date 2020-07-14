@@ -26,6 +26,7 @@ public class ClusterMapConfig {
   public static final String CLUSTERMAP_DATACENTER_NAME = "clustermap.datacenter.name";
   public static final String CLUSTERMAP_HOST_NAME = "clustermap.host.name";
   public static final String CLUSTERMAP_PORT = "clustermap.port";
+  public static final String CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES = "clustermap.max.disk.capacity.in.bytes";
   public static final String AMBRY_STATE_MODEL_DEF = "AmbryLeaderStandby";
   public static final String OLD_STATE_MODEL_DEF = LeaderStandbySMD.name;
   public static final String DEFAULT_STATE_MODEL_DEF = AMBRY_STATE_MODEL_DEF;
@@ -266,6 +267,12 @@ public class ClusterMapConfig {
   @Default("{}")
   public final JSONObject clustermapRecoveryTestHardwareLayout;
 
+  /**
+   * Max capacity of a disk in bytes.
+   */
+  @Config(CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES)
+  public final long clustermapMaxDiskCapacityInBytes;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -320,5 +327,8 @@ public class ClusterMapConfig {
         new JSONObject(verifiableProperties.getString("clustermap.recovery.test.hardware.layout", "{}"));
     clustermapRecoveryTestPartitionLayout =
         new JSONObject(verifiableProperties.getString("clustermap.recovery.test.partition.layout", "{}"));
+    clustermapMaxDiskCapacityInBytes =
+        verifiableProperties.getLongInRange(CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES, 20L * 1024 * 1024 * 1024 * 1024, 0,
+            Long.MAX_VALUE);
   }
 }

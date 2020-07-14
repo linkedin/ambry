@@ -110,48 +110,49 @@ public class DynamicClusterManagerComponentsTest {
     // the snapshot is for debug info, but just check that it works without throwing exceptions.
     assertNotNull(datanode1.getSnapshot());
     assertNotNull(datanode1.toString());
+    long maxDiskCapacityInBytes = clusterMapConfig1.clustermapMaxDiskCapacityInBytes;
 
     // AmbryDisk tests
     String mountPath1 = "/mnt/1";
     String mountPath2 = "/mnt/2";
     try {
-      new AmbryDisk(clusterMapConfig1, null, mountPath1, HardwareState.UNAVAILABLE, MAX_DISK_CAPACITY_IN_BYTES);
+      new AmbryDisk(clusterMapConfig1, null, mountPath1, HardwareState.UNAVAILABLE, maxDiskCapacityInBytes);
       fail("disk initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
     try {
-      new AmbryDisk(clusterMapConfig1, datanode1, null, HardwareState.UNAVAILABLE, MAX_DISK_CAPACITY_IN_BYTES);
+      new AmbryDisk(clusterMapConfig1, datanode1, null, HardwareState.UNAVAILABLE, maxDiskCapacityInBytes);
       fail("disk initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
     try {
-      new AmbryDisk(clusterMapConfig1, datanode1, "", HardwareState.UNAVAILABLE, MAX_DISK_CAPACITY_IN_BYTES);
+      new AmbryDisk(clusterMapConfig1, datanode1, "", HardwareState.UNAVAILABLE,
+          clusterMapConfig1.clustermapMaxDiskCapacityInBytes);
       fail("disk initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
     try {
-      new AmbryDisk(clusterMapConfig1, datanode1, "0", HardwareState.UNAVAILABLE, MAX_DISK_CAPACITY_IN_BYTES);
+      new AmbryDisk(clusterMapConfig1, datanode1, "0", HardwareState.UNAVAILABLE, maxDiskCapacityInBytes);
       fail("disk initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
     try {
-      new AmbryDisk(clusterMapConfig1, datanode1, mountPath1, HardwareState.UNAVAILABLE,
-          MAX_DISK_CAPACITY_IN_BYTES + 1);
+      new AmbryDisk(clusterMapConfig1, datanode1, mountPath1, HardwareState.UNAVAILABLE, maxDiskCapacityInBytes + 1);
       fail("disk initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
 
     AmbryDisk disk1 =
-        new AmbryDisk(clusterMapConfig1, datanode1, mountPath1, HardwareState.AVAILABLE, MAX_DISK_CAPACITY_IN_BYTES);
+        new AmbryDisk(clusterMapConfig1, datanode1, mountPath1, HardwareState.AVAILABLE, maxDiskCapacityInBytes);
     AmbryDisk disk2 =
-        new AmbryDisk(clusterMapConfig2, datanode2, mountPath2, HardwareState.AVAILABLE, MAX_DISK_CAPACITY_IN_BYTES);
+        new AmbryDisk(clusterMapConfig2, datanode2, mountPath2, HardwareState.AVAILABLE, maxDiskCapacityInBytes);
     assertEquals(mountPath1, disk1.getMountPath());
-    assertEquals(MAX_DISK_CAPACITY_IN_BYTES, disk1.getRawCapacityInBytes());
+    assertEquals(maxDiskCapacityInBytes, disk1.getRawCapacityInBytes());
     assertEquals(HardwareState.AVAILABLE, disk1.getState());
     disk1.setState(HardwareState.UNAVAILABLE);
     assertEquals(HardwareState.UNAVAILABLE, disk1.getState());
