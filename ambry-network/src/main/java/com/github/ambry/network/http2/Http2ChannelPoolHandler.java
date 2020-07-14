@@ -17,26 +17,33 @@ package com.github.ambry.network.http2;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.pool.AbstractChannelPoolHandler;
 import io.netty.channel.pool.ChannelPoolHandler;
+import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2MultiplexHandler;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.ssl.SslHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * A {@link ChannelPoolHandler} to be used with {@link Http2ChannelPoolMap}.
  */
 public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
+  private static final Logger logger = LoggerFactory.getLogger(Http2ChannelPoolHandler.class);
   private final SSLFactory sslFactory;
   private final String host;
   private final int port;
   private final Http2ClientConfig http2ClientConfig;
+  private final ConnectionInboundExceptionHandler connectionInboundExceptionHandler;
 
   /**
    * Construct a {@link Http2ChannelPoolHandler}.
@@ -49,6 +56,7 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
     this.host = host;
     this.port = port;
     this.http2ClientConfig = http2ClientConfig;
+    this.connectionInboundExceptionHandler = new ConnectionInboundExceptionHandler();
   }
 
   @Override
@@ -63,6 +71,20 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
         .frameLogger(new Http2FrameLogger(LogLevel.DEBUG, "client"))
         .build());
     pipeline.addLast(new Http2MultiplexHandler(new ChannelInboundHandlerAdapter()));
+  }
+
+  @ChannelHandler.Sharable
+  private static class ConnectionInboundExceptionHandler extends ChannelInboundHandlerAdapter {
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+      if (cause instanceof Http2Exception.StreamException) {
+        // This usually happens when server returns response which from a dropped request.
+        logger.info(cause.getMessage());
+      } else {
+        logger.warn("Connection inbound exception:", cause);
+      }
+    }
   }
 }
 

@@ -37,6 +37,7 @@ import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.InetSocketAddress;
+import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -150,8 +151,11 @@ public class Http2NetworkClient implements NetworkClient {
                     http2ClientResponseHandler.getResponseInfoQueue()
                         .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
                     correlationIdInFlightToChannelMap.remove(requestInfo.getRequest().getCorrelationId());
-                    // release related bytebuf
-                    requestInfo.getRequest().release();
+                    if (!(future.cause() instanceof ClosedChannelException)) {
+                      // If it's ClosedChannelException caused by drop request, it's probably refCnt has been decreased.
+                      // TODO: a round solution is needed.
+                      requestInfo.getRequest().release();
+                    }
                   }
                 }
               });
