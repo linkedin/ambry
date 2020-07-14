@@ -90,9 +90,24 @@ public class Http2NetworkClient implements NetworkClient {
   @Override
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop,
       int pollTimeoutMs) {
-    long startTime = System.currentTimeMillis();
 
     List<ResponseInfo> readyResponseInfos = new ArrayList<>();
+    if (requestsToDrop.size() != 0) {
+      logger.warn("Number of requestsToDrop: {}", requestsToDrop.size());
+      http2ClientMetrics.http2RequestsToDropCount.inc(requestsToDrop.size());
+      for (int correlationId : requestsToDrop) {
+        Channel streamChannel = correlationIdInFlightToChannelMap.get(correlationId);
+        if (streamChannel != null) {
+          logger.warn("Drop request on streamChannel: {}", streamChannel);
+          RequestInfo requestInfo = releaseAndCloseStreamChannel(streamChannel);
+          if (requestInfo != null) {
+            readyResponseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.TimeoutError, null));
+          }
+        }
+      }
+    }
+
+    long sendStartTime = System.currentTimeMillis();
     // Send request
     http2ClientMetrics.http2ClientSendRate.mark(requestsToSend.size());
     for (RequestInfo requestInfo : requestsToSend) {
@@ -134,7 +149,6 @@ public class Http2NetworkClient implements NetworkClient {
                         releaseAndCloseStreamChannel(streamChannel);
                         http2ClientResponseHandler.getResponseInfoQueue()
                             .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
-                        correlationIdInFlightToChannelMap.remove(requestInfo.getRequest().getCorrelationId());
                         // Don't need to call requestInfo.getRequest().release(), because netty write handler decreases refcnt.
                       }
                     }
@@ -150,7 +164,6 @@ public class Http2NetworkClient implements NetworkClient {
                     releaseAndCloseStreamChannel(streamChannel);
                     http2ClientResponseHandler.getResponseInfoQueue()
                         .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
-                    correlationIdInFlightToChannelMap.remove(requestInfo.getRequest().getCorrelationId());
                     if (!(future.cause() instanceof ClosedChannelException)) {
                       // If it's ClosedChannelException caused by drop request, it's probably refCnt has been decreased.
                       // TODO: a round solution is needed.
@@ -169,24 +182,15 @@ public class Http2NetworkClient implements NetworkClient {
             }
           });
     }
-    http2ClientMetrics.http2ClientSendTime.update(System.currentTimeMillis() - startTime);
-    // TODO: close stream channel for requestsToDrop. Need a hashmap from corelationId to streamChannel
-    if (requestsToDrop.size() != 0) {
-      logger.warn("Number of requestsToDrop: {}", requestsToDrop.size());
-      http2ClientMetrics.http2RequestsToDropCount.inc(requestsToDrop.size());
-      for (int correlationId : requestsToDrop) {
-        Channel streamChannel = correlationIdInFlightToChannelMap.remove(correlationId);
-        if (streamChannel != null) {
-          releaseAndCloseStreamChannel(streamChannel);
-        }
-      }
-    }
+    http2ClientMetrics.http2ClientSendTime.update(System.currentTimeMillis() - sendStartTime);
 
     http2ClientResponseHandler.getResponseInfoQueue().poll(readyResponseInfos, pollTimeoutMs);
+    for (ResponseInfo responseInfo : readyResponseInfos) {
+      correlationIdInFlightToChannelMap.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
+    }
 
     http2ClientMetrics.http2ClientSendRate.mark(readyResponseInfos.size());
-
-    http2ClientMetrics.http2ClientSendAndPollTime.update(System.currentTimeMillis() - startTime);
+    http2ClientMetrics.http2ClientSendAndPollTime.update(System.currentTimeMillis() - sendStartTime);
     return readyResponseInfos;
   }
 

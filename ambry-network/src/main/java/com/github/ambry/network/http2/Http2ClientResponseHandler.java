@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network.http2;
 
+import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.utils.BatchBlockingQueue;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -67,8 +68,11 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
     http2ClientMetrics.http2StreamExceptionCount.inc();
-    logger.info("Exception caught from in Http2ClientResponseHandler {} {}. Closing stream channel. Cause: ",
+    logger.info("Exception caught in Http2ClientResponseHandler {} {}. Closing stream channel. Cause: ",
         ctx.channel().hashCode(), ctx.channel(), cause);
-    releaseAndCloseStreamChannel(ctx.channel());
+    RequestInfo requestInfo = releaseAndCloseStreamChannel(ctx.channel());
+    if (requestInfo != null) {
+      responseInfoQueue.put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
+    }
   }
 }
