@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.router.Callback;
 import com.github.ambry.server.AmbryHealthReport;
+import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -101,11 +102,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * Initiate the participation by registering via the {@link HelixManager} as a participant to the associated
    * Helix cluster.
    * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
-   * @param callback
+   * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void participate(List<AmbryHealthReport> ambryHealthReports, Callback callback) throws IOException {
+  public void participate(List<AmbryHealthReport> ambryHealthReports, Callback<StatsSnapshot> callback) throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
@@ -418,8 +419,9 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param engine the {@link StateMachineEngine} to register the task state model.
    * @param healthReports the {@link List} of {@link AmbryHealthReport}s that may require the registration of
    * corresponding {@link HelixHealthReportAggregatorTask}s.
+   * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
-  private void registerHealthReportTasks(StateMachineEngine engine, List<AmbryHealthReport> healthReports, Callback callback) {
+  private void registerHealthReportTasks(StateMachineEngine engine, List<AmbryHealthReport> healthReports, Callback<StatsSnapshot> callback) {
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
     for (final AmbryHealthReport healthReport : healthReports) {
       if (healthReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {

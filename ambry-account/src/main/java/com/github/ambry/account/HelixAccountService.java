@@ -18,7 +18,6 @@ import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.router.Router;
 import com.github.ambry.server.StatsSnapshot;
-import com.google.common.base.Preconditions;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -351,62 +350,61 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    * Selects {@link Container}s to be marked as INACTIVE. Check the valid data size of each DELETE_IN_PROGRESS container
    * from {@link StatsSnapshot} and select the ones with zero data size to be marked as INACTIVE.
    */
-  Set<Container> selectInvalidContainerCandidates(StatsSnapshot statsSnapshot) {
-    Set<Container> invalidContainerCandidateSet = new HashSet<>();
+  Set<Container> selectInactiveContainerCandidates(StatsSnapshot statsSnapshot) {
+    Set<Container> inactiveContainerCandidateSet = new HashSet<>();
     if (statsSnapshot != null) {
-      Map<String, Set<String>> accountToContainerMap = new HashMap<>();
-      getValidContainers(accountToContainerMap, statsSnapshot, null);
+      Map<String, Set<String>> nonEmptyContainersByAccount = new HashMap<>();
+      searchNonEmptyContainers(nonEmptyContainersByAccount, statsSnapshot, null);
       Set<Container> deleteInProgressContainerSet = getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS);
       for (Container container : deleteInProgressContainerSet) {
         String containerIdToString = "C[" + container.getId() + "]";
         String accountIdToString = "A[" + container.getParentAccountId() + "]";
-        if (accountToContainerMap.containsKey(accountIdToString) && accountToContainerMap.get(accountIdToString).contains(containerIdToString)) {
-          logger.info("Container {} has not been deleted yet", container);
+        if (nonEmptyContainersByAccount.containsKey(accountIdToString) && nonEmptyContainersByAccount.get(accountIdToString).contains(containerIdToString)) {
+          logger.debug("Container {} has not been compacted yet", container);
         } else {
-          invalidContainerCandidateSet.add(container);
+          logger.info("Container {} has been compacted already", container);
+          inactiveContainerCandidateSet.add(container);
         }
       }
     }
-    return invalidContainerCandidateSet;
+    return inactiveContainerCandidateSet;
   }
 
   /**
    * Selects {@link Container}s to be marked as INACTIVE and marked in zookeeper.
    */
-  public void selectInvalidContainersAndMarkInZK(StatsSnapshot statsSnapshot) {
-    Set<Container> invalidContainerCandidateSet = selectInvalidContainerCandidates(statsSnapshot);
-    markContainerZkNodesInactive(invalidContainerCandidateSet);
+  public void selectInactiveContainersAndMarkInZK(StatsSnapshot statsSnapshot) {
+    Set<Container> inactiveContainerCandidateSet = selectInactiveContainerCandidates(statsSnapshot);
+    markContainerInactiveOnZk(inactiveContainerCandidateSet);
   }
 
   /**
    * Mark the given {@link Container}s status to INACTIVE in zookeeper.
-   * @param invalidContainerSet DELETE_IN_PROGRESS {@link Container} set which has been deleted successfully during compaction.
+   * @param inactiveContainerCandidateSet DELETE_IN_PROGRESS {@link Container} set which has been deleted successfully during compaction.
    */
-  private void markContainerZkNodesInactive(Set<Container> invalidContainerSet) {
+  private void markContainerInactiveOnZk(Set<Container> inactiveContainerCandidateSet) {
     // TODO: mark the given containers status to INACTIVE in zookeeper.
   }
 
   /**
    * Gets valid data size {@link Container}s. The qualified {@link Container}s' raw valid data size should be larger than zero.
-   * @param accountToContainerMap it holds a mapping of {@link Account}s to {@link Container}s which raw valid data size larger than zero.
+   * @param nonEmptyContainersByAccount it holds a mapping of {@link Account}s to {@link Container}s which raw valid data size larger than zero.
    * @param statsSnapshot the {@link StatsSnapshot} generated from cluster wide aggregation.
    * @param keyName the key of subMap for each level of {@link StatsSnapshot}.
    */
-  private void getValidContainers(Map<String, Set<String>> accountToContainerMap, StatsSnapshot statsSnapshot,
-      String keyName) {
-    if (statsSnapshot.getSubMap() == null || statsSnapshot.getSubMap().isEmpty()) {
-      return;
-    } else {
+  private void searchNonEmptyContainers(Map<String, Set<String>> nonEmptyContainersByAccount,
+      StatsSnapshot statsSnapshot, String keyName) {
+    if (statsSnapshot.getSubMap() != null && !statsSnapshot.getSubMap().isEmpty()) {
       for (Map.Entry<String, StatsSnapshot> entry : statsSnapshot.getSubMap().entrySet()) {
         if (entry.getKey().startsWith("C") && entry.getValue().getValue() > 0) {
-          Preconditions.checkNotNull(keyName,
+          Objects.requireNonNull(keyName,
               "keyName should not be null since every container will have it's corresponding accountId");
-          accountToContainerMap.getOrDefault(keyName, new HashSet<>()).add(entry.getKey());
+          nonEmptyContainersByAccount.getOrDefault(keyName, new HashSet<>()).add(entry.getKey());
         } else if (entry.getKey().startsWith("A")) {
-          accountToContainerMap.putIfAbsent(entry.getKey(), new HashSet<>());
-          getValidContainers(accountToContainerMap, entry.getValue(), entry.getKey());
+          nonEmptyContainersByAccount.putIfAbsent(entry.getKey(), new HashSet<>());
+          searchNonEmptyContainers(nonEmptyContainersByAccount, entry.getValue(), entry.getKey());
         } else {
-          getValidContainers(accountToContainerMap, entry.getValue(), null);
+          searchNonEmptyContainers(nonEmptyContainersByAccount, entry.getValue(), null);
         }
       }
     }

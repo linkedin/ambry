@@ -22,7 +22,6 @@ import java.nio.file.attribute.FileTime;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;

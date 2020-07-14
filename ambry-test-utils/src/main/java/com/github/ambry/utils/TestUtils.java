@@ -434,7 +434,8 @@ public class TestUtils {
    * @param type the type of stats report to be generated for the store
    * @return the generated store level {@link StatsSnapshot}
    */
-  public static StatsSnapshot generateStoreStats(int accountCount, int containerCount, Random random, StatsReportType type) {
+  public static StatsSnapshot generateStoreStats(int accountCount, int containerCount, Random random,
+      StatsReportType type) {
     Map<String, StatsSnapshot> subMap = new HashMap<>();
     long totalSize = 0;
     for (int i = 0; i < accountCount; i++) {
@@ -459,4 +460,3 @@ public class TestUtils {
     return new StatsSnapshot(totalSize, subMap);
   }
 }
-

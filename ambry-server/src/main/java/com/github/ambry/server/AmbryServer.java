@@ -307,7 +307,7 @@ public class AmbryServer {
       if (vcrClusterSpectator != null) {
         vcrClusterSpectator.spectate();
       }
-      Callback accountServiceCallback = new AccountServiceCallback(accountService);
+      Callback<StatsSnapshot> accountServiceCallback = new AccountServiceCallback(accountService);
       for (ClusterParticipant clusterParticipant : clusterParticipants) {
         clusterParticipant.participate(ambryHealthReports, accountServiceCallback);
       }

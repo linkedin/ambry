@@ -13,7 +13,6 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.server.StatsSnapshot;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;

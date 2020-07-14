@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.router.Callback;
 import com.github.ambry.server.AmbryHealthReport;
+import com.github.ambry.server.StatsSnapshot;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -83,7 +84,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         private final Map<StateModelListenerType, PartitionStateChangeListener> listeners = new HashMap<>();
 
         @Override
-        public void participate(List<AmbryHealthReport> ambryHealthReports, Callback callback) {
+        public void participate(List<AmbryHealthReport> ambryHealthReports, Callback<StatsSnapshot> callback) {
           DataNodeId currentNode =
               getClusterMap().getDataNodeId(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
           Set<String> partitionsOnNode = getClusterMap().getReplicaIds(currentNode)

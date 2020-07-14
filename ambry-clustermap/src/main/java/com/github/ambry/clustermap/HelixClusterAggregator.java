@@ -48,7 +48,7 @@ public class HelixClusterAggregator {
    * @param statsWrappersJSON a {@link Map} of instance name to JSON string representation of {@link StatsWrapper} objects from the
    *                          node level
    * @param type the type of stats report to be aggregated, which is defined in {@link StatsReportType}
-   * @return a {@link Pair} of Strings whose values represents aggregated stats across all partitions.
+   * @return a {@link Pair} of StatsSnapshot whose values represents aggregated stats across all partitions.
    * First element is the raw (sum) aggregated stats and second element is valid aggregated stats for all replicas
    * for each partition.
    * @throws IOException

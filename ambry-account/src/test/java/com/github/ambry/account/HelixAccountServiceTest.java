@@ -246,7 +246,7 @@ public class HelixAccountServiceTest {
       accountId++;
     }
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 4, true);
-    Set<Container> invalidContainerSet = ((HelixAccountService) accountService).selectInvalidContainerCandidates(statsSnapshot);
+    Set<Container> invalidContainerSet = ((HelixAccountService) accountService).selectInactiveContainerCandidates(statsSnapshot);
     assertTrue("Mismatch in container Set after detect", expectContainerSet.equals(invalidContainerSet));
   }
 
