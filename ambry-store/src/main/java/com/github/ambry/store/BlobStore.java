@@ -940,15 +940,15 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public Map<StoreKey, MessageInfo> findKeys(List<? extends StoreKey> storeKeys) {
+  public Map<StoreKey, MessageInfo> findKeys(List<? extends StoreKey> storeKeys) throws StoreException {
     Map<StoreKey, MessageInfo> messageInfoMap = new HashMap<>();
     for (StoreKey storeKey : storeKeys) {
+      // TODO: Need to look into the possibility if its more efficient to not call findKey() multiple times in a loop,
+      // and instead search the index once for all the blobs in the list.
       try {
-        // TODO: Need to look into the possibility if its more efficient to not call findKey() multiple times in a loop,
-        // and instead search the index once for all the blobs in the list.
         messageInfoMap.put(storeKey, findKey(storeKey));
-      } catch (StoreException stEx) {
-        logger.info("Key %s not found in findKey", storeKey.getID());
+      } catch (StoreException e) {
+        logger.error("findKey failed for key {} with reason {}", storeKey.getID(), e.getErrorCode().toString());
       }
     }
     return messageInfoMap;

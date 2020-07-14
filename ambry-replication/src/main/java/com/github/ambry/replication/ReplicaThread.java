@@ -890,6 +890,7 @@ public class ReplicaThread implements Runnable {
           // all the keys being processed are missing in local store.
           localMessageInfoMap = remoteReplicaInfo.getLocalStore()
               .findKeys(messageInfoList.stream()
+                  .filter(msgInfo -> !missingRemoteStoreMessages.contains(msgInfo))
                   .map(msgInfo -> (BlobId) remoteKeyToLocalKeyMap.get(msgInfo.getStoreKey()))
                   .filter(key -> key != null)
                   .collect(Collectors.toList()));
@@ -917,7 +918,8 @@ public class ReplicaThread implements Runnable {
   public void applyUpdatesToBlobInLocalStore(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo,
       BlobId localKey, MessageInfo localMessageInfo) throws StoreException {
     if (localMessageInfo == null) {
-      throw new StoreException("Key " + localKey + " not found in store.", StoreErrorCodes.ID_Not_Found);
+      throw new StoreException(String.format("Key %s not found in store.", localKey.getID()),
+          StoreErrorCodes.ID_Not_Found);
     }
     boolean deletedLocally = localMessageInfo.isDeleted();
     boolean ttlUpdatedLocally = localMessageInfo.isTtlUpdated();
