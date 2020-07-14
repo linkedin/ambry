@@ -20,7 +20,6 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
-import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -63,8 +62,6 @@ class BlobStoreStats implements StoreStats, Closeable {
   private static final int SUBTRACT = -1;
   private static final long REF_TIME_OUT_OF_BOUNDS = -1;
   private static final Logger logger = LoggerFactory.getLogger(BlobStoreStats.class);
-  private static final Comparator<IndexEntry> KEY_OFFSET_COMPARATOR =
-      Comparator.comparing(IndexEntry::getKey).thenComparing(IndexEntry::getValue);
 
   private final String storeId;
   private final PersistentIndex index;
@@ -590,20 +587,6 @@ class BlobStoreStats implements StoreStats, Closeable {
       refTimeInMs = results.logSegmentLastBucketTimeMs;
     }
     return refTimeInMs;
-  }
-
-  /**
-   * Find the original PUT that was deleted within the same index segment.
-   * @param key the {@link StoreKey} for the entry
-   * @param deleteIndexValue the {@link IndexValue} of the delete
-   * @return a copy of the original put {@link IndexValue}
-   * @throws StoreException
-   */
-  private IndexValue getPutRecordForDeletedKey(StoreKey key, IndexValue deleteIndexValue) throws StoreException {
-    BlobReadOptions originalPut = index.getBlobReadInfo(key, EnumSet.allOf(StoreGetOptions.class));
-    Offset originalPutOffset = new Offset(originalPut.getLogSegmentName(), originalPut.getOffset());
-    return new IndexValue(originalPut.getMessageInfo().getSize(), originalPutOffset, deleteIndexValue.getExpiresAtMs(),
-        deleteIndexValue.getOperationTimeInMs(), deleteIndexValue.getAccountId(), deleteIndexValue.getContainerId());
   }
 
   /**
