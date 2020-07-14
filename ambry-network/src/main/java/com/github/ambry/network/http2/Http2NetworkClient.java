@@ -96,7 +96,7 @@ public class Http2NetworkClient implements NetworkClient {
       logger.warn("Number of requestsToDrop: {}", requestsToDrop.size());
       http2ClientMetrics.http2RequestsToDropCount.inc(requestsToDrop.size());
       for (int correlationId : requestsToDrop) {
-        Channel streamChannel = correlationIdInFlightToChannelMap.get(correlationId);
+        Channel streamChannel = correlationIdInFlightToChannelMap.remove(correlationId);
         if (streamChannel != null) {
           logger.warn("Drop request on streamChannel: {}", streamChannel);
           RequestInfo requestInfo = releaseAndCloseStreamChannel(streamChannel);
