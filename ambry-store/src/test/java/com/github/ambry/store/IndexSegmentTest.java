@@ -31,6 +31,7 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
@@ -157,20 +158,20 @@ public class IndexSegmentTest {
     MockId id3 = new MockId("2" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    short updateVersion = 0;
+    short lifeVersion = 0;
     IndexValue value1 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.milliseconds(),
-            accountId, containerId, updateVersion, formatVersion);
+            accountId, containerId, lifeVersion, formatVersion);
     IndexValue value2 = IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 1000), time.milliseconds() + 1,
-        time.milliseconds(), accountId, containerId, updateVersion, formatVersion);
+        time.milliseconds(), accountId, containerId, lifeVersion, formatVersion);
     IndexValue value3 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 2000), Utils.Infinite_Time, time.milliseconds(),
-            accountId, containerId, updateVersion, formatVersion);
+            accountId, containerId, lifeVersion, formatVersion);
     time.sleep(TimeUnit.SECONDS.toMillis(1));
     // generate a TTL Update
     IndexValue ttlUpValue2 =
         IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), Utils.Infinite_Time, time.milliseconds(),
-            value2.getAccountId(), value2.getContainerId(), updateVersion, formatVersion);
+            value2.getAccountId(), value2.getContainerId(), lifeVersion, formatVersion);
     ttlUpValue2.setNewOffset(new Offset(logSegmentName, 3000));
     ttlUpValue2.setNewSize(50);
     ttlUpValue2.setFlag(IndexValue.Flags.Ttl_Update_Index);
@@ -178,7 +179,7 @@ public class IndexSegmentTest {
     // generate a DELETE
     IndexValue delValue2 = IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), ttlUpValue2.getFlags(),
         value2.getExpiresAtMs(), value2.getOffset().getOffset(), time.milliseconds(), value2.getAccountId(),
-        value2.getContainerId(), updateVersion, formatVersion);
+        value2.getContainerId(), lifeVersion, formatVersion);
     delValue2.setNewOffset(new Offset(logSegmentName, 3050));
     delValue2.setNewSize(100);
     delValue2.setFlag(IndexValue.Flags.Delete_Index);
@@ -256,21 +257,21 @@ public class IndexSegmentTest {
     MockId id3 = new MockId("2" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    short updateVersion = (short) 0;
+    short lifeVersion = (short) 0;
     IndexValue value1 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.milliseconds(),
-            accountId, containerId, updateVersion, formatVersion);
+            accountId, containerId, lifeVersion, formatVersion);
     IndexValue value2 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 1000), Utils.Infinite_Time, time.milliseconds(),
-            accountId, containerId, updateVersion, formatVersion);
+            accountId, containerId, lifeVersion, formatVersion);
     IndexValue value3 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 2000), Utils.Infinite_Time, time.milliseconds(),
-            accountId, containerId, updateVersion, formatVersion);
+            accountId, containerId, lifeVersion, formatVersion);
     time.sleep(TimeUnit.SECONDS.toMillis(1));
     // generate a TTL Update
     IndexValue ttlUpValue2 =
         IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), Utils.Infinite_Time, time.milliseconds(),
-            value2.getAccountId(), value2.getContainerId(), updateVersion, formatVersion);
+            value2.getAccountId(), value2.getContainerId(), lifeVersion, formatVersion);
     ttlUpValue2.setNewOffset(new Offset(logSegmentName, 3000));
     ttlUpValue2.setNewSize(50);
     ttlUpValue2.setFlag(IndexValue.Flags.Ttl_Update_Index);
@@ -278,7 +279,7 @@ public class IndexSegmentTest {
     // generate a DELETE
     IndexValue delValue2 = IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), ttlUpValue2.getFlags(),
         value2.getExpiresAtMs(), value2.getOffset().getOffset(), time.milliseconds(), value2.getAccountId(),
-        value2.getContainerId(), updateVersion, formatVersion);
+        value2.getContainerId(), lifeVersion, formatVersion);
     delValue2.setNewOffset(new Offset(logSegmentName, 3050));
     delValue2.setNewSize(100);
     delValue2.setFlag(IndexValue.Flags.Delete_Index);
@@ -446,8 +447,7 @@ public class IndexSegmentTest {
             : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
     IndexSegment indexSegment1 =
         new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName1, 0), STORE_KEY_FACTORY,
-            KEY_SIZE + indexValueSize, indexValueSize, config,
-            metrics, time);
+            KEY_SIZE + indexValueSize, indexValueSize, config, metrics, time);
     Random random = new Random();
     short accountId1 = getRandomShort(random);
     short containerId1 = getRandomShort(random);
@@ -484,8 +484,7 @@ public class IndexSegmentTest {
     String logSegmentName2 = LogSegmentNameHelper.getName(1, 0);
     IndexSegment indexSegment2 =
         new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName2, 0), STORE_KEY_FACTORY,
-            KEY_SIZE + indexValueSize, indexValueSize,
-            storeConfig, metrics, time);
+            KEY_SIZE + indexValueSize, indexValueSize, storeConfig, metrics, time);
     indexSegment2.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName2, 1000));
     indexSegment2.writeIndexSegmentToFile(new Offset(logSegmentName2, 1000));
     indexSegment2.seal();
@@ -533,6 +532,168 @@ public class IndexSegmentTest {
       assertEquals("Error code is not expected.", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
     } finally {
       assertTrue("Could not make writable", tempDir.setWritable(true));
+    }
+  }
+
+  /**
+   * Test Iterator and ListIterator of index segment.
+   * @throws Exception
+   */
+  @Test
+  public void iteratorTest() throws Exception {
+    String logSegmentName = LogSegmentNameHelper.getName(0, 0);
+    MockId id1 = new MockId("0" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id2 = new MockId("1" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id3 = new MockId("2" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id4 = new MockId("3" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    short lifeVersion = (short) 0;
+    IndexValue value1 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.milliseconds(),
+            accountId, containerId, lifeVersion, formatVersion);
+    IndexValue value2 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 1000), Utils.Infinite_Time, time.milliseconds(),
+            accountId, containerId, lifeVersion, formatVersion);
+    IndexValue value3 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 2000), Utils.Infinite_Time, time.milliseconds(),
+            accountId, containerId, lifeVersion, formatVersion);
+    time.sleep(TimeUnit.SECONDS.toMillis(1));
+    // generate a TTL Update
+    IndexValue ttlUpValue2 =
+        IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), Utils.Infinite_Time, time.milliseconds(),
+            value2.getAccountId(), value2.getContainerId(), lifeVersion, formatVersion);
+    ttlUpValue2.setNewOffset(new Offset(logSegmentName, 3000));
+    ttlUpValue2.setNewSize(50);
+    ttlUpValue2.setFlag(IndexValue.Flags.Ttl_Update_Index);
+    time.sleep(TimeUnit.SECONDS.toMillis(1));
+    // generate a DELETE
+    IndexValue delValue2 = IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), ttlUpValue2.getFlags(),
+        value2.getExpiresAtMs(), value2.getOffset().getOffset(), time.milliseconds(), value2.getAccountId(),
+        value2.getContainerId(), lifeVersion, formatVersion);
+    delValue2.setNewOffset(new Offset(logSegmentName, 3050));
+    delValue2.setNewSize(100);
+    delValue2.setFlag(IndexValue.Flags.Delete_Index);
+    // generate an UNDELETE
+    IndexValue undeleteValue1 =
+        IndexValueTest.getIndexValue(value1.getSize(), value1.getOffset(), value1.getFlags(), value1.getExpiresAtMs(),
+            value1.getOffset().getOffset(), time.milliseconds(), value1.getAccountId(), value1.getContainerId(),
+            (short) (lifeVersion + 1), formatVersion);
+    undeleteValue1.setNewOffset(new Offset(logSegmentName, 3150));
+    undeleteValue1.setNewSize(100);
+    undeleteValue1.setFlag(IndexValue.Flags.Undelete_Index);
+    // generate a delete
+    IndexValue delValue3 =
+        IndexValueTest.getIndexValue(value3.getSize(), value3.getOffset(), value3.getFlags(), value3.getExpiresAtMs(),
+            value3.getOffset().getOffset(), time.milliseconds(), value3.getAccountId(), value3.getContainerId(),
+            lifeVersion, formatVersion);
+    delValue3.setNewOffset(new Offset(logSegmentName, 3250));
+    delValue3.setNewSize(100);
+    delValue3.setFlag(IndexValue.Flags.Delete_Index);
+
+    // generate a undelete for delValue3, this will be added to index segment while iterating through the index entries.
+    IndexValue undeleteValue3 =
+        IndexValueTest.getIndexValue(value3.getSize(), value3.getOffset(), value3.getFlags(), value3.getExpiresAtMs(),
+            value1.getOffset().getOffset(), time.milliseconds(), value3.getAccountId(), value3.getContainerId(),
+            (short) (lifeVersion + 1), formatVersion);
+    undeleteValue3.setNewOffset(new Offset(logSegmentName, 3350));
+    undeleteValue3.setNewSize(100);
+    undeleteValue3.setFlag(IndexValue.Flags.Undelete_Index);
+
+    IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), STORE_KEY_FACTORY);
+    // inserting in the opposite order by design to ensure that writes are based on offset ordering and not key ordering
+    indexSegment.addEntry(new IndexEntry(id3, value1), new Offset(logSegmentName, 1000));
+    indexSegment.addEntry(new IndexEntry(id2, value2), new Offset(logSegmentName, 2000));
+    indexSegment.addEntry(new IndexEntry(id1, value3), new Offset(logSegmentName, 3000));
+    indexSegment.addEntry(new IndexEntry(id2, ttlUpValue2), new Offset(logSegmentName, 3050));
+    indexSegment.addEntry(new IndexEntry(id2, delValue2), new Offset(logSegmentName, 3150));
+    indexSegment.addEntry(new IndexEntry(id3, undeleteValue1), new Offset(logSegmentName, 3250));
+    indexSegment.addEntry(new IndexEntry(id1, delValue3), new Offset(logSegmentName, 3350));
+
+    // This is a unseal index segment.
+    List<IndexEntry> expectedEntries = new ArrayList<>();
+    expectedEntries.add(new IndexEntry(id1, value3));
+    expectedEntries.add(new IndexEntry(id1, delValue3));
+    expectedEntries.add(new IndexEntry(id2, value2));
+    expectedEntries.add(new IndexEntry(id2, ttlUpValue2));
+    expectedEntries.add(new IndexEntry(id2, delValue2));
+    expectedEntries.add(new IndexEntry(id3, value1));
+    expectedEntries.add(new IndexEntry(id3, undeleteValue1));
+    // Conduct two rounds of tests, first round will change the obtained index entry and add a new entry.
+    for (int i = 0; i < 2; i++) {
+      if (i == 1) {
+        expectedEntries.add(2, new IndexEntry(id1, undeleteValue3));
+      }
+      Iterator<IndexEntry> segmentIter = indexSegment.iterator();
+      Iterator<IndexEntry> listIter = expectedEntries.iterator();
+      boolean newEntryAdded = false;
+      while (listIter.hasNext()) {
+        assertTrue(segmentIter.hasNext());
+        IndexEntry expected = listIter.next();
+        IndexEntry obtained = segmentIter.next();
+        assertIndexEntryEquals(expected, obtained);
+
+        // First round, change the obtained index entries and add a new entry.
+        if (i == 0) {
+          // Modify the obtained index entry, make sure it doesn't affect index segment.
+          obtained.getValue().setNewSize(0);
+          if (!newEntryAdded) {
+            // Adding new entries to index segment since this is not sealed. make sure it doesn't affect the iterator.
+            newEntryAdded = true;
+            indexSegment.addEntry(new IndexEntry(id1, undeleteValue3), new Offset(logSegmentName, 3450));
+          }
+        }
+      }
+      assertFalse(segmentIter.hasNext());
+    }
+    IndexValue value4 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 3450), Utils.Infinite_Time, time.milliseconds(),
+            accountId, containerId, lifeVersion, formatVersion);
+
+    // Now test list iterator
+    for (int i = 0; i < 2; i++) {
+      if (i == 1) {
+        expectedEntries.add(new IndexEntry(id4, value4));
+      }
+      assertEquals(expectedEntries.size(), indexSegment.size());
+      ListIterator<IndexEntry> segmentListIter = indexSegment.listIterator(indexSegment.size());
+      ListIterator<IndexEntry> listListIter = expectedEntries.listIterator(expectedEntries.size());
+      boolean newEntryAdded = false;
+      while (listListIter.hasPrevious()) {
+        assertTrue(segmentListIter.hasPrevious());
+        IndexEntry expected = listListIter.previous();
+        IndexEntry obtained = segmentListIter.previous();
+        assertIndexEntryEquals(expected, obtained);
+
+        if (i == 0 && !newEntryAdded) {
+          newEntryAdded = true;
+          indexSegment.addEntry(new IndexEntry(id4, value4), new Offset(logSegmentName, 4450));
+        }
+      }
+      assertFalse(segmentListIter.hasPrevious());
+    }
+    indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, 4450));
+    indexSegment.seal();
+
+    // Now it's sealed, no entries will be added.
+    assertEquals(expectedEntries.size(), indexSegment.size());
+    Iterator<IndexEntry> segmentIter = indexSegment.iterator();
+    Iterator<IndexEntry> listIter = expectedEntries.iterator();
+    while (listIter.hasNext()) {
+      assertTrue(segmentIter.hasNext());
+      IndexEntry expected = listIter.next();
+      IndexEntry obtained = segmentIter.next();
+      assertIndexEntryEquals(expected, obtained);
+    }
+
+    ListIterator<IndexEntry> segmentListIter = indexSegment.listIterator(indexSegment.size());
+    ListIterator<IndexEntry> listListIter = expectedEntries.listIterator(expectedEntries.size());
+    boolean newEntryAdded = false;
+    while (listListIter.hasPrevious()) {
+      assertTrue(segmentListIter.hasPrevious());
+      IndexEntry expected = listListIter.previous();
+      IndexEntry obtained = segmentListIter.previous();
+      assertIndexEntryEquals(expected, obtained);
     }
   }
 
@@ -1206,6 +1367,21 @@ public class IndexSegmentTest {
         endOffset, lastModifiedTimeInMs, resetKey);
     // journal should not contain any entries
     assertNull("Journal should not have any entries", journal.getFirstOffset());
+  }
+
+  /**
+   * Assert two {@link IndexEntry} are equal
+   * @param expected the expected {@link IndexEntry}.
+   * @param obtained the {@link IndexEntry} to check against {@code expected}.
+   */
+  private void assertIndexEntryEquals(IndexEntry expected, IndexEntry obtained) {
+    assertEquals(expected.getKey(), obtained.getKey());
+    assertEquals(expected.getValue().getOffset(), obtained.getValue().getOffset());
+    assertEquals(expected.getValue().getSize(), obtained.getValue().getSize());
+    assertEquals(expected.getValue().getFlags(), obtained.getValue().getFlags());
+    assertEquals(expected.getValue().getExpiresAtMs(), obtained.getValue().getExpiresAtMs());
+    assertEquals(expected.getValue().getOperationTimeInMs(), obtained.getValue().getOperationTimeInMs());
+    assertEquals(expected.getValue().getOriginalMessageOffset(), obtained.getValue().getOriginalMessageOffset());
   }
 
   /**
