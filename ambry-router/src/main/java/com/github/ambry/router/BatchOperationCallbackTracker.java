@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.Callback;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;

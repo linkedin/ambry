@@ -403,8 +403,6 @@ public class HelixAccountService extends AbstractAccountService implements Accou
         } else if (entry.getKey().startsWith("A")) {
           nonEmptyContainersByAccount.putIfAbsent(entry.getKey(), new HashSet<>());
           searchNonEmptyContainers(nonEmptyContainersByAccount, entry.getValue(), entry.getKey());
-        } else {
-          searchNonEmptyContainers(nonEmptyContainersByAccount, entry.getValue(), null);
         }
       }
     }

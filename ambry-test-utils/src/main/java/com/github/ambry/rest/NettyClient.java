@@ -14,7 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.commons.SSLFactory;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.FutureResult;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;

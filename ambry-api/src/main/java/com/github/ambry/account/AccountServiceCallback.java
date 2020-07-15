@@ -13,7 +13,7 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.server.StatsSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

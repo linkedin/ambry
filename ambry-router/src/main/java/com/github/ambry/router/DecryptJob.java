@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.Callback;
 import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;

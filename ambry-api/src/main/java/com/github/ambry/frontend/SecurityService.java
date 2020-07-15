@@ -16,7 +16,7 @@ package com.github.ambry.frontend;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.FutureResult;
 import java.io.Closeable;
 import java.util.concurrent.Future;

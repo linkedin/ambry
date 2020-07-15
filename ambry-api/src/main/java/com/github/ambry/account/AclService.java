@@ -14,7 +14,7 @@
 
 package com.github.ambry.account;
 
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import java.io.Closeable;
 
 

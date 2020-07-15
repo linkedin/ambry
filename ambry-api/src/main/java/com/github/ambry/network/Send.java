@@ -14,7 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 import java.io.IOException;

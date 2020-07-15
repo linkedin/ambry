@@ -17,7 +17,7 @@ import com.github.ambry.commons.PerformanceIndex;
 import com.github.ambry.commons.Thresholds;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
