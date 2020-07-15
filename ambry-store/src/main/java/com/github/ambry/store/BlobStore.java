@@ -949,6 +949,7 @@ public class BlobStore implements Store {
         messageInfoMap.put(storeKey, findKey(storeKey));
       } catch (StoreException e) {
         logger.error("findKey failed for key {} with reason {}", storeKey.getID(), e.getErrorCode().toString());
+        throw e;
       }
     }
     return messageInfoMap;
