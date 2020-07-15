@@ -71,6 +71,7 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
         .frameLogger(new Http2FrameLogger(LogLevel.DEBUG, "client"))
         .build());
     pipeline.addLast(new Http2MultiplexHandler(new ChannelInboundHandlerAdapter()));
+    pipeline.addLast(connectionInboundExceptionHandler);
   }
 
   @ChannelHandler.Sharable
@@ -79,8 +80,8 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
       if (cause instanceof Http2Exception.StreamException) {
-        // This usually happens when server returns response which from a dropped request.
-        logger.info(cause.getMessage());
+        // This usually happens when server returns response for a request which was already dropped.
+        logger.info("StreamException: {}", cause.getMessage());
       } else {
         logger.warn("Connection inbound exception:", cause);
       }

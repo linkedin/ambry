@@ -99,6 +99,9 @@ public class Http2NetworkClient implements NetworkClient {
         Channel streamChannel = correlationIdInFlightToChannelMap.remove(correlationId);
         if (streamChannel != null) {
           logger.warn("Drop request on streamChannel: {}", streamChannel);
+          // Drop a request triggers exception on writeAndFlush failure or Http2ClientResponseHandler.exceptionCaught()
+          // We can't release a stream channel twice because a stream counter is maintained per physical channel, but we
+          // could add multiple ResponseInfos for same RequestInfo, because router will ignore these after the first one.
           RequestInfo requestInfo = releaseAndCloseStreamChannel(streamChannel);
           if (requestInfo != null) {
             readyResponseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.TimeoutError, null));
@@ -128,7 +131,7 @@ public class Http2NetworkClient implements NetworkClient {
               streamChannel.attr(REQUEST_INFO).set(requestInfo);
               if (!streamChannel.isWritable() || !streamChannel.parent().isWritable()) {
                 http2ClientMetrics.http2StreamNotWritableCount.inc();
-                logger.warn("Stream {} {} not writable. BytesBeforeWritable {} {}", streamChannel.hashCode(),
+                logger.debug("Stream {} {} not writable. BytesBeforeWritable {} {}", streamChannel.hashCode(),
                     streamChannel, streamChannel.bytesBeforeWritable(), streamChannel.parent().bytesBeforeWritable());
               }
               streamChannel.writeAndFlush(requestInfo.getRequest()).addListener(new ChannelFutureListener() {
@@ -142,14 +145,16 @@ public class Http2NetworkClient implements NetworkClient {
                     requestInfo.setStreamSendTime(System.currentTimeMillis());
                     if (writeAndFlushUsedTime > http2ClientConfig.http2WriteAndFlushTimeoutMs) {
                       // This usually happens if remote can't accept data in time.
-                      logger.warn(
+                      logger.debug(
                           "WriteAndFlush exceeds http2RequestTimeoutMs {}ms, used time: {}ms, stream channel {}",
                           http2ClientConfig.http2WriteAndFlushTimeoutMs, writeAndFlushUsedTime, streamChannel);
                       if (http2ClientConfig.http2DropRequestOnWriteAndFlushTimeout) {
-                        releaseAndCloseStreamChannel(streamChannel);
-                        http2ClientResponseHandler.getResponseInfoQueue()
-                            .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
-                        // Don't need to call requestInfo.getRequest().release(), because netty write handler decreases refcnt.
+                        RequestInfo requestInfoFromChannelAttr = releaseAndCloseStreamChannel(streamChannel);
+                        if (requestInfoFromChannelAttr != null) {
+                          http2ClientResponseHandler.getResponseInfoQueue()
+                              .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
+                          // Don't need to call requestInfo.getRequest().release(), because netty write handler decreases refcnt.
+                        }
                       }
                     }
                     // When success, handler would release the request.
@@ -157,13 +162,11 @@ public class Http2NetworkClient implements NetworkClient {
                     http2ClientMetrics.http2StreamWriteAndFlushErrorCount.inc();
                     logger.warn("Stream {} {} writeAndFlush fail. Cause: ", streamChannel.hashCode(), streamChannel,
                         future.cause());
-                    // Set attribute null and close stream. It's possible that exception was fired on parent channel close
-                    // and triggered releaseAndCloseStreamChannel before, but it's tolerable to call releaseAndCloseStreamChannel
-                    // again as streamChannel close happen in event loop. No impact to main flow.
-                    // For netty 4.1.42.Final, streamChannel can be close twice without any exception.
-                    releaseAndCloseStreamChannel(streamChannel);
-                    http2ClientResponseHandler.getResponseInfoQueue()
-                        .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
+                    RequestInfo requestInfoFromChannelAttr = releaseAndCloseStreamChannel(streamChannel);
+                    if (requestInfoFromChannelAttr != null) {
+                      http2ClientResponseHandler.getResponseInfoQueue()
+                          .put(new ResponseInfo(requestInfoFromChannelAttr, NetworkClientErrorCode.NetworkError, null));
+                    }
                     if (!(future.cause() instanceof ClosedChannelException)) {
                       // If it's ClosedChannelException caused by drop request, it's probably refCnt has been decreased.
                       // TODO: a round solution is needed.
