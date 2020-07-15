@@ -911,7 +911,12 @@ public class BlobStore implements Store {
     }
   }
 
-  @Override
+  /**
+   * Return {@link MessageInfo} of given key. This method will only be used in replication thread.
+   * @param key The key of which blob to return {@link MessageInfo}.
+   * @return The {@link MessageInfo}.
+   * @throws StoreException
+   */
   public MessageInfo findKey(StoreKey key) throws StoreException {
     checkStarted();
     final Timer.Context context = metrics.findKeyResponse.time();
@@ -932,6 +937,22 @@ public class BlobStore implements Store {
     } finally {
       context.stop();
     }
+  }
+
+  @Override
+  public Map<StoreKey, MessageInfo> findKeys(List<? extends StoreKey> storeKeys) throws StoreException {
+    Map<StoreKey, MessageInfo> messageInfoMap = new HashMap<>();
+    for (StoreKey storeKey : storeKeys) {
+      // TODO: Need to look into the possibility if its more efficient to not call findKey() multiple times in a loop,
+      // and instead search the index once for all the blobs in the list.
+      try {
+        messageInfoMap.put(storeKey, findKey(storeKey));
+      } catch (StoreException e) {
+        logger.error("findKey failed for key {} with reason {}", storeKey.getID(), e.getErrorCode().toString());
+        throw e;
+      }
+    }
+    return messageInfoMap;
   }
 
   @Override

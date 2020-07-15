@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.replication.FindToken;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 
@@ -95,12 +96,14 @@ public interface Store {
   Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException;
 
   /**
-   * Return {@link MessageInfo} of given key. This method will only be used in replication thread.
-   * @param key The key of which blob to return {@link MessageInfo}.
-   * @return The {@link MessageInfo}.
+   * Return a {@link Map} of {@code storeKeys} to {@link MessageInfo} of the keys.
+   * This method will only be used in replication thread, and the map returned will contain message infos for only those
+   * keys that are found in the local store.
+   * @param storeKeys The list of keys for which to return {@link MessageInfo}s.
+   * @return The {@link Map} of key to {@link MessageInfo}.
    * @throws StoreException
    */
-  MessageInfo findKey(StoreKey key) throws StoreException;
+  Map<StoreKey, MessageInfo> findKeys(List<? extends StoreKey> storeKeys) throws StoreException;
 
   /**
    * Get the corresponding {@link StoreStats} instance for this store.
