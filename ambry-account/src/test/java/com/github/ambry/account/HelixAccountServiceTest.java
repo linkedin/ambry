@@ -14,7 +14,6 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.HelixClusterAggregator;
 import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
@@ -59,7 +58,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.Mockito;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.AccountTestUtils.*;
@@ -110,6 +108,7 @@ public class HelixAccountServiceTest {
   private MockHelixAccountServiceFactory mockHelixAccountServiceFactory;
   private Router mockRouter;
   private boolean useNewZNodePath;
+
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(new Object[][]{{false}, {true}});
@@ -204,10 +203,10 @@ public class HelixAccountServiceTest {
   }
 
   /**
-   * Tests select INVALID {@link Container}s from DELETE_IN_PROGRESS {@link Container}s.
+   * Tests select INACTIVE {@link Container}s from DELETE_IN_PROGRESS {@link Container}s.
    */
   @Test
-  public void testSelectInvalidContainer() throws Exception {
+  public void testSelectInactiveContainer() throws Exception {
     //generates store stats
     int accountCount = 1;
     int containerCount = 3;
@@ -215,7 +214,7 @@ public class HelixAccountServiceTest {
         generateStoreStats(accountCount, containerCount, random, StatsReportType.ACCOUNT_REPORT);
 
     // a set that records the account ids that have already been taken.
-    Set accountIdSet = new HashSet<>();
+    Set<Short> accountIdSet = new HashSet<>();
     // generate a single reference account and container that can be referenced by refAccount and refContainer respectively.
     refAccountId = Utils.getRandomShort(random);
     accountIdSet.add(refAccountId);
@@ -246,8 +245,9 @@ public class HelixAccountServiceTest {
       accountId++;
     }
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 4, true);
-    Set<Container> invalidContainerSet = ((HelixAccountService) accountService).selectInactiveContainerCandidates(statsSnapshot);
-    assertTrue("Mismatch in container Set after detect", expectContainerSet.equals(invalidContainerSet));
+    Set<Container> inactiveContainerSet =
+        ((HelixAccountService) accountService).selectInactiveContainerCandidates(statsSnapshot);
+    assertTrue("Mismatch in container Set after detect", expectContainerSet.equals(inactiveContainerSet));
   }
 
   /**

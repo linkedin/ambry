@@ -106,7 +106,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void participate(List<AmbryHealthReport> ambryHealthReports, Callback<StatsSnapshot> callback) throws IOException {
+  public void participate(List<AmbryHealthReport> ambryHealthReports, Callback<StatsSnapshot> callback)
+      throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
@@ -421,7 +422,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * corresponding {@link HelixHealthReportAggregatorTask}s.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
-  private void registerHealthReportTasks(StateMachineEngine engine, List<AmbryHealthReport> healthReports, Callback<StatsSnapshot> callback) {
+  private void registerHealthReportTasks(StateMachineEngine engine, List<AmbryHealthReport> healthReports,
+      Callback<StatsSnapshot> callback) {
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
     for (final AmbryHealthReport healthReport : healthReports) {
       if (healthReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {
@@ -433,7 +435,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
               public Task createNewTask(TaskCallbackContext context) {
                 return new HelixHealthReportAggregatorTask(context, healthReport.getAggregateIntervalInMinutes(),
                     healthReport.getReportName(), healthReport.getStatsFieldName(), healthReport.getStatsReportType(),
-                    callback);
+                    callback, clusterMapConfig);
               }
             });
       }

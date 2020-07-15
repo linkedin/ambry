@@ -15,6 +15,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.commons.Callback;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
@@ -51,6 +52,7 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
   private final String healthReportName;
   private final String statsFieldName;
   private final StatsReportType statsReportType;
+  private final ClusterMapConfig clusterMapConfig;
   public final Callback<StatsSnapshot> callback;
   private static final Logger logger = LoggerFactory.getLogger(HelixHealthReportAggregatorTask.class);
 
@@ -63,15 +65,18 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
    * @param statsFieldName Stats field name
    * @param statsReportType the type of stats report
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
+   * @param clusterMapConfig the {@link ClusterMapConfig} associated with helix participant.
    */
   HelixHealthReportAggregatorTask(TaskCallbackContext context, long relevantTimePeriodInMs, String healthReportName,
-      String statsFieldName, StatsReportType statsReportType, Callback<StatsSnapshot> callback) {
+      String statsFieldName, StatsReportType statsReportType, Callback<StatsSnapshot> callback,
+      ClusterMapConfig clusterMapConfig) {
     manager = context.getManager();
     clusterAggregator = new HelixClusterAggregator(relevantTimePeriodInMs);
     this.healthReportName = healthReportName;
     this.statsFieldName = statsFieldName;
     this.statsReportType = statsReportType;
     this.callback = callback;
+    this.clusterMapConfig = clusterMapConfig;
   }
 
   @Override
@@ -106,7 +111,8 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
       exception = e;
       return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
     } finally {
-      if (callback != null && results != null && statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
+      if (clusterMapConfig.clustermapEnableContainerDeletionAggregation && callback != null && results != null
+          && statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
         callback.onCompletion(results.getFirst(), exception);
       }
     }
