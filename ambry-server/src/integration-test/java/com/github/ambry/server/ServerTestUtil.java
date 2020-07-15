@@ -85,7 +85,7 @@ import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.replication.FindTokenFactory;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.NonBlockingRouterFactory;

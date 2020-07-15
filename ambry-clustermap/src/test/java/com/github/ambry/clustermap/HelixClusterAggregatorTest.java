@@ -19,6 +19,7 @@ import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.TestUtils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -59,7 +60,7 @@ public class HelixClusterAggregatorTest {
     for (StatsReportType type : EnumSet.of(StatsReportType.ACCOUNT_REPORT, StatsReportType.PARTITION_CLASS_REPORT)) {
       List<StatsSnapshot> storeSnapshots = new ArrayList<>();
       for (int i = 3; i < 6; i++) {
-        storeSnapshots.add(generateStoreStats(i, 3, random, type));
+        storeSnapshots.add(TestUtils.generateStoreStats(i, 3, random, type));
       }
       StatsWrapper nodeStats = generateNodeStats(storeSnapshots, DEFAULT_TIMESTAMP, type);
       String nodeStatsJSON = mapper.writeValueAsString(nodeStats);
@@ -84,7 +85,8 @@ public class HelixClusterAggregatorTest {
       // 1. Aggregate all snapshots into the first snapshot in snapshots list. The intention is to get expected aggregated snapshot.
       // 2. Then invoke clusterAggregator to do work on stats across all instances.
       // 3. Verify both raw stats and valid stats after aggregation
-      Pair<String, String> aggregatedRawAndValidStats = clusterAggregator.doWork(instanceToStatsMap, type);
+      Pair<StatsSnapshot, StatsSnapshot> aggregatedRawAndValidStats =
+          clusterAggregator.doWork(instanceToStatsMap, type);
 
       StatsSnapshot expectedSnapshot = null;
       switch (type) {
@@ -103,7 +105,8 @@ public class HelixClusterAggregatorTest {
       }
 
       // Verify cluster wide raw stats aggregation
-      StatsSnapshot rawSnapshot = mapper.readValue(aggregatedRawAndValidStats.getFirst(), StatsSnapshot.class);
+      StatsSnapshot rawSnapshot =
+          mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getFirst()), StatsSnapshot.class);
       assertEquals("Mismatch in total value of " + type, nodeCount * expectedSnapshot.getValue(),
           rawSnapshot.getValue());
       if (type == StatsReportType.ACCOUNT_REPORT) {
@@ -113,7 +116,8 @@ public class HelixClusterAggregatorTest {
       }
 
       // Verify cluster wide stats aggregation
-      StatsSnapshot actualSnapshot = mapper.readValue(aggregatedRawAndValidStats.getSecond(), StatsSnapshot.class);
+      StatsSnapshot actualSnapshot =
+          mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getSecond()), StatsSnapshot.class);
       assertTrue("Mismatch in the aggregated snapshot", expectedSnapshot.equals(actualSnapshot));
       // Verify aggregator keeps track of instances where exception occurred.
       assertEquals("Mismatch in instances where exception occurred", Collections.singletonList(EXCEPTION_INSTANCE_NAME),
@@ -135,10 +139,12 @@ public class HelixClusterAggregatorTest {
     // storeSnapshots1 only has 2 store stats. storeSnapshots2 and storeSnapshots2Copy have 3 store stats each.
     for (int i = 3; i < 6; i++) {
       if (i < 5) {
-        storeSnapshots1.add(generateStoreStats(i, 3, new Random(seed), StatsReportType.PARTITION_CLASS_REPORT));
+        storeSnapshots1.add(
+            TestUtils.generateStoreStats(i, 3, new Random(seed), StatsReportType.PARTITION_CLASS_REPORT));
       }
-      storeSnapshots2.add(generateStoreStats(i, 3, new Random(seed), StatsReportType.PARTITION_CLASS_REPORT));
-      storeSnapshots2Copy.add(generateStoreStats(i, 3, new Random(seed), StatsReportType.PARTITION_CLASS_REPORT));
+      storeSnapshots2.add(TestUtils.generateStoreStats(i, 3, new Random(seed), StatsReportType.PARTITION_CLASS_REPORT));
+      storeSnapshots2Copy.add(
+          TestUtils.generateStoreStats(i, 3, new Random(seed), StatsReportType.PARTITION_CLASS_REPORT));
     }
     StatsWrapper nodeStatsWrapper1 =
         generateNodeStats(storeSnapshots1, DEFAULT_TIMESTAMP, StatsReportType.PARTITION_CLASS_REPORT);
@@ -150,7 +156,7 @@ public class HelixClusterAggregatorTest {
     instanceStatsMap.put("Instance_1", mapper.writeValueAsString(nodeStatsWrapper1));
     instanceStatsMap.put("Instance_2", mapper.writeValueAsString(nodeStatsWrapper2));
 
-    Pair<String, String> aggregatedRawAndValidStats =
+    Pair<StatsSnapshot, StatsSnapshot> aggregatedRawAndValidStats =
         clusterAggregator.doWork(instanceStatsMap, StatsReportType.PARTITION_CLASS_REPORT);
 
     // verify aggregation on raw data
@@ -158,13 +164,15 @@ public class HelixClusterAggregatorTest {
     StatsSnapshot.aggregate(expectedRawSnapshot, nodeStatsWrapper1.getSnapshot());
     StatsSnapshot.aggregate(expectedRawSnapshot, nodeStatsWrapper2Copy.getSnapshot());
     expectedRawSnapshot = HelixClusterAggregator.reduceByPartitionClass(expectedRawSnapshot);
-    StatsSnapshot rawSnapshot = mapper.readValue(aggregatedRawAndValidStats.getFirst(), StatsSnapshot.class);
+    StatsSnapshot rawSnapshot =
+        mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getFirst()), StatsSnapshot.class);
     assertTrue("Mismatch in the raw data aggregated snapshot", expectedRawSnapshot.equals(rawSnapshot));
 
     // verify aggregation on valid data
     StatsSnapshot expectedValidsnapshot =
         HelixClusterAggregator.reduceByPartitionClass(nodeStatsWrapper2.getSnapshot());
-    StatsSnapshot validSnapshot = mapper.readValue(aggregatedRawAndValidStats.getSecond(), StatsSnapshot.class);
+    StatsSnapshot validSnapshot =
+        mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getSecond()), StatsSnapshot.class);
     assertTrue("Mismatch in the valid data aggregated snapshot", expectedValidsnapshot.equals(validSnapshot));
   }
 
@@ -178,8 +186,8 @@ public class HelixClusterAggregatorTest {
     for (StatsReportType type : EnumSet.of(StatsReportType.ACCOUNT_REPORT, StatsReportType.PARTITION_CLASS_REPORT)) {
       List<StatsSnapshot> upToDateStoreSnapshots = new ArrayList<>();
       List<StatsSnapshot> outdatedStoreSnapshots = new ArrayList<>();
-      upToDateStoreSnapshots.add(generateStoreStats(5, 3, new Random(seed), type));
-      outdatedStoreSnapshots.add(generateStoreStats(6, 3, new Random(seed), type));
+      upToDateStoreSnapshots.add(TestUtils.generateStoreStats(5, 3, new Random(seed), type));
+      outdatedStoreSnapshots.add(TestUtils.generateStoreStats(6, 3, new Random(seed), type));
       StatsWrapper upToDateNodeStats =
           generateNodeStats(upToDateStoreSnapshots, TimeUnit.MINUTES.toMillis(2 * RELEVANT_PERIOD_IN_MINUTES), type);
       StatsWrapper outdatedNodeStats = generateNodeStats(outdatedStoreSnapshots, 0, type);
@@ -190,7 +198,8 @@ public class HelixClusterAggregatorTest {
       instanceToStatsMap.put("Instance_1", mapper.writeValueAsString(upToDateNodeStats));
       instanceToStatsMap.put("Instance_2", mapper.writeValueAsString(emptyNodeStats));
       instanceToStatsMap.put(EXCEPTION_INSTANCE_NAME, "");
-      Pair<String, String> aggregatedRawAndValidStats = clusterAggregator.doWork(instanceToStatsMap, type);
+      Pair<StatsSnapshot, StatsSnapshot> aggregatedRawAndValidStats =
+          clusterAggregator.doWork(instanceToStatsMap, type);
       StatsSnapshot expectedValidSnapshot = null;
       StatsSnapshot expectedRawSnapshot = new StatsSnapshot(0L, new HashMap<>());
       switch (type) {
@@ -208,11 +217,13 @@ public class HelixClusterAggregatorTest {
       }
 
       // verify cluster wide aggregation on raw stats with outdated node stats
-      StatsSnapshot rawSnapshot = mapper.readValue(aggregatedRawAndValidStats.getFirst(), StatsSnapshot.class);
+      StatsSnapshot rawSnapshot =
+          mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getFirst()), StatsSnapshot.class);
       assertTrue("Mismatch in the aggregated raw snapshot", expectedRawSnapshot.equals(rawSnapshot));
 
       // verify cluster wide aggregation on valid stats with outdated node stats
-      StatsSnapshot actualSnapshot = mapper.readValue(aggregatedRawAndValidStats.getSecond(), StatsSnapshot.class);
+      StatsSnapshot actualSnapshot =
+          mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getSecond()), StatsSnapshot.class);
       assertTrue("Mismatch in the aggregated valid snapshot", expectedValidSnapshot.equals(actualSnapshot));
 
       // verify aggregator keeps track of instances where exception occurred.
@@ -232,9 +243,9 @@ public class HelixClusterAggregatorTest {
       List<StatsSnapshot> greaterStoreSnapshots = new ArrayList<>();
       List<StatsSnapshot> smallerStoreSnapshots = new ArrayList<>();
       List<StatsSnapshot> mediumStoreSnapshots = new ArrayList<>();
-      greaterStoreSnapshots.add(generateStoreStats(6, 3, new Random(seed), type));
-      mediumStoreSnapshots.add(generateStoreStats(5, 3, new Random(seed), type));
-      smallerStoreSnapshots.add(generateStoreStats(5, 3, new Random(seed), type));
+      greaterStoreSnapshots.add(TestUtils.generateStoreStats(6, 3, new Random(seed), type));
+      mediumStoreSnapshots.add(TestUtils.generateStoreStats(5, 3, new Random(seed), type));
+      smallerStoreSnapshots.add(TestUtils.generateStoreStats(5, 3, new Random(seed), type));
       StatsWrapper greaterNodeStats = generateNodeStats(greaterStoreSnapshots, DEFAULT_TIMESTAMP, type);
       StatsWrapper mediumNodeStats = generateNodeStats(mediumStoreSnapshots, DEFAULT_TIMESTAMP, type);
       StatsWrapper smallerNodeStats = generateNodeStats(smallerStoreSnapshots, DEFAULT_TIMESTAMP, type);
@@ -245,7 +256,8 @@ public class HelixClusterAggregatorTest {
       instanceToStatsMap.put("Instance_2", mapper.writeValueAsString(mediumNodeStats));
       instanceToStatsMap.put("Instance_3", mapper.writeValueAsString(emptyNodeStats));
       instanceToStatsMap.put(EXCEPTION_INSTANCE_NAME, "");
-      Pair<String, String> aggregatedRawAndValidStats = clusterAggregator.doWork(instanceToStatsMap, type);
+      Pair<StatsSnapshot, StatsSnapshot> aggregatedRawAndValidStats =
+          clusterAggregator.doWork(instanceToStatsMap, type);
 
       StatsSnapshot expectedRawSnapshot = new StatsSnapshot(0L, new HashMap<>());
       StatsSnapshot expectedValidSnapshot = null;
@@ -266,11 +278,13 @@ public class HelixClusterAggregatorTest {
       }
 
       // verify cluster wide aggregation on raw data with different node stats
-      StatsSnapshot rawSnapshot = mapper.readValue(aggregatedRawAndValidStats.getFirst(), StatsSnapshot.class);
+      StatsSnapshot rawSnapshot =
+          mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getFirst()), StatsSnapshot.class);
       assertTrue("Mismatch in the raw aggregated snapshot for " + type, expectedRawSnapshot.equals(rawSnapshot));
 
       // verify cluster wide aggregation on valid data with different node stats
-      StatsSnapshot actualSnapshot = mapper.readValue(aggregatedRawAndValidStats.getSecond(), StatsSnapshot.class);
+      StatsSnapshot actualSnapshot =
+          mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getSecond()), StatsSnapshot.class);
       assertTrue("Mismatch in the valid aggregated snapshot for " + type, expectedValidSnapshot.equals(actualSnapshot));
 
       // verify aggregator keeps track of instances where exception occurred.
@@ -293,10 +307,13 @@ public class HelixClusterAggregatorTest {
       for (int i = 0; i < nodeCount; i++) {
         instanceToStatsMap.put("Instance_" + i, emptyStatsJSON);
       }
-      Pair<String, String> aggregatedRawAndValidStats = clusterAggregator.doWork(instanceToStatsMap, type);
+      Pair<StatsSnapshot, StatsSnapshot> aggregatedRawAndValidStats =
+          clusterAggregator.doWork(instanceToStatsMap, type);
       StatsSnapshot expectedSnapshot = new StatsSnapshot(0L, null);
-      StatsSnapshot rawSnapshot = mapper.readValue(aggregatedRawAndValidStats.getFirst(), StatsSnapshot.class);
-      StatsSnapshot validSnapshot = mapper.readValue(aggregatedRawAndValidStats.getSecond(), StatsSnapshot.class);
+      StatsSnapshot rawSnapshot =
+          mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getFirst()), StatsSnapshot.class);
+      StatsSnapshot validSnapshot =
+          mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getSecond()), StatsSnapshot.class);
       assertTrue("Mismatch in raw snapshot", expectedSnapshot.equals(rawSnapshot));
       assertTrue("Mismatch in valid snapshot", expectedSnapshot.equals(validSnapshot));
     }
@@ -340,40 +357,6 @@ public class HelixClusterAggregatorTest {
         new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, timestamp, numbOfPartitions, numbOfPartitions,
             Collections.emptyList());
     return new StatsWrapper(header, nodeSnapshot);
-  }
-
-  /**
-   * Generate certain type of {@link StatsSnapshot} based on the given parameters that would have been produced by a
-   * {@link com.github.ambry.store.Store}.
-   * @param accountCount number of account entry in the {@link StatsSnapshot}
-   * @param containerCount number of container entry in the {@link StatsSnapshot}
-   * @param random the random generator to be used
-   * @param type the type of stats report to be generated for the store
-   * @return the generated store level {@link StatsSnapshot}
-   */
-  private StatsSnapshot generateStoreStats(int accountCount, int containerCount, Random random, StatsReportType type) {
-    Map<String, StatsSnapshot> subMap = new HashMap<>();
-    long totalSize = 0;
-    for (int i = 0; i < accountCount; i++) {
-      String accountIdStr = "Account[" + i + "]";
-      Map<String, StatsSnapshot> containerMap = new HashMap<>();
-      long subTotalSize = 0;
-      for (int j = 0; j < containerCount; j++) {
-        String containerIdStr = "Container[" + j + "]";
-        long validSize = random.nextInt(2501) + 500;
-        subTotalSize += validSize;
-        if (type == StatsReportType.ACCOUNT_REPORT) {
-          containerMap.put(containerIdStr, new StatsSnapshot(validSize, null));
-        } else if (type == StatsReportType.PARTITION_CLASS_REPORT) {
-          subMap.put(accountIdStr + "_" + containerIdStr, new StatsSnapshot(validSize, null));
-        }
-      }
-      totalSize += subTotalSize;
-      if (type == StatsReportType.ACCOUNT_REPORT) {
-        subMap.put(accountIdStr, new StatsSnapshot(subTotalSize, containerMap));
-      }
-    }
-    return new StatsSnapshot(totalSize, subMap);
   }
 
   /**

@@ -17,7 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;

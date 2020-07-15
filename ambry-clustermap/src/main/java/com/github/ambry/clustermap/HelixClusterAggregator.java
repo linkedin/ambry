@@ -48,12 +48,12 @@ public class HelixClusterAggregator {
    * @param statsWrappersJSON a {@link Map} of instance name to JSON string representation of {@link StatsWrapper} objects from the
    *                          node level
    * @param type the type of stats report to be aggregated, which is defined in {@link StatsReportType}
-   * @return a {@link Pair} of Strings whose values represents aggregated stats across all partitions.
+   * @return a {@link Pair} of StatsSnapshot whose values represents aggregated stats across all partitions.
    * First element is the raw (sum) aggregated stats and second element is valid aggregated stats for all replicas
    * for each partition.
    * @throws IOException
    */
-  Pair<String, String> doWork(Map<String, String> statsWrappersJSON, StatsReportType type) throws IOException {
+  Pair<StatsSnapshot, StatsSnapshot> doWork(Map<String, String> statsWrappersJSON, StatsReportType type) throws IOException {
     StatsSnapshot partitionSnapshot = new StatsSnapshot(0L, new HashMap<>());
     Map<String, Long> partitionTimestampMap = new HashMap<>();
     StatsSnapshot rawPartitionSnapshot = new StatsSnapshot(0L, new HashMap<>());
@@ -105,7 +105,7 @@ public class HelixClusterAggregator {
       logger.trace("Reduced raw snapshot {}", mapper.writeValueAsString(reducedRawSnapshot));
       logger.trace("Reduced valid snapshot {}", mapper.writeValueAsString(reducedSnapshot));
     }
-    return new Pair<>(mapper.writeValueAsString(reducedRawSnapshot), mapper.writeValueAsString(reducedSnapshot));
+    return new Pair<>(reducedRawSnapshot, reducedSnapshot);
   }
 
   /**

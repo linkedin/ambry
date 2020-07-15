@@ -273,6 +273,13 @@ public class ClusterMapConfig {
   @Config(CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES)
   public final long clustermapMaxDiskCapacityInBytes;
 
+  /**
+   * True to enable aggregation phase for container deletion.
+   */
+  @Config("clustermap.enable.container.deletion.aggregation")
+  @Default("false")
+  public final boolean clustermapEnableContainerDeletionAggregation;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -330,5 +337,7 @@ public class ClusterMapConfig {
     clustermapMaxDiskCapacityInBytes =
         verifiableProperties.getLongInRange(CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES, 20L * 1024 * 1024 * 1024 * 1024, 0,
             Long.MAX_VALUE);
+    clustermapEnableContainerDeletionAggregation =
+        verifiableProperties.getBoolean("clustermap.enable.container.deletion.aggregation", false);
   }
 }

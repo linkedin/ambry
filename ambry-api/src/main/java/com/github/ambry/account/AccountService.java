@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.server.StatsSnapshot;
 import java.io.Closeable;
 import java.util.Collection;
 import java.util.HashSet;
@@ -119,5 +120,9 @@ public interface AccountService extends Closeable {
       }
     }
     return selectedContainers;
+  }
+
+  default void selectInactiveContainersAndMarkInZK(StatsSnapshot statsSnapshot) {
+    throw new UnsupportedOperationException("This method is not supported");
   }
 }

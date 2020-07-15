@@ -51,7 +51,7 @@ import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;

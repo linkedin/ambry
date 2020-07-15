@@ -15,7 +15,7 @@ package com.github.ambry.messageformat;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MockId;
 import com.github.ambry.store.MockIdFactory;

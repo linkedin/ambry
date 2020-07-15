@@ -13,7 +13,6 @@
  */
 package com.github.ambry.commons;
 
-import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.io.InputStream;

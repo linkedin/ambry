@@ -15,7 +15,7 @@
 package com.github.ambry.server;
 
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.FutureResult;
 import java.io.Closeable;
 import java.util.concurrent.Future;

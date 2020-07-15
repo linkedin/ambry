@@ -14,7 +14,9 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.commons.Callback;
 import com.github.ambry.server.AmbryHealthReport;
+import com.github.ambry.server.StatsSnapshot;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
@@ -30,9 +32,10 @@ public interface ClusterParticipant extends AutoCloseable {
   /**
    * Initiate the participation of cluster participant.
    * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
+   * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    * @throws IOException
    */
-  void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException;
+  void participate(List<AmbryHealthReport> ambryHealthReports, Callback<StatsSnapshot> callback) throws IOException;
 
   /**
    * Set or reset the sealed state of the given replica.

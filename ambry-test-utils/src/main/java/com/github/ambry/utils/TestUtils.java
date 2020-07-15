@@ -13,6 +13,8 @@
  */
 package com.github.ambry.utils;
 
+import com.github.ambry.server.StatsReportType;
+import com.github.ambry.server.StatsSnapshot;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,7 +23,9 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -420,5 +424,39 @@ public class TestUtils {
     }
     return true;
   }
-}
 
+  /**
+   * Generate certain type of {@link StatsSnapshot} based on the given parameters that would have been produced by a
+   * {@link com.github.ambry.store.Store}.
+   * @param accountCount number of account entry in the {@link StatsSnapshot}
+   * @param containerCount number of container entry in the {@link StatsSnapshot}
+   * @param random the random generator to be used
+   * @param type the type of stats report to be generated for the store
+   * @return the generated store level {@link StatsSnapshot}
+   */
+  public static StatsSnapshot generateStoreStats(int accountCount, int containerCount, Random random,
+      StatsReportType type) {
+    Map<String, StatsSnapshot> subMap = new HashMap<>();
+    long totalSize = 0;
+    for (int i = 0; i < accountCount; i++) {
+      String accountIdStr = "A[" + i + "]";
+      Map<String, StatsSnapshot> containerMap = new HashMap<>();
+      long subTotalSize = 0;
+      for (int j = 0; j < containerCount; j++) {
+        String containerIdStr = "C[" + j + "]";
+        long validSize = random.nextInt(2501) + 500;
+        subTotalSize += validSize;
+        if (type == StatsReportType.ACCOUNT_REPORT) {
+          containerMap.put(containerIdStr, new StatsSnapshot(validSize, null));
+        } else if (type == StatsReportType.PARTITION_CLASS_REPORT) {
+          subMap.put(accountIdStr + "_" + containerIdStr, new StatsSnapshot(validSize, null));
+        }
+      }
+      totalSize += subTotalSize;
+      if (type == StatsReportType.ACCOUNT_REPORT) {
+        subMap.put(accountIdStr, new StatsSnapshot(subTotalSize, containerMap));
+      }
+    }
+    return new StatsSnapshot(totalSize, subMap);
+  }
+}

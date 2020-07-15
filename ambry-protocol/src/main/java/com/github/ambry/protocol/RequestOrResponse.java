@@ -15,7 +15,7 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.network.SendWithCorrelationId;
 import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;

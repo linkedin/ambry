@@ -14,7 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;

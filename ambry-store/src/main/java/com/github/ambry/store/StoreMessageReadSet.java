@@ -16,7 +16,7 @@ package com.github.ambry.store;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;

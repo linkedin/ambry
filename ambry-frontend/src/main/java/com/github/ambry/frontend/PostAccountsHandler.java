@@ -25,7 +25,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import java.util.Collection;
 import java.util.GregorianCalendar;
 import org.json.JSONException;

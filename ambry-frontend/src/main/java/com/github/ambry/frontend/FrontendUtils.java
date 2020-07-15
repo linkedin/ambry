@@ -19,7 +19,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.CallbackUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.AsyncOperationTracker;

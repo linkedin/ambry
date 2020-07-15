@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
@@ -176,7 +177,7 @@ public class ParticipantsConsistencyTest {
     }
 
     @Override
-    public void participate(List<AmbryHealthReport> ambryHealthReports) {
+    public void participate(List<AmbryHealthReport> ambryHealthReports, Callback<StatsSnapshot> callback) {
     }
 
     @Override

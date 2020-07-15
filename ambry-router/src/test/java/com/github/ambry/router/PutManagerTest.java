@@ -22,6 +22,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobId.BlobDataType;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;

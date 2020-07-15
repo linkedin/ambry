@@ -35,7 +35,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.io.InputStream;

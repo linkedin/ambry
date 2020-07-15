@@ -19,7 +19,7 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;

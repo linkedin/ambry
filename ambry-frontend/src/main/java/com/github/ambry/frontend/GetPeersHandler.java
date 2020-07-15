@@ -22,7 +22,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.SystemTime;
 import java.util.GregorianCalendar;

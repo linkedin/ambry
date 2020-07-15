@@ -14,7 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.router.Callback;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;

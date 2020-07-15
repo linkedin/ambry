@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.router;
+package com.github.ambry.commons;
 
 /**
  * A callback interface that the user can implement to allow code to execute when the request is complete. This callback

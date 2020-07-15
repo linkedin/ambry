@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.jmx.JmxReporter;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceCallback;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -63,6 +64,7 @@ import com.github.ambry.rest.NettyMetrics;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -305,8 +307,9 @@ public class AmbryServer {
       if (vcrClusterSpectator != null) {
         vcrClusterSpectator.spectate();
       }
+      Callback<StatsSnapshot> accountServiceCallback = new AccountServiceCallback(accountService);
       for (ClusterParticipant clusterParticipant : clusterParticipants) {
-        clusterParticipant.participate(ambryHealthReports);
+        clusterParticipant.participate(ambryHealthReports, accountServiceCallback);
       }
 
       logger.info("started");
