@@ -1357,11 +1357,11 @@ class PutOperation {
         requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
         if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
-          logger.debug("Making request with correlationId {} to a remote replica {} in {} ", correlationId,
+          logger.debug("Making request with correlationId {} to a remote replica {} in {}", correlationId,
               replicaId.getDataNodeId(), replicaId.getDataNodeId().getDatacenterName());
           routerMetrics.crossColoRequestCount.inc();
         } else {
-          logger.trace("Making request with correlationId {} to a local replica {} ", correlationId,
+          logger.trace("Making request with correlationId {} to a local replica {}", correlationId,
               replicaId.getDataNodeId());
         }
         routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestRate.mark();
