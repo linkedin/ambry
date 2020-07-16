@@ -682,7 +682,7 @@ public class HelixBootstrapUpgradeToolTest {
     String path = PARTITION_DISABLED_ZNODE_PATH + getInstanceName(removedReplica.getDataNodeId());
     assertTrue("ZNode is not found for disabled partition node.",
         helixPropertyStore.exists(path, AccessOption.PERSISTENT));
-    helixPropertyStore.close();
+    helixPropertyStore.stop();
 
     // unblock HelixBootstrapTool
     blockRemovingNodeLatch.countDown();

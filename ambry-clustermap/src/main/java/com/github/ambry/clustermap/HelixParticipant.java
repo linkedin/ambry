@@ -456,7 +456,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       Thread.sleep(clusterMapConfig.clustermapRetryDisablePartitionCompletionBackoffMs);
       logger.info("{} th attempt on checking the completion of disabling partition.", ++count);
     }
-    helixPropertyStore.close();
+    helixPropertyStore.stop();
   }
 
   /**

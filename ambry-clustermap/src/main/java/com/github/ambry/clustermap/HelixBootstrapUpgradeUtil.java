@@ -690,7 +690,7 @@ public class HelixBootstrapUpgradeUtil {
       if (!helixPropertyStore.set(adminConfigZNodePath, znRecord, AccessOption.PERSISTENT)) {
         logger.error("Failed to upload {} infos for datacenter {}", clusterAdminType, entry.getKey());
       }
-      helixPropertyStore.close();
+      helixPropertyStore.stop();
     }
   }
 
@@ -710,7 +710,7 @@ public class HelixBootstrapUpgradeUtil {
       if (!helixPropertyStore.remove(adminConfigZNodePath, AccessOption.PERSISTENT)) {
         logger.error("Failed to remove {} infos from datacenter {}", clusterAdminType, entry.getKey());
       }
-      helixPropertyStore.close();
+      helixPropertyStore.stop();
     }
   }
 
@@ -1102,7 +1102,7 @@ public class HelixBootstrapUpgradeUtil {
               instanceName, dcName);
         }
       }
-      helixPropertyStore.close();
+      helixPropertyStore.stop();
     }
 
     // Add what is not already in Helix under new resources.
