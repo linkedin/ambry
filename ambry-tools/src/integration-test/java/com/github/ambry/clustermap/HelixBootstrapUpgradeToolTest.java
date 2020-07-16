@@ -643,8 +643,24 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-
-    // Before disabling partition, let's attempt to update InstanceConfig via HelixParticipant, which should be blocked
+    // make bootstrap tool blocked by count down latch before removing znodes for disabling partitions
+    blockRemovingNodeLatch = new CountDownLatch(1);
+    disablePartitionLatch = new CountDownLatch(activeDcSet.size());
+    CountDownLatch bootstrapCompletionLatch = new CountDownLatch(1);
+    Utils.newThread(() -> {
+      try {
+        // Upgrade Helix by updating IdealState: AdminOperation = DisablePartition
+        HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+            CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DisablePartition);
+        bootstrapCompletionLatch.countDown();
+      } catch (Exception e) {
+        // do nothing, if there is any exception subsequent test should fail.
+      }
+    }, false).start();
+    assertTrue("Disable partition latch didn't come down within 5 seconds",
+        disablePartitionLatch.await(5, TimeUnit.SECONDS));
+    // Let's attempt to update InstanceConfig via HelixParticipant, which should be blocked
     CountDownLatch updateCompletionLatch = new CountDownLatch(1);
     Utils.newThread(() -> {
       helixParticipant.updateDataNodeInfoInCluster(removedReplica, false);
@@ -652,17 +668,26 @@ public class HelixBootstrapUpgradeToolTest {
     }, false).start();
     // sleep 100 ms to ensure updateDataNodeInfoInCluster is blocked due to disabling partition hasn't completed yet
     Thread.sleep(100);
-    // Ensure the InstanceConfig hasn't changed
+    // Ensure the InstanceConfig still has the replica
     InstanceConfig currentInstanceConfig =
         admin.getInstanceConfig(clusterName, getInstanceName(removedReplica.getDataNodeId()));
-    assertEquals("InstanceConfig should stay unchanged", previousInstanceConfig.getRecord(),
-        currentInstanceConfig.getRecord());
+    verifyReplicaInfoInInstanceConfig(currentInstanceConfig, removedReplica, true);
 
-    // Upgrade Helix by updating IdealState: AdminOperation = DisablePartition
-    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DisablePartition);
+    // verify the znode is created for the node on which partition has been disabled.
+    Properties properties = new Properties();
+    properties.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
+    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(properties));
+    HelixPropertyStore<ZNRecord> helixPropertyStore =
+        CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig, null);
+    String path = PARTITION_DISABLED_ZNODE_PATH + getInstanceName(removedReplica.getDataNodeId());
+    assertTrue("ZNode is not found for disabled partition node.",
+        helixPropertyStore.exists(path, AccessOption.PERSISTENT));
+    helixPropertyStore.close();
 
+    // unblock HelixBootstrapTool
+    blockRemovingNodeLatch.countDown();
+    // waiting for bootstrap tool to complete
+    assertTrue("Helix tool didn't complete within 5 seconds", bootstrapCompletionLatch.await(5, TimeUnit.SECONDS));
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
     assertTrue("Helix participant didn't complete update within 5 seconds",
         updateCompletionLatch.await(5, TimeUnit.SECONDS));
@@ -697,17 +722,6 @@ public class HelixBootstrapUpgradeToolTest {
         currentInstanceConfig.getRecord().getMapField(disabledPartitionStr));
     // verify the removed replica is no longer in InstanceConfig
     verifyReplicaInfoInInstanceConfig(currentInstanceConfig, removedReplica, false);
-
-    // verify the znode is created for the node on which partition has been disabled.
-    Properties properties = new Properties();
-    properties.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
-    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(properties));
-    HelixPropertyStore<ZNRecord> helixPropertyStore =
-        CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig, null);
-    String path = PARTITION_DISABLED_ZNODE_PATH + getInstanceName(removedReplica.getDataNodeId());
-    assertTrue("ZNode is not found for disabled partition node.",
-        helixPropertyStore.exists(path, AccessOption.PERSISTENT));
-    helixPropertyStore.close();
   }
 
   /**

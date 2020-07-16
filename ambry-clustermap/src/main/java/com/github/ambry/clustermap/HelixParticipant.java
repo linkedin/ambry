@@ -451,11 +451,12 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         CommonUtils.createHelixPropertyStore(zkConnectStr, propertyStoreConfig, null);
     String path = PARTITION_DISABLED_ZNODE_PATH + instanceName;
     int count = 1;
-    while (!helixPropertyStore.exists(path, AccessOption.PERSISTENT)) {
+    while (helixPropertyStore.exists(path, AccessOption.PERSISTENT)) {
       // Thread.sleep() pauses the current thread but does not release any locks
       Thread.sleep(clusterMapConfig.clustermapRetryDisablePartitionCompletionBackoffMs);
       logger.info("{} th attempt on checking the completion of disabling partition.", ++count);
     }
+    helixPropertyStore.close();
   }
 
   /**

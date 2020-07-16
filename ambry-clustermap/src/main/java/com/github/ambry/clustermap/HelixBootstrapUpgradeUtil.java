@@ -108,6 +108,9 @@ public class HelixBootstrapUpgradeUtil {
   static final int DEFAULT_MAX_PARTITIONS_PER_RESOURCE = 100;
   static final String HELIX_DISABLED_PARTITION_STR =
       InstanceConfig.InstanceConfigProperty.HELIX_DISABLED_PARTITION.name();
+  // blockRemovingNodeLatch is for testing purpose
+  static CountDownLatch blockRemovingNodeLatch = null;
+  static CountDownLatch disablePartitionLatch = null;
   private final StaticClusterManager staticClusterMap;
   private final String zkLayoutPath;
   private final String stateModelDef;
@@ -687,6 +690,7 @@ public class HelixBootstrapUpgradeUtil {
       if (!helixPropertyStore.set(adminConfigZNodePath, znRecord, AccessOption.PERSISTENT)) {
         logger.error("Failed to upload {} infos for datacenter {}", clusterAdminType, entry.getKey());
       }
+      helixPropertyStore.close();
     }
   }
 
@@ -706,6 +710,7 @@ public class HelixBootstrapUpgradeUtil {
       if (!helixPropertyStore.remove(adminConfigZNodePath, AccessOption.PERSISTENT)) {
         logger.error("Failed to remove {} infos from datacenter {}", clusterAdminType, entry.getKey());
       }
+      helixPropertyStore.close();
     }
   }
 
@@ -970,7 +975,9 @@ public class HelixBootstrapUpgradeUtil {
   private void addUpdateResources(String dcName, Map<String, Set<String>> partitionsToInstancesInDc) {
     HelixAdmin dcAdmin = adminForDc.get(dcName);
     List<String> resourcesInCluster = dcAdmin.getResourcesInCluster(clusterName);
-    List<InstanceConfig> instancesWithDisabledPartition = new ArrayList<>();
+    List<String> instancesWithDisabledPartition = new ArrayList<>();
+    HelixPropertyStore<ZNRecord> helixPropertyStore =
+        helixAdminOperation == HelixAdminOperation.DisablePartition ? createHelixPropertyStore(dcName) : null;
     // maxResource may vary from one dc to another (special partition class allows partitions to exist in one dc only)
     int maxResource = -1;
     for (String resourceName : resourcesInCluster) {
@@ -1036,9 +1043,20 @@ public class HelixBootstrapUpgradeUtil {
                   resourceName, instanceInHelixOnly, dryRun ? "No action as dry run" : "Disabling it");
               if (!dryRun) {
                 InstanceConfig instanceConfig = dcAdmin.getInstanceConfig(clusterName, instanceInHelixOnly);
+                String instanceName = instanceConfig.getInstanceName();
+                // create a Znode (if not present) for this instance before disabling partition
+                if (!instancesWithDisabledPartition.contains(instanceName)) {
+                  ZNRecord znRecord = new ZNRecord(instanceName);
+                  String path = PARTITION_DISABLED_ZNODE_PATH + instanceName;
+                  if (!helixPropertyStore.create(path, znRecord, AccessOption.PERSISTENT)) {
+                    logger.error("Failed to create a ZNode for {} in datacenter {} before disabling partition.",
+                        instanceName, dcName);
+                    continue;
+                  }
+                }
                 instanceConfig.setInstanceEnabledForPartition(resourceName, partitionName, false);
                 dcAdmin.setInstanceConfig(clusterName, instanceInHelixOnly, instanceConfig);
-                instancesWithDisabledPartition.add(instanceConfig);
+                instancesWithDisabledPartition.add(instanceName);
               }
               // note that disabling partition also updates InstanceConfig of certain node which hosts the partition.
               instancesUpdated.getAndIncrement();
@@ -1075,22 +1093,16 @@ public class HelixBootstrapUpgradeUtil {
       }
     }
     // if there are some partitions are disabled, mark whole disabling process complete in Helix PropertyStore
-    if (helixAdminOperation == HelixAdminOperation.DisablePartition && !instancesWithDisabledPartition.isEmpty()) {
-      // create znode under admin configs
-      Properties storeProps = new Properties();
-      storeProps.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
-      HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
-      String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
-      HelixPropertyStore<ZNRecord> helixPropertyStore =
-          CommonUtils.createHelixPropertyStore(zkConnectStr, propertyStoreConfig, null);
-      for (InstanceConfig instanceConfig : instancesWithDisabledPartition) {
-        ZNRecord znRecord = new ZNRecord(instanceConfig.getInstanceName());
-        String path = PARTITION_DISABLED_ZNODE_PATH + instanceConfig.getInstanceName();
-        if (!helixPropertyStore.create(path, znRecord, AccessOption.PERSISTENT)) {
-          logger.error("Failed to create a ZNode to mark disabling partition complete for {} in datacenter {}.",
-              instanceConfig.getHostName(), dcName);
+    if (helixPropertyStore != null) {
+      maybeAwaitForLatch();
+      for (String instanceName : instancesWithDisabledPartition) {
+        String path = PARTITION_DISABLED_ZNODE_PATH + instanceName;
+        if (!helixPropertyStore.remove(path, AccessOption.PERSISTENT)) {
+          logger.error("Failed to remove a ZNode for {} in datacenter {} after disabling partition completed.",
+              instanceName, dcName);
         }
       }
+      helixPropertyStore.close();
     }
 
     // Add what is not already in Helix under new resources.
@@ -1126,6 +1138,20 @@ public class HelixBootstrapUpgradeUtil {
       }
       resourcesAdded.getAndIncrement();
     }
+  }
+
+  /**
+   * Create a {@link HelixPropertyStore} for given datacenter.
+   * @param dcName the name of datacenter
+   * @return {@link HelixPropertyStore} associated with given dc.
+   */
+  private HelixPropertyStore<ZNRecord> createHelixPropertyStore(String dcName) {
+    // create znode under admin configs
+    Properties storeProps = new Properties();
+    storeProps.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
+    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
+    String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
+    return CommonUtils.createHelixPropertyStore(zkConnectStr, propertyStoreConfig, null);
   }
 
   /**
@@ -1664,6 +1690,22 @@ public class HelixBootstrapUpgradeUtil {
   private void ensureOrThrow(boolean condition, String errStr) {
     if (!condition) {
       throw new AssertionError(errStr);
+    }
+  }
+
+  /**
+   * Exposed for testing
+   */
+  private void maybeAwaitForLatch() {
+    if (disablePartitionLatch != null) {
+      disablePartitionLatch.countDown();
+    }
+    if (blockRemovingNodeLatch != null) {
+      try {
+        blockRemovingNodeLatch.await();
+      } catch (Exception e) {
+        logger.error("Interrupted when waiting for latch ", e);
+      }
     }
   }
 
