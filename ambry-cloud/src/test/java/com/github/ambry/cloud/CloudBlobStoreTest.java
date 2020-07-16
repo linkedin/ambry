@@ -61,6 +61,8 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
@@ -81,6 +83,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.invocation.InvocationOnMock;
 
 import static com.github.ambry.cloud.CloudTestUtil.*;
 import static com.github.ambry.replication.ReplicationTest.*;
@@ -711,8 +714,17 @@ public class CloudBlobStoreTest {
     CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, operationTime, Utils.Infinite_Time, 1024, null);
     CloudStorageException retryableException =
         new CloudStorageException("Server unavailable", null, 500, true, retryDelay);
-    when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(retryableException)
-        .thenReturn(true);
+    when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class)))
+        // First call, consume inputstream and throw exception
+        .thenAnswer((invocation -> {
+          consumeStream(invocation);
+          throw retryableException;
+        }))
+        // On second call, consume stream again to make sure we can
+        .thenAnswer(invocation -> {
+          consumeStream(invocation);
+          return true;
+        });
     when(exDest.deleteBlob(any(BlobId.class), anyLong(), anyShort(), any(CloudUpdateValidator.class))).thenThrow(
         retryableException).thenReturn(true);
     when(exDest.updateBlobExpiration(any(BlobId.class), anyLong(), any(CloudUpdateValidator.class))).thenThrow(
@@ -773,6 +785,21 @@ public class CloudBlobStoreTest {
       expectedCacheHits++;
     }
     verifyCacheHits(expectedCacheLookups + expectedCacheHits, expectedCacheHits);
+  }
+
+  /**
+   * Consume the input stream passed to the uploadBlob mock invocation.
+   * @param invocation
+   * @throws IOException
+   */
+  private void consumeStream(InvocationOnMock invocation) throws IOException {
+    long size = invocation.getArgument(1);
+    InputStream inputStream = invocation.getArgument(3);
+    for (int j = 0; j < size; j++) {
+      if (inputStream.read() == -1) {
+        throw new EOFException("end of stream");
+      }
+    }
   }
 
   /**

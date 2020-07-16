@@ -283,19 +283,13 @@ class CloudBlobStore implements Store {
                 cryptoAgentFactory.getClass().getName(), encryptedSize, messageInfo.getLifeVersion());
         // If buffer was encrypted, we no longer know its size
         long bufferLen = (encryptedSize == -1) ? size : encryptedSize;
-        InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
-        uploaded = requestAgent.doWithRetries(
-            () -> cloudDestination.uploadBlob(blobId, bufferLen, blobMetadata, uploadInputStream), "Upload",
-            partitionId.toPathString());
+        uploaded = uploadWithRetries(blobId, messageBuf, bufferLen, blobMetadata);
       } else {
         // Upload blob as is
         CloudBlobMetadata blobMetadata =
             new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
                 messageInfo.getSize(), encryptionOrigin, messageInfo.getLifeVersion());
-        InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
-        uploaded =
-            requestAgent.doWithRetries(() -> cloudDestination.uploadBlob(blobId, size, blobMetadata, uploadInputStream),
-                "Upload", partitionId.toPathString());
+        uploaded = uploadWithRetries(blobId, messageBuf, size, blobMetadata);
       }
       addToCache(blobId.getID(), (short) 0, BlobState.CREATED);
       if (!uploaded && !isVcr) {
@@ -315,6 +309,25 @@ class CloudBlobStore implements Store {
             StoreErrorCodes.Already_Exist);
       }
     }
+  }
+
+  /**
+   * Upload the supplied message buffer to a blob in the cloud destination.
+   * @param blobId the {@link BlobId}.
+   * @param messageBuf the byte buffer to upload.
+   * @param bufferSize the size of the buffer.
+   * @param blobMetadata the {@link CloudBlobMetadata} for the blob.
+   * @return boolean indicating if the upload was completed.
+   * @throws CloudStorageException if the upload failed.
+   */
+  private boolean uploadWithRetries(BlobId blobId, ByteBuffer messageBuf, long bufferSize, CloudBlobMetadata blobMetadata)
+      throws CloudStorageException {
+    return requestAgent.doWithRetries(() -> {
+      // Note: reset buffer and input stream each time through the loop
+      messageBuf.rewind();
+      InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
+      return cloudDestination.uploadBlob(blobId, bufferSize, blobMetadata, uploadInputStream);
+    }, "Upload", partitionId.toPathString());
   }
 
   /**
