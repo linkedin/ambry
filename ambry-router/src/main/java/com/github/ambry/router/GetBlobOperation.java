@@ -648,8 +648,7 @@ class GetBlobOperation extends GetOperation {
     }
 
     /**
-     * Maybe process callbacks if applicable. This is a no-op for blobs that do not need
-     * any async processing. As of now, decryption is the only async processing that could happen if applicable.
+     * Process decryption callback.
      */
     protected void processCallbacks() {
       logger.trace("Processing decrypt callback stored result for data chunk {}", chunkBlobId);
