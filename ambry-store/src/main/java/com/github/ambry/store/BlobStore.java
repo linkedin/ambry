@@ -838,7 +838,7 @@ public class BlobStore implements Store {
         // we still use lifeVersion from message info here so that we can re-verify the sanity of undelete request in persistent index.
         IndexValue newUndelete = index.markAsUndeleted(info.getStoreKey(), fileSpan, null, info.getOperationTimeMs(),
             lifeVersionFromMessageInfo);
-        blobStoreStats.handleNewUndeleteEntry(newUndelete, null);
+        blobStoreStats.handleNewUndeleteEntry(newUndelete);
       }
       onSuccess();
       return revisedLifeVersion;

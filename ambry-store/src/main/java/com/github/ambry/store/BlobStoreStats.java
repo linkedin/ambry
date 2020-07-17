@@ -383,10 +383,9 @@ class BlobStoreStats implements StoreStats, Closeable {
   /**
    * Function that handles new UNDELETE after a scan to keep the current {@link ScanResults} relevant.
    * @param undeleteValue the {@link IndexValue} of the new UNDELETE
-   * @param originalPutValue the {@link IndexValue} of the original PUT that is getting deleted
    */
-  void handleNewUndeleteEntry(IndexValue undeleteValue, IndexValue originalPutValue) {
-    enqueueNewValue(undeleteValue, originalPutValue);
+  void handleNewUndeleteEntry(IndexValue undeleteValue) {
+    enqueueNewValue(undeleteValue, null);
   }
 
   /**
@@ -496,6 +495,9 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @param indexSegment the {@link IndexSegment} where the entries came from
    * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
    * @param keyFinalStates a {@link Map} of key to {@link IndexFinalState}.
+   * @param removeFromStates if {@code True}, then remove the {@link IndexFinalState} from the given map {@code keyFinalStates}
+   *                         when encountering PUT IndexValue. This method iterates through IndexValues from most recent one to
+   *                         earliest one, so PUT IndexValue is the last IndexValue for the same key.
    * @param validIndexEntryAction the action to take on each valid {@link IndexEntry} found.
    * @throws StoreException if there are problems reading the index.
    */
@@ -515,7 +517,7 @@ class BlobStoreStats implements StoreStats, Closeable {
             // This DELETE is not valid, when the final state of this storeKey is
             // 1. UNDELETE, or
             // 2. DELETE, but the current lifeVersion is not the same, or
-            // 2. TTL_UPDATE
+            // 3. TTL_UPDATE
             continue;
           }
         } else {
