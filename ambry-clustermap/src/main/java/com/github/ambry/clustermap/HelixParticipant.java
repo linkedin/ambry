@@ -14,8 +14,11 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.CommonUtils;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.HelixPropertyStoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Utils;
@@ -28,19 +31,23 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.healthcheck.HealthReportProvider;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.participant.StateMachineEngine;
+import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.task.Task;
 import org.apache.helix.task.TaskCallbackContext;
 import org.apache.helix.task.TaskConstants;
 import org.apache.helix.task.TaskFactory;
 import org.apache.helix.task.TaskStateModelFactory;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,6 +69,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private String instanceName;
   private HelixAdmin helixAdmin;
   private ReplicaSyncUpManager replicaSyncUpManager;
+  private volatile boolean disablePartitionsComplete = false;
   final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
 
   private static final Logger logger = LoggerFactory.getLogger(HelixParticipant.class);
@@ -233,9 +241,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     boolean updateResult = true;
     if (clusterMapConfig.clustermapUpdateDatanodeInfo) {
       synchronized (helixAdministrationLock) {
-        InstanceConfig instanceConfig = getInstanceConfig();
-        updateResult = shouldExist ? addNewReplicaInfo(replicaId, instanceConfig)
-            : removeOldReplicaInfo(replicaId, instanceConfig);
+        updateResult = shouldExist ? addNewReplicaInfo(replicaId) : removeOldReplicaInfo(replicaId);
       }
     }
     return updateResult;
@@ -291,23 +297,32 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
+   * Mark disablePartitionsComplete = true, this is exposed for testing only.
+   */
+  protected void markDisablePartitionComplete() {
+    disablePartitionsComplete = true;
+  }
+
+  /**
    * Add new replica info into {@link InstanceConfig} of current data node.
    * @param replicaId new replica whose info should be added into {@link InstanceConfig}.
-   * @param instanceConfig the {@link InstanceConfig} to update.
    * @return {@code true} replica info is successfully added. {@code false} otherwise.
    */
-  private boolean addNewReplicaInfo(ReplicaId replicaId, InstanceConfig instanceConfig) {
+  private boolean addNewReplicaInfo(ReplicaId replicaId) {
     boolean additionResult = true;
     String partitionName = replicaId.getPartitionId().toPathString();
     String newReplicaInfo =
         String.join(REPLICAS_STR_SEPARATOR, partitionName, String.valueOf(replicaId.getCapacityInBytes()),
             replicaId.getPartitionId().getPartitionClass()) + REPLICAS_DELIM_STR;
+    InstanceConfig instanceConfig = getInstanceConfig();
     Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
     Map<String, String> diskInfo = mountPathToDiskInfos.get(replicaId.getMountPath());
+    Map<String, String> diskInfoToAdd;
     boolean newReplicaInfoAdded = false;
     boolean duplicateFound = false;
     if (diskInfo != null) {
       // add replica to an existing disk (need to sort replicas by partition id)
+      diskInfoToAdd = diskInfo;
       String replicasStr = diskInfo.get(REPLICAS_STR);
       String[] replicaInfos = replicasStr.split(REPLICAS_DELIM_STR);
       StringBuilder replicasStrBuilder = new StringBuilder();
@@ -335,23 +350,21 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         newReplicaInfoAdded = true;
       }
       if (newReplicaInfoAdded) {
-        diskInfo.put(REPLICAS_STR, replicasStrBuilder.toString());
-        mountPathToDiskInfos.put(replicaId.getMountPath(), diskInfo);
+        diskInfoToAdd.put(REPLICAS_STR, replicasStrBuilder.toString());
       }
     } else {
       // add replica onto a brand new disk
+      diskInfoToAdd = new HashMap<>();
       logger.info("Adding info of new replica {} to the new disk {}", replicaId.getPartitionId().toPathString(),
           replicaId.getDiskId());
-      Map<String, String> diskInfoToAdd = new HashMap<>();
       diskInfoToAdd.put(DISK_CAPACITY_STR, Long.toString(replicaId.getDiskId().getRawCapacityInBytes()));
       diskInfoToAdd.put(DISK_STATE, AVAILABLE_STR);
       diskInfoToAdd.put(REPLICAS_STR, newReplicaInfo);
-      mountPathToDiskInfos.put(replicaId.getMountPath(), diskInfoToAdd);
       newReplicaInfoAdded = true;
     }
     if (newReplicaInfoAdded) {
       // we update InstanceConfig only when new replica info is added (skip updating if replica is already present)
-      instanceConfig.getRecord().setMapFields(mountPathToDiskInfos);
+      instanceConfig.getRecord().setMapField(replicaId.getMountPath(), diskInfoToAdd);
       logger.info("Updating config: {} in Helix by adding partition {}", instanceConfig, partitionName);
       additionResult = helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
     }
@@ -361,13 +374,23 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * Remove old/existing replica info from {@link InstanceConfig} that associates with current data node.
    * @param replicaId the {@link ReplicaId} whose info should be removed.
-   * @param instanceConfig {@link InstanceConfig} to update.
    * @return {@code true} replica info is successfully removed. {@code false} otherwise.
    */
-  private boolean removeOldReplicaInfo(ReplicaId replicaId, InstanceConfig instanceConfig) {
+  private boolean removeOldReplicaInfo(ReplicaId replicaId) {
     boolean removalResult = true;
     boolean instanceConfigUpdated = false;
     boolean replicaFound;
+    if (!disablePartitionsComplete) {
+      // block here until there is a ZNode associated with current node has been created under /PROPERTYSTORE/AdminConfig/
+      try {
+        awaitDisablingPartition();
+      } catch (InterruptedException e) {
+        logger.error("Awaiting completion of disabling partition was interrupted. ", e);
+        return false;
+      }
+      disablePartitionsComplete = true;
+    }
+    InstanceConfig instanceConfig = getInstanceConfig();
     String partitionName = replicaId.getPartitionId().toPathString();
     List<String> stoppedReplicas = instanceConfig.getRecord().getListField(STOPPED_REPLICAS_STR);
     List<String> sealedReplicas = instanceConfig.getRecord().getListField(SEALED_STR);
@@ -398,9 +421,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
           }
           // update diskInfo and MountPathToDisk map
           diskInfo.put(REPLICAS_STR, newReplicasStrBuilder.toString());
-          mountPathToDiskInfos.put(replicaId.getMountPath(), diskInfo);
           // update InstanceConfig
-          instanceConfig.getRecord().setMapFields(mountPathToDiskInfos);
+          instanceConfig.getRecord().setMapField(replicaId.getMountPath(), diskInfo);
           instanceConfigUpdated = true;
         }
       }
@@ -413,6 +435,28 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
           partitionName, instanceName);
     }
     return removalResult;
+  }
+
+  /**
+   * Wait until disabling partition process has completed. This is to avoid race condition where server and Helix may
+   * modify same InstanceConfig.
+   * TODO remove this method after migrating ambry to PropertyStore (in Helix).
+   * @throws InterruptedException
+   */
+  private void awaitDisablingPartition() throws InterruptedException {
+    Properties properties = new Properties();
+    properties.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
+    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(properties));
+    HelixPropertyStore<ZNRecord> helixPropertyStore =
+        CommonUtils.createHelixPropertyStore(zkConnectStr, propertyStoreConfig, null);
+    String path = PARTITION_DISABLED_ZNODE_PATH + instanceName;
+    int count = 1;
+    while (helixPropertyStore.exists(path, AccessOption.PERSISTENT)) {
+      // Thread.sleep() pauses the current thread but does not release any locks
+      Thread.sleep(clusterMapConfig.clustermapRetryDisablePartitionCompletionBackoffMs);
+      logger.info("{} th attempt on checking the completion of disabling partition.", ++count);
+    }
+    helixPropertyStore.stop();
   }
 
   /**

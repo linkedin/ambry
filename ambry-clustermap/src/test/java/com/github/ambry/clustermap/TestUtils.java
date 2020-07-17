@@ -23,13 +23,18 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
+import org.apache.helix.model.InstanceConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -432,6 +437,34 @@ public class TestUtils {
     jsonObject.put("partitionIdFactory", partitionCount);
     jsonObject.put("partitions", partitions);
     return jsonObject;
+  }
+
+  /**
+   * Verify updated {@link InstanceConfig}. If {@param shouldExist} is true, verify that replica is present in InstanceConfig.
+   * If false, InstanceConfig should not contain given replica info.
+   * @param instanceConfig the updated {@link InstanceConfig} to verify.
+   * @param replicaId the replica whose info should/shouldn't exist in InstanceConfig
+   * @param shouldExist whether given replica should exist in InstanceConfig.
+   */
+  public static void verifyReplicaInfoInInstanceConfig(InstanceConfig instanceConfig, ReplicaId replicaId,
+      boolean shouldExist) {
+    Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
+    Map<String, String> diskInfo = mountPathToDiskInfos.get(replicaId.getMountPath());
+    Set<String> replicasOnDisk = new HashSet<>();
+    for (String replicaInfo : diskInfo.get(REPLICAS_STR).split(REPLICAS_DELIM_STR)) {
+      replicasOnDisk.add(replicaInfo.split(REPLICAS_STR_SEPARATOR)[0]);
+    }
+    List<String> sealedList = getSealedReplicas(instanceConfig);
+    List<String> stoppedList = getStoppedReplicas(instanceConfig);
+    String partitionName = replicaId.getPartitionId().toPathString();
+    if (shouldExist) {
+      assertTrue("New replica is not found in InstanceConfig", replicasOnDisk.contains(partitionName));
+    } else {
+      assertFalse("Old replica should not exist in InstanceConfig", replicasOnDisk.contains(partitionName));
+      // make sure the replica is not present in sealed/stopped list
+      assertFalse("Old replica should not exist in sealed/stopped list",
+          sealedList.contains(partitionName) || stoppedList.contains(partitionName));
+    }
   }
 
   /**

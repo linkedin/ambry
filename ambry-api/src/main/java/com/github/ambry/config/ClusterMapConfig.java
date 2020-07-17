@@ -280,6 +280,14 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clustermapEnableContainerDeletionAggregation;
 
+  /**
+   * Time to wait before checking if disabling partition has completed. This is only used when Helix is adopted and
+   * datanode tries to remove certain replica entry from InstanceConfig.
+   * TODO remove this config after migrating ambry to PropertyStore (in Helix).
+   */
+  @Config("clustermap.retry.disable.partition.completion.backoff.ms")
+  public final int clustermapRetryDisablePartitionCompletionBackoffMs;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -339,5 +347,8 @@ public class ClusterMapConfig {
             Long.MAX_VALUE);
     clustermapEnableContainerDeletionAggregation =
         verifiableProperties.getBoolean("clustermap.enable.container.deletion.aggregation", false);
+    clustermapRetryDisablePartitionCompletionBackoffMs =
+        verifiableProperties.getIntInRange("clustermap.retry.disable.partition.completion.backoff.ms", 10 * 1000, 1,
+            Integer.MAX_VALUE);
   }
 }

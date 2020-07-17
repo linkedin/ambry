@@ -1332,8 +1332,9 @@ public class StorageManagerTest {
     private Boolean setSealStateReturnVal;
     private Boolean setStopStateReturnVal;
 
-    MockClusterParticipant() throws IOException {
+    MockClusterParticipant() {
       this(null, null);
+      markDisablePartitionComplete();
     }
 
     /**
@@ -1349,6 +1350,7 @@ public class StorageManagerTest {
               clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
       this.setSealStateReturnVal = setSealStateReturnVal;
       this.setStopStateReturnVal = setStopStateReturnVal;
+      markDisablePartitionComplete();
     }
 
     @Override
