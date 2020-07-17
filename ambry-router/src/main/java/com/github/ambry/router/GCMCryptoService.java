@@ -124,7 +124,6 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
       encrypter.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
       int outputSize = encrypter.getOutputSize(toEncrypt.readableBytes());
 
-      // stick with heap memory for now so to compare with the java.nio.ByteBuffer.
       encryptedContent = PooledByteBufAllocator.DEFAULT.ioBuffer(IVRecord_Format_V1.getIVRecordSize(iv) + outputSize);
       IVRecord_Format_V1.serializeIVRecord(encryptedContent, iv);
 
