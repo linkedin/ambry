@@ -839,7 +839,6 @@ public class ReplicaThread implements Runnable {
       DataNodeId remoteNode, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap) throws StoreException {
     long startTime = time.milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
-    Map<StoreKey, MessageInfo> localMessageInfoMap = null;
     for (MessageInfo messageInfo : messageInfoList) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       if (remoteReplicaInfo.getLocalReplicaId().getPartitionId().compareTo(blobId.getPartition()) != 0) {
@@ -881,21 +880,10 @@ public class ReplicaThread implements Runnable {
         // it is deleted in the remote store and not deleted yet locally.
 
         // if the blob is from deprecated container, then nothing needs to be done.
-        if (replicationConfig.replicationContainerDeletionEnabled && skipPredicate != null && skipPredicate.test(
-            messageInfo)) {
+        if (replicationConfig.replicationContainerDeletionEnabled && skipPredicate != null && skipPredicate.test(messageInfo)) {
           continue;
         }
-        if (localMessageInfoMap == null) {
-          // This makes sure that the potentially expensive findKeys() method isn't called for a replication loop, if
-          // all the keys being processed are missing in local store.
-          localMessageInfoMap = remoteReplicaInfo.getLocalStore()
-              .findKeys(messageInfoList.stream()
-                  .filter(msgInfo -> !missingRemoteStoreMessages.contains(msgInfo))
-                  .map(msgInfo -> (BlobId) remoteKeyToLocalKeyMap.get(msgInfo.getStoreKey()))
-                  .filter(key -> key != null)
-                  .collect(Collectors.toList()));
-        }
-        applyUpdatesToBlobInLocalStore(messageInfo, remoteReplicaInfo, localKey, localMessageInfoMap.get(localKey));
+        applyUpdatesToBlobInLocalStore(messageInfo, remoteReplicaInfo, localKey);
       }
     }
     if (replicatingFromRemoteColo) {
@@ -912,15 +900,11 @@ public class ReplicaThread implements Runnable {
    * @param messageInfo message information of the blob from remote replica
    * @param remoteReplicaInfo remote replica information
    * @param localKey local blob information
-   * @param localMessageInfo message information of the blob from the local replica
    * @throws StoreException
    */
   public void applyUpdatesToBlobInLocalStore(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo,
-      BlobId localKey, MessageInfo localMessageInfo) throws StoreException {
-    if (localMessageInfo == null) {
-      throw new StoreException(String.format("Key %s not found in store.", localKey.getID()),
-          StoreErrorCodes.ID_Not_Found);
-    }
+      BlobId localKey) throws StoreException {
+    MessageInfo localMessageInfo = remoteReplicaInfo.getLocalStore().findKey(localKey);
     boolean deletedLocally = localMessageInfo.isDeleted();
     boolean ttlUpdatedLocally = localMessageInfo.isTtlUpdated();
     short localLifeVersion = localMessageInfo.getLifeVersion();
@@ -1392,13 +1376,6 @@ public class ReplicaThread implements Runnable {
             exchangeMetadataResponse.getReceivedStoreMessagesWithUpdatesPending();
         Set<MessageInfo> receivedMessagesWithUpdatesCompleted = new HashSet<>();
 
-        Map<StoreKey, MessageInfo> localMessageInfoMap = remoteReplicaInfo.getLocalStore()
-            .findKeys(receivedStoreMessagesWithUpdatesPending.stream()
-                .map(messageInfo -> (BlobId) exchangeMetadataResponse.remoteKeyToLocalKeyMap.get(
-                    messageInfo.getStoreKey()))
-                .filter(localKey -> localKey != null)
-                .collect(Collectors.toList()));
-
         // 1. Go through messages for this replica whose keys were previously missing in local store and are now received
         // (via other replica threads) and compare the message infos with message infos of keys in local store to apply
         // updates to them (if needed) to reconcile delete, ttl_update and undelete states.
@@ -1406,8 +1383,7 @@ public class ReplicaThread implements Runnable {
           BlobId localStoreKey =
               (BlobId) exchangeMetadataResponse.remoteKeyToLocalKeyMap.get(messageInfo.getStoreKey());
           if (localStoreKey != null) {
-            applyUpdatesToBlobInLocalStore(messageInfo, remoteReplicaInfo, localStoreKey,
-                localMessageInfoMap.get(localStoreKey));
+            applyUpdatesToBlobInLocalStore(messageInfo, remoteReplicaInfo, localStoreKey);
           }
           receivedMessagesWithUpdatesCompleted.add(messageInfo);
         }
