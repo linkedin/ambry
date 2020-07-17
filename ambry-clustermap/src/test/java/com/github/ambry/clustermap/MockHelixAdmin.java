@@ -403,7 +403,7 @@ public class MockHelixAdmin implements HelixAdmin {
   /**
    * @return the number of calls to the {@link #setInstanceConfig} method.
    */
-  public int getSetInstanceConfigCallCount() {
+  int getSetInstanceConfigCallCount() {
     return setInstanceConfigCallCount;
   }
 

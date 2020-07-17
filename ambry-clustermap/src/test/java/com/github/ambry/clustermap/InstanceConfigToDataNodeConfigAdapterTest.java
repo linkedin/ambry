@@ -17,7 +17,6 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.TestUtils.ZkInfo;
 import java.io.File;
 import java.nio.file.Files;

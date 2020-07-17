@@ -346,7 +346,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * Remove old/existing replica info from {@link DataNodeConfig} that associates with current data node.
    * @param replicaId the {@link ReplicaId} whose info should be removed.
-   * @param dataNodeConfig {@link DataNodeConfig} to update.
    * @return {@code true} replica info is successfully removed. {@code false} otherwise.
    */
   private boolean removeOldReplicaInfo(ReplicaId replicaId) {
@@ -378,8 +377,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       logger.info("Updating config: {} in Helix by removing partition {}", dataNodeConfig, partitionName);
       removalResult = dataNodeConfigSource.set(dataNodeConfig);
     } else {
-      logger.warn("Partition {} is not found on instance {}, skipping removing it from InstanceConfig in Helix.",
-          partitionName, instanceName);
+      logger.warn("Partition {} is not found on instance {}, skipping removing it from config in Helix.", partitionName,
+          instanceName);
     }
     return removalResult;
   }
