@@ -26,5 +26,10 @@ public enum NetworkClientErrorCode {
    * A network error was encountered.
    */
   NetworkError,
+
+  /**
+   * Request timed out.
+   */
+  TimeoutError,
 }
 

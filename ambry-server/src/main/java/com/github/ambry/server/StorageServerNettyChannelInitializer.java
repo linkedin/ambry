@@ -84,8 +84,8 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     ch.config()
         .setSendBufferSize(http2ClientConfig.nettySendBufferSize)
         .setReceiveBufferSize(http2ClientConfig.nettyReceiveBufferSize)
-        .setWriteBufferWaterMark(new WriteBufferWaterMark(http2ClientConfig.http2InitialWindowSize,
-            2 * http2ClientConfig.http2InitialWindowSize));
+        .setWriteBufferWaterMark(new WriteBufferWaterMark(http2ClientConfig.http2InitialWindowSize / 2,
+            http2ClientConfig.http2InitialWindowSize));
     // If channel handler implementations are not annotated with @Sharable, Netty creates a new instance of every class
     // in the pipeline for every connection.
     // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.

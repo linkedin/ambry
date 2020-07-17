@@ -28,6 +28,9 @@ public class Http2ClientConfig {
   public static final String HTTP2_INITIAL_WINDOW_SIZE = "http2.initial.window.size";
   public static final String NETTY_RECEIVE_BUFFER_SIZE = "netty.receive.buffer.size";
   public static final String NETTY_SEND_BUFFER_SIZE = "netty.send.buffer.size";
+  public static final String HTTP2_WRITE_AND_FLUSH_TIMEOUT_MS = "http2.write.and.flush.timeout.ms";
+  public static final String HTTP2_DROP_REQUEST_ON_WRITE_AND_FLUSH_TIMEOUT =
+      "http2.drop.request.on.write.and.flush.timeout";
   public static final String HTTP2_BLOCKING_CHANNEL_ACQUIRE_TIMEOUT_MS = "http2.blocking.channel.acquire.timeout.ms";
   public static final String HTTP2_BLOCKING_CHANNEL_SEND_TIMEOUT_MS = "http2.blocking.channel.send.timeout.ms";
   public static final String HTTP2_BLOCKING_CHANNEL_RECEIVE_TIMEOUT_MS = "http2.blocking.channel.receive.timeout.ms";
@@ -106,6 +109,20 @@ public class Http2ClientConfig {
   public final int nettySendBufferSize;
 
   /**
+   * Show warn message if waiting time longer than this threshold.
+   */
+  @Config(HTTP2_WRITE_AND_FLUSH_TIMEOUT_MS)
+  @Default("1000")
+  public final int http2WriteAndFlushTimeoutMs;
+
+  /**
+   * Drop request if waiting time longer than http2WriteAndFlushTimeoutMs.
+   */
+  @Config(HTTP2_DROP_REQUEST_ON_WRITE_AND_FLUSH_TIMEOUT)
+  @Default("false")
+  public final boolean http2DropRequestOnWriteAndFlushTimeout;
+
+  /**
    * Maximum time allowed for acquire a stream channel from http2 connection.
    */
   @Config(HTTP2_BLOCKING_CHANNEL_ACQUIRE_TIMEOUT_MS)
@@ -147,6 +164,9 @@ public class Http2ClientConfig {
 
     nettyReceiveBufferSize = verifiableProperties.getInt(NETTY_RECEIVE_BUFFER_SIZE, 1024 * 1024);
     nettySendBufferSize = verifiableProperties.getInt(NETTY_SEND_BUFFER_SIZE, 1024 * 1024);
+    http2WriteAndFlushTimeoutMs = verifiableProperties.getInt(HTTP2_WRITE_AND_FLUSH_TIMEOUT_MS, 1000);
+    http2DropRequestOnWriteAndFlushTimeout =
+        verifiableProperties.getBoolean(HTTP2_DROP_REQUEST_ON_WRITE_AND_FLUSH_TIMEOUT, false);
     http2BlockingChannelAcquireTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_ACQUIRE_TIMEOUT_MS, 1000);
     http2BlockingChannelSendTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_SEND_TIMEOUT_MS, 2000);
     http2BlockingChannelReceiveTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_RECEIVE_TIMEOUT_MS, 5000);

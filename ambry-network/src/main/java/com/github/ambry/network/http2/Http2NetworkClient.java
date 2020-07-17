@@ -20,6 +20,7 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.RequestOrResponse;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -36,9 +37,12 @@ import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.InetSocketAddress;
+import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,6 +63,7 @@ public class Http2NetworkClient implements NetworkClient {
   private final Http2ClientConfig http2ClientConfig;
   private final Http2StreamFrameToHttpObjectCodec http2StreamFrameToHttpObjectCodec;
   private final AmbrySendToHttp2Adaptor ambrySendToHttp2Adaptor;
+  private final Map<Integer, Channel> correlationIdInFlightToChannelMap;
   static final AttributeKey<RequestInfo> REQUEST_INFO = AttributeKey.newInstance("RequestInfo");
 
   public Http2NetworkClient(Http2ClientMetrics http2ClientMetrics, Http2ClientConfig http2ClientConfig,
@@ -79,17 +84,42 @@ public class Http2NetworkClient implements NetworkClient {
     this.pools = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics,
         new StreamChannelInitializer());
     this.http2ClientMetrics = http2ClientMetrics;
+    correlationIdInFlightToChannelMap = new ConcurrentHashMap<>();
   }
 
   @Override
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop,
       int pollTimeoutMs) {
-    long startTime = System.currentTimeMillis();
+
     List<ResponseInfo> readyResponseInfos = new ArrayList<>();
+    if (requestsToDrop.size() != 0) {
+      logger.warn("Number of requestsToDrop: {}", requestsToDrop.size());
+      http2ClientMetrics.http2RequestsToDropCount.inc(requestsToDrop.size());
+      for (int correlationId : requestsToDrop) {
+        Channel streamChannel = correlationIdInFlightToChannelMap.remove(correlationId);
+        if (streamChannel != null) {
+          logger.warn("Drop request on streamChannel: {}", streamChannel);
+          // Drop a request triggers exception on writeAndFlush failure or Http2ClientResponseHandler.exceptionCaught()
+          // We can't release a stream channel twice because a stream counter is maintained per physical channel, but we
+          // could add multiple ResponseInfos for same RequestInfo, because router will ignore these after the first one.
+          RequestInfo requestInfo = releaseAndCloseStreamChannel(streamChannel);
+          if (requestInfo != null) {
+            readyResponseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.TimeoutError, null));
+          }
+        }
+      }
+    }
+
+    long sendStartTime = System.currentTimeMillis();
     // Send request
     http2ClientMetrics.http2ClientSendRate.mark(requestsToSend.size());
     for (RequestInfo requestInfo : requestsToSend) {
       long streamInitiateTime = System.currentTimeMillis();
+
+      RequestOrResponse request = (RequestOrResponse) (requestInfo.getRequest());
+      long waitingTime = streamInitiateTime - request.requestCreateTime;
+      http2ClientMetrics.requestToNetworkClientLatencyMs.update(waitingTime);
+
       this.pools.get(InetSocketAddress.createUnresolved(requestInfo.getHost(), requestInfo.getPort().getPort()))
           .acquire()
           .addListener((GenericFutureListener<Future<Channel>>) future -> {
@@ -97,35 +127,51 @@ public class Http2NetworkClient implements NetworkClient {
               http2ClientMetrics.http2StreamAcquireTime.update(System.currentTimeMillis() - streamInitiateTime);
               long streamAcquiredTime = System.currentTimeMillis();
               Channel streamChannel = future.getNow();
+              correlationIdInFlightToChannelMap.put(requestInfo.getRequest().getCorrelationId(), streamChannel);
               streamChannel.attr(REQUEST_INFO).set(requestInfo);
               if (!streamChannel.isWritable() || !streamChannel.parent().isWritable()) {
                 http2ClientMetrics.http2StreamNotWritableCount.inc();
-                logger.warn("Stream {} {} not writable. BytesBeforeWritable {} {}", streamChannel.hashCode(),
+                logger.debug("Stream {} {} not writable. BytesBeforeWritable {} {}", streamChannel.hashCode(),
                     streamChannel, streamChannel.bytesBeforeWritable(), streamChannel.parent().bytesBeforeWritable());
               }
               streamChannel.writeAndFlush(requestInfo.getRequest()).addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
-                  // Listener will be notified after data is removed from ChannelOutboundBuffer (netty's send buffer)
+                  // Listener will be notified right after data is removed from ChannelOutboundBuffer (netty's send buffer)
                   // After removing from ChannelOutboundBuffer, it goes to OS send buffer.
                   if (future.isSuccess()) {
-                    http2ClientMetrics.http2StreamWriteAndFlushTime.update(
-                        System.currentTimeMillis() - streamAcquiredTime);
+                    long writeAndFlushUsedTime = System.currentTimeMillis() - streamAcquiredTime;
+                    http2ClientMetrics.http2StreamWriteAndFlushTime.update(writeAndFlushUsedTime);
                     requestInfo.setStreamSendTime(System.currentTimeMillis());
+                    if (writeAndFlushUsedTime > http2ClientConfig.http2WriteAndFlushTimeoutMs) {
+                      // This usually happens if remote can't accept data in time.
+                      logger.debug(
+                          "WriteAndFlush exceeds http2RequestTimeoutMs {}ms, used time: {}ms, stream channel {}",
+                          http2ClientConfig.http2WriteAndFlushTimeoutMs, writeAndFlushUsedTime, streamChannel);
+                      if (http2ClientConfig.http2DropRequestOnWriteAndFlushTimeout) {
+                        RequestInfo requestInfoFromChannelAttr = releaseAndCloseStreamChannel(streamChannel);
+                        if (requestInfoFromChannelAttr != null) {
+                          http2ClientResponseHandler.getResponseInfoQueue()
+                              .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
+                          // Don't need to call requestInfo.getRequest().release(), because netty write handler decreases refcnt.
+                        }
+                      }
+                    }
                     // When success, handler would release the request.
                   } else {
                     http2ClientMetrics.http2StreamWriteAndFlushErrorCount.inc();
                     logger.warn("Stream {} {} writeAndFlush fail. Cause: ", streamChannel.hashCode(), streamChannel,
                         future.cause());
-                    // Set attribute null and close stream. It's possible that exception was fired on parent channel close
-                    // and triggered releaseAndCloseStreamChannel before, but it's tolerable to call releaseAndCloseStreamChannel
-                    // again as streamChannel close happen in event loop. No impact to main flow.
-                    // For netty 4.1.42.Final, streamChannel can be close twice without any exception.
-                    releaseAndCloseStreamChannel(streamChannel);
-                    http2ClientResponseHandler.getResponseInfoQueue()
-                        .put(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
-                    // release related bytebuf
-                    requestInfo.getRequest().release();
+                    RequestInfo requestInfoFromChannelAttr = releaseAndCloseStreamChannel(streamChannel);
+                    if (requestInfoFromChannelAttr != null) {
+                      http2ClientResponseHandler.getResponseInfoQueue()
+                          .put(new ResponseInfo(requestInfoFromChannelAttr, NetworkClientErrorCode.NetworkError, null));
+                    }
+                    if (!(future.cause() instanceof ClosedChannelException)) {
+                      // If it's ClosedChannelException caused by drop request, it's probably refCnt has been decreased.
+                      // TODO: a round solution is needed.
+                      requestInfo.getRequest().release();
+                    }
                   }
                 }
               });
@@ -139,18 +185,15 @@ public class Http2NetworkClient implements NetworkClient {
             }
           });
     }
-    http2ClientMetrics.http2ClientSendTime.update(System.currentTimeMillis() - startTime);
-    // TODO: close stream channel for requestsToDrop. Need a hashmap from corelationId to streamChannel
-    if (requestsToDrop.size() != 0) {
-      logger.warn("Number of requestsToDrop: {}", requestsToDrop.size());
-      http2ClientMetrics.http2RequestsToDropCount.inc(requestsToDrop.size());
-    }
+    http2ClientMetrics.http2ClientSendTime.update(System.currentTimeMillis() - sendStartTime);
 
     http2ClientResponseHandler.getResponseInfoQueue().poll(readyResponseInfos, pollTimeoutMs);
+    for (ResponseInfo responseInfo : readyResponseInfos) {
+      correlationIdInFlightToChannelMap.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
+    }
 
     http2ClientMetrics.http2ClientSendRate.mark(readyResponseInfos.size());
-
-    http2ClientMetrics.http2ClientSendAndPollTime.update(System.currentTimeMillis() - startTime);
+    http2ClientMetrics.http2ClientSendAndPollTime.update(System.currentTimeMillis() - sendStartTime);
     return readyResponseInfos;
   }
 

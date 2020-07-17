@@ -118,9 +118,10 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
         .option(ChannelOption.SO_KEEPALIVE, true)
         // To honor http2 window size, WriteBufferWaterMark.high() should be greater or equal to http2 window size.
         // Also see: https://github.com/netty/netty/issues/10193
+        // Use reasonable WaterMark, because channel.isWriteable() depends on WriteBufferWaterMark.
         .option(ChannelOption.WRITE_BUFFER_WATER_MARK,
-            new WriteBufferWaterMark(http2ClientConfig.http2InitialWindowSize,
-                2 * http2ClientConfig.http2InitialWindowSize))
+            new WriteBufferWaterMark(http2ClientConfig.http2InitialWindowSize / 2,
+                http2ClientConfig.http2InitialWindowSize))
         .remoteAddress(inetSocketAddress);
     if (http2ClientConfig.nettyReceiveBufferSize != -1) {
       b.option(ChannelOption.SO_RCVBUF, http2ClientConfig.nettyReceiveBufferSize);
