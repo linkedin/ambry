@@ -725,7 +725,7 @@ public class StatsManagerTest {
     }
 
     @Override
-    public Map<StoreKey, MessageInfo> findKeys(List<? extends StoreKey> storeKeys) throws StoreException {
+    public MessageInfo findKey(StoreKey key) throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
 

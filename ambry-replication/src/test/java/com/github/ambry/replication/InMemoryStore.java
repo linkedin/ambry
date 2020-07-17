@@ -44,10 +44,8 @@ import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static com.github.ambry.replication.ReplicationTest.*;
@@ -404,12 +402,8 @@ class InMemoryStore implements Store {
   }
 
   @Override
-  public Map<StoreKey, MessageInfo> findKeys(List<? extends StoreKey> storeKeys) throws StoreException {
-    Map<StoreKey, MessageInfo> map = new HashMap<>();
-    for (StoreKey storeKey : storeKeys) {
-      map.put(storeKey, getMergedMessageInfo(storeKey, messageInfos));
-    }
-    return map;
+  public MessageInfo findKey(StoreKey key) throws StoreException {
+    return getMergedMessageInfo(key, messageInfos);
   }
 
   @Override
