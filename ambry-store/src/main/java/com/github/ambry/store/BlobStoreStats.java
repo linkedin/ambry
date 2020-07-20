@@ -531,14 +531,14 @@ class BlobStoreStats implements StoreStats, Closeable {
       } else if (indexValue.isUndelete()) {
         if (keyFinalStates.containsKey(key)) {
           IndexFinalState state = keyFinalStates.get(key);
-          if (state.isTtlUpdate()) {
-            indexValue.setExpiresAtMs(Utils.Infinite_Time);
-          }
           if (state.isDelete() || (state.getLifeVersion() != indexValue.getLifeVersion())) {
             // This UNDELETE is not valid, when the final state of this storeKey is
             // 1. DELETE, or
             // 2. the current lifeVersion is not the same
             continue;
+          }
+          if (state.isTtlUpdate()) {
+            indexValue.setExpiresAtMs(Utils.Infinite_Time);
           }
         } else {
           long operationTimeInMs =
