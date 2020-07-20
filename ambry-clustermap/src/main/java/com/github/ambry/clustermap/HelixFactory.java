@@ -102,11 +102,5 @@ public class HelixFactory {
     public int hashCode() {
       return Objects.hash(clusterName, instanceName, instanceType, zkAddr);
     }
-
-    @Override
-    public String toString() {
-      return "ManagerKey{" + "clusterName='" + clusterName + '\'' + ", instanceName='" + instanceName + '\''
-          + ", instanceType=" + instanceType + ", zkAddr='" + zkAddr + '\'' + '}';
-    }
   }
 }

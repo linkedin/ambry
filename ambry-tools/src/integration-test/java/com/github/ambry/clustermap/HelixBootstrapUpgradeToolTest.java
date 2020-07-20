@@ -702,7 +702,7 @@ public class HelixBootstrapUpgradeToolTest {
       }
     }
     List<String> disabledPartition = currentInstanceConfig.getDisabledPartitions(resourceName);
-    assertEquals("Disabled partition is not expected",
+    assertEquals("Disabled partition not as expected",
         Collections.singletonList(removedReplica.getPartitionId().toPathString()), disabledPartition);
     // Verify that IdealState has no change
     verifyIdealStateForPartition(removedReplica, true, 3, expectedResourceCount);
@@ -718,7 +718,7 @@ public class HelixBootstrapUpgradeToolTest {
     Map<String, String> expectedDisabledPartitionMap = new HashMap<>();
     expectedDisabledPartitionMap.put(resourceName, removedReplica.getPartitionId().toPathString());
 
-    assertEquals("Mismatch in disabled partition string in InstnaceConfig", expectedDisabledPartitionMap,
+    assertEquals("Mismatch in disabled partition string in InstanceConfig", expectedDisabledPartitionMap,
         currentInstanceConfig.getRecord().getMapField(disabledPartitionStr));
     // verify the removed replica is no longer in InstanceConfig
     verifyReplicaInfoInInstanceConfig(currentInstanceConfig, removedReplica, false);

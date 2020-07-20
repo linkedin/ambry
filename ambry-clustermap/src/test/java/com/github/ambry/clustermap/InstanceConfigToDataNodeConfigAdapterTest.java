@@ -20,6 +20,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils.ZkInfo;
 import java.io.File;
 import java.nio.file.Files;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
@@ -95,6 +96,8 @@ public class InstanceConfigToDataNodeConfigAdapterTest extends DataNodeConfigSou
     reset(listener2);
     DataNodeConfig updatedConfig = allConfigs.iterator().next();
     updatedConfig.getStoppedReplicas().add("partition");
+    // add an extra map field to ensure it gets serialized/deserialized correctly
+    updatedConfig.getExtraMapFields().put("extra", Collections.singletonMap("k", "v"));
     source.set(updatedConfig);
     // need to manually trigger a notification since MockHelixParticipant does not do so.
     // (other tests may not work as intended if we trigger a notification on calls to setInstanceConfig)

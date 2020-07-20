@@ -104,8 +104,9 @@ public class InstanceConfigToDataNodeConfigAdapter implements DataNodeConfigSour
           // Check if this map field actually holds disk properties, since we can't tell from just the field key (the
           // mount path with no special prefix). There may be extra fields when Helix controller adds partitions in ERROR
           // state to InstanceConfig.
-          LOGGER.warn("{} field does not contain disk info on {}. Skip it and continue on next one.", mountPath,
+          LOGGER.info("{} field does not contain disk info on {}. Storing it in extraMapFields.", mountPath,
               instanceConfig.getInstanceName());
+          dataNodeConfig.getExtraMapFields().put(mountPath, diskProps);
         } else {
           DataNodeConfig.DiskConfig disk = new DataNodeConfig.DiskConfig(
               diskProps.get(DISK_STATE).equals(AVAILABLE_STR) ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE,
@@ -171,6 +172,7 @@ public class InstanceConfigToDataNodeConfigAdapter implements DataNodeConfigSour
         diskProps.put(REPLICAS_STR, replicasStrBuilder.toString());
         instanceConfig.getRecord().setMapField(mountPath, diskProps);
       });
+      dataNodeConfig.getExtraMapFields().forEach((k, v) -> instanceConfig.getRecord().setMapField(k, v));
       return instanceConfig;
     }
   }

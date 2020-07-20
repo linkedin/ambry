@@ -38,6 +38,7 @@ class DataNodeConfig {
   private final Set<String> stoppedReplicas = new HashSet<>();
   private final Set<String> disabledReplicas = new HashSet<>();
   private final Map<String, DiskConfig> diskConfigs = new HashMap<>();
+  private final Map<String, Map<String, String>> extraMapFields = new HashMap<>();
 
   /**
    * @param instanceName a name that can be used as a unique key for this server.
@@ -144,6 +145,16 @@ class DataNodeConfig {
    */
   Map<String, DiskConfig> getDiskConfigs() {
     return diskConfigs;
+  }
+
+  /**
+   * This can be used for extra fields that are not recognized by {@link DataNodeConfigSource} but still need to be
+   * read from or written to the source of truth. This should be used sparingly and is mainly provided for legacy
+   * compatibility.
+   * @return a map from field name to map-style fields.
+   */
+  public Map<String, Map<String, String>> getExtraMapFields() {
+    return extraMapFields;
   }
 
   @Override
