@@ -436,7 +436,7 @@ public class ReplicaThread implements Runnable {
         }
 
         if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
-          // Get a list of inactive standby replicas whose missing keys haven't arrived for long time.
+          // Get a list of blocked standby replicas whose missing keys haven't arrived for long time.
           // Use case: In leader-based cross colo replication, standby replicas don't send GET requests for missing keys
           // found in metadata exchange and expect them to come via leader <-> leader replication.
           // This is a safety condition to ensure that standby replicas are not stuck waiting for the keys to come from leader
@@ -456,14 +456,14 @@ public class ReplicaThread implements Runnable {
               checkoutConnectionTimeInMs = time.milliseconds() - startTimeInMs;
             }
 
-            List<ExchangeMetadataResponse> exchangeMetadataResponseListForInactiveReplicas =
+            List<ExchangeMetadataResponse> exchangeMetadataResponseListForBlockedReplicas =
                 standbyReplicasTimedOutOnNoProgress.stream()
                     .map(RemoteReplicaInfo::getExchangeMetadataResponse)
                     .collect(Collectors.toList());
 
             // Convert (and cache) the remote keys that are being fetched as the StoreKeyConverter would have cleared
             // these keys from its cache while it is replicating with other replicas before time out happened for these standby replicas.
-            List<StoreKey> storeKeysToConvert = exchangeMetadataResponseListForInactiveReplicas.stream()
+            List<StoreKey> storeKeysToConvert = exchangeMetadataResponseListForBlockedReplicas.stream()
                 .map(ExchangeMetadataResponse::getMissingStoreKeys)
                 .flatMap(Collection::stream)
                 .collect(Collectors.toList());
@@ -475,7 +475,7 @@ public class ReplicaThread implements Runnable {
                 "Sending GET request to fetch missing keys for standby remote replicas {} timed out on no progress",
                 currentReplicaList);
             fixMissingStoreKeys(connectedChannel, standbyReplicasTimedOutOnNoProgress,
-                exchangeMetadataResponseListForInactiveReplicas, true);
+                exchangeMetadataResponseListForBlockedReplicas, true);
             fixMissingStoreKeysTimeInMs = time.milliseconds() - startTimeInMs;
           }
         }
@@ -1094,7 +1094,6 @@ public class ReplicaThread implements Runnable {
     long totalBytesFixed = 0;
     long totalBlobsFixed = 0;
     long startTime = time.milliseconds();
-
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
