@@ -13,10 +13,12 @@
  */
 package com.github.ambry.server;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
@@ -29,6 +31,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.commons.ServerMetrics;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StatsManagerConfig;
@@ -108,6 +111,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
@@ -117,6 +121,7 @@ import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.MockClusterMap.*;
+import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -130,7 +135,6 @@ public class AmbryServerRequestsTest {
   private final FindTokenHelper findTokenHelper;
   private final MockClusterMap clusterMap;
   private final DataNodeId dataNodeId;
-  private final MockStorageManager storageManager;
   private final MockReplicationManager replicationManager;
   private final MockStatsManager statsManager;
   private final MockRequestResponseChannel requestResponseChannel = new MockRequestResponseChannel();
@@ -139,10 +143,13 @@ public class AmbryServerRequestsTest {
   private final MockStoreKeyConverterFactory storeKeyConverterFactory;
   private final ReplicationConfig replicationConfig;
   private final ServerConfig serverConfig;
+  private final ClusterMapConfig clusterMapConfig;
   private final ServerMetrics serverMetrics;
   private final String localDc;
   private final ReplicaStatusDelegate mockDelegate = Mockito.mock(ReplicaStatusDelegate.class);
   private final boolean validateRequestOnStoreState;
+  private MockStorageManager storageManager;
+  private MockHelixParticipant helixParticipant;
   private AmbryServerRequests ambryRequests;
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
@@ -160,12 +167,15 @@ public class AmbryServerRequestsTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
     serverConfig = new ServerConfig(verifiableProperties);
+    clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     StatsManagerConfig statsManagerConfig = new StatsManagerConfig(verifiableProperties);
     dataNodeId =
         clusterMap.getDataNodeIds().stream().filter(node -> node.getDatacenterName().equals(localDc)).findFirst().get();
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
     findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
-    storageManager = new MockStorageManager(validKeysInStore, clusterMap, dataNodeId, findTokenHelper);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
+    helixParticipant = new MockHelixParticipant(clusterMapConfig);
+    storageManager = new MockStorageManager(validKeysInStore, clusterMap, dataNodeId, findTokenHelper, null);
     storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(conversionMap);
     replicationManager =
@@ -177,7 +187,7 @@ public class AmbryServerRequestsTest {
     serverMetrics = new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
-        storeKeyConverterFactory, statsManager);
+        storeKeyConverterFactory, statsManager, helixParticipant);
     storageManager.start();
     Mockito.when(mockDelegate.unseal(any())).thenReturn(true);
     Mockito.when(mockDelegate.unmarkStopped(anyList())).thenReturn(true);
@@ -185,6 +195,9 @@ public class AmbryServerRequestsTest {
 
   private static Properties createProperties(boolean validateRequestOnStoreState,
       boolean handleUndeleteRequestEnabled) {
+    List<TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
+    zkInfoList.add(new TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
+    JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     Properties properties = new Properties();
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
@@ -195,6 +208,7 @@ public class AmbryServerRequestsTest {
     properties.setProperty("server.validate.request.based.on.store.state",
         Boolean.toString(validateRequestOnStoreState));
     properties.setProperty("server.handle.undelete.request.enabled", Boolean.toString(handleUndeleteRequestEnabled));
+    properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     return properties;
   }
 
@@ -481,6 +495,13 @@ public class AmbryServerRequestsTest {
    */
   @Test
   public void controlBlobStoreSuccessTest() throws Exception {
+    // Recreate storage manager and ambryRequest to pass in HelixParticipant
+    storageManager.shutdown();
+    storageManager =
+        new MockStorageManager(validKeysInStore, clusterMap, dataNodeId, findTokenHelper, helixParticipant);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
+        storeKeyConverterFactory, statsManager, helixParticipant);
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     PartitionId id = partitionIds.get(0);
     List<? extends ReplicaId> replicaIds = id.getReplicaIds();
@@ -595,7 +616,15 @@ public class AmbryServerRequestsTest {
    * @throws IOException
    */
   @Test
-  public void startBlobStoreFailureTest() throws InterruptedException, IOException {
+  public void startBlobStoreFailureTest() throws Exception {
+    // Recreate storage manager and ambryRequest to pass in HelixParticipant
+    storageManager.shutdown();
+    storageManager =
+        new MockStorageManager(validKeysInStore, clusterMap, dataNodeId, findTokenHelper, helixParticipant);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
+        storeKeyConverterFactory, statsManager, helixParticipant);
+
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     PartitionId id = partitionIds.get(0);
     short numReplicasCaughtUpPerPartition = 3;
@@ -624,6 +653,16 @@ public class AmbryServerRequestsTest {
     sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnControllingCompaction = null;
+    // test HelixParticipant resets partition error
+    helixParticipant.resetPartitionVal = false;
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
+    helixParticipant.resetPartitionVal = true;
+    // test stop list update failure
+    helixParticipant.setStoppedStateReturnVal = false;
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
+    helixParticipant.setStoppedStateReturnVal = null;
   }
 
   /**
@@ -814,7 +853,7 @@ public class AmbryServerRequestsTest {
         new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     AmbryServerRequests other = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
-        storeKeyConverterFactory, statsManager);
+        storeKeyConverterFactory, statsManager, null);
 
     AmbryServerRequests temp = ambryRequests;
     ambryRequests = other;

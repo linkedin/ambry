@@ -341,7 +341,7 @@ final class ServerTestUtil {
               resp2.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
         }
       } catch (MessageFormatException e) {
-        assertEquals(false, true);
+        fail();
       }
 
       // get blob info
@@ -410,7 +410,7 @@ final class ServerTestUtil {
 
       // fetch blob that does not exist
       // get blob properties
-      ids = new ArrayList<BlobId>();
+      ids = new ArrayList<>();
       partition = (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           clusterMap.getLocalDatacenterId(), properties.getAccountId(), properties.getContainerId(), partition, false,
@@ -446,10 +446,10 @@ final class ServerTestUtil {
       assertEquals("Put blob on stopped store should fail", ServerErrorCode.Replica_Unavailable, response.getError());
 
       // get a blob properties on a stopped store, which should fail
-      ids = new ArrayList<BlobId>();
+      ids = new ArrayList<>();
       partition = (MockPartitionId) blobId1.getPartition();
       ids.add(blobId1);
-      partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+      partitionRequestInfoList = new ArrayList<>();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       getRequest1 =
@@ -494,7 +494,7 @@ final class ServerTestUtil {
       assertEquals("Put blob on restarted store should succeed", ServerErrorCode.No_Error, response5.getError());
 
       // get a blob on a restarted store , which should succeed
-      ids = new ArrayList<BlobId>();
+      ids = new ArrayList<>();
       PartitionId partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(blobId1);
       partitionRequestInfoList = new ArrayList<>();

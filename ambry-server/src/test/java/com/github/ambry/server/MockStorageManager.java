@@ -16,7 +16,9 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -78,6 +80,12 @@ class MockStorageManager extends StorageManager {
   private class TestStore implements Store {
     boolean started;
     ReplicaState currentState = ReplicaState.STANDBY;
+
+    TestStore(ClusterParticipant clusterParticipant) {
+      if (clusterParticipant instanceof HelixParticipant) {
+        currentState = ReplicaState.OFFLINE;
+      }
+    }
 
     @Override
     public void start() throws StoreException {
@@ -367,7 +375,7 @@ class MockStorageManager extends StorageManager {
   /**
    * An empty {@link Store} implementation.
    */
-  private Store store = new TestStore();
+  private Store store = new TestStore(null);
 
   private static final VerifiableProperties VPROPS = new VerifiableProperties(new Properties());
   /**
@@ -454,13 +462,15 @@ class MockStorageManager extends StorageManager {
   private Map<PartitionId, Store> storeMap = new HashMap<>();
 
   MockStorageManager(Set<StoreKey> validKeysInStore, ClusterMap clusterMap, DataNodeId dataNodeId,
-      FindTokenHelper findTokenHelper) throws StoreException {
+      FindTokenHelper findTokenHelper, ClusterParticipant clusterParticipant) throws StoreException {
     super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
-        null, clusterMap, dataNodeId, null, null, new MockTime(), null, new InMemAccountService(false, false));
+        null, clusterMap, dataNodeId, null,
+        clusterParticipant == null ? null : Collections.singletonList(clusterParticipant), new MockTime(), null,
+        new InMemAccountService(false, false));
     this.validKeysInStore = validKeysInStore;
     this.findTokenHelper = findTokenHelper;
     for (ReplicaId replica : clusterMap.getReplicaIds(dataNodeId)) {
-      storeMap.put(replica.getPartitionId(), new TestStore());
+      storeMap.put(replica.getPartitionId(), new TestStore(clusterParticipant));
     }
   }
 

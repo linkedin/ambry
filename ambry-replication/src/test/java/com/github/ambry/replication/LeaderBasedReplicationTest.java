@@ -173,8 +173,8 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
         ReplicaId peerLeaderReplica = peerLeaderReplicasInClusterMap.iterator().next();
         ReplicaId peerStandByReplica = existingPartition.getReplicaIdsByState(ReplicaState.STANDBY,
             peerLeaderReplica.getDataNodeId().getDatacenterName()).get(0);
-        existingPartition.setReplicaIdToState(peerLeaderReplica, ReplicaState.STANDBY);
-        existingPartition.setReplicaIdToState(peerStandByReplica, ReplicaState.LEADER);
+        existingPartition.setReplicaState(peerLeaderReplica, ReplicaState.STANDBY);
+        existingPartition.setReplicaState(peerStandByReplica, ReplicaState.LEADER);
 
         //Trigger routing table change callback to replication manager
         ClusterMapChangeListener clusterMapChangeListener = clusterMap.getClusterMapChangeListener();
