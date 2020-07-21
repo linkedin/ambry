@@ -280,7 +280,10 @@ public class ReplicationTestHelper {
     StoreConfig storeConfig = new StoreConfig(verifiableProperties);
     DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
 
-    StoreKeyConverterFactory storeKeyConverterFactory = new StoreKeyConverterFactoryImpl(null, null);
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+
     StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
 
     StorageManager storageManager =

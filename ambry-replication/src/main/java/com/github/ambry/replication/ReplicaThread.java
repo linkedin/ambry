@@ -443,7 +443,7 @@ public class ReplicaThread implements Runnable {
         }
 
         if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
-          // Get a list of inactive standby replicas whose missing keys haven't arrived for long time.
+          // Get a list of blocked standby replicas whose missing keys haven't arrived for long time.
           // Use case: In leader-based cross colo replication, standby replicas don't send GET requests for missing keys
           // found in metadata exchange and expect them to come via leader <-> leader replication.
           // This is a safety condition to ensure that standby replicas are not stuck waiting for the keys to come from leader
@@ -462,17 +462,27 @@ public class ReplicaThread implements Runnable {
                   replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
               checkoutConnectionTimeInMs = time.milliseconds() - startTimeInMs;
             }
-            List<ExchangeMetadataResponse> exchangeMetadataResponseListForInactiveReplicas =
+
+            List<ExchangeMetadataResponse> exchangeMetadataResponseListForBlockedReplicas =
                 standbyReplicasTimedOutOnNoProgress.stream()
                     .map(RemoteReplicaInfo::getExchangeMetadataResponse)
                     .collect(Collectors.toList());
+
+            // Convert (and cache) the remote keys that are being fetched as the StoreKeyConverter would have cleared
+            // these keys from its cache while it is replicating with other replicas before time out happened for these standby replicas.
+            List<StoreKey> storeKeysToConvert = exchangeMetadataResponseListForBlockedReplicas.stream()
+                .map(ExchangeMetadataResponse::getMissingStoreKeys)
+                .flatMap(Collection::stream)
+                .collect(Collectors.toList());
+            convertStoreKeys(storeKeysToConvert);
+
             exchangeMetadataTimeInMs = 0;
             fixMissingStoreKeysTimeInMs = -1;
             logger.debug(
                 "Sending GET request to fetch missing keys for standby remote replicas {} timed out on no progress",
                 currentReplicaList);
             fixMissingStoreKeys(connectedChannel, standbyReplicasTimedOutOnNoProgress,
-                exchangeMetadataResponseListForInactiveReplicas, true);
+                exchangeMetadataResponseListForBlockedReplicas, true);
             fixMissingStoreKeysTimeInMs = time.milliseconds() - startTimeInMs;
           }
         }
@@ -982,16 +992,26 @@ public class ReplicaThread implements Runnable {
    * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
    */
   Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response) throws IOException {
-    try {
-      List<StoreKey> storeKeysToConvert = new ArrayList<>();
-      for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : response.getReplicaMetadataResponseInfoList()) {
-        if ((replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) && (
-            replicaMetadataResponseInfo.getMessageInfoList() != null)) {
-          for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
-            storeKeysToConvert.add(messageInfo.getStoreKey());
-          }
+    List<StoreKey> storeKeysToConvert = new ArrayList<>();
+    for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : response.getReplicaMetadataResponseInfoList()) {
+      if ((replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) && (
+          replicaMetadataResponseInfo.getMessageInfoList() != null)) {
+        for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
+          storeKeysToConvert.add(messageInfo.getStoreKey());
         }
       }
+    }
+    return convertStoreKeys(storeKeysToConvert);
+  }
+
+  /**
+   * Converts all input remote store keys to local keys using {@link StoreKeyConverter}
+   * @param storeKeysToConvert the {@link List<StoreKey>} list of keys to be converted
+   * @return the map from the {@link StoreKeyConverter#convert(Collection)} call
+   * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
+   */
+  Map<StoreKey, StoreKey> convertStoreKeys(List<StoreKey> storeKeysToConvert) throws IOException {
+    try {
       storeKeyConverter.dropCache();
       return storeKeyConverter.convert(storeKeysToConvert);
     } catch (Exception e) {
