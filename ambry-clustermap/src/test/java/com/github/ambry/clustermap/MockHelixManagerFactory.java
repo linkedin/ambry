@@ -56,13 +56,15 @@ import org.apache.helix.store.zk.ZkHelixPropertyStore;
 
 
 public class MockHelixManagerFactory extends HelixFactory {
-  private final MockHelixManager helixManager;
+  private final MockHelixManager participantHelixManager;
+  private final MockHelixManager spectatorHelixManager;
 
   /**
    * Construct this factory.
    */
   public MockHelixManagerFactory() {
-    helixManager = new MockHelixManager();
+    participantHelixManager = new MockHelixManager();
+    spectatorHelixManager = new MockHelixManager();
   }
 
   /**
@@ -76,21 +78,11 @@ public class MockHelixManagerFactory extends HelixFactory {
   @Override
   public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
       String zkAddr) {
-    return helixManager;
+    return getHelixManager(instanceType);
   }
 
-  /**
-   * Return the {@link MockHelixAdmin}
-   * @param zkAddr unused.
-   * @return the {@link MockHelixAdmin}
-   */
-  @Override
-  public HelixAdmin getHelixAdmin(String zkAddr) {
-    return new MockHelixAdmin();
-  }
-
-  public MockHelixManager getHelixManager() {
-    return helixManager;
+  public MockHelixManager getHelixManager(InstanceType instanceType) {
+    return instanceType == InstanceType.PARTICIPANT ? participantHelixManager : spectatorHelixManager;
   }
 
   /**

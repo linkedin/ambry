@@ -1504,6 +1504,7 @@ public class HelixClusterManagerTest {
      * @param zkAddr the address identifying the zk service to which this request is to be made.
      * @return the {@link MockHelixManager}
      */
+    @Override
     public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
         String zkAddr) {
       if (helixCluster.getZkAddrs().contains(zkAddr)) {

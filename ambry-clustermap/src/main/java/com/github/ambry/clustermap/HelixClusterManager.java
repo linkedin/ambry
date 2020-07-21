@@ -205,10 +205,7 @@ public class HelixClusterManager implements ClusterMap {
     // doesn't support multiple HelixClusterManagers(spectators) on same node.
     String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
     HelixManager manager =
-        helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
-    logger.info("Connecting to Helix manager in local zookeeper at {}", zkConnectStr);
-    manager.connect();
-    logger.info("Established connection to Helix manager in local zookeeper at {}", zkConnectStr);
+        helixFactory.getZkHelixManagerAndConnect(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
     helixPropertyStoreInLocalDc = manager.getHelixPropertyStore();
     logger.info("HelixPropertyStore from local datacenter {} is: {}", dcZkInfo.getDcName(),
         helixPropertyStoreInLocalDc);
