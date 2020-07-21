@@ -708,6 +708,13 @@ public class ReplicaThread implements Runnable {
       GetResponse getResponse =
           getMessagesForMissingKeys(connectedChannel, exchangeMetadataResponseList, replicasToReplicatePerNode,
               remoteNode, remoteColoGetRequestForStandby);
+      if (remoteColoGetRequestForStandby) {
+        // If we are fetching missing keys for standby replicas (timed out waiting for their keys to arrive from leaders)
+        // during leader-based replication, convert (and cache) received keys in the GET response. This is needed as the
+        // StoreKeyConverter would have cleared these keys from its cache as it is replicating with other replicas before
+        // time out happened for these standby replicas.
+        batchConvertGetResponseKeys(getResponse);
+      }
       writeMessagesToLocalStoreAndAdvanceTokens(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode,
           remoteNode, remoteColoGetRequestForStandby);
     } finally {
@@ -880,7 +887,8 @@ public class ReplicaThread implements Runnable {
         // it is deleted in the remote store and not deleted yet locally.
 
         // if the blob is from deprecated container, then nothing needs to be done.
-        if (replicationConfig.replicationContainerDeletionEnabled && skipPredicate != null && skipPredicate.test(messageInfo)) {
+        if (replicationConfig.replicationContainerDeletionEnabled && skipPredicate != null && skipPredicate.test(
+            messageInfo)) {
           continue;
         }
         applyUpdatesToBlobInLocalStore(messageInfo, remoteReplicaInfo, localKey);
@@ -992,6 +1000,32 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
+   * Batch converts all keys in the {@link GetResponse} response.
+   * Intention is that conversion is done all at once so that followup calls to
+   * {@link StoreKeyConverter#getConverted(StoreKey)} will work
+   * @param response the {@link GetResponse} whose keys will be converted
+   * @return the map from the {@link StoreKeyConverter#convert(Collection)} call
+   * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
+   */
+  Map<StoreKey, StoreKey> batchConvertGetResponseKeys(GetResponse response) throws IOException {
+    try {
+      List<StoreKey> storeKeysToConvert = new ArrayList<>();
+      for (PartitionResponseInfo partitionResponseInfo : response.getPartitionResponseInfoList()) {
+        if ((partitionResponseInfo.getErrorCode() == ServerErrorCode.No_Error) && (
+            partitionResponseInfo.getMessageInfoList() != null)) {
+          for (MessageInfo messageInfo : partitionResponseInfo.getMessageInfoList()) {
+            storeKeysToConvert.add(messageInfo.getStoreKey());
+          }
+        }
+      }
+      storeKeyConverter.dropCache();
+      return storeKeyConverter.convert(storeKeysToConvert);
+    } catch (Exception e) {
+      throw new IOException("Problem with store key conversion", e);
+    }
+  }
+
+  /**
    * Gets the messages for the keys that are missing from the local store by issuing a {@link GetRequest} to the remote
    * node, if there are any missing keys. If there are no missing keys to be fetched, then no request is issued and a
    * null response is returned.
@@ -1073,6 +1107,7 @@ public class ReplicaThread implements Runnable {
     long totalBytesFixed = 0;
     long totalBlobsFixed = 0;
     long startTime = time.milliseconds();
+
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
