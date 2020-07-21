@@ -455,10 +455,20 @@ public class ReplicaThread implements Runnable {
                   replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
               checkoutConnectionTimeInMs = time.milliseconds() - startTimeInMs;
             }
+
             List<ExchangeMetadataResponse> exchangeMetadataResponseListForInactiveReplicas =
                 standbyReplicasTimedOutOnNoProgress.stream()
                     .map(RemoteReplicaInfo::getExchangeMetadataResponse)
                     .collect(Collectors.toList());
+
+            // Convert (and cache) the remote keys that are being fetched as the StoreKeyConverter would have cleared
+            // these keys from its cache while it is replicating with other replicas before time out happened for these standby replicas.
+            List<StoreKey> storeKeysToConvert = exchangeMetadataResponseListForInactiveReplicas.stream()
+                .map(ExchangeMetadataResponse::getMissingStoreKeys)
+                .flatMap(Collection::stream)
+                .collect(Collectors.toList());
+            convertStoreKeys(storeKeysToConvert);
+
             exchangeMetadataTimeInMs = 0;
             fixMissingStoreKeysTimeInMs = -1;
             logger.debug(
@@ -708,13 +718,6 @@ public class ReplicaThread implements Runnable {
       GetResponse getResponse =
           getMessagesForMissingKeys(connectedChannel, exchangeMetadataResponseList, replicasToReplicatePerNode,
               remoteNode, remoteColoGetRequestForStandby);
-      if (remoteColoGetRequestForStandby) {
-        // If we are fetching missing keys for standby replicas (timed out waiting for their keys to arrive from leaders)
-        // during leader-based replication, convert (and cache) received keys in the GET response. This is needed as the
-        // StoreKeyConverter would have cleared these keys from its cache as it is replicating with other replicas before
-        // time out happened for these standby replicas.
-        batchConvertGetResponseKeys(getResponse);
-      }
       writeMessagesToLocalStoreAndAdvanceTokens(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode,
           remoteNode, remoteColoGetRequestForStandby);
     } finally {
@@ -982,42 +985,26 @@ public class ReplicaThread implements Runnable {
    * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
    */
   Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response) throws IOException {
-    try {
-      List<StoreKey> storeKeysToConvert = new ArrayList<>();
-      for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : response.getReplicaMetadataResponseInfoList()) {
-        if ((replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) && (
-            replicaMetadataResponseInfo.getMessageInfoList() != null)) {
-          for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
-            storeKeysToConvert.add(messageInfo.getStoreKey());
-          }
+    List<StoreKey> storeKeysToConvert = new ArrayList<>();
+    for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : response.getReplicaMetadataResponseInfoList()) {
+      if ((replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) && (
+          replicaMetadataResponseInfo.getMessageInfoList() != null)) {
+        for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
+          storeKeysToConvert.add(messageInfo.getStoreKey());
         }
       }
-      storeKeyConverter.dropCache();
-      return storeKeyConverter.convert(storeKeysToConvert);
-    } catch (Exception e) {
-      throw new IOException("Problem with store key conversion", e);
     }
+    return convertStoreKeys(storeKeysToConvert);
   }
 
   /**
-   * Batch converts all keys in the {@link GetResponse} response.
-   * Intention is that conversion is done all at once so that followup calls to
-   * {@link StoreKeyConverter#getConverted(StoreKey)} will work
-   * @param response the {@link GetResponse} whose keys will be converted
+   * Converts all input remote store keys to local keys using {@link StoreKeyConverter}
+   * @param storeKeysToConvert the {@link List<StoreKey>} list of keys to be converted
    * @return the map from the {@link StoreKeyConverter#convert(Collection)} call
    * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
    */
-  Map<StoreKey, StoreKey> batchConvertGetResponseKeys(GetResponse response) throws IOException {
+  Map<StoreKey, StoreKey> convertStoreKeys(List<StoreKey> storeKeysToConvert) throws IOException {
     try {
-      List<StoreKey> storeKeysToConvert = new ArrayList<>();
-      for (PartitionResponseInfo partitionResponseInfo : response.getPartitionResponseInfoList()) {
-        if ((partitionResponseInfo.getErrorCode() == ServerErrorCode.No_Error) && (
-            partitionResponseInfo.getMessageInfoList() != null)) {
-          for (MessageInfo messageInfo : partitionResponseInfo.getMessageInfoList()) {
-            storeKeysToConvert.add(messageInfo.getStoreKey());
-          }
-        }
-      }
       storeKeyConverter.dropCache();
       return storeKeyConverter.convert(storeKeysToConvert);
     } catch (Exception e) {
