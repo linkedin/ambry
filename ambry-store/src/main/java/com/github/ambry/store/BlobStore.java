@@ -584,7 +584,7 @@ public class BlobStore implements Store {
             IndexValue value =
                 index.findKey(info.getStoreKey(), fileSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
             if (value != null) {
-              // There are several possible cases that can exist here. Delete has be follow either PUT, TTL_UPDATE or UNDELETE.
+              // There are several possible cases that can exist here. Delete has to follow either PUT, TTL_UPDATE or UNDELETE.
               // let EOBC be end offset before check, and [RECORD] means RECORD is optional
               // 1. PUT [TTL_UPDATE DELETE UNDELETE] EOBC DELETE
               // 2. PUT EOBC TTL_UPDATE
