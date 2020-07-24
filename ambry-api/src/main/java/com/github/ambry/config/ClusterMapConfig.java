@@ -13,6 +13,7 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.clustermap.DataNodeConfigSourceType;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.json.JSONObject;
 
@@ -27,6 +28,7 @@ public class ClusterMapConfig {
   public static final String CLUSTERMAP_HOST_NAME = "clustermap.host.name";
   public static final String CLUSTERMAP_PORT = "clustermap.port";
   public static final String CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES = "clustermap.max.disk.capacity.in.bytes";
+  public static final String CLUSTERMAP_DATA_NODE_CONFIG_SOURCE_TYPE = "clustermap.data.node.config.source.type";
   public static final String AMBRY_STATE_MODEL_DEF = "AmbryLeaderStandby";
   public static final String OLD_STATE_MODEL_DEF = LeaderStandbySMD.name;
   public static final String DEFAULT_STATE_MODEL_DEF = AMBRY_STATE_MODEL_DEF;
@@ -101,6 +103,13 @@ public class ClusterMapConfig {
   @Config("clustermap.cluster.change.handler.type")
   @Default("SimpleClusterChangeHandler")
   public final String clusterMapClusterChangeHandlerType;
+
+  /**
+   * The {@code DataNodeConfigSource} implementation to use with the Helix-based Cluster Map.
+   */
+  @Config(CLUSTERMAP_DATA_NODE_CONFIG_SOURCE_TYPE)
+  @Default("INSTANCE_CONFIG")
+  public final DataNodeConfigSourceType clusterMapDataNodeConfigSourceType;
 
   /**
    * Serialized json containing the information about all the zk hosts that the Helix based cluster manager should
@@ -311,6 +320,9 @@ public class ClusterMapConfig {
         "com.github.ambry.clustermap.StaticClusterAgentsFactory");
     clusterMapClusterChangeHandlerType =
         verifiableProperties.getString("clustermap.cluster.change.handler.type", "SimpleClusterChangeHandler");
+    clusterMapDataNodeConfigSourceType =
+        verifiableProperties.getEnum(CLUSTERMAP_DATA_NODE_CONFIG_SOURCE_TYPE, DataNodeConfigSourceType.class,
+            DataNodeConfigSourceType.INSTANCE_CONFIG);
     clusterMapDcsZkConnectStrings = verifiableProperties.getString("clustermap.dcs.zk.connect.strings", "");
     clusterMapClusterName = verifiableProperties.getString(CLUSTERMAP_CLUSTER_NAME);
     clusterMapDatacenterName = verifiableProperties.getString(CLUSTERMAP_DATACENTER_NAME);

@@ -162,11 +162,14 @@ class DataNodeConfig {
     return "DataNodeConfig{" + "instanceName='" + instanceName + '\'' + ", hostName='" + hostName + '\'' + ", port="
         + port + ", datacenterName='" + datacenterName + '\'' + ", sslPort=" + sslPort + ", http2Port=" + http2Port
         + ", rackId='" + rackId + '\'' + ", xid=" + xid + ", sealedReplicas=" + sealedReplicas + ", stoppedReplicas="
-        + stoppedReplicas + ", disabledReplicas=" + disabledReplicas + ", diskConfigs=" + diskConfigs + '}';
+        + stoppedReplicas + ", disabledReplicas=" + disabledReplicas + ", diskConfigs=" + diskConfigs
+        + ", extraMapFields=" + extraMapFields + '}';
   }
 
   @Override
   public boolean equals(Object o) {
+    // xid and extraMapFields are ignored in this equality check. They are unique to specific DataNodeConfigSource
+    // implementations for legacy compatibility only. Comparison between configs from different sources is required.
     if (this == o) {
       return true;
     }
@@ -176,9 +179,9 @@ class DataNodeConfig {
     DataNodeConfig that = (DataNodeConfig) o;
     return Objects.equals(instanceName, that.instanceName) && Objects.equals(hostName, that.hostName) && Objects.equals(
         datacenterName, that.datacenterName) && port == that.port && Objects.equals(sslPort, that.sslPort)
-        && Objects.equals(http2Port, that.http2Port) && Objects.equals(rackId, that.rackId) && xid == that.xid
-        && sealedReplicas.equals(that.sealedReplicas) && stoppedReplicas.equals(that.stoppedReplicas)
-        && disabledReplicas.equals(that.disabledReplicas) && diskConfigs.equals(that.diskConfigs);
+        && Objects.equals(http2Port, that.http2Port) && Objects.equals(rackId, that.rackId) && sealedReplicas.equals(
+        that.sealedReplicas) && stoppedReplicas.equals(that.stoppedReplicas) && disabledReplicas.equals(
+        that.disabledReplicas) && diskConfigs.equals(that.diskConfigs);
   }
 
   @Override

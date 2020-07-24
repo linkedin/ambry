@@ -16,7 +16,9 @@ package com.github.ambry.utils;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 
 
@@ -27,6 +29,7 @@ public class MockTime extends Time {
   private final Set<String> timeSuspendedThreads = ConcurrentHashMap.newKeySet();
   private volatile boolean suspend = false;
   private long currentNanoSeconds;
+  private final AtomicReference<Semaphore> sleepCallsAllowed = new AtomicReference<>(null);
 
   public MockTime(long initialMilliseconds) {
     setCurrentMilliseconds(initialMilliseconds);
@@ -53,6 +56,14 @@ public class MockTime extends Time {
 
   @Override
   public void sleep(long ms) {
+    if (sleepCallsAllowed.get() != null) {
+      try {
+        sleepCallsAllowed.get().acquire();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException("Caught interrupted exception", e);
+      }
+    }
     if (!suspend && !timeSuspendedThreads.contains(Thread.currentThread().getName())) {
       currentNanoSeconds += TimeUnit.MILLISECONDS.toNanos(ms);
     }
@@ -104,5 +115,14 @@ public class MockTime extends Time {
     if (threadNames != null) {
       timeSuspendedThreads.removeAll(threadNames);
     }
+  }
+
+  /**
+   * Give permission to allow {@code numCalls} sleep calls to proceed unblocked. Calling this for the first time enables
+   * the feature. If this method is never called, sleep calls proceed unblocked.
+   * @param numCalls the number of sleep calls to allow.
+   */
+  public void allowSleepCalls(int numCalls) {
+    sleepCallsAllowed.updateAndGet(prev -> prev == null ? new Semaphore(0) : prev).release(numCalls);
   }
 }
