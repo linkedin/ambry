@@ -57,21 +57,22 @@ public class CompositeDataNodeConfigSource implements DataNodeConfigSource {
   }
 
   @Override
-  public void addDataNodeConfigChangeListener(DataNodeConfigChangeListener userListener) throws Exception {
+  public void addDataNodeConfigChangeListener(DataNodeConfigChangeListener listener) throws Exception {
     if (recordingListenersRegistered.compareAndSet(false, true)) {
-      RecordingListener primaryListener = new RecordingListener(userListener);
-      RecordingListener secondaryListener = new RecordingListener(null);
+      ConfigChangeRecorder primaryListener = new ConfigChangeRecorder(listener);
+      ConfigChangeRecorder secondaryListener = new ConfigChangeRecorder(null);
       primarySource.addDataNodeConfigChangeListener(primaryListener);
       try {
         secondarySource.addDataNodeConfigChangeListener(secondaryListener);
+        Utils.newThread("DataNodeConfigConsistencyChecker",
+            new ConsistencyChecker(time, metrics, primaryListener, secondaryListener), false).start();
       } catch (Exception e) {
-        LOGGER.error("Error from secondarySource.addDataNodeConfigChangeListener({})", userListener, e);
+        metrics.addListenerSwallowedErrorCount.inc();
+        LOGGER.error("Error from secondarySource.addDataNodeConfigChangeListener({})", listener, e);
       }
-      Utils.newThread("DataNodeConfigConsistencyChecker",
-          new ConsistencyChecker(time, metrics, primaryListener, secondaryListener), false).start();
     } else {
       // only set up consistency checking for the first listener. Other listeners will just use with the primary src
-      primarySource.addDataNodeConfigChangeListener(userListener);
+      primarySource.addDataNodeConfigChangeListener(listener);
     }
   }
 
@@ -81,12 +82,12 @@ public class CompositeDataNodeConfigSource implements DataNodeConfigSource {
     try {
       boolean secondaryResult = secondarySource.set(config);
       if (primaryResult != secondaryResult) {
-        metrics.setInconsistentCount.inc();
+        metrics.setSwallowedErrorCount.inc();
         LOGGER.error("Results differ for set({}). sourceOfTruth={}, secondarySource={}", config, primaryResult,
             secondaryResult);
       }
     } catch (Exception e) {
-      metrics.setInconsistentCount.inc();
+      metrics.setSwallowedErrorCount.inc();
       LOGGER.error("Error from secondarySource.set({})", config, e);
     }
     return primaryResult;
@@ -98,12 +99,12 @@ public class CompositeDataNodeConfigSource implements DataNodeConfigSource {
     try {
       DataNodeConfig secondaryResult = secondarySource.get(instanceName);
       if (!Objects.equals(primaryResult, secondaryResult)) {
-        metrics.getInconsistentCount.inc();
+        metrics.getSwallowedErrorCount.inc();
         LOGGER.error("Results differ for get({}). sourceOfTruth={}, secondarySource={}", instanceName, primaryResult,
             secondaryResult);
       }
     } catch (Exception e) {
-      metrics.getInconsistentCount.inc();
+      metrics.getSwallowedErrorCount.inc();
       LOGGER.error("Error from secondarySource.get({})", instanceName, e);
     }
     return primaryResult;
@@ -115,17 +116,17 @@ public class CompositeDataNodeConfigSource implements DataNodeConfigSource {
   private static class ConsistencyChecker implements Runnable {
     private final Time time;
     private final DataNodeConfigSourceMetrics metrics;
-    private final RecordingListener primaryListener;
-    private final RecordingListener secondaryListener;
+    private final ConfigChangeRecorder primaryListener;
+    private final ConfigChangeRecorder secondaryListener;
 
     /**
      * @param time {@link Time} instance.
      * @param metrics {@link DataNodeConfigSourceMetrics} instance.
-     * @param primaryListener the first {@link RecordingListener} to compare.
-     * @param secondaryListener the second {@link RecordingListener} to compare.
+     * @param primaryListener the first {@link ConfigChangeRecorder} to compare.
+     * @param secondaryListener the second {@link ConfigChangeRecorder} to compare.
      */
-    public ConsistencyChecker(Time time, DataNodeConfigSourceMetrics metrics, RecordingListener primaryListener,
-        RecordingListener secondaryListener) {
+    public ConsistencyChecker(Time time, DataNodeConfigSourceMetrics metrics, ConfigChangeRecorder primaryListener,
+        ConfigChangeRecorder secondaryListener) {
       this.time = time;
       this.metrics = metrics;
       this.primaryListener = primaryListener;
@@ -148,14 +149,13 @@ public class CompositeDataNodeConfigSource implements DataNodeConfigSource {
         Map<String, DataNodeConfig> secondaryConfigsSeen = secondaryListener.configsSeen;
         if (primaryConfigsSeen.equals(secondaryConfigsSeen)) {
           lastSuccessTimeMs = currentTimeMs;
-          metrics.listenerConsistentCount.inc();
           LOGGER.debug("Sources consistent at {}", currentTimeMs);
         } else if ((currentTimeMs - CHECK_PERIOD_MS * MAX_PERIODS_WITH_INCONSISTENCY) >= lastSuccessTimeMs) {
-          metrics.listenerInconsistentCount.inc();
+          metrics.listenerInconsistencyCount.inc();
           LOGGER.warn("Inconsistency detected for multiple periods. primary={}, secondary={}", primaryConfigsSeen,
               secondaryConfigsSeen);
         } else {
-          metrics.listenerTrendingInconsistentCount.inc();
+          metrics.listenerTransientInconsistencyCount.inc();
           LOGGER.debug("Inconsistency detected at {}, waiting to see if state converges. primary={}, secondary={}",
               currentTimeMs, primaryConfigsSeen, secondaryConfigsSeen);
         }
@@ -166,21 +166,21 @@ public class CompositeDataNodeConfigSource implements DataNodeConfigSource {
   /**
    * A listener that keeps a map of all of the configs it has seen that can be used for checking consistency.
    */
-  private static class RecordingListener implements DataNodeConfigChangeListener {
+  private static class ConfigChangeRecorder implements DataNodeConfigChangeListener {
     final Map<String, DataNodeConfig> configsSeen = new ConcurrentHashMap<>();
-    private final DataNodeConfigChangeListener userListener;
+    private final DataNodeConfigChangeListener listener;
 
     /**
-     * @param userListener if non-null, this listener will be notified on any change.
+     * @param listener if non-null, this listener will be notified on any change.
      */
-    public RecordingListener(DataNodeConfigChangeListener userListener) {
-      this.userListener = userListener;
+    public ConfigChangeRecorder(DataNodeConfigChangeListener listener) {
+      this.listener = listener;
     }
 
     @Override
     public void onDataNodeConfigChange(Iterable<DataNodeConfig> configs) {
-      if (userListener != null) {
-        userListener.onDataNodeConfigChange(configs);
+      if (listener != null) {
+        listener.onDataNodeConfigChange(configs);
       }
       for (DataNodeConfig config : configs) {
         configsSeen.put(config.getInstanceName(), config);

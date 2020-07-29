@@ -23,22 +23,22 @@ import com.codahale.metrics.MetricRegistry;
  * Metrics for {@link DataNodeConfigSource} implementations
  */
 class DataNodeConfigSourceMetrics {
-  final Counter setInconsistentCount;
-  final Counter getInconsistentCount;
-  final Counter listenerInconsistentCount;
-  final Counter listenerTrendingInconsistentCount;
-  final Counter listenerConsistentCount;
+  final Counter setSwallowedErrorCount;
+  final Counter getSwallowedErrorCount;
+  final Counter addListenerSwallowedErrorCount;
+  final Counter listenerInconsistencyCount;
+  final Counter listenerTransientInconsistencyCount;
 
   DataNodeConfigSourceMetrics(MetricRegistry registry) {
-    setInconsistentCount =
-        registry.counter(MetricRegistry.name(CompositeDataNodeConfigSource.class, "SetInconsistentCount"));
-    getInconsistentCount =
-        registry.counter(MetricRegistry.name(CompositeDataNodeConfigSource.class, "GetInconsistentCount"));
-    listenerInconsistentCount =
-        registry.counter(MetricRegistry.name(CompositeDataNodeConfigSource.class, "ListenerInconsistentCount"));
-    listenerTrendingInconsistentCount =
-        registry.counter(MetricRegistry.name(CompositeDataNodeConfigSource.class, "ListenerTrendingInconsistentCount"));
-    listenerConsistentCount =
-        registry.counter(MetricRegistry.name(CompositeDataNodeConfigSource.class, "ListenerConsistentCount"));
+    setSwallowedErrorCount =
+        registry.counter(MetricRegistry.name(CompositeDataNodeConfigSource.class, "SetSwallowedErrorCount"));
+    getSwallowedErrorCount =
+        registry.counter(MetricRegistry.name(CompositeDataNodeConfigSource.class, "GetSwallowedErrorCount"));
+    addListenerSwallowedErrorCount =
+        registry.counter(MetricRegistry.name(CompositeDataNodeConfigSource.class, "AddListenerSwallowedErrorCount"));
+    listenerInconsistencyCount =
+        registry.counter(MetricRegistry.name(CompositeDataNodeConfigSource.class, "ListenerInconsistencyCount"));
+    listenerTransientInconsistencyCount = registry.counter(
+        MetricRegistry.name(CompositeDataNodeConfigSource.class, "ListenerTransientInconsistencyCount"));
   }
 }

@@ -34,6 +34,9 @@ public class CompositeDataNodeConfigSourceTest extends DataNodeConfigSourceTestB
   CompositeDataNodeConfigSource compositeSource =
       new CompositeDataNodeConfigSource(primarySource, secondarySource, time, metrics);
 
+  /**
+   * Test functionality related to detecting inconsistencies between two listeners
+   */
   @Test
   public void testListener() throws Exception {
     time.allowSleepCalls(0);
@@ -47,17 +50,21 @@ public class CompositeDataNodeConfigSourceTest extends DataNodeConfigSourceTestB
     verify(listener).onDataNodeConfigChange(Collections.singleton(configOne));
     time.allowSleepCalls(1);
     assertTrue("Expected 0 inconsistencies so far",
-        TestUtils.checkAndSleep(0L, metrics.listenerInconsistentCount::getCount, 500));
+        TestUtils.checkAndSleep(0L, metrics.listenerInconsistencyCount::getCount, 500));
+    assertTrue("Expected 1 transient inconsistency so far",
+        TestUtils.checkAndSleep(1L, metrics.listenerTransientInconsistencyCount::getCount, 500));
     time.allowSleepCalls(2);
     assertTrue("Expected 1 inconsistency so far",
-        TestUtils.checkAndSleep(1L, metrics.listenerInconsistentCount::getCount, 500));
-    assertEquals("Expected 0 consistent checks at this point", 0, metrics.listenerConsistentCount.getCount());
+        TestUtils.checkAndSleep(1L, metrics.listenerInconsistencyCount::getCount, 500));
+    assertTrue("Expected 2 transient inconsistencies so far",
+        TestUtils.checkAndSleep(2L, metrics.listenerTransientInconsistencyCount::getCount, 500));
 
     // fix the inconsistency
     secondaryListener.onDataNodeConfigChange(Collections.singleton(configOne));
     time.allowSleepCalls(1);
-    assertTrue("Expected inconsistency to be resolved",
-        TestUtils.checkAndSleep(1L, metrics.listenerConsistentCount::getCount, 500));
+    assertEquals("Expected no more inconsistencies", 1, metrics.listenerInconsistencyCount.getCount());
+    assertEquals("Expected no more transient inconsistencies", 2,
+        metrics.listenerTransientInconsistencyCount.getCount());
 
     // add a second listener, this should only be attached to the primary
     DataNodeConfigChangeListener newListener = mock(DataNodeConfigChangeListener.class);
@@ -90,7 +97,7 @@ public class CompositeDataNodeConfigSourceTest extends DataNodeConfigSourceTestB
     assertTrue("Expected response from primary", compositeSource.set(config));
     verify(primarySource).set(config);
     verify(secondarySource).set(config);
-    assertEquals("Expected one inconsistency", 1, metrics.setInconsistentCount.getCount());
+    assertEquals("Expected one inconsistency", 1, metrics.setSwallowedErrorCount.getCount());
   }
 
   /**
@@ -112,7 +119,7 @@ public class CompositeDataNodeConfigSourceTest extends DataNodeConfigSourceTestB
     assertTrue("Expected response from primary", compositeSource.set(config));
     verify(primarySource).set(config);
     verify(secondarySource).set(config);
-    assertEquals("Expected one inconsistency", 1, metrics.setInconsistentCount.getCount());
+    assertEquals("Expected one inconsistency", 1, metrics.setSwallowedErrorCount.getCount());
   }
 
   /**
@@ -139,7 +146,7 @@ public class CompositeDataNodeConfigSourceTest extends DataNodeConfigSourceTestB
     assertEquals("Expected response from primary", config, compositeSource.get(config.getInstanceName()));
     verify(primarySource).get(config.getInstanceName());
     verify(secondarySource).get(config.getInstanceName());
-    assertEquals("Expected one inconsistency", 1, metrics.getInconsistentCount.getCount());
+    assertEquals("Expected one inconsistency", 1, metrics.getSwallowedErrorCount.getCount());
   }
 
   /**
@@ -161,7 +168,7 @@ public class CompositeDataNodeConfigSourceTest extends DataNodeConfigSourceTestB
     assertEquals("Expected response from primary", config, compositeSource.get(config.getInstanceName()));
     verify(primarySource).get(config.getInstanceName());
     verify(secondarySource).get(config.getInstanceName());
-    assertEquals("Expected one inconsistency", 1, metrics.getInconsistentCount.getCount());
+    assertEquals("Expected one inconsistency", 1, metrics.getSwallowedErrorCount.getCount());
   }
 
   /**

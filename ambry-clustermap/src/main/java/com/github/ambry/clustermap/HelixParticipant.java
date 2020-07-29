@@ -265,21 +265,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     synchronized (helixAdministrationLock) {
       String partitionName = replicaId.getPartitionId().toPathString();
 
-      // 1. invoke Helix native method to enable/disable partition on local node, this will trigger subsequent state
-      //    transition on given replica. This method modifies MapFields in InstanceConfig.
-      boolean instanceConfigUpdated = false;
-      InstanceConfig instanceConfig = getInstanceConfig();
-      String resourceNameForPartition = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
-      logger.info("{} replica {} on current node", disable ? "Disabling" : "Enabling", partitionName);
-      boolean currentlyEnabled = instanceConfig.getInstanceEnabledForPartition(resourceNameForPartition, partitionName);
-      if (currentlyEnabled == disable) {
-        instanceConfig.setInstanceEnabledForPartition(resourceNameForPartition, partitionName, !disable);
-        if (!helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig)) {
-          logger.warn("setReplicaDisabledState() failed InstanceConfig update");
-        }
-      }
-
-      // 2. update disabled replica list in DataNodeConfig. This modifies ListFields only
+      // 1. update disabled replica list in DataNodeConfig. This modifies ListFields only
       boolean dataNodeConfigChanged = false;
       DataNodeConfig dataNodeConfig = getDataNodeConfig();
       if (!disable && dataNodeConfig.getDisabledReplicas().remove(partitionName)) {
@@ -292,7 +278,20 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       if (dataNodeConfigChanged) {
         logger.info("Setting config with list of disabled replicas: {}", dataNodeConfig.getDisabledReplicas());
         if (!dataNodeConfigSource.set(dataNodeConfig)) {
+          participantMetrics.setReplicaDisabledStateErrorCount.inc();
           logger.warn("setReplicaDisabledState() failed DataNodeConfig update");
+        }
+
+        // 2. If the DataNodeConfig was changed, invoke Helix native method to enable/disable partition on local node,
+        //    this will trigger subsequent state transition on given replica. This method modifies MapFields in
+        //    InstanceConfig.
+        InstanceConfig instanceConfig = getInstanceConfig();
+        String resourceNameForPartition = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
+        logger.info("{} replica {} on current node", disable ? "Disabling" : "Enabling", partitionName);
+        instanceConfig.setInstanceEnabledForPartition(resourceNameForPartition, partitionName, !disable);
+        if (!helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig)) {
+          participantMetrics.setReplicaDisabledStateErrorCount.inc();
+          logger.warn("setReplicaDisabledState() failed InstanceConfig update");
         }
       }
       logger.info("Disabled state of partition {} is updated", partitionName);
