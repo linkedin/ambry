@@ -138,11 +138,17 @@ public class AmbryPartition implements PartitionId {
   }
 
   @Override
+  public String getResourceName() {
+    return clusterManagerCallback.getResourceNameForPartition(this);
+  }
+
+  @Override
   public JSONObject getSnapshot() {
     JSONObject snapshot = new JSONObject();
     snapshot.put(PARTITION_ID, toPathString());
     snapshot.put(PARTITION_WRITE_STATE, getPartitionState().name());
     snapshot.put(PARTITION_CLASS, getPartitionClass());
+    snapshot.put(PARTITION_RESOURCE_ID, getResourceName());
     JSONArray replicas = new JSONArray();
     getReplicaIds().forEach(replica -> replicas.put(replica.getSnapshot()));
     snapshot.put(PARTITION_REPLICAS, replicas);

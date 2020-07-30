@@ -157,7 +157,8 @@ class SimpleOperationTracker implements OperationTracker {
         includeNonOriginatingDcReplicas = routerConfig.routerGetIncludeNonOriginatingDcReplicas;
         numOfReplicasRequired = routerConfig.routerGetReplicasRequired;
         eligibleReplicas = getEligibleReplicas(partitionId, null,
-            EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE));
+            EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE,
+                ReplicaState.OFFLINE));
         break;
       case PutOperation:
         eligibleReplicas =
@@ -286,7 +287,8 @@ class SimpleOperationTracker implements OperationTracker {
     // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
     // Please report the test failure if you run into this exception.
     Supplier<IllegalArgumentException> notEnoughReplicasException = () -> new IllegalArgumentException(
-        generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck));
+        generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck,
+            routerOperation));
     // initialize this to the replica type of the first request to send so that parallelism is set correctly for the
     // first request
     inFlightReplicaType =
@@ -522,21 +524,26 @@ class SimpleOperationTracker implements OperationTracker {
   /**
    * Helper function to catch a potential race condition in
    * {@link SimpleOperationTracker#SimpleOperationTracker(RouterConfig, RouterOperation, PartitionId, String, boolean)}.
-   *
-   * @param partitionId The partition on which the operation is performed.
+   *  @param partitionId The partition on which the operation is performed.
    * @param examinedReplicas All replicas examined.
    * @param replicaPool Replicas added to replicaPool.
    * @param backupReplicas Replicas added to backupReplicas.
    * @param downReplicas Replicas added to downReplicas.
+   * @param routerOperation The operation type associated with current operation tracker.
    */
   private static String generateErrorMessage(PartitionId partitionId, List<ReplicaId> examinedReplicas,
-      List<ReplicaId> replicaPool, List<ReplicaId> backupReplicas, List<ReplicaId> downReplicas) {
+      List<ReplicaId> replicaPool, List<ReplicaId> backupReplicas, List<ReplicaId> downReplicas,
+      RouterOperation routerOperation) {
     StringBuilder errMsg = new StringBuilder("Total Replica count ").append(replicaPool.size())
         .append(" is less than success target. ")
-        .append("Partition is ")
+        .append("Router operation is ")
+        .append(routerOperation)
+        .append(". Partition is ")
         .append(partitionId)
-        .append(" and partition class is ")
+        .append(", partition class is ")
         .append(partitionId.getPartitionClass())
+        .append(" and associated resource is ")
+        .append(partitionId.getResourceName())
         .append(". examinedReplicas: ");
     for (ReplicaId replicaId : examinedReplicas) {
       errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");

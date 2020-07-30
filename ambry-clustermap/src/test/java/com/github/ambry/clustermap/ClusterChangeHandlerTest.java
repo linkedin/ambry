@@ -425,6 +425,10 @@ public class ClusterChangeHandlerTest {
     Set<String> partitionNames = partitionIds.stream().map(PartitionId::toPathString).collect(Collectors.toSet());
     assertEquals("Some partitions are not present in partition-to-resource map", partitionNames,
         partitionNameToResource.keySet());
+    // verify all partitions are able to get their resource name
+    helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS)
+        .forEach(partitionId -> assertEquals("Resource name is not expected",
+            partitionNameToResource.get(partitionId.toPathString()), partitionId.getResourceName()));
     helixClusterManager.close();
   }
 

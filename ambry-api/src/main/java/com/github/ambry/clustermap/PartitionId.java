@@ -73,4 +73,11 @@ public interface PartitionId extends Resource, Comparable<PartitionId> {
    * @return the partition class that this partition belongs to
    */
   String getPartitionClass();
+
+  /**
+   * @return the resource name which this partition belongs to. Can be null if resource is not defined or applicable.
+   */
+  default String getResourceName() {
+    return null;
+  }
 }
