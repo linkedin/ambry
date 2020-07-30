@@ -319,8 +319,8 @@ class CloudBlobStore implements Store {
    * @return boolean indicating if the upload was completed.
    * @throws CloudStorageException if the upload failed.
    */
-  private boolean uploadWithRetries(BlobId blobId, ByteBuffer messageBuf, long bufferSize, CloudBlobMetadata blobMetadata)
-      throws CloudStorageException {
+  private boolean uploadWithRetries(BlobId blobId, ByteBuffer messageBuf, long bufferSize,
+      CloudBlobMetadata blobMetadata) throws CloudStorageException {
     return requestAgent.doWithRetries(() -> {
       // Note: reset buffer and input stream each time through the loop
       messageBuf.rewind();
@@ -398,9 +398,15 @@ class CloudBlobStore implements Store {
     // Note: always check cache before operation attempt, since this could be a retry after a CONFLICT error,
     // in which case the cache may have been updated by another thread.
     if (!checkCacheState(blobKey, lifeVersion, BlobState.DELETED)) {
-      boolean deleted = cloudDestination.deleteBlob(blobId, deletionTime, lifeVersion, this::preDeleteValidation);
-      addToCache(blobKey, lifeVersion, BlobState.DELETED);
-      return deleted;
+      try {
+        boolean deleted = cloudDestination.deleteBlob(blobId, deletionTime, lifeVersion, this::preDeleteValidation);
+        addToCache(blobKey, lifeVersion, BlobState.DELETED);
+        return deleted;
+      } catch (CloudStorageException ex) {
+        // Cache entry could be stale, evict it to force refresh on retry.
+        removeFromCache(blobKey);
+        throw ex;
+      }
     } else {
       // This means that we definitely saw this delete for the same or smaller lifeversion before.
       throw new CloudStorageException("Error updating blob metadata",
@@ -434,11 +440,18 @@ class CloudBlobStore implements Store {
    * @throws StoreException in case any {@link StoreException} is thrown.
    */
   private short undeleteIfNeeded(BlobId blobId, short lifeVersion) throws CloudStorageException, StoreException {
+    String blobKey = blobId.getID();
     // See note in deleteIfNeeded.
-    if (!checkCacheState(blobId.getID(), lifeVersion, BlobState.CREATED)) {
-      short newLifeVersion = cloudDestination.undeleteBlob(blobId, lifeVersion, this::preUndeleteValidation);
-      addToCache(blobId.getID(), newLifeVersion, BlobState.CREATED);
-      return newLifeVersion;
+    if (!checkCacheState(blobKey, lifeVersion, BlobState.CREATED)) {
+      try {
+        short newLifeVersion = cloudDestination.undeleteBlob(blobId, lifeVersion, this::preUndeleteValidation);
+        addToCache(blobId.getID(), newLifeVersion, BlobState.CREATED);
+        return newLifeVersion;
+      } catch (CloudStorageException ex) {
+        // Cache entry could be stale, evict it to force refresh on retry.
+        removeFromCache(blobKey);
+        throw ex;
+      }
     } else {
       throw new StoreException("Id " + blobId.getID() + " is already undeleted in cloud", StoreErrorCodes.ID_Undeleted);
     }
@@ -488,10 +501,16 @@ class CloudBlobStore implements Store {
     String blobKey = blobId.getID();
     // See note in deleteIfNeeded.
     if (!checkCacheState(blobKey, BlobState.TTL_UPDATED)) {
-      short lifeVersion =
-          cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time, this::preTtlUpdateValidation);
-      addToCache(blobKey, lifeVersion, BlobState.TTL_UPDATED);
-      return (lifeVersion != -1);
+      try {
+        short lifeVersion =
+            cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time, this::preTtlUpdateValidation);
+        addToCache(blobKey, lifeVersion, BlobState.TTL_UPDATED);
+        return (lifeVersion != -1);
+      } catch (CloudStorageException ex) {
+        // Cache entry could be stale, evict it to force refresh on retry.
+        removeFromCache(blobKey);
+        throw ex;
+      }
     }
     return false;
   }
@@ -723,6 +742,18 @@ class CloudBlobStore implements Store {
         }
       }
       recentBlobCache.put(blobKey, new BlobLifeState(blobState, lifeVersion, recentBlobCache.get(blobKey)));
+    }
+  }
+
+  /**
+   * Remove a blob state mapping from the recent blob cache.
+   * @param blobKey the blob key to remove.
+   */
+  // Visible for test.
+  void removeFromCache(String blobKey) {
+    if (isVcr) {
+      logger.debug("Removing key {} from cache", blobKey);
+      recentBlobCache.remove(blobKey);
     }
   }
 
