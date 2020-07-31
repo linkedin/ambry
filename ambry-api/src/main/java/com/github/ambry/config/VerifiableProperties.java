@@ -234,6 +234,7 @@ public class VerifiableProperties {
   public <E extends Enum<E>> E getEnum(String name, Class<E> type, E defaultVal) {
     return containsKey(name) ? Enum.valueOf(type, getProperty(name)) : defaultVal;
   }
+
   /**
    * Get a string property, or, if no such property is defined, return the given default value
    */
