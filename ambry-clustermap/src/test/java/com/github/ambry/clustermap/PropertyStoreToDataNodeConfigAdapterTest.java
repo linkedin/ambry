@@ -34,7 +34,7 @@ public class PropertyStoreToDataNodeConfigAdapterTest extends DataNodeConfigSour
 
   private final MockHelixPropertyStore<ZNRecord> propertyStore = new MockHelixPropertyStore<>();
   private final DataNodeConfigSource source =
-      new PropertyStoreToDataNodeConfigAdapter(propertyStore, TestUtils.getDummyConfig(), DC_NAME);
+      new PropertyStoreToDataNodeConfigAdapter(propertyStore, TestUtils.getDummyConfig());
 
   /**
    * Test {@link DataNodeConfigSource} methods.

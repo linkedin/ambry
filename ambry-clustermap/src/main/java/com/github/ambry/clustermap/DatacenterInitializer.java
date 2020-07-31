@@ -201,7 +201,7 @@ class DatacenterInitializer {
     // call. Therefore, when the call to add a listener returns, the initial notification will have been
     // received and handled.
     DataNodeConfigSource dataNodeConfigSource =
-        ClusterMapUtils.getDataNodeConfigSource(clusterMapConfig, manager, dcName, dataNodeConfigSourceMetrics);
+        ClusterMapUtils.getDataNodeConfigSource(clusterMapConfig, manager, dataNodeConfigSourceMetrics);
     dataNodeConfigSource.addDataNodeConfigChangeListener(clusterChangeHandler);
     logger.info("Registered instance config change listeners for Helix manager at {}", zkConnectStr);
     manager.addIdealStateChangeListener(clusterChangeHandler);

@@ -283,7 +283,16 @@ public class ClusterMapUtils {
    * @return the datacenter name associated with the given instance.
    */
   public static String getDcName(InstanceConfig instanceConfig) {
-    return instanceConfig.getRecord().getSimpleField(DATACENTER_STR);
+    return getDcName(instanceConfig.getRecord());
+  }
+
+  /**
+   * Get the datacenter name associated with the given instance.
+   * @param znRecord the {@link ZNRecord} associated with the interested instance.
+   * @return the datacenter name associated with the given instance.
+   */
+  public static String getDcName(ZNRecord znRecord) {
+    return znRecord.getSimpleField(DATACENTER_STR);
   }
 
   /**
@@ -358,25 +367,24 @@ public class ClusterMapUtils {
    * Get an instance of a {@link DataNodeConfigSource} based on settings in the provided {@link ClusterMapConfig}
    * @param clusterMapConfig the config to use.
    * @param helixManager the manager instance to use.
-   * @param dcName the name of the datacenter that the returned source should be configured for.
    * @param metrics the metrics instance that the returned source should use.
    * @return the {@link DataNodeConfigSource} instance.
    */
   static DataNodeConfigSource getDataNodeConfigSource(ClusterMapConfig clusterMapConfig, HelixManager helixManager,
-      String dcName, DataNodeConfigSourceMetrics metrics) {
+      DataNodeConfigSourceMetrics metrics) {
     switch (clusterMapConfig.clusterMapDataNodeConfigSourceType) {
       case INSTANCE_CONFIG:
         return new InstanceConfigToDataNodeConfigAdapter(helixManager, clusterMapConfig);
       case PROPERTY_STORE:
-        return new PropertyStoreToDataNodeConfigAdapter(helixManager.getHelixPropertyStore(), clusterMapConfig, dcName);
+        return new PropertyStoreToDataNodeConfigAdapter(helixManager.getHelixPropertyStore(), clusterMapConfig);
       case COMPOSITE_INSTANCE_CONFIG_PRIMARY:
         return new CompositeDataNodeConfigSource(
             new InstanceConfigToDataNodeConfigAdapter(helixManager, clusterMapConfig),
-            new PropertyStoreToDataNodeConfigAdapter(helixManager.getHelixPropertyStore(), clusterMapConfig, dcName),
+            new PropertyStoreToDataNodeConfigAdapter(helixManager.getHelixPropertyStore(), clusterMapConfig),
             SystemTime.getInstance(), metrics);
       case COMPOSITE_PROPERTY_STORE_PRIMARY:
         return new CompositeDataNodeConfigSource(
-            new PropertyStoreToDataNodeConfigAdapter(helixManager.getHelixPropertyStore(), clusterMapConfig, dcName),
+            new PropertyStoreToDataNodeConfigAdapter(helixManager.getHelixPropertyStore(), clusterMapConfig),
             new InstanceConfigToDataNodeConfigAdapter(helixManager, clusterMapConfig), SystemTime.getInstance(),
             metrics);
       default:
