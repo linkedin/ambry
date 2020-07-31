@@ -96,14 +96,14 @@ public class HelixBootstrapUpgradeTool {
   public static void main(String[] args) throws Exception {
     OptionParser parser = new OptionParser();
 
-    OptionSpec dropClusterOpt = parser.accepts("dropCluster",
+    OptionSpec<Void> dropClusterOpt = parser.accepts("dropCluster",
         "Drops the given Ambry cluster from Helix. Use this option with care. If present, must be accompanied with and "
             + "only with the clusterName argument");
 
-    OptionSpec forceRemove = parser.accepts("forceRemove",
+    OptionSpec<Void> forceRemove = parser.accepts("forceRemove",
         "Specifies that any instances or partitions absent in the json files be removed from Helix. Use this with care");
 
-    OptionSpec addStateModel = parser.accepts("addStateModel",
+    OptionSpec<Void> addStateModel = parser.accepts("addStateModel",
         "Attempt to add new state model to Helix StateModelDefs if it doesn't exist. This option will not touch instanceConfig");
 
     ArgumentAcceptingOptionSpec<String> hardwareLayoutPathOpt =
@@ -174,13 +174,14 @@ public class HelixBootstrapUpgradeTool {
 
     ArgumentAcceptingOptionSpec<String> adminOperationOpt = parser.accepts("adminOperation",
         "(Optional argument) Perform admin operations to manage resources in cluster. For example: "
-            + " '--adminOperation UpdateIdealState'     # Update IdealState based on static clustermap. This won't change InstanceConfig"
-            + " '--adminOperation DisablePartition'     # Disable partition on certain node. Usually used as first step to decommission replica(s)"
-            + " '--adminOperation EnablePartition'      # Enable partition on certain node (if partition is previously disabled)"
-            + " '--adminOperation ResetPartition'       # Reset partition on certain node (if partition is previously in error state)"
-            + " '--adminOperation ListSealedPartition'  # List all sealed partitions in Helix cluster (aggregated across all datacenters)"
-            + " '--adminOperation ValidateCluster'      # Validates the information in static clustermap is consistent with the information in Helix"
-            + " '--adminOperation BootstrapCluster'     # (Default operation if not specified) Bootstrap cluster based on static clustermap")
+            + " '--adminOperation UpdateIdealState' # Update IdealState based on static clustermap. This won't change InstanceConfig"
+            + " '--adminOperation DisablePartition' # Disable partition on certain node. Usually used as first step to decommission replica(s)"
+            + " '--adminOperation EnablePartition' # Enable partition on certain node (if partition is previously disabled)"
+            + " '--adminOperation ResetPartition' # Reset partition on certain node (if partition is previously in error state)"
+            + " '--adminOperation ListSealedPartition' # List all sealed partitions in Helix cluster (aggregated across all datacenters)"
+            + " '--adminOperation ValidateCluster' # Validates the information in static clustermap is consistent with the information in Helix"
+            + " '--adminOperation MigrateToPropertyStore' # Migrate custom instance config properties to DataNodeConfigs in the property store"
+            + " '--adminOperation BootstrapCluster' # (Default operation if not specified) Bootstrap cluster based on static clustermap")
         .withRequiredArg()
         .describedAs("admin_operation")
         .ofType(String.class);
@@ -271,6 +272,10 @@ public class HelixBootstrapUpgradeTool {
           break;
         case ListSealedPartition:
           HelixBootstrapUpgradeUtil.listSealedPartition(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+              clusterNamePrefix, dcs);
+          break;
+        case MigrateToPropertyStore:
+          HelixBootstrapUpgradeUtil.migrateToPropertyStore(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
               clusterNamePrefix, dcs);
           break;
         case ResetPartition:

@@ -850,6 +850,63 @@ public class HelixBootstrapUpgradeToolTest {
   }
 
   /**
+   * Test migrating instance configs to HelixPropertyStore
+   */
+  @Test
+  public void testMigrateToPropertyStore() throws Exception {
+    assumeTrue(dcStr.equals("all"));
+    // build a cluster first with metadata in the instance configs
+    long expectedResourceCount =
+        (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
+
+    // copy the configs
+    HelixBootstrapUpgradeUtil.migrateToPropertyStore(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr);
+
+    // verify that they are present in the property store and that the basic values match expectations
+    for (ZkInfo zkInfo : dcsToZkInfo.values()) {
+      String dcName = zkInfo.getDcName();
+      HelixPropertyStore<ZNRecord> propertyStore =
+          CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
+              Collections.singletonList(propertyStoreConfig.rootPath));
+      try {
+        PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter =
+            new PropertyStoreToDataNodeConfigAdapter(propertyStore,
+                HelixBootstrapUpgradeUtil.getClusterMapConfig(CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP,
+                    dcName, null), dcName);
+        Map<DataNodeId, Set<String>> dataNodeToReplicas = testPartitionLayout.getPartitionLayout()
+            .getPartitions(null)
+            .stream()
+            .flatMap(partition -> partition.getReplicaIds().stream())
+            .collect(Collectors.groupingBy(ReplicaId::getDataNodeId,
+                Collectors.mapping(replica -> replica.getPartitionId().toPathString(), Collectors.toSet())));
+        List<DataNode> expectedNodes = testHardwareLayout.getAllDataNodesFromDc(zkInfo.getDcName());
+        for (DataNode expectedNode : expectedNodes) {
+          String instanceName = getInstanceName(expectedNode);
+          DataNodeConfig config = propertyStoreAdapter.get(instanceName);
+          assertNotNull("Config for " + instanceName + " not found", config);
+          assertEquals("Unexpected instance name", instanceName, config.getInstanceName());
+          assertEquals("Unexpected host", expectedNode.getHostname(), config.getHostName());
+          assertEquals("Unexpected port", expectedNode.getPort(), config.getPort());
+          Set<String> expectedReplicas = dataNodeToReplicas.get(expectedNode);
+          Set<String> replicasInConfig = config.getDiskConfigs()
+              .values()
+              .stream()
+              .flatMap(diskConfig -> diskConfig.getReplicaConfigs().keySet().stream())
+              .collect(Collectors.toSet());
+          assertEquals("Unexpected partitions in config", expectedReplicas, replicasInConfig);
+        }
+        assertEquals("Unexpected number of node configs in property store", expectedNodes.size(),
+            propertyStore.getChildren(PropertyStoreToDataNodeConfigAdapter.CONFIG_PATH, null, AccessOption.PERSISTENT)
+                .size());
+      } finally {
+        propertyStore.stop();
+      }
+    }
+  }
+
+  /**
    * Test that bootstrap tool is able to generate partition override map from static file (if adminConfigFilePath is not
    * null). It tests both success and failure cases.
    * @throws Exception
