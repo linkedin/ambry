@@ -148,7 +148,7 @@ public class AmbryPartition implements PartitionId {
     snapshot.put(PARTITION_ID, toPathString());
     snapshot.put(PARTITION_WRITE_STATE, getPartitionState().name());
     snapshot.put(PARTITION_CLASS, getPartitionClass());
-    snapshot.put(PARTITION_RESOURCE_ID, getResourceName());
+    snapshot.put(PARTITION_RESOURCE_NAME, getResourceName());
     JSONArray replicas = new JSONArray();
     getReplicaIds().forEach(replica -> replicas.put(replica.getSnapshot()));
     snapshot.put(PARTITION_REPLICAS, replicas);
