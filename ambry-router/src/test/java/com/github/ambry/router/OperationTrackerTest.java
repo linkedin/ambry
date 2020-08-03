@@ -372,6 +372,35 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Test GET operation is able to requests to replicas in all partition states (except for ERROR).
+   */
+  @Test
+  public void getOperationWithReplicaStateTest() {
+    assumeTrue(replicasStateEnabled);
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    datanodes = new ArrayList<>(Arrays.asList(new MockDataNodeId(portList, mountPaths, "dc-0"),
+        new MockDataNodeId(portList, mountPaths, "dc-1")));
+    mockPartition = new MockPartitionId();
+    for (ReplicaState state : EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER,
+        ReplicaState.INACTIVE, ReplicaState.OFFLINE)) {
+      populateReplicaList(1, state);
+    }
+    localDcName = datanodes.get(0).getDatacenterName();
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+    OperationTracker ot = getOperationTracker(true, 1, 1, true, Integer.MAX_VALUE, RouterOperation.GetBlobOperation);
+    // make sure 4 requests fails and last one succeeds. (This is to verify operation tracker adds offline replica into replica pool as well)
+    for (int i = 0; i < 4; ++i) {
+      sendRequests(ot, 1, false);
+      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+      assertFalse("Operation should not complete", ot.isDone());
+    }
+    sendRequests(ot, 1, false);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
    * Test delete/ttlUpdate operation when replicasStateEnabled is enabled/disabled.
    * local dc: 2 STANDBY and 1 INACTIVE; remote dc: 2 STANDBY and 1 INACTIVE
    * 1. Issue 3 requests in parallel

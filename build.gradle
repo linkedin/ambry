@@ -152,12 +152,7 @@ project(':ambry-utils') {
         compile "org.json:json:$jsonVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         compile "io.netty:netty-buffer:$nettyVersion"
-        testCompile ("org.apache.helix:helix-core:$helixVersion") {
-            // TODO Once new release is out, we can remove this
-            exclude group: "org.apache.helix", module: "helix-common"
-        }
-        // TODO remove zookeeper dependency once Helix open source fix is out
-        testCompile "org.apache.zookeeper:zookeeper:3.4.13"
+        testCompile "org.apache.helix:helix-core:$helixVersion"
         testCompile project(":ambry-test-utils")
     }
 }
@@ -178,12 +173,7 @@ project(':ambry-api') {
         compile project(':ambry-utils')
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
-            // This is a workaround for https://github.com/apache/helix/issues/1022.
-            // TODO Once new release is out, we can remove this
-            exclude group: "org.apache.helix", module: "helix-common"
         }
-        // TODO remove zookeeper dependency once Helix open source fix is out
-        compile "org.apache.zookeeper:zookeeper:3.4.13"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.codehaus.jackson:jackson-core-asl:$jacksonVersion"
         compile "org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion"
@@ -198,12 +188,7 @@ project(':ambry-account') {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons')
-        compile ("org.apache.helix:helix-core:$helixVersion") {
-            // TODO remove this once Helix open source fix is out
-            exclude group: "org.apache.helix", module: "helix-common"
-        }
-        // TODO remove zookeeper dependency once Helix open source fix is out
-        compile "org.apache.zookeeper:zookeeper:3.4.13"
+        compile "org.apache.helix:helix-core:$helixVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
         testCompile project(':ambry-test-utils')
@@ -216,12 +201,7 @@ project(':ambry-clustermap') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils')
-        compile ("org.apache.helix:helix-core:$helixVersion") {
-            // TODO remove this once Helix open source fix is out
-            exclude group: "org.apache.helix", module: "helix-common"
-        }
-        // TODO remove zookeeper dependency once Helix open source fix is out
-        compile "org.apache.zookeeper:zookeeper:3.4.13"
+        compile "org.apache.helix:helix-core:$helixVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
         testCompile project(':ambry-commons')

@@ -668,6 +668,20 @@ public class HelixClusterManager implements ClusterMap {
       return new ArrayList<>(ambryPartitionToAmbryReplicas.get(partition));
     }
 
+    @Override
+    public String getResourceNameForPartition(AmbryPartition partition) {
+      String result = null;
+      // go through all datacenters in case that partition resides in one datacenter only
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        String resourceName = dcInfo.clusterChangeHandler.getPartitionToResourceMap().get(partition.toPathString());
+        if (resourceName != null) {
+          result = resourceName;
+          break;
+        }
+      }
+      return result;
+    }
+
     /**
      * {@inheritDoc}
      * If dcName is null, then get replicas by given state from all datacenters.

@@ -30,6 +30,15 @@ interface ClusterManagerCallback<R extends ReplicaId, D extends DiskId, P extend
   List<R> getReplicaIdsForPartition(P partition);
 
   /**
+   * Get resource name associated with given partition.
+   * @param partition the {@link PartitionId} for which to get the resource name.
+   * @return the resource name associated with given partition.
+   */
+  default String getResourceNameForPartition(P partition) {
+    return null;
+  }
+
+  /**
    * Get replicas of given partition from specified datacenter that are in required state
    * @param partition the {@link PartitionId} for which to get the list of replicas.
    * @param state {@link ReplicaState} associated with replica
