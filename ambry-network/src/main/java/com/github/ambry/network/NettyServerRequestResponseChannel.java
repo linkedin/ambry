@@ -51,7 +51,6 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     if (!(originalRequest instanceof NettyServerRequest)) {
       throw new IllegalArgumentException("NetworkRequest should be NettyRequest");
     }
-
     ChannelHandlerContext ctx = ((NettyServerRequest) originalRequest).getCtx();
     http2ServerMetrics.requestTotalProcessingTime.update(
         System.currentTimeMillis() - originalRequest.getStartTimeInMs());

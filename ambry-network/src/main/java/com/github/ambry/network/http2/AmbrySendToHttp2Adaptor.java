@@ -79,6 +79,7 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
       try {
         send.writeTo(byteBufChannel);
         dataContent = byteBufChannel.getBuf();
+        send.release();
       } catch (IOException e) {
         promise.setFailure(e);
         return;
