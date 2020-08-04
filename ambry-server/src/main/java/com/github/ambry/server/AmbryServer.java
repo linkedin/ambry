@@ -25,6 +25,7 @@ import com.github.ambry.clustermap.ClusterSpectator;
 import com.github.ambry.clustermap.ClusterSpectatorFactory;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
@@ -120,6 +121,7 @@ public class AmbryServer {
   private ScheduledFuture<?> consistencyCheckerTask = null;
   private ScheduledExecutorService consistencyCheckerScheduler = null;
   private ServerSecurityService serverSecurityService;
+  private final NettyInternalMetrics nettyInternalMetrics;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       ClusterSpectatorFactory clusterSpectatorFactory, Time time) throws InstantiationException {
@@ -149,6 +151,7 @@ public class AmbryServer {
       ServerSecurityServiceFactory serverSecurityServiceFactory =
           Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, metrics, registry);
       serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
+      nettyInternalMetrics = new NettyInternalMetrics(registry, new NettyConfig(properties));
     } catch (Exception e) {
       logger.error("Error during bootup", e);
       throw new InstantiationException("failure during bootup " + e);
@@ -312,6 +315,10 @@ public class AmbryServer {
         clusterParticipant.participate(ambryHealthReports, accountServiceCallback);
       }
 
+      if (nettyInternalMetrics != null) {
+        nettyInternalMetrics.start();
+        logger.info("NettyInternalMetric starts");
+      }
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverStartTimeInMs.update(processingTime);
@@ -330,6 +337,9 @@ public class AmbryServer {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
+      if (nettyInternalMetrics != null) {
+        nettyInternalMetrics.stop();
+      }
       if (consistencyCheckerTask != null) {
         consistencyCheckerTask.cancel(false);
       }
