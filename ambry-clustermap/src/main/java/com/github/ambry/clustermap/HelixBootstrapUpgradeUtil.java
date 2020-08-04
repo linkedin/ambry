@@ -694,21 +694,18 @@ public class HelixBootstrapUpgradeUtil {
    */
   private void uploadClusterAdminInfos(Map<String, Map<String, Map<String, String>>> adminInfosByDc,
       String clusterAdminType, String adminConfigZNodePath) {
-    Properties storeProps = new Properties();
-    storeProps.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
-    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
-    for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
-      info("Uploading {} infos for datacenter {}.", clusterAdminType, entry.getKey());
-      List<String> zkConnectStrs = entry.getValue().getZkConnectStrs();
-      // The number of zk endpoints has been validated in the ctor of HelixBootstrapUpgradeUtil, no need to check it again
-      HelixPropertyStore<ZNRecord> helixPropertyStore =
-          CommonUtils.createHelixPropertyStore(zkConnectStrs.get(0), propertyStoreConfig, null);
-      ZNRecord znRecord = new ZNRecord(clusterAdminType);
-      znRecord.setMapFields(adminInfosByDc.get(entry.getKey()));
-      if (!helixPropertyStore.set(adminConfigZNodePath, znRecord, AccessOption.PERSISTENT)) {
-        logger.error("Failed to upload {} infos for datacenter {}", clusterAdminType, entry.getKey());
+    for (String dcName : dataCenterToZkAddress.keySet()) {
+      info("Uploading {} infos for datacenter {}.", clusterAdminType, dcName);
+      HelixPropertyStore<ZNRecord> helixPropertyStore = createHelixPropertyStore(dcName);
+      try {
+        ZNRecord znRecord = new ZNRecord(clusterAdminType);
+        znRecord.setMapFields(adminInfosByDc.get(dcName));
+        if (!helixPropertyStore.set(adminConfigZNodePath, znRecord, AccessOption.PERSISTENT)) {
+          logger.error("Failed to upload {} infos for datacenter {}", clusterAdminType, dcName);
+        }
+      } finally {
+        helixPropertyStore.stop();
       }
-      helixPropertyStore.stop();
     }
   }
 
@@ -731,32 +728,43 @@ public class HelixBootstrapUpgradeUtil {
   /**
    * Convert instance configs to the new DataNodeConfig format and persist them in the property store.
    */
-  private void migrateToPropertyStore() {
-    adminForDc.forEach((dcName, helixAdmin) -> {
-      logger.info("Starting property store migration in {}", dcName);
-      ClusterMapConfig config = getClusterMapConfig(clusterName, dcName, null);
-      InstanceConfigToDataNodeConfigAdapter.Converter instanceConfigConverter =
-          new InstanceConfigToDataNodeConfigAdapter.Converter(config);
-      HelixPropertyStore<ZNRecord> propertyStore = createHelixPropertyStore(dcName);
+  private void migrateToPropertyStore() throws InterruptedException {
+    CountDownLatch migrationComplete = new CountDownLatch(adminForDc.size());
+    // different DCs can be migrated in parallel
+    adminForDc.forEach((dcName, helixAdmin) -> Utils.newThread(() -> {
       try {
-        PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter =
-            new PropertyStoreToDataNodeConfigAdapter(propertyStore, config, dcName);
-        List<String> instanceNames = helixAdmin.getInstancesInCluster(clusterName);
-        logger.info("Found {} instances in cluster", instanceNames.size());
-        instanceNames.forEach(instanceName -> {
-          logger.info("Copying config for node {}", instanceName);
-          InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-          DataNodeConfig dataNodeConfig = instanceConfigConverter.convert(instanceConfig);
-          logger.debug("Writing {} to property store in {}", dataNodeConfig, dcName);
-          if (!propertyStoreAdapter.set(dataNodeConfig)) {
-            logger.error("Failed to persist config for node {} in the property store.",
-                dataNodeConfig.getInstanceName());
-          }
-        });
+        logger.info("Starting property store migration in {}", dcName);
+        ClusterMapConfig config = getClusterMapConfig(clusterName, dcName, null);
+        InstanceConfigToDataNodeConfigAdapter.Converter instanceConfigConverter =
+            new InstanceConfigToDataNodeConfigAdapter.Converter(config);
+        HelixPropertyStore<ZNRecord> propertyStore = createHelixPropertyStore(dcName);
+        try {
+          PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter =
+              new PropertyStoreToDataNodeConfigAdapter(propertyStore, config, dcName);
+          List<String> instanceNames = helixAdmin.getInstancesInCluster(clusterName);
+          logger.info("Found {} instances in cluster", instanceNames.size());
+          instanceNames.forEach(instanceName -> {
+            logger.info("Copying config for node {}", instanceName);
+            InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+            DataNodeConfig dataNodeConfig = instanceConfigConverter.convert(instanceConfig);
+            logger.debug("Writing {} to property store in {}", dataNodeConfig, dcName);
+            if (!propertyStoreAdapter.set(dataNodeConfig)) {
+              logger.error("Failed to persist config for node {} in the property store.",
+                  dataNodeConfig.getInstanceName());
+            }
+          });
+        } finally {
+          propertyStore.stop();
+        }
+        logger.error("Successfully migrated to property store in {}", dcName);
+      } catch (Throwable t) {
+        logger.error("Error while migrating to property store in {}", dcName, t);
       } finally {
-        propertyStore.stop();
+        migrationComplete.countDown();
       }
-    });
+    }, false).start());
+
+    migrationComplete.await();
   }
 
   /**
@@ -1191,10 +1199,10 @@ public class HelixBootstrapUpgradeUtil {
    * @return {@link HelixPropertyStore} associated with given dc.
    */
   private HelixPropertyStore<ZNRecord> createHelixPropertyStore(String dcName) {
-    // create znode under admin configs
     Properties storeProps = new Properties();
     storeProps.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
+    // The number of zk endpoints has been validated in the ctor of HelixBootstrapUpgradeUtil, no need to check it again
     String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
     return CommonUtils.createHelixPropertyStore(zkConnectStr, propertyStoreConfig, null);
   }
