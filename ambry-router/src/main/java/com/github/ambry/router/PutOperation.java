@@ -1432,7 +1432,9 @@ class PutOperation {
       if (responseInfo.getError() != null) {
         logger.debug("PutRequest with response correlationId {} timed out for replica {} ", correlationId,
             chunkPutRequestInfo.replicaId.getDataNodeId());
-        setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
+        setChunkException(new RouterException(
+            "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
+            RouterErrorCode.OperationTimedOut));
         isSuccessful = false;
         putRequestFinalState = TrackedRequestFinalState.FAILURE;
       } else {

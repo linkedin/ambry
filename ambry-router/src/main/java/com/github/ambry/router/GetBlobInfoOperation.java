@@ -210,8 +210,9 @@ class GetBlobInfoOperation extends GetOperation {
     if (responseInfo.getError() != null) {
       logger.trace("GetBlobInfoRequest with response correlationId {} timed out for replica {} ", correlationId,
           getRequestInfo.replicaId.getDataNodeId());
-      onErrorResponse(getRequestInfo.replicaId,
-          new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
+      onErrorResponse(getRequestInfo.replicaId, new RouterException(
+          "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
+          RouterErrorCode.OperationTimedOut));
     } else {
       if (getResponse == null) {
         logger.trace(
