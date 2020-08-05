@@ -13,7 +13,9 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -33,6 +35,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.HelixManager;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
@@ -280,7 +283,16 @@ public class ClusterMapUtils {
    * @return the datacenter name associated with the given instance.
    */
   public static String getDcName(InstanceConfig instanceConfig) {
-    return instanceConfig.getRecord().getSimpleField(DATACENTER_STR);
+    return getDcName(instanceConfig.getRecord());
+  }
+
+  /**
+   * Get the datacenter name associated with the given instance.
+   * @param znRecord the {@link ZNRecord} associated with the interested instance.
+   * @return the datacenter name associated with the given instance.
+   */
+  public static String getDcName(ZNRecord znRecord) {
+    return znRecord.getSimpleField(DATACENTER_STR);
   }
 
   /**
@@ -349,6 +361,35 @@ public class ClusterMapUtils {
       }
     }
     return result;
+  }
+
+  /**
+   * Get an instance of a {@link DataNodeConfigSource} based on settings in the provided {@link ClusterMapConfig}
+   * @param clusterMapConfig the config to use.
+   * @param helixManager the manager instance to use.
+   * @param metrics the metrics instance that the returned source should use.
+   * @return the {@link DataNodeConfigSource} instance.
+   */
+  static DataNodeConfigSource getDataNodeConfigSource(ClusterMapConfig clusterMapConfig, HelixManager helixManager,
+      DataNodeConfigSourceMetrics metrics) {
+    switch (clusterMapConfig.clusterMapDataNodeConfigSourceType) {
+      case INSTANCE_CONFIG:
+        return new InstanceConfigToDataNodeConfigAdapter(helixManager, clusterMapConfig);
+      case PROPERTY_STORE:
+        return new PropertyStoreToDataNodeConfigAdapter(helixManager.getHelixPropertyStore(), clusterMapConfig);
+      case COMPOSITE_INSTANCE_CONFIG_PRIMARY:
+        return new CompositeDataNodeConfigSource(
+            new InstanceConfigToDataNodeConfigAdapter(helixManager, clusterMapConfig),
+            new PropertyStoreToDataNodeConfigAdapter(helixManager.getHelixPropertyStore(), clusterMapConfig),
+            SystemTime.getInstance(), metrics);
+      case COMPOSITE_PROPERTY_STORE_PRIMARY:
+        return new CompositeDataNodeConfigSource(
+            new PropertyStoreToDataNodeConfigAdapter(helixManager.getHelixPropertyStore(), clusterMapConfig),
+            new InstanceConfigToDataNodeConfigAdapter(helixManager, clusterMapConfig), SystemTime.getInstance(),
+            metrics);
+      default:
+        throw new IllegalArgumentException("Unknown type: " + clusterMapConfig.clusterMapDataNodeConfigSourceType);
+    }
   }
 
   /**

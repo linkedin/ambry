@@ -113,13 +113,14 @@ public class HelixClusterManager implements ClusterMap {
     }
     if (initializationFailureMap.get(clusterMapConfig.clusterMapDatacenterName) == null) {
       List<DatacenterInitializer> initializers = new ArrayList<>();
+      DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics = new DataNodeConfigSourceMetrics(metricRegistry);
       for (DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
         // Initialize from every remote datacenter in a separate thread to speed things up.
         DatacenterInitializer initializer =
             new DatacenterInitializer(clusterMapConfig, localManager, helixFactory, dcZkInfo, selfInstanceName,
                 partitionOverrideInfoMap, clusterChangeHandlerCallback, helixClusterManagerCallback,
-                helixClusterManagerMetrics, sealedStateChangeCounter, partitionMap, partitionNameToAmbryPartition,
-                ambryPartitionToAmbryReplicas);
+                helixClusterManagerMetrics, dataNodeConfigSourceMetrics, sealedStateChangeCounter, partitionMap,
+                partitionNameToAmbryPartition, ambryPartitionToAmbryReplicas);
         initializer.start();
         initializers.add(initializer);
       }

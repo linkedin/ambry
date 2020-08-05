@@ -29,6 +29,7 @@ class HelixParticipantMetrics {
   private final Map<String, ReplicaState> localPartitionAndState;
   // no need to record exact number of "dropped" partition, a counter to track partition-dropped events would suffice
   final Counter partitionDroppedCount;
+  final Counter setReplicaDisabledStateErrorCount;
 
   HelixParticipantMetrics(MetricRegistry metricRegistry, String zkConnectStr,
       Map<String, ReplicaState> localPartitionAndState) {
@@ -55,6 +56,8 @@ class HelixParticipantMetrics {
         errorStatePartitionCount);
     partitionDroppedCount =
         metricRegistry.counter(MetricRegistry.name(HelixParticipant.class, "partitionDroppedCount" + zkSuffix));
+    setReplicaDisabledStateErrorCount = metricRegistry.counter(
+        MetricRegistry.name(HelixParticipant.class, "setReplicaDisabledStateErrorCount" + zkSuffix));
   }
 
   /**

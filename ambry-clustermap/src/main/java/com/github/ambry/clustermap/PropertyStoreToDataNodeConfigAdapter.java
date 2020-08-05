@@ -53,12 +53,11 @@ public class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSourc
   /**
    * @param propertyStore the {@link HelixPropertyStore} instance to use to interact with zookeeper.
    * @param clusterMapConfig the {@link ClusterMapConfig} to use.
-   * @param dcName the datacenter name for for the property store.
    */
   public PropertyStoreToDataNodeConfigAdapter(HelixPropertyStore<ZNRecord> propertyStore,
-      ClusterMapConfig clusterMapConfig, String dcName) {
+      ClusterMapConfig clusterMapConfig) {
     this.propertyStore = propertyStore;
-    this.converter = new Converter(clusterMapConfig.clusterMapDefaultPartitionClass, dcName);
+    this.converter = new Converter(clusterMapConfig.clusterMapDefaultPartitionClass);
     this.eventExecutor = Executors.newSingleThreadExecutor();
   }
 
@@ -184,15 +183,12 @@ public class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSourc
     private static final String HOSTNAME_FIELD = "hostname";
     private static final String PORT_FIELD = "port";
     private final String defaultPartitionClass;
-    private final String dcName;
 
     /**
      * @param defaultPartitionClass the default partition class for these nodes.
-     * @param dcName the datacenter name for these nodes.
      */
-    Converter(String defaultPartitionClass, String dcName) {
+    Converter(String defaultPartitionClass) {
       this.defaultPartitionClass = defaultPartitionClass;
-      this.dcName = dcName;
     }
 
     /**
@@ -208,7 +204,7 @@ public class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSourc
       }
 
       DataNodeConfig dataNodeConfig = new DataNodeConfig(record.getId(), record.getSimpleField(HOSTNAME_FIELD),
-          record.getIntField(PORT_FIELD, DataNodeId.UNKNOWN_PORT), dcName, getSslPortStr(record),
+          record.getIntField(PORT_FIELD, DataNodeId.UNKNOWN_PORT), getDcName(record), getSslPortStr(record),
           getHttp2PortStr(record), getRackId(record), DEFAULT_XID);
       dataNodeConfig.getSealedReplicas().addAll(getSealedReplicas(record));
       dataNodeConfig.getStoppedReplicas().addAll(getStoppedReplicas(record));
@@ -247,6 +243,7 @@ public class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSourc
       record.setIntField(SCHEMA_VERSION_STR, VERSION_0);
       record.setSimpleField(HOSTNAME_FIELD, dataNodeConfig.getHostName());
       record.setIntField(PORT_FIELD, dataNodeConfig.getPort());
+      record.setSimpleField(DATACENTER_STR, dataNodeConfig.getDatacenterName());
       if (dataNodeConfig.getSslPort() != null) {
         record.setIntField(SSL_PORT_STR, dataNodeConfig.getSslPort());
       }

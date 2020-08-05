@@ -226,6 +226,16 @@ public class VerifiableProperties {
   }
 
   /**
+   * @param name The property name.
+   * @param type The type of enum to parse.
+   * @param defaultVal The default value to use if the property is not found.
+   * @return The enum value.
+   */
+  public <E extends Enum<E>> E getEnum(String name, Class<E> type, E defaultVal) {
+    return containsKey(name) ? Enum.valueOf(type, getProperty(name)) : defaultVal;
+  }
+
+  /**
    * Get a string property, or, if no such property is defined, return the given default value
    */
   public String getString(String name, String defaultVal) {

@@ -61,6 +61,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
@@ -1864,8 +1865,8 @@ public class BlobStoreTest {
     properties.setProperty("store.replica.status.delegate.enable", "true");
     properties.setProperty("store.set.local.partition.state.enabled", "true");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
-    InstanceConfig instanceConfig = new InstanceConfig("localhost");
-    instanceConfig.setPort("2222");
+    AtomicReference<InstanceConfig> instanceConfig = new AtomicReference<>(new InstanceConfig("localhost"));
+    instanceConfig.get().setPort("2222");
     Map<String, List<String>> listMap = new HashMap<>();
     listMap.put(storeId, null);
     ZNRecord znRecord = new ZNRecord("localhost");
@@ -1874,9 +1875,13 @@ public class BlobStoreTest {
     idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
     // mock helix related components
     HelixAdmin mockHelixAdmin = mock(HelixAdmin.class);
-    when(mockHelixAdmin.getInstanceConfig(eq(CLUSTER_NAME), anyString())).thenReturn(instanceConfig);
+    when(mockHelixAdmin.getInstanceConfig(eq(CLUSTER_NAME), anyString())).then(invocation -> instanceConfig.get());
     when(mockHelixAdmin.getResourcesInCluster(eq(CLUSTER_NAME))).thenReturn(Collections.singletonList(RESOURCE_NAME));
     when(mockHelixAdmin.getResourceIdealState(eq(CLUSTER_NAME), eq(RESOURCE_NAME))).thenReturn(idealState);
+    when(mockHelixAdmin.setInstanceConfig(any(), any(), any())).then(invocation -> {
+      instanceConfig.set(invocation.getArgument(2));
+      return true;
+    });
     HelixManager mockHelixManager = mock(HelixManager.class);
     when(mockHelixManager.getClusterManagmentTool()).thenReturn(mockHelixAdmin);
     HelixFactory mockHelixFactory = mock(HelixFactory.class);
@@ -1908,10 +1913,10 @@ public class BlobStoreTest {
       assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
     }
     assertNull("Disabled partition list should be null as disabling replica didn't succeed",
-        instanceConfig.getDisabledPartitions(RESOURCE_NAME));
+        instanceConfig.get().getDisabledPartitions(RESOURCE_NAME));
 
     // 2. mock success case
-    when(mockHelixAdmin.getInstanceConfig(eq(CLUSTER_NAME), anyString())).thenReturn(instanceConfig);
+    when(mockHelixAdmin.getInstanceConfig(eq(CLUSTER_NAME), anyString())).then(invocation -> instanceConfig.get());
     testStore.start();
     assertTrue("Store should start successfully", testStore.isStarted());
     try {
@@ -1921,15 +1926,15 @@ public class BlobStoreTest {
       assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
     }
     assertEquals("Disabled partition name is not expected", storeId,
-        instanceConfig.getDisabledPartitions(RESOURCE_NAME).get(0));
+        instanceConfig.get().getDisabledPartitions(RESOURCE_NAME).get(0));
     // verify "DISABLED" list in InstanceConfig has correct partition id.
     assertEquals("Disabled replica list is not expected", Collections.singletonList(storeId),
-        getDisabledReplicas(instanceConfig));
+        getDisabledReplicas(instanceConfig.get()));
     // 3. mock disk is replaced case, restart should succeed
     testStore.start();
     assertNull("Disabled partition list should be null as restart will enable same replica",
-        instanceConfig.getDisabledPartitions(RESOURCE_NAME));
-    assertTrue("Disabled replica list should be empty", getDisabledReplicas(instanceConfig).isEmpty());
+        instanceConfig.get().getDisabledPartitions(RESOURCE_NAME));
+    assertTrue("Disabled replica list should be empty", getDisabledReplicas(instanceConfig.get()).isEmpty());
     testStore.shutdown();
     reloadStore();
   }

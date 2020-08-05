@@ -53,6 +53,7 @@ class DatacenterInitializer {
   private final HelixClusterManager.ClusterChangeHandlerCallback clusterChangeHandlerCallback;
   private final HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback;
   private final HelixClusterManagerMetrics helixClusterManagerMetrics;
+  private final DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics;
   private final AtomicLong sealedStateChangeCounter;
   // Fields to pass into only SimpleClusterChangeHandler (These can be removed if SimpleClusterChangeHandler is removed)
   private final ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap;
@@ -69,6 +70,7 @@ class DatacenterInitializer {
    * @param clusterChangeHandlerCallback a call back that allows current handler to update cluster-wide info.
    * @param helixClusterManagerCallback a help class to get cluster state from all DCs.
    * @param helixClusterManagerMetrics metrics that help track of cluster changes and infos.
+   * @param dataNodeConfigSourceMetrics metrics related to {@link DataNodeConfigSource}.
    * @param sealedStateChangeCounter a counter that records event when replica is sealed or unsealed
    * @param partitionMap a map from serialized bytes to corresponding partition.
    * @param partitionNameToAmbryPartition a map from partition name to {@link AmbryPartition} object.
@@ -79,8 +81,8 @@ class DatacenterInitializer {
       Map<String, Map<String, String>> partitionOverrideInfoMap,
       HelixClusterManager.ClusterChangeHandlerCallback clusterChangeHandlerCallback,
       HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback,
-      HelixClusterManagerMetrics helixClusterManagerMetrics, AtomicLong sealedStateChangeCounter,
-      ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap,
+      HelixClusterManagerMetrics helixClusterManagerMetrics, DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics,
+      AtomicLong sealedStateChangeCounter, ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap,
       ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition,
       ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas) {
     this.clusterMapConfig = clusterMapConfig;
@@ -92,6 +94,7 @@ class DatacenterInitializer {
     this.clusterChangeHandlerCallback = clusterChangeHandlerCallback;
     this.helixClusterManagerCallback = helixClusterManagerCallback;
     this.helixClusterManagerMetrics = helixClusterManagerMetrics;
+    this.dataNodeConfigSourceMetrics = dataNodeConfigSourceMetrics;
     this.sealedStateChangeCounter = sealedStateChangeCounter;
     this.partitionMap = partitionMap;
     this.partitionNameToAmbryPartition = partitionNameToAmbryPartition;
@@ -197,7 +200,8 @@ class DatacenterInitializer {
     // notification for a change from within the same thread that adds the listener, in the context of the add
     // call. Therefore, when the call to add a listener returns, the initial notification will have been
     // received and handled.
-    DataNodeConfigSource dataNodeConfigSource = new InstanceConfigToDataNodeConfigAdapter(manager, clusterMapConfig);
+    DataNodeConfigSource dataNodeConfigSource =
+        ClusterMapUtils.getDataNodeConfigSource(clusterMapConfig, manager, dataNodeConfigSourceMetrics);
     dataNodeConfigSource.addDataNodeConfigChangeListener(clusterChangeHandler);
     logger.info("Registered instance config change listeners for Helix manager at {}", zkConnectStr);
     manager.addIdealStateChangeListener(clusterChangeHandler);

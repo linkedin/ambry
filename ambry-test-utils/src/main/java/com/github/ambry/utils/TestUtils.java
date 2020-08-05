@@ -410,7 +410,7 @@ public class TestUtils {
    * @param timeoutInMs the time out in millisecond.
    * @return true if value match.
    */
-  public static <T> boolean checkAndSleep(T expectedValue, Supplier expressionToCheck, int timeoutInMs) {
+  public static <T> boolean checkAndSleep(T expectedValue, Supplier<T> expressionToCheck, int timeoutInMs) {
     long startTime = System.currentTimeMillis();
     try {
       while (!Objects.equals(expectedValue, expressionToCheck.get())) {
