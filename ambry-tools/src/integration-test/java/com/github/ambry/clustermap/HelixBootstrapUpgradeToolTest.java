@@ -874,7 +874,7 @@ public class HelixBootstrapUpgradeToolTest {
         PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter =
             new PropertyStoreToDataNodeConfigAdapter(propertyStore,
                 HelixBootstrapUpgradeUtil.getClusterMapConfig(CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP,
-                    dcName, null), dcName);
+                    dcName, null));
         Map<DataNodeId, Set<String>> dataNodeToReplicas = testPartitionLayout.getPartitionLayout()
             .getPartitions(null)
             .stream()

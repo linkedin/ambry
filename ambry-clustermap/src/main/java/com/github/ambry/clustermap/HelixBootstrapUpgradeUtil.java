@@ -740,7 +740,7 @@ public class HelixBootstrapUpgradeUtil {
         HelixPropertyStore<ZNRecord> propertyStore = createHelixPropertyStore(dcName);
         try {
           PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter =
-              new PropertyStoreToDataNodeConfigAdapter(propertyStore, config, dcName);
+              new PropertyStoreToDataNodeConfigAdapter(propertyStore, config);
           List<String> instanceNames = helixAdmin.getInstancesInCluster(clusterName);
           logger.info("Found {} instances in cluster", instanceNames.size());
           instanceNames.forEach(instanceName -> {
