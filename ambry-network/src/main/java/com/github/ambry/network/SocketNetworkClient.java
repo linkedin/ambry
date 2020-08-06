@@ -355,7 +355,8 @@ public class SocketNetworkClient implements NetworkClient {
           // No need to call pendingRequests.remove() because it has been removed due to connection unavailability in prepareSends()
         }
       }
-      if (requestMetadata != null) {
+      // if request is send completed, its resource has already been released.
+      if (requestMetadata != null && !requestMetadata.requestInfo.getRequest().isSendComplete()) {
         requestMetadata.requestInfo.getRequest().release();
       }
       networkMetrics.connectionDisconnected.inc();

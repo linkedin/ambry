@@ -21,11 +21,12 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.AbstractByteBufHolder;
+import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Time;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.PooledByteBufAllocator;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -284,6 +285,7 @@ public class SocketNetworkClientTest {
     networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
     Assert.assertEquals("NetworkClientException should increase because replica is null in request", 1,
         networkMetrics.networkClientException.getCount());
+    requestInfoList.forEach(requestInfo -> requestInfo.getRequest().release());
     requestInfoList.clear();
     // test that IOException occurs when selector invokes connect()
     requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode));
@@ -296,6 +298,7 @@ public class SocketNetworkClientTest {
     } catch (Exception e) {
       Assert.fail("If selector throws on connect, sendAndPoll() should not throw");
     }
+    requestInfoList.forEach(requestInfo -> requestInfo.getRequest().release());
   }
 
   /**
@@ -602,6 +605,7 @@ public class SocketNetworkClientTest {
     } catch (Exception e) {
       Assert.fail("If selector throws on poll, sendAndPoll() should not throw.");
     }
+    requestInfoList.forEach(requestInfo -> requestInfo.getRequest().release());
     selector.setState(MockSelectorState.Good);
   }
 
@@ -656,7 +660,8 @@ public class SocketNetworkClientTest {
  * identify this request.
  */
 class MockSend extends AbstractByteBufHolder<MockSend> implements SendWithCorrelationId {
-  private final ByteBuffer buf;
+  public static final int SEND_SIZE = 16;
+  private final ByteBuf buf;
   private final int correlationId;
   private final int size;
 
@@ -666,8 +671,9 @@ class MockSend extends AbstractByteBufHolder<MockSend> implements SendWithCorrel
    */
   MockSend(int correlationId) {
     this.correlationId = correlationId;
-    buf = ByteBuffer.allocate(16);
-    size = 16;
+    buf = PooledByteBufAllocator.DEFAULT.heapBuffer(SEND_SIZE);
+    buf.writeBytes(new byte[SEND_SIZE]);
+    size = SEND_SIZE;
   }
 
   /**
@@ -683,7 +689,8 @@ class MockSend extends AbstractByteBufHolder<MockSend> implements SendWithCorrel
    */
   @Override
   public long writeTo(WritableByteChannel channel) throws IOException {
-    long written = channel.write(buf);
+    long written = channel.write(buf.nioBuffer(0, size));
+    buf.skipBytes((int) written);
     return written;
   }
 
@@ -692,7 +699,7 @@ class MockSend extends AbstractByteBufHolder<MockSend> implements SendWithCorrel
    */
   @Override
   public boolean isSendComplete() {
-    return buf.remaining() == 0;
+    return buf.readableBytes() == 0;
   }
 
   /**
@@ -710,7 +717,7 @@ class MockSend extends AbstractByteBufHolder<MockSend> implements SendWithCorrel
 
   @Override
   public ByteBuf content() {
-    return null;
+    return buf;
   }
 
   @Override
@@ -730,7 +737,7 @@ class MockBoundedNettyByteBufReceive extends BoundedNettyByteBufReceive {
    * @param correlationId the correlation id associated with this object.
    */
   public MockBoundedNettyByteBufReceive(int correlationId) {
-    super(ByteBufAllocator.DEFAULT.heapBuffer(16).writeInt(correlationId), (long) 16);
+    super(PooledByteBufAllocator.DEFAULT.directBuffer(16).writeInt(correlationId), 16);
   }
 }
 
@@ -878,6 +885,10 @@ class MockSelector extends Selector {
         } else if (!closedConnections.contains(send.getConnectionId())) {
           receives.add(new NetworkReceive(send.getConnectionId(),
               new MockBoundedNettyByteBufReceive(mockSend.getCorrelationId()), new MockTime()));
+          mockSend.writeTo(new ByteBufferChannel(ByteBuffer.allocate(MockSend.SEND_SIZE)));
+          if (mockSend.isSendComplete()) {
+            mockSend.release();
+          }
         }
       }
     }
