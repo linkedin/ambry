@@ -177,8 +177,8 @@ class DeleteOperation {
       logger.trace("DeleteRequest with response correlationId {} timed out for replica {} ",
           deleteRequest.getCorrelationId(), replica.getDataNodeId());
       onErrorResponse(replica, new RouterException(
-          "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
-          RouterErrorCode.OperationTimedOut));
+          "Operation to delete " + blobId + " timed out because of " + responseInfo.getError() + " at DataNode "
+              + responseInfo.getDataNode(), RouterErrorCode.OperationTimedOut));
     } else {
       if (deleteResponse == null) {
         logger.trace(
