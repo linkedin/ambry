@@ -15,9 +15,12 @@ package com.github.ambry.network;
 
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.server.EmptyRequest;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.ArrayBlockingQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,7 +57,18 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     ChannelHandlerContext ctx = ((NettyServerRequest) originalRequest).getCtx();
     http2ServerMetrics.requestTotalProcessingTime.update(
         System.currentTimeMillis() - originalRequest.getStartTimeInMs());
-    ctx.channel().writeAndFlush(payloadToSend);
+    ChannelFutureListener channelFutureListener = new ChannelFutureListener() {
+      @Override
+      public void operationComplete(ChannelFuture future) throws Exception {
+        if (!future.isSuccess()) {
+          if (!(future.cause() instanceof ClosedChannelException)) {
+            // TODO: a round solution is needed. For now, use same logic as Http2NetworkClient in frontend.
+            payloadToSend.release();
+          }
+        }
+      }
+    };
+    ctx.channel().writeAndFlush(payloadToSend).addListener(channelFutureListener);
   }
 
   /**
