@@ -388,9 +388,9 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    */
   void markContainerInactiveOnZk(Set<Container> inactiveContainerCandidateSet) throws InterruptedException {
     if (inactiveContainerCandidateSet != null) {
-      boolean successful = false;
+      boolean success = false;
       int retry = 0;
-      while (!successful && retry < config.maxRetryCountOnUpdateFailure) {
+      while (!success && retry < config.maxRetryCountOnUpdateFailure) {
         Map<Short, Account> accountToUpdateMap = new HashMap<>();
         inactiveContainerCandidateSet.forEach(container -> {
           // start by getting account, and then get container from account to make sure that we are editing the most
@@ -403,13 +403,13 @@ public class HelixAccountService extends AbstractAccountService implements Accou
           accountToUpdateMap.put(accountId,
                   new AccountBuilder(accountToEdit).addOrUpdateContainer(editedContainer).build());
         });
-        successful = updateAccounts(accountToUpdateMap.values());
-        if (!successful) {
+        success = updateAccounts(accountToUpdateMap.values());
+        if (!success) {
           retry++;
           Thread.sleep(config.retryDelayMs);
         }
       }
-      if (!successful) {
+      if (!success) {
         logger.error("Failed to mark containers INACTIVE in set : {}  after {} retries", inactiveContainerCandidateSet, config.maxRetryCountOnUpdateFailure);
         accountServiceMetrics.accountUpdatesToZkErrorCount.inc();
       }
