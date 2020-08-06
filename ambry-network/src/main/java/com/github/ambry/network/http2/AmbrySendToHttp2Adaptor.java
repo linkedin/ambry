@@ -82,6 +82,8 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
       } catch (IOException e) {
         promise.setFailure(e);
         return;
+      } finally {
+        send.release();
       }
     }
     DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(dataContent, true);
