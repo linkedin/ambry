@@ -375,15 +375,45 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    */
   public void selectInactiveContainersAndMarkInZK(StatsSnapshot statsSnapshot) {
     Set<Container> inactiveContainerCandidateSet = selectInactiveContainerCandidates(statsSnapshot);
-    markContainerInactiveOnZk(inactiveContainerCandidateSet);
+    try {
+      markContainerInactiveOnZk(inactiveContainerCandidateSet);
+    } catch (InterruptedException e) {
+      logger.error("Mark inactive container in zookeeper is interrupted", e);
+    }
   }
 
   /**
    * Mark the given {@link Container}s status to INACTIVE in zookeeper.
    * @param inactiveContainerCandidateSet DELETE_IN_PROGRESS {@link Container} set which has been deleted successfully during compaction.
    */
-  private void markContainerInactiveOnZk(Set<Container> inactiveContainerCandidateSet) {
-    // TODO: mark the given containers status to INACTIVE in zookeeper.
+  void markContainerInactiveOnZk(Set<Container> inactiveContainerCandidateSet) throws InterruptedException {
+    if (inactiveContainerCandidateSet != null) {
+      boolean success = false;
+      int retry = 0;
+      while (!success && retry < config.maxRetryCountOnUpdateFailure) {
+        Map<Short, Account> accountToUpdateMap = new HashMap<>();
+        inactiveContainerCandidateSet.forEach(container -> {
+          // start by getting account, and then get container from account to make sure that we are editing the most
+          // recent snapshot
+          short accountId = container.getParentAccountId();
+          Account accountToEdit = accountToUpdateMap.computeIfAbsent(accountId, this::getAccountById);
+          Container containerToEdit = accountToEdit.getContainerById(container.getId());
+          Container editedContainer =
+                  new ContainerBuilder(containerToEdit).setStatus(Container.ContainerStatus.INACTIVE).build();
+          accountToUpdateMap.put(accountId,
+                  new AccountBuilder(accountToEdit).addOrUpdateContainer(editedContainer).build());
+        });
+        success = updateAccounts(accountToUpdateMap.values());
+        if (!success) {
+          retry++;
+          Thread.sleep(config.retryDelayMs);
+        }
+      }
+      if (!success) {
+        logger.error("Failed to mark containers INACTIVE in set : {}  after {} retries", inactiveContainerCandidateSet, config.maxRetryCountOnUpdateFailure);
+        accountServiceMetrics.accountUpdatesToZkErrorCount.inc();
+      }
+    }
   }
 
   /**
