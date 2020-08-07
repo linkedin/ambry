@@ -593,7 +593,7 @@ class BlobStoreCompactor {
     boolean isFromDeprecatedContainer = false;
     if (deprecatedContainers.contains(
         new Pair<>(copyCandidateValue.getAccountId(), copyCandidateValue.getContainerId()))) {
-      logger.info("{} in store {} is from deprecated container.", copyCandidate, storeId);
+      logger.trace("{} in store {} is from deprecated container.", copyCandidate, storeId);
       isFromDeprecatedContainer = true;
     }
     return isFromDeprecatedContainer;
