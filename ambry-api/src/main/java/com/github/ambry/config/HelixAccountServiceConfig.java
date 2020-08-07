@@ -30,7 +30,7 @@ public class HelixAccountServiceConfig {
   public static final String ENABLE_SERVE_FROM_BACKUP = HELIX_ACCOUNT_SERVICE_PREFIX + "enable.serve.from.backup";
   public static final String TOTAL_NUMBER_OF_VERSION_TO_KEEP =
       HELIX_ACCOUNT_SERVICE_PREFIX + "total.number.of.version.to.keep";
-  public static final String MAX_RETRY_COUNT_ON_UPDATE_FAILURE = HELIX_ACCOUNT_SERVICE_PREFIX + "retry.count.on.update.failure";
+  public static final String MAX_RETRY_COUNT_ON_UPDATE_FAILURE = HELIX_ACCOUNT_SERVICE_PREFIX + "max.retry.count.on.update.failure";
   public static final String RETRY_DELAY_MS = HELIX_ACCOUNT_SERVICE_PREFIX + "retry.delay.ms";
   /**
    * The ZooKeeper server address. This config is required when using {@code HelixAccountService}.
