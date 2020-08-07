@@ -814,8 +814,9 @@ class GetBlobOperation extends GetOperation {
         // the latency histogram in adaptive operation tracker should not be updated.
         logger.trace("GetBlobRequest with response correlationId {} timed out for replica {} ", correlationId,
             getRequestInfo.replicaId.getDataNodeId());
-        onErrorResponse(getRequestInfo.replicaId,
-            buildChunkException("Operation timed out", RouterErrorCode.OperationTimedOut));
+        onErrorResponse(getRequestInfo.replicaId, buildChunkException(
+            "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
+            RouterErrorCode.OperationTimedOut));
       } else {
         if (getResponse == null) {
           logger.trace(

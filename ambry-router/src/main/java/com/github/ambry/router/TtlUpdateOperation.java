@@ -167,7 +167,9 @@ class TtlUpdateOperation {
     if (responseInfo.getError() != null) {
       LOGGER.debug("TtlUpdateRequest with response correlationId {} timed out for replica {} ",
           ttlUpdateRequest.getCorrelationId(), replica.getDataNodeId());
-      onErrorResponse(replica, new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
+      onErrorResponse(replica, new RouterException(
+          "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
+          RouterErrorCode.OperationTimedOut));
     } else {
       if (ttlUpdateResponse == null) {
         LOGGER.debug(

@@ -165,7 +165,9 @@ public class UndeleteOperation {
     if (responseInfo.getError() != null) {
       LOGGER.trace("UndeleteRequest with response correlationId {} timed out for replica {} ",
           undeleteRequest.getCorrelationId(), replica.getDataNodeId());
-      onErrorResponse(replica, new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
+      onErrorResponse(replica, new RouterException(
+          "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
+          RouterErrorCode.OperationTimedOut));
     } else {
       if (undeleteResponse == null) {
         LOGGER.trace(
