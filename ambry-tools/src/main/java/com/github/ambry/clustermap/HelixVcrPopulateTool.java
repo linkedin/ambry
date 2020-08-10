@@ -19,13 +19,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
-import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
+import org.apache.helix.controller.rebalancer.DelayedAutoRebalancer;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
 import org.apache.helix.manager.zk.ZKUtil;
@@ -33,7 +34,7 @@ import org.apache.helix.manager.zk.client.DedicatedZkClientFactory;
 import org.apache.helix.model.ClusterConfig;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.IdealState;
-import org.apache.helix.model.LeaderStandbySMD;
+import org.apache.helix.model.OnlineOfflineSMD;
 import org.apache.helix.model.builder.FullAutoModeISBuilder;
 import org.apache.helix.model.builder.HelixConfigScopeBuilder;
 import org.apache.helix.tools.ClusterSetup;
@@ -48,11 +49,13 @@ public class HelixVcrPopulateTool {
 
   private static final String SEPARATOR = "/";
   static List<String> ignoreResourceKeyWords = Arrays.asList("aggregation", "trigger", "stats");
-  private static final int REPLICA_NUMBER = 3;
+  private static final int REPLICA_NUMBER = 1;
   private static final ZNRecordSerializer ZN_RECORD_SERIALIZER = new ZNRecordSerializer();
   // TODO: get from properties file
   private static final int MAX_OFFLINE_INSTANCES_ALLOWED = 4;
   private static final int NUM_OFFLINE_INSTANCES_FOR_AUTO_EXIT = 2;
+  private static final int MIN_ACTIVE_REPLICAS = 0;
+  private static final long REBALANCE_DELAY = TimeUnit.MINUTES.toMillis(20);
 
   public static void main(String[] args) {
     OptionParser parser = new OptionParser();
@@ -214,11 +217,13 @@ public class HelixVcrPopulateTool {
    */
   static IdealState buildIdealState(String resource, Set<String> partitionSet) {
     FullAutoModeISBuilder builder = new FullAutoModeISBuilder(resource);
-    builder.setStateModel(LeaderStandbySMD.name);
+    builder.setStateModel(OnlineOfflineSMD.name);
     for (String partition : partitionSet) {
       builder.add(partition);
     }
-    builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
+    builder.setMinActiveReplica(MIN_ACTIVE_REPLICAS);
+    builder.setRebalanceDelay((int) REBALANCE_DELAY);
+    builder.setRebalancerClass(DelayedAutoRebalancer.class.getName());
     return builder.build();
   }
 

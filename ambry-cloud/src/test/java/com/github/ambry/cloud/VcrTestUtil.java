@@ -24,16 +24,17 @@ import com.github.ambry.utils.TestUtils;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
-import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
+import org.apache.helix.controller.rebalancer.DelayedAutoRebalancer;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.model.ClusterConfig;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.IdealState;
-import org.apache.helix.model.LeaderStandbySMD;
+import org.apache.helix.model.OnlineOfflineSMD;
 import org.apache.helix.model.builder.FullAutoModeISBuilder;
 import org.apache.helix.model.builder.HelixConfigScopeBuilder;
 import org.apache.helix.tools.ClusterSetup;
@@ -46,7 +47,9 @@ import org.apache.helix.zookeeper.impl.factory.DedicatedZkClientFactory;
  */
 public class VcrTestUtil {
 
-  public static String helixResource = "resource1";
+  private static final int MIN_ACTIVE_REPLICAS = 0;
+  private static final long REBALANCE_DELAY = TimeUnit.SECONDS.toMillis(2);
+  public static final String helixResource = "resource1";
 
   /**
    * Create a {@link VcrServer}.
@@ -90,14 +93,16 @@ public class VcrTestUtil {
       configAccessor.setClusterConfig(vcrClusterName, clusterConfig);
 
       FullAutoModeISBuilder builder = new FullAutoModeISBuilder(helixResource);
-      builder.setStateModel(LeaderStandbySMD.name);
+      builder.setStateModel(OnlineOfflineSMD.name);
       for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
         builder.add(partitionId.toPathString());
       }
-      builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
+      builder.setMinActiveReplica(MIN_ACTIVE_REPLICAS);
+      builder.setRebalanceDelay((int) REBALANCE_DELAY);
+      builder.setRebalancerClass(DelayedAutoRebalancer.class.getName());
       IdealState idealState = builder.build();
       admin.addResource(vcrClusterName, helixResource, idealState);
-      admin.rebalance(vcrClusterName, helixResource, 3, "", "");
+      admin.rebalance(vcrClusterName, helixResource, 1, "", "");
       HelixControllerManager helixControllerManager = new HelixControllerManager(zkConnectString, vcrClusterName);
       helixControllerManager.syncStart();
       return helixControllerManager;

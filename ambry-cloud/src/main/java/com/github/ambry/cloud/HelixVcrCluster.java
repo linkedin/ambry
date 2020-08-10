@@ -36,7 +36,7 @@ import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerFactory;
 import org.apache.helix.InstanceType;
-import org.apache.helix.model.LeaderStandbySMD;
+import org.apache.helix.model.OnlineOfflineSMD;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,7 +82,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
 
   /**
    * Add {@link PartitionId} to assignedPartitionIds set, if {@param partitionIdStr} valid.
-   * Used in {@link HelixVcrStateModel} if current VCR becomes leader of a partition.
+   * Used in {@link HelixVcrStateModel} if current VCR is assigned a partition.
    * @param partitionIdStr The partitionIdStr notified by Helix.
    */
   public void addPartition(String partitionIdStr) {
@@ -106,7 +106,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
 
   /**
    * Remove {@link PartitionId} from assignedPartitionIds set, if {@param partitionIdStr} valid.
-   * Used in {@link HelixVcrStateModel} if current VCR becomes offline or standby a partition.
+   * Used in {@link HelixVcrStateModel} if current VCR becomes offline for a partition.
    * @param partitionIdStr The partitionIdStr notified by Helix.
    */
   public void removePartition(String partitionIdStr) {
@@ -144,7 +144,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
     manager = HelixManagerFactory.getZKHelixManager(vcrClusterName, vcrInstanceName, role,
         cloudConfig.vcrClusterZkConnectString);
     manager.getStateMachineEngine()
-        .registerStateModelFactory(LeaderStandbySMD.name, new HelixVcrStateModelFactory(this));
+        .registerStateModelFactory(OnlineOfflineSMD.name, new HelixVcrStateModelFactory(this));
     manager.connect();
     helixAdmin = manager.getClusterManagmentTool();
     logger.info("Participate HelixVcrCluster as {} successfully.", role);

@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
  * {@link StateModel} to use when the VCR participants register to Helix. The methods are callbacks
  * that get called within a participant whenever its state changes in Helix.
  */
-@StateModelInfo(initialState = "OFFLINE", states = {"LEADER", "STANDBY"})
+@StateModelInfo(initialState = "OFFLINE", states = {"OFFLINE", "ONLINE", "DROPPED"})
 public class HelixVcrStateModel extends StateModel {
   private static final Logger logger = LoggerFactory.getLogger(HelixVcrStateModel.class);
   private final HelixVcrCluster helixVcrCluster;
@@ -35,42 +35,23 @@ public class HelixVcrStateModel extends StateModel {
     this.helixVcrCluster = helixVcrCluster;
   }
 
-  @Transition(to = "STANDBY", from = "OFFLINE")
-  public void onBecomeStandbyFromOffline(Message message, NotificationContext context) {
-    logger.trace("{} Becoming STANDBY from OFFLINE of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
-        message.getPartitionName());
-  }
-
-  @Transition(to = "LEADER", from = "STANDBY")
-  public void onBecomeLeaderFromStandby(Message message, NotificationContext context) {
-    logger.info("{} Becoming LEADER from STANDBY of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
+  @Transition(to = "ONLINE", from = "OFFLINE")
+  public void onTransitionToOnlineFromOffline(Message message, NotificationContext context) {
+    logger.info("{} Transitioning to ONLINE from OFFLINE for Partition {}", helixVcrCluster.getCurrentDataNodeId(),
         message.getPartitionName());
     helixVcrCluster.addPartition(message.getPartitionName());
   }
 
-  @Transition(to = "STANDBY", from = "LEADER")
-  public void onBecomeStandbyFromLeader(Message message, NotificationContext context) {
-    logger.info("{} Becoming STANDBY from LEADER of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
-        message.getPartitionName());
-    helixVcrCluster.removePartition(message.getPartitionName());
-  }
-
-  @Transition(to = "OFFLINE", from = "STANDBY")
-  public void onBecomeOfflineFromStandby(Message message, NotificationContext context) {
-    logger.trace("{} Becoming OFFLINE from STANDBY of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
-        message.getPartitionName());
-  }
-
-  @Transition(to = "OFFLINE", from = "LEADER")
-  public void onBecomeOfflineFromLeader(Message message, NotificationContext context) {
-    logger.info("{} Becoming OFFLINE from LEADER of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
+  @Transition(to = "OFFLINE", from = "ONLINE")
+  public void onTransitionToOfflineFromOnline(Message message, NotificationContext context) {
+    logger.info("{} Transitioning to OFFLINE from ONLINE of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
         message.getPartitionName());
     helixVcrCluster.removePartition(message.getPartitionName());
   }
 
   @Transition(to = "DROPPED", from = "OFFLINE")
-  public void onBecomeDroppedFromOffline(Message message, NotificationContext context) {
-    logger.info("{} Becoming DROPPED from OFFLINE of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
+  public void onTransitionToDroppedFromOffline(Message message, NotificationContext context) {
+    logger.info("{} Transitioning to DROPPED from OFFLINE of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
         message.getPartitionName());
   }
 
