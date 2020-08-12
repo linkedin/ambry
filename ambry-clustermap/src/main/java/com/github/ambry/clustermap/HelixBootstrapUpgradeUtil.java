@@ -156,7 +156,8 @@ public class HelixBootstrapUpgradeUtil {
     DisablePartition,
     EnablePartition,
     ResetPartition,
-    ListSealedPartition
+    ListSealedPartition,
+    MigrateToPropertyStore
   }
 
   /**
@@ -356,6 +357,26 @@ public class HelixBootstrapUpgradeUtil {
   }
 
   /**
+   * Copy the legacy custom InstanceConfig properties to the DataNodeConfigs tree in the property store.
+   * @param hardwareLayoutPath the path to the hardware layout file.
+   * @param partitionLayoutPath the path to the partition layout file.
+   * @param zkLayoutPath the path to the zookeeper layout file.
+   * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
+   *                          will give the cluster name in Helix to bootstrap or upgrade.
+   * @param dcs the comma-separated list of data centers that needs to be migrated
+   * @throws Exception
+   */
+  static void migrateToPropertyStore(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+      String clusterNamePrefix, String dcs) throws Exception {
+
+    HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil =
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
+            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, null, null, null, null,
+            HelixAdminOperation.MigrateToPropertyStore);
+    helixBootstrapUpgradeUtil.migrateToPropertyStore();
+  }
+
+  /**
    * Drop a cluster from Helix.
    * @param zkLayoutPath the path to the zookeeper layout file.
    * @param clusterName the name of the cluster in Helix.
@@ -466,10 +487,7 @@ public class HelixBootstrapUpgradeUtil {
     dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     Properties props = new Properties();
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
-    props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.cluster.name", "");
-    props.setProperty("clustermap.datacenter.name", "");
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    ClusterMapConfig clusterMapConfig = getClusterMapConfig("", "", null);
     if (new File(partitionLayoutPath).exists()) {
       staticClusterMap =
           (new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
@@ -676,21 +694,18 @@ public class HelixBootstrapUpgradeUtil {
    */
   private void uploadClusterAdminInfos(Map<String, Map<String, Map<String, String>>> adminInfosByDc,
       String clusterAdminType, String adminConfigZNodePath) {
-    Properties storeProps = new Properties();
-    storeProps.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
-    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
-    for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
-      info("Uploading {} infos for datacenter {}.", clusterAdminType, entry.getKey());
-      List<String> zkConnectStrs = entry.getValue().getZkConnectStrs();
-      // The number of zk endpoints has been validated in the ctor of HelixBootstrapUpgradeUtil, no need to check it again
-      HelixPropertyStore<ZNRecord> helixPropertyStore =
-          CommonUtils.createHelixPropertyStore(zkConnectStrs.get(0), propertyStoreConfig, null);
-      ZNRecord znRecord = new ZNRecord(clusterAdminType);
-      znRecord.setMapFields(adminInfosByDc.get(entry.getKey()));
-      if (!helixPropertyStore.set(adminConfigZNodePath, znRecord, AccessOption.PERSISTENT)) {
-        logger.error("Failed to upload {} infos for datacenter {}", clusterAdminType, entry.getKey());
+    for (String dcName : dataCenterToZkAddress.keySet()) {
+      info("Uploading {} infos for datacenter {}.", clusterAdminType, dcName);
+      HelixPropertyStore<ZNRecord> helixPropertyStore = createHelixPropertyStore(dcName);
+      try {
+        ZNRecord znRecord = new ZNRecord(clusterAdminType);
+        znRecord.setMapFields(adminInfosByDc.get(dcName));
+        if (!helixPropertyStore.set(adminConfigZNodePath, znRecord, AccessOption.PERSISTENT)) {
+          logger.error("Failed to upload {} infos for datacenter {}", clusterAdminType, dcName);
+        }
+      } finally {
+        helixPropertyStore.stop();
       }
-      helixPropertyStore.stop();
     }
   }
 
@@ -700,18 +715,56 @@ public class HelixBootstrapUpgradeUtil {
    * @param adminConfigZNodePath the znode path of admin config.
    */
   private void deleteClusterAdminInfos(String clusterAdminType, String adminConfigZNodePath) {
-    Properties storeProps = new Properties();
-    storeProps.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
-    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
       info("Deleting {} infos for datacenter {}.", clusterAdminType, entry.getKey());
-      HelixPropertyStore<ZNRecord> helixPropertyStore =
-          CommonUtils.createHelixPropertyStore(entry.getValue().getZkConnectStrs().get(0), propertyStoreConfig, null);
+      HelixPropertyStore<ZNRecord> helixPropertyStore = createHelixPropertyStore(entry.getKey());
       if (!helixPropertyStore.remove(adminConfigZNodePath, AccessOption.PERSISTENT)) {
         logger.error("Failed to remove {} infos from datacenter {}", clusterAdminType, entry.getKey());
       }
       helixPropertyStore.stop();
     }
+  }
+
+  /**
+   * Convert instance configs to the new DataNodeConfig format and persist them in the property store.
+   */
+  private void migrateToPropertyStore() throws InterruptedException {
+    CountDownLatch migrationComplete = new CountDownLatch(adminForDc.size());
+    // different DCs can be migrated in parallel
+    adminForDc.forEach((dcName, helixAdmin) -> Utils.newThread(() -> {
+      try {
+        logger.info("Starting property store migration in {}", dcName);
+        ClusterMapConfig config = getClusterMapConfig(clusterName, dcName, null);
+        InstanceConfigToDataNodeConfigAdapter.Converter instanceConfigConverter =
+            new InstanceConfigToDataNodeConfigAdapter.Converter(config);
+        HelixPropertyStore<ZNRecord> propertyStore = createHelixPropertyStore(dcName);
+        try {
+          PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter =
+              new PropertyStoreToDataNodeConfigAdapter(propertyStore, config);
+          List<String> instanceNames = helixAdmin.getInstancesInCluster(clusterName);
+          logger.info("Found {} instances in cluster", instanceNames.size());
+          instanceNames.forEach(instanceName -> {
+            logger.info("Copying config for node {}", instanceName);
+            InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+            DataNodeConfig dataNodeConfig = instanceConfigConverter.convert(instanceConfig);
+            logger.debug("Writing {} to property store in {}", dataNodeConfig, dcName);
+            if (!propertyStoreAdapter.set(dataNodeConfig)) {
+              logger.error("Failed to persist config for node {} in the property store.",
+                  dataNodeConfig.getInstanceName());
+            }
+          });
+        } finally {
+          propertyStore.stop();
+        }
+        logger.error("Successfully migrated to property store in {}", dcName);
+      } catch (Throwable t) {
+        logger.error("Error while migrating to property store in {}", dcName, t);
+      } finally {
+        migrationComplete.countDown();
+      }
+    }, false).start());
+
+    migrationComplete.await();
   }
 
   /**
@@ -1146,12 +1199,26 @@ public class HelixBootstrapUpgradeUtil {
    * @return {@link HelixPropertyStore} associated with given dc.
    */
   private HelixPropertyStore<ZNRecord> createHelixPropertyStore(String dcName) {
-    // create znode under admin configs
     Properties storeProps = new Properties();
     storeProps.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
+    // The number of zk endpoints has been validated in the ctor of HelixBootstrapUpgradeUtil, no need to check it again
     String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
     return CommonUtils.createHelixPropertyStore(zkConnectStr, propertyStoreConfig, null);
+  }
+
+  /**
+   * @param dcName the datacenter to check in.
+   * @return true if the cluster is present and set up in this datacenter.
+   */
+  private boolean isClusterPresent(String dcName) {
+    if (zkClientForDc.get(dcName) == null) {
+      return Objects.requireNonNull(adminForDc.get(dcName), () -> "no admin for " + dcName)
+          .getClusters()
+          .contains(clusterName);
+    } else {
+      return ZKUtil.isClusterSetup(clusterName, zkClientForDc.get(dcName));
+    }
   }
 
   /**
@@ -1162,9 +1229,7 @@ public class HelixBootstrapUpgradeUtil {
       // Add a cluster entry in every enabled DC
       String dcName = entry.getKey();
       HelixAdmin admin = entry.getValue();
-      boolean isClusterPresent = zkClientForDc.get(dcName) == null ? admin.getClusters().contains(clusterName)
-          : ZKUtil.isClusterSetup(clusterName, zkClientForDc.get(dcName));
-      if (!isClusterPresent) {
+      if (!isClusterPresent(dcName)) {
         throw new IllegalStateException("Cluster " + clusterName + " in " + dcName + " doesn't exist!");
       }
       if (!admin.getStateModelDefs(clusterName).contains(stateModelDef)) {
@@ -1273,9 +1338,7 @@ public class HelixBootstrapUpgradeUtil {
       // Add a cluster entry in every DC
       String dcName = entry.getKey();
       HelixAdmin admin = entry.getValue();
-      boolean isClusterPresent = zkClientForDc.get(dcName) == null ? admin.getClusters().contains(clusterName)
-          : ZKUtil.isClusterSetup(clusterName, zkClientForDc.get(dcName));
-      if (!isClusterPresent) {
+      if (!isClusterPresent(dcName)) {
         info("Adding cluster {} in {}", clusterName, dcName);
         admin.addCluster(clusterName);
         admin.addStateModelDef(clusterName, stateModelDef, getStateModelDefinition(stateModelDef));
@@ -1308,14 +1371,32 @@ public class HelixBootstrapUpgradeUtil {
    * @throws IOException if there was an error instantiating the cluster manager.
    */
   private void startClusterManager() throws IOException {
+    ClusterMapConfig clusterMapConfig =
+        getClusterMapConfig(clusterName, adminForDc.keySet().iterator().next(), zkLayoutPath);
+    HelixClusterAgentsFactory helixClusterAgentsFactory = new HelixClusterAgentsFactory(clusterMapConfig, null, null);
+    validatingHelixClusterManager = helixClusterAgentsFactory.getClusterMap();
+  }
+
+  /**
+   * Exposed for test use.
+   * @param clusterName cluster name to use in the config
+   * @param dcName datacenter name to use in the config
+   * @param zkLayoutPath if non-null, read ZK connection configs from the file at this path.
+   * @return the {@link ClusterMapConfig}
+   */
+  static ClusterMapConfig getClusterMapConfig(String clusterName, String dcName, String zkLayoutPath) {
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("clustermap.cluster.name", clusterName);
-    props.setProperty("clustermap.datacenter.name", adminForDc.keySet().iterator().next());
-    props.setProperty("clustermap.dcs.zk.connect.strings", Utils.readStringFromFile(zkLayoutPath));
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixClusterAgentsFactory helixClusterAgentsFactory = new HelixClusterAgentsFactory(clusterMapConfig, null, null);
-    validatingHelixClusterManager = helixClusterAgentsFactory.getClusterMap();
+    props.setProperty("clustermap.datacenter.name", dcName);
+    if (zkLayoutPath != null) {
+      try {
+        props.setProperty("clustermap.dcs.zk.connect.strings", Utils.readStringFromFile(zkLayoutPath));
+      } catch (IOException e) {
+        throw new RuntimeException("Could not read zk layout file", e);
+      }
+    }
+    return new ClusterMapConfig(new VerifiableProperties(props));
   }
 
   /**
@@ -1367,8 +1448,7 @@ public class HelixBootstrapUpgradeUtil {
         info("Skipping {}", dc.getName());
         continue;
       }
-      ensureOrThrow(zkClientForDc.get(dc.getName()) == null ? admin.getClusters().contains(clusterName)
-              : ZKUtil.isClusterSetup(clusterName, zkClientForDc.get(dc.getName())),
+      ensureOrThrow(isClusterPresent(dc.getName()),
           "Cluster not found in ZK " + dataCenterToZkAddress.get(dc.getName()));
       Utils.newThread(() -> {
         try {
@@ -1456,8 +1536,7 @@ public class HelixBootstrapUpgradeUtil {
         info("Skipping {}", dc.getName());
         continue;
       }
-      ensureOrThrow(zkClientForDc.get(dc.getName()) == null ? admin.getClusters().contains(clusterName)
-              : ZKUtil.isClusterSetup(clusterName, zkClientForDc.get(dc.getName())),
+      ensureOrThrow(isClusterPresent(dc.getName()),
           "Cluster not found in ZK " + dataCenterToZkAddress.get(dc.getName()));
       Utils.newThread(() -> {
         try {
@@ -1487,11 +1566,7 @@ public class HelixBootstrapUpgradeUtil {
   private void verifyDataNodeAndDiskEquivalencyInDc(Datacenter dc, String clusterName,
       PartitionLayout partitionLayout) {
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
-    Properties props = new Properties();
-    props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.cluster.name", clusterName);
-    props.setProperty("clustermap.datacenter.name", dc.getName());
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    ClusterMapConfig clusterMapConfig = getClusterMapConfig(clusterName, dc.getName(), null);
     StaticClusterManager staticClusterMap =
         (new StaticClusterAgentsFactory(clusterMapConfig, partitionLayout)).getClusterMap();
     String dcName = dc.getName();
