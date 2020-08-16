@@ -43,7 +43,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import org.apache.helix.InstanceType;
 
 
 /**
@@ -117,7 +116,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     });
 
     try {
-      virtualReplicatorCluster.participate(InstanceType.PARTICIPANT);
+      virtualReplicatorCluster.participate();
     } catch (Exception e) {
       throw new ReplicationException("Cluster participate failed.", e);
     }

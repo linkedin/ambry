@@ -16,7 +16,6 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
@@ -330,7 +329,7 @@ class TailoredPeersClusterMap implements ClusterMap {
 
   @Override
   public byte getLocalDatacenterId() {
-    return ClusterMapUtils.UNKNOWN_DATACENTER_ID;
+    return ClusterMap.UNKNOWN_DATACENTER_ID;
   }
 
   @Override

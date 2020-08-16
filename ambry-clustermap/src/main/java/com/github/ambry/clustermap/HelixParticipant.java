@@ -310,6 +310,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return result;
   }
 
+  @Override
+  public boolean supportsStateChanges() {
+    return true;
+  }
+
   /**
    * Exposed for testing
    * @return {@link HelixAdmin} that manages current data node.

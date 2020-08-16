@@ -18,7 +18,6 @@ import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -843,8 +842,8 @@ public class CloudBlobStoreTest {
     List<BlobId> blobIdList = new ArrayList<>();
     for (int i = 0; i < 6; i++) {
       blobIdList.add(
-          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-              containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK));
+          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+              partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK));
     }
 
     // Set up VCR

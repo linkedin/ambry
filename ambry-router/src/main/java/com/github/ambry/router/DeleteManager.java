@@ -17,7 +17,6 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
@@ -95,7 +94,7 @@ class DeleteManager {
   void submitDeleteBlobOperation(String blobIdStr, String serviceId, FutureResult<Void> futureResult,
       Callback<Void> callback) throws RouterException {
     final BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
-    if (blobId.getDatacenterId() != ClusterMapUtils.UNKNOWN_DATACENTER_ID
+    if (blobId.getDatacenterId() != ClusterMap.UNKNOWN_DATACENTER_ID
         && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
       routerMetrics.deleteBlobNotOriginateLocalOperationRate.mark();
     }

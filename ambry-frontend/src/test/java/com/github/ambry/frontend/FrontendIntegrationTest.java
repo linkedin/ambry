@@ -22,7 +22,6 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapSnapshotConstants;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -214,7 +213,8 @@ public class FrontendIntegrationTest {
     enableUndeleteTested = true;
     File trustStoreFile = File.createTempFile("truststore", ".jks");
     trustStoreFile.deleteOnExit();
-    VerifiableProperties vprop = buildFrontendVProps(trustStoreFile, false, PLAINTEXT_SERVER_PORT + 100, SSL_SERVER_PORT + 100);
+    VerifiableProperties vprop =
+        buildFrontendVProps(trustStoreFile, false, PLAINTEXT_SERVER_PORT + 100, SSL_SERVER_PORT + 100);
 
     RestServer ambryRestServer = new RestServer(vprop, CLUSTER_MAP, new LoggingNotificationSystem(),
         SSLFactory.getNewInstance(new SSLConfig(vprop)));
@@ -334,8 +334,8 @@ public class FrontendIntegrationTest {
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
       BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-          ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-          partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          ClusterMap.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partitionId,
+          false, BlobId.BlobDataType.DATACHUNK);
       FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET,
           blobId.getID() + "/" + RestUtils.SubResource.Replicas, Unpooled.buffer(0));
       ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -819,8 +819,8 @@ public class FrontendIntegrationTest {
     assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match", expectedHeaders.get(RestUtils.Headers.BLOB_SIZE),
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     assertEquals("Accept-Ranges not set correctly", "bytes", response.headers().get(RestUtils.Headers.ACCEPT_RANGES));
-    assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match", expectedHeaders.get(RestUtils.Headers.LIFE_VERSION),
-        response.headers().get(RestUtils.Headers.LIFE_VERSION));
+    assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match",
+        expectedHeaders.get(RestUtils.Headers.LIFE_VERSION), response.headers().get(RestUtils.Headers.LIFE_VERSION));
     byte[] expectedContentArray = expectedContent.array();
     if (range != null) {
       long blobSize = Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE));
@@ -940,8 +940,8 @@ public class FrontendIntegrationTest {
       assertNoContent(responseParts.queue, 1);
     }
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
-    assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match", expectedHeaders.get(RestUtils.Headers.LIFE_VERSION),
-        response.headers().get(RestUtils.Headers.LIFE_VERSION));
+    assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match",
+        expectedHeaders.get(RestUtils.Headers.LIFE_VERSION), response.headers().get(RestUtils.Headers.LIFE_VERSION));
   }
 
   /**
@@ -987,8 +987,8 @@ public class FrontendIntegrationTest {
     assertEquals(RestUtils.Headers.CONTENT_TYPE + " does not match " + RestUtils.Headers.AMBRY_CONTENT_TYPE,
         expectedHeaders.get(RestUtils.Headers.AMBRY_CONTENT_TYPE),
         response.headers().get(HttpHeaderNames.CONTENT_TYPE));
-    assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match", expectedHeaders.get(RestUtils.Headers.LIFE_VERSION),
-        response.headers().get(RestUtils.Headers.LIFE_VERSION));
+    assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match",
+        expectedHeaders.get(RestUtils.Headers.LIFE_VERSION), response.headers().get(RestUtils.Headers.LIFE_VERSION));
     verifyBlobProperties(expectedHeaders, isPrivate, response);
     verifyAccountAndContainerHeaders(accountName, containerName, response);
     assertNoContent(responseParts.queue, 1);

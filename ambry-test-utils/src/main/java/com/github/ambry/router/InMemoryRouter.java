@@ -14,7 +14,6 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
@@ -483,7 +482,7 @@ public class InMemoryRouter implements Router {
       String operationResult = null;
       Exception exception = null;
       try {
-        String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+        String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
             postData.getBlobProperties().getAccountId(), postData.getBlobProperties().getContainerId(),
             getPartitionForPut(), false, BlobId.BlobDataType.DATACHUNK).getID();
         if (blobs.containsKey(blobId)) {

@@ -152,7 +152,6 @@ project(':ambry-utils') {
         compile "org.json:json:$jsonVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         compile "io.netty:netty-buffer:$nettyVersion"
-        testCompile "org.apache.helix:helix-core:$helixVersion"
         testCompile project(":ambry-test-utils")
     }
 }
@@ -164,6 +163,7 @@ project(':ambry-test-utils') {
         compile project(":ambry-utils")
         compile project(":ambry-api")
         compile project(":ambry-commons")
+        compile project(":ambry-clustermap")
         compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
@@ -171,9 +171,6 @@ project(':ambry-test-utils') {
 project(':ambry-api') {
     dependencies {
         compile project(':ambry-utils')
-        compile ("org.apache.helix:helix-core:$helixVersion") {
-            exclude group: "log4j", module: "log4j"
-        }
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.codehaus.jackson:jackson-core-asl:$jacksonVersion"
         compile "org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion"
@@ -188,7 +185,9 @@ project(':ambry-account') {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons')
-        compile "org.apache.helix:helix-core:$helixVersion"
+        compile ("org.apache.helix:helix-core:$helixVersion") {
+            exclude group: "log4j", module: "log4j"
+        }
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
         testCompile project(':ambry-test-utils')
@@ -200,8 +199,11 @@ project(':ambry-account') {
 project(':ambry-clustermap') {
     dependencies {
         compile project(':ambry-api'),
+                project(':ambry-commons'),
                 project(':ambry-utils')
-        compile "org.apache.helix:helix-core:$helixVersion"
+        compile ("org.apache.helix:helix-core:$helixVersion") {
+            exclude group: "log4j", module: "log4j"
+        }
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
         testCompile project(':ambry-commons')
@@ -212,12 +214,14 @@ project(':ambry-clustermap') {
 project(':ambry-commons') {
     dependencies {
         compile project(':ambry-api'),
-                project(':ambry-clustermap'),
                 project(':ambry-messageformat'),
                 project(':ambry-utils')
         compile "org.conscrypt:conscrypt-openjdk-uber:$conscryptVersion"
         compile "io.netty:netty-all:$nettyVersion"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
+        compile ("org.apache.helix:helix-core:$helixVersion") {
+            exclude group: "log4j", module: "log4j"
+        }
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }

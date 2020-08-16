@@ -95,9 +95,9 @@ public class ReplicaStatusDelegate {
   }
 
   /**
-   * @return the {@link ClusterParticipant} used by this {@link ReplicaStatusDelegate}
+   * @return {@code true} if the underlying participant supports dynamic partition state changes.
    */
-  public ClusterParticipant getClusterParticipant() {
-    return clusterParticipant;
+  public boolean supportsStateChanges() {
+    return clusterParticipant.supportsStateChanges();
   }
 }

@@ -40,8 +40,6 @@ import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
-
 
 /**
  * Test handler code

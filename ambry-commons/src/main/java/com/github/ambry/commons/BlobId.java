@@ -16,7 +16,6 @@ package com.github.ambry.commons;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -28,12 +27,10 @@ import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.util.UUID;
 import org.apache.commons.codec.binary.Base64;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.clustermap.ClusterMap.*;
 
 
 /**
@@ -57,8 +54,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * and {@code partitionId} of the blob. {@code flag} is a single byte that is unused for V2. The {@code datacenterId} is
  * the id of the datacenter where this blob was originally posted (not through replication). The {@code accountId} is
  * the id of the {@link Account} the blob belongs to. The {@code containerId} is the {@link Container} the blob
- * belongs to. The {@code partitionId} is the {@link com.github.ambry.clustermap.Partition} to which this
- * blob is assigned.
+ * belongs to. The {@code partitionId} is the {@link PartitionId} to which this blob is assigned.
  * <br>
  * <pre>
  * +---------+-------+--------------+-----------+-------------+-------------+----------+----------+
@@ -416,7 +412,7 @@ public class BlobId extends StoreKey {
 
   /**
    * Gets the id of the datacenter where this blob was originally posted. If this information was not available
-   * when the blobId was formed, it will return {@link ClusterMapUtils#UNKNOWN_DATACENTER_ID}.
+   * when the blobId was formed, it will return {@link ClusterMap#UNKNOWN_DATACENTER_ID}.
    * @return The id of the datacenter where this blob was originally posted.
    */
   public byte getDatacenterId() {

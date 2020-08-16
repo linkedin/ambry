@@ -308,33 +308,35 @@ public class HelixClusterManager implements ClusterMap {
 
   @Override
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
-    AmbryReplica replica = (AmbryReplica) replicaId;
-    switch (event) {
-      case Node_Response:
-        replica.getDataNodeId().onNodeResponse();
-        break;
-      case Node_Timeout:
-        replica.getDataNodeId().onNodeTimeout();
-        break;
-      case Disk_Error:
-        if (replica.getReplicaType() == ReplicaType.DISK_BACKED) {
-          replica.getDiskId().onDiskError();
-        }
-        break;
-      case Disk_Ok:
-        if (replica.getReplicaType() == ReplicaType.DISK_BACKED) {
-          replica.getDiskId().onDiskOk();
-        }
-        break;
-      case Partition_ReadOnly:
-        replica.getPartitionId().onPartitionReadOnly();
-        break;
-      case Replica_Unavailable:
-        replica.onReplicaUnavailable();
-        break;
-      case Replica_Available:
-        replica.onReplicaResponse();
-        break;
+    if (replicaId instanceof AmbryReplica) {
+      AmbryReplica replica = (AmbryReplica) replicaId;
+      switch (event) {
+        case Node_Response:
+          replica.getDataNodeId().onNodeResponse();
+          break;
+        case Node_Timeout:
+          replica.getDataNodeId().onNodeTimeout();
+          break;
+        case Disk_Error:
+          if (replica.getReplicaType() == ReplicaType.DISK_BACKED) {
+            replica.getDiskId().onDiskError();
+          }
+          break;
+        case Disk_Ok:
+          if (replica.getReplicaType() == ReplicaType.DISK_BACKED) {
+            replica.getDiskId().onDiskOk();
+          }
+          break;
+        case Partition_ReadOnly:
+          replica.getPartitionId().onPartitionReadOnly();
+          break;
+        case Replica_Unavailable:
+          replica.onReplicaUnavailable();
+          break;
+        case Replica_Available:
+          replica.onReplicaResponse();
+          break;
+      }
     }
   }
 

@@ -140,14 +140,14 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   }
 
   @Override
-  public void participate(InstanceType role) throws Exception {
-    manager = HelixManagerFactory.getZKHelixManager(vcrClusterName, vcrInstanceName, role,
+  public void participate() throws Exception {
+    manager = HelixManagerFactory.getZKHelixManager(vcrClusterName, vcrInstanceName, InstanceType.PARTICIPANT,
         cloudConfig.vcrClusterZkConnectString);
     manager.getStateMachineEngine()
         .registerStateModelFactory(LeaderStandbySMD.name, new HelixVcrStateModelFactory(this));
     manager.connect();
     helixAdmin = manager.getClusterManagmentTool();
-    logger.info("Participate HelixVcrCluster as {} successfully.", role);
+    logger.info("Participated in HelixVcrCluster successfully.");
   }
 
   @Override

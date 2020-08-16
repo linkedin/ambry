@@ -24,7 +24,6 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapSnapshotConstants;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -182,7 +181,7 @@ public class FrontendRestRequestServiceTest {
     router = new InMemoryRouter(verifiableProperties, clusterMap);
     responseHandler = new FrontendTestResponseHandler();
     frontendRestRequestService = getFrontendRestRequestService();
-    referenceBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+    referenceBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
         Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
@@ -536,33 +535,33 @@ public class FrontendRestRequestServiceTest {
 
       // aid=refAId, cid=refCId
       String blobId =
-          new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
+          new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, refAccount.getId(),
               refContainer.getId(), clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
               false, BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, refAccount, refContainer, RestServiceErrorCode.NotFound);
 
       // aid=refAId, cid=unknownCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, refAccount.getId(),
           Container.UNKNOWN_CONTAINER_ID,
           clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
           BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=refAId, cid=nonExistCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, refAccount.getId(),
           (short) -1234, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
           BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=unknownAId, cid=refCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
           Account.UNKNOWN_ACCOUNT_ID, refContainer.getId(),
           clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
           BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=unknownAId, cid=unknownCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
           Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
           clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
           BlobId.BlobDataType.DATACHUNK).getID();
@@ -570,27 +569,27 @@ public class FrontendRestRequestServiceTest {
           RestServiceErrorCode.NotFound);
 
       // aid=unknownAId, cid=nonExistCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
           Account.UNKNOWN_ACCOUNT_ID, (short) -1234,
           clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
           BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=nonExistAId, cid=refCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, (short) -1234,
           refContainer.getId(), clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
           false, BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
 
       // aid=nonExistAId, cid=unknownCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, (short) -1234,
           Container.UNKNOWN_CONTAINER_ID,
           clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
           BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
 
       // aid=nonExistAId, cid=nonExistCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, (short) -1234,
           (short) -11, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
           BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
@@ -612,7 +611,7 @@ public class FrontendRestRequestServiceTest {
     populateAccountService();
     // it does not matter what AID and CID are supplied when constructing blobId in v1.
     // expect unknown account and container for v1 blob IDs that went through request processing only.
-    String blobId = new BlobId(BlobId.BLOB_ID_V1, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+    String blobId = new BlobId(BlobId.BLOB_ID_V1, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
         refAccount.getId(), refContainer.getId(),
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK).getID();
@@ -845,7 +844,7 @@ public class FrontendRestRequestServiceTest {
     List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
-      BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+      BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
           Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partitionId, false,
           BlobId.BlobDataType.DATACHUNK);
       RestRequest restRequest =

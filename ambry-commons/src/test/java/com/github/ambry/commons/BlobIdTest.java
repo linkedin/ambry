@@ -40,7 +40,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.commons.BlobId.*;
 import static com.github.ambry.utils.Utils.*;
 import static org.hamcrest.CoreMatchers.*;
@@ -555,9 +554,9 @@ public class BlobIdTest {
    * @param blobId The {@link BlobId} to assert.
    * @param type The expected {@link BlobIdType}.
    * @param datacenterId The expected {@code datacenterId}. This will be of no effect if version is set to v1, and the
-   *                     expected value will become {@link com.github.ambry.clustermap.ClusterMapUtils#UNKNOWN_DATACENTER_ID}.
+   *                     expected value will become {@link ClusterMap#UNKNOWN_DATACENTER_ID}.
    *                     For v2, {@code null} will make the assertion against
-   *                     {@link com.github.ambry.clustermap.ClusterMapUtils#UNKNOWN_DATACENTER_ID}.
+   *                     {@link ClusterMap#UNKNOWN_DATACENTER_ID}.
    * @param accountId The expected {@code accountId}. This will be of no effect if version is set to v1, and the expected
    *                  value will become {@link Account#UNKNOWN_ACCOUNT_ID}. For v2, {@code null} will make the assertion
    *                  against {@link Account#UNKNOWN_ACCOUNT_ID}.
@@ -576,7 +575,8 @@ public class BlobIdTest {
     switch (version) {
       case BLOB_ID_V1:
         assertEquals("Wrong type in blobId: " + blobId, BlobIdType.NATIVE, blobId.getType());
-        assertEquals("Wrong datacenter id in blobId: " + blobId, UNKNOWN_DATACENTER_ID, blobId.getDatacenterId());
+        assertEquals("Wrong datacenter id in blobId: " + blobId, ClusterMap.UNKNOWN_DATACENTER_ID,
+            blobId.getDatacenterId());
         assertEquals("Wrong account id in blobId: " + blobId, Account.UNKNOWN_ACCOUNT_ID, blobId.getAccountId());
         assertEquals("Wrong container id in blobId: " + blobId, Container.UNKNOWN_CONTAINER_ID,
             blobId.getContainerId());
