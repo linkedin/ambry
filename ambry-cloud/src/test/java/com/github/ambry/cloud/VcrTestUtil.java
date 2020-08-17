@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.controller.rebalancer.DelayedAutoRebalancer;
+import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
@@ -48,7 +49,7 @@ import org.apache.helix.zookeeper.impl.factory.DedicatedZkClientFactory;
 public class VcrTestUtil {
 
   private static final int MIN_ACTIVE_REPLICAS = 0;
-  private static final long REBALANCE_DELAY = TimeUnit.SECONDS.toMillis(2);
+  private static final long REBALANCE_DELAY_MS = TimeUnit.SECONDS.toMillis(2);
   public static final String helixResource = "resource1";
 
   /**
@@ -98,8 +99,9 @@ public class VcrTestUtil {
         builder.add(partitionId.toPathString());
       }
       builder.setMinActiveReplica(MIN_ACTIVE_REPLICAS);
-      builder.setRebalanceDelay((int) REBALANCE_DELAY);
+      builder.setRebalanceDelay((int) REBALANCE_DELAY_MS);
       builder.setRebalancerClass(DelayedAutoRebalancer.class.getName());
+      builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
       IdealState idealState = builder.build();
       admin.addResource(vcrClusterName, helixResource, idealState);
       admin.rebalance(vcrClusterName, helixResource, 1, "", "");

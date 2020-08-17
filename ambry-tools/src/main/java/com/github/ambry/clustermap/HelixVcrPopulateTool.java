@@ -27,6 +27,7 @@ import joptsimple.OptionSpec;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.controller.rebalancer.DelayedAutoRebalancer;
+import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
 import org.apache.helix.manager.zk.ZKUtil;
@@ -55,7 +56,7 @@ public class HelixVcrPopulateTool {
   private static final int MAX_OFFLINE_INSTANCES_ALLOWED = 4;
   private static final int NUM_OFFLINE_INSTANCES_FOR_AUTO_EXIT = 2;
   private static final int MIN_ACTIVE_REPLICAS = 0;
-  private static final long REBALANCE_DELAY = TimeUnit.MINUTES.toMillis(20);
+  private static final long REBALANCE_DELAY_MS = TimeUnit.MINUTES.toMillis(20);
 
   public static void main(String[] args) {
     OptionParser parser = new OptionParser();
@@ -222,8 +223,9 @@ public class HelixVcrPopulateTool {
       builder.add(partition);
     }
     builder.setMinActiveReplica(MIN_ACTIVE_REPLICAS);
-    builder.setRebalanceDelay((int) REBALANCE_DELAY);
+    builder.setRebalanceDelay((int) REBALANCE_DELAY_MS);
     builder.setRebalancerClass(DelayedAutoRebalancer.class.getName());
+    builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
     return builder.build();
   }
 
