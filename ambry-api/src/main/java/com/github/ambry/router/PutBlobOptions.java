@@ -17,7 +17,6 @@ package com.github.ambry.router;
 
 /**
  * Represents any options associated with a putBlob request.
- * @todo honor these options within the router impl
  */
 public class PutBlobOptions {
   public static final PutBlobOptions DEFAULT = new PutBlobOptionsBuilder().build();
