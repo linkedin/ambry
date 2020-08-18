@@ -125,7 +125,8 @@ class NonBlockingRouter implements Router {
     backgroundDeleter = new BackgroundDeleter();
     ocList.add(backgroundDeleter);
     ocList.forEach(OperationController::start);
-    routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount, currentBackgroundOperationsCount);
+    routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount, currentBackgroundOperationsCount,
+        backgroundDeleter.getConcurrentBackgroudDeleteOperationCount());
     resourcesToClose = new ArrayList<>();
   }
 
@@ -1043,7 +1044,7 @@ class NonBlockingRouter implements Router {
    * 2. (TBD) Deleting successfully put chunks of a failed composite blob put operation. Today, this is done by the
    * same {@link OperationController} doing the put.
    */
-  private class BackgroundDeleter extends OperationController {
+  class BackgroundDeleter extends OperationController {
     private final AtomicInteger concurrentBackgroudDeleteOperationCount = new AtomicInteger();
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final ConcurrentLinkedDeque<Supplier<Void>> deleteOperationQueue = new ConcurrentLinkedDeque<>();
@@ -1056,6 +1057,13 @@ class NonBlockingRouter implements Router {
       super("backgroundDeleter", null, accountService);
       putManager.close();
       ttlUpdateManager.close();
+    }
+
+    /**
+     * @return The concurrent background delete operation counter.
+     */
+    protected AtomicInteger getConcurrentBackgroudDeleteOperationCount() {
+      return concurrentBackgroudDeleteOperationCount;
     }
 
     /**

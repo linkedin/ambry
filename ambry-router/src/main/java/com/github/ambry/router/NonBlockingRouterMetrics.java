@@ -637,13 +637,18 @@ public class NonBlockingRouterMetrics {
    * @param currentOperationsCount The counter of {@code OperationController}.
    * @param currentBackgroundOperationsCount The counter of background operations submitted to the router that are not
    *                                         yet completed.
+   * @param concurrentBackgroundDeleteOperationCount The counter of concurrent background delete operations.
    */
   public void initializeNumActiveOperationsMetrics(final AtomicInteger currentOperationsCount,
-      final AtomicInteger currentBackgroundOperationsCount) {
+      final AtomicInteger currentBackgroundOperationsCount,
+      final AtomicInteger concurrentBackgroundDeleteOperationCount) {
     metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveOperations"),
         (Gauge<Integer>) currentOperationsCount::get);
     metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveBackgroundOperations"),
         (Gauge<Integer>) currentBackgroundOperationsCount::get);
+    metricRegistry.register(
+        MetricRegistry.name(NonBlockingRouter.BackgroundDeleter.class, "NumberConcurrentBackgroundDeleteOperations"),
+        (Gauge<Integer>) concurrentBackgroundDeleteOperationCount::get);
   }
 
   /**
