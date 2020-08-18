@@ -393,7 +393,11 @@ public class SocketNetworkClient implements NetworkClient {
     if (pendingConnectionsToAssociatedRequests != null) {
       requestMetadataToRelease.addAll(pendingConnectionsToAssociatedRequests.values());
     }
-    requestMetadataToRelease.forEach(requestMetadata -> requestMetadata.requestInfo.getRequest().release());
+    requestMetadataToRelease.forEach(requestMetadata -> {
+      if (!requestMetadata.requestInfo.getRequest().isSendComplete()) {
+        requestMetadata.requestInfo.getRequest().release();
+      }
+    });
     logger.trace("Closing the SocketNetworkClient");
     selector.close();
     closed = true;

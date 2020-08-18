@@ -634,6 +634,44 @@ public class SocketNetworkClientTest {
   }
 
   /**
+   * Test when close the router, the dangling requests will be correctly released.
+   */
+  @Test
+  public void testCloseWithDanglingRequest() throws Exception {
+    Properties props = new Properties();
+    props.setProperty(NetworkConfig.NETWORK_CLIENT_ENABLE_CONNECTION_REPLENISHMENT, "true");
+    VerifiableProperties vprops = new VerifiableProperties(props);
+    NetworkConfig networkConfig = new NetworkConfig(vprops);
+    MockSelector mockSelector = new MockSelector(networkConfig);
+    NetworkMetrics localNetworkMetrics = new NetworkMetrics(new MetricRegistry());
+    SocketNetworkClient localNetworkClient =
+        new SocketNetworkClient(mockSelector, networkConfig, localNetworkMetrics, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, time);
+    DataNodeId dataNodeId = localPlainTextDataNodes.get(0);
+    ReplicaId replicaId = sslDisabledClusterMap.getReplicaIds(dataNodeId).get(0);
+    List<RequestInfo> requestInfoList = new ArrayList<>();
+    List<ResponseInfo> responseInfoList;
+    requestInfoList.add(
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(1), replicaId));
+    requestInfoList.add(
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(2), replicaId));
+
+    // This call would create two connection and not send any requests out
+    localNetworkClient.sendAndPoll(requestInfoList, Collections.EMPTY_SET, POLL_TIMEOUT_MS);
+    requestInfoList.clear();
+
+    requestInfoList.add(
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(3), replicaId));
+    requestInfoList.add(
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(4), replicaId));
+
+    mockSelector.setState(MockSelectorState.IdlePoll);
+    // This call would send first two requests out. At the same time, keep last two requests in the pendingRequests queue.
+    localNetworkClient.sendAndPoll(requestInfoList, Collections.EMPTY_SET, POLL_TIMEOUT_MS);
+    localNetworkClient.close();
+  }
+
+  /**
    * Helper function to test {@link SocketNetworkClient#warmUpConnections(List, int, long, List)}. This will build up to 100%
    * pre-warmed connections.
    */
@@ -990,6 +1028,7 @@ class MockSelector extends Selector {
   @Override
   public void close() {
     isOpen = false;
+    connectionIds.forEach(conn -> close(conn));
   }
 
   /**
