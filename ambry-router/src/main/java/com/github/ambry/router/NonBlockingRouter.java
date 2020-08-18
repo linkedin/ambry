@@ -41,6 +41,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
@@ -48,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -122,6 +124,7 @@ class NonBlockingRouter implements Router {
     }
     backgroundDeleter = new BackgroundDeleter();
     ocList.add(backgroundDeleter);
+    ocList.forEach(OperationController::start);
     routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount, currentBackgroundOperationsCount);
     resourcesToClose = new ArrayList<>();
   }
@@ -659,6 +662,12 @@ class NonBlockingRouter implements Router {
           new UndeleteManager(clusterMap, responseHandler, notificationSystem, accountService, routerConfig,
               routerMetrics, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + suffix, this, true);
+    }
+
+    /**
+     * Start the thread to run the operation controller
+     */
+    protected void start() {
       requestResponseHandlerThread.start();
       routerMetrics.initializeOperationControllerMetrics(requestResponseHandlerThread);
     }
@@ -1035,7 +1044,9 @@ class NonBlockingRouter implements Router {
    * same {@link OperationController} doing the put.
    */
   private class BackgroundDeleter extends OperationController {
+    private final AtomicInteger concurrentBackgroudDeleteOperationCount = new AtomicInteger();
     private final Logger logger = LoggerFactory.getLogger(getClass());
+    private final ConcurrentLinkedDeque<Supplier<Void>> deleteOperationQueue = new ConcurrentLinkedDeque<>();
 
     /**
      * Instantiate the BackgroundDeleter
@@ -1086,11 +1097,48 @@ class NonBlockingRouter implements Router {
     }
 
     /**
+     * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
+     * @param blobIdStr The ID of the blob that needs to be deleted in string form
+     * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
+     * @param futureResult A future that would contain information about whether the deletion succeeded or not,
+     *                     eventually.
+     * @param callback The {@link Callback} which will be invoked on the completion of a request.
+     * @param attemptChunkDeletes whether delete of chunks of the given blob (if it turns out to be composite) should be
+     *                            attempted. Set this to false if it is known that the given blob is a data chunk.
+     */
+    @Override
+    protected void deleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
+        final Callback<Void> callback, boolean attemptChunkDeletes) {
+      Supplier<Void> deleteCall = () -> {
+        super.deleteBlob(blobIdStr, serviceId, futureResult, (Void result, Exception e) -> {
+          callback.onCompletion(result, e);
+          concurrentBackgroudDeleteOperationCount.decrementAndGet();
+        }, attemptChunkDeletes);
+        return null;
+      };
+      if (routerConfig.routerBackgroundDeleterMaxConcurrentOperations != 0) {
+        deleteOperationQueue.offer(deleteCall);
+      } else {
+        concurrentBackgroudDeleteOperationCount.incrementAndGet();
+        deleteCall.get();
+      }
+    }
+
+    /**
      * {@inheritDoc}
      */
     @Override
     protected void pollForRequests(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop) {
       try {
+        while (!deleteOperationQueue.isEmpty()) {
+          if (concurrentBackgroudDeleteOperationCount.incrementAndGet()
+              <= routerConfig.routerBackgroundDeleterMaxConcurrentOperations) {
+            deleteOperationQueue.poll().get();
+          } else {
+            concurrentBackgroudDeleteOperationCount.decrementAndGet();
+            break;
+          }
+        }
         getManager.poll(requestsToSend, requestsToDrop);
         deleteManager.poll(requestsToSend, requestsToDrop);
       } catch (Exception e) {
