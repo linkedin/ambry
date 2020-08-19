@@ -140,7 +140,7 @@ public class VcrTestUtil {
   public static Properties createVcrProperties(String datacenter, String vcrClusterName, String zkConnectString,
       int clusterMapPort, int vcrSslPort, Properties vcrSSLProps) {
     return createVcrProperties(datacenter, vcrClusterName, zkConnectString, clusterMapPort, vcrSslPort, vcrSSLProps,
-        OnlineOfflineSMD.name);
+        OnlineOfflineHelixVcrStateModelFactory.class.getName());
   }
 
   /**
@@ -151,11 +151,11 @@ public class VcrTestUtil {
    * @param clusterMapPort the clusterMapPort to use.
    * @param vcrSslPort the vcrSslPort to use.
    * @param vcrSSLProps the SSL Properties to use if exist. Can be {@code null}.
-   * @param vcrHelixStateModel the state model to use for helix cluster events.
+   * @param vcrHelixStateModelFactoryClass the state model factory class.
    * @return the created VCR {@link Properties}.
    */
   public static Properties createVcrProperties(String datacenter, String vcrClusterName, String zkConnectString,
-      int clusterMapPort, int vcrSslPort, Properties vcrSSLProps, String vcrHelixStateModel) {
+      int clusterMapPort, int vcrSslPort, Properties vcrSSLProps, String vcrHelixStateModelFactoryClass) {
     // Start the VCR and CloudBackupManager
     Properties props = new Properties();
     props.setProperty(CloudConfig.CLOUD_IS_VCR, Boolean.TRUE.toString());
@@ -169,7 +169,7 @@ public class VcrTestUtil {
     props.setProperty("vcr.source.datacenters", datacenter);
     props.setProperty("clustermap.port", Integer.toString(clusterMapPort));
     props.setProperty("port", Integer.toString(clusterMapPort));
-    props.setProperty("vcr.helix.state.model.name", vcrHelixStateModel);
+    props.setProperty("vcr.helix.state.model.factory.class", vcrHelixStateModelFactoryClass);
     if (vcrSSLProps == null) {
       props.setProperty("clustermap.ssl.enabled.datacenters", "");
     } else {

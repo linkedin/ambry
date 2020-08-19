@@ -181,12 +181,12 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
     if (stateModelFactoryClass.equals(OnlineOfflineHelixVcrStateModelFactory.class.getName())) {
       return OnlineOfflineSMD.name;
     }
-    if (stateModelFactoryClass.equals(LeaderStandbyHelixVcrStateModel.class.getName())) {
+    if (stateModelFactoryClass.equals(LeaderStandbyHelixVcrStateModelFactory.class.getName())) {
       return LeaderStandbySMD.name;
     }
     throw new IllegalArgumentException(String.format(
         "Illegal vcr helix state model factory class: " + stateModelFactoryClass + ". Should be one of"
             + OnlineOfflineHelixVcrStateModelFactory.class.getName() + ", "
-            + LeaderStandbyHelixVcrStateModel.class.getName()));
+            + LeaderStandbyHelixVcrStateModelFactory.class.getName()));
   }
 }
