@@ -15,6 +15,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.utils.TestUtils;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
@@ -42,13 +43,28 @@ import static com.github.ambry.clustermap.HelixVcrPopulateTool.*;
 @RunWith(Parameterized.class)
 public class HelixVcrPopulateToolTest {
 
-  private static final String delayedAutoRebalanceConfigFileName =
-      "mocktio-extensions/DelayedAutoRebalancerHelixConfig.json";
-  private static final String crushEdRebalancerConfigFileName = "mocktio-extensions/CrushEdRebalancerHelixConfig.json";
+  private static final String delayedAutoRebalanceConfig =
+      "{\n" + "  \"clusterConfigFields\": {\n" + "    \"maxOfflineInstancesAllowed\": 4,\n"
+          + "    \"numOfflineInstancesForAutoExit\": 2,\n" + "    \"allowAutoJoin\": true\n" + "  },\n"
+          + "  \"idealStateConfigFields\": {\n" + "    \"numReplicas\": 2,\n"
+          + "    \"stateModelDefRef\": \"OnlineOffline\",\n"
+          + "    \"rebalanceStrategy\": \"org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy\",\n"
+          + "    \"minActiveReplicas\": 0,\n"
+          + "    \"rebalancerClassName\": \"org.apache.helix.controller.rebalancer.DelayedAutoRebalancer\",\n"
+          + "    \"rebalanceDelayInMins\": 20\n" + "  }\n" + "}\n";
+
+  private static final String crushEdRebalancerConfig =
+      "{\n" + "  \"clusterConfigFields\": {\n" + "    \"maxOfflineInstancesAllowed\": 4,\n"
+          + "    \"numOfflineInstancesForAutoExit\": 2,\n" + "    \"allowAutoJoin\": true\n" + "  },\n"
+          + "  \"idealStateConfigFields\": {\n" + "    \"numReplicas\": 2,\n"
+          + "    \"stateModelDefRef\": \"OnlineOffline\",\n"
+          + "    \"rebalanceStrategy\": \"org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy\"\n"
+          + "  }\n" + "}";
+
   private static int SRC_ZK_SERVER_PORT = 31900;
   private final String SRC_ZK_SERVER_HOSTNAME = "localhost";
   private final String SRC_CLUSTER_NAME = "srcCluster";
-  private final String propFileName;
+  private final String configData;
   private String SRC_ZK_CONNECT_STRING = SRC_ZK_SERVER_HOSTNAME + ":" + SRC_ZK_SERVER_PORT;
   private TestUtils.ZkInfo srcZkInfo;
   private HelixAdmin srcHelixAdmin;
@@ -58,10 +74,10 @@ public class HelixVcrPopulateToolTest {
 
   /**
    * Constructor for {@link HelixVcrPopulateTool}.
-   * @param configFileName name of the config file.
+   * @param configData the config json.
    */
-  public HelixVcrPopulateToolTest(String configFileName) {
-    this.propFileName = configFileName;
+  public HelixVcrPopulateToolTest(String configData) {
+    this.configData = configData;
     SRC_ZK_SERVER_PORT += 100;
   }
 
@@ -71,18 +87,15 @@ public class HelixVcrPopulateToolTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{crushEdRebalancerConfigFileName}, {delayedAutoRebalanceConfigFileName}});
+    return Arrays.asList(new Object[][]{{crushEdRebalancerConfig}, {delayedAutoRebalanceConfig}});
   }
 
   @Before
   public void beforeTest() throws Exception {
-    try (InputStream input = HelixVcrPopulateToolTest.class.getClassLoader().getResourceAsStream(propFileName)) {
-      if (input == null) {
-        throw new IllegalStateException("Could not find config: " + propFileName);
-      }
+    try (InputStream input = new ByteArrayInputStream(configData.getBytes())) {
       config = new ObjectMapper().readValue(input, Config.class);
     } catch (IOException ex) {
-      throw new IllegalStateException("Could not load config from resource: " + propFileName);
+      throw new IllegalStateException("Could not load config from config data: " + configData);
     }
     srcZkInfo = new com.github.ambry.utils.TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1,
         SRC_ZK_SERVER_PORT, true);

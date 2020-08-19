@@ -56,22 +56,19 @@ public class HelixVcrPopulateTool {
   public static void main(String[] args) throws IOException {
     OptionParser parser = new OptionParser();
     OptionSpec createClusterOpt = parser.accepts("createCluster",
-        "Create cluster in dest zk(no resource creation). --createCluster --dest destZkEndpoint/destClusterName"
-            + " --config configFilePath");
+        "Create cluster in dest zk(no resource creation). --createCluster --dest destZkEndpoint/destClusterName --config configFilePath");
 
     OptionSpec updateClusterOpt = parser.accepts("updateCluster",
-        "Update resources in dest by copying from src to dest. --updateCluster"
-            + " [--src srcZkEndpoint/srcClusterName] --dest destZkEndpoint/destClusterName --config configFilePath");
+        "Update resources in dest by copying from src to dest. --updateCluster [--src srcZkEndpoint/srcClusterName] --dest destZkEndpoint/destClusterName --config configFilePath");
     OptionSpec dryRunOpt = parser.accepts("dryRun", "Do dry run.");
 
     OptionSpec controlResourceOpt = parser.accepts("controlResource",
-        "Enable/Disable a resource. --controlResource --dest destZkEndpoint/destClusterName"
-            + " --resource resource --enable true");
+        "Enable/Disable a resource. --controlResource --dest destZkEndpoint/destClusterName --resource resource --enable true");
     ArgumentAcceptingOptionSpec<String> resourceOpt =
         parser.accepts("resource").withRequiredArg().describedAs("resource name").ofType(String.class);
 
     ArgumentAcceptingOptionSpec<Boolean> maintenanceOpt = parser.accepts("maintainCluster",
-        "Enter/Exit helix maintenance mode. --maintainCluster --dest destZkEndpoint/destClusterName" + " --enable true")
+        "Enter/Exit helix maintenance mode. --maintainCluster --dest destZkEndpoint/destClusterName --enable true")
         .withRequiredArg()
         .ofType(Boolean.class);
 
@@ -220,6 +217,7 @@ public class HelixVcrPopulateTool {
    * Build the IdealState for the specified resource.
    * @param resource the Helix resource name.
    * @param partitionSet the set of partitions managed by the resource.
+   * @param idealStateConfigFields {@link IdealStateConfigFields} object containing the ideal state configs.
    * @return the {@link IdealState}.
    */
   static IdealState buildIdealState(String resource, Set<String> partitionSet,
@@ -460,4 +458,3 @@ public class HelixVcrPopulateTool {
     }
   }
 }
-

@@ -146,7 +146,9 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   public void participate(InstanceType role) throws Exception {
     manager = HelixManagerFactory.getZKHelixManager(vcrClusterName, vcrInstanceName, role,
         cloudConfig.vcrClusterZkConnectString);
-    registerStateModelFactory(cloudConfig.vcrHelixStateModelName);
+    manager.getStateMachineEngine()
+        .registerStateModelFactory(getStateModelNameFromFactory(cloudConfig.vcrHelixStateModelFactoryClass),
+            Utils.getObj(cloudConfig.vcrHelixStateModelFactoryClass, this));
     manager.connect();
     helixAdmin = manager.getClusterManagmentTool();
     logger.info("Participate HelixVcrCluster as {} successfully.", role);
@@ -171,23 +173,20 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   }
 
   /**
-   * Register the state model factory corresponding to {@code vcrHelixStateModelName}.
-   * @param vcrHelixStateModelName
+   * Get the name of the state model for the factory class.
+   * @param stateModelFactoryClass name of the {@link org.apache.helix.participant.statemachine.StateModelFactory} class.
+   * @return state model name corresponding to the factor class.
    */
-  private void registerStateModelFactory(String vcrHelixStateModelName) {
-    switch (vcrHelixStateModelName) {
-      case OnlineOfflineSMD.name:
-        manager.getStateMachineEngine()
-            .registerStateModelFactory(vcrHelixStateModelName, new OnlineOfflineHelixVcrStateModelFactory(this));
-        break;
-      case LeaderStandbySMD.name:
-        manager.getStateMachineEngine()
-            .registerStateModelFactory(vcrHelixStateModelName, new LeaderStandbyHelixVcrStateModelFactory(this));
-        break;
-      default:
-        throw new IllegalArgumentException(String.format(
-            "Illegal vcr helix state model name: " + vcrHelixStateModelName + ". Should be one of"
-                + OnlineOfflineSMD.name + ", " + LeaderStandbySMD.name));
+  private String getStateModelNameFromFactory(String stateModelFactoryClass) {
+    if (stateModelFactoryClass.equals(OnlineOfflineHelixVcrStateModelFactory.class.getName())) {
+      return OnlineOfflineSMD.name;
     }
+    if (stateModelFactoryClass.equals(LeaderStandbyHelixVcrStateModel.class.getName())) {
+      return LeaderStandbySMD.name;
+    }
+    throw new IllegalArgumentException(String.format(
+        "Illegal vcr helix state model factory class: " + stateModelFactoryClass + ". Should be one of"
+            + OnlineOfflineHelixVcrStateModelFactory.class.getName() + ", "
+            + LeaderStandbyHelixVcrStateModel.class.getName()));
   }
 }
