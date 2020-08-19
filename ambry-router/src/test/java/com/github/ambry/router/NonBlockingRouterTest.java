@@ -837,9 +837,28 @@ public class NonBlockingRouterTest {
    */
   @Test
   public void testCompositeBlobDataChunksDelete() throws Exception {
+    // Test when there is no limit on how many concurrent background delete operations
+    testCompositeBlobDataChunksDeleteMaxDeleteOperation(0);
+  }
+
+  /**
+   * Test that if a composite blob is deleted, the data chunks are eventually deleted. Also check the service IDs used
+   * for delete operations. But this time, we limit the number of background delete operations.
+   */
+  @Test
+  public void testCompositeBlobDataChunksDeleteWithMaxBackgroudDeleteOperation() throws Exception {
+    // Test when the maximum number of background delete operations is 2;
+    testCompositeBlobDataChunksDeleteMaxDeleteOperation(2);
+  }
+
+  protected void testCompositeBlobDataChunksDeleteMaxDeleteOperation(int maxDeleteOperation) throws Exception {
     // Ensure there are 4 chunks.
     maxPutChunkSize = PUT_CONTENT_SIZE / 4;
     Properties props = getNonBlockingRouterProperties("DC1");
+    if (maxDeleteOperation != 0) {
+      props.setProperty(RouterConfig.ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS,
+          Integer.toString(maxDeleteOperation));
+    }
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     MockClusterMap mockClusterMap = new MockClusterMap();
