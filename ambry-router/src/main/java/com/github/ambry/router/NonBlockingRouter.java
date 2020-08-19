@@ -41,7 +41,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
@@ -126,7 +126,7 @@ class NonBlockingRouter implements Router {
     ocList.add(backgroundDeleter);
     ocList.forEach(OperationController::start);
     routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount, currentBackgroundOperationsCount,
-        backgroundDeleter.getConcurrentBackgroudDeleteOperationCount());
+        backgroundDeleter.getConcurrentBackgroundDeleteOperationCount());
     resourcesToClose = new ArrayList<>();
   }
 
@@ -1045,9 +1045,9 @@ class NonBlockingRouter implements Router {
    * same {@link OperationController} doing the put.
    */
   class BackgroundDeleter extends OperationController {
-    private final AtomicInteger concurrentBackgroudDeleteOperationCount = new AtomicInteger();
+    private final AtomicInteger concurrentBackgroundDeleteOperationCount = new AtomicInteger();
     private final Logger logger = LoggerFactory.getLogger(getClass());
-    private final ConcurrentLinkedDeque<Supplier<Void>> deleteOperationQueue = new ConcurrentLinkedDeque<>();
+    private final ConcurrentLinkedQueue<Supplier<Void>> deleteOperationQueue = new ConcurrentLinkedQueue<>();
 
     /**
      * Instantiate the BackgroundDeleter
@@ -1062,8 +1062,8 @@ class NonBlockingRouter implements Router {
     /**
      * @return The concurrent background delete operation counter.
      */
-    protected AtomicInteger getConcurrentBackgroudDeleteOperationCount() {
-      return concurrentBackgroudDeleteOperationCount;
+    protected AtomicInteger getConcurrentBackgroundDeleteOperationCount() {
+      return concurrentBackgroundDeleteOperationCount;
     }
 
     /**
@@ -1105,14 +1105,10 @@ class NonBlockingRouter implements Router {
     }
 
     /**
-     * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
-     * @param blobIdStr The ID of the blob that needs to be deleted in string form
-     * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
-     * @param futureResult A future that would contain information about whether the deletion succeeded or not,
-     *                     eventually.
-     * @param callback The {@link Callback} which will be invoked on the completion of a request.
-     * @param attemptChunkDeletes whether delete of chunks of the given blob (if it turns out to be composite) should be
-     *                            attempted. Set this to false if it is known that the given blob is a data chunk.
+     * {@inheritDoc}
+     *
+     * If the maximum concurrent number of background delete operation in router configuration is not 0, then this delete
+     * operation will be enqueued to a thread-safe queue and delete operations will be executed later.
      */
     @Override
     protected void deleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
@@ -1120,14 +1116,14 @@ class NonBlockingRouter implements Router {
       Supplier<Void> deleteCall = () -> {
         super.deleteBlob(blobIdStr, serviceId, futureResult, (Void result, Exception e) -> {
           callback.onCompletion(result, e);
-          concurrentBackgroudDeleteOperationCount.decrementAndGet();
+          concurrentBackgroundDeleteOperationCount.decrementAndGet();
         }, attemptChunkDeletes);
         return null;
       };
-      if (routerConfig.routerBackgroundDeleterMaxConcurrentOperations != 0) {
+      if (routerConfig.routerBackgroundDeleterMaxConcurrentOperations > 0) {
         deleteOperationQueue.offer(deleteCall);
       } else {
-        concurrentBackgroudDeleteOperationCount.incrementAndGet();
+        concurrentBackgroundDeleteOperationCount.incrementAndGet();
         deleteCall.get();
       }
     }
@@ -1139,11 +1135,11 @@ class NonBlockingRouter implements Router {
     protected void pollForRequests(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop) {
       try {
         while (!deleteOperationQueue.isEmpty()) {
-          if (concurrentBackgroudDeleteOperationCount.incrementAndGet()
+          if (concurrentBackgroundDeleteOperationCount.incrementAndGet()
               <= routerConfig.routerBackgroundDeleterMaxConcurrentOperations) {
             deleteOperationQueue.poll().get();
           } else {
-            concurrentBackgroudDeleteOperationCount.decrementAndGet();
+            concurrentBackgroundDeleteOperationCount.decrementAndGet();
             break;
           }
         }
