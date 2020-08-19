@@ -95,7 +95,7 @@ class GetBlobOperation extends GetOperation {
   // the total number of data chunks associated with this blob.
   private int numChunksTotal;
   // the total number of data chunks retrieved so far (and may or may not have been written out yet).
-  private int numChunksRetrieved;
+  private AtomicInteger numChunksRetrieved = new AtomicInteger();
   // the total size of the object being fetched in this operation
   private long totalSize;
   // a byte range with defined start/end offsets that has been verified to be within the total blob size
@@ -308,7 +308,7 @@ class GetBlobOperation extends GetOperation {
               dataChunk.initialize(chunkIdIterator.nextIndex(), chunkIdIterator.next());
             }
             if (dataChunk.isInProgress() || (dataChunk.isReady()
-                && numChunksRetrieved - blobDataChannel.getNumChunksWrittenOut()
+                && numChunksRetrieved.get() - blobDataChannel.getNumChunksWrittenOut()
                 < routerConfig.routerMaxInMemGetChunks)) {
               dataChunk.poll(requestRegistrationCallback);
               if (dataChunk.isComplete()) {
@@ -657,7 +657,7 @@ class GetBlobOperation extends GetOperation {
       // response info anymore.
       if (decryptCallbackResultInfo.exception == null) {
         chunkIndexToBuf.put(chunkIndex, filterChunkToRange(decryptCallbackResultInfo.result.getDecryptedBlobContent()));
-        numChunksRetrieved++;
+        numChunksRetrieved.incrementAndGet();
         logger.trace("Decrypt result successfully updated for data chunk {}", chunkBlobId);
         progressTracker.setCryptoJobSuccess();
       } else {
@@ -771,7 +771,7 @@ class GetBlobOperation extends GetOperation {
           if (!launchedJob) {
             chunkBuf = filterChunkToRange(chunkBuf);
             chunkIndexToBuf.put(chunkIndex, chunkBuf.retainedDuplicate());
-            numChunksRetrieved++;
+            numChunksRetrieved.incrementAndGet();
           }
 
           successfullyDeserialized = true;
@@ -1175,7 +1175,7 @@ class GetBlobOperation extends GetOperation {
           totalSize = decryptedBlobContent.readableBytes();
           if (!resolveRange(totalSize)) {
             chunkIndexToBuf.put(0, filterChunkToRange(decryptedBlobContent));
-            numChunksRetrieved = 1;
+            numChunksRetrieved.set(1);
             progressTracker.setCryptoJobSuccess();
             logger.trace("BlobContent available to process for simple blob {}", blobId);
           } else {
@@ -1250,7 +1250,7 @@ class GetBlobOperation extends GetOperation {
             chunkIndex = 0;
             numChunksTotal = 1;
             chunkIndexToBuf.put(0, Unpooled.wrappedBuffer(rawPayloadBuffer));
-            numChunksRetrieved = 1;
+            numChunksRetrieved.set(1);
           } else {
             setOperationException(new IllegalStateException("Only encrypted blobs supported in raw mode"));
           }
@@ -1426,7 +1426,7 @@ class GetBlobOperation extends GetOperation {
             if (!launchedJob) {
               chunkBuf = filterChunkToRange(chunkBuf);
               chunkIndexToBuf.put(0, chunkBuf.retainedDuplicate());
-              numChunksRetrieved = 1;
+              numChunksRetrieved.set(1);
             }
           }
         }
@@ -1465,7 +1465,7 @@ class GetBlobOperation extends GetOperation {
       chunkIdIterator = null;
       dataChunks = null;
       numChunksTotal = 0;
-      numChunksRetrieved = 0;
+      numChunksRetrieved.set(0);
     }
   }
 
