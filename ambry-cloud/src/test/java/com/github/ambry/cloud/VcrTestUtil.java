@@ -48,9 +48,10 @@ import org.apache.helix.zookeeper.impl.factory.DedicatedZkClientFactory;
  */
 public class VcrTestUtil {
 
+  public static final String helixResource = "resource1";
   private static final int MIN_ACTIVE_REPLICAS = 0;
   private static final long REBALANCE_DELAY_MS = TimeUnit.SECONDS.toMillis(2);
-  public static final String helixResource = "resource1";
+  private static final int NUM_REPLICAS = 1;
 
   /**
    * Create a {@link VcrServer}.
@@ -74,6 +75,19 @@ public class VcrTestUtil {
    */
   public static HelixControllerManager populateZkInfoAndStartController(String zkConnectString, String vcrClusterName,
       ClusterMap clusterMap) {
+    return populateZkInfoAndStartController(zkConnectString, vcrClusterName, clusterMap, OnlineOfflineSMD.name);
+  }
+
+  /**
+   * Populate info on ZooKeeper server and start {@link HelixControllerManager}.
+   * @param zkConnectString zk connect string to zk server.
+   * @param vcrClusterName the vcr cluster name.
+   * @param clusterMap the {@link ClusterMap} to use.
+   * @param vcrHelixStateModel the state model to use for helix cluster events.
+   * @return the created {@link HelixControllerManager}.
+   */
+  public static HelixControllerManager populateZkInfoAndStartController(String zkConnectString, String vcrClusterName,
+      ClusterMap clusterMap, String vcrHelixStateModel) {
     HelixZkClient zkClient = DedicatedZkClientFactory.getInstance()
         .buildZkClient(new HelixZkClient.ZkConnectionConfig(zkConnectString), new HelixZkClient.ZkClientConfig());
     try {
@@ -94,7 +108,7 @@ public class VcrTestUtil {
       configAccessor.setClusterConfig(vcrClusterName, clusterConfig);
 
       FullAutoModeISBuilder builder = new FullAutoModeISBuilder(helixResource);
-      builder.setStateModel(OnlineOfflineSMD.name);
+      builder.setStateModel(vcrHelixStateModel);
       for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
         builder.add(partitionId.toPathString());
       }
@@ -104,7 +118,7 @@ public class VcrTestUtil {
       builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
       IdealState idealState = builder.build();
       admin.addResource(vcrClusterName, helixResource, idealState);
-      admin.rebalance(vcrClusterName, helixResource, 1, "", "");
+      admin.rebalance(vcrClusterName, helixResource, NUM_REPLICAS, "", "");
       HelixControllerManager helixControllerManager = new HelixControllerManager(zkConnectString, vcrClusterName);
       helixControllerManager.syncStart();
       return helixControllerManager;
@@ -125,6 +139,23 @@ public class VcrTestUtil {
    */
   public static Properties createVcrProperties(String datacenter, String vcrClusterName, String zkConnectString,
       int clusterMapPort, int vcrSslPort, Properties vcrSSLProps) {
+    return createVcrProperties(datacenter, vcrClusterName, zkConnectString, clusterMapPort, vcrSslPort, vcrSSLProps,
+        OnlineOfflineSMD.name);
+  }
+
+  /**
+   * Create a {@link Properties} for VCR.
+   * @param datacenter the datacenter to use.
+   * @param vcrClusterName the vcrClusterName to use.
+   * @param zkConnectString the zkConnectString to use.
+   * @param clusterMapPort the clusterMapPort to use.
+   * @param vcrSslPort the vcrSslPort to use.
+   * @param vcrSSLProps the SSL Properties to use if exist. Can be {@code null}.
+   * @param vcrHelixStateModel the state model to use for helix cluster events.
+   * @return the created VCR {@link Properties}.
+   */
+  public static Properties createVcrProperties(String datacenter, String vcrClusterName, String zkConnectString,
+      int clusterMapPort, int vcrSslPort, Properties vcrSSLProps, String vcrHelixStateModel) {
     // Start the VCR and CloudBackupManager
     Properties props = new Properties();
     props.setProperty(CloudConfig.CLOUD_IS_VCR, Boolean.TRUE.toString());
@@ -138,6 +169,7 @@ public class VcrTestUtil {
     props.setProperty("vcr.source.datacenters", datacenter);
     props.setProperty("clustermap.port", Integer.toString(clusterMapPort));
     props.setProperty("port", Integer.toString(clusterMapPort));
+    props.setProperty("vcr.helix.state.model.name", vcrHelixStateModel);
     if (vcrSSLProps == null) {
       props.setProperty("clustermap.ssl.enabled.datacenters", "");
     } else {

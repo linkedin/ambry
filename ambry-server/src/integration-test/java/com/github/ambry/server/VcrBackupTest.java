@@ -34,6 +34,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -48,30 +49,43 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.*;
 
 
+@RunWith(Parameterized.class)
 public class VcrBackupTest {
   private static final Logger logger = LoggerFactory.getLogger(VcrBackupTest.class);
+  private static TestUtils.ZkInfo zkInfo;
+  private static int zkPort = 31996;
+  private static String zkConnectString = "localhost:" + zkPort;
+  private static String vcrClusterName = "vcrBackupTestCluster";
+  private final String vcrHelixStateModel;
   private MockNotificationSystem notificationSystem;
   private MockCluster mockCluster;
   private HelixControllerManager helixControllerManager;
   private DataNodeId dataNode;
   private int numOfPartitions = 20;
-  private static TestUtils.ZkInfo zkInfo;
-  private static int zkPort = 31996;
-  private static String zkConnectString = "localhost:" + zkPort;
-  private static String vcrClusterName = "vcrBackupTestCluster";
 
-  static {
-    try {
-      zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
-    } catch (IOException e) {
-      throw new IllegalStateException(e);
-    }
+  /**
+   * Constructor for {@link VcrBackupTest}.
+   * @param vcrHelixStateModel state model used for vcr helix cluster state transitions.
+   */
+  public VcrBackupTest(String vcrHelixStateModel) {
+    this.vcrHelixStateModel = vcrHelixStateModel;
+  }
+
+  /**
+   * Run for both onlineoffline and leaderstandby state models.
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{"OnlineOffline"}, {"LeaderStandby"}});
   }
 
   @Before
@@ -89,7 +103,8 @@ public class VcrBackupTest {
       zkInfo.startZkServer();
     }
     helixControllerManager =
-        VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, mockCluster.getClusterMap());
+        VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, mockCluster.getClusterMap(),
+            vcrHelixStateModel);
   }
 
   @After
@@ -109,7 +124,7 @@ public class VcrBackupTest {
     // Start the VCR and CloudBackupManager
     Properties props =
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
-            null);
+            null, vcrHelixStateModel);
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
         new LatchBasedInMemoryCloudDestination(blobIds);
     CloudDestinationFactory cloudDestinationFactory =
@@ -143,7 +158,7 @@ public class VcrBackupTest {
     // Start the VCR with token persistor off.
     Properties props =
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
-            null);
+            null, vcrHelixStateModel);
     props.setProperty("replication.persist.token.on.shutdown.or.replica.remove", "false");
     MockNotificationSystem vcrNotificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
     VcrServer vcrServer =
@@ -221,7 +236,7 @@ public class VcrBackupTest {
     // Start the VCR with token persistor on.
     Properties props =
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
-            null);
+            null, vcrHelixStateModel);
     props.setProperty("replication.persist.token.on.shutdown.or.replica.remove", "true");
     MockNotificationSystem vcrNotificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
     VcrServer vcrServer =
@@ -304,7 +319,7 @@ public class VcrBackupTest {
     for (int port = 12310; port < 12310 + initialNumOfVcrs; port++) {
       Properties props =
           VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, port,
-              port + 100, null);
+              port + 100, null, vcrHelixStateModel);
       MockNotificationSystem vcrNotificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
       VcrServer vcrServer =
           VcrTestUtil.createVcrServer(new VerifiableProperties(props), mockCluster.getClusterAgentsFactory(),
@@ -340,7 +355,7 @@ public class VcrBackupTest {
 
     // 2nd phase: Add a new VCR to cluster.
     Properties props = VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString,
-        12310 + initialNumOfVcrs, 12310 + initialNumOfVcrs + 100, null);
+        12310 + initialNumOfVcrs, 12310 + initialNumOfVcrs + 100, null, vcrHelixStateModel);
     MockNotificationSystem vcrNotificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
     VcrServer vcrServer =
         VcrTestUtil.createVcrServer(new VerifiableProperties(props), mockCluster.getClusterAgentsFactory(),
@@ -436,5 +451,13 @@ public class VcrBackupTest {
       notificationSystem.awaitBlobCreations(blobId.getID());
     }
     return blobIds;
+  }
+
+  static {
+    try {
+      zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
+    }
   }
 }

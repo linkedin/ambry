@@ -1,5 +1,5 @@
 /**
- * Copyright 2019 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,11 +27,11 @@ import org.slf4j.LoggerFactory;
  * that get called within a participant whenever its state changes in Helix.
  */
 @StateModelInfo(initialState = "OFFLINE", states = {"OFFLINE", "ONLINE", "DROPPED"})
-public class HelixVcrStateModel extends StateModel {
-  private static final Logger logger = LoggerFactory.getLogger(HelixVcrStateModel.class);
+public class OnlineOfflineHelixVcrStateModel extends StateModel {
+  private static final Logger logger = LoggerFactory.getLogger(OnlineOfflineHelixVcrStateModel.class);
   private final HelixVcrCluster helixVcrCluster;
 
-  HelixVcrStateModel(HelixVcrCluster helixVcrCluster) {
+  OnlineOfflineHelixVcrStateModel(HelixVcrCluster helixVcrCluster) {
     this.helixVcrCluster = helixVcrCluster;
   }
 

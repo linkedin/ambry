@@ -13,6 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -26,8 +28,6 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
-import org.apache.helix.controller.rebalancer.DelayedAutoRebalancer;
-import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
 import org.apache.helix.manager.zk.ZKUtil;
@@ -35,12 +35,12 @@ import org.apache.helix.manager.zk.client.DedicatedZkClientFactory;
 import org.apache.helix.model.ClusterConfig;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.IdealState;
-import org.apache.helix.model.OnlineOfflineSMD;
 import org.apache.helix.model.builder.FullAutoModeISBuilder;
 import org.apache.helix.model.builder.HelixConfigScopeBuilder;
 import org.apache.helix.tools.ClusterSetup;
 import org.apache.helix.zookeeper.api.client.HelixZkClient;
 import org.apache.helix.zookeeper.datamodel.serializer.ZNRecordSerializer;
+import org.codehaus.jackson.map.ObjectMapper;
 
 
 /**
@@ -48,33 +48,30 @@ import org.apache.helix.zookeeper.datamodel.serializer.ZNRecordSerializer;
  */
 public class HelixVcrPopulateTool {
 
+  static final List<String> ignoreResourceKeyWords = Arrays.asList("aggregation", "trigger", "stats");
   private static final String SEPARATOR = "/";
-  static List<String> ignoreResourceKeyWords = Arrays.asList("aggregation", "trigger", "stats");
-  private static final int REPLICA_NUMBER = 1;
   private static final ZNRecordSerializer ZN_RECORD_SERIALIZER = new ZNRecordSerializer();
-  // TODO: get from properties file
-  private static final int MAX_OFFLINE_INSTANCES_ALLOWED = 4;
-  private static final int NUM_OFFLINE_INSTANCES_FOR_AUTO_EXIT = 2;
-  private static final int MIN_ACTIVE_REPLICAS = 0;
-  private static final long REBALANCE_DELAY_MS = TimeUnit.MINUTES.toMillis(20);
+  private static final String DELAYED_REBALANCER_CLASS_NAME = "DelayedRebalancer";
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws IOException {
     OptionParser parser = new OptionParser();
     OptionSpec createClusterOpt = parser.accepts("createCluster",
-        "Create cluster in dest zk(no resource creation). --createCluster --dest destZkEndpoint/destClusterName");
+        "Create cluster in dest zk(no resource creation). --createCluster --dest destZkEndpoint/destClusterName"
+            + " --config configFilePath");
 
     OptionSpec updateClusterOpt = parser.accepts("updateCluster",
         "Update resources in dest by copying from src to dest. --updateCluster"
-            + " [--src srcZkEndpoint/srcClusterName] --dest destZkEndpoint/destClusterName");
+            + " [--src srcZkEndpoint/srcClusterName] --dest destZkEndpoint/destClusterName --config configFilePath");
     OptionSpec dryRunOpt = parser.accepts("dryRun", "Do dry run.");
 
     OptionSpec controlResourceOpt = parser.accepts("controlResource",
-        "Enable/Disable a resource. --controlResource --dest destZkEndpoint/destClusterName --resource resource --enable true");
+        "Enable/Disable a resource. --controlResource --dest destZkEndpoint/destClusterName"
+            + " --resource resource --enable true");
     ArgumentAcceptingOptionSpec<String> resourceOpt =
         parser.accepts("resource").withRequiredArg().describedAs("resource name").ofType(String.class);
 
     ArgumentAcceptingOptionSpec<Boolean> maintenanceOpt = parser.accepts("maintainCluster",
-        "Enter/Exit helix maintenance mode. --maintainCluster --dest destZkEndpoint/destClusterName --enable true")
+        "Enter/Exit helix maintenance mode. --maintainCluster --dest destZkEndpoint/destClusterName" + " --enable true")
         .withRequiredArg()
         .ofType(Boolean.class);
 
@@ -86,6 +83,8 @@ public class HelixVcrPopulateTool {
         parser.accepts("src").withRequiredArg().describedAs("src zk and cluster name").ofType(String.class);
     ArgumentAcceptingOptionSpec<Boolean> enableOpt =
         parser.accepts("enable").withRequiredArg().describedAs("enable/disable").ofType(Boolean.class);
+    ArgumentAcceptingOptionSpec<String> configFileOpt =
+        parser.accepts("config").withRequiredArg().describedAs("config file path").ofType(String.class);
 
     OptionSet options = parser.parse(args);
 
@@ -99,9 +98,11 @@ public class HelixVcrPopulateTool {
       errorAndExit("dest should be a VCR cluster.(VCR string should be included)");
     }
 
+    Config config = new ObjectMapper().readValue(Utils.readStringFromFile(String.valueOf(configFileOpt)), Config.class);
+
     if (options.has(createClusterOpt)) {
       System.out.println("Creating cluster: " + destClusterName);
-      createCluster(destZkString, destClusterName);
+      createCluster(destZkString, destClusterName, config);
     }
 
     if (options.has(updateClusterOpt)) {
@@ -114,12 +115,12 @@ public class HelixVcrPopulateTool {
         String srcZkString = srcZkAndCluster[0];
         String srcClusterName = srcZkAndCluster[1];
         System.out.println("Updating cluster: " + destClusterName + " by checking " + srcClusterName);
-        updateResourceAndPartition(srcZkString, srcClusterName, destZkString, destClusterName, dryRun);
+        updateResourceAndPartition(srcZkString, srcClusterName, destZkString, destClusterName, config, dryRun);
       } else {
         System.out.println("Updating cluster config for: " + destClusterName);
         // Update the cluster config and resources to the latest settings.
-        setClusterConfig(getHelixZkClient(destZkString), destClusterName, dryRun);
-        updateResourceIdealState(destZkString, destClusterName, dryRun);
+        setClusterConfig(getHelixZkClient(destZkString), destClusterName, config, dryRun);
+        updateResourceIdealState(destZkString, destClusterName, config, dryRun);
         if (!dryRun) {
           System.out.println("Cluster " + destClusterName + " is updated successfully!");
         }
@@ -146,7 +147,7 @@ public class HelixVcrPopulateTool {
    * @param destZkString the cluster's zk string
    * @param destClusterName the cluster's name
    */
-  static void createCluster(String destZkString, String destClusterName) {
+  static void createCluster(String destZkString, String destClusterName, Config config) {
     HelixZkClient destZkClient = getHelixZkClient(destZkString);
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
     if (ZKUtil.isClusterSetup(destClusterName, destZkClient)) {
@@ -159,10 +160,11 @@ public class HelixVcrPopulateTool {
     HelixConfigScope configScope = new HelixConfigScopeBuilder(HelixConfigScope.ConfigScopeProperty.CLUSTER).
         forCluster(destClusterName).build();
     Map<String, String> helixClusterProperties = new HashMap<>();
-    helixClusterProperties.put(ZKHelixManager.ALLOW_PARTICIPANT_AUTO_JOIN, String.valueOf(true));
+    helixClusterProperties.put(ZKHelixManager.ALLOW_PARTICIPANT_AUTO_JOIN,
+        String.valueOf(config.getClusterConfigFields().isAllowAutoJoin()));
     destAdmin.setConfig(configScope, helixClusterProperties);
 
-    setClusterConfig(destZkClient, destClusterName, false);
+    setClusterConfig(destZkClient, destClusterName, config, false);
     System.out.println("Cluster " + destClusterName + " is created successfully!");
   }
 
@@ -172,14 +174,15 @@ public class HelixVcrPopulateTool {
    * @param destClusterName the cluster name.
    * @param dryRun run without actual change.
    */
-  static void setClusterConfig(HelixZkClient destZkClient, String destClusterName, boolean dryRun) {
+  static void setClusterConfig(HelixZkClient destZkClient, String destClusterName, Config config, boolean dryRun) {
     ConfigAccessor configAccessor = new ConfigAccessor(destZkClient);
     ClusterConfig clusterConfig = configAccessor.getClusterConfig(destClusterName);
     clusterConfig.setPersistBestPossibleAssignment(true);
-    // if offline instances >= 4, helix enters maintenance mode.
-    clusterConfig.setMaxOfflineInstancesAllowed(MAX_OFFLINE_INSTANCES_ALLOWED);
-    // if offline instances <= 2, helix exit maintenance mode.
-    clusterConfig.setNumOfflineInstancesForAutoExit(NUM_OFFLINE_INSTANCES_FOR_AUTO_EXIT);
+    ClusterConfigFields clusterConfigFields = config.getClusterConfigFields();
+    // if offline instances >= max offline instances allowed config, helix enters maintenance mode.
+    clusterConfig.setMaxOfflineInstancesAllowed(clusterConfigFields.getMaxOfflineInstancesAllowed());
+    // if offline instances <= number of offline instances config, helix exit maintenance mode.
+    clusterConfig.setNumOfflineInstancesForAutoExit(clusterConfigFields.getNumOfflineInstancesForAutoExit());
     if (dryRun) {
       System.out.println("Will update cluster config to: " + clusterConfig.toString());
     }
@@ -192,20 +195,23 @@ public class HelixVcrPopulateTool {
    * @param destClusterName the destination cluster name.
    * @param dryRun run without actual change.
    */
-  static void updateResourceIdealState(String destZkString, String destClusterName, boolean dryRun) {
+  static void updateResourceIdealState(String destZkString, String destClusterName, Config config, boolean dryRun) {
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkString);
     Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
 
     for (String resource : destResources) {
       IdealState currentIdealState = destAdmin.getResourceIdealState(destClusterName, resource);
-      IdealState newIdealState = buildIdealState(resource, currentIdealState.getPartitionSet());
+      IdealState newIdealState =
+          buildIdealState(resource, currentIdealState.getPartitionSet(), config.getIdealStateConfigFields());
       if (dryRun) {
         System.out.println("Will update " + resource + " to new ideal state " + newIdealState.toString());
       } else {
         destAdmin.setResourceIdealState(destClusterName, resource, newIdealState);
         System.out.println("Updated the ideal state for resource " + resource);
-        destAdmin.rebalance(destClusterName, resource, REPLICA_NUMBER, "", "");
-        System.out.println("Rebalanced resource " + resource + " with REPLICA_NUM: " + REPLICA_NUMBER);
+        destAdmin.rebalance(destClusterName, resource, config.getIdealStateConfigFields().getNumReplicas(), "", "");
+        System.out.println(
+            "Rebalanced resource " + resource + " with REPLICA_NUM: " + config.getIdealStateConfigFields()
+                .getNumReplicas());
       }
     }
   }
@@ -216,16 +222,19 @@ public class HelixVcrPopulateTool {
    * @param partitionSet the set of partitions managed by the resource.
    * @return the {@link IdealState}.
    */
-  static IdealState buildIdealState(String resource, Set<String> partitionSet) {
+  static IdealState buildIdealState(String resource, Set<String> partitionSet,
+      IdealStateConfigFields idealStateConfigFields) {
     FullAutoModeISBuilder builder = new FullAutoModeISBuilder(resource);
-    builder.setStateModel(OnlineOfflineSMD.name);
+    builder.setStateModel(idealStateConfigFields.getStateModelDefRef());
     for (String partition : partitionSet) {
       builder.add(partition);
     }
-    builder.setMinActiveReplica(MIN_ACTIVE_REPLICAS);
-    builder.setRebalanceDelay((int) REBALANCE_DELAY_MS);
-    builder.setRebalancerClass(DelayedAutoRebalancer.class.getName());
-    builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
+    if (isDelayedRebalanceEnabled(idealStateConfigFields.getRebalancerClassName())) {
+      builder.setMinActiveReplica(idealStateConfigFields.getMinActiveReplicas());
+      builder.setRebalanceDelay((int) TimeUnit.MINUTES.toMillis(idealStateConfigFields.getRebalanceDelayInMins()));
+      builder.setRebalancerClass(idealStateConfigFields.getRebalancerClassName());
+    }
+    builder.setRebalanceStrategy(idealStateConfigFields.getRebalanceStrategy());
     return builder.build();
   }
 
@@ -239,7 +248,7 @@ public class HelixVcrPopulateTool {
    * @param dryRun run the update process but without actual change.
    */
   static void updateResourceAndPartition(String srcZkString, String srcClusterName, String destZkString,
-      String destClusterName, boolean dryRun) {
+      String destClusterName, Config config, boolean dryRun) {
 
     HelixAdmin srcAdmin = new ZKHelixAdmin(srcZkString);
     Set<String> srcResources = new HashSet<>(srcAdmin.getResourcesInCluster(srcClusterName));
@@ -282,12 +291,12 @@ public class HelixVcrPopulateTool {
       if (createNewResource) {
         // add new resource
         Set<String> srcPartitions = srcAdmin.getResourceIdealState(srcClusterName, resource).getPartitionSet();
-        IdealState idealState = buildIdealState(resource, srcPartitions);
+        IdealState idealState = buildIdealState(resource, srcPartitions, config.getIdealStateConfigFields());
         if (dryRun) {
           System.out.println("DryRun: Add Resource " + resource + " with partition " + srcPartitions);
         } else {
           destAdmin.addResource(destClusterName, resource, idealState);
-          destAdmin.rebalance(destClusterName, resource, REPLICA_NUMBER, "", "");
+          destAdmin.rebalance(destClusterName, resource, config.getIdealStateConfigFields().getNumReplicas(), "", "");
           System.out.println("Added Resource " + resource + " with partition " + srcPartitions);
         }
       }
@@ -334,6 +343,121 @@ public class HelixVcrPopulateTool {
   static void errorAndExit(String error) {
     System.err.println(error);
     System.exit(1);
+  }
+
+  /**
+   * Is the rebalancer class {@link org.apache.helix.controller.rebalancer.DelayedAutoRebalancer}
+   * @param rebalancerClassName name of the rebalancer class.
+   * @return true if rebalancer is {@link org.apache.helix.controller.rebalancer.DelayedAutoRebalancer}, false otherwise.
+   */
+  private static boolean isDelayedRebalanceEnabled(String rebalancerClassName) {
+    return (rebalancerClassName != null) && rebalancerClassName.endsWith(DELAYED_REBALANCER_CLASS_NAME);
+  }
+
+  /**
+   * Class for ideal state configs.
+   */
+  static class IdealStateConfigFields {
+    private int numReplicas;
+    private String stateModelDefRef;
+    private String rebalanceStrategy;
+    private int minActiveReplicas;
+    private String rebalancerClassName;
+    private long rebalanceDelayInMins;
+
+    /**
+     * @return {@code numReplicas}
+     */
+    public int getNumReplicas() {
+      return numReplicas;
+    }
+
+    /**
+     * @return {@code stateModelDefRef}
+     */
+    public String getStateModelDefRef() {
+      return stateModelDefRef;
+    }
+
+    /**
+     * @return {@code rebalanceStrategy}
+     */
+    public String getRebalanceStrategy() {
+      return rebalanceStrategy;
+    }
+
+    /**
+     * @return {@code minActiveReplicas}
+     */
+    public int getMinActiveReplicas() {
+      return minActiveReplicas;
+    }
+
+    /**
+     * @return {@code rebalancerClassName}
+     */
+    public String getRebalancerClassName() {
+      return rebalancerClassName;
+    }
+
+    /**
+     * @return {@code rebalanceDelayInMins}
+     */
+    public long getRebalanceDelayInMins() {
+      return rebalanceDelayInMins;
+    }
+  }
+
+  /**
+   * Class for cluster config fields.
+   */
+  static class ClusterConfigFields {
+    private int maxOfflineInstancesAllowed;
+    private int numOfflineInstancesForAutoExit;
+    private boolean allowAutoJoin;
+
+    /**
+     * @return {@code maxOfflineInstancesAllowed}
+     */
+    public int getMaxOfflineInstancesAllowed() {
+      return maxOfflineInstancesAllowed;
+    }
+
+    /**
+     * @return {@code numOfflineInstancesForAutoExit}
+     */
+    public int getNumOfflineInstancesForAutoExit() {
+      return numOfflineInstancesForAutoExit;
+    }
+
+    /**
+     * @return {@code allowAutoJoin}
+     */
+    public boolean isAllowAutoJoin() {
+      return allowAutoJoin;
+    }
+  }
+
+  /**
+   * Class for configs passed to the {@link HelixVcrPopulateTool}
+   */
+  static class Config {
+    private IdealStateConfigFields idealStateConfigFields;
+    private ClusterConfigFields clusterConfigFields;
+
+    /**
+     * @return {@code idealStateConfigFields}
+     */
+    public IdealStateConfigFields getIdealStateConfigFields() {
+      return idealStateConfigFields;
+    }
+
+    /**
+     * @return {@code clusterConfigFields}
+     */
+    public ClusterConfigFields getClusterConfigFields() {
+      return clusterConfigFields;
+    }
   }
 }
 
