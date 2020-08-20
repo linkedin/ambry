@@ -14,7 +14,6 @@
 package com.github.ambry.clustermap;
 
 import java.util.List;
-import org.apache.helix.InstanceType;
 
 
 /**
@@ -36,10 +35,9 @@ public interface VirtualReplicatorCluster extends AutoCloseable {
   DataNodeId getCurrentDataNodeId();
 
   /**
-   * Join the cluster as {@link InstanceType#PARTICIPANT} or {@link InstanceType#SPECTATOR} .
-   * @param role the {@link InstanceType}.
+   * Join the cluster as a participant.
    */
-  void participate(InstanceType role) throws Exception;
+  void participate() throws Exception;
 
   /**
    * Gets all {@link PartitionId}s assigned to current node.

@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
@@ -1243,7 +1242,7 @@ public class BlobStore implements Store {
   private void resolveStoreInitialState() {
     // Determine if HelixParticipant is adopted.
     if (replicaStatusDelegates != null && !replicaStatusDelegates.isEmpty() && replicaStatusDelegates.get(0)
-        .getClusterParticipant() instanceof HelixParticipant) {
+        .supportsStateChanges()) {
       // If store is managed by Helix, Helix controller will update its state after participation.
       currentState = ReplicaState.OFFLINE;
     } else {

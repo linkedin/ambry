@@ -270,11 +270,13 @@ class CompositeClusterManager implements ClusterMap {
    */
   @Override
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
-    staticClusterManager.onReplicaEvent(replicaId, event);
-    if (helixClusterManager != null) {
-      AmbryReplica ambryReplica = helixClusterManager.getReplicaForPartitionOnNode(replicaId.getDataNodeId(),
-          replicaId.getPartitionId().toPathString());
-      helixClusterManager.onReplicaEvent(ambryReplica, event);
+    if (replicaId instanceof Replica) {
+      staticClusterManager.onReplicaEvent(replicaId, event);
+      if (helixClusterManager != null) {
+        AmbryReplica ambryReplica = helixClusterManager.getReplicaForPartitionOnNode(replicaId.getDataNodeId(),
+            replicaId.getPartitionId().toPathString());
+        helixClusterManager.onReplicaEvent(ambryReplica, event);
+      }
     }
   }
 

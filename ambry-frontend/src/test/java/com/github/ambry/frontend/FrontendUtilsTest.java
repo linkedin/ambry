@@ -84,9 +84,9 @@ public class FrontendUtilsTest {
    * @param blobId The {@link BlobId} to assert.
    * @param type The expected {@link BlobId.BlobIdType}.
    * @param datacenterId The expected {@code datacenterId}. This will be of no effect if version is set to v1, and the
-   *                     expected value will become {@link com.github.ambry.clustermap.ClusterMapUtils#UNKNOWN_DATACENTER_ID}.
+   *                     expected value will become {@link ClusterMap#UNKNOWN_DATACENTER_ID}.
    *                     For v2, {@code null} will make the assertion against
-   *                     {@link com.github.ambry.clustermap.ClusterMapUtils#UNKNOWN_DATACENTER_ID}.
+   *                     {@link ClusterMap#UNKNOWN_DATACENTER_ID}.
    * @param accountId The expected {@code accountId}. This will be of no effect if version is set to v1, and the expected
    *                  value will become {@link Account#UNKNOWN_ACCOUNT_ID}. For v2, {@code null} will make the assertion
    *                  against {@link Account#UNKNOWN_ACCOUNT_ID}.

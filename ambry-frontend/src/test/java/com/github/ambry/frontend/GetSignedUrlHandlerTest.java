@@ -19,7 +19,6 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
@@ -80,7 +79,7 @@ public class GetSignedUrlHandlerTest {
         securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(), accountAndContainerInjector,
         metrics, CLUSTER_MAP);
     testBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),
+        ClusterMap.UNKNOWN_DATACENTER_ID, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),
         CLUSTER_MAP.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
   }

@@ -14,7 +14,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterMapUtils;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
@@ -211,7 +211,6 @@ public class AmbryServerRequestsTest {
     properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     return properties;
   }
-
 
   @Before
   public void before() {
@@ -745,11 +744,11 @@ public class AmbryServerRequestsTest {
     List<BlobId> blobIds = new ArrayList<>();
     for (int i = 0; i < numIds; i++) {
       BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-          ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+          ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
           Utils.getRandomShort(TestUtils.RANDOM), partitionId, false, BlobId.BlobDataType.DATACHUNK);
       BlobId convertedBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.CRAFTED,
-          ClusterMapUtils.UNKNOWN_DATACENTER_ID, originalBlobId.getAccountId(), originalBlobId.getContainerId(),
-          partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          ClusterMap.UNKNOWN_DATACENTER_ID, originalBlobId.getAccountId(), originalBlobId.getContainerId(), partitionId,
+          false, BlobId.BlobDataType.DATACHUNK);
       conversionMap.put(originalBlobId, convertedBlobId);
       validKeysInStore.add(convertedBlobId);
       blobIds.add(originalBlobId);
@@ -774,7 +773,7 @@ public class AmbryServerRequestsTest {
 
     // Check a valid key mapped to null
     BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), partitionId, false, BlobId.BlobDataType.DATACHUNK);
     blobIds.add(originalBlobId);
     conversionMap.put(originalBlobId, null);
@@ -783,7 +782,7 @@ public class AmbryServerRequestsTest {
 
     // Check a invalid key mapped to null
     originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), partitionId, false, BlobId.BlobDataType.DATACHUNK);
     blobIds.add(originalBlobId);
     conversionMap.put(originalBlobId, null);
@@ -807,7 +806,7 @@ public class AmbryServerRequestsTest {
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
     BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
     long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
     long opTimeMs = SystemTime.getInstance().milliseconds();
@@ -862,7 +861,7 @@ public class AmbryServerRequestsTest {
       int correlationId = TestUtils.RANDOM.nextInt();
       String clientId = TestUtils.getRandomString(10);
       BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-          ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+          ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
           Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
       long opTimeMs = SystemTime.getInstance().milliseconds();
       doUndelete(correlationId++, clientId, blobId, opTimeMs, ServerErrorCode.Temporarily_Disabled);
@@ -882,7 +881,7 @@ public class AmbryServerRequestsTest {
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
     BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
     long opTimeMs = SystemTime.getInstance().milliseconds();
 
@@ -1113,7 +1112,8 @@ public class AmbryServerRequestsTest {
       idsToTest = Collections.singletonList(id);
     }
     // check that everything works
-    List<Response> responses = sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null, null);
+    List<Response> responses =
+        sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error, null, null);
     responses.forEach(Response::release);
     // disable the request
     sendAndVerifyRequestControlRequest(toControl, false, id, ServerErrorCode.No_Error);
@@ -1189,11 +1189,11 @@ public class AmbryServerRequestsTest {
       int correlationId = TestUtils.RANDOM.nextInt();
       String clientId = clientIdStr == null ? TestUtils.getRandomString(10) : clientIdStr;
       BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-          ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+          ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
           Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
       BlobId convertedBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.CRAFTED,
-          ClusterMapUtils.UNKNOWN_DATACENTER_ID, originalBlobId.getAccountId(), originalBlobId.getContainerId(), id,
-          false, BlobId.BlobDataType.DATACHUNK);
+          ClusterMap.UNKNOWN_DATACENTER_ID, originalBlobId.getAccountId(), originalBlobId.getContainerId(), id, false,
+          BlobId.BlobDataType.DATACHUNK);
       conversionMap.put(originalBlobId, convertedBlobId);
       validKeysInStore.add(convertedBlobId);
       RequestOrResponse request;

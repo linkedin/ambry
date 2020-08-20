@@ -64,7 +64,7 @@ class StaticClusterManager implements ClusterMap {
     this.metricRegistry = metricRegistry;
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
     localDatacenterId = localDatacenterName != null && !localDatacenterName.isEmpty() ? hardwareLayout.findDatacenter(
-        localDatacenterName).getId() : ClusterMapUtils.UNKNOWN_DATACENTER_ID;
+        localDatacenterName).getId() : ClusterMap.UNKNOWN_DATACENTER_ID;
   }
 
   void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
@@ -490,32 +490,34 @@ class StaticClusterManager implements ClusterMap {
 
   @Override
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
-    switch (event) {
-      case Disk_Error:
-        if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
-          ((Disk) replicaId.getDiskId()).onDiskError();
-        }
-        break;
-      case Disk_Ok:
-        if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
-          ((Disk) replicaId.getDiskId()).onDiskOk();
-        }
-        break;
-      case Node_Timeout:
-        ((DataNode) replicaId.getDataNodeId()).onNodeTimeout();
-        break;
-      case Node_Response:
-        ((DataNode) replicaId.getDataNodeId()).onNodeResponse();
-        break;
-      case Partition_ReadOnly:
-        ((Partition) replicaId.getPartitionId()).onPartitionReadOnly();
-        break;
-      case Replica_Unavailable:
-        ((Replica) replicaId).onReplicaUnavailable();
-        break;
-      case Replica_Available:
-        ((Replica) replicaId).onReplicaResponse();
-        break;
+    if (replicaId instanceof Replica) {
+      switch (event) {
+        case Disk_Error:
+          if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
+            ((Disk) replicaId.getDiskId()).onDiskError();
+          }
+          break;
+        case Disk_Ok:
+          if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
+            ((Disk) replicaId.getDiskId()).onDiskOk();
+          }
+          break;
+        case Node_Timeout:
+          ((DataNode) replicaId.getDataNodeId()).onNodeTimeout();
+          break;
+        case Node_Response:
+          ((DataNode) replicaId.getDataNodeId()).onNodeResponse();
+          break;
+        case Partition_ReadOnly:
+          ((Partition) replicaId.getPartitionId()).onPartitionReadOnly();
+          break;
+        case Replica_Unavailable:
+          ((Replica) replicaId).onReplicaUnavailable();
+          break;
+        case Replica_Available:
+          ((Replica) replicaId).onReplicaResponse();
+          break;
+      }
     }
   }
 

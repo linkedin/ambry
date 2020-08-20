@@ -18,7 +18,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockHelixParticipant;
@@ -54,8 +53,6 @@ import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
-import com.github.ambry.store.StoreKeyConverterFactory;
-import com.github.ambry.store.StoreKeyConverterFactoryImpl;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
@@ -735,7 +732,7 @@ public class ReplicationTestHelper {
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       boolean toEncrypt = i % 2 == 0;
-      BlobId id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
+      BlobId id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId,
           containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       ids.add(id);
       PutMsgInfoAndBuffer msgInfoAndBuffer =
@@ -752,7 +749,7 @@ public class ReplicationTestHelper {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     boolean toEncrypt = Utils.getRandomShort(TestUtils.RANDOM) % 2 == 0;
-    return new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
+    return new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId,
         containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
   }
 
@@ -1109,10 +1106,10 @@ public class ReplicationTestHelper {
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
       oldKey =
-          new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+          new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
               partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
       newKey =
-          new BlobId(VERSION_5, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+          new BlobId(VERSION_5, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
               partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
       localConversionMap.put(oldKey, newKey);
       remoteConversionMap.put(newKey, oldKey);

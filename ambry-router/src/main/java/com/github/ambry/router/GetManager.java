@@ -15,7 +15,6 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.Meter;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.Callback;
@@ -116,7 +115,7 @@ class GetManager {
       logger.warn(
           "This shouldn't happen because getBlobIdFromString() should have thrown RouterException for this case.", e);
     }
-    if (blobId.getDatacenterId() != ClusterMapUtils.UNKNOWN_DATACENTER_ID
+    if (blobId.getDatacenterId() != ClusterMap.UNKNOWN_DATACENTER_ID
         && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
       routerMetrics.getBlobNotOriginateLocalOperationRate.mark();
     }

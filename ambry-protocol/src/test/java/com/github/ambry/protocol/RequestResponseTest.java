@@ -14,7 +14,6 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -320,7 +319,7 @@ public class RequestResponseTest {
     int correlationId = 5;
     String clientId = "client";
     BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM),
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
@@ -398,7 +397,7 @@ public class RequestResponseTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+        ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
     ArrayList<BlobId> blobIdList = new ArrayList<BlobId>();
@@ -478,7 +477,7 @@ public class RequestResponseTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+        ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
     short[] versions = new short[]{DeleteRequest.DELETE_REQUEST_VERSION_1, DeleteRequest.DELETE_REQUEST_VERSION_2};
@@ -525,7 +524,7 @@ public class RequestResponseTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+        ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
     int correlationId = TestUtils.RANDOM.nextInt();
@@ -637,7 +636,7 @@ public class RequestResponseTest {
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
         BlobId id = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-            ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+            ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
             clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
             BlobId.BlobDataType.DATACHUNK);
         MessageInfo messageInfo =
@@ -871,7 +870,7 @@ public class RequestResponseTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+        ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
     short[] versions = new short[]{TtlUpdateRequest.TTL_UPDATE_REQUEST_VERSION_1};

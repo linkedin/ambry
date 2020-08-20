@@ -127,6 +127,13 @@ public interface ClusterParticipant extends AutoCloseable {
   Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners();
 
   /**
+   * @return {@code true} if this participant supports dynamic partition state changes.
+   */
+  default boolean supportsStateChanges() {
+    return false;
+  }
+
+  /**
    * Terminate the participant.
    */
   @Override

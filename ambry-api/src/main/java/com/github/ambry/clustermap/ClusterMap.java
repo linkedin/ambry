@@ -26,6 +26,11 @@ import org.json.JSONObject;
 public interface ClusterMap extends AutoCloseable {
 
   /**
+   * Indicates that a blob ID does not have a datacenter ID
+   */
+  byte UNKNOWN_DATACENTER_ID = -1;
+
+  /**
    * Gets PartitionId based on serialized bytes.
    * @param stream {@link InputStream} that contains the serialized partition bytes
    * @return deserialized PartitionId

@@ -533,26 +533,28 @@ public class MockClusterMap implements ClusterMap {
 
   @Override
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
-    switch (event) {
-      case Disk_Error:
-        if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
-          ((MockDiskId) replicaId.getDiskId()).onDiskError();
-        }
-        break;
-      case Disk_Ok:
-        if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
-          ((MockDiskId) replicaId.getDiskId()).onDiskOk();
-        }
-        break;
-      case Node_Timeout:
-        ((MockDataNodeId) replicaId.getDataNodeId()).onNodeTimeout();
-        break;
-      case Node_Response:
-        ((MockDataNodeId) replicaId.getDataNodeId()).onNodeResponse();
-        break;
-      case Partition_ReadOnly:
-        ((MockPartitionId) replicaId.getPartitionId()).onPartitionReadOnly();
-        break;
+    if (replicaId instanceof MockReplicaId) {
+      switch (event) {
+        case Disk_Error:
+          if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
+            ((MockDiskId) replicaId.getDiskId()).onDiskError();
+          }
+          break;
+        case Disk_Ok:
+          if (replicaId.getReplicaType() == ReplicaType.DISK_BACKED) {
+            ((MockDiskId) replicaId.getDiskId()).onDiskOk();
+          }
+          break;
+        case Node_Timeout:
+          ((MockDataNodeId) replicaId.getDataNodeId()).onNodeTimeout();
+          break;
+        case Node_Response:
+          ((MockDataNodeId) replicaId.getDataNodeId()).onNodeResponse();
+          break;
+        case Partition_ReadOnly:
+          ((MockPartitionId) replicaId.getPartitionId()).onPartitionReadOnly();
+          break;
+      }
     }
   }
 

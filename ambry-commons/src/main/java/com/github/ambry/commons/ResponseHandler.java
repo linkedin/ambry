@@ -13,7 +13,6 @@
  */
 package com.github.ambry.commons;
 
-import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaEventType;
@@ -34,7 +33,7 @@ import java.util.List;
  */
 
 public class ResponseHandler {
-  private ClusterMap clusterMap;
+  private final ClusterMap clusterMap;
 
   /**
    * Construct a ResponseHandler instance.
@@ -110,8 +109,6 @@ public class ResponseHandler {
    * {@link ServerErrorCode}.
    */
   public void onEvent(ReplicaId replicaId, Object event) {
-    if(replicaId instanceof CloudReplica)
-      return;
     if (event instanceof ServerErrorCode) {
       onServerEvent(replicaId, (ServerErrorCode) event);
     } else if (event instanceof Exception) {

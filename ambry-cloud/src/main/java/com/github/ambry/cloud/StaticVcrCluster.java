@@ -31,7 +31,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.apache.helix.InstanceType;
 
 
 /**
@@ -81,7 +80,7 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
   }
 
   @Override
-  public void participate(InstanceType role) throws Exception {
+  public void participate() throws Exception {
     for (VirtualReplicatorClusterListener listener : listeners) {
       for (PartitionId partitionId : assignedPartitionIds) {
         listener.onPartitionAdded(partitionId);

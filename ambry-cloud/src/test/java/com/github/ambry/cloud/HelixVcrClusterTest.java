@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import org.apache.helix.InstanceType;
 import org.apache.helix.tools.ClusterVerifiers.StrictMatchExternalViewVerifier;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -78,7 +77,7 @@ public class HelixVcrClusterTest {
     List<PartitionId> expectedPartitions = mockClusterMap.getAllPartitionIds(null);
     MockVcrListener mockVcrListener = new MockVcrListener();
     helixInstance1.addListener(mockVcrListener);
-    helixInstance1.participate(InstanceType.PARTICIPANT);
+    helixInstance1.participate();
     TestUtils.checkAndSleep(true, () -> helixInstance1.getAssignedPartitionIds().size() > 0, 1000);
     Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(5000));
     Assert.assertEquals("Partition assignment are not correct.", helixInstance1.getAssignedPartitionIds(),
@@ -86,7 +85,7 @@ public class HelixVcrClusterTest {
 
     // Create helixInstance2 and join the cluster. Half of partitions should be removed from helixInstance1.
     VirtualReplicatorCluster helixInstance2 = createHelixInstance(8124, 10124);
-    helixInstance2.participate(InstanceType.PARTICIPANT);
+    helixInstance2.participate();
     // Detect any ideal state change first.
     TestUtils.checkAndSleep(true, () -> helixInstance1.getAssignedPartitionIds().size() < expectedPartitions.size(),
         1000);

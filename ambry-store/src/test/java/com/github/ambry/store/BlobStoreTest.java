@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.AmbryReplica;
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.HelixFactory;
 import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.MockHelixParticipant;
@@ -2117,14 +2118,15 @@ public class BlobStoreTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
-    HelixParticipant mockHelixParticipant = Mockito.mock(HelixParticipant.class);
-    ReplicaStatusDelegate delegate = new ReplicaStatusDelegate(mockHelixParticipant);
+    ClusterParticipant dynamicParticipant = Mockito.mock(ClusterParticipant.class);
+    when(dynamicParticipant.supportsStateChanges()).thenReturn(true);
+    ReplicaStatusDelegate delegate = new ReplicaStatusDelegate(dynamicParticipant);
     BlobStore testStore =
         new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
             diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete,
             Collections.singletonList(delegate), time, new InMemAccountService(false, false));
     testStore.start();
-    assertEquals("Store current state should be OFFLINE if HelixParticipant is adopted", OFFLINE,
+    assertEquals("Store current state should be OFFLINE if dynamic participant is adopted", OFFLINE,
         testStore.getCurrentState());
     testStore.shutdown();
   }

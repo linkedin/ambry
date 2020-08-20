@@ -14,7 +14,6 @@
 package com.github.ambry.config;
 
 import com.github.ambry.clustermap.DataNodeConfigSourceType;
-import org.apache.helix.model.LeaderStandbySMD;
 import org.json.JSONObject;
 
 
@@ -30,7 +29,7 @@ public class ClusterMapConfig {
   public static final String CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES = "clustermap.max.disk.capacity.in.bytes";
   public static final String CLUSTERMAP_DATA_NODE_CONFIG_SOURCE_TYPE = "clustermap.data.node.config.source.type";
   public static final String AMBRY_STATE_MODEL_DEF = "AmbryLeaderStandby";
-  public static final String OLD_STATE_MODEL_DEF = LeaderStandbySMD.name;
+  public static final String OLD_STATE_MODEL_DEF = "LeaderStandby";
   public static final String DEFAULT_STATE_MODEL_DEF = AMBRY_STATE_MODEL_DEF;
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 

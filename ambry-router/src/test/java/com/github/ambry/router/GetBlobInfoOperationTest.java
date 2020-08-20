@@ -14,7 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.account.InMemAccountService;
-import com.github.ambry.clustermap.ClusterMapUtils;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
@@ -207,7 +207,7 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testInstantiation() {
     BlobId blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(random), Utils.getRandomShort(random),
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(random), Utils.getRandomShort(random),
         mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
     Callback<GetBlobResultInternal> getOperationCallback = (result, exception) -> {
