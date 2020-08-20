@@ -1550,23 +1550,23 @@ public class ReplicaThread implements Runnable {
     /**
      * Shallow copy Constructor for {@link ExchangeMetadataResponse}, which copies all field references with exception
      * of 'missingStoreMessages' for which it creates new Set object.
-     * @param old old {@link ExchangeMetadataResponse} object.
+     * @param other other {@link ExchangeMetadataResponse} object.
      */
-    ExchangeMetadataResponse(ExchangeMetadataResponse old) {
+    ExchangeMetadataResponse(ExchangeMetadataResponse other) {
       // Create a copy of 'missingStoreMessages' since it is mutable and sharing between multiple ExchangeMetadataResponses
       // can make operations on it such as size(), isEmpty(), etc. hard to track.
       // For example, an inter-colo thread could be fetching missing store messages from its copy of exchangeMetadataResponse
       // in fixMissingKeys() method while an intra-colo thread could be emptying the missing store messages in
       // exchangeMetadataResponse stored in RemoteReplicaInfo. Referencing same object of missingStoreMessages could
       // lead to race conditions and is avoided for simplicity.
-      this.missingStoreMessages = old.missingStoreMessages == null ? null : new HashSet<>(old.missingStoreMessages);
-      this.remoteKeyToLocalKeyMap = old.remoteKeyToLocalKeyMap;
-      this.remoteToken = old.remoteToken;
-      this.localLagFromRemoteInBytes = old.localLagFromRemoteInBytes;
-      this.serverErrorCode = old.serverErrorCode;
-      this.time = old.time;
-      this.lastMissingMessageReceivedTimeSec = old.lastMissingMessageReceivedTimeSec;
-      this.receivedStoreMessagesWithUpdatesPending = old.receivedStoreMessagesWithUpdatesPending;
+      this.missingStoreMessages = other.missingStoreMessages == null ? null : new HashSet<>(other.missingStoreMessages);
+      this.remoteKeyToLocalKeyMap = other.remoteKeyToLocalKeyMap;
+      this.remoteToken = other.remoteToken;
+      this.localLagFromRemoteInBytes = other.localLagFromRemoteInBytes;
+      this.serverErrorCode = other.serverErrorCode;
+      this.time = other.time;
+      this.lastMissingMessageReceivedTimeSec = other.lastMissingMessageReceivedTimeSec;
+      this.receivedStoreMessagesWithUpdatesPending = other.receivedStoreMessagesWithUpdatesPending;
     }
 
     /**
