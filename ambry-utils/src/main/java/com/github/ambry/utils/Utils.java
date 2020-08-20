@@ -250,6 +250,9 @@ public class Utils {
    * @throws IOException Unexpected IO errors.
    */
   public static ByteBuffer getByteBufferFromInputStream(InputStream stream, int dataSize) throws IOException {
+    if (dataSize < 0) {
+      throw new IllegalArgumentException("Input size of stream is " + dataSize);
+    }
     ByteBuffer output = ByteBuffer.allocate(dataSize);
     int read = 0;
     ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
@@ -707,6 +710,7 @@ public class Utils {
       serializeString(outputBuf, value, Charset.defaultCharset());
     }
   }
+
   /**
    * Serializes a string into byte buffer
    * @param outputBuffer The output buffer to serialize the value to
@@ -730,6 +734,7 @@ public class Utils {
     outputBuf.writeInt(valueArray.length);
     outputBuf.writeBytes(valueArray);
   }
+
   /**
    * Deserializes a string from byte buffer
    * @param inputBuffer The input buffer to deserialize the value from
@@ -1222,5 +1227,4 @@ public class Utils {
       return currentSize.getAsInt();
     }
   }
-
 }
