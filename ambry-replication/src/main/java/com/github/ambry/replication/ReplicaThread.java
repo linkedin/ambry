@@ -465,7 +465,8 @@ public class ReplicaThread implements Runnable {
 
             List<ExchangeMetadataResponse> exchangeMetadataResponseListForBlockedReplicas =
                 standbyReplicasTimedOutOnNoProgress.stream()
-                    .map(RemoteReplicaInfo::getExchangeMetadataResponse)
+                    .map(remoteReplicaInfo -> new ExchangeMetadataResponse(
+                        remoteReplicaInfo.getExchangeMetadataResponse()))
                     .collect(Collectors.toList());
 
             // Convert (and cache) the remote keys that are being fetched as the StoreKeyConverter would have cleared
@@ -673,12 +674,7 @@ public class ReplicaThread implements Runnable {
               // If leader-based replication is enabled, store the meta data exchange received for the remote replica as
               // standby replicas will not send GET request for the missing store keys and track them from leader <->
               // leader exchanges and intra-dc replication.
-
-              ExchangeMetadataResponse exchangeMetadataResponseCopyToCache =
-                  new ExchangeMetadataResponse(new HashSet<>(exchangeMetadataResponse.missingStoreMessages),
-                      exchangeMetadataResponse.remoteToken, exchangeMetadataResponse.localLagFromRemoteInBytes,
-                      exchangeMetadataResponse.remoteKeyToLocalKeyMap, time);
-              remoteReplicaInfo.setExchangeMetadataResponse(exchangeMetadataResponseCopyToCache);
+              remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(exchangeMetadataResponse));
 
               // It is possible that some of the missing keys found in exchange metadata response are written in parallel
               // by other replica threads since the time we calculated it. Go through the local store once more and
@@ -1549,6 +1545,28 @@ public class ReplicaThread implements Runnable {
       this.lastMissingMessageReceivedTimeSec = -1;
       this.time = null;
       this.receivedStoreMessagesWithUpdatesPending = null;
+    }
+
+    /**
+     * Shallow copy Constructor for {@link ExchangeMetadataResponse}, which copies all field references with exception
+     * of 'missingStoreMessages' for which it creates new Set object.
+     * @param old old {@link ExchangeMetadataResponse} object.
+     */
+    ExchangeMetadataResponse(ExchangeMetadataResponse old) {
+      // Create a copy of 'missingStoreMessages' since it is mutable and sharing between multiple ExchangeMetadataResponses
+      // can make operations on it such as size(), isEmpty(), etc. hard to track.
+      // For example, an inter-colo thread could be fetching missing store messages from its copy of exchangeMetadataResponse
+      // in fixMissingKeys() method while an intra-colo thread could be emptying the missing store messages in
+      // exchangeMetadataResponse stored in RemoteReplicaInfo. Referencing same object of missingStoreMessages could
+      // lead to race conditions and is avoided for simplicity.
+      this.missingStoreMessages = old.missingStoreMessages == null ? null : new HashSet<>(old.missingStoreMessages);
+      this.remoteKeyToLocalKeyMap = old.remoteKeyToLocalKeyMap;
+      this.remoteToken = old.remoteToken;
+      this.localLagFromRemoteInBytes = old.localLagFromRemoteInBytes;
+      this.serverErrorCode = old.serverErrorCode;
+      this.time = old.time;
+      this.lastMissingMessageReceivedTimeSec = old.lastMissingMessageReceivedTimeSec;
+      this.receivedStoreMessagesWithUpdatesPending = old.receivedStoreMessagesWithUpdatesPending;
     }
 
     /**
