@@ -14,10 +14,10 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -538,7 +538,8 @@ public class NettyResponseChannelTest {
         HttpResponseStatus expectedStatus = getExpectedHttpResponseStatus(errorCode);
         assertEquals("Unexpected response status", expectedStatus, response.status());
         boolean containsFailureReasonHeader = response.headers().contains(NettyResponseChannel.FAILURE_REASON_HEADER);
-        if (expectedStatus == HttpResponseStatus.BAD_REQUEST || expectedStatus == HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE || includeExceptionMessageInResponse) {
+        if (expectedStatus == HttpResponseStatus.BAD_REQUEST
+            || expectedStatus == HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE || includeExceptionMessageInResponse) {
           assertTrue("Could not find failure reason header.", containsFailureReasonHeader);
         } else {
           assertFalse("Should not have found failure reason header.", containsFailureReasonHeader);
