@@ -13,11 +13,11 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.PerformanceIndex;
 import com.github.ambry.commons.Thresholds;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -611,7 +611,8 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   private boolean shouldSendFailureReason(HttpResponseStatus status, RestServiceException exception) {
-    if (status == HttpResponseStatus.BAD_REQUEST || exception.shouldIncludeExceptionMessageInResponse()) {
+    if (status == HttpResponseStatus.BAD_REQUEST || status == HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE
+        || exception.shouldIncludeExceptionMessageInResponse()) {
       return true;
     }
     return request != null && request.getArgs().containsKey(RestUtils.InternalKeys.SEND_FAILURE_REASON)

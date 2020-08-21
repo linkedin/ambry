@@ -538,7 +538,7 @@ public class NettyResponseChannelTest {
         HttpResponseStatus expectedStatus = getExpectedHttpResponseStatus(errorCode);
         assertEquals("Unexpected response status", expectedStatus, response.status());
         boolean containsFailureReasonHeader = response.headers().contains(NettyResponseChannel.FAILURE_REASON_HEADER);
-        if (expectedStatus == HttpResponseStatus.BAD_REQUEST || includeExceptionMessageInResponse) {
+        if (expectedStatus == HttpResponseStatus.BAD_REQUEST || expectedStatus == HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE || includeExceptionMessageInResponse) {
           assertTrue("Could not find failure reason header.", containsFailureReasonHeader);
         } else {
           assertFalse("Should not have found failure reason header.", containsFailureReasonHeader);
