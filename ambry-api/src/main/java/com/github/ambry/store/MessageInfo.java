@@ -167,8 +167,8 @@ public class MessageInfo {
     this.key = key;
     this.size = size;
     this.isDeleted = deleted;
-    isTtlUpdated = ttlUpdated;
-    isUndeleted = undeleted;
+    this.isTtlUpdated = ttlUpdated;
+    this.isUndeleted = undeleted;
     this.expirationTimeInMs = expirationTimeInMs;
     this.crc = crc;
     this.accountId = accountId;
@@ -294,5 +294,63 @@ public class MessageInfo {
         .append(lifeVersion)
         .append("]");
     return stringBuilder.toString();
+  }
+
+  public static class Builder {
+    private final StoreKey key;
+    private final long size;
+    private final short accountId;
+    private final short containerId;
+    private final long operationTimeMs;
+
+    private long expirationTimeInMs = Utils.Infinite_Time;
+    private boolean isDeleted = false;
+    private boolean isTtlUpdated = false;
+    private boolean isUndeleted = false;
+    private Long crc = null;
+    private short lifeVersion = 0;
+
+    public Builder(StoreKey key, long size, short accountId, short containerId, long operationTimeMs) {
+      this.key = key;
+      this.size = size;
+      this.accountId = accountId;
+      this.containerId = containerId;
+      this.operationTimeMs = operationTimeMs;
+    }
+
+    public MessageInfo build() {
+      return new MessageInfo(key, size, isDeleted, isTtlUpdated, isUndeleted, expirationTimeInMs, crc, accountId,
+          containerId, operationTimeMs, lifeVersion);
+    }
+
+    public Builder expirationTimeInMs(long expirationTimeInMs) {
+      this.expirationTimeInMs = expirationTimeInMs;
+      return this;
+    }
+
+    public Builder isDeleted(boolean isDeleted) {
+      this.isDeleted = isDeleted;
+      return this;
+    }
+
+    public Builder isTtlUpdated(boolean isTtlUpdated) {
+      this.isTtlUpdated = isTtlUpdated;
+      return this;
+    }
+
+    public Builder isUndeleted(boolean isUndeleted) {
+      this.isUndeleted = isUndeleted;
+      return this;
+    }
+
+    public Builder crc(Long crc) {
+      this.crc = crc;
+      return this;
+    }
+
+    public Builder lifeVersion(short lifeVersion) {
+      this.lifeVersion = lifeVersion;
+      return this;
+    }
   }
 }
