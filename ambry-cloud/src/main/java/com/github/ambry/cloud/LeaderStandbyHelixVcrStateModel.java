@@ -27,11 +27,11 @@ import org.slf4j.LoggerFactory;
  * that get called within a participant whenever its state changes in Helix.
  */
 @StateModelInfo(initialState = "OFFLINE", states = {"LEADER", "STANDBY"})
-public class HelixVcrStateModel extends StateModel {
-  private static final Logger logger = LoggerFactory.getLogger(HelixVcrStateModel.class);
+public class LeaderStandbyHelixVcrStateModel extends StateModel {
+  private static final Logger logger = LoggerFactory.getLogger(LeaderStandbyHelixVcrStateModel.class);
   private final HelixVcrCluster helixVcrCluster;
 
-  HelixVcrStateModel(HelixVcrCluster helixVcrCluster) {
+  LeaderStandbyHelixVcrStateModel(HelixVcrCluster helixVcrCluster) {
     this.helixVcrCluster = helixVcrCluster;
   }
 

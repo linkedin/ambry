@@ -1,0 +1,15 @@
+{
+  "clusterConfigFields": {
+    "maxOfflineInstancesAllowed": 4,
+    "numOfflineInstancesForAutoExit": 2,
+    "allowAutoJoin": true
+  },
+  "idealStateConfigFields": {
+    "numReplicas": 2,
+    "stateModelDefRef": "OnlineOffline",
+    "rebalanceStrategy": "org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy",
+    "minActiveReplicas": 0,
+    "rebalancerClassName": "org.apache.helix.controller.rebalancer.DelayedAutoRebalancer",
+    "rebalanceDelayInMins": 20
+  }
+}

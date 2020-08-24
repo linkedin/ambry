@@ -59,6 +59,7 @@ public class CloudConfig {
   // Comma separated names of datacenter(s) which the VCR replicate from.
   public static final String VCR_SOURCE_DATACENTERS = "vcr.source.datacenters";
   public static final String CLOUD_COMPACTION_NUM_THREADS = "cloud.compaction.num.threads";
+  public static final String VCR_HELIX_STATE_MODEL_FACTORY_CLASS = "vcr.helix.state.model.factory.class";
 
   public static final String DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS =
       "com.github.ambry.cloud.StaticVcrClusterFactory";
@@ -89,6 +90,8 @@ public class CloudConfig {
   public static final int DEFAULT_CLOUD_COMPACTION_NUM_THREADS = 4;
   public static final String DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS =
       "com.github.ambry.clustermap.HelixClusterSpectatorFactory";
+  public static final String DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS =
+      "com.github.ambry.cloud.OnlineOfflineHelixVcrStateModelFactory";
 
   /**
    * True for VCR node, false for live serving node.
@@ -326,6 +329,13 @@ public class CloudConfig {
   @Config(CLOUD_COMPACTION_NUM_THREADS)
   public final int cloudCompactionNumThreads;
 
+  /**
+   * State model name for the vcr helix cluster.
+   */
+  @Config(VCR_HELIX_STATE_MODEL_FACTORY_CLASS)
+  @Default(DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS)
+  public final String vcrHelixStateModelFactoryClass;
+
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
     cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
@@ -380,5 +390,7 @@ public class CloudConfig {
 
     vcrSourceDatacenters =
         Utils.splitString(verifiableProperties.getString(VCR_SOURCE_DATACENTERS, ""), ",", HashSet::new);
+    vcrHelixStateModelFactoryClass = verifiableProperties.getString(VCR_HELIX_STATE_MODEL_FACTORY_CLASS,
+        DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS);
   }
 }

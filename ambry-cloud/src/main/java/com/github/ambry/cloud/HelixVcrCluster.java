@@ -37,6 +37,7 @@ import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerFactory;
 import org.apache.helix.InstanceType;
 import org.apache.helix.model.LeaderStandbySMD;
+import org.apache.helix.model.OnlineOfflineSMD;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,7 +83,8 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
 
   /**
    * Add {@link PartitionId} to assignedPartitionIds set, if {@param partitionIdStr} valid.
-   * Used in {@link HelixVcrStateModel} if current VCR becomes leader of a partition.
+   * Used in one of the vcr state model classes {@link OnlineOfflineHelixVcrStateModel} or
+   * {@link LeaderStandbyHelixVcrStateModel} if current VCR is assigned a partition.
    * @param partitionIdStr The partitionIdStr notified by Helix.
    */
   public void addPartition(String partitionIdStr) {
@@ -106,7 +108,8 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
 
   /**
    * Remove {@link PartitionId} from assignedPartitionIds set, if {@param partitionIdStr} valid.
-   * Used in {@link HelixVcrStateModel} if current VCR becomes offline or standby a partition.
+   * Used in one of the vcr state model classes {@link OnlineOfflineHelixVcrStateModel} or
+   * {@link LeaderStandbyHelixVcrStateModel} if current VCR becomes offline for a partition.
    * @param partitionIdStr The partitionIdStr notified by Helix.
    */
   public void removePartition(String partitionIdStr) {
@@ -144,7 +147,8 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
     manager = HelixManagerFactory.getZKHelixManager(vcrClusterName, vcrInstanceName, InstanceType.PARTICIPANT,
         cloudConfig.vcrClusterZkConnectString);
     manager.getStateMachineEngine()
-        .registerStateModelFactory(LeaderStandbySMD.name, new HelixVcrStateModelFactory(this));
+        .registerStateModelFactory(getStateModelNameFromFactory(cloudConfig.vcrHelixStateModelFactoryClass),
+            Utils.getObj(cloudConfig.vcrHelixStateModelFactoryClass, this));
     manager.connect();
     helixAdmin = manager.getClusterManagmentTool();
     logger.info("Participated in HelixVcrCluster successfully.");
@@ -166,5 +170,23 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
     listeners.clear();
     manager.disconnect();
     helixAdmin.close();
+  }
+
+  /**
+   * Get the name of the state model for the factory class.
+   * @param stateModelFactoryClass name of the {@link org.apache.helix.participant.statemachine.StateModelFactory} class.
+   * @return state model name corresponding to the factor class.
+   */
+  private String getStateModelNameFromFactory(String stateModelFactoryClass) {
+    if (stateModelFactoryClass.equals(OnlineOfflineHelixVcrStateModelFactory.class.getName())) {
+      return OnlineOfflineSMD.name;
+    }
+    if (stateModelFactoryClass.equals(LeaderStandbyHelixVcrStateModelFactory.class.getName())) {
+      return LeaderStandbySMD.name;
+    }
+    throw new IllegalArgumentException(String.format(
+        "Illegal vcr helix state model factory class: " + stateModelFactoryClass + ". Should be one of"
+            + OnlineOfflineHelixVcrStateModelFactory.class.getName() + ", "
+            + LeaderStandbyHelixVcrStateModelFactory.class.getName()));
   }
 }

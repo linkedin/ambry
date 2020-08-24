@@ -18,26 +18,24 @@ import org.apache.helix.participant.statemachine.StateModelFactory;
 
 
 /**
- * A factory for creating {@link HelixVcrStateModel}
+ * A factory for creating {@link LeaderStandbyHelixVcrStateModel}
  */
-public class HelixVcrStateModelFactory extends StateModelFactory<StateModel> {
+public class LeaderStandbyHelixVcrStateModelFactory extends StateModelFactory<StateModel> {
   HelixVcrCluster helixVcrCluster;
 
-  public HelixVcrStateModelFactory(HelixVcrCluster helixVcrCluster) {
+  public LeaderStandbyHelixVcrStateModelFactory(HelixVcrCluster helixVcrCluster) {
     this.helixVcrCluster = helixVcrCluster;
   }
 
   /**
-   * Create and return an instance of {@link HelixVcrStateModel}
+   * Create and return an instance of {@link LeaderStandbyHelixVcrStateModel}
    * @param resourceName the resource name for which this state model is being created.
    * @param partitionName the partition name for which this state model is being created.
    *
-   * @return an instance of {@link HelixVcrStateModel}.
+   * @return an instance of {@link LeaderStandbyHelixVcrStateModel}.
    */
   @Override
   public StateModel createNewStateModel(String resourceName, String partitionName) {
-    return new HelixVcrStateModel(helixVcrCluster);
+    return new LeaderStandbyHelixVcrStateModel(helixVcrCluster);
   }
 }
-
-
