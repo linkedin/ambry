@@ -18,6 +18,14 @@ import org.json.JSONObject;
 
 public class AccountSerdeUtils {
 
+  public static Account accountFromJson(String json) {
+    return Account.fromJson(new JSONObject(json));
+  }
+
+  public static String accountToJson(Account account) {
+    return account.toJson(false).toString();
+  }
+
   public static Container containerFromJson(String json, short accountId) {
     return Container.fromJson(new JSONObject(json), accountId);
   }
