@@ -88,10 +88,10 @@ public class ValidatingTransformer implements Transformer {
             new PutMessageFormatInputStream(keyInStream, encryptionKey, props, metadata,
                 new ByteBufInputStream(blobData.content(), true), blobData.getSize(), blobData.getBlobType(),
                 msgInfo.getLifeVersion());
-        MessageInfo transformedMsgInfo =
-            new MessageInfo(keyInStream, transformedStream.getSize(), false, msgInfo.isTtlUpdated(),
-                false, msgInfo.getExpirationTimeInMs(), msgInfo.getCrc(), msgInfo.getAccountId(),
-                msgInfo.getContainerId(), msgInfo.getOperationTimeMs(), msgInfo.getLifeVersion());
+        MessageInfo transformedMsgInfo = new MessageInfo.Builder(msgInfo).size(transformedStream.getSize())
+            .isDeleted(false)
+            .isUndeleted(false)
+            .build();
         transformationOutput = new TransformationOutput(new Message(transformedMsgInfo, transformedStream));
       } else {
         throw new IllegalStateException(

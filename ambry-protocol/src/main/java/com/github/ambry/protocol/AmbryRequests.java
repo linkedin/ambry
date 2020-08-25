@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.commons.ServerMetrics;
+import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
@@ -168,11 +169,15 @@ public class AmbryRequests implements RequestAPI {
             new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobEncryptionKey(),
                 receivedRequest.getBlobProperties(), receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(),
                 receivedRequest.getBlobSize(), receivedRequest.getBlobType());
-        MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(), false, false, false,
-            Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
-                receivedRequest.getBlobProperties().getTimeToLiveInSeconds()), receivedRequest.getCrc(),
-            receivedRequest.getBlobProperties().getAccountId(), receivedRequest.getBlobProperties().getContainerId(),
-            receivedRequest.getBlobProperties().getCreationTimeInMs(), MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+        BlobProperties properties = receivedRequest.getBlobProperties();
+        long expirationTime = Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
+            receivedRequest.getBlobProperties().getTimeToLiveInSeconds());
+        MessageInfo info =
+            new MessageInfo.Builder(receivedRequest.getBlobId(), stream.getSize(), properties.getAccountId(),
+                properties.getContainerId(), properties.getCreationTimeInMs()).expirationTimeInMs(expirationTime)
+                .crc(receivedRequest.getCrc())
+                .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
+                .build();
         ArrayList<MessageInfo> infoList = new ArrayList<>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
@@ -367,7 +372,7 @@ public class AmbryRequests implements RequestAPI {
         if (isReplicaRequest) {
           metrics.getBlobAllByReplicaProcessingTimeInMs.update(processingTime);
           // client id now has dc name at the end, for example: ClientId=replication-fetch-abc.example.com[dc1]
-          String[] clientStrs = getRequest.getClientId().split("\\[" );
+          String[] clientStrs = getRequest.getClientId().split("\\[");
           if (clientStrs.length > 1) {
             String clientDc = clientStrs[1].substring(0, clientStrs[1].length() - 1);
             if (!currentNode.getDatacenterName().equals(clientDc)) {
@@ -402,9 +407,10 @@ public class AmbryRequests implements RequestAPI {
         response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
       } else {
         BlobId convertedBlobId = (BlobId) convertedStoreKey;
-        MessageInfo info = new MessageInfo(convertedStoreKey, -1, true, false, false, Utils.Infinite_Time, null,
-            convertedBlobId.getAccountId(), convertedBlobId.getContainerId(), deleteRequest.getDeletionTimeInMs(),
-            MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+        MessageInfo info = new MessageInfo.Builder(convertedBlobId, -1, convertedBlobId.getAccountId(),
+            convertedBlobId.getContainerId(), deleteRequest.getDeletionTimeInMs()).isDeleted(true)
+            .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
+            .build();
         Store storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
         storeToDelete.delete(Collections.singletonList(info));
         response =
@@ -472,10 +478,11 @@ public class AmbryRequests implements RequestAPI {
       } else {
         BlobId convertedStoreKey =
             (BlobId) getConvertedStoreKeys(Collections.singletonList(updateRequest.getBlobId())).get(0);
-        MessageInfo info =
-            new MessageInfo(convertedStoreKey, -1, false, true, false, updateRequest.getExpiresAtMs(), null,
-                convertedStoreKey.getAccountId(), convertedStoreKey.getContainerId(),
-                updateRequest.getOperationTimeInMs(), MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+        MessageInfo info = new MessageInfo.Builder(convertedStoreKey, -1, convertedStoreKey.getAccountId(),
+            convertedStoreKey.getContainerId(), updateRequest.getOperationTimeInMs()).isTtlUpdated(true)
+            .expirationTimeInMs(updateRequest.getExpiresAtMs())
+            .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
+            .build();
         Store store = storeManager.getStore(updateRequest.getBlobId().getPartition());
         store.updateTtl(Collections.singletonList(info));
         response = new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(),
@@ -665,9 +672,10 @@ public class AmbryRequests implements RequestAPI {
         response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), error);
       } else {
         BlobId convertedBlobId = (BlobId) convertedStoreKey;
-        MessageInfo info = new MessageInfo(convertedBlobId, -1, false, false, true, Utils.Infinite_Time, null,
-            convertedBlobId.getAccountId(), convertedBlobId.getContainerId(), undeleteRequest.getOperationTimeMs(),
-            MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+        MessageInfo info = new MessageInfo.Builder(convertedBlobId, -1, convertedBlobId.getAccountId(),
+            convertedBlobId.getContainerId(), undeleteRequest.getOperationTimeMs()).isUndeleted(true)
+            .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
+            .build();
         storeToUndelete = storeManager.getStore(undeleteRequest.getBlobId().getPartition());
         short lifeVersion = storeToUndelete.undelete(info);
         response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), lifeVersion);

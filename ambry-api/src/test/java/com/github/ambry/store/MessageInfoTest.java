@@ -82,6 +82,89 @@ public class MessageInfoTest {
   }
 
   /**
+   * Tests for MessageInfo.Builder.
+   */
+  @Test
+  public void testBuilder() {
+    short accountId = 100, containerId = 1000;
+    StoreKey key = new MockId(TestUtils.getRandomString(10), accountId, containerId);
+    long size = 12345;
+    long expirationTime = SystemTime.getInstance().milliseconds() - 1;
+    long operationTime = SystemTime.getInstance().milliseconds() + 300;
+    Long crc = 1000L;
+    short lifeVersion = 5;
+    MessageInfo origin =
+        new MessageInfo(key, size, false, false, false, expirationTime, crc, accountId, containerId, operationTime,
+            lifeVersion);
+
+    MessageInfo.Builder builder = new MessageInfo.Builder(origin);
+    MessageInfo info = builder.build();
+    checkGetters(info, origin.getStoreKey(), origin.getSize(), origin.isDeleted(), origin.isTtlUpdated(),
+        origin.isUndeleted(), origin.getExpirationTimeInMs(), origin.getCrc(), origin.getAccountId(),
+        origin.getContainerId(), origin.getOperationTimeMs(), origin.getLifeVersion());
+
+    StoreKey newKey = new MockId(TestUtils.getRandomString(10), accountId, containerId);
+    info = builder.storeKey(newKey).build();
+    checkGetters(info, newKey, origin.getSize(), origin.isDeleted(), origin.isTtlUpdated(), origin.isUndeleted(),
+        origin.getExpirationTimeInMs(), origin.getCrc(), origin.getAccountId(), origin.getContainerId(),
+        origin.getOperationTimeMs(), origin.getLifeVersion());
+
+    long newSize = size + 1000L;
+    info = builder.size(newSize).build();
+    checkGetters(info, newKey, newSize, origin.isDeleted(), origin.isTtlUpdated(), origin.isUndeleted(),
+        origin.getExpirationTimeInMs(), origin.getCrc(), origin.getAccountId(), origin.getContainerId(),
+        origin.getOperationTimeMs(), origin.getLifeVersion());
+
+    info = builder.isDeleted(true).build();
+    checkGetters(info, newKey, newSize, true, origin.isTtlUpdated(), origin.isUndeleted(),
+        origin.getExpirationTimeInMs(), origin.getCrc(), origin.getAccountId(), origin.getContainerId(),
+        origin.getOperationTimeMs(), origin.getLifeVersion());
+
+    info = builder.isTtlUpdated(true).build();
+    checkGetters(info, newKey, newSize, true, true, origin.isUndeleted(), origin.getExpirationTimeInMs(),
+        origin.getCrc(), origin.getAccountId(), origin.getContainerId(), origin.getOperationTimeMs(),
+        origin.getLifeVersion());
+
+    info = builder.isUndeleted(true).build();
+    checkGetters(info, newKey, newSize, true, true, true, origin.getExpirationTimeInMs(), origin.getCrc(),
+        origin.getAccountId(), origin.getContainerId(), origin.getOperationTimeMs(), origin.getLifeVersion());
+
+    long newExpirationTime = expirationTime + 1000L;
+    info = builder.expirationTimeInMs(newExpirationTime).build();
+    checkGetters(info, newKey, newSize, true, true, true, newExpirationTime, origin.getCrc(), origin.getAccountId(),
+        origin.getContainerId(), origin.getOperationTimeMs(), origin.getLifeVersion());
+
+    Long newCrc = null;
+    info = builder.crc(newCrc).build();
+    checkGetters(info, newKey, newSize, true, true, true, newExpirationTime, newCrc, origin.getAccountId(),
+        origin.getContainerId(), origin.getOperationTimeMs(), origin.getLifeVersion());
+
+    short newAccountId = 101;
+    info = builder.accountId(newAccountId).build();
+    checkGetters(info, newKey, newSize, true, true, true, newExpirationTime, newCrc, newAccountId,
+        origin.getContainerId(), origin.getOperationTimeMs(), origin.getLifeVersion());
+
+    short newContainerId = 10001;
+    info = builder.containerId(newContainerId).build();
+    checkGetters(info, newKey, newSize, true, true, true, newExpirationTime, newCrc, newAccountId, newContainerId,
+        origin.getOperationTimeMs(), origin.getLifeVersion());
+
+    long newOperationTime = operationTime - 1000L;
+    info = builder.operationTimeMs(newOperationTime).build();
+    checkGetters(info, newKey, newSize, true, true, true, newExpirationTime, newCrc, newAccountId, newContainerId,
+        newOperationTime, origin.getLifeVersion());
+
+    short newLifeVersion = (short) (lifeVersion + 1);
+    info = builder.lifeVersion(newLifeVersion).build();
+    checkGetters(info, newKey, newSize, true, true, true, newExpirationTime, newCrc, newAccountId, newContainerId,
+        newOperationTime, newLifeVersion);
+
+    info = new MessageInfo.Builder(newKey, newSize, newAccountId, newContainerId, newOperationTime).build();
+    checkGetters(info, newKey, newSize, false, false, false, Utils.Infinite_Time, null, newAccountId, newContainerId,
+        newOperationTime, (short) 0);
+  }
+
+  /**
    * Checks getters of {@code info}
    * @param info the {@link MessageInfo} whose props need to checked
    * @param key the expected {@link StoreKey} in {@code info}.

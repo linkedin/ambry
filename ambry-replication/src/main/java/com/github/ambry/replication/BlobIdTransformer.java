@@ -263,9 +263,13 @@ public class BlobIdTransformer implements Transformer {
       // same after conversion.
       Long originalCrc = oldMessageInfo.getStoreKey().getID().equals(newKey.getID()) ? oldMessageInfo.getCrc() : null;
       MessageInfo info =
-          new MessageInfo(newKey, putMessageFormatInputStream.getSize(), false, oldMessageInfo.isTtlUpdated(), false,
-              oldMessageInfo.getExpirationTimeInMs(), originalCrc, newProperties.getAccountId(),
-              newProperties.getContainerId(), oldMessageInfo.getOperationTimeMs(), oldMessageInfo.getLifeVersion());
+          new MessageInfo.Builder(newKey, putMessageFormatInputStream.getSize(), newProperties.getAccountId(),
+              newProperties.getContainerId(), oldMessageInfo.getOperationTimeMs()).isTtlUpdated(
+              oldMessageInfo.isTtlUpdated())
+              .expirationTimeInMs(oldMessageInfo.getExpirationTimeInMs())
+              .crc(originalCrc)
+              .lifeVersion(oldMessageInfo.getLifeVersion())
+              .build();
       return new Message(info, putMessageFormatInputStream);
     } else {
       throw new IllegalArgumentException("Only 'put' records are valid");

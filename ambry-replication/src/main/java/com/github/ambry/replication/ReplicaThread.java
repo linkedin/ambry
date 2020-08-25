@@ -1222,10 +1222,7 @@ public class ReplicaThread implements Runnable {
       // committed), then we have a bad situation where only a TTL update exists in the store. This problem has to be
       // addressed. This can only happen if replication is far behind (for e.g due to a server being down for a long
       // time). Won't happen if a server is being recreated.
-      messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(), messageInfo.isDeleted(), true,
-          messageInfo.isUndeleted(), messageInfo.getExpirationTimeInMs(), messageInfo.getCrc(),
-          messageInfo.getAccountId(), messageInfo.getContainerId(), messageInfo.getOperationTimeMs(),
-          messageInfo.getLifeVersion());
+      messageInfo = new MessageInfo.Builder(messageInfo).isTtlUpdated(true).build();
       remoteReplicaInfo.getLocalStore().updateTtl(Collections.singletonList(messageInfo));
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key ttl updated id: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
@@ -1255,10 +1252,7 @@ public class ReplicaThread implements Runnable {
   private void applyUndelete(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
     try {
-      messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(), messageInfo.isDeleted(),
-          messageInfo.isTtlUpdated(), true, messageInfo.getExpirationTimeInMs(), messageInfo.getCrc(),
-          messageInfo.getAccountId(), messageInfo.getContainerId(), messageInfo.getOperationTimeMs(),
-          messageInfo.getLifeVersion());
+      messageInfo = new MessageInfo.Builder(messageInfo).isUndeleted(true).isDeleted(false).build();
       remoteReplicaInfo.getLocalStore().undelete(messageInfo);
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key undelete id: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
@@ -1289,10 +1283,7 @@ public class ReplicaThread implements Runnable {
   private void applyDelete(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
     try {
-      messageInfo =
-          new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(), true, messageInfo.isTtlUpdated(), false,
-              messageInfo.getExpirationTimeInMs(), messageInfo.getCrc(), messageInfo.getAccountId(),
-              messageInfo.getContainerId(), messageInfo.getOperationTimeMs(), messageInfo.getLifeVersion());
+      messageInfo = new MessageInfo.Builder(messageInfo).isDeleted(true).isUndeleted(false).build();
       remoteReplicaInfo.getLocalStore().delete(Collections.singletonList(messageInfo));
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key delete: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());

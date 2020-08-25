@@ -1138,10 +1138,10 @@ class ValidatingKeyConvertingTransformer implements Transformer {
               new PutMessageFormatInputStream(newKey, encryptionKey, props, metadata,
                   new ByteBufInputStream(blobData.content(), true), blobData.getSize(), blobData.getBlobType(),
                   msgInfo.getLifeVersion());
-          transformedMsgInfo =
-              new MessageInfo(newKey, transformedStream.getSize(), msgInfo.isDeleted(), msgInfo.isTtlUpdated(), false,
-                  msgInfo.getExpirationTimeInMs(), msgInfo.getCrc(), msgInfo.getAccountId(), msgInfo.getContainerId(),
-                  msgInfo.getOperationTimeMs(), msgInfo.getLifeVersion());
+          transformedMsgInfo = new MessageInfo.Builder(msgInfo).storeKey(newKey)
+              .size(transformedStream.getSize())
+              .isUndeleted(false)
+              .build();
           transformationOutput = new TransformationOutput(new Message(transformedMsgInfo, transformedStream));
         }
       } else {
