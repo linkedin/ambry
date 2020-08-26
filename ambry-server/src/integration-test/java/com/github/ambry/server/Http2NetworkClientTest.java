@@ -51,6 +51,10 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -74,6 +78,7 @@ public class Http2NetworkClientTest {
   private static MockNotificationSystem notificationSystem;
   private static MockCluster http2Cluster;
   private static SSLConfig clientSSLConfig;
+  private static EventLoopGroup eventLoopGroup;
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   @Before
@@ -97,6 +102,8 @@ public class Http2NetworkClientTest {
         "http2-client");
     TestSSLUtils.addHttp2Properties(clientSSLProps, SSLFactory.Mode.CLIENT, false);
     clientSSLConfig = new SSLConfig(new VerifiableProperties(clientSSLProps));
+    eventLoopGroup = new NioEventLoopGroup();
+    eventLoopGroup = Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup();
 
     // Server
     serverSSLProps = new Properties();
@@ -126,7 +133,7 @@ public class Http2NetworkClientTest {
     BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
     SSLFactory sslFactory = new NettySslHttp2Factory(clientSSLConfig);
     Http2NetworkClient networkClient = new Http2NetworkClient(new Http2ClientMetrics(new MetricRegistry()),
-        new Http2ClientConfig(new VerifiableProperties(new Properties())), sslFactory);
+        new Http2ClientConfig(new VerifiableProperties(new Properties())), sslFactory, eventLoopGroup);
     // Put a blob
     int blobSize = 1024 * 1024;
     byte[] usermetadata = new byte[1000];
@@ -216,7 +223,8 @@ public class Http2NetworkClientTest {
     properties.setProperty(Http2ClientConfig.HTTP2_MIN_CONNECTION_PER_PORT, Integer.toString(connectionPerPort));
     Http2ClientConfig http2ClientConfig = new Http2ClientConfig(new VerifiableProperties(properties));
     Http2NetworkClient networkClient =
-        new Http2NetworkClient(new Http2ClientMetrics(new MetricRegistry()), http2ClientConfig, sslFactory);
+        new Http2NetworkClient(new Http2ClientMetrics(new MetricRegistry()), http2ClientConfig, sslFactory,
+            eventLoopGroup);
     MockClusterMap clusterMap = http2Cluster.getClusterMap();
     assertEquals("Connection count is not expected", 0,
         networkClient.warmUpConnections(clusterMap.getDataNodeIds(), 0, 1000, new ArrayList<>()));

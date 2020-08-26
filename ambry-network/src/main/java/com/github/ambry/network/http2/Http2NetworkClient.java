@@ -26,9 +26,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.epoll.Epoll;
-import io.netty.channel.epoll.EpollEventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.pool.ChannelPool;
 import io.netty.channel.pool.ChannelPoolMap;
 import io.netty.handler.codec.http.HttpObjectAggregator;
@@ -55,7 +52,6 @@ import static com.github.ambry.network.http2.Http2Utils.*;
  */
 public class Http2NetworkClient implements NetworkClient {
   private static final Logger logger = LoggerFactory.getLogger(Http2NetworkClient.class);
-  private final EventLoopGroup eventLoopGroup;
   private final ChannelPoolMap<InetSocketAddress, ChannelPool> pools;
   private final Http2ClientResponseHandler http2ClientResponseHandler;
   private final Http2ClientStreamStatsHandler http2ClientStreamStatsHandler;
@@ -67,20 +63,13 @@ public class Http2NetworkClient implements NetworkClient {
   static final AttributeKey<RequestInfo> REQUEST_INFO = AttributeKey.newInstance("RequestInfo");
 
   public Http2NetworkClient(Http2ClientMetrics http2ClientMetrics, Http2ClientConfig http2ClientConfig,
-      SSLFactory sslFactory) {
+      SSLFactory sslFactory, EventLoopGroup eventLoopGroup) {
     logger.info("Http2NetworkClient started");
     this.http2ClientConfig = http2ClientConfig;
-    if (Epoll.isAvailable()) {
-      logger.info("Using EpollEventLoopGroup in Http2NetworkClient.");
-      this.eventLoopGroup = new EpollEventLoopGroup(http2ClientConfig.http2NettyEventLoopGroupThreads);
-    } else {
-      this.eventLoopGroup = new NioEventLoopGroup(http2ClientConfig.http2NettyEventLoopGroupThreads);
-    }
     this.http2ClientResponseHandler = new Http2ClientResponseHandler(http2ClientMetrics);
     this.http2ClientStreamStatsHandler = new Http2ClientStreamStatsHandler(http2ClientMetrics);
     this.http2StreamFrameToHttpObjectCodec = new Http2StreamFrameToHttpObjectCodec(false);
     this.ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor(false);
-
     this.pools = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics,
         new StreamChannelInitializer());
     this.http2ClientMetrics = http2ClientMetrics;
