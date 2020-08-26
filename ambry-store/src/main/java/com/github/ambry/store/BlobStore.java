@@ -251,8 +251,9 @@ public class BlobStore implements Store {
             TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes);
         blobStoreStats =
             new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs, logSegmentForecastOffsetMs,
-                queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
-                taskScheduler, diskIOScheduler, metrics);
+                queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs,
+                config.storeEnableBucketForLogSegmentReports, time, longLivedTaskScheduler, taskScheduler,
+                diskIOScheduler, metrics);
         checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
         onSuccess();
@@ -526,7 +527,8 @@ public class BlobStore implements Store {
     checkDuplicates(infosToDelete);
     final Timer.Context context = metrics.deleteResponse.time();
     try {
-      List<IndexValue> indexValuesToDelete = new ArrayList<>();
+      List<IndexValue> indexValuesPriorToDelete = new ArrayList<>();
+      List<IndexValue> originalPuts = new ArrayList<>();
       List<Short> lifeVersions = new ArrayList<>();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       maybeCallInDeleteBetweenGetEndOffsetAndFindKey();
@@ -555,7 +557,7 @@ public class BlobStore implements Store {
                 "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
                 StoreErrorCodes.ID_Deleted);
           }
-          indexValuesToDelete.add(value);
+          indexValuesPriorToDelete.add(value);
           lifeVersions.add(value.getLifeVersion());
         } else {
           // This is a delete request from replication
@@ -569,8 +571,14 @@ public class BlobStore implements Store {
                 "Cannot delete id " + info.getStoreKey() + " since it has a higher lifeVersion than the message info: "
                     + value.getLifeVersion() + ">" + info.getLifeVersion(), StoreErrorCodes.Life_Version_Conflict);
           }
-          indexValuesToDelete.add(value);
+          indexValuesPriorToDelete.add(value);
           lifeVersions.add(info.getLifeVersion());
+        }
+        if (!value.isDelete() && !value.isUndelete()) {
+          originalPuts.add(value);
+        } else {
+          originalPuts.add(index.findKey(info.getStoreKey(), new FileSpan(index.getStartOffset(), value.getOffset()),
+              EnumSet.of(PersistentIndex.IndexEntryType.PUT)));
         }
       }
       maybeCallBeforeSynchronization();
@@ -605,6 +613,7 @@ public class BlobStore implements Store {
                     StoreErrorCodes.Life_Version_Conflict);
               }
             }
+            indexValuesPriorToDelete.set(i, value);
             i++;
           }
         }
@@ -634,7 +643,9 @@ public class BlobStore implements Store {
           IndexValue deleteIndexValue =
               index.markAsDeleted(info.getStoreKey(), fileSpan, null, info.getOperationTimeMs(), info.getLifeVersion());
           endOffsetOfLastMessage = fileSpan.getEndOffset();
-          blobStoreStats.handleNewDeleteEntry(deleteIndexValue, indexValuesToDelete.get(correspondingPutIndex++));
+          blobStoreStats.handleNewDeleteEntry(info.getStoreKey(), deleteIndexValue,
+              originalPuts.get(correspondingPutIndex), indexValuesPriorToDelete.get(correspondingPutIndex));
+          correspondingPutIndex++;
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }
@@ -785,6 +796,7 @@ public class BlobStore implements Store {
       // Check if the undelete record is valid.
       index.validateSanityForUndelete(id, values, lifeVersionFromMessageInfo);
       IndexValue latestValue = values.get(0);
+      IndexValue originalPut = values.get(values.size() - 1);
       if (!IndexValue.hasLifeVersion(revisedLifeVersion)) {
         revisedLifeVersion = (short) (latestValue.getLifeVersion() + 1);
       }
@@ -838,7 +850,7 @@ public class BlobStore implements Store {
         // we still use lifeVersion from message info here so that we can re-verify the sanity of undelete request in persistent index.
         IndexValue newUndelete = index.markAsUndeleted(info.getStoreKey(), fileSpan, null, info.getOperationTimeMs(),
             lifeVersionFromMessageInfo);
-        blobStoreStats.handleNewUndeleteEntry(newUndelete);
+        blobStoreStats.handleNewUndeleteEntry(info.getStoreKey(), newUndelete, originalPut, latestValue);
       }
       onSuccess();
       return revisedLifeVersion;

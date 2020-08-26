@@ -461,8 +461,9 @@ class MockBlobStore extends BlobStore {
 
   MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, long capacityInBytes, long segmentCapacity,
       long segmentHeaderSize, long usedCapacity, MockBlobStoreStats mockBlobStoreStats) {
-    super(StoreTestUtils.createMockReplicaId(mockBlobStoreStats.getStoreId(), 0, "/tmp/" + mockBlobStoreStats.getStoreId() + "/"), config, null, null, null, null,
-        metrics, metrics, null, null, null, null, time, new InMemAccountService(false, false));
+    super(StoreTestUtils.createMockReplicaId(mockBlobStoreStats.getStoreId(), 0,
+        "/tmp/" + mockBlobStoreStats.getStoreId() + "/"), config, null, null, null, null, metrics, metrics, null, null,
+        null, null, time, new InMemAccountService(false, false));
     this.capacityInBytes = capacityInBytes;
     this.segmentCapacity = segmentCapacity;
     this.segmentHeaderSize = segmentHeaderSize;
@@ -491,12 +492,12 @@ class MockBlobStoreStats extends BlobStoreStats {
   private String storeId = "";
 
   MockBlobStoreStats(long maxBlobSize) {
-    super("", null, 0, 0, 0, 0, 0, null, null, null, null, null);
+    super("", null, 0, 0, 0, 0, 0, true, null, null, null, null, null);
     this.maxBlobSize = maxBlobSize;
   }
 
   MockBlobStoreStats(long maxBlobSize, int i) {
-    super("storeId" + i, null, 0, 0, 0, 0, 0, null, null, null, null, null);
+    super("storeId" + i, null, 0, 0, 0, 0, 0, true, null, null, null, null, null);
     this.maxBlobSize = maxBlobSize;
     this.storeId = "storeId" + i;
   }
@@ -516,7 +517,7 @@ class MockBlobStoreStats extends BlobStoreStats {
     return maxBlobSize;
   }
 
-  String getStoreId(){
+  String getStoreId() {
     return this.storeId;
   }
 }

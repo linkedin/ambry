@@ -26,46 +26,124 @@ import java.util.TreeMap;
  * used to modify and access the stored data structures.
  */
 class ScanResults {
-  // A NavigableMap that stores buckets for container valid data size. The key of the map is the end time of each
-  // bucket and the value is the corresponding valid data size map. For example, there are two buckets with end time
-  // t1 and t2. Bucket with end time t2 includes all events whose operation time is greater than or equal to t1 but
-  // strictly less than t2.
-  // Each bucket except for the very first one contains the delta in valid data size that occurred prior to the bucket
-  // end time. The very first bucket's end time is the forecast start time for containers and it contains the valid data
-  // size map at the forecast start time. The very first bucket is used as a base value, requested valid data size is
-  // computed by applying the deltas from appropriate buckets on the base value.
+  // A bucket is a period of time, whose length is defined by bucketSpanInMs parameter in constructor. In this class,
+  // several maps are created to represent different purposes of bucket.
+  // An object is created to represent base bucket and another map, whose value is the same type as the base bucket,
+  // is created to represent delta in each time bucket. This is an example to illustrate how base and delta bucket work.
+  //
+  // If we want to calculate valid data size for all account and container, we create at least two fields
+  // <pre><code>
+  //  private long validSize;
+  //  private final NavigableMap<Long, Long> deltaBuckets = new TreeMap<>();
+  // </code></pre>
+  //
+  // When starting calculating, we add valid data size to {@code validSize} and add delta to its corresponding bucket.
+  // Assuming each bucket is one hour long and the start time is T0, then we have deltaBuckets as
+  //    T0                    T0+1H                   T0+2H                 T0+3H
+  // baseBucket   [              ]    [                  ]    [                 ]   .....
+  //
+  // T0+1H is the first key in the deltaBuckets. All the deltas that happen before T0+1H but after T0 will be added to
+  // its value. T0+2H is the second key in the deltaBucket. All the deltas that happen before T0+2H but after T0+1H will
+  // be added to its value. But what are deltas? This is an example to show the answer.
+  //
+  // Now let's go through some IndexValues as
+  // 1. PUT[ID1]: created at T0-1D, but will expire at T0+2.5H
+  // 2. PUT[ID2]: created at T0-1D, permanent blob
+  // The validSize at T0 should be PUT[ID1] + PUT[ID2] because PUT[ID1] haven't expired yet. But we know at T0+2.5H, the
+  // validSize should be PUT[ID2] because PUT[ID1] is expired. Since we are not going to handle PUT[ID1] again, we need
+  // to put a delta in T0+3H bucket. And it looks like this:
+  //    T0                           T0+1H                   T0+2H                 T0+3H
+  // PUT[ID1]+PUT[ID2]   [              ]    [                  ]    [ -PUT[ID1]     ]   .....
+  // Please notice that the delta is negative. So when we pick any point of time and add the base validSize and all the
+  // delta values in the buckets before this point of time, we will get the correct answer. For instance, validSize of
+  // T0 is PUT[ID1]+PUT[ID2], validSize of T0+1H is PUT[ID1]+PUT[ID2]+delta of T0+1H. And validSize of T0+2H is PUT[ID1]
+  // +PUT[ID2]-PUT[ID1] because the delta of T0+3H bucket is -PUT[ID1].
+  //
+  // As new IndexValue comes in, we have to deal with them and fill the delta for them as well.
+  // 1. DELETE[ID1]: deleted at T0+0.5H
+  // 2. PUT[ID3]: created at T0+1.2H, but will expire at T0+2.8H
+  // 3. DELETE[ID2]: deleted at T0+1.5H
+  // For DELETE[ID1], it adds -PUT[ID1] delta to T0+1H bucket since it makes PUT[ID1] invalid. However, PUT[ID1] will
+  // expire at T0+2.5H and delta has already been added to T0+3H bucket. In order to avoid double adding, we have to add
+  // PUT[ID1] back to T0+3H bucket. PUT[ID3] adds delta in T0+2H bucket but it will expire at T0+2.8H, so it has be to
+  // subtracted in T0+3H bucket. DELETE[ID2] makes PUT[ID2] invalid, so a delta will be added to T0+2H bucket.
+  //    T0                           T0+1H                   T0+2H                             T0+3H
+  // PUT[ID1]+PUT[ID2]   [-PUT[ID1]      ]    [PUT[ID3]-PUT[ID2] ]    [-PUT[ID1]+PUT[ID1]-PUT[ID3] ]   .....
+  //
+  // This is how delta bucket works. We can pick any point of time and add base validSize and all the delta value in those
+  // buckets prior to this point of time and get the answer we need.
+
+  // Container buckets are very close to the example above, except that it doesn't aggregate all containers' valid data,
+  // rather it keeps them in a map. The key of this map is the AccountId, and the value of this map is yet another map,
+  // whose key is the ContainerId and the value is the valid size of this container.
+  // So {@code containerBaseBucket} is base value for all containers and the {@code containerBuckets} is the delta values
+  // on each time bucket.
+  private final Map<String, Map<String, Long>> containerBaseBucket = new HashMap<>();
   private final NavigableMap<Long, Map<String, Map<String, Long>>> containerBuckets = new TreeMap<>();
-
-  // A NavigableMap that stores buckets for log segment valid data size. The rest of the structure is similar
-  // to containerBuckets.
-  private final NavigableMap<Long, NavigableMap<String, Long>> logSegmentBuckets = new TreeMap<>();
-
   final long containerForecastStartTimeMs;
   final long containerLastBucketTimeMs;
   final long containerForecastEndTimeMs;
-  final long logSegmentForecastStartTimeMs;
-  final long logSegmentLastBucketTimeMs;
-  final long logSegmentForecastEndTimeMs;
+
+  // LogSegment buckets keep track of valid IndexValue size in each log segments. So the base value of log segment bucket
+  // is a map, whose key is the log segment name and the value is the sum of valid IndexValues' sizes. To test if an
+  // IndexValue is valid or not, we follow the same rule in the {@link BlobStoreCompactor}.
+  //
+  // LogSegment buckets is very close to container buckets, except for several differences.
+  // 1. LogSegment has two delta buckets. one for deleted blobs, the other for expired blobs.
+  // 2. Since we have a retention period for deleted blob, deleted delta's first bucket would start earlier than expired
+  //    delta.
+  // The reason to have two delta buckets is because deleted blobs and expired blobs are invalidated at different time.
+  // When a blob is deleted, we have to wait for a retention duration(7 days in prod) to invalidate it. But when a blob
+  // is expired, it's invalidated right aways. So when calculating valid size for log segment, we have to pass two time
+  // stamps, a delete reference time, usually is now - 7 days, and a expiry time, usually is now.
+  private final NavigableMap<String, Long> logSegmentBaseBucket = new TreeMap<>();
+  private final NavigableMap<Long, NavigableMap<String, Long>> logSegmentBucketsDeltaForDeleted = new TreeMap<>();
+  private final NavigableMap<Long, NavigableMap<String, Long>> logSegmentBucketsDeltaForExpired = new TreeMap<>();
+
+  final long logSegmentForecastStartTimeMsForDeleted;
+  final long logSegmentLastBucketTimeMsForDeleted;
+  final long logSegmentForecastEndTimeMsForDeleted;
+  final long logSegmentForecastStartTimeMsForExpired;
+  final long logSegmentLastBucketTimeMsForExpired;
+  final long logSegmentForecastEndTimeMsForExpired;
   Offset scannedEndOffset = null;
 
   /**
    * Create the bucket data structures in advance based on the given scanStartTime and segmentScanTimeOffset.
    */
   ScanResults(long startTimeInMs, long logSegmentForecastOffsetMs, int bucketCount, long bucketSpanInMs) {
-    long containerBucketTimeMs = startTimeInMs;
-    long logSegmentBucketTimeMs = startTimeInMs - logSegmentForecastOffsetMs;
-    for (int i = 0; i < bucketCount; i++) {
+    // Set up container buckets
+    containerForecastStartTimeMs = startTimeInMs;
+    long containerBucketTimeMs = containerForecastStartTimeMs + bucketSpanInMs;
+    for (int i = 1; i < bucketCount; i++) {
       containerBuckets.put(containerBucketTimeMs, new HashMap<>());
-      logSegmentBuckets.put(logSegmentBucketTimeMs, new TreeMap<>(LogSegmentNameHelper.COMPARATOR));
       containerBucketTimeMs += bucketSpanInMs;
-      logSegmentBucketTimeMs += bucketSpanInMs;
     }
-    containerForecastStartTimeMs = containerBuckets.firstKey();
-    containerLastBucketTimeMs = containerBuckets.lastKey();
+    containerLastBucketTimeMs = containerBuckets.isEmpty() ? containerForecastStartTimeMs : containerBuckets.lastKey();
     containerForecastEndTimeMs = containerLastBucketTimeMs + bucketSpanInMs;
-    logSegmentForecastStartTimeMs = logSegmentBuckets.firstKey();
-    logSegmentLastBucketTimeMs = logSegmentBuckets.lastKey();
-    logSegmentForecastEndTimeMs = logSegmentLastBucketTimeMs + bucketSpanInMs;
+
+    // Set up log segment buckets
+    logSegmentForecastStartTimeMsForExpired = startTimeInMs;
+    long bucketTimeMs = logSegmentForecastStartTimeMsForExpired + bucketSpanInMs;
+    for (int i = 1; i < bucketCount; i++) {
+      logSegmentBucketsDeltaForExpired.put(bucketTimeMs, new TreeMap<>(LogSegmentNameHelper.COMPARATOR));
+      bucketTimeMs += bucketSpanInMs;
+    }
+    logSegmentLastBucketTimeMsForExpired =
+        logSegmentBucketsDeltaForExpired.isEmpty() ? logSegmentForecastStartTimeMsForExpired
+            : logSegmentBucketsDeltaForExpired.lastKey();
+    logSegmentForecastEndTimeMsForExpired = logSegmentLastBucketTimeMsForExpired + bucketSpanInMs;
+
+    logSegmentForecastStartTimeMsForDeleted = startTimeInMs - logSegmentForecastOffsetMs;
+    bucketTimeMs = logSegmentForecastStartTimeMsForDeleted + bucketSpanInMs;
+    for (int i = 1; i < bucketCount; i++) {
+      logSegmentBucketsDeltaForDeleted.put(bucketTimeMs, new TreeMap<>(LogSegmentNameHelper.COMPARATOR));
+      bucketTimeMs += bucketSpanInMs;
+    }
+    logSegmentLastBucketTimeMsForDeleted =
+        logSegmentBucketsDeltaForDeleted.isEmpty() ? logSegmentForecastStartTimeMsForDeleted
+            : logSegmentBucketsDeltaForDeleted.lastKey();
+    logSegmentForecastEndTimeMsForDeleted = logSegmentLastBucketTimeMsForDeleted + bucketSpanInMs;
   }
 
   /**
@@ -80,33 +158,44 @@ class ScanResults {
   }
 
   /**
-   * Given a reference time, return the key of the appropriate log segment bucket whose end time is strictly greater
-   * than the reference time.
+   * Given a reference time, return the key of the appropriate log segment deleted bucket whose end time is strictly
+   * greater than the reference time.
    * @param referenceTimeInMs the reference time or operation time of an event.
    * @return the appropriate bucket key (bucket end time) to indicate which bucket will an event with
    * the given reference time as operation time belong to.
    */
-  Long getLogSegmentBucketKey(long referenceTimeInMs) {
-    return logSegmentBuckets.higherKey(referenceTimeInMs);
+  Long getLogSegmentDeletedBucketKey(long referenceTimeInMs) {
+    return logSegmentBucketsDeltaForDeleted.higherKey(referenceTimeInMs);
   }
 
   /**
-   * Helper function to update the container base value bucket with the given value.
+   * Given a reference time, return the key of the appropriate log segment expired bucket whose end time is strictly
+   * greater than the reference time.
+   * @param referenceTimeInMs the reference time or operation time of an event.
+   * @return the appropriate bucket key (bucket end time) to indicate which bucket will an event with
+   * the given reference time as operation time belong to.
+   */
+  Long getLogSegmentExpiredBucketKey(long referenceTimeInMs) {
+    return logSegmentBucketsDeltaForExpired.higherKey(referenceTimeInMs);
+  }
+
+  /**
+   * Update the container base value bucket with the given value.
    * @param serviceId the serviceId of the map entry to be updated
    * @param containerId the containerId of the map entry to be updated
    * @param value the value to be added
    */
   void updateContainerBaseBucket(String serviceId, String containerId, long value) {
-    updateContainerBucket(containerBuckets.firstKey(), serviceId, containerId, value);
+    updateNestedMapHelper(containerBaseBucket, serviceId, containerId, value);
   }
 
   /**
-   * Helper function to update the log segment base value bucket with the given value.
+   * Update the log segment base value bucket with the given value.
    * @param logSegmentName the log segment name of the map entry to be updated
    * @param value the value to be added
    */
   void updateLogSegmentBaseBucket(String logSegmentName, long value) {
-    updateLogSegmentBucket(logSegmentBuckets.firstKey(), logSegmentName, value);
+    updateMapHelper(logSegmentBaseBucket, logSegmentName, value);
   }
 
   /**
@@ -124,36 +213,59 @@ class ScanResults {
   }
 
   /**
-   * Helper function to update a log segment bucket with a given value.
+   * Helper function to update a log segment deleted bucket with a given value.
    * @param bucketKey the bucket key to specify which bucket will be updated
    * @param logSegmentName the log segment name of the map entry to be updated
    * @param value the value to be added
    */
-  void updateLogSegmentBucket(Long bucketKey, String logSegmentName, long value) {
-    if (bucketKey != null && logSegmentBuckets.containsKey(bucketKey)) {
-      Map<String, Long> existingBucketEntry = logSegmentBuckets.get(bucketKey);
+  void updateLogSegmentDeletedBucket(Long bucketKey, String logSegmentName, long value) {
+    if (bucketKey != null && logSegmentBucketsDeltaForDeleted.containsKey(bucketKey)) {
+      Map<String, Long> existingBucketEntry = logSegmentBucketsDeltaForDeleted.get(bucketKey);
       updateMapHelper(existingBucketEntry, logSegmentName, value);
     }
   }
 
   /**
-   * Given a reference time in milliseconds return the corresponding valid data size per log segment map by aggregating
-   * all buckets whose end time is less than or equal to the reference time.
-   * @param referenceTimeInMS the reference time in ms until which deletes and expiration are relevant
-   * @return a {@link Pair} whose first element is the end time of the last bucket that was aggregated and whose second
-   * element is the requested valid data size per log segment {@link NavigableMap}.
+   * Helper function to update a log segment expired bucket with a given value.
+   * @param bucketKey the bucket key to specify which bucket will be updated
+   * @param logSegmentName the log segment name of the map entry to be updated
+   * @param value the value to be added
    */
-  Pair<Long, NavigableMap<String, Long>> getValidSizePerLogSegment(Long referenceTimeInMS) {
-    NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>(logSegmentBuckets.firstEntry().getValue());
+  void updateLogSegmentExpiredBucket(Long bucketKey, String logSegmentName, long value) {
+    if (bucketKey != null && logSegmentBucketsDeltaForExpired.containsKey(bucketKey)) {
+      Map<String, Long> existingBucketEntry = logSegmentBucketsDeltaForExpired.get(bucketKey);
+      updateMapHelper(existingBucketEntry, logSegmentName, value);
+    }
+  }
+
+  /**
+   * Given a deleted and expired reference time in milliseconds return the corresponding valid data size per log segment
+   * map by aggregating all buckets whose end time is less than or equal to the reference time.
+   * @param deleteReferenceTimeInMS the reference time in ms until which deletes are relevant
+   * @param expiryReferenceTimeInMs the reference time in ms until which expiration is relevant
+   * @return a {@link Pair} whose first element is the end time of the last deleted bucket that was aggregated and whose
+   * second element is the requested valid data size per log segment {@link NavigableMap}.
+   */
+  Pair<Long, NavigableMap<String, Long>> getValidSizePerLogSegment(Long deleteReferenceTimeInMS,
+      long expiryReferenceTimeInMs) {
+    NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>(logSegmentBaseBucket);
     NavigableMap<Long, NavigableMap<String, Long>> subMap =
-        logSegmentBuckets.subMap(logSegmentBuckets.firstKey(), false, referenceTimeInMS, true);
+        logSegmentBucketsDeltaForDeleted.headMap(deleteReferenceTimeInMS, true);
     for (Map.Entry<Long, NavigableMap<String, Long>> bucket : subMap.entrySet()) {
       for (Map.Entry<String, Long> bucketEntry : bucket.getValue().entrySet()) {
         updateMapHelper(validSizePerLogSegment, bucketEntry.getKey(), bucketEntry.getValue());
       }
     }
-    Long lastReferenceBucketTimeInMs = subMap.isEmpty() ? logSegmentBuckets.firstKey() : subMap.lastKey();
-    return new Pair<>(lastReferenceBucketTimeInMs, validSizePerLogSegment);
+    Long lastDeleteReferenceBucketTimeInMs =
+        subMap.isEmpty() ? logSegmentForecastStartTimeMsForDeleted : subMap.lastKey();
+
+    subMap = logSegmentBucketsDeltaForExpired.headMap(expiryReferenceTimeInMs, true);
+    for (Map.Entry<Long, NavigableMap<String, Long>> bucket : subMap.entrySet()) {
+      for (Map.Entry<String, Long> bucketEntry : bucket.getValue().entrySet()) {
+        updateMapHelper(validSizePerLogSegment, bucketEntry.getKey(), bucketEntry.getValue());
+      }
+    }
+    return new Pair<>(lastDeleteReferenceBucketTimeInMs, validSizePerLogSegment);
   }
 
   /**
@@ -165,11 +277,10 @@ class ScanResults {
    */
   Map<String, Map<String, Long>> getValidSizePerContainer(Long referenceTimeInMs) {
     Map<String, Map<String, Long>> validSizePerContainer = new HashMap<>();
-    for (Map.Entry<String, Map<String, Long>> accountEntry : containerBuckets.firstEntry().getValue().entrySet()) {
+    for (Map.Entry<String, Map<String, Long>> accountEntry : containerBaseBucket.entrySet()) {
       validSizePerContainer.put(accountEntry.getKey(), new HashMap<>(accountEntry.getValue()));
     }
-    NavigableMap<Long, Map<String, Map<String, Long>>> subMap =
-        containerBuckets.subMap(containerBuckets.firstKey(), false, referenceTimeInMs, true);
+    NavigableMap<Long, Map<String, Map<String, Long>>> subMap = containerBuckets.headMap(referenceTimeInMs, true);
     for (Map.Entry<Long, Map<String, Map<String, Long>>> bucket : subMap.entrySet()) {
       for (Map.Entry<String, Map<String, Long>> accountEntry : bucket.getValue().entrySet()) {
         for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {

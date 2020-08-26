@@ -74,13 +74,13 @@ public class BlobStoreStatsTest {
    */
   public BlobStoreStatsTest(boolean isBucketingEnabled) throws IOException, StoreException {
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + TestUtils.getRandomString(10));
-    state = new CuratedLogIndexState(true, tempDir, true, !isBucketingEnabled);
+    state = new CuratedLogIndexState(true, tempDir, true, true);
     bucketingEnabled = isBucketingEnabled;
   }
 
   private BlobStoreStats setupBlobStoreStats(int bucketCount, long logSegmentForecastOffsetMs) {
     return new BlobStoreStats("", state.index, bucketCount, BUCKET_SPAN_IN_MS, logSegmentForecastOffsetMs,
-        QUEUE_PROCESSOR_PERIOD_IN_Ms, DEFAULT_WAIT_TIMEOUT_SECS, state.time, indexScannerScheduler,
+        QUEUE_PROCESSOR_PERIOD_IN_Ms, DEFAULT_WAIT_TIMEOUT_SECS, true, state.time, indexScannerScheduler,
         queueProcessorScheduler, diskIOScheduler, METRICS);
   }
 
@@ -316,13 +316,75 @@ public class BlobStoreStatsTest {
   }
 
   /**
+   * Tests to verify the correctness of reported stats with after new undeletes via the following steps:
+   * 1. Add new 2 new PUTs and 1 TTL_UPDATE
+   * 2. Delete these 2 newly added PUTs
+   * 3. Verify reported stats and records the total valid size before new undeletes.
+   * 4. Undelete these 2 PUTs.
+   * 5. Verify reported stats and record the total valid size after the undeletes.
+   * 6. Verify the delta of the total valid size prior to the new undeletes matches the expected value.
+   * @throws Exception
+   */
+  @Test
+  public void testValidDataSizeAfterUndeletes() throws Exception {
+    assumeTrue(!bucketingEnabled);
+    BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
+
+    // Undelete two deleted blob, it will bring two PUT blob back to life.
+    List<IndexEntry> puts = state.addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    advanceTimeToNextSecond();
+    MockId firstId = (MockId) puts.get(0).getKey();
+    MockId secondId = (MockId) puts.get(1).getKey();
+    // Now add a TTL_UPDATE record for first ID
+    state.makePermanent(firstId, false);
+
+    // Now delete those two
+    state.addDeleteEntry(firstId);
+    state.addDeleteEntry(secondId);
+    // Make sure deletes are taking effect
+    advanceTimeToNextSecond();
+
+    long timeInMsBeforeUndeletes = state.time.milliseconds();
+    long totalLogSegmentValidSizeBeforeUndeletes =
+        verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(timeInMsBeforeUndeletes, 0L));
+    long totalContainerValidSizeBeforeUndeletes =
+        verifyAndGetContainerValidSize(blobStoreStats, timeInMsBeforeUndeletes);
+
+    state.addUndeleteEntry(firstId);
+    state.addUndeleteEntry(secondId);
+
+    long timeInMsAfterUndeletes = state.time.milliseconds();
+    long expectedContainerIncrement = 2 * PUT_RECORD_SIZE;
+    long expectedLogSegmentIncrement =
+        2 * PUT_RECORD_SIZE - 2 * DELETE_RECORD_SIZE + 2 * UNDELETE_RECORD_SIZE + TTL_UPDATE_RECORD_SIZE;
+    long totalLogSegmentValidSizeAfterUndeletes =
+        verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(timeInMsAfterUndeletes, 0L));
+    long totalContainerValidSizeAfterUndeletes = verifyAndGetContainerValidSize(blobStoreStats, timeInMsAfterUndeletes);
+    assertEquals("Undelete entries are not properly counted for container valid size",
+        totalContainerValidSizeAfterUndeletes, totalContainerValidSizeBeforeUndeletes + expectedContainerIncrement);
+    assertEquals("Undelete entries are not properly counted for log segment valid size",
+        totalLogSegmentValidSizeAfterUndeletes, totalLogSegmentValidSizeBeforeUndeletes + expectedLogSegmentIncrement);
+
+    // Add another UNDELETE to second ID would not change validSize
+    state.addDeleteEntry(secondId, null, (short) 2);
+    totalLogSegmentValidSizeAfterUndeletes =
+        verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(timeInMsAfterUndeletes, 0L));
+    totalContainerValidSizeAfterUndeletes = verifyAndGetContainerValidSize(blobStoreStats, timeInMsAfterUndeletes);
+    assertEquals("Undelete entries are not properly counted for container valid size",
+        totalContainerValidSizeAfterUndeletes, totalContainerValidSizeBeforeUndeletes + expectedContainerIncrement);
+    assertEquals("Undelete entries are not properly counted for log segment valid size",
+        totalLogSegmentValidSizeAfterUndeletes, totalLogSegmentValidSizeBeforeUndeletes + expectedLogSegmentIncrement);
+    blobStoreStats.close();
+  }
+
+  /**
    * Basic test to verify that the {@link BlobStoreStats} can scan the index, populate the buckets and use these buckets
    * to report stats correctly.
    * @throws StoreException
    * @throws InterruptedException
    * @throws IOException
    */
-  //@Test
+  @Test
   public void testBucketingBasic() throws StoreException, InterruptedException, IOException {
     assumeTrue(bucketingEnabled);
     final CountDownLatch scanStartedLatch = new CountDownLatch(1);
@@ -331,8 +393,21 @@ public class BlobStoreStatsTest {
     long logSegmentForecastOffsetMs = state.time.milliseconds();
     int bucketCount = 2 * (int) (logSegmentForecastOffsetMs / BUCKET_SPAN_IN_MS);
     long expiresAtInMs = ((long) bucketCount - 2) * BUCKET_SPAN_IN_MS;
+
     // add 3 puts with expiry
     state.addPutEntries(3, PUT_RECORD_SIZE, expiresAtInMs);
+    // add records so that we will have two consecutive deletes and undeletes for each PUT
+    List<IndexEntry> puts = state.addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    MockId id1 = (MockId) puts.get(0).getKey();
+    MockId id2 = (MockId) puts.get(1).getKey();
+
+    state.addDeleteEntry(id1);
+    state.addDeleteEntry(id1, null, (short) 1);
+
+    state.addDeleteEntry(id2);
+    state.addUndeleteEntry(id2);
+    state.addUndeleteEntry(id2, (short) 2);
+
     int expectedThrottleCount = state.referenceIndex.size();
     long logSegmentForecastStartTimeInMs = state.time.milliseconds() - logSegmentForecastOffsetMs;
     long logSegmentForecastEndTimeInMs = logSegmentForecastStartTimeInMs + bucketCount * BUCKET_SPAN_IN_MS;
@@ -371,7 +446,7 @@ public class BlobStoreStatsTest {
    * @throws InterruptedException
    * @throws IOException
    */
-  //@Test
+  @Test
   public void testBucketingWithNewEntriesAfterScan() throws StoreException, InterruptedException, IOException {
     assumeTrue(bucketingEnabled);
     CountDownLatch scanStartedLatch = new CountDownLatch(1);
@@ -412,6 +487,68 @@ public class BlobStoreStatsTest {
     for (IndexEntry entry : expiredPutEntries) {
       newDelete(blobStoreStats, (MockId) entry.getKey());
     }
+    // add two blobs that will expired fairly soon, testing TTL_UPDATE and DELETE
+    long soonExpiredTimeInMs = state.time.milliseconds() + (10 * BUCKET_SPAN_IN_MS);
+    List<IndexEntry> soonExpiredPutEntries = state.addPutEntries(2, PUT_RECORD_SIZE, soonExpiredTimeInMs);
+    for (IndexEntry entry : soonExpiredPutEntries) {
+      blobStoreStats.handleNewPutEntry(entry.getValue());
+      newTtlUpdate(blobStoreStats, (MockId) entry.getKey());
+    }
+    // Delete first entry
+    newDelete(blobStoreStats, getIdToDelete(soonExpiredPutEntries.get(0).getKey()));
+    advanceTimeToNextSecond();
+    newDelete(blobStoreStats, (MockId) soonExpiredPutEntries.get(0).getKey(), (short) 2);
+    advanceTimeToNextSecond();
+
+    // Testing UNDELETE and DELETE
+    // P, D, U
+    // P, U
+    // P, T, D, U
+    // P, D, U, T
+    // P, T, D, U, U
+    // P, D, D, U
+    // P, D, U, D, U
+    long expiredForUndeleteEntries = state.time.milliseconds() + 100 * BUCKET_SPAN_IN_MS;
+    List<IndexEntry> toUndeleteEntries = state.addPutEntries(7, PUT_RECORD_SIZE, expiredForUndeleteEntries);
+    for (IndexEntry entry : toUndeleteEntries) {
+      blobStoreStats.handleNewPutEntry(entry.getValue());
+    }
+    MockId id1 = getIdToDelete(toUndeleteEntries.get(0).getKey());
+    newDelete(blobStoreStats, id1);
+    newUndelete(blobStoreStats, id1);
+
+    MockId id2 = (MockId) toUndeleteEntries.get(1).getKey();
+    newUndelete(blobStoreStats, id2, (short) 1);
+
+    MockId id3 = (MockId) toUndeleteEntries.get(2).getKey();
+    newTtlUpdate(blobStoreStats, id3);
+    newDelete(blobStoreStats, getIdToDelete(id3));
+    newUndelete(blobStoreStats, id3);
+
+    MockId id4 = (MockId) toUndeleteEntries.get(3).getKey();
+    newDelete(blobStoreStats, getIdToDelete(id4));
+    newUndelete(blobStoreStats, id4);
+    newTtlUpdate(blobStoreStats, id4);
+
+    MockId id5 = (MockId) toUndeleteEntries.get(4).getKey();
+    newTtlUpdate(blobStoreStats, id5);
+    newDelete(blobStoreStats, getIdToDelete(id5));
+    newUndelete(blobStoreStats, id5);
+    newUndelete(blobStoreStats, id5, (short) 2);
+
+    MockId id6 = (MockId) toUndeleteEntries.get(5).getKey();
+    newDelete(blobStoreStats, getIdToDelete(id6));
+    advanceTimeToNextSecond();
+    newDelete(blobStoreStats, id6, (short) 1);
+    newUndelete(blobStoreStats, id6);
+    advanceTimeToNextSecond();
+
+    MockId id7 = (MockId) toUndeleteEntries.get(6).getKey();
+    newDelete(blobStoreStats, getIdToDelete(id7));
+    newUndelete(blobStoreStats, id7);
+    newDelete(blobStoreStats, id7);
+    newUndelete(blobStoreStats, id7);
+
     // a probe put with a latch to inform us about the state of the queue
     blobStoreStats.handleNewPutEntry(new MockIndexValue(queueProcessedLatch, state.index.getCurrentEndOffset()));
     assertTrue("QueueProcessor took too long to process the new entries",
@@ -466,7 +603,7 @@ public class BlobStoreStatsTest {
    * @throws InterruptedException
    * @throws IOException
    */
-  //@Test
+  @Test
   public void testBucketingWithNewEntriesDuringScan() throws StoreException, InterruptedException, IOException {
     assumeTrue(bucketingEnabled);
     CountDownLatch scanStartedLatch = new CountDownLatch(1);
@@ -537,12 +674,10 @@ public class BlobStoreStatsTest {
 
   /**
    * Tests to verify requests inside and outside of the forecast coverage can still be served properly while scanning.
-   * @throws InterruptedException
-   * @throws StoreException
-   * @throws IOException
+   * @throws Exception
    */
   @Test
-  public void testBucketingCoverageTransition() throws InterruptedException, StoreException, IOException {
+  public void testBucketingCoverageTransition() throws Exception {
     assumeTrue(bucketingEnabled);
     CountDownLatch scanStartedLatch = new CountDownLatch(1);
     // do not hold the initial scan
@@ -591,7 +726,7 @@ public class BlobStoreStatsTest {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + TestUtils.getRandomString(10));
-    state = new CuratedLogIndexState(true, tempDir, false, false, true, !bucketingEnabled);
+    state = new CuratedLogIndexState(true, tempDir, false, false, true, true);
     int bucketCount = bucketingEnabled ? 1 : 0;
     BlobStoreStats blobStoreStats = setupBlobStoreStats(bucketCount, 0);
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
@@ -604,13 +739,13 @@ public class BlobStoreStatsTest {
     blobStoreStats.close();
   }
 
-  // @Test
+  @Test
   public void testBucketingWithEmptyIndexToBegin() throws InterruptedException, StoreException, IOException {
     assumeTrue(bucketingEnabled);
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + TestUtils.getRandomString(10));
-    state = new CuratedLogIndexState(true, tempDir, false, false, true, false);
+    state = new CuratedLogIndexState(true, tempDir, false, false, true, true);
     MockThrottler mockThrottler = new MockThrottler(new CountDownLatch(0), new CountDownLatch(0));
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
     int bucketCount = 50;
@@ -618,7 +753,7 @@ public class BlobStoreStatsTest {
     int expectedThrottleCount = state.referenceIndex.size();
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), 0));
-    long expiresAtInMs = ((long) bucketCount - 2) * BUCKET_SPAN_IN_MS;
+    long expiresAtInMs = state.time.milliseconds() + ((long) bucketCount - 2) * BUCKET_SPAN_IN_MS;
     // 3 new puts with expiry
     List<IndexEntry> newPutEntries = state.addPutEntries(3, PUT_RECORD_SIZE, expiresAtInMs);
     // 3 new put with no expiry
@@ -665,7 +800,7 @@ public class BlobStoreStatsTest {
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
     int expectedMinimumThrottleCount = 2 * state.referenceIndex.size();
     BlobStoreStats blobStoreStats =
-        new BlobStoreStats("", state.index, 10, BUCKET_SPAN_IN_MS, 0, QUEUE_PROCESSOR_PERIOD_IN_Ms, 1, state.time,
+        new BlobStoreStats("", state.index, 10, BUCKET_SPAN_IN_MS, 0, QUEUE_PROCESSOR_PERIOD_IN_Ms, 1, true, state.time,
             indexScannerScheduler, queueProcessorScheduler, diskIOScheduler, METRICS);
     // proceed only when the scan is started
     assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
@@ -888,6 +1023,7 @@ public class BlobStoreStatsTest {
     for (MockId id : state.liveKeys) {
       if (id.getID().equals(storeKey.getID())) {
         idToDelete = id;
+        break;
       }
     }
     if (idToDelete != null) {
@@ -895,6 +1031,25 @@ public class BlobStoreStatsTest {
       state.liveKeys.remove(idToDelete);
     }
     return idToDelete;
+  }
+
+  /**
+   * A helper function that deletes the PUT with the given {@link MockId} and lifeVersion,  and inform
+   * {@link BlobStoreStats} about it.
+   * @param blobStoreStats the {@link BlobStoreStats} instance to handle the new delete
+   * @param idToDelete the {@link MockId} to be deleted
+   * @param lifeVersion the lifeVersion of the new delete
+   * @throws StoreException
+   * @throws IOException
+   */
+  private void newDelete(BlobStoreStats blobStoreStats, MockId idToDelete, short lifeVersion) throws StoreException {
+    state.addDeleteEntry(idToDelete, null, lifeVersion);
+    IndexValue currentDelete = state.getExpectedValue(idToDelete, false);
+    IndexValue originalPut = state.getExpectedValue(idToDelete, true);
+    IndexValue previousValue =
+        state.getExpectedValue(idToDelete, EnumSet.complementOf(EnumSet.of(PersistentIndex.IndexEntryType.TTL_UPDATE)),
+            new FileSpan(originalPut.getOffset(), currentDelete.getOffset()));
+    blobStoreStats.handleNewDeleteEntry(idToDelete, currentDelete, originalPut, previousValue);
   }
 
   /**
@@ -906,8 +1061,64 @@ public class BlobStoreStatsTest {
    */
   private void newDelete(BlobStoreStats blobStoreStats, MockId idToDelete) throws StoreException, IOException {
     state.addDeleteEntry(idToDelete);
-    blobStoreStats.handleNewDeleteEntry(state.getExpectedValue(idToDelete, false),
-        state.getExpectedValue(idToDelete, true));
+    IndexValue currentDelete = state.getExpectedValue(idToDelete, false);
+    IndexValue originalPut = state.getExpectedValue(idToDelete, true);
+    IndexValue previousValue =
+        state.getExpectedValue(idToDelete, EnumSet.complementOf(EnumSet.of(PersistentIndex.IndexEntryType.TTL_UPDATE)),
+            new FileSpan(originalPut.getOffset(), currentDelete.getOffset()));
+    blobStoreStats.handleNewDeleteEntry(idToDelete, currentDelete, originalPut, previousValue);
+  }
+
+  /**
+   * A helper function that undeletes the blob with the given {@link MockId} and lifeVersion,  and inform
+   * {@link BlobStoreStats} about it.
+   * @param blobStoreStats the {@link BlobStoreStats} instance to handle the new undelete
+   * @param idToUndelete the {@link MockId} to be undeleted
+   * @param lifeVersion the lifeVersion of the new undeleted
+   * @throws StoreException
+   */
+  private void newUndelete(BlobStoreStats blobStoreStats, MockId idToUndelete, short lifeVersion)
+      throws StoreException {
+    state.addUndeleteEntry(idToUndelete, lifeVersion);
+    IndexValue currentUndelete = state.getExpectedValue(idToUndelete, false);
+    IndexValue originalPut = state.getExpectedValue(idToUndelete, true);
+    IndexValue previousValue = state.getExpectedValue(idToUndelete,
+        EnumSet.complementOf(EnumSet.of(PersistentIndex.IndexEntryType.TTL_UPDATE)),
+        new FileSpan(originalPut.getOffset(), currentUndelete.getOffset()));
+    blobStoreStats.handleNewUndeleteEntry(idToUndelete, currentUndelete, originalPut, previousValue);
+  }
+
+  /**
+   * A helper function that undeletes the blob with the given {@link MockId} and inform {@link BlobStoreStats} about it.
+   * @param blobStoreStats the {@link BlobStoreStats} instance to handle the new undelete
+   * @param idToUndelete the {@link MockId} to be undeleted
+   * @throws StoreException
+   */
+  private void newUndelete(BlobStoreStats blobStoreStats, MockId idToUndelete) throws StoreException {
+    state.addUndeleteEntry(idToUndelete);
+    IndexValue currentUndelete = state.getExpectedValue(idToUndelete, false);
+    IndexValue originalPut = state.getExpectedValue(idToUndelete, true);
+    IndexValue previousValue = state.getExpectedValue(idToUndelete,
+        EnumSet.complementOf(EnumSet.of(PersistentIndex.IndexEntryType.TTL_UPDATE)),
+        new FileSpan(originalPut.getOffset(), currentUndelete.getOffset()));
+    blobStoreStats.handleNewUndeleteEntry(idToUndelete, currentUndelete, originalPut, previousValue);
+  }
+
+  /**
+   * A helper function that updates ttl of the blob with the given {@link MockId} and inform {@link BlobStoreStats}
+   * about it.
+   * @param blobStoreStats the {@link BlobStoreStats} instance to handle the new ttl_update
+   * @param idToUpdate the {@link MockId} to be updated
+   * @throws StoreException
+   */
+  private void newTtlUpdate(BlobStoreStats blobStoreStats, MockId idToUpdate) throws StoreException {
+    // Get original PUT IndexValue before adding TTL_UPDATE so that original PUT IndexValue would have it's original
+    // expiration time.
+    IndexValue originalPut = state.getExpectedValue(idToUpdate, true);
+    state.makePermanent(idToUpdate, false);
+    IndexValue ttlUpdateValue =
+        state.getExpectedValue(idToUpdate, EnumSet.of(PersistentIndex.IndexEntryType.TTL_UPDATE), null);
+    blobStoreStats.handleNewTtlUpdateEntry(ttlUpdateValue, originalPut);
   }
 
   /**
@@ -929,7 +1140,8 @@ public class BlobStoreStatsTest {
       throws StoreException {
     Map<String, Map<String, Long>> actualContainerValidSizeMap =
         blobStoreStats.getValidDataSizeByContainer(referenceTimeInMs);
-    Map<String, Map<String, Long>> expectedContainerValidSizeMap = getValidSizeByContainer(referenceTimeInMs);
+    Map<String, Map<String, Long>> expectedContainerValidSizeMap =
+        getValidSizeByContainer(referenceTimeInMs, state.time.milliseconds());
     long totalValidSize = 0L;
 
     for (Map.Entry<String, Map<String, Long>> expectedContainerValidSizeEntry : expectedContainerValidSizeMap.entrySet()) {
@@ -972,8 +1184,9 @@ public class BlobStoreStatsTest {
    */
   private long verifyAndGetLogSegmentValidSize(BlobStoreStats blobStoreStats, TimeRange timeRange)
       throws StoreException {
+    long expiryReferenceTime = state.time.milliseconds();
     Pair<Long, NavigableMap<String, Long>> actualLogSegmentValidSizeMap =
-        blobStoreStats.getValidDataSizeByLogSegment(timeRange);
+        blobStoreStats.getValidDataSizeByLogSegment(timeRange, expiryReferenceTime);
     assertTrue("Valid data size collection time should be in the range",
         timeRange.getStartTimeInMs() <= actualLogSegmentValidSizeMap.getFirst()
             && timeRange.getEndTimeInMs() >= actualLogSegmentValidSizeMap.getFirst());
@@ -984,14 +1197,14 @@ public class BlobStoreStatsTest {
 
     while (logSegment != null) {
       String logSegmentName = logSegment.getName();
-      assertTrue("Log segment: " + logSegmentName + " not found",
+      assertTrue("Log segment: " + logSegmentName + " not found in TimeRange " + timeRange,
           actualLogSegmentValidSizeMap.getSecond().containsKey(logSegmentName));
 
       long expectedLogSegmentValidSize =
-          state.getValidDataSizeForLogSegment(logSegment, timeRange.getEndTimeInMs(), timeRange.getEndTimeInMs(), null);
+          state.getValidDataSizeForLogSegment(logSegment, timeRange.getEndTimeInMs(), expiryReferenceTime, null);
       long actualLogSegmentValidSize = actualLogSegmentValidSizeMap.getSecond().get(logSegmentName);
-      assertEquals("Valid data size mismatch for log segment: " + logSegmentName, expectedLogSegmentValidSize,
-          actualLogSegmentValidSize);
+      assertEquals("Valid data size mismatch for log segment: " + logSegmentName + " in TimeRange " + timeRange,
+          expectedLogSegmentValidSize, actualLogSegmentValidSize);
 
       expectedTotalLogSegmentValidSize += expectedLogSegmentValidSize;
       expectedNumberOfLogSegments++;
@@ -1014,15 +1227,17 @@ public class BlobStoreStatsTest {
   /**
    * Go over the referenceIndex to collect valid data size information per container. The result is used for
    * verification purposes.
-   * @param deleteAndExpirationRefTimeInMs the reference time in ms until which deletes and expiration are relevant
+   * @param deleteReferenceTimeInMs the reference time in ms until which deletes are relevant
+   * @param expiryReferenceTimeInMs the reference time in ms until which expirations are relevant
    * @return a nested {@link Map} of serviceId to containerId to valid data size
    */
-  private Map<String, Map<String, Long>> getValidSizeByContainer(long deleteAndExpirationRefTimeInMs) {
+  private Map<String, Map<String, Long>> getValidSizeByContainer(long deleteReferenceTimeInMs,
+      long expiryReferenceTimeInMs) {
     Map<String, Map<String, Long>> containerValidSizeMap = new HashMap<>();
     for (Offset indSegStartOffset : state.referenceIndex.keySet()) {
       List<IndexEntry> validEntries =
-          state.getValidIndexEntriesForIndexSegment(indSegStartOffset, deleteAndExpirationRefTimeInMs,
-              deleteAndExpirationRefTimeInMs, null);
+          state.getValidIndexEntriesForIndexSegment(indSegStartOffset, deleteReferenceTimeInMs, expiryReferenceTimeInMs,
+              null);
       for (IndexEntry indexEntry : validEntries) {
         IndexValue indexValue = indexEntry.getValue();
         if (indexValue.isPut()) {
@@ -1113,9 +1328,9 @@ public class BlobStoreStatsTest {
     }
 
     @Override
-    Offset getOffset() {
+    long getExpiresAtMs() {
       latch.countDown();
-      return super.getOffset();
+      return super.getExpiresAtMs();
     }
   }
 }
