@@ -190,6 +190,7 @@ project(':ambry-account') {
         }
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
+        compile "mysql:mysql-connector-java:8.0.21"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
         testCompile "com.google.jimfs:jimfs:$jimFsVersion"
