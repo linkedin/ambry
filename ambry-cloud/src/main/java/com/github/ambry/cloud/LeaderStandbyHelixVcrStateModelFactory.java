@@ -13,16 +13,19 @@
  */
 package com.github.ambry.cloud;
 
+import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.participant.statemachine.StateModel;
-import org.apache.helix.participant.statemachine.StateModelFactory;
 
 
 /**
  * A factory for creating {@link LeaderStandbyHelixVcrStateModel}
  */
-public class LeaderStandbyHelixVcrStateModelFactory extends StateModelFactory<StateModel> {
-  HelixVcrCluster helixVcrCluster;
+public class LeaderStandbyHelixVcrStateModelFactory extends VcrStateModelFactory {
 
+  /**
+   * Constructor for {@link LeaderStandbyHelixVcrStateModelFactory}.
+   * @param helixVcrCluster the helix vcr cluster.
+   */
   public LeaderStandbyHelixVcrStateModelFactory(HelixVcrCluster helixVcrCluster) {
     this.helixVcrCluster = helixVcrCluster;
   }
@@ -37,5 +40,10 @@ public class LeaderStandbyHelixVcrStateModelFactory extends StateModelFactory<St
   @Override
   public StateModel createNewStateModel(String resourceName, String partitionName) {
     return new LeaderStandbyHelixVcrStateModel(helixVcrCluster);
+  }
+
+  @Override
+  String getStateModelName() {
+    return LeaderStandbySMD.name;
   }
 }

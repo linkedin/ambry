@@ -13,15 +13,14 @@
  */
 package com.github.ambry.cloud;
 
+import org.apache.helix.model.OnlineOfflineSMD;
 import org.apache.helix.participant.statemachine.StateModel;
-import org.apache.helix.participant.statemachine.StateModelFactory;
 
 
 /**
  * A factory for creating {@link OnlineOfflineHelixVcrStateModel}
  */
-public class OnlineOfflineHelixVcrStateModelFactory extends StateModelFactory<StateModel> {
-  HelixVcrCluster helixVcrCluster;
+public class OnlineOfflineHelixVcrStateModelFactory extends VcrStateModelFactory {
 
   public OnlineOfflineHelixVcrStateModelFactory(HelixVcrCluster helixVcrCluster) {
     this.helixVcrCluster = helixVcrCluster;
@@ -37,5 +36,10 @@ public class OnlineOfflineHelixVcrStateModelFactory extends StateModelFactory<St
   @Override
   public StateModel createNewStateModel(String resourceName, String partitionName) {
     return new OnlineOfflineHelixVcrStateModel(helixVcrCluster);
+  }
+
+  @Override
+  String getStateModelName() {
+    return OnlineOfflineSMD.name;
   }
 }

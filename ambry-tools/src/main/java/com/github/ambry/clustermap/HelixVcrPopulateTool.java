@@ -51,7 +51,7 @@ public class HelixVcrPopulateTool {
   static final List<String> ignoreResourceKeyWords = Arrays.asList("aggregation", "trigger", "stats");
   private static final String SEPARATOR = "/";
   private static final ZNRecordSerializer ZN_RECORD_SERIALIZER = new ZNRecordSerializer();
-  private static final String DELAYED_REBALANCER_CLASS_NAME = "DelayedRebalancer";
+  private static final String DELAYED_REBALANCER_CLASS_NAME = "DelayedAutoRebalancer";
 
   public static void main(String[] args) throws IOException {
     OptionParser parser = new OptionParser();
@@ -67,10 +67,8 @@ public class HelixVcrPopulateTool {
     ArgumentAcceptingOptionSpec<String> resourceOpt =
         parser.accepts("resource").withRequiredArg().describedAs("resource name").ofType(String.class);
 
-    ArgumentAcceptingOptionSpec<Boolean> maintenanceOpt = parser.accepts("maintainCluster",
-        "Enter/Exit helix maintenance mode. --maintainCluster --dest destZkEndpoint/destClusterName --enable true")
-        .withRequiredArg()
-        .ofType(Boolean.class);
+    OptionSpec maintenanceOpt = parser.accepts("maintainCluster",
+        "Enter/Exit helix maintenance mode. --maintainCluster --dest destZkEndpoint/destClusterName --enable true");
 
     // Some shared options.
     // VCR cluster argument is always required
@@ -95,7 +93,14 @@ public class HelixVcrPopulateTool {
       errorAndExit("dest should be a VCR cluster.(VCR string should be included)");
     }
 
-    Config config = new ObjectMapper().readValue(Utils.readStringFromFile(String.valueOf(configFileOpt)), Config.class);
+    Config config = null;
+    if (options.has(createClusterOpt) || options.has(updateClusterOpt)) {
+      try {
+        config = new ObjectMapper().readValue(Utils.readStringFromFile(options.valueOf(configFileOpt)), Config.class);
+      } catch (IOException ioEx) {
+        errorAndExit("Couldn't read the config file: " + options.valueOf(configFileOpt));
+      }
+    }
 
     if (options.has(createClusterOpt)) {
       System.out.println("Creating cluster: " + destClusterName);

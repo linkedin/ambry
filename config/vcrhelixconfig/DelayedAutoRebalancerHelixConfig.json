@@ -5,7 +5,7 @@
     "allowAutoJoin": true
   },
   "idealStateConfigFields": {
-    "numReplicas": 2,
+    "numReplicas": 1,
     "stateModelDefRef": "OnlineOffline",
     "rebalanceStrategy": "org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy",
     "minActiveReplicas": 0,
