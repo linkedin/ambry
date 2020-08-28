@@ -182,7 +182,6 @@ public enum RestServiceErrorCode {
    */
   public static RestServiceErrorCode getRestServiceErrorCode(RouterErrorCode routerErrorCode) {
     switch (routerErrorCode) {
-      case BlobTooLarge:
       case InvalidBlobId:
       case InvalidPutArgument:
       case BadInputChannel:
@@ -196,6 +195,8 @@ public enum RestServiceErrorCode {
         return NotFound;
       case BlobUpdateNotAllowed:
         return NotAllowed;
+      case BlobTooLarge:
+        return RequestTooLarge;
       case RangeNotSatisfiable:
         return RangeNotSatisfiable;
       case OperationTimedOut:
