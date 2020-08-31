@@ -37,6 +37,7 @@ public class ContainerTable {
   private final MySqlDataAccessor dataAccessor;
   private final PreparedStatement insertStatement;
   private final PreparedStatement getSinceStatement;
+  private final PreparedStatement getByAccountStatement;
 
   public ContainerTable(MySqlDataAccessor dataAccessor) throws SQLException {
     this.dataAccessor = dataAccessor;
@@ -51,6 +52,11 @@ public class ContainerTable {
         String.format("select %s, %s, %s from %s where %s > ?", ACCOUNT_ID, CONTAINER_INFO, LAST_MODIFIED_TIME,
             CONTAINER_TABLE, LAST_MODIFIED_TIME);
     getSinceStatement = dbConnection.prepareStatement(getSinceSql);
+
+    String getByAccountSql =
+        String.format("select %s, %s, %s from %s where %s = ?", ACCOUNT_ID, CONTAINER_INFO, LAST_MODIFIED_TIME,
+            CONTAINER_TABLE, ACCOUNT_ID);
+    getByAccountStatement = dbConnection.prepareStatement(getByAccountSql);
   }
 
   public void addContainer(int accountId, Container container) throws SQLException {
@@ -66,27 +72,33 @@ public class ContainerTable {
   }
 
   public List<Container> getContainers(int accountId) throws SQLException {
-    throw new UnsupportedOperationException();
+    getByAccountStatement.setInt(1, accountId);
+    ResultSet rs = getByAccountStatement.executeQuery();
+    return convertResultSet(rs);
   }
 
   public List<Container> getNewContainers(long updatedSince) throws SQLException {
     try {
-      List<Container> containers = new ArrayList<>();
       Timestamp sinceTime = new Timestamp(updatedSince);
       getSinceStatement.setTimestamp(1, sinceTime);
       ResultSet rs = getSinceStatement.executeQuery();
-      while (rs.next()) {
-        int accountId = rs.getInt(ACCOUNT_ID);
-        String containerJson = rs.getString(CONTAINER_INFO);
-        Timestamp lastModifiedTime = rs.getTimestamp(LAST_MODIFIED_TIME);
-        Container container = AccountSerdeUtils.containerFromJson(containerJson, (short) accountId);
-        //container.setLastModifiedTime(lastModifiedTime);
-        containers.add(container);
-      }
-      return containers;
+      return convertResultSet(rs);
     } catch (SQLException e) {
       // record failure, parse exception, ...
       throw e;
     }
+  }
+
+  private List<Container> convertResultSet(ResultSet rs) throws SQLException {
+    List<Container> containers = new ArrayList<>();
+    while (rs.next()) {
+      int accountId = rs.getInt(ACCOUNT_ID);
+      String containerJson = rs.getString(CONTAINER_INFO);
+      Timestamp lastModifiedTime = rs.getTimestamp(LAST_MODIFIED_TIME);
+      Container container = AccountSerdeUtils.containerFromJson(containerJson, (short) accountId);
+      //container.setLastModifiedTime(lastModifiedTime);
+      containers.add(container);
+    }
+    return containers;
   }
 }
