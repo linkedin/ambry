@@ -17,7 +17,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -52,12 +54,12 @@ import org.slf4j.LoggerFactory;
  *
  *   A sample usage of the tool is:
  *     java -Dlog4j.configuration=file:../config/log4j.properties -cp ambry.jar com.github.ambry.account.MySqlAccountsDBTool
- *     --propsFile mysql.properties --operation init --zkServer zk-ei4-ambry.int.linkedin.com:12913 --storePath /Ambry/Ambry-EI/helixPropertyStore
+ *     --propsFile mysql.properties --operation init --zkServer localhost:2181  --storePath /Ambry/test/helixPropertyStore
  *
  *  A propsFile should contain:
- *    db.url=jdbc:mysql://makto-db-006.int.linkedin.com/AccountMetadata
- *    user=AmbryUser-2
- *    password=AmbryAccounts-1
+ *    db.url=jdbc:mysql://localhost/db
+ *    user=user
+ *    password=password
  * </p>
  */
 
@@ -143,7 +145,7 @@ public class MySqlAccountsDBTool {
     } catch (Exception e) {
       System.out.println("Invalid operation: " + operation + ". Supported operations: init, compare");
       parser.printHelpOn(System.out);
-      System.exit(0);
+      System.exit(1);
     }
     String zkServer = options.valueOf(zkServerOpt);
     String storePath = options.valueOf(storePathOpt);
@@ -212,15 +214,19 @@ public class MySqlAccountsDBTool {
         zkFetchTimeMs - startTimeMs);
 
     AccountInfoMap accountInfoMap = new AccountInfoMap(new AccountServiceMetrics(new MetricRegistry()), accountMap);
+
+    // Populate Account and Container tables
     for (Account account : accountInfoMap.getAccounts()) {
-      accountTable.addAccount(account);
-      for (Container container : account.getAllContainers()) {
+      List<Container> containers = (List<Container>) account.getAllContainers();
+      for (Container container : containers) {
         containerTable.addContainer(account.getId(), container);
+        account.updateContainerMap(container, true);
       }
+      accountTable.addAccount(account);
     }
 
-    logger.info("Initialized account metadata in DB from ZK path {}, took time={} ms",
-        fullZKAccountMetadataPath, System.currentTimeMillis() - zkFetchTimeMs);
+    logger.info("Initialized account metadata in DB from ZK path {}, took time={} ms", fullZKAccountMetadataPath,
+        System.currentTimeMillis() - zkFetchTimeMs);
   }
 
   /**
@@ -238,20 +244,77 @@ public class MySqlAccountsDBTool {
     long zkFetchTimeMs = SystemTime.getInstance().milliseconds();
     logger.info("Fetched account metadata from zk path={}, took time={} ms", fullZKAccountMetadataPath,
         zkFetchTimeMs - startTimeMs);
+
     Set<Account> accountSetFromZK = (accountMapFromZK.values()
         .stream()
         .map(accountString -> Account.fromJson(new JSONObject(accountString)))
         .collect(Collectors.toSet()));
 
-    // get the list of accounts from mysql in the form of map account id -> account json (as string)
+    // Query the list of all Account from mysql
     Set<Account> accountSetFromDB = new HashSet<>(accountTable.getNewAccounts(0));
+
+    // Query the list of containers for each Account and add them to the Account
+    accountSetFromDB.forEach(account -> {
+      try {
+        containerTable.getContainers(account.getId())
+            .forEach(container -> account.updateContainerMap(container, false));
+      } catch (SQLException e) {
+        e.printStackTrace();
+      }
+    });
 
     //Accounts missing (or different) in DB = accounts in ZK - accounts in DB
     accountSetFromZK.removeAll(accountSetFromDB);
+
     if (accountSetFromZK.size() > 0) {
-      logger.info("Accounts different in DB {} ", accountSetFromZK);
+
+      Map<Short, Account> accountMapFromDB = new HashMap<>();
+      accountSetFromDB.forEach(account -> {
+        accountMapFromDB.put(account.getId(), account);
+      });
+
+      Set<Account> accountsMissingInDB = accountSetFromZK.stream()
+          .filter(account -> !accountMapFromDB.containsKey(account.getId()))
+          .collect(Collectors.toSet());
+      logger.info("======================= Accounts missing in DB =======================");
+      logger.info("{}", accountsMissingInDB);
+
+      logger.info("\r\n");
+
+      accountSetFromZK.removeAll(accountsMissingInDB);
+      logger.info("=======================  Accounts different in DB =======================");
+      logger.info("{}", accountSetFromZK);
+
+      logger.info("\r\n");
+
+      logger.info(
+          "======================= Detailed Information for accounts that are different =======================");
+
+      for (Account accountFromZK : accountSetFromZK) {
+        Account accountFromDB = accountMapFromDB.get(accountFromZK.getId());
+        Set<Container> containersDiffInZK = new HashSet<>(accountFromZK.getAllContainers());
+        containersDiffInZK.removeAll(accountFromDB.getAllContainers());
+
+        logger.info("\r\n");
+        logger.info("----------------------- Account ID: {}, Account Name: {} -----------------------",
+            accountFromZK.getId(), accountFromZK.getName());
+        logger.info("........................ Containers missing or different in DB ........................");
+        logger.info("{}", containersDiffInZK);
+
+        logger.info("\r\n");
+        for (Container containerInZK : containersDiffInZK) {
+          Container containerInDB = accountFromDB.getContainerById(containerInZK.getId());
+          if (containerInDB != null) {
+            logger.info("........................ Container ID: {}, Container Name: {} ........................",
+                containerInZK.getId(), containerInZK.getName());
+            logger.info("Container info in zk: {}", containerInZK.toJson().toString());
+            logger.info("Container info in DB: {}", containerInDB.toJson().toString());
+            logger.info("\r\n");
+          }
+        }
+      }
     } else {
-      logger.info("Accounts in ZK and DB are same");
+      logger.info("Accounts/Containers are in sync at ZK and DB");
     }
   }
 
