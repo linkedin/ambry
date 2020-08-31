@@ -316,7 +316,7 @@ public class MessageInfo {
     /**
      * Constructor to create a builder.
      * @param key The {@link StoreKey} associated with {@link MessageInfo}.
-     * @param size The size of this this message in bytes.
+     * @param size The size of this message in bytes.
      * @param accountId accountId of the blob.
      * @param containerId containerId of the blob.
      * @param operationTimeMs operation time in ms.
@@ -449,7 +449,7 @@ public class MessageInfo {
     /**
      * Sets crc of the {@link MessageInfo} to build.
      * @param crc the crc to set.
-     * @return
+     * @return This builder.
      */
     public Builder crc(Long crc) {
       this.crc = crc;

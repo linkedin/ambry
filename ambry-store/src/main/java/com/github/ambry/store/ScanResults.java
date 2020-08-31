@@ -193,9 +193,7 @@ class ScanResults {
     if (!nestedMap.containsKey(firstKey)) {
       nestedMap.put(firstKey, new HashMap<String, Long>());
     }
-    updateMapHelper(nestedMap.get(firstKey), secondKey, value);
-  }
-
+    updateMapHelper(nestedMap.get(firstKey), secondKey, v
   /**
    * Helper function to update map data structure.
    * @param map {@link Map} to be updated

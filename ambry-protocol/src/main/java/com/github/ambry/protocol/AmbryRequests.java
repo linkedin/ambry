@@ -171,7 +171,7 @@ public class AmbryRequests implements RequestAPI {
                 receivedRequest.getBlobSize(), receivedRequest.getBlobType());
         BlobProperties properties = receivedRequest.getBlobProperties();
         long expirationTime = Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
-            receivedRequest.getBlobProperties().getTimeToLiveInSeconds());
+            properties.getTimeToLiveInSeconds());
         MessageInfo info =
             new MessageInfo.Builder(receivedRequest.getBlobId(), stream.getSize(), properties.getAccountId(),
                 properties.getContainerId(), properties.getCreationTimeInMs()).expirationTimeInMs(expirationTime)
