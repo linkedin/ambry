@@ -16,6 +16,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.commons.Callback;
 import com.github.ambry.protocol.GetOption;
+import java.util.Objects;
 
 
 /**
@@ -27,22 +28,26 @@ public class GetBlobOptions {
   private final OperationType operationType;
   private final GetOption getOption;
   private final ByteRange range;
+  private final boolean resolveRangeOnEmptyBlob;
   // Flag indicating whether to return the raw blob payload without deserialization.
   private final boolean rawMode;
   private final int blobSegmentIdx;
-  public static int NO_BLOB_SEGMENT_IDX_SPECIFIED = -1;
+  public static final int NO_BLOB_SEGMENT_IDX_SPECIFIED = -1;
 
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
    * @param operationType the {@link OperationType} for this request. This must be non-null.
    * @param getOption the {@link GetOption} associated with the request.
    * @param range a {@link ByteRange} for this get request. This can be null, if the entire blob is desired.
+   * @param resolveRangeOnEmptyBlob {@code true} to indicate that the router should a successful response for a range
+   *                                request against an empty (0 byte) blob instead of returning a
+   *                                {@link RouterErrorCode#RangeNotSatisfiable} error.
    * @param rawMode a system flag indicating that the raw bytes should be returned.
-   * @param blobSegmentIdx if not NO_BLOB_SEGMENT_IDX_SPECIFIED, the blob segment requested to be returned (only relevant for
-   *                       metadata blobs)
+   * @param blobSegmentIdx if not NO_BLOB_SEGMENT_IDX_SPECIFIED, the blob segment requested to be returned (only
+   *                       relevant for metadata blobs)
    */
-  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean rawMode,
-      int blobSegmentIdx) {
+  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean resolveRangeOnEmptyBlob,
+      boolean rawMode, int blobSegmentIdx) {
     if (operationType == null || getOption == null) {
       throw new IllegalArgumentException("operationType and getOption must be defined");
     }
@@ -55,6 +60,7 @@ public class GetBlobOptions {
     this.operationType = operationType;
     this.getOption = getOption;
     this.range = range;
+    this.resolveRangeOnEmptyBlob = resolveRangeOnEmptyBlob;
     this.rawMode = rawMode;
     this.blobSegmentIdx = blobSegmentIdx;
   }
@@ -88,6 +94,14 @@ public class GetBlobOptions {
   }
 
   /**
+   * @return {@code true} if the router should a successful response for a range request against an empty (0 byte) blob
+   *         instead of returning a {@link RouterErrorCode#RangeNotSatisfiable} error.
+   */
+  public boolean resolveRangeOnEmptyBlob() {
+    return resolveRangeOnEmptyBlob;
+  }
+
+  /**
    * @return the blob segment index
    */
   public int getBlobSegmentIdx() {
@@ -115,32 +129,15 @@ public class GetBlobOptions {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-
     GetBlobOptions that = (GetBlobOptions) o;
-
-    if (operationType != that.operationType) {
-      return false;
-    }
-    if (getOption != that.getOption) {
-      return false;
-    }
-    if (rawMode != that.rawMode) {
-      return false;
-    }
-    if (blobSegmentIdx != that.blobSegmentIdx) {
-      return false;
-    }
-    return !(range != null ? !range.equals(that.range) : that.range != null);
+    return resolveRangeOnEmptyBlob == that.resolveRangeOnEmptyBlob && rawMode == that.rawMode
+        && blobSegmentIdx == that.blobSegmentIdx && operationType == that.operationType && getOption == that.getOption
+        && Objects.equals(range, that.range);
   }
 
   @Override
   public int hashCode() {
-    int result = operationType.hashCode();
-    result = 31 * result + getOption.hashCode();
-    result = 31 * result + (range != null ? range.hashCode() : 0);
-    result = 31 * result + Boolean.hashCode(rawMode);
-    result = 31 * result + (int) blobSegmentIdx;
-    return result;
+    return Objects.hash(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx);
   }
 
   /**

@@ -928,21 +928,28 @@ public class RestUtilsTest {
    * @throws RestServiceException
    */
   private void doBuildGetBlobOptionsTest(String rangeHeader, ByteRange expectedRange,
-      boolean shouldSucceedWithoutSubResource, boolean shouldSucceedWithNonSegmentSubResource, boolean shouldSucceedWithSegment)
-      throws RestServiceException {
-    Map<String, Object> args = new HashMap<>();
-    if (rangeHeader != null) {
-      args.put(RestUtils.Headers.RANGE, rangeHeader);
-    }
-    doBuildGetBlobOptionsTestForSubResource(args, null, expectedRange, GetBlobOptions.OperationType.All,
-        shouldSucceedWithoutSubResource);
-    for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
-      if (subResource.equals(RestUtils.SubResource.Segment)) {
-        doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, OperationType.All,
-            shouldSucceedWithSegment);
-      } else {
-        doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, GetBlobOptions.OperationType.BlobInfo,
-            shouldSucceedWithNonSegmentSubResource);
+      boolean shouldSucceedWithoutSubResource, boolean shouldSucceedWithNonSegmentSubResource,
+      boolean shouldSucceedWithSegment) throws RestServiceException {
+    for (String resolveRangeOnEmptyBlobHeader : Arrays.asList(null, "true", "false")) {
+      Map<String, Object> args = new HashMap<>();
+      if (rangeHeader != null) {
+        args.put(RestUtils.Headers.RANGE, rangeHeader);
+      }
+      if (resolveRangeOnEmptyBlobHeader != null) {
+        args.put(RestUtils.Headers.RESOLVE_RANGE_ON_EMPTY_BLOB, resolveRangeOnEmptyBlobHeader);
+      }
+      boolean expectedResolveRangeOnEmptyBlob = "true".equals(resolveRangeOnEmptyBlobHeader);
+      doBuildGetBlobOptionsTestForSubResource(args, null, expectedRange, GetBlobOptions.OperationType.All,
+          expectedResolveRangeOnEmptyBlob, shouldSucceedWithoutSubResource);
+      for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+        if (subResource.equals(RestUtils.SubResource.Segment)) {
+          doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, OperationType.All,
+              expectedResolveRangeOnEmptyBlob, shouldSucceedWithSegment);
+        } else {
+          doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange,
+              GetBlobOptions.OperationType.BlobInfo, expectedResolveRangeOnEmptyBlob,
+              shouldSucceedWithNonSegmentSubResource);
+        }
       }
     }
   }
@@ -954,14 +961,15 @@ public class RestUtilsTest {
    * @param subResource the sub-resource for the call.
    * @param expectedRange the {@link ByteRange} expected to be parsed if the call should succeed, or {@code null} if no
    *                      range is expected.
-   * @param expectedOpType the {@link GetBlobOptions.OperationType} expected to be set in the {@link GetBlobOptions}
+   * @param expectedOpType the {@link OperationType} expected to be set in the {@link GetBlobOptions}
    *                       object.
+   * @param expectedResolveRangeOnEmptyBlob the expected value of {@link GetBlobOptions#resolveRangeOnEmptyBlob}.
    * @param shouldSucceed {@code true} if the call should succeed.
    * @throws RestServiceException
    */
   private void doBuildGetBlobOptionsTestForSubResource(Map<String, Object> args, RestUtils.SubResource subResource,
-      ByteRange expectedRange, GetBlobOptions.OperationType expectedOpType, boolean shouldSucceed)
-      throws RestServiceException {
+      ByteRange expectedRange, OperationType expectedOpType, boolean expectedResolveRangeOnEmptyBlob,
+      boolean shouldSucceed) throws RestServiceException {
     if (shouldSucceed) {
       GetBlobOptions options =
           RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, NO_BLOB_SEGMENT_IDX_SPECIFIED);
@@ -971,6 +979,8 @@ public class RestUtilsTest {
           options.getOperationType());
       assertEquals("Unexpected get options type for args=" + args + " and subResource=" + subResource, GetOption.None,
           options.getGetOption());
+      assertEquals("Unexpected resolveRangeOnEmptyBlob for args=" + args + " and subResource=" + subResource,
+          expectedResolveRangeOnEmptyBlob, options.resolveRangeOnEmptyBlob());
     } else {
       try {
         RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, NO_BLOB_SEGMENT_IDX_SPECIFIED);

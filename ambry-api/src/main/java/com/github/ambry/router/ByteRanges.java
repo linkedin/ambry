@@ -15,6 +15,7 @@
 package com.github.ambry.router;
 
 public class ByteRanges {
+  private static final ByteRange EMPTY_RANGE = new ClosedRange(0, -1);
 
   /**
    * Construct a range from a start offset to an end offset.
@@ -55,6 +56,14 @@ public class ByteRanges {
       throw new IllegalArgumentException("Invalid range offsets provided for ByteRange; lastNBytes=" + lastNBytes);
     }
     return new SuffixRange(lastNBytes);
+  }
+
+  /**
+   * Return an empty range for internal components that need one. This is represented as the range {@code [0,-1]}
+   * @return a range that contains 0 bytes.
+   */
+  static ByteRange emptyRange() {
+    return EMPTY_RANGE;
   }
 
   /**
@@ -133,7 +142,7 @@ public class ByteRanges {
    * A range from a start offset to the end of an object.
    */
   private static class OpenRange extends ByteRange {
-    private long startOffset;
+    private final long startOffset;
 
     /**
      * @see ByteRanges#fromStartOffset(long)
@@ -187,7 +196,7 @@ public class ByteRanges {
    * A range that represents the last N bytes of an object.
    */
   private static class SuffixRange extends ByteRange {
-    private long lastNBytes;
+    private final long lastNBytes;
 
     /**
      * @see ByteRanges#fromLastNBytes(long)

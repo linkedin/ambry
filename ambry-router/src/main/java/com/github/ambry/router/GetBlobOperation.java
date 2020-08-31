@@ -1469,7 +1469,11 @@ class GetBlobOperation extends GetOperation {
       boolean failure = false;
       try {
         if (options != null && options.getBlobOptions.getRange() != null) {
-          resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
+          if (options.getBlobOptions.resolveRangeOnEmptyBlob() && totalSize == 0) {
+            resolvedByteRange = ByteRanges.emptyRange();
+          } else {
+            resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
+          }
         }
       } catch (IllegalArgumentException e) {
         onInvalidRange(e);

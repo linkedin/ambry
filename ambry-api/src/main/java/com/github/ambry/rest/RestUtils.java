@@ -221,6 +221,12 @@ public class RestUtils {
      * The lifeVersion of the blob.
      */
     public final static String LIFE_VERSION = "x-ambry-life-version";
+
+    /**
+     * Set to true to indicate that ambry should return a successful response for a range request against an empty
+     * (0 byte) blob instead of returning a 416 error.
+     */
+    public final static String RESOLVE_RANGE_ON_EMPTY_BLOB = "x-ambry-resolve-range-on-empty-blob";
   }
 
   public static final class TrackingHeaders {
@@ -538,12 +544,14 @@ public class RestUtils {
       throw new RestServiceException("Ranges not supported for sub-resources that aren't Segment.",
           RestServiceErrorCode.InvalidArgs);
     }
+    boolean resolveRangeOnEmptyBlob = getBooleanHeader(args, Headers.RESOLVE_RANGE_ON_EMPTY_BLOB, false);
     return new GetBlobOptionsBuilder().operationType(
         subResource == null || subResource == SubResource.Segment ? GetBlobOptions.OperationType.All
             : GetBlobOptions.OperationType.BlobInfo)
         .getOption(getOption)
         .blobSegment(blobSegmentIdx)
         .range(rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null)
+        .resolveRangeOnEmptyBlob(resolveRangeOnEmptyBlob)
         .build();
   }
 
