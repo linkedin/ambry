@@ -135,7 +135,7 @@ public class Account {
             Container container = Container.fromJson(containerArray.getJSONObject(index), id);
             checkParentAccountIdInContainers(container);
             checkDuplicateContainerNameOrId(container);
-            updateContainerMap(container,false);
+            updateContainerMap(container);
           }
         }
         break;
@@ -163,7 +163,7 @@ public class Account {
       for (Container container : containers) {
         checkParentAccountIdInContainers(container);
         checkDuplicateContainerNameOrId(container);
-        updateContainerMap(container,false);
+        updateContainerMap(container);
       }
     }
   }
@@ -306,18 +306,12 @@ public class Account {
   }
 
   /**
-   * Adds or removes a {@link Container} to this account and updates internal maps accordingly.
-   * @param container The container to be updated to this account.
-   * @param remove boolean which tells whether to add or remove the container.
+   * Adds a {@link Container} to this account and updates internal maps accordingly.
+   * @param container The container to update this account.
    */
-  public void updateContainerMap(Container container, boolean remove) {
-    if (!remove) {
-      containerIdToContainerMap.put(container.getId(), container);
-      containerNameToContainerMap.put(container.getName(), container);
-    } else {
-      containerIdToContainerMap.remove(container.getId());
-      containerNameToContainerMap.remove(container.getName());
-    }
+  public void updateContainerMap(Container container) {
+    containerIdToContainerMap.put(container.getId(), container);
+    containerNameToContainerMap.put(container.getName(), container);
   }
 
   /**

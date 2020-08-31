@@ -41,7 +41,7 @@ public class AccountTable {
 
   public void addAccount(Account account) throws SQLException {
     try {
-      insertStatement.setString(1, AccountSerdeUtils.accountToJson(account).toString());
+      insertStatement.setString(1, AccountSerdeUtils.accountToJson(account, true));
       insertStatement.setInt(2, account.getSnapshotVersion());
       insertStatement.executeUpdate();
     } catch (SQLException e) {

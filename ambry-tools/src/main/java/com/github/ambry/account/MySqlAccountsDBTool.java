@@ -6,7 +6,6 @@ import com.github.ambry.account.mysql.ContainerTable;
 import com.github.ambry.account.mysql.MySqlConfig;
 import com.github.ambry.account.mysql.MySqlDataAccessor;
 import com.github.ambry.commons.CommonUtils;
-import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
@@ -15,13 +14,9 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -217,10 +212,8 @@ public class MySqlAccountsDBTool {
 
     // Populate Account and Container tables
     for (Account account : accountInfoMap.getAccounts()) {
-      List<Container> containers = (List<Container>) account.getAllContainers();
-      for (Container container : containers) {
+      for (Container container : account.getAllContainers()) {
         containerTable.addContainer(account.getId(), container);
-        account.updateContainerMap(container, true);
       }
       accountTable.addAccount(account);
     }
@@ -257,9 +250,10 @@ public class MySqlAccountsDBTool {
     accountSetFromDB.forEach(account -> {
       try {
         containerTable.getContainers(account.getId())
-            .forEach(container -> account.updateContainerMap(container, false));
+            .forEach(account::updateContainerMap);
       } catch (SQLException e) {
-        e.printStackTrace();
+        logger.error("MySQL querying containers failed", e);
+        return;
       }
     });
 

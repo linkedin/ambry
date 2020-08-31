@@ -18,12 +18,18 @@ import org.json.JSONObject;
 
 public class AccountSerdeUtils {
 
+  private static final String CONTAINERS_KEY = "containers";
+
   public static Account accountFromJson(String json) {
     return Account.fromJson(new JSONObject(json));
   }
 
-  public static String accountToJson(Account account) {
-    return account.toJson(false).toString();
+  public static String accountToJson(Account account, boolean excludeContainers) {
+    JSONObject jsonObject = account.toJson(false);
+    if (excludeContainers) {
+      jsonObject.remove(CONTAINERS_KEY);
+    }
+    return jsonObject.toString();
   }
 
   public static Container containerFromJson(String json, short accountId) {
