@@ -107,11 +107,16 @@ class CompactionLog implements Closeable {
    */
   CompactionLog(String dir, String storeId, StoreKeyFactory storeKeyFactory, Time time, StoreConfig config)
       throws IOException {
-    this.time = time;
-    file = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
-    if (!file.exists()) {
-      throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist");
+    this(new File(dir, storeId + COMPACTION_LOG_SUFFIX), storeKeyFactory, time, config);
+  }
+
+  CompactionLog(File compactionLogFile, StoreKeyFactory storeKeyFactory, Time time, StoreConfig config)
+      throws IOException {
+    if (!compactionLogFile.exists()) {
+      throw new IllegalArgumentException(compactionLogFile.getAbsolutePath() + " does not exist");
     }
+    this.file = compactionLogFile;
+    this.time = time;
     try (FileInputStream fileInputStream = new FileInputStream(file)) {
       CrcInputStream crcInputStream = new CrcInputStream(fileInputStream);
       DataInputStream stream = new DataInputStream(crcInputStream);
@@ -380,6 +385,35 @@ class CompactionLog implements Closeable {
     }
   }
 
+  @Override
+  public String toString() {
+    StringBuffer buffer = new StringBuffer();
+    buffer.append("Version:")
+        .append(CURRENT_VERSION)
+        .append("\n")
+        .append("StartTime:")
+        .append(startTime)
+        .append("\n")
+        .append("StartOffsetOfLastIndexSegmentForDeleteCheck");
+    if (startOffsetOfLastIndexSegmentForDeleteCheck == null) {
+      buffer.append("null");
+    } else {
+      buffer.append(startOffsetOfLastIndexSegmentForDeleteCheck.toString());
+    }
+    buffer.append("\n");
+    buffer.append("CurrentIndex:")
+        .append(currentIdx)
+        .append("\n")
+        .append("CycleLogSize:")
+        .append(cycleLogs.size())
+        .append("\n")
+        .append("CycleLogs:");
+    for (CycleLog cycleLog : cycleLogs) {
+      buffer.append(cycleLog.toString()).append("\n\n");
+    }
+    return buffer.toString();
+  }
+
   /**
    * Details and log for a single compaction cycle.
    */
@@ -478,6 +512,27 @@ class CompactionLog implements Closeable {
       bufWrap.put(safeToken != null ? STORE_TOKEN_PRESENT : STORE_TOKEN_ABSENT);
       bufWrap.put(safeTokenBytes);
       return buf;
+    }
+
+    @Override
+    public String toString() {
+      StringBuffer buffer = new StringBuffer();
+      buffer.append("CompactionDetal:")
+          .append(compactionDetails.toString())
+          .append("\n")
+          .append("CopyStartTime:")
+          .append(copyStartTime)
+          .append("\n")
+          .append("CommitStartTime:")
+          .append(commitStartTime)
+          .append("\n")
+          .append("CleanupStartTime:")
+          .append(cleanupStartTime)
+          .append("\n")
+          .append("CycleEndTime:")
+          .append(cycleEndTime)
+          .append("\n");
+      return buffer.toString();
     }
   }
 }
