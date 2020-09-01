@@ -36,6 +36,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -203,6 +204,39 @@ public class PutOperationTest {
     responseInfo.release();
     requestInfos.forEach(info -> info.getRequest().release());
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
+  }
+
+  /**
+   * Test the case when there is an empty bytebuf in the end of the {@link ReadableByteChannel}, make sure that
+   * setting operation completed to true wouldn't end up with NPE.
+   * @throws Exception
+   */
+  @Test
+  public void testEmptyByteBufInReadableStreamChannel() throws Exception {
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize];
+    random.nextBytes(content);
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content), true);
+    FutureResult<String> future = new FutureResult<>();
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, future, null,
+            new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time, blobProperties,
+            MockClusterMap.DEFAULT_PARTITION_CLASS);
+    op.startOperation();
+    // Calling fillChunks would fetch the buffer chunk and the empty chunk from the channel
+    op.fillChunks();
+    // Now fail the operation
+    op.setOperationCompleted();
+    // Calling fillChunks again, this would force fillChunk to release the empty chunk
+    op.fillChunks();
+    // Now call fillChunk again
+    op.fillChunks();
+    Assert.assertNull(op.getOperationException());
   }
 
   /**

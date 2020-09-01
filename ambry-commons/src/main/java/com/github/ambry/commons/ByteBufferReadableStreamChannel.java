@@ -16,6 +16,7 @@ package com.github.ambry.commons;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
+import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -31,14 +32,20 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean channelEmptied = new AtomicBoolean(false);
   private final ByteBuffer buffer;
   private final int size;
+  private final boolean addEmptyChunk;
 
   /**
    * Constructs a {@link ReadableStreamChannel} whose read operations return data from the provided {@code buffer}.
    * @param buffer the {@link ByteBuffer} that is used to retrieve data from on invocation of read operations.
    */
   public ByteBufferReadableStreamChannel(ByteBuffer buffer) {
+    this(buffer, false);
+  }
+
+  public ByteBufferReadableStreamChannel(ByteBuffer buffer, boolean addEmptyChunk) {
     this.buffer = buffer;
     size = buffer.remaining();
+    this.addEmptyChunk = addEmptyChunk;
   }
 
   @Override
@@ -60,7 +67,14 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
     } else if (!channelEmptied.compareAndSet(false, true)) {
       throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
     } else {
-      future = asyncWritableChannel.write(buffer, callback);
+      Callback<Long> bufferCallback = callback;
+      if (addEmptyChunk) {
+        bufferCallback = null;
+      }
+      future = asyncWritableChannel.write(buffer, bufferCallback);
+      if (addEmptyChunk) {
+        future = asyncWritableChannel.write(Unpooled.EMPTY_BUFFER, callback);
+      }
     }
     return future;
   }

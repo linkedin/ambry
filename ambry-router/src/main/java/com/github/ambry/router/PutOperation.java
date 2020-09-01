@@ -444,7 +444,7 @@ class PutOperation {
     }
   }
 
-  private void setOperationCompleted() {
+  void setOperationCompleted() {
     operationCompleted = true;
     releaseResource();
   }
@@ -592,6 +592,8 @@ class PutOperation {
         if (lastChunk != null) {
           if (chunkCounter != 0 && lastChunk.buf.readableBytes() == 0) {
             logger.trace("The last buffer(s) received from chunkFillerChannel have no data, discarding them.");
+            lastChunk.releaseBlobContent();
+            lastChunk.state = ChunkState.Free;
           } else {
             lastChunk.onFillComplete(true);
             updateChunkFillerWaitTimeMetrics();
