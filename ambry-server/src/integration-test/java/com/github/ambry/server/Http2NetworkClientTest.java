@@ -102,7 +102,6 @@ public class Http2NetworkClientTest {
         "http2-client");
     TestSSLUtils.addHttp2Properties(clientSSLProps, SSLFactory.Mode.CLIENT, false);
     clientSSLConfig = new SSLConfig(new VerifiableProperties(clientSSLProps));
-    eventLoopGroup = new NioEventLoopGroup();
     eventLoopGroup = Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup();
 
     // Server
