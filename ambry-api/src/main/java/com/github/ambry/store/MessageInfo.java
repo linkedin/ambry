@@ -167,8 +167,8 @@ public class MessageInfo {
     this.key = key;
     this.size = size;
     this.isDeleted = deleted;
-    isTtlUpdated = ttlUpdated;
-    isUndeleted = undeleted;
+    this.isTtlUpdated = ttlUpdated;
+    this.isUndeleted = undeleted;
     this.expirationTimeInMs = expirationTimeInMs;
     this.crc = crc;
     this.accountId = accountId;
@@ -294,5 +294,176 @@ public class MessageInfo {
         .append(lifeVersion)
         .append("]");
     return stringBuilder.toString();
+  }
+
+  /**
+   * A builder class for {@link MessageInfo}.
+   */
+  public static class Builder {
+    private StoreKey key;
+    private short accountId;
+    private short containerId;
+    private long operationTimeMs;
+    private long size;
+
+    private long expirationTimeInMs = Utils.Infinite_Time;
+    private boolean isDeleted = false;
+    private boolean isTtlUpdated = false;
+    private boolean isUndeleted = false;
+    private Long crc = null;
+    private short lifeVersion = 0;
+
+    /**
+     * Constructor to create a builder.
+     * @param key The {@link StoreKey} associated with {@link MessageInfo}.
+     * @param size The size of this message in bytes.
+     * @param accountId accountId of the blob.
+     * @param containerId containerId of the blob.
+     * @param operationTimeMs operation time in ms.
+     */
+    public Builder(StoreKey key, long size, short accountId, short containerId, long operationTimeMs) {
+      this.key = key;
+      this.size = size;
+      this.accountId = accountId;
+      this.containerId = containerId;
+      this.operationTimeMs = operationTimeMs;
+    }
+
+    /**
+     * Constructor to create a builder from {@link MessageInfo}.
+     * @param info The {@link MessageInfo} to build from.
+     */
+    public Builder(final MessageInfo info) {
+      this.key = info.getStoreKey();
+      this.accountId = info.getAccountId();
+      this.containerId = info.getContainerId();
+      this.operationTimeMs = info.getOperationTimeMs();
+      this.size = info.getSize();
+      this.expirationTimeInMs = info.getExpirationTimeInMs();
+      this.isDeleted = info.isDeleted();
+      this.isTtlUpdated = info.isTtlUpdated();
+      this.isUndeleted = info.isUndeleted();
+      this.crc = info.getCrc();
+      this.lifeVersion = info.getLifeVersion();
+    }
+
+    /**
+     * Builds a {@link MessageInfo} object.
+     * @return A {@link MessageInfo} object.
+     */
+    public MessageInfo build() {
+      return new MessageInfo(key, size, isDeleted, isTtlUpdated, isUndeleted, expirationTimeInMs, crc, accountId,
+          containerId, operationTimeMs, lifeVersion);
+    }
+
+    /**
+     * Sets the key of the {@link MessageInfo} to build.
+     * @param key the key to set.
+     * @return This builder.
+     */
+    public Builder storeKey(StoreKey key) {
+      this.key = key;
+      return this;
+    }
+
+    /**
+     * Sets the accountId of the {@link MessageInfo} to build.
+     * @param accountId the accountId to set.
+     * @return This builder.
+     */
+    public Builder accountId(short accountId) {
+      this.accountId = accountId;
+      return this;
+    }
+
+    /**
+     * Sets the containerId of the {@link MessageInfo} to build.
+     * @param containerId the containerId to set.
+     * @return This builder.
+     */
+    public Builder containerId(short containerId) {
+      this.containerId = containerId;
+      return this;
+    }
+
+    /**
+     * Sets the operationTime in ms of the {@link MessageInfo} to build.
+     * @param operationTimeMs the operationTime to set.
+     * @return This builder.
+     */
+    public Builder operationTimeMs(long operationTimeMs) {
+      this.operationTimeMs = operationTimeMs;
+      return this;
+    }
+
+    /**
+     * Sets the size of the {@link MessageInfo} to build.
+     * @param size the size to set.
+     * @return This builder.
+     */
+    public Builder size(long size) {
+      this.size = size;
+      return this;
+    }
+
+    /**
+     * Sets expirationTime in ms of the {@link MessageInfo} to build.
+     * @param expirationTimeInMs the expirationTime to set
+     * @return This builder.
+     */
+    public Builder expirationTimeInMs(long expirationTimeInMs) {
+      this.expirationTimeInMs = expirationTimeInMs;
+      return this;
+    }
+
+    /**
+     * Sets isDeleted flag of the {@link MessageInfo} to build.
+     * @param isDeleted the isDeleted to set.
+     * @return This builder.
+     */
+    public Builder isDeleted(boolean isDeleted) {
+      this.isDeleted = isDeleted;
+      return this;
+    }
+
+    /**
+     * Sets isTtlUpdated flag of the {@link MessageInfo} to build.
+     * @param isTtlUpdated the isTtlUpdated to set.
+     * @return This builder.
+     */
+    public Builder isTtlUpdated(boolean isTtlUpdated) {
+      this.isTtlUpdated = isTtlUpdated;
+      return this;
+    }
+
+    /**
+     * Sets isUndeleted flag of the {@link MessageInfo} to build.
+     * @param isUndeleted the isUndeleted to set.
+     * @return This builder.
+     */
+    public Builder isUndeleted(boolean isUndeleted) {
+      this.isUndeleted = isUndeleted;
+      return this;
+    }
+
+    /**
+     * Sets crc of the {@link MessageInfo} to build.
+     * @param crc the crc to set.
+     * @return This builder.
+     */
+    public Builder crc(Long crc) {
+      this.crc = crc;
+      return this;
+    }
+
+    /**
+     * Sets the lifeVersion of the {@link MessageInfo} to build.
+     * @param lifeVersion the lifeVersion to set.
+     * @return This builder.
+     */
+    public Builder lifeVersion(short lifeVersion) {
+      this.lifeVersion = lifeVersion;
+      return this;
+    }
   }
 }
