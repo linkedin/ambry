@@ -345,7 +345,7 @@ public class BlobStore implements Store {
           existingIdenticalEntries++;
           metrics.identicalPutAttemptCount.inc();
         } else {
-          logger.trace("COLLISION: For key {} in WriteSet with crc {}, index already has the key with journal crc {}",
+          logger.error("COLLISION: For key {} in WriteSet with crc {}, index already has the key with journal crc {}",
               info.getStoreKey(), info.getCrc(), index.journal.getCrcOfKey(info.getStoreKey()));
           return MessageWriteSetStateInStore.COLLIDING;
         }
@@ -449,7 +449,8 @@ public class BlobStore implements Store {
     final Timer.Context context = metrics.putResponse.time();
     try {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
-      MessageWriteSetStateInStore state = checkWriteSetStateInStore(messageSetToWrite, null);
+      MessageWriteSetStateInStore state =
+          checkWriteSetStateInStore(messageSetToWrite, new FileSpan(index.getStartOffset(), indexEndOffsetBeforeCheck));
       if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
         maybeCallBeforeSynchronization();
         synchronized (storeWriteLock) {
