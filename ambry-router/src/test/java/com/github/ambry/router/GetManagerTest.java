@@ -47,18 +47,26 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.router.GetBlobOptions.*;
+
 
 @RunWith(Parameterized.class)
 public class GetManagerTest {
+  private static final int CHUNK_SIZE = new Random().nextInt(1024 * 1024) + 8191;
+  private static final int LARGE_BLOB_SIZE = CHUNK_SIZE * 6 + 11;
+  private static final int MAX_PORTS_PLAIN_TEXT = 3;
+  private static final int MAX_PORTS_SSL = 3;
+  private static final int CHECKOUT_TIMEOUT_MS = 1000;
+  private static final int NUM_STITCHED_CHUNKS = 10;
   private final MockServerLayout mockServerLayout;
   private final MockTime mockTime = new MockTime();
   private final MockClusterMap mockClusterMap;
   private final Random random = new Random();
   // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
-  private NonBlockingRouter router;
   private final boolean testEncryption;
   private final int metadataContentVersion;
+  private NonBlockingRouter router;
   private KeyManagementService kms = null;
   private CryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
@@ -73,24 +81,6 @@ public class GetManagerTest {
   private ReadableStreamChannel putChannel;
   private GetBlobOptions options = new GetBlobOptionsBuilder().build();
   private List<ChunkInfo> chunkInfos;
-  private static final int CHUNK_SIZE = new Random().nextInt(1024 * 1024) + 8191;
-  private static final int LARGE_BLOB_SIZE = CHUNK_SIZE * 6 + 11;
-  private static final int MAX_PORTS_PLAIN_TEXT = 3;
-  private static final int MAX_PORTS_SSL = 3;
-  private static final int CHECKOUT_TIMEOUT_MS = 1000;
-  private static final int NUM_STITCHED_CHUNKS = 10;
-
-  /**
-   * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
-   * @return an array with all four different choices
-   */
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
-        {false, MessageFormatRecord.Metadata_Content_Version_V3},
-        {true, MessageFormatRecord.Metadata_Content_Version_V2},
-        {true, MessageFormatRecord.Metadata_Content_Version_V3}});
-  }
 
   /**
    * Pre-initialization common to all tests.
@@ -105,6 +95,18 @@ public class GetManagerTest {
     mockClusterMap = new MockClusterMap();
     mockServerLayout = new MockServerLayout(mockClusterMap);
     resetEncryptionObjects();
+  }
+
+  /**
+   * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
+   * @return an array with all four different choices
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
+        {false, MessageFormatRecord.Metadata_Content_Version_V3},
+        {true, MessageFormatRecord.Metadata_Content_Version_V2},
+        {true, MessageFormatRecord.Metadata_Content_Version_V3}});
   }
 
   /**
@@ -212,33 +214,33 @@ public class GetManagerTest {
         // entire chunk, [0, chunkSize-1]
         this.options =
             new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(0, chunkSize - 1)).build();
-        getBlobAndCompareContent(blobId);
+        getBlobAndCompareContent(blobId, chunkSize);
 
         // overflow: [0, chunkSize]
         this.options =
             new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(0, chunkSize)).build();
-        getBlobAndCompareContent(blobId);
+        getBlobAndCompareContent(blobId, chunkSize);
 
         // more overflow: [0, chunkSize + 100]
         this.options =
             new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(0, chunkSize + 100)).build();
-        getBlobAndCompareContent(blobId);
+        getBlobAndCompareContent(blobId, chunkSize);
 
         // last N bytes: [chunkSize-1-N, chunkSize-1]
         this.options = new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromLastNBytes(100)).build();
-        getBlobAndCompareContent(blobId);
+        getBlobAndCompareContent(blobId, chunkSize);
 
         // range: [chunkSize/2, chunkSize/2 + Random number]
         int end = new Random().nextInt(chunkSize / 2) + chunkSize / 2;
         this.options =
             new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(chunkSize / 2, end)).build();
-        getBlobAndCompareContent(blobId);
+        getBlobAndCompareContent(blobId, chunkSize);
 
         this.options = new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(0, 0)).build();
-        getBlobAndCompareContent(blobId);
+        getBlobAndCompareContent(blobId, chunkSize);
       }
       this.options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();
-      getBlobAndCompareContent(blobId);
+      getBlobAndCompareContent(blobId, -1);
       router.close();
     } else {
       router = getNonBlockingRouter();
@@ -256,10 +258,10 @@ public class GetManagerTest {
     setOperationParams(blobSize, options);
     String blobId =
         router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
-    getBlobAndCompareContent(blobId);
+    getBlobAndCompareContent(blobId, -1);
     // Test GetBlobInfoOperation, regardless of options passed in.
     this.options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();
-    getBlobAndCompareContent(blobId);
+    getBlobAndCompareContent(blobId, -1);
     router.close();
   }
 
@@ -295,10 +297,12 @@ public class GetManagerTest {
     router = getNonBlockingRouter();
     String blobId = createStitchBlob(blobSize);
     this.options = options;
-    getBlobAndCompareContent(blobId);
+    long segmentSize = (options.getBlobSegmentIdx() == NO_BLOB_SEGMENT_IDX_SPECIFIED) ? -1
+        : chunkInfos.get(options.getBlobSegmentIdx()).getChunkSizeInBytes();
+    getBlobAndCompareContent(blobId, segmentSize);
     // Test GetBlobInfoOperation, regardless of options passed in.
     this.options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();
-    getBlobAndCompareContent(blobId);
+    getBlobAndCompareContent(blobId, -1);
     router.close();
   }
 
@@ -395,7 +399,7 @@ public class GetManagerTest {
     }
     options = infoOptions;
     for (Future<GetBlobResult> future : getBlobInfoFutures) {
-      compareBlobInfo(future.get().getBlobInfo());
+      compareBlobInfo(future.get().getBlobInfo(), -1);
     }
     Assert.assertTrue("getBlobInfo callback not called.", getBlobInfoCallbackCalled.await(2, TimeUnit.SECONDS));
     Assert.assertTrue("getBlob callback not called.", getBlobCallbackCalled.await(2, TimeUnit.SECONDS));
@@ -405,9 +409,9 @@ public class GetManagerTest {
     // Test that GetManager is still operational
     setOperationParams(CHUNK_SIZE, new GetBlobOptionsBuilder().build());
     blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
-    getBlobAndCompareContent(blobId);
+    getBlobAndCompareContent(blobId, -1);
     this.options = infoOptions;
-    getBlobAndCompareContent(blobId);
+    getBlobAndCompareContent(blobId, -1);
     router.close();
   }
 
@@ -476,19 +480,19 @@ public class GetManagerTest {
    * @param blobId the id of the blob (simple or composite) that needs to be fetched and compared.
    * @throws Exception
    */
-  private void getBlobAndCompareContent(String blobId) throws Exception {
+  private void getBlobAndCompareContent(String blobId, long segmentSize) throws Exception {
     GetBlobResult result = router.getBlob(blobId, options).get();
 
     switch (options.getOperationType()) {
       case All:
-        compareBlobInfo(result.getBlobInfo());
+        compareBlobInfo(result.getBlobInfo(), segmentSize);
         compareContent(result.getBlobDataChannel());
         break;
       case Data:
         compareContent(result.getBlobDataChannel());
         break;
       case BlobInfo:
-        compareBlobInfo(result.getBlobInfo());
+        compareBlobInfo(result.getBlobInfo(), segmentSize);
         Assert.assertNull("Unexpected blob data channel in result", result.getBlobDataChannel());
         break;
     }
@@ -518,11 +522,11 @@ public class GetManagerTest {
    * the original put properties and metadata.
    * @param blobInfo the {@link ReadableStreamChannel} that is the candidate for comparison.
    */
-  private void compareBlobInfo(BlobInfo blobInfo) {
+  private void compareBlobInfo(BlobInfo blobInfo, long segmentSize) {
     Assert.assertTrue("Blob properties should match",
         RouterTestHelpers.arePersistedFieldsEquivalent(putBlobProperties, blobInfo.getBlobProperties()));
-    Assert.assertEquals("Blob size in received blobProperties should be the same as actual", blobSize,
-        blobInfo.getBlobProperties().getBlobSize());
+    Assert.assertEquals("Blob size in received blobProperties should be the same as actual",
+        (segmentSize == -1) ? blobSize : segmentSize, blobInfo.getBlobProperties().getBlobSize());
     Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
   }
 

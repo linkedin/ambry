@@ -49,17 +49,12 @@ import static com.github.ambry.router.GetBlobOptions.*;
  */
 class AmbrySecurityService implements SecurityService {
 
-  private boolean isOpen;
+  static final Set<String> OPERATIONS;
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
   private final QuotaManager quotaManager;
-  static final Set<String> OPERATIONS;
-
-  static {
-    OPERATIONS = Collections.unmodifiableSet(Utils.getStaticFieldValuesAsStrings(Operations.class)
-        .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
-  }
+  private boolean isOpen;
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       UrlSigningService urlSigningService, QuotaManager quotaManager) {
@@ -175,6 +170,8 @@ class AmbrySecurityService implements SecurityService {
             break;
           case GET:
             if (!requestPath.matchesOperation(Operations.GET_SIGNED_URL)) {
+              options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None,
+                  NO_BLOB_SEGMENT_IDX_SPECIFIED);
               responseChannel.setStatus(ResponseStatus.Ok);
               RestUtils.SubResource subResource = RestUtils.getRequestPath(restRequest).getSubResource();
               responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
@@ -186,8 +183,6 @@ class AmbrySecurityService implements SecurityService {
                     <= ifModifiedSinceMs) {
                   responseChannel.setStatus(ResponseStatus.NotModified);
                 } else {
-                  options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None,
-                      NO_BLOB_SEGMENT_IDX_SPECIFIED);
                   if (options.getRange() != null) {
                     responseChannel.setStatus(ResponseStatus.PartialContent);
                   }
@@ -203,6 +198,10 @@ class AmbrySecurityService implements SecurityService {
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
                   responseChannel.setHeader(RestUtils.Headers.LIFE_VERSION, blobInfo.getLifeVersion());
+                } else if (subResource.equals(SubResource.Segment)) {
+                  setGetBlobResponseHeaders(blobInfo, options, responseChannel);
+                  setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
+                  setAccountAndContainerHeaders(restRequest, responseChannel);
                 }
                 if (!setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel)) {
                   restRequest.setArg(InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY, true);
@@ -384,5 +383,10 @@ class AmbrySecurityService implements SecurityService {
             RestServiceErrorCode.AccessDenied);
       }
     }
+  }
+
+  static {
+    OPERATIONS = Collections.unmodifiableSet(Utils.getStaticFieldValuesAsStrings(Operations.class)
+        .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
   }
 }
