@@ -18,6 +18,9 @@ import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
 
 
+/**
+ * Config for MySql database connection.
+ */
 public class MySqlConfig {
 
   /**

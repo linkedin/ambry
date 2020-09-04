@@ -15,10 +15,8 @@ package com.github.ambry.account;
 
 import org.json.JSONObject;
 
-
+// TODO: merge with AccountCollectionSerde
 public class AccountSerdeUtils {
-
-  private static final String CONTAINERS_KEY = "containers";
 
   public static Account accountFromJson(String json) {
     return Account.fromJson(new JSONObject(json));
@@ -27,7 +25,7 @@ public class AccountSerdeUtils {
   public static String accountToJson(Account account, boolean excludeContainers) {
     JSONObject jsonObject = account.toJson(false);
     if (excludeContainers) {
-      jsonObject.remove(CONTAINERS_KEY);
+      jsonObject.remove(Account.CONTAINERS_KEY);
     }
     return jsonObject.toString();
   }

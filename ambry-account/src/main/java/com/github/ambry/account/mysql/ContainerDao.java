@@ -24,14 +24,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 
-public class ContainerTable {
-  public static final String CONTAINER_TABLE = "ContainerMetadata";
-  public static final String ACCOUNT_ID = "ACCOUNT_ID";
-  public static final String CONTAINER_ID = "CONTAINER_ID";
-  public static final String CONTAINER_INFO = "CONTAINER_INFO";
-  public static final String VERSION = "VERSION";
-  public static final String CREATION_TIME = "CREATION_TIME";
-  public static final String LAST_MODIFIED_TIME = "LAST_MODIFIED_TIME";
+/**
+ * Container Data Access Object.
+ */
+public class ContainerDao {
+  public static final String CONTAINER_TABLE = "Containers";
+  // TODO: make Container key constants public
+  public static final String ACCOUNT_ID = "accountId";
+  public static final String CONTAINER_ID = "containerId";
+  public static final String CONTAINER_INFO = "containerInfo";
+  public static final String VERSION = "version";
+  public static final String CREATION_TIME = "creationTime";
+  public static final String LAST_MODIFIED_TIME = "lastModifiedTime";
 
   private final Connection dbConnection;
   private final MySqlDataAccessor dataAccessor;
@@ -39,7 +43,7 @@ public class ContainerTable {
   private final PreparedStatement getSinceStatement;
   private final PreparedStatement getByAccountStatement;
 
-  public ContainerTable(MySqlDataAccessor dataAccessor) throws SQLException {
+  public ContainerDao(MySqlDataAccessor dataAccessor) throws SQLException {
     this.dataAccessor = dataAccessor;
     this.dbConnection = dataAccessor.getDatabaseConnection();
 
@@ -59,6 +63,12 @@ public class ContainerTable {
     getByAccountStatement = dbConnection.prepareStatement(getByAccountSql);
   }
 
+  /**
+   * Add a container to the database.
+   * @param accountId the container's parent account id.
+   * @param container the container to insert.
+   * @throws SQLException
+   */
   public void addContainer(int accountId, Container container) throws SQLException {
     try {
       // Note: assuming autocommit for now
@@ -71,17 +81,29 @@ public class ContainerTable {
     }
   }
 
+  /**
+   * Gets the containers in a specified account.
+   * @param accountId the id for the account.
+   * @return a list of {@link Container}.
+   * @throws SQLException
+   */
   public List<Container> getContainers(int accountId) throws SQLException {
     getByAccountStatement.setInt(1, accountId);
-    ResultSet rs = getByAccountStatement.executeQuery();
-    return convertResultSet(rs);
+    try (ResultSet rs = getByAccountStatement.executeQuery()) {
+      return convertResultSet(rs);
+    }
   }
 
+  /**
+   * Gets all containers that have been created or modified since the specified time.
+   * @param updatedSince the last modified time used to filter.
+   * @return a list of {@link Container}.
+   * @throws SQLException
+   */
   public List<Container> getNewContainers(long updatedSince) throws SQLException {
-    try {
-      Timestamp sinceTime = new Timestamp(updatedSince);
-      getSinceStatement.setTimestamp(1, sinceTime);
-      ResultSet rs = getSinceStatement.executeQuery();
+    Timestamp sinceTime = new Timestamp(updatedSince);
+    getSinceStatement.setTimestamp(1, sinceTime);
+    try (ResultSet rs = getSinceStatement.executeQuery()) {
       return convertResultSet(rs);
     } catch (SQLException e) {
       // record failure, parse exception, ...

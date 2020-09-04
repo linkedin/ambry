@@ -1,7 +1,21 @@
+/*
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.account.mysql;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountSerdeUtils;
+import com.github.ambry.account.Container;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -11,20 +25,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 
-public class AccountTable {
+/**
+ * Account Data Access Object.
+ */
+public class AccountDao {
 
-  public static final String ACCOUNT_TABLE = "AccountMetadata";
-  public static final String ACCOUNT_INFO = "ACCOUNT_INFO";
-  public static final String VERSION = "VERSION";
-  public static final String CREATION_TIME = "CREATION_TIME";
-  public static final String LAST_MODIFIED_TIME = "LAST_MODIFIED_TIME";
+  public static final String ACCOUNT_TABLE = "Accounts";
+  public static final String ACCOUNT_INFO = "accountInfo";
+  public static final String VERSION = "version";
+  public static final String CREATION_TIME = "creationTime";
+  public static final String LAST_MODIFIED_TIME = "lastModifiedTime";
 
   private final MySqlDataAccessor dataAccessor;
   private final Connection dbConnection;
   private final PreparedStatement insertStatement;
   private final PreparedStatement getSinceStatement;
 
-  public AccountTable(MySqlDataAccessor dataAccessor) throws SQLException {
+  public AccountDao(MySqlDataAccessor dataAccessor) throws SQLException {
     this.dataAccessor = dataAccessor;
     this.dbConnection = dataAccessor.getDatabaseConnection();
 
@@ -39,6 +56,11 @@ public class AccountTable {
     getSinceStatement = dbConnection.prepareStatement(getSinceSql);
   }
 
+  /**
+   * Add an account to the database.
+   * @param account the account to insert.
+   * @throws SQLException
+   */
   public void addAccount(Account account) throws SQLException {
     try {
       insertStatement.setString(1, AccountSerdeUtils.accountToJson(account, true));
@@ -50,12 +72,17 @@ public class AccountTable {
     }
   }
 
+  /**
+   * Gets all accounts that have been created or modified since the specified time.
+   * @param updatedSince the last modified time used to filter.
+   * @return a list of {@link Account}.
+   * @throws SQLException
+   */
   public List<Account> getNewAccounts(long updatedSince) throws SQLException {
-    try {
-      List<Account> accounts = new ArrayList<>();
-      Timestamp sinceTime = new Timestamp(updatedSince);
-      getSinceStatement.setTimestamp(1, sinceTime);
-      ResultSet rs = getSinceStatement.executeQuery();
+    List<Account> accounts = new ArrayList<>();
+    Timestamp sinceTime = new Timestamp(updatedSince);
+    getSinceStatement.setTimestamp(1, sinceTime);
+    try (ResultSet rs = getSinceStatement.executeQuery()) {
       while (rs.next()) {
         String accountJson = rs.getString(ACCOUNT_INFO);
         Timestamp lastModifiedTime = rs.getTimestamp(LAST_MODIFIED_TIME);

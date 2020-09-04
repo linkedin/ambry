@@ -20,6 +20,9 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 
+/**
+ * Data Accessor to connect to MySql database.
+ */
 public class MySqlDataAccessor {
 
   private final String mysqlUrl;
@@ -42,6 +45,10 @@ public class MySqlDataAccessor {
     }
   }
 
+  /**
+   * @return a JDBC {@link Connection} to the database.  An existing connection will be reused.
+   * @throws SQLException
+   */
   public synchronized Connection getDatabaseConnection() throws SQLException {
     if (activeConnection == null || !activeConnection.isValid(5)) {
       Properties credentials = new Properties();

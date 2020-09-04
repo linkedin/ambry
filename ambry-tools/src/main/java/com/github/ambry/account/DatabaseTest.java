@@ -13,7 +13,7 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.account.mysql.ContainerTable;
+import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlConfig;
 import com.github.ambry.account.mysql.MySqlDataAccessor;
 import com.github.ambry.config.VerifiableProperties;
@@ -56,7 +56,7 @@ public class DatabaseTest {
   private static void perfTest(VerifiableProperties verifiableProperties) throws Exception {
     MySqlConfig config = new MySqlConfig(verifiableProperties);
     MySqlDataAccessor dataAccessor = new MySqlDataAccessor(config);
-    ContainerTable containerTable = new ContainerTable(dataAccessor);
+    ContainerDao containerDao = new ContainerDao(dataAccessor);
     // Use high account id to avoid conflict
     short startAccountId = 30000;
     int numAccounts = 10;
@@ -70,7 +70,7 @@ public class DatabaseTest {
     for (short accountId = startAccountId; accountId < startAccountId + numAccounts; accountId++) {
       for (short containerId = 1; containerId <= numContainers; containerId++) {
         builder.setId(containerId).setName("Container-" + containerId).setTtlRequired(true);
-        containerTable.addContainer(accountId, builder.build());
+        containerDao.addContainer(accountId, builder.build());
         containersAdded++;
       }
     }
@@ -79,11 +79,11 @@ public class DatabaseTest {
     logger.info("Added {} containers in {} ms", containersAdded, insertTime);
 
     // Query containers since t0 (should be all)
-    List<Container> allContainers = containerTable.getNewContainers(t0);
+    List<Container> allContainers = containerDao.getNewContainers(t0);
     long t2 = System.currentTimeMillis();
     logger.info("Queried {} containers in {} ms", allContainers.size(), t2 - t1);
     // Query containers since t2 (should be none)
-    allContainers = containerTable.getNewContainers(t2);
+    allContainers = containerDao.getNewContainers(t2);
     long t3 = System.currentTimeMillis();
     logger.info("Queried {} containers in {} ms", allContainers.size(), t3 - t2);
   }
@@ -91,7 +91,7 @@ public class DatabaseTest {
   private static void cleanup(Connection dbConnection, short startAccountId) throws SQLException {
     Statement statement = dbConnection.createStatement();
     int numDeleted = statement.executeUpdate(
-        "delete from " + ContainerTable.CONTAINER_TABLE + " where " + ContainerTable.ACCOUNT_ID + " >= "
+        "delete from " + ContainerDao.CONTAINER_TABLE + " where " + ContainerDao.ACCOUNT_ID + " >= "
             + startAccountId);
     logger.info("Deleted {} containers", numDeleted);
   }

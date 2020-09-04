@@ -1,0 +1,73 @@
+/*
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+package com.github.ambry.account.mysql;
+
+import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
+import com.github.ambry.account.AccountSerdeUtils;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.junit.MockitoJUnitRunner;
+
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
+
+
+/** Unit test for AccountDao class */
+@RunWith(MockitoJUnitRunner.class)
+public class AccountDaoTest {
+
+  private final short accountId = 101;
+  private final String accountName = "samza";
+  private final Account testAccount;
+  private final String accountJson;
+  private final MySqlDataAccessor dataAccessor;
+  private final Connection mockConnection;
+  private final AccountDao accountDao;
+
+  public AccountDaoTest() throws SQLException {
+    testAccount = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).build();
+    accountJson = AccountSerdeUtils.accountToJson(testAccount, true);
+    dataAccessor = mock(MySqlDataAccessor.class);
+    mockConnection = mock(Connection.class);
+    PreparedStatement mockInsertStatement = mock(PreparedStatement.class);
+    when(mockConnection.prepareStatement(contains("insert into"))).thenReturn(mockInsertStatement);
+    when(mockInsertStatement.executeUpdate()).thenReturn(1);
+    PreparedStatement mockQueryStatement = mock(PreparedStatement.class);
+    when(mockConnection.prepareStatement(startsWith("select"))).thenReturn(mockQueryStatement);
+    ResultSet mockResultSet = mock(ResultSet.class);
+    when(mockResultSet.next()).thenReturn(true).thenReturn(false);
+    when(mockResultSet.getString(eq(AccountDao.ACCOUNT_INFO))).thenReturn(accountJson);
+    when(mockQueryStatement.executeQuery()).thenReturn(mockResultSet);
+    when(dataAccessor.getDatabaseConnection()).thenReturn(mockConnection);
+    accountDao = new AccountDao(dataAccessor);
+  }
+
+  @Test
+  public void testAddAccount() throws Exception {
+    accountDao.addAccount(testAccount);
+  }
+
+  @Test
+  public void testGetAccounts() throws Exception {
+    List<Account> accountList = accountDao.getNewAccounts(0l);
+    assertEquals(1, accountList.size());
+    assertEquals(testAccount, accountList.get(0));
+  }
+}

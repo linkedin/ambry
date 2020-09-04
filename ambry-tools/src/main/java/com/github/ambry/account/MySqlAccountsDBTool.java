@@ -1,8 +1,8 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.mysql.AccountTable;
-import com.github.ambry.account.mysql.ContainerTable;
+import com.github.ambry.account.mysql.AccountDao;
+import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlConfig;
 import com.github.ambry.account.mysql.MySqlDataAccessor;
 import com.github.ambry.commons.CommonUtils;
@@ -71,8 +71,8 @@ public class MySqlAccountsDBTool {
   static final String RELATIVE_ACCOUNT_METADATA_PATH = "/account_metadata/full_data";
 
   private final MySqlDataAccessor mySqlDataAccessor;
-  private final AccountTable accountTable;
-  private final ContainerTable containerTable;
+  private final AccountDao accountDao;
+  private final ContainerDao containerDao;
   private final HelixPropertyStore<ZNRecord> helixPropertyStore;
   private final String fullZKAccountMetadataPath;
 
@@ -171,8 +171,8 @@ public class MySqlAccountsDBTool {
   public MySqlAccountsDBTool(VerifiableProperties verifiableProperties, String zkServer) throws SQLException {
 
     this.mySqlDataAccessor = new MySqlDataAccessor(new MySqlConfig(verifiableProperties));
-    this.accountTable = new AccountTable(mySqlDataAccessor);
-    this.containerTable = new ContainerTable(mySqlDataAccessor);
+    this.accountDao = new AccountDao(mySqlDataAccessor);
+    this.containerDao = new ContainerDao(mySqlDataAccessor);
     //Create helix property store
     HelixPropertyStoreConfig helixPropertyStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
     this.helixPropertyStore = CommonUtils.createHelixPropertyStore(zkServer, helixPropertyStoreConfig, null);
@@ -183,9 +183,9 @@ public class MySqlAccountsDBTool {
 
   private void cleanup() throws SQLException {
     Statement statement = mySqlDataAccessor.getDatabaseConnection().createStatement();
-    int numDeleted = statement.executeUpdate("delete from " + ContainerTable.CONTAINER_TABLE);
+    int numDeleted = statement.executeUpdate("delete from " + ContainerDao.CONTAINER_TABLE);
     logger.info("Deleted {} containers", numDeleted);
-    int numDeletedAccounts = statement.executeUpdate("delete from " + AccountTable.ACCOUNT_TABLE);
+    int numDeletedAccounts = statement.executeUpdate("delete from " + AccountDao.ACCOUNT_TABLE);
     logger.info("Deleted {} Accounts", numDeletedAccounts);
   }
 
@@ -213,9 +213,9 @@ public class MySqlAccountsDBTool {
     // Populate Account and Container tables
     for (Account account : accountInfoMap.getAccounts()) {
       for (Container container : account.getAllContainers()) {
-        containerTable.addContainer(account.getId(), container);
+        containerDao.addContainer(account.getId(), container);
       }
-      accountTable.addAccount(account);
+      accountDao.addAccount(account);
     }
 
     logger.info("Initialized account metadata in DB from ZK path {}, took time={} ms", fullZKAccountMetadataPath,
@@ -244,12 +244,12 @@ public class MySqlAccountsDBTool {
         .collect(Collectors.toSet()));
 
     // Query the list of all Account from mysql
-    Set<Account> accountSetFromDB = new HashSet<>(accountTable.getNewAccounts(0));
+    Set<Account> accountSetFromDB = new HashSet<>(accountDao.getNewAccounts(0));
 
     // Query the list of containers for each Account and add them to the Account
     accountSetFromDB.forEach(account -> {
       try {
-        containerTable.getContainers(account.getId())
+        containerDao.getContainers(account.getId())
             .forEach(account::updateContainerMap);
       } catch (SQLException e) {
         logger.error("MySQL querying containers failed", e);

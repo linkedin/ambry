@@ -12,35 +12,35 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-CREATE TABLE IF NOT EXISTS AccountMetadata
+CREATE TABLE IF NOT EXISTS Accounts
 (
-    ACCOUNT_INFO JSON NOT NULL,
-    VERSION INT NOT NULL,
-    CREATION_TIME DATETIME NOT NULL,
-    LAST_MODIFIED_TIME DATETIME NOT NULL,
-    ACCOUNT_ID INT GENERATED ALWAYS AS (ACCOUNT_INFO->>"$.accountId") STORED NOT NULL,
-    ACCOUNT_NAME VARCHAR(255) GENERATED ALWAYS AS (ACCOUNT_INFO->>"$.accountName") NOT NULL,
-    ACCOUNT_STATUS VARCHAR(50) GENERATED ALWAYS AS (ACCOUNT_INFO->>"$.status") STORED NOT NULL,
-    UNIQUE KEY account (ACCOUNT_ID),
-    UNIQUE INDEX uniqueName (ACCOUNT_NAME),
-    INDEX lmtIndex (LAST_MODIFIED_TIME),
-    INDEX statusIndex (ACCOUNT_STATUS)
+    accountInfo JSON NOT NULL,
+    version INT NOT NULL,
+    creationTime DATETIME NOT NULL,
+    lastModifiedTime DATETIME NOT NULL,
+    accountId INT GENERATED ALWAYS AS (accountInfo->>"$.accountId") STORED NOT NULL,
+    accountName VARCHAR(255) GENERATED ALWAYS AS (accountInfo->>"$.accountName") NOT NULL,
+    status VARCHAR(50) GENERATED ALWAYS AS (accountInfo->>"$.status") STORED NOT NULL,
+    UNIQUE KEY account (accountId),
+    UNIQUE INDEX uniqueName (accountName),
+    INDEX lmtIndex (lastModifiedTime),
+    INDEX statusIndex (status)
 )
 CHARACTER SET utf8 COLLATE utf8-bin;
 
-CREATE TABLE IF NOT EXISTS ContainerMetadata
+CREATE TABLE IF NOT EXISTS Containers
 (
-    ACCOUNT_ID INT NOT NULL,
-    CONTAINER_INFO JSON NOT NULL,
-    VERSION INT NOT NULL,
-    CREATION_TIME DATETIME NOT NULL,
-    LAST_MODIFIED_TIME DATETIME NOT NULL,
-    CONTAINER_ID INT GENERATED ALWAYS AS (CONTAINER_INFO->>"$.containerId") STORED NOT NULL,
-    CONTAINER_NAME VARCHAR(255) GENERATED ALWAYS AS (CONTAINER_INFO->>"$.containerName") NOT NULL,
-    CONTAINER_STATUS VARCHAR(50) GENERATED ALWAYS AS (CONTAINER_INFO->>"$.status") STORED NOT NULL,
-    UNIQUE KEY accountContainer (ACCOUNT_ID, CONTAINER_ID),
-    UNIQUE INDEX uniqueName (ACCOUNT_ID, CONTAINER_NAME),
-    INDEX lmtIndex (LAST_MODIFIED_TIME),
-    INDEX statusIndex (CONTAINER_STATUS)
+    accountId INT NOT NULL,
+    containerInfo JSON NOT NULL,
+    version INT NOT NULL,
+    creationTime DATETIME NOT NULL,
+    lastModifiedTime DATETIME NOT NULL,
+    containerId INT GENERATED ALWAYS AS (containerInfo->>"$.containerId") STORED NOT NULL,
+    containerName VARCHAR(255) GENERATED ALWAYS AS (containerInfo->>"$.containerName") NOT NULL,
+    status VARCHAR(50) GENERATED ALWAYS AS (containerInfo->>"$.status") STORED NOT NULL,
+    UNIQUE KEY accountContainer (accountId, containerId),
+    UNIQUE INDEX uniqueName (accountId, containerName),
+    INDEX lmtIndex (lastModifiedTime),
+    INDEX statusIndex (status)
 )
 CHARACTER SET utf8 COLLATE utf8-bin;
