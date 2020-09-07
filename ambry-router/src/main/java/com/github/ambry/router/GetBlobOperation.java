@@ -38,7 +38,6 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
-import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
@@ -222,22 +221,8 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
           }
           if (e == null) {
-            // In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly,
-            // we will replace the field with the size from inside of the metadata content.
             if (blobInfo != null) {
-              if (blobInfo.getBlobProperties().getBlobSize() != totalSize) {
-                if (compositeBlobInfo != null) {
-                  routerMetrics.compositeBlobSizeMismatchCount.inc();
-                  logger.debug("Blob size mismatch for composite blob: {}", getBlobIdStr());
-                } else if (blobInfo.getBlobProperties().isEncrypted()) {
-                  routerMetrics.simpleEncryptedBlobSizeMismatchCount.inc();
-                  logger.debug("Blob size mismatch for simple encrypted blob: {}", getBlobIdStr());
-                } else {
-                  routerMetrics.simpleUnencryptedBlobSizeMismatchCount.inc();
-                  logger.warn("Blob size mismatch for simple unencrypted blob (should not happen): {}", getBlobIdStr());
-                }
-                blobInfo.getBlobProperties().setBlobSize(totalSize);
-              }
+              fixBlobSizeIfRequired(blobInfo.getBlobProperties().getBlobSize(), totalSize);
             }
             if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
               blobDataChannel = new BlobDataReadableStreamChannel();
@@ -258,6 +243,8 @@ class GetBlobOperation extends GetOperation {
       }
     } else if (options.getBlobOptions.hasBlobSegmentIdx()) {
       // We have fetched the segmented chunk, and there cannot be any more chunks to fetch now.
+      fixBlobSizeIfRequired(blobInfo.getBlobProperties().getBlobSize(),
+          firstChunk.getChunkMetadataList().get(0).getSize());
       operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel), null);
       NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
     }
@@ -265,6 +252,30 @@ class GetBlobOperation extends GetOperation {
     chunk.postCompletionCleanup();
     if (shouldWriteToChannel && blobDataChannel != null) {
       blobDataChannel.maybeWriteToChannel();
+    }
+  }
+
+  /**
+   * In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly,
+   * replace the field with the size from inside of the metadata content.
+   * @param blobSizeFromProperties blob size obtained from blob properties.
+   * @param blobSizeFromMetadata blob size obtained from metadata of the given blob or its composite blob.
+   */
+  private void fixBlobSizeIfRequired(long blobSizeFromProperties, long blobSizeFromMetadata) {
+    // In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly,
+    // we will replace the field with the size from inside of the metadata content.
+    if (blobSizeFromProperties != blobSizeFromMetadata) {
+      if (compositeBlobInfo != null) {
+        routerMetrics.compositeBlobSizeMismatchCount.inc();
+        logger.debug("Blob size mismatch for composite blob: {}", getBlobIdStr());
+      } else if (blobInfo.getBlobProperties().isEncrypted()) {
+        routerMetrics.simpleEncryptedBlobSizeMismatchCount.inc();
+        logger.debug("Blob size mismatch for simple encrypted blob: {}", getBlobIdStr());
+      } else {
+        routerMetrics.simpleUnencryptedBlobSizeMismatchCount.inc();
+        logger.warn("Blob size mismatch for simple unencrypted blob (should not happen): {}", getBlobIdStr());
+      }
+      blobInfo.getBlobProperties().setBlobSize(blobSizeFromMetadata);
     }
   }
 
@@ -1333,6 +1344,13 @@ class GetBlobOperation extends GetOperation {
           resolvedRouterErrorCode = RouterErrorCode.UnexpectedInternalError;
       }
       return resolvedRouterErrorCode;
+    }
+
+    /**
+     * @return {@code chunkMetadataList}.
+     */
+    public List<CompositeBlobInfo.ChunkMetadata> getChunkMetadataList() {
+      return chunkMetadataList;
     }
 
     /**
