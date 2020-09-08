@@ -144,18 +144,19 @@ public class InMemoryRouter implements Router {
     }
 
     /**
-     * @param range the {@link ByteRange} for the blob, or null.
+     * @param options any options specified for fetching the blob.
      * @return the blob content within the provided range, or the entire blob, if the range is null.
      * @throws RouterException if the range was non-null, but could not be resolved.
      */
-    public ByteBuffer getBlob(ByteRange range) throws RouterException {
+    public ByteBuffer getBlob(GetBlobOptions options) throws RouterException {
       ByteBuffer buf;
-      if (range == null) {
+      if (options.getRange() == null) {
         buf = getBlob();
       } else {
         ByteRange resolvedRange;
         try {
-          resolvedRange = range.toResolvedByteRange(blob.array().length);
+          resolvedRange =
+              options.getRange().toResolvedByteRange(blob.array().length, options.resolveRangeOnEmptyBlob());
         } catch (IllegalArgumentException e) {
           throw new RouterException("Invalid range for blob", e, RouterErrorCode.RangeNotSatisfiable);
         }
@@ -210,13 +211,13 @@ public class InMemoryRouter implements Router {
             || ALLOW_EXPIRED_BLOB_GET.contains(options.getGetOption())) {
           switch (options.getOperationType()) {
             case Data:
-              blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
+              blobDataChannel = new ByteBufferRSC(blob.getBlob(options));
               break;
             case BlobInfo:
               blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
               break;
             case All:
-              blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
+              blobDataChannel = new ByteBufferRSC(blob.getBlob(options));
               blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
               break;
           }
