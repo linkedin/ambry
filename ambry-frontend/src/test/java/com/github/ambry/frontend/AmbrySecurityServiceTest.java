@@ -717,7 +717,7 @@ public class AmbrySecurityServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     long contentLength = blobProperties.getBlobSize();
     if (range != null) {
-      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
+      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength, false);
       Assert.assertEquals("Content range header not set correctly for range " + range, rangeAndLength.getFirst(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
       contentLength = rangeAndLength.getSecond();
@@ -765,7 +765,7 @@ public class AmbrySecurityServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     long contentLength = blobProperties.getBlobSize();
     if (range != null) {
-      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
+      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength, false);
       Assert.assertEquals("Content range header not set correctly for range " + range, rangeAndLength.getFirst(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
       contentLength = rangeAndLength.getSecond();

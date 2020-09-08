@@ -1664,7 +1664,7 @@ public class FrontendRestRequestServiceTest {
     if (range != null) {
       long blobSize = expectedHeaders.getLong(RestUtils.Headers.BLOB_SIZE);
       assertEquals("Content-Range does not match expected",
-          RestUtils.buildContentRangeAndLength(range, blobSize).getFirst(),
+          RestUtils.buildContentRangeAndLength(range, blobSize, false).getFirst(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
       ByteRange resolvedRange = range.toResolvedByteRange(blobSize);
       expectedContentArray = Arrays.copyOfRange(expectedContentArray, (int) resolvedRange.getStartOffset(),
@@ -1790,7 +1790,7 @@ public class FrontendRestRequestServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     long contentLength = expectedHeaders.getLong(RestUtils.Headers.BLOB_SIZE);
     if (range != null) {
-      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
+      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength, false);
       assertEquals("Content-Range does not match expected", rangeAndLength.getFirst(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
       contentLength = rangeAndLength.getSecond();

@@ -1559,8 +1559,8 @@ public class GetBlobOperationTest {
         && !options.getBlobOptions.isRawMode() && !options.getChunkIdsOnly) {
       int sizeWritten = blobSize;
       if (options.getBlobOptions.getRange() != null) {
-        ByteRange range = options.getBlobOptions.resolveRangeOnEmptyBlob() && blobSize == 0 ? ByteRanges.emptyRange()
-            : options.getBlobOptions.getRange().toResolvedByteRange(blobSize);
+        ByteRange range = options.getBlobOptions.getRange()
+            .toResolvedByteRange(blobSize, options.getBlobOptions.resolveRangeOnEmptyBlob());
         sizeWritten = (int) range.getRangeSize();
       }
       Assert.assertEquals("Size read must equal size written", sizeWritten, readCompleteResult.get());
@@ -1643,8 +1643,7 @@ public class GetBlobOperationTest {
       } else {
         // If a range is set, compare the result against the specified byte range.
         if (options != null && options.getRange() != null) {
-          ByteRange range = options.resolveRangeOnEmptyBlob() && putContent.length == 0 ? ByteRanges.emptyRange()
-              : options.getRange().toResolvedByteRange(blobSize);
+          ByteRange range = options.getRange().toResolvedByteRange(blobSize, options.resolveRangeOnEmptyBlob());
           putContentBuf = ByteBuffer.wrap(putContent, (int) range.getStartOffset(), (int) range.getRangeSize());
         } else {
           putContentBuf = ByteBuffer.wrap(putContent);

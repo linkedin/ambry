@@ -576,7 +576,7 @@ public class RestUtilsTest {
   }
 
   /**
-   * Test {@link RestUtils#buildContentRangeAndLength(ByteRange, long)}.
+   * Test {@link RestUtils#buildContentRangeAndLength(ByteRange, long, boolean)}.
    */
   @Test
   public void buildContentRangeAndLengthTest() throws RestServiceException {
@@ -992,7 +992,7 @@ public class RestUtilsTest {
   }
 
   /**
-   * Test {@link RestUtils#buildContentRangeAndLength(ByteRange, long)} for a specific {@link ByteRange} and total blob
+   * Test {@link RestUtils#buildContentRangeAndLength(ByteRange, long, boolean)} for a specific {@link ByteRange} and total blob
    * size.
    * @param range the {@link ByteRange} to test for.
    * @param blobSize the total blob size in bytes to test for.
@@ -1004,12 +1004,12 @@ public class RestUtilsTest {
   private void doBuildContentRangeAndLengthTest(ByteRange range, long blobSize, String expectedContentRange,
       long expectedContentLength, boolean shouldSucceed) throws RestServiceException {
     if (shouldSucceed) {
-      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, blobSize);
+      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, blobSize, false);
       assertEquals(expectedContentRange, rangeAndLength.getFirst());
       assertEquals(expectedContentLength, (long) rangeAndLength.getSecond());
     } else {
       try {
-        RestUtils.buildContentRangeAndLength(range, blobSize);
+        RestUtils.buildContentRangeAndLength(range, blobSize, false);
         fail("Should have encountered exception when building Content-Range");
       } catch (RestServiceException e) {
         assertEquals("Unexpected error code.", RestServiceErrorCode.RangeNotSatisfiable, e.getErrorCode());

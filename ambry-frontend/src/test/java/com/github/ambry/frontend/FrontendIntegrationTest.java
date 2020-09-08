@@ -825,7 +825,7 @@ public class FrontendIntegrationTest {
     if (range != null) {
       long blobSize = Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE));
       assertEquals("Content-Range header not set correctly",
-          RestUtils.buildContentRangeAndLength(range, blobSize).getFirst(),
+          RestUtils.buildContentRangeAndLength(range, blobSize, false).getFirst(),
           response.headers().get(RestUtils.Headers.CONTENT_RANGE));
       ByteRange resolvedRange = range.toResolvedByteRange(blobSize);
       expectedContentArray = Arrays.copyOfRange(expectedContentArray, (int) resolvedRange.getStartOffset(),
@@ -974,7 +974,7 @@ public class FrontendIntegrationTest {
     checkCommonGetHeadHeaders(response.headers());
     long contentLength = Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE));
     if (range != null) {
-      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
+      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength, false);
       assertEquals("Content-Range header not set correctly", rangeAndLength.getFirst(),
           response.headers().get(RestUtils.Headers.CONTENT_RANGE));
       contentLength = rangeAndLength.getSecond();

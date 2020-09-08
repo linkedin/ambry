@@ -557,17 +557,20 @@ public class RestUtils {
 
   /**
    * Build the value for the Content-Range header that corresponds to the provided range and blob size. The returned
-   * Content-Range header value will be in the following format: {@code {a}-{b}/{c}}, where {@code {a}} is the inclusive
-   * start byte offset of the returned range, {@code {b}} is the inclusive end byte offset of the returned range, and
-   * {@code {c}} is the total size of the blob in bytes. This function also generates the range length in bytes.
+   * Content-Range header value will be in the following format: {@code bytes {a}-{b}/{c}}, where {@code {a}} is the
+   * inclusive start byte offset of the returned range, {@code {b}} is the inclusive end byte offset of the returned
+   * range, and {@code {c}} is the total size of the blob in bytes. This function also generates the range length in
+   * bytes.
    * @param range a {@link ByteRange} used to generate the Content-Range header.
    * @param blobSize the total size of the associated blob in bytes.
+   * @param resolveRangeOnEmptyBlob {@code true} to force range resolution to succeed if the blob is empty.
+   *                                In other words, return {@code bytes 1-0/0} if {@code totalSize == 0}.
    * @return a {@link Pair} containing the content range header value and the content length in bytes.
    */
-  public static Pair<String, Long> buildContentRangeAndLength(ByteRange range, long blobSize)
-      throws RestServiceException {
+  public static Pair<String, Long> buildContentRangeAndLength(ByteRange range, long blobSize,
+      boolean resolveRangeOnEmptyBlob) throws RestServiceException {
     try {
-      range = range.toResolvedByteRange(blobSize);
+      range = range.toResolvedByteRange(blobSize, resolveRangeOnEmptyBlob);
     } catch (IllegalArgumentException e) {
       throw new RestServiceException("Range provided was not satisfiable.", e,
           RestServiceErrorCode.RangeNotSatisfiable);

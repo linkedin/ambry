@@ -59,14 +59,6 @@ public class ByteRanges {
   }
 
   /**
-   * Return an empty range for internal components that need one. This is represented as the range {@code [0,-1]}
-   * @return a range that contains 0 bytes.
-   */
-  static ByteRange emptyRange() {
-    return EMPTY_RANGE;
-  }
-
-  /**
    * Only static methods in this class.
    */
   private ByteRanges() {
@@ -108,7 +100,10 @@ public class ByteRanges {
     }
 
     @Override
-    public ByteRange toResolvedByteRange(long totalSize) {
+    public ByteRange toResolvedByteRange(long totalSize, boolean resolveRangeOnEmptyBlob) {
+      if (totalSize == 0 && resolveRangeOnEmptyBlob) {
+        return EMPTY_RANGE;
+      }
       if (getStartOffset() >= totalSize) {
         throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
       }
@@ -162,7 +157,10 @@ public class ByteRanges {
     }
 
     @Override
-    public ByteRange toResolvedByteRange(long totalSize) {
+    public ByteRange toResolvedByteRange(long totalSize, boolean resolveRangeOnEmptyBlob) {
+      if (totalSize == 0 && resolveRangeOnEmptyBlob) {
+        return EMPTY_RANGE;
+      }
       if (getStartOffset() >= totalSize) {
         throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
       }
@@ -221,7 +219,10 @@ public class ByteRanges {
     }
 
     @Override
-    public ByteRange toResolvedByteRange(long totalSize) {
+    public ByteRange toResolvedByteRange(long totalSize, boolean resolveRangeOnEmptyBlob) {
+      if (totalSize == 0 && resolveRangeOnEmptyBlob) {
+        return EMPTY_RANGE;
+      }
       if (totalSize < 0) {
         throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
       }
