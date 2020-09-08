@@ -13,8 +13,6 @@
  */
 package com.github.ambry.account.mysql;
 
-import com.github.ambry.account.Account;
-import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountSerdeUtils;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
@@ -41,7 +39,6 @@ public class ContainerDaoTest {
   private final Container testContainer;
   private final String containerJson;
   private final String accountName = "samza";
-  private final Account testAccount;
   private final MySqlDataAccessor dataAccessor;
   private final Connection mockConnection;
   private final ContainerDao containerDao;
@@ -50,8 +47,6 @@ public class ContainerDaoTest {
     testContainer =
         new ContainerBuilder(containerId, containerName, Container.ContainerStatus.ACTIVE, "", accountId).build();
     containerJson = AccountSerdeUtils.containerToJson(testContainer);
-    testAccount = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).build();
-    dataAccessor = mock(MySqlDataAccessor.class);
     mockConnection = mock(Connection.class);
     PreparedStatement mockInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into"))).thenReturn(mockInsertStatement);
@@ -63,7 +58,7 @@ public class ContainerDaoTest {
     when(mockResultSet.next()).thenReturn(true).thenReturn(false);
     when(mockResultSet.getInt(eq(ContainerDao.ACCOUNT_ID))).thenReturn((int) accountId);
     when(mockResultSet.getString(eq(ContainerDao.CONTAINER_INFO))).thenReturn(containerJson);
-    when(dataAccessor.getDatabaseConnection()).thenReturn(mockConnection);
+    dataAccessor = AccountDaoTest.getDataAccessor(mockConnection);
     containerDao = new ContainerDao(dataAccessor);
   }
 

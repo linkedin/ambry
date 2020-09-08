@@ -16,11 +16,14 @@ package com.github.ambry.account.mysql;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountSerdeUtils;
+import com.github.ambry.config.VerifiableProperties;
 import java.sql.Connection;
+import java.sql.Driver;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Properties;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -44,7 +47,6 @@ public class AccountDaoTest {
   public AccountDaoTest() throws SQLException {
     testAccount = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).build();
     accountJson = AccountSerdeUtils.accountToJson(testAccount, true);
-    dataAccessor = mock(MySqlDataAccessor.class);
     mockConnection = mock(Connection.class);
     PreparedStatement mockInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into"))).thenReturn(mockInsertStatement);
@@ -55,8 +57,28 @@ public class AccountDaoTest {
     when(mockResultSet.next()).thenReturn(true).thenReturn(false);
     when(mockResultSet.getString(eq(AccountDao.ACCOUNT_INFO))).thenReturn(accountJson);
     when(mockQueryStatement.executeQuery()).thenReturn(mockResultSet);
-    when(dataAccessor.getDatabaseConnection()).thenReturn(mockConnection);
+    dataAccessor = getDataAccessor(mockConnection);
     accountDao = new AccountDao(dataAccessor);
+  }
+
+  /**
+   * Utility to get a {@link MySqlDataAccessor}.
+   * @param mockConnection the connection to use.
+   * @return the {@link MySqlDataAccessor}.
+   * @throws SQLException
+   */
+  static MySqlDataAccessor getDataAccessor(Connection mockConnection) throws SQLException {
+    Driver mockDriver = mock(Driver.class);
+    when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
+    //lenient().when(mockConnection.isValid(anyInt())).thenReturn(true);
+    Properties properties = new Properties();
+    properties.setProperty(MySqlConfig.MYSQL_URL, "jdbc:mysql://localhost/AccountMetadata");
+    properties.setProperty(MySqlConfig.MYSQL_USER, "ambry");
+    properties.setProperty(MySqlConfig.MYSQL_PASSWORD, "ambry");
+    MySqlConfig config = new MySqlConfig(new VerifiableProperties(properties));
+    MySqlDataAccessor dataAccessor = new MySqlDataAccessor(config, mockDriver);
+    when(dataAccessor.getDatabaseConnection()).thenReturn(mockConnection);
+    return dataAccessor;
   }
 
   @Test

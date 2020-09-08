@@ -23,22 +23,25 @@ import com.github.ambry.config.VerifiableProperties;
  */
 public class MySqlConfig {
 
+  public static final String MYSQL_URL = "mysql.url";
+  public static final String MYSQL_USER = "mysql.user";
+  public static final String MYSQL_PASSWORD = "mysql.password";
   /**
    * Flag indicating whether to use DirectHttps CosmosDB connection mode.
    * Provides better performance but may not work with all firewall settings.
    */
-  @Config("mysql.url")
+  @Config(MYSQL_URL)
   public final String mysqlUrl;
 
-  @Config("mysql.user")
+  @Config(MYSQL_USER)
   public final String mysqlUser;
 
-  @Config("mysql.password")
+  @Config(MYSQL_PASSWORD)
   public final String mysqlPassword;
 
   public MySqlConfig(VerifiableProperties verifiableProperties) {
-    mysqlUrl = verifiableProperties.getString("mysql.url");
-    mysqlUser = verifiableProperties.getString("mysql.user");
-    mysqlPassword = verifiableProperties.getString("mysql.password");
+    mysqlUrl = verifiableProperties.getString(MYSQL_URL);
+    mysqlUser = verifiableProperties.getString(MYSQL_USER);
+    mysqlPassword = verifiableProperties.getString(MYSQL_PASSWORD);
   }
 }

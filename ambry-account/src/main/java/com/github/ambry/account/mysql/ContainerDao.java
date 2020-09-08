@@ -37,30 +37,22 @@ public class ContainerDao {
   public static final String CREATION_TIME = "creationTime";
   public static final String LAST_MODIFIED_TIME = "lastModifiedTime";
 
-  private final Connection dbConnection;
   private final MySqlDataAccessor dataAccessor;
-  private final PreparedStatement insertStatement;
-  private final PreparedStatement getSinceStatement;
-  private final PreparedStatement getByAccountStatement;
+  private final String insertSql;
+  private final String getSinceSql;
+  private final String getByAccountSql;
 
-  public ContainerDao(MySqlDataAccessor dataAccessor) throws SQLException {
+  public ContainerDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = dataAccessor;
-    this.dbConnection = dataAccessor.getDatabaseConnection();
-
-    String insertSql =
+    insertSql =
         String.format("insert into %s (%s, %s, %s, %s, %s) values (?, ?, 1, now(), now())", CONTAINER_TABLE, ACCOUNT_ID,
             CONTAINER_INFO, VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
-    insertStatement = dbConnection.prepareStatement(insertSql);
-
-    String getSinceSql =
+    getSinceSql =
         String.format("select %s, %s, %s from %s where %s > ?", ACCOUNT_ID, CONTAINER_INFO, LAST_MODIFIED_TIME,
             CONTAINER_TABLE, LAST_MODIFIED_TIME);
-    getSinceStatement = dbConnection.prepareStatement(getSinceSql);
-
-    String getByAccountSql =
+    getByAccountSql =
         String.format("select %s, %s, %s from %s where %s = ?", ACCOUNT_ID, CONTAINER_INFO, LAST_MODIFIED_TIME,
             CONTAINER_TABLE, ACCOUNT_ID);
-    getByAccountStatement = dbConnection.prepareStatement(getByAccountSql);
   }
 
   /**
@@ -72,11 +64,14 @@ public class ContainerDao {
   public void addContainer(int accountId, Container container) throws SQLException {
     try {
       // Note: assuming autocommit for now
+      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
       insertStatement.setInt(1, accountId);
       insertStatement.setString(2, AccountSerdeUtils.containerToJson(container));
       insertStatement.executeUpdate();
     } catch (SQLException e) {
-      // record failure, parse exception to figure out what we did wrong (eg. id or name collision)
+      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
+      // For now, assume connection issue.
+      dataAccessor.reset();
       throw e;
     }
   }
@@ -88,9 +83,14 @@ public class ContainerDao {
    * @throws SQLException
    */
   public List<Container> getContainers(int accountId) throws SQLException {
+    PreparedStatement getByAccountStatement = dataAccessor.getPreparedStatement(getByAccountSql);
     getByAccountStatement.setInt(1, accountId);
     try (ResultSet rs = getByAccountStatement.executeQuery()) {
       return convertResultSet(rs);
+    } catch (SQLException e) {
+      // record failure, parse exception, ...
+      dataAccessor.reset();
+      throw e;
     }
   }
 
@@ -102,21 +102,29 @@ public class ContainerDao {
    */
   public List<Container> getNewContainers(long updatedSince) throws SQLException {
     Timestamp sinceTime = new Timestamp(updatedSince);
+    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql);
     getSinceStatement.setTimestamp(1, sinceTime);
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       return convertResultSet(rs);
     } catch (SQLException e) {
       // record failure, parse exception, ...
+      dataAccessor.reset();
       throw e;
     }
   }
 
-  private List<Container> convertResultSet(ResultSet rs) throws SQLException {
+  /**
+   * Convert a query result set to a list of containers.
+   * @param resultSet the result set.
+   * @return a list of containers.
+   * @throws SQLException
+   */
+  private List<Container> convertResultSet(ResultSet resultSet) throws SQLException {
     List<Container> containers = new ArrayList<>();
-    while (rs.next()) {
-      int accountId = rs.getInt(ACCOUNT_ID);
-      String containerJson = rs.getString(CONTAINER_INFO);
-      Timestamp lastModifiedTime = rs.getTimestamp(LAST_MODIFIED_TIME);
+    while (resultSet.next()) {
+      int accountId = resultSet.getInt(ACCOUNT_ID);
+      String containerJson = resultSet.getString(CONTAINER_INFO);
+      Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
       Container container = AccountSerdeUtils.containerFromJson(containerJson, (short) accountId);
       //container.setLastModifiedTime(lastModifiedTime);
       containers.add(container);

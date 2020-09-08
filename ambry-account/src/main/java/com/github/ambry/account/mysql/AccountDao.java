@@ -37,23 +37,17 @@ public class AccountDao {
   public static final String LAST_MODIFIED_TIME = "lastModifiedTime";
 
   private final MySqlDataAccessor dataAccessor;
-  private final Connection dbConnection;
-  private final PreparedStatement insertStatement;
-  private final PreparedStatement getSinceStatement;
+  private final String insertSql;
+  private final String getSinceSql;
 
-  public AccountDao(MySqlDataAccessor dataAccessor) throws SQLException {
+  public AccountDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = dataAccessor;
-    this.dbConnection = dataAccessor.getDatabaseConnection();
-
-    String insertSql =
+    insertSql =
         String.format("insert into %s (%s, %s, %s, %s) values (?, ?, now(), now())", ACCOUNT_TABLE, ACCOUNT_INFO,
             VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
-    insertStatement = dbConnection.prepareStatement(insertSql);
-
-    String getSinceSql =
+    getSinceSql =
         String.format("select %s, %s from %s where %s > ?", ACCOUNT_INFO, LAST_MODIFIED_TIME, ACCOUNT_TABLE,
             LAST_MODIFIED_TIME);
-    getSinceStatement = dbConnection.prepareStatement(getSinceSql);
   }
 
   /**
@@ -63,11 +57,14 @@ public class AccountDao {
    */
   public void addAccount(Account account) throws SQLException {
     try {
+      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
       insertStatement.setString(1, AccountSerdeUtils.accountToJson(account, true));
       insertStatement.setInt(2, account.getSnapshotVersion());
       insertStatement.executeUpdate();
     } catch (SQLException e) {
-      // record failure, parse exception to figure out what we did wrong (eg. id or name collision)
+      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
+      // For now, assume connection issue.
+      dataAccessor.reset();
       throw e;
     }
   }
@@ -81,6 +78,7 @@ public class AccountDao {
   public List<Account> getNewAccounts(long updatedSince) throws SQLException {
     List<Account> accounts = new ArrayList<>();
     Timestamp sinceTime = new Timestamp(updatedSince);
+    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql);
     getSinceStatement.setTimestamp(1, sinceTime);
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       while (rs.next()) {
@@ -93,6 +91,7 @@ public class AccountDao {
       return accounts;
     } catch (SQLException e) {
       // record failure, parse exception, ...
+      dataAccessor.reset();
       throw e;
     }
   }
