@@ -1113,7 +1113,7 @@ class BlobStoreCompactor {
       // StoreConfig#storeDeletedMessageRetentionDays days old. If there are such deletes, then they are not counted as
       // deletes and the PUT records are still valid as far as compaction is concerned
       boolean deletesInEffect = startOffsetOfLastIndexSegmentForDeleteCheck != null
-          && indexSegment.getStartOffset().compareTo(startOffsetOfLastIndexSegmentForDeleteCheck) < 0;
+          && indexSegment.getStartOffset().compareTo(startOffsetOfLastIndexSegmentForDeleteCheck) <= 0;
       logger.trace("Deletes in effect is {} for index segment with start offset {} in {}", deletesInEffect,
           indexSegment.getStartOffset(), storeId);
       List<IndexEntry> validEntries = new ArrayList<>();
@@ -1191,7 +1191,9 @@ class BlobStoreCompactor {
         long referenceTimeMs = compactionLog.getCompactionDetails().getReferenceTimeMs();
         for (IndexSegment indexSegment : srcIndex.getIndexSegments().descendingMap().values()) {
           if (indexSegment.getLastModifiedTimeMs() < referenceTimeMs) {
-            cutoffOffset = indexSegment.getEndOffset();
+            // NOTE: using start offset here because of the way FileSpan is treated in PersistentIndex.findKey().
+            // using this as the end offset for delete includes the whole index segment in the search.
+            cutoffOffset = indexSegment.getStartOffset();
             break;
           }
         }

@@ -531,10 +531,18 @@ public class BlobStore implements Store {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       maybeCallInDeleteBetweenGetEndOffsetAndFindKey();
       for (MessageInfo info : infosToDelete) {
-        IndexValue value =
-            index.findKey(info.getStoreKey(), new FileSpan(index.getStartOffset(), indexEndOffsetBeforeCheck));
-        if (value == null) {
-          throw new StoreException("Cannot delete id " + info.getStoreKey() + " because it is not present in the index",
+        IndexValue value = index.findKey(info.getStoreKey());
+        // TODO: Passing a FileSpan the findKey and change the findKey implementation to fully restrict the index
+        // searching space to be limited within the given FileSpan.
+        if (value == null || (value.getOffset().compareTo(indexEndOffsetBeforeCheck) >= 0 && value.isPut())) {
+          // A temporary fix to deal with this particular corner case.
+          // Between calling index.getCurrentEndOffset and findKey method, there is a Put record of the same blob
+          // is inserted to index.
+          // index.getCurrentEndOffset should create a virtual snapshot for this delete method. Everything happens after
+          // this end offset would be considered as happening outside of the snapshot.
+          String reason =
+              value == null ? "it is not present in the index" : "PUT record is out of current offset before check";
+          throw new StoreException("Cannot delete id " + info.getStoreKey() + " because " + reason,
               StoreErrorCodes.ID_Not_Found);
         }
         if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
@@ -580,24 +588,16 @@ public class BlobStore implements Store {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           int i = 0;
           for (MessageInfo info : infosToDelete) {
-            IndexValue value =
-                index.findKey(info.getStoreKey(), fileSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
-            if (value != null) {
-              // There are several possible cases that can exist here. Delete has to follow either PUT, TTL_UPDATE or UNDELETE.
-              // let EOBC be end offset before check, and [RECORD] means RECORD is optional
-              // 1. PUT [TTL_UPDATE DELETE UNDELETE] EOBC DELETE
-              // 2. PUT EOBC TTL_UPDATE
-              // 3. PUT EOBC DELETE UNDELETE: this is really extreme case
-              // From these cases, we can have value being DELETE, TTL_UPDATE AND UNDELETE, we have to deal with them accordingly.
-              if (value.getLifeVersion() == lifeVersions.get(i)) {
-                if (value.isDelete()) {
-                  throw new StoreException(
-                      "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
-                      StoreErrorCodes.ID_Deleted);
-                }
-                // value being ttl update is fine, we can just append DELETE to it.
+            IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
+                EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE,
+                    PersistentIndex.IndexEntryType.UNDELETE));
+            if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) >= 0) {
+              // Make sure the value is actually after the indexEndOffsetBeforeCheck
+              if (value.isDelete() && value.getLifeVersion() == lifeVersions.get(i)) {
+                throw new StoreException(
+                    "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                    StoreErrorCodes.ID_Deleted);
               } else {
-                // For the extreme case, we log it out and throw an exception.
                 logger.warn("Concurrent operation for id " + info.getStoreKey() + " in store " + dataDir
                     + ". Newly added value " + value);
                 throw new StoreException(
@@ -666,8 +666,7 @@ public class BlobStore implements Store {
           throw new StoreException("BlobStore only supports removing the expiration time",
               StoreErrorCodes.Update_Not_Allowed);
         }
-        IndexValue value =
-            index.findKey(info.getStoreKey(), new FileSpan(index.getStartOffset(), indexEndOffsetBeforeCheck));
+        IndexValue value = index.findKey(info.getStoreKey());
         if (value == null) {
           throw new StoreException("Cannot update TTL of " + info.getStoreKey() + " since it's not in the index",
               StoreErrorCodes.ID_Not_Found);
@@ -780,8 +779,7 @@ public class BlobStore implements Store {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       short lifeVersionFromMessageInfo = info.getLifeVersion();
 
-      List<IndexValue> values =
-          index.findAllIndexValuesForKey(id, new FileSpan(index.getStartOffset(), indexEndOffsetBeforeCheck));
+      List<IndexValue> values = index.findAllIndexValuesForKey(id, null);
       // Check if the undelete record is valid.
       index.validateSanityForUndelete(id, values, lifeVersionFromMessageInfo);
       IndexValue latestValue = values.get(0);
@@ -817,7 +815,8 @@ public class BlobStore implements Store {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
               EnumSet.of(PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE));
-          if (value != null) {
+          if (value != null && value.getOffset().compareTo(indexEndOffsetBeforeCheck) >= 0) {
+            // Make sure the value is actually after the indexEndOffsetBeforeCheck
             if (value.isUndelete() && value.getLifeVersion() == revisedLifeVersion) {
               // Might get an concurrent undelete from both replication and frontend.
               throw new IdUndeletedStoreException(

@@ -556,19 +556,6 @@ class PersistentIndex {
    * if present in the index within the given {@code fileSpan}.
    * @param key The key to do the exist check against
    * @param fileSpan FileSpan which specifies the range within which search should be made
-   * @return The latest {@link IndexValue} for {@code key} conforming to one of the types {@code types} - if one exists
-   * within the {@code fileSpan}, {@code null} otherwise.
-   * @throws StoreException
-   */
-  IndexValue findKey(StoreKey key, FileSpan fileSpan) throws StoreException {
-    return findKey(key, fileSpan, EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE, IndexEntryType.UNDELETE));
-  }
-
-  /**
-   * Finds the latest {@link IndexValue} associated with the {@code key} that matches any of the provided {@code types}
-   * if present in the index within the given {@code fileSpan}.
-   * @param key The key to do the exist check against
-   * @param fileSpan FileSpan which specifies the range within which search should be made
    * @param types the types of {@link IndexEntryType} to look for. The latest entry matching one of the types will be
    *              returned
    * @return The latest {@link IndexValue} for {@code key} conforming to one of the types {@code types} - if one exists
@@ -593,9 +580,6 @@ class PersistentIndex {
    */
   private IndexValue findKey(StoreKey key, FileSpan fileSpan, EnumSet<IndexEntryType> types,
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
-    if (fileSpan != null && fileSpan.isEmpty()) {
-      return null;
-    }
     IndexValue latest = null;
     IndexValue retCandidate = null;
     final Timer.Context context = metrics.findTime.time();
@@ -608,7 +592,7 @@ class PersistentIndex {
         logger.trace("Searching for {} in index with filespan ranging from {} to {}", key, fileSpan.getStartOffset(),
             fileSpan.getEndOffset());
         segmentsMapToSearch = indexSegments.subMap(indexSegments.floorKey(fileSpan.getStartOffset()), true,
-            indexSegments.lowerKey(fileSpan.getEndOffset()), true).descendingMap();
+            indexSegments.floorKey(fileSpan.getEndOffset()), true).descendingMap();
         metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
       }
       int segmentsSearched = 0;
@@ -620,15 +604,6 @@ class PersistentIndex {
           Iterator<IndexValue> it = values.descendingIterator();
           while (it.hasNext()) {
             IndexValue value = it.next();
-            if (fileSpan != null) {
-              // Start <= value.offset < End
-              if (value.getOffset().compareTo(fileSpan.getEndOffset()) >= 0) {
-                continue;
-              }
-              if (value.getOffset().compareTo(fileSpan.getStartOffset()) < 0) {
-                break;
-              }
-            }
             if (latest == null) {
               latest = value;
             }
@@ -702,9 +677,6 @@ class PersistentIndex {
   List<IndexValue> findAllIndexValuesForKey(StoreKey key, FileSpan fileSpan, EnumSet<IndexEntryType> types,
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
     List<IndexValue> result = new ArrayList<>();
-    if (fileSpan != null && fileSpan.isEmpty()) {
-      return result;
-    }
     final Timer.Context context = metrics.findTime.time();
     try {
       ConcurrentNavigableMap<Offset, IndexSegment> segmentsMapToSearch;
@@ -715,7 +687,7 @@ class PersistentIndex {
         logger.trace("Searching all indexes for {} in index with filespan ranging from {} to {}", key,
             fileSpan.getStartOffset(), fileSpan.getEndOffset());
         segmentsMapToSearch = indexSegments.subMap(indexSegments.floorKey(fileSpan.getStartOffset()), true,
-            indexSegments.lowerKey(fileSpan.getEndOffset()), true).descendingMap();
+            indexSegments.floorKey(fileSpan.getEndOffset()), true).descendingMap();
         metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
       }
       int segmentsSearched = 0;
@@ -727,15 +699,6 @@ class PersistentIndex {
           Iterator<IndexValue> it = values.descendingIterator();
           while (it.hasNext()) {
             IndexValue value = it.next();
-            if (fileSpan != null) {
-              // Start <= value.offset < End
-              if (value.getOffset().compareTo(fileSpan.getEndOffset()) >= 0) {
-                continue;
-              }
-              if (value.getOffset().compareTo(fileSpan.getStartOffset()) < 0) {
-                break;
-              }
-            }
             if ((types.contains(IndexEntryType.DELETE) && value.isDelete()) || (types.contains(IndexEntryType.UNDELETE)
                 && value.isUndelete()) || (types.contains(IndexEntryType.TTL_UPDATE) && !value.isDelete()
                 && !value.isUndelete() && value.isTtlUpdate()) || (types.contains(IndexEntryType.PUT)
