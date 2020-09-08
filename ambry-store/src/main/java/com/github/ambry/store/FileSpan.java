@@ -14,8 +14,7 @@
 package com.github.ambry.store;
 
 /**
- * Represents a portion of a log. Provides the start and end offset of a log. The start offset is inclusive in the
- * FileSpan, but the end offset is not. When the start offset = end offset, this is an empty FileSpan.
+ * Represents a portion of a log. Provides the start and end offset of a log
  */
 class FileSpan {
   private Offset startOffset;
@@ -54,14 +53,7 @@ class FileSpan {
    * @return {@code true} if {@code offset} is in this {@link FileSpan} (start and end offsets are considered inclusive)
    */
   boolean inSpan(Offset offset) {
-    return offset.compareTo(startOffset) >= 0 && offset.compareTo(endOffset) < 0;
-  }
-
-  /**
-   * @return True when start offset equals to end offset.
-   */
-  boolean isEmpty() {
-    return startOffset.compareTo(endOffset) == 0;
+    return offset.compareTo(startOffset) >= 0 && offset.compareTo(endOffset) <= 0;
   }
 
   @Override
