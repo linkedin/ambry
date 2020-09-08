@@ -529,14 +529,14 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @param deleteReferenceTimeInMs the reference time in ms until which deletes are relevant
    * @param expiryReferenceTimeInMs the reference time in ms until which expiration are relevant
    * @param keyFinalStates a {@link Map} of key to {@link IndexFinalState}.
-   * @param removeFromStates if {@code True}, then remove the {@link IndexFinalState} from the given map {@code keyFinalStates}
+   * @param removeFinalStateOnPut if {@code True}, then remove the {@link IndexFinalState} from the given map {@code keyFinalStates}
    *                         when encountering PUT IndexValue. This method iterates through IndexValues from most recent one to
    *                         earliest one, so PUT IndexValue is the last IndexValue for the same key.
    * @param validIndexEntryAction the action to take on each valid {@link IndexEntry} found.
    * @throws StoreException if there are problems reading the index.
    */
   private void forEachValidIndexEntry(IndexSegment indexSegment, long deleteReferenceTimeInMs,
-      long expiryReferenceTimeInMs, Map<StoreKey, IndexFinalState> keyFinalStates, boolean removeFromStates,
+      long expiryReferenceTimeInMs, Map<StoreKey, IndexFinalState> keyFinalStates, boolean removeFinalStateOnPut,
       IndexEntryAction validIndexEntryAction) throws StoreException {
     ListIterator<IndexEntry> it = indexSegment.listIterator(indexSegment.size());
     while (it.hasPrevious()) {
@@ -592,7 +592,7 @@ class BlobStoreStats implements StoreStats, Closeable {
         IndexFinalState finalState = keyFinalStates.get(key);
         if (finalState != null && finalState.isDelete() && finalState.getOperationTime() < deleteReferenceTimeInMs) {
           // Put is deleted before reference time, it's not valid.
-          if (removeFromStates) {
+          if (removeFinalStateOnPut) {
             keyFinalStates.remove(key);
           }
           continue;
@@ -604,7 +604,7 @@ class BlobStoreStats implements StoreStats, Closeable {
         if (!isExpired(indexValue.getExpiresAtMs(), expiryReferenceTimeInMs)) {
           validIndexEntryAction.accept(indexEntry);
         }
-        if (removeFromStates) {
+        if (removeFinalStateOnPut) {
           keyFinalStates.remove(key);
         }
       }

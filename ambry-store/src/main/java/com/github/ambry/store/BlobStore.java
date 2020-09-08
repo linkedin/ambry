@@ -557,8 +557,6 @@ public class BlobStore implements Store {
                 "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
                 StoreErrorCodes.ID_Deleted);
           }
-          indexValuesPriorToDelete.add(value);
-          lifeVersions.add(value.getLifeVersion());
         } else {
           // This is a delete request from replication
           if (value.isDelete() && value.getLifeVersion() == info.getLifeVersion()) {
@@ -571,9 +569,9 @@ public class BlobStore implements Store {
                 "Cannot delete id " + info.getStoreKey() + " since it has a higher lifeVersion than the message info: "
                     + value.getLifeVersion() + ">" + info.getLifeVersion(), StoreErrorCodes.Life_Version_Conflict);
           }
-          indexValuesPriorToDelete.add(value);
-          lifeVersions.add(info.getLifeVersion());
         }
+        indexValuesPriorToDelete.add(value);
+        lifeVersions.add(info.getLifeVersion());
         if (!value.isDelete() && !value.isUndelete()) {
           originalPuts.add(value);
         } else {
