@@ -309,7 +309,7 @@ public class Account {
    * Adds a {@link Container} to this account and updates internal maps accordingly.
    * @param container The container to update this account.
    */
-  public void updateContainerMap(Container container) {
+  private void updateContainerMap(Container container) {
     containerIdToContainerMap.put(container.getId(), container);
     containerNameToContainerMap.put(container.getName(), container);
   }
