@@ -82,6 +82,11 @@ public class MySqlDataAccessor {
     return activeConnection;
   }
 
+  /**
+   * @return a {@link PreparedStatement} using the supplied SQL text.
+   * @param sql the SQL text to use.
+   * @throws SQLException
+   */
   public synchronized PreparedStatement getPreparedStatement(String sql) throws SQLException {
     PreparedStatement statement = statementCache.get(sql);
     if (statement != null) {
