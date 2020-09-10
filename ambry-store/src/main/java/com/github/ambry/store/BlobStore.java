@@ -550,6 +550,7 @@ public class BlobStore implements Store {
             metrics.deleteAuthorizationFailureCount.inc();
           }
         }
+        short revisedLifeVersion = info.getLifeVersion();
         if (info.getLifeVersion() == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
           // This is a delete request from frontend
           if (value.isDelete()) {
@@ -557,6 +558,7 @@ public class BlobStore implements Store {
                 "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
                 StoreErrorCodes.ID_Deleted);
           }
+          revisedLifeVersion = value.getLifeVersion();
         } else {
           // This is a delete request from replication
           if (value.isDelete() && value.getLifeVersion() == info.getLifeVersion()) {
@@ -571,7 +573,7 @@ public class BlobStore implements Store {
           }
         }
         indexValuesPriorToDelete.add(value);
-        lifeVersions.add(info.getLifeVersion());
+        lifeVersions.add(revisedLifeVersion);
         if (!value.isDelete() && !value.isUndelete()) {
           originalPuts.add(value);
         } else {
