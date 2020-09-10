@@ -24,11 +24,13 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.ClusterSpectator;
 import com.github.ambry.clustermap.ClusterSpectatorFactory;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
+import com.github.ambry.commons.Throttler;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -65,7 +67,6 @@ import com.github.ambry.rest.NettyMetrics;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -93,6 +94,12 @@ import static com.github.ambry.utils.Utils.*;
  */
 public class AmbryServer {
 
+  private static final Logger logger = LoggerFactory.getLogger(AmbryServer.class);
+  private final VerifiableProperties properties;
+  private final ClusterAgentsFactory clusterAgentsFactory;
+  private final ClusterSpectatorFactory clusterSpectatorFactory;
+  private final NotificationSystem notificationSystem;
+  private final NettyInternalMetrics nettyInternalMetrics;
   private CountDownLatch shutdownLatch = new CountDownLatch(1);
   private NetworkServer networkServer = null;
   private AmbryRequests requests = null;
@@ -102,17 +109,12 @@ public class AmbryServer {
   private StatsManager statsManager = null;
   private ReplicationManager replicationManager = null;
   private CloudToStoreReplicationManager cloudToStoreReplicationManager = null;
-  private static final Logger logger = LoggerFactory.getLogger(AmbryServer.class);
-  private final VerifiableProperties properties;
-  private final ClusterAgentsFactory clusterAgentsFactory;
-  private final ClusterSpectatorFactory clusterSpectatorFactory;
   private ClusterMap clusterMap;
   private List<ClusterParticipant> clusterParticipants;
   private ClusterSpectator vcrClusterSpectator;
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
   private ConnectionPool connectionPool = null;
-  private final NotificationSystem notificationSystem;
   private ServerMetrics metrics = null;
   private Time time;
   private RequestHandlerPool requestHandlerPoolForHttp2;
@@ -121,7 +123,6 @@ public class AmbryServer {
   private ScheduledFuture<?> consistencyCheckerTask = null;
   private ScheduledExecutorService consistencyCheckerScheduler = null;
   private ServerSecurityService serverSecurityService;
-  private final NettyInternalMetrics nettyInternalMetrics;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       ClusterSpectatorFactory clusterSpectatorFactory, Time time) throws InstantiationException {
@@ -251,12 +252,17 @@ public class AmbryServer {
         statsManager.start();
       }
 
+      ServerHealthThrottlerFactory serverHealthThrottlerFactory =
+          Utils.getObj(serverConfig.serverRequestThrottlerFactoryClass, registry,
+              serverConfig.serverRequestThrottlingMode, nodeId.hasHttp2Port());
+      Throttler throttler = serverHealthThrottlerFactory.getThrottler();
+
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
       if (nodeId.hasSSLPort()) {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
-      networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
+      networkServer = new SocketServer(networkConfig, sslConfig, registry, ports, throttler);
       FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
       requests = new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId,
           registry, metrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
@@ -286,7 +292,7 @@ public class AmbryServer {
 
         NioServerFactory nioServerFactory =
             new StorageServerNettyFactory(nodeId.getHttp2Port(), requestResponseChannel, sslFactory, nettyConfig,
-                http2ClientConfig, metrics, nettyMetrics, http2ServerMetrics, serverSecurityService);
+                http2ClientConfig, metrics, nettyMetrics, http2ServerMetrics, serverSecurityService, throttler);
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
       }

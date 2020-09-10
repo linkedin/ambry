@@ -15,6 +15,7 @@ package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.commons.Throttler;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.SystemTime;
@@ -49,6 +50,7 @@ import org.slf4j.LoggerFactory;
  */
 public class SocketServer implements NetworkServer {
 
+  private static final Logger logger = LoggerFactory.getLogger(SocketServer.class);
   private final NetworkConfig networkConfig;
   private final String host;
   private final int port;
@@ -58,14 +60,15 @@ public class SocketServer implements NetworkServer {
   private final int recvBufferSize;
   private final int maxRequestSize;
   private final ArrayList<Processor> processors;
-  private volatile ArrayList<Acceptor> acceptors;
   private final SocketRequestResponseChannel requestResponseChannel;
-  private static final Logger logger = LoggerFactory.getLogger(SocketServer.class);
   private final ServerNetworkMetrics metrics;
   private final HashMap<PortType, Port> ports;
+  private final Throttler throttler;
+  private volatile ArrayList<Acceptor> acceptors;
   private SSLFactory sslFactory;
 
-  public SocketServer(NetworkConfig config, SSLConfig sslConfig, MetricRegistry registry, ArrayList<Port> portList) {
+  public SocketServer(NetworkConfig config, SSLConfig sslConfig, MetricRegistry registry, ArrayList<Port> portList,
+      Throttler throttler) {
     this.networkConfig = config;
     this.host = config.hostName;
     this.port = config.port;
@@ -81,6 +84,7 @@ public class SocketServer implements NetworkServer {
     this.ports = new HashMap<PortType, Port>();
     this.validatePorts(portList);
     this.initializeSSLFactory(sslConfig);
+    this.throttler = throttler;
   }
 
   public String getHost() {
@@ -255,14 +259,14 @@ abstract class AbstractServerThread implements Runnable {
  * Thread that accepts and configures new connections.
  */
 class Acceptor extends AbstractServerThread {
+  private static final long selectTimeOutMs = 500;
+  private static final Logger logger = LoggerFactory.getLogger(Acceptor.class);
   private final ArrayList<Processor> processors;
   private final int sendBufferSize;
   private final int recvBufferSize;
   private final ServerSocketChannel serverChannel;
   private final java.nio.channels.Selector nioSelector;
-  private static final long selectTimeOutMs = 500;
   private final ServerNetworkMetrics metrics;
-  private static final Logger logger = LoggerFactory.getLogger(Acceptor.class);
 
   public Acceptor(int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
       ServerNetworkMetrics metrics) throws IOException {
@@ -334,12 +338,12 @@ class Acceptor extends AbstractServerThread {
   /*
    * Accept a new connection
    */
-  protected void accept(SelectionKey key, Processor processor) throws SocketException, IOException {
+  protected void accept(SelectionKey key, Processor processor) throws IOException {
     SocketChannel socketChannel = acceptConnection(key);
     processor.accept(socketChannel, PortType.PLAINTEXT);
   }
 
-  protected SocketChannel acceptConnection(SelectionKey key) throws SocketException, IOException {
+  protected SocketChannel acceptConnection(SelectionKey key) throws IOException {
     ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
     serverSocketChannel.socket().setReceiveBufferSize(recvBufferSize);
     SocketChannel socketChannel = serverSocketChannel.accept();
@@ -374,7 +378,7 @@ class SSLAcceptor extends Acceptor {
    * Accept a new connection
    */
   @Override
-  protected void accept(SelectionKey key, Processor processor) throws SocketException, IOException {
+  protected void accept(SelectionKey key, Processor processor) throws IOException {
     SocketChannel socketChannel = acceptConnection(key);
     processor.accept(socketChannel, PortType.SSL);
   }
@@ -385,6 +389,8 @@ class SSLAcceptor extends Acceptor {
  * each of which has its own selectors
  */
 class Processor extends AbstractServerThread {
+  private static final long pollTimeoutMs = 300;
+  private static final Logger logger = LoggerFactory.getLogger(Processor.class);
   private final SocketRequestResponseChannel channel;
   private final int id;
   private final Time time;
@@ -392,9 +398,7 @@ class Processor extends AbstractServerThread {
       new ConcurrentLinkedQueue<SocketChannelPortTypePair>();
   private final Selector selector;
   private final ServerNetworkMetrics metrics;
-  private static final long pollTimeoutMs = 300;
   private final NetworkConfig networkConfig;
-  private static final Logger logger = LoggerFactory.getLogger(Processor.class);
 
   Processor(int id, int maxRequestSize, RequestResponseChannel channel, ServerNetworkMetrics metrics,
       SSLFactory sslFactory, NetworkConfig networkConfig) throws IOException {
@@ -484,7 +488,7 @@ class Processor extends AbstractServerThread {
   /**
    * Register any new connections that have been queued up
    */
-  private void configureNewConnections() throws ClosedChannelException, IOException {
+  private void configureNewConnections() throws IOException {
     while (newConnections.size() > 0) {
       SocketChannelPortTypePair socketChannelPortTypePair = newConnections.poll();
       logger.debug("Processor {} listening to new connection from {}", id,

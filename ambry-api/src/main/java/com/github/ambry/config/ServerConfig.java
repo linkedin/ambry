@@ -114,6 +114,12 @@ public class ServerConfig {
   @Default("0")
   public final long serverParticipantsConsistencyCheckerPeriodSec;
 
+  /**
+   * Factory class that creates the throttler class for Ambry server.
+   */
+  @Config("server.request.throttler.factory.class")
+  @Default("com.github.ambry.commons.PassThroughThrottlerFactory")
+  public final String serverRequestThrottlerFactoryClass;
 
   /**
    * The ServerSecurityServiceFactory that needs to validate connections and requests coming to server.
@@ -121,6 +127,13 @@ public class ServerConfig {
   @Config("server.security.service.factory")
   @Default("com.github.ambry.server.AmbryServerSecurityServiceFactory")
   public final String serverSecurityServiceFactory;
+
+  /**
+   * The throttling mode in which the server throttling will operate.
+   */
+  @Config("server.request.throttling.mode")
+  @Default("TRACKING")
+  public final String serverRequestThrottlingMode;
 
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
@@ -147,5 +160,8 @@ public class ServerConfig {
         verifiableProperties.getLong("server.participants.consistency.checker.period.sec", 0);
     serverSecurityServiceFactory = verifiableProperties.getString("server.security.service.factory",
         "com.github.ambry.server.AmbryServerSecurityServiceFactory");
+    serverRequestThrottlerFactoryClass = verifiableProperties.getString("server.request.throttler.factory.class",
+        "com.github.ambry.commons.PassThroughThrottlerFactory");
+    serverRequestThrottlingMode = verifiableProperties.getString("server.request.throttling.mode", "TRACKING");
   }
 }

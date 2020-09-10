@@ -15,19 +15,20 @@ package com.github.ambry.server;
 
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
+import com.github.ambry.commons.Throttler;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.http2.AmbryNetworkRequestHandler;
 import com.github.ambry.network.http2.AmbrySendToHttp2Adaptor;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.network.http2.Http2ServerStreamHandler;
 import com.github.ambry.rest.ConnectionStatsHandler;
-import com.github.ambry.rest.ServerSecurityHandler;
-import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.rest.NettyMetrics;
 import com.github.ambry.rest.NettyServer;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
+import com.github.ambry.rest.ServerSecurityHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
@@ -45,10 +46,10 @@ import org.slf4j.LoggerFactory;
  */
 public class StorageServerNettyFactory implements NioServerFactory {
   private static final Logger LOGGER = LoggerFactory.getLogger(StorageServerNettyFactory.class);
-
+  final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
+  private final Throttler throttler;
 
   /**
    * Creates a new instance of StorageServerNettyFactory.
@@ -68,7 +69,8 @@ public class StorageServerNettyFactory implements NioServerFactory {
 
   public StorageServerNettyFactory(int http2Port, RequestResponseChannel requestResponseChannel, SSLFactory sslFactory,
       NettyConfig nettyConfig, Http2ClientConfig http2ClientConfig, ServerMetrics serverMetrics,
-      NettyMetrics nettyMetrics, Http2ServerMetrics http2ServerMetrics, ServerSecurityService serverSecurityService) {
+      NettyMetrics nettyMetrics, Http2ServerMetrics http2ServerMetrics, ServerSecurityService serverSecurityService,
+      Throttler throttler) {
     if (requestResponseChannel == null || sslFactory == null || nettyConfig == null || http2ClientConfig == null
         || serverMetrics == null || nettyMetrics == null || http2ServerMetrics == null
         || serverSecurityService == null) {
@@ -76,6 +78,7 @@ public class StorageServerNettyFactory implements NioServerFactory {
     }
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
+    this.throttler = throttler;
 
     // For ServerSecurityHandler, Http2ServerStreamHandler, AmbryNetworkRequestHandler,
     // Http2StreamFrameToHttpObjectCodec and AmbrySendToHttp2Adaptor, each of them should only have one instance.
