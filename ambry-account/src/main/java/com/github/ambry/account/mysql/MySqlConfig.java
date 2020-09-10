@@ -26,10 +26,7 @@ public class MySqlConfig {
   public static final String MYSQL_URL = "mysql.url";
   public static final String MYSQL_USER = "mysql.user";
   public static final String MYSQL_PASSWORD = "mysql.password";
-  /**
-   * Flag indicating whether to use DirectHttps CosmosDB connection mode.
-   * Provides better performance but may not work with all firewall settings.
-   */
+
   @Config(MYSQL_URL)
   public final String mysqlUrl;
 
