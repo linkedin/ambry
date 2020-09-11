@@ -198,7 +198,8 @@ public class ChunkFillTest {
           Assert.assertTrue("Chunk should be Building or Ready.", putChunk.getState() == PutOperation.ChunkState.Ready
               || putChunk.getState() == PutOperation.ChunkState.Building);
           if (putChunk.getState() == PutOperation.ChunkState.Ready) {
-            Assert.assertEquals("Chunk size should be the last chunk size", lastChunkSize, putChunk.buf.readableBytes());
+            Assert.assertEquals("Chunk size should be the last chunk size", lastChunkSize,
+                putChunk.buf.readableBytes());
             Assert.assertTrue("Chunk Filling should be complete at this time", op.isChunkFillingDone());
             fillingComplete = true;
           }
@@ -321,7 +322,7 @@ public class ChunkFillTest {
       ByteBuffer dest = ByteBuffer.allocate(totalSizeWritten);
       for (ByteBuf buf : compositeBuffers) {
         Assert.assertNotNull("All chunks should have come in", buf);
-        for (ByteBuffer buffer: buf.nioBuffers()) {
+        for (ByteBuffer buffer : buf.nioBuffers()) {
           dest.put(buffer);
         }
       }
@@ -335,9 +336,11 @@ public class ChunkFillTest {
             new DecryptJob(compositeBlobIds[i], compositeEncryptionKeys[i], compositeBuffers[i], null, cryptoService,
                 kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), (result, exception) -> {
               Assert.assertNull("Exception shouldn't have been thrown", exception);
-              int chunkSize = result.getDecryptedBlobContent().remaining();
-              result.getDecryptedBlobContent().get(content, offset.get(), chunkSize);
+              ByteBuf decryptedBlobContent = result.getDecryptedBlobContent();
+              int chunkSize = decryptedBlobContent.readableBytes();
+              decryptedBlobContent.readBytes(content, offset.get(), chunkSize);
               offset.addAndGet(chunkSize);
+              decryptedBlobContent.release();
             });
         decryptJob.run();
       }

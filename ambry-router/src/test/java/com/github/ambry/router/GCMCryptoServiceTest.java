@@ -20,12 +20,14 @@ import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
 import java.util.Properties;
 import javax.crypto.spec.SecretKeySpec;
+import org.apache.commons.math.distribution.DiscreteDistribution;
 import org.bouncycastle.util.encoders.Hex;
 import org.junit.After;
 import org.junit.Assert;
@@ -98,13 +100,14 @@ public class GCMCryptoServiceTest {
     GCMCryptoService cryptoService =
         (GCMCryptoService) (new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService());
     byte[] fixedIv = new byte[12];
+    boolean directMemorySupported = PooledByteBufAllocator.DEFAULT.isDirectBufferPooled();
     for (int i = 0; i < 5; i++) {
       int size = TestUtils.RANDOM.nextInt(MAX_DATA_SIZE);
       byte[] randomData = new byte[size];
       TestUtils.RANDOM.nextBytes(randomData);
       ByteBuffer toEncrypt = ByteBuffer.wrap(randomData);
-      ByteBuf toEncryptByteBufHeap = ByteBufAllocator.DEFAULT.heapBuffer(size);
-      ByteBuf toEncryptByteBufDirect = ByteBufAllocator.DEFAULT.ioBuffer(size);
+      ByteBuf toEncryptByteBufHeap = PooledByteBufAllocator.DEFAULT.heapBuffer(size);
+      ByteBuf toEncryptByteBufDirect = PooledByteBufAllocator.DEFAULT.ioBuffer(size);
       toEncryptByteBufHeap.writeBytes(randomData);
       toEncryptByteBufDirect.writeBytes(randomData);
 
@@ -113,8 +116,8 @@ public class GCMCryptoServiceTest {
       ByteBuf encryptedBytesByteBufDirect = cryptoService.encrypt(toEncryptByteBufDirect, secretKeySpec, fixedIv);
 
       // EncryptedByteBuf should be a head buffer always.
-      Assert.assertTrue(encryptedBytesByteBufHeap.hasArray());
-      Assert.assertTrue(encryptedBytesByteBufDirect.hasArray());
+      Assert.assertEquals(directMemorySupported, !encryptedBytesByteBufHeap.hasArray());
+      Assert.assertEquals(directMemorySupported, !encryptedBytesByteBufDirect.hasArray());
       Assert.assertEquals(encryptedBytes.remaining(), encryptedBytesByteBufHeap.readableBytes());
       Assert.assertEquals(encryptedBytes.remaining(), encryptedBytesByteBufDirect.readableBytes());
       Assert.assertEquals(toEncrypt.remaining(), 0);
@@ -127,16 +130,22 @@ public class GCMCryptoServiceTest {
       encryptedBytesByteBufDirect.getBytes(encryptedBytesByteBufDirect.readerIndex(), arrayFromByteBuf);
       Assert.assertArrayEquals(encryptedBytes.array(), arrayFromByteBuf);
 
-      ByteBuf toDecryptByteBufHeap = encryptedBytesByteBufHeap;
-      ByteBuf toDecryptByteBufDirect = ByteBufAllocator.DEFAULT.ioBuffer(encryptedBytesByteBufHeap.readableBytes());
-      toDecryptByteBufDirect.writeBytes(toDecryptByteBufHeap, 0, toDecryptByteBufHeap.readableBytes());
+      toEncryptByteBufHeap.release();
+      toEncryptByteBufDirect.release();
+      encryptedBytesByteBufHeap.release();
+      encryptedBytesByteBufDirect.release();
+
+      ByteBuf toDecryptByteBufHeap = PooledByteBufAllocator.DEFAULT.heapBuffer(arrayFromByteBuf.length);
+      ByteBuf toDecryptByteBufDirect = ByteBufAllocator.DEFAULT.ioBuffer(arrayFromByteBuf.length);
+      toDecryptByteBufHeap.writeBytes(arrayFromByteBuf);
+      toDecryptByteBufDirect.writeBytes(arrayFromByteBuf);
 
       ByteBuffer decryptedBytes = cryptoService.decrypt(encryptedBytes, secretKeySpec);
       ByteBuf decryptedBytesByteBufHeap = cryptoService.decrypt(toDecryptByteBufHeap, secretKeySpec);
       ByteBuf decryptedBytesByteBufDirect = cryptoService.decrypt(toDecryptByteBufDirect, secretKeySpec);
 
-      Assert.assertTrue(decryptedBytesByteBufHeap.hasArray());
-      Assert.assertTrue(decryptedBytesByteBufDirect.hasArray());
+      Assert.assertEquals(directMemorySupported, !decryptedBytesByteBufHeap.hasArray());
+      Assert.assertEquals(directMemorySupported, !decryptedBytesByteBufDirect.hasArray());
       Assert.assertEquals(decryptedBytes.remaining(), decryptedBytesByteBufHeap.readableBytes());
       Assert.assertEquals(decryptedBytes.remaining(), decryptedBytesByteBufDirect.readableBytes());
       Assert.assertEquals(encryptedBytes.remaining(), 0);
@@ -149,10 +158,7 @@ public class GCMCryptoServiceTest {
       decryptedBytesByteBufDirect.getBytes(decryptedBytesByteBufDirect.readerIndex(), arrayFromByteBuf);
       Assert.assertArrayEquals(decryptedBytes.array(), arrayFromByteBuf);
 
-      toEncryptByteBufHeap.release();
-      toEncryptByteBufDirect.release();
-      encryptedBytesByteBufHeap.release();
-      encryptedBytesByteBufDirect.release();
+      toDecryptByteBufHeap.release();
       toDecryptByteBufDirect.release();
       decryptedBytesByteBufHeap.release();
       decryptedBytesByteBufDirect.release();
@@ -176,8 +182,9 @@ public class GCMCryptoServiceTest {
       byte[] randomData = new byte[size];
       TestUtils.RANDOM.nextBytes(randomData);
 
-      ByteBuf toEncrypt = Unpooled.wrappedBuffer(randomData);
-      CompositeByteBuf toEncryptComposite = new CompositeByteBuf(toEncrypt.alloc(), toEncrypt.isDirect(), size);
+      ByteBuf toEncrypt = PooledByteBufAllocator.DEFAULT.ioBuffer(randomData.length);
+      toEncrypt.writeBytes(randomData);
+      CompositeByteBuf toEncryptComposite = toEncrypt.alloc().compositeBuffer(size);
       int start = 0;
       int end = 0;
       for (int j = 0; j < 3; j++) {
@@ -186,7 +193,7 @@ public class GCMCryptoServiceTest {
         if (j == 2) {
           end = size;
         }
-        ByteBuf c = Unpooled.buffer(end - start);
+        ByteBuf c = PooledByteBufAllocator.DEFAULT.ioBuffer(end - start);
         c.writeBytes(randomData, start, end - start);
         toEncryptComposite.addComponent(true, c);
       }
@@ -203,9 +210,15 @@ public class GCMCryptoServiceTest {
       encryptedBytesComposite.getBytes(encryptedBytesComposite.readerIndex(), arrayComposite);
       Assert.assertArrayEquals(array, arrayComposite);
 
-      ByteBuf toDecrypt = encryptedBytes;
-      CompositeByteBuf toDecryptComposite = new CompositeByteBuf(toDecrypt.alloc(), toEncrypt.isDirect(), size);
-      size = encryptedBytes.readableBytes();
+      toEncrypt.release();
+      toEncryptComposite.release();
+      encryptedBytes.release();
+      encryptedBytesComposite.release();
+
+      ByteBuf toDecrypt = PooledByteBufAllocator.DEFAULT.ioBuffer(array.length);
+      toDecrypt.writeBytes(array);
+      CompositeByteBuf toDecryptComposite = toDecrypt.alloc().compositeBuffer(size);
+      size = array.length;
       start = 0;
       end = 0;
       for (int j = 0; j < 3; j++) {
@@ -214,8 +227,8 @@ public class GCMCryptoServiceTest {
         if (j == 2) {
           end = size;
         }
-        ByteBuf c = Unpooled.buffer(end - start);
-        c.writeBytes(encryptedBytes, start, end - start);
+        ByteBuf c = PooledByteBufAllocator.DEFAULT.ioBuffer(end - start);
+        c.writeBytes(array, start, end - start);
         toDecryptComposite.addComponent(true, c);
       }
 
@@ -232,10 +245,7 @@ public class GCMCryptoServiceTest {
       decryptedBytesComposite.getBytes(decryptedBytesComposite.readerIndex(), arrayComposite);
       Assert.assertArrayEquals(array, arrayComposite);
 
-      toEncrypt.release();
-      toEncryptComposite.release();
-      encryptedBytes.release();
-      encryptedBytesComposite.release();
+      toDecrypt.release();
       toDecryptComposite.release();
       decryptedBytes.release();
       decryptedBytesComposite.release();
