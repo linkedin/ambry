@@ -33,7 +33,7 @@ class ProgressTracker {
   /**
    * Initializes the {@link CryptoJobStatusTracker}
    */
-  synchronized void initializeCryptoJobTracker(CryptoJobType cryptoJobType) {
+  void initializeCryptoJobTracker(CryptoJobType cryptoJobType) {
     cryptoJobStatusTracker = new CryptoJobStatusTracker();
     this.cryptoJobType = cryptoJobType;
   }
@@ -41,14 +41,14 @@ class ProgressTracker {
   /**
    * @return {@code true} if crypto job is required. {@code false} otherwise
    */
-  synchronized boolean isCryptoJobRequired() {
+  boolean isCryptoJobRequired() {
     return cryptoJobStatusTracker != null;
   }
 
   /**
    * Sets crypto job as succeeded
    */
-  synchronized void setCryptoJobSuccess() {
+  void setCryptoJobSuccess() {
     if (cryptoJobStatusTracker == null) {
       throw new IllegalStateException("No crypto job.");
     }
@@ -58,7 +58,7 @@ class ProgressTracker {
   /**
    * Sets crypto job as failed
    */
-  synchronized void setCryptoJobFailed() {
+  void setCryptoJobFailed() {
     if (cryptoJobStatusTracker == null) {
       throw new IllegalStateException("No crypto job.");
     }
@@ -70,7 +70,7 @@ class ProgressTracker {
    *
    * @return {@code true} if the operation has completed.
    */
-  synchronized boolean isDone() {
+  boolean isDone() {
     return operationTracker.isDone() && (cryptoJobStatusTracker == null || cryptoJobStatusTracker.isDone());
   }
 

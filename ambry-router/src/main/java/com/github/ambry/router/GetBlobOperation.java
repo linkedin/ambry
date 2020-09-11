@@ -38,7 +38,6 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
-import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
@@ -159,6 +158,12 @@ class GetBlobOperation extends GetOperation {
         byteBuf.release();
       }
     }
+    firstChunk.maybeReleaseDecryptionResultBuffer();
+    if (dataChunks != null) {
+      for (GetChunk getChunk : dataChunks) {
+        getChunk.maybeReleaseDecryptionResultBuffer();
+      }
+    }
   }
 
   /**
@@ -269,8 +274,7 @@ class GetBlobOperation extends GetOperation {
   @Override
   void handleResponse(ResponseInfo responseInfo, GetResponse getResponse) {
     responseInfo.touch(blobId);
-    GetChunk getChunk = correlationIdToGetChunk.remove(
-        ((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
+    GetChunk getChunk = correlationIdToGetChunk.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
     getChunk.handleResponse(responseInfo, getResponse);
     if (getChunk.isComplete()) {
       onChunkOperationComplete(getChunk);
@@ -641,6 +645,7 @@ class GetBlobOperation extends GetOperation {
     void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
       //First, check if any of the existing requests have timed out.
       cleanupExpiredInFlightRequests(requestRegistrationCallback);
+      maybeProcessCallbacks();
       checkAndMaybeComplete();
       if (!isComplete()) {
         fetchRequests(requestRegistrationCallback);
@@ -648,28 +653,47 @@ class GetBlobOperation extends GetOperation {
     }
 
     /**
-     * Process decryption callback.
+     * Maybe process callbacks if applicable. This is a no-op for blobs that do not need any async processing.
+     * As of now, decryption is the only async processing that could happen if applicable.
      */
-    protected void processCallbacks() {
-      logger.trace("Processing decrypt callback stored result for data chunk {}", chunkBlobId);
-      decryptJobMetricsTracker.onJobResultProcessingStart();
-      // Only when the blob is encrypted should we need to call this method. When finish decryption, we don't need
-      // response info anymore.
-      if (decryptCallbackResultInfo.exception == null) {
-        chunkIndexToBuf.put(chunkIndex, filterChunkToRange(decryptCallbackResultInfo.result.getDecryptedBlobContent()));
-        numChunksRetrieved.incrementAndGet();
-        logger.trace("Decrypt result successfully updated for data chunk {}", chunkBlobId);
-        progressTracker.setCryptoJobSuccess();
-      } else {
-        decryptJobMetricsTracker.incrementOperationError();
-        logger.trace("Setting operation exception as decryption callback invoked with exception {} for data chunk {}",
-            decryptCallbackResultInfo.exception, chunkBlobId);
-        setOperationException(buildChunkException("Exception thrown on decrypting the content for data chunk",
-            decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
-        progressTracker.setCryptoJobFailed();
+    protected void maybeProcessCallbacks() {
+      if (progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
+        logger.trace("Processing decrypt callback stored result for data chunk {}", chunkBlobId);
+        decryptJobMetricsTracker.onJobResultProcessingStart();
+        // Only when the blob is encrypted should we need to call this method. When finish decryption, we don't need
+        // response info anymore.
+        if (decryptCallbackResultInfo.exception == null) {
+          chunkIndexToBuf.put(chunkIndex,
+              filterChunkToRange(decryptCallbackResultInfo.result.getDecryptedBlobContent()));
+          numChunksRetrieved.incrementAndGet();
+          logger.trace("Decrypt result successfully updated for data chunk {}", chunkBlobId);
+          progressTracker.setCryptoJobSuccess();
+          // Nullify result so we know we already passed the bytebuf to chunkIndexToBuf map
+          decryptCallbackResultInfo.result = null;
+        } else {
+          decryptJobMetricsTracker.incrementOperationError();
+          logger.trace("Setting operation exception as decryption callback invoked with exception {} for data chunk {}",
+              decryptCallbackResultInfo.exception, chunkBlobId);
+          setOperationException(buildChunkException("Exception thrown on decrypting the content for data chunk",
+              decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
+          progressTracker.setCryptoJobFailed();
+        }
+        decryptJobMetricsTracker.onJobResultProcessingComplete();
+        logger.trace("Marking blob content available to process for data chunk {}", chunkBlobId);
       }
-      decryptJobMetricsTracker.onJobResultProcessingComplete();
-      logger.trace("Marking blob content available to process for data chunk {}", chunkBlobId);
+    }
+
+    /**
+     * Maybe release the bytebuf in the decryption result. This is used in {@link #releaseResource()} when releasing
+     * the resource, if we have just finished a decryption task, and not yet called poll method to add the decryption
+     * result bytebuf to chunkIndexToBuf, then we have to call this method to release this result bytebuf.
+     */
+    protected void maybeReleaseDecryptionResultBuffer() {
+      if (isInProgress() && progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
+        if (decryptCallbackResultInfo.result != null) {
+          decryptCallbackResultInfo.result.getDecryptedBlobContent().release();
+        }
+      }
     }
 
     /**
@@ -897,7 +921,6 @@ class GetBlobOperation extends GetOperation {
               decryptCallbackResultInfo.setResultAndException(result, exception);
               routerCallback.onPollReady();
               decryptJobMetricsTracker.onJobCallbackProcessingComplete();
-              processCallbacks();
             }));
         return true;
       } else {
@@ -1142,49 +1165,51 @@ class GetBlobOperation extends GetOperation {
     }
 
     @Override
-    protected void processCallbacks() {
-      decryptJobMetricsTracker.onJobResultProcessingStart();
-      if (decryptCallbackResultInfo.exception != null) {
-        decryptJobMetricsTracker.incrementOperationError();
-        logger.trace("Decryption job callback invoked with exception for {} blob {} ", blobType, blobId,
-            decryptCallbackResultInfo.exception);
-        setOperationException(
-            new RouterException("Exception thrown on decrypting content for " + blobType + " blob " + blobId,
-                decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
-        progressTracker.setCryptoJobFailed();
-      } else {
-        // in case of Metadata blob, only user-metadata needs decryption if the blob is encrypted
-        if (blobType == BlobType.MetadataBlob) {
-          logger.trace("Processing stored decryption callback result for Metadata blob {}", blobId);
-          initializeDataChunks();
-          blobInfo =
-              new BlobInfo(serverBlobProperties, decryptCallbackResultInfo.result.getDecryptedUserMetadata().array(),
-                  lifeVersion);
-          progressTracker.setCryptoJobSuccess();
-          logger.trace("BlobContent available to process for Metadata blob {}", blobId);
+    protected void maybeProcessCallbacks() {
+      if (progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
+        decryptJobMetricsTracker.onJobResultProcessingStart();
+        if (decryptCallbackResultInfo.exception != null) {
+          decryptJobMetricsTracker.incrementOperationError();
+          logger.trace("Decryption job callback invoked with exception for {} blob {} ", blobType, blobId,
+              decryptCallbackResultInfo.exception);
+          setOperationException(
+              new RouterException("Exception thrown on decrypting content for " + blobType + " blob " + blobId,
+                  decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
+          progressTracker.setCryptoJobFailed();
         } else {
-          logger.trace("Processing stored decryption callback result for simple blob {}", blobId);
-          // In case of simple blobs, user-metadata may or may not be passed into decryption job based on GetOptions flag.
-          // Only in-case of GetBlobInfo and GetBlobAll, user-metadata is required to be decrypted
-          if (decryptCallbackResultInfo.result.getDecryptedUserMetadata() != null) {
+          // in case of Metadata blob, only user-metadata needs decryption if the blob is encrypted
+          if (blobType == BlobType.MetadataBlob) {
+            logger.trace("Processing stored decryption callback result for Metadata blob {}", blobId);
+            initializeDataChunks();
             blobInfo =
                 new BlobInfo(serverBlobProperties, decryptCallbackResultInfo.result.getDecryptedUserMetadata().array(),
                     lifeVersion);
-          }
-          ByteBuf decryptedBlobContent = decryptCallbackResultInfo.result.getDecryptedBlobContent();
-          totalSize = decryptedBlobContent.readableBytes();
-          if (!resolveRange(totalSize)) {
-            chunkIndexToBuf.put(0, filterChunkToRange(decryptedBlobContent));
-            numChunksRetrieved.set(1);
             progressTracker.setCryptoJobSuccess();
-            logger.trace("BlobContent available to process for simple blob {}", blobId);
+            logger.trace("BlobContent available to process for Metadata blob {}", blobId);
           } else {
-            decryptedBlobContent.release();
-            progressTracker.setCryptoJobFailed();
+            logger.trace("Processing stored decryption callback result for simple blob {}", blobId);
+            // In case of simple blobs, user-metadata may or may not be passed into decryption job based on GetOptions flag.
+            // Only in-case of GetBlobInfo and GetBlobAll, user-metadata is required to be decrypted
+            if (decryptCallbackResultInfo.result.getDecryptedUserMetadata() != null) {
+              blobInfo = new BlobInfo(serverBlobProperties,
+                  decryptCallbackResultInfo.result.getDecryptedUserMetadata().array(), lifeVersion);
+            }
+            ByteBuf decryptedBlobContent = decryptCallbackResultInfo.result.getDecryptedBlobContent();
+            totalSize = decryptedBlobContent.readableBytes();
+            if (!resolveRange(totalSize)) {
+              chunkIndexToBuf.put(0, filterChunkToRange(decryptedBlobContent));
+              numChunksRetrieved.set(1);
+              progressTracker.setCryptoJobSuccess();
+              logger.trace("BlobContent available to process for simple blob {}", blobId);
+            } else {
+              decryptedBlobContent.release();
+              progressTracker.setCryptoJobFailed();
+            }
           }
+          decryptCallbackResultInfo.result = null;
         }
+        decryptJobMetricsTracker.onJobResultProcessingComplete();
       }
-      decryptJobMetricsTracker.onJobResultProcessingComplete();
     }
 
     /**
@@ -1368,7 +1393,6 @@ class GetBlobOperation extends GetOperation {
                     decryptCallbackResultInfo.setResultAndException(result, exception);
                     routerCallback.onPollReady();
                     decryptJobMetricsTracker.onJobCallbackProcessingComplete();
-                    processCallbacks();
                   }
                 }));
           }
@@ -1499,9 +1523,9 @@ class GetBlobOperation extends GetOperation {
  * Holds info about decryption job callback
  */
 class DecryptCallBackResultInfo {
-  boolean decryptJobComplete;
-  Exception exception;
-  DecryptJob.DecryptJobResult result;
+  volatile boolean decryptJobComplete;
+  volatile Exception exception;
+  volatile DecryptJob.DecryptJobResult result;
 
   /**
    * Sets the result and exception from decrypt job callback
