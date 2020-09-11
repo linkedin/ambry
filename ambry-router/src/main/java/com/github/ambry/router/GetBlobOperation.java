@@ -692,6 +692,7 @@ class GetBlobOperation extends GetOperation {
       if (isInProgress() && progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
         if (decryptCallbackResultInfo.result != null) {
           decryptCallbackResultInfo.result.getDecryptedBlobContent().release();
+          decryptCallbackResultInfo.result = null;
         }
       }
     }
