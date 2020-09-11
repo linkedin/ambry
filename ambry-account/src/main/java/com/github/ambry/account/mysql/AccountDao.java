@@ -15,8 +15,6 @@ package com.github.ambry.account.mysql;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountSerdeUtils;
-import com.github.ambry.account.Container;
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -45,9 +43,8 @@ public class AccountDao {
     insertSql =
         String.format("insert into %s (%s, %s, %s, %s) values (?, ?, now(), now())", ACCOUNT_TABLE, ACCOUNT_INFO,
             VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
-    getSinceSql =
-        String.format("select %s, %s from %s where %s > ?", ACCOUNT_INFO, LAST_MODIFIED_TIME, ACCOUNT_TABLE,
-            LAST_MODIFIED_TIME);
+    getSinceSql = String.format("select %s, %s from %s where %s > ?", ACCOUNT_INFO, LAST_MODIFIED_TIME, ACCOUNT_TABLE,
+        LAST_MODIFIED_TIME);
   }
 
   /**
@@ -83,9 +80,8 @@ public class AccountDao {
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       while (rs.next()) {
         String accountJson = rs.getString(ACCOUNT_INFO);
-        Timestamp lastModifiedTime = rs.getTimestamp(LAST_MODIFIED_TIME);
         Account account = AccountSerdeUtils.accountFromJson(accountJson);
-        //account.setLastModifiedTime(lastModifiedTime);
+        // TODO: account.setLastModifiedTime(rs.getTimestamp(LAST_MODIFIED_TIME));
         accounts.add(account);
       }
       return accounts;

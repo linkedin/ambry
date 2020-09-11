@@ -124,9 +124,8 @@ public class ContainerDao {
     while (resultSet.next()) {
       int accountId = resultSet.getInt(ACCOUNT_ID);
       String containerJson = resultSet.getString(CONTAINER_INFO);
-      Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
       Container container = AccountSerdeUtils.containerFromJson(containerJson, (short) accountId);
-      //container.setLastModifiedTime(lastModifiedTime);
+      // TODO: container.setLastModifiedTime(resultSet.getTimestamp(LAST_MODIFIED_TIME));
       containers.add(container);
     }
     return containers;

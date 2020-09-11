@@ -14,7 +14,6 @@
 package com.github.ambry.account.mysql;
 
 import com.github.ambry.config.Config;
-import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
 
 

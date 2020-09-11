@@ -90,7 +90,10 @@ public class MySqlAccountsDBTool {
   private final String fullZKAccountMetadataPath;
 
   enum OPERATION_TYPE {
-    INIT, COMPARE
+    /** Initialize database with ZK contents */
+    INIT,
+    /** Compare database and ZK contents */
+    COMPARE
   }
 
   public static void main(String[] args) throws IOException {
@@ -236,7 +239,7 @@ public class MySqlAccountsDBTool {
   }
 
   /**
-   * compares db with zk and prints the accounts (IDs) that are different
+   * Compares db with zk and prints the accounts (IDs) that are different
    */
   public void compare() throws SQLException {
 
@@ -260,15 +263,9 @@ public class MySqlAccountsDBTool {
     Set<Account> accountSetFromDB = new HashSet<>(accountDao.getNewAccounts(0));
 
     // Query the list of containers for each Account and add them to the Account
-    accountSetFromDB.forEach(account -> {
-      try {
-        containerDao.getContainers(account.getId())
-            .forEach(account::updateContainerMap);
-      } catch (SQLException e) {
-        logger.error("MySQL querying containers failed", e);
-        return;
-      }
-    });
+    for (Account account : accountSetFromDB) {
+      containerDao.getContainers(account.getId()).forEach(account::updateContainerMap);
+    }
 
     //Accounts missing (or different) in DB = accounts in ZK - accounts in DB
     accountSetFromZK.removeAll(accountSetFromDB);

@@ -103,7 +103,7 @@ public class MySqlDataAccessor {
    * This should be called after a failed database operation.
    */
   synchronized void reset() {
-    for (PreparedStatement statement: statementCache.values()) {
+    for (PreparedStatement statement : statementCache.values()) {
       try {
         statement.close();
       } catch (SQLException e) {

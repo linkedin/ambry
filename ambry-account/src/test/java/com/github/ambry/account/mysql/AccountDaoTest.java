@@ -70,7 +70,6 @@ public class AccountDaoTest {
   static MySqlDataAccessor getDataAccessor(Connection mockConnection) throws SQLException {
     Driver mockDriver = mock(Driver.class);
     when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
-    //lenient().when(mockConnection.isValid(anyInt())).thenReturn(true);
     Properties properties = new Properties();
     properties.setProperty(MySqlConfig.MYSQL_URL, "jdbc:mysql://localhost/AccountMetadata");
     properties.setProperty(MySqlConfig.MYSQL_USER, "ambry");
@@ -84,11 +83,15 @@ public class AccountDaoTest {
   @Test
   public void testAddAccount() throws Exception {
     accountDao.addAccount(testAccount);
+    verify(mockConnection).prepareStatement(anyString());
+    // Run second time to reuse statement
+    accountDao.addAccount(testAccount);
+    verify(mockConnection).prepareStatement(anyString());
   }
 
   @Test
   public void testGetAccounts() throws Exception {
-    List<Account> accountList = accountDao.getNewAccounts(0l);
+    List<Account> accountList = accountDao.getNewAccounts(0L);
     assertEquals(1, accountList.size());
     assertEquals(testAccount, accountList.get(0));
   }
