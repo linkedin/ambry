@@ -657,7 +657,8 @@ class GetBlobOperation extends GetOperation {
      * As of now, decryption is the only async processing that could happen if applicable.
      */
     protected void maybeProcessCallbacks() {
-      if (progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
+      if (!isOperationComplete() && progressTracker.isCryptoJobRequired()
+          && decryptCallbackResultInfo.decryptJobComplete) {
         logger.trace("Processing decrypt callback stored result for data chunk {}", chunkBlobId);
         decryptJobMetricsTracker.onJobResultProcessingStart();
         // Only when the blob is encrypted should we need to call this method. When finish decryption, we don't need
@@ -1167,7 +1168,8 @@ class GetBlobOperation extends GetOperation {
 
     @Override
     protected void maybeProcessCallbacks() {
-      if (progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
+      if (!isOperationComplete() && progressTracker.isCryptoJobRequired()
+          && decryptCallbackResultInfo.decryptJobComplete) {
         decryptJobMetricsTracker.onJobResultProcessingStart();
         if (decryptCallbackResultInfo.exception != null) {
           decryptJobMetricsTracker.incrementOperationError();
