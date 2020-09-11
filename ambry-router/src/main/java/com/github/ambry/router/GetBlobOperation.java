@@ -222,7 +222,7 @@ class GetBlobOperation extends GetOperation {
           }
           if (e == null) {
             if (blobInfo != null) {
-              // For segmented blob we have already filtered out not required chunks by now. So the first chunk is the segment we need.
+              // For segmented blob we have already filtered out not-required chunks by now. So the first chunk is the segment we need.
               fixBlobSizeIfRequired(blobInfo.getBlobProperties().getBlobSize(),
                   options.getBlobOptions.hasBlobSegmentIdx() ? firstChunk.getChunkMetadataList().get(0).getSize()
                       : totalSize);
@@ -250,13 +250,13 @@ class GetBlobOperation extends GetOperation {
 
   /**
    * In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly,
-   * replace the field with the size from inside of the metadata content.
+   * and in case of GET for segment of a blob, replace the field with the size from inside of the metadata content.
    * @param blobSizeFromProperties blob size obtained from blob properties.
    * @param blobSizeFromMetadata blob size obtained from metadata of the given blob or its composite blob.
    */
   private void fixBlobSizeIfRequired(long blobSizeFromProperties, long blobSizeFromMetadata) {
     // In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly,
-    // we will replace the field with the size from inside of the metadata content.
+    // and in case of GET for segment of a blob, we will replace the field with the size from inside of the metadata content.
     if (blobSizeFromProperties != blobSizeFromMetadata) {
       if (compositeBlobInfo != null) {
         routerMetrics.compositeBlobSizeMismatchCount.inc();
