@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -27,7 +28,6 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
@@ -49,7 +49,9 @@ import static com.github.ambry.router.GetBlobOptions.*;
  */
 class AmbrySecurityService implements SecurityService {
 
-  static final Set<String> OPERATIONS;
+  static final Set<String> OPERATIONS = Collections.unmodifiableSet(
+      Utils.getStaticFieldValuesAsStrings(Operations.class)
+          .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
@@ -383,10 +385,5 @@ class AmbrySecurityService implements SecurityService {
             RestServiceErrorCode.AccessDenied);
       }
     }
-  }
-
-  static {
-    OPERATIONS = Collections.unmodifiableSet(Utils.getStaticFieldValuesAsStrings(Operations.class)
-        .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
   }
 }

@@ -222,7 +222,10 @@ class GetBlobOperation extends GetOperation {
           }
           if (e == null) {
             if (blobInfo != null) {
-              fixBlobSizeIfRequired(blobInfo.getBlobProperties().getBlobSize(), totalSize);
+              // For segmented blob we have already filtered out not required chunks by now. So the first chunk is the segment we need.
+              fixBlobSizeIfRequired(blobInfo.getBlobProperties().getBlobSize(),
+                  options.getBlobOptions.hasBlobSegmentIdx() ? firstChunk.getChunkMetadataList().get(0).getSize()
+                      : totalSize);
             }
             if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
               blobDataChannel = new BlobDataReadableStreamChannel();
@@ -236,21 +239,11 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.onGetBlobError(e, options, isEncrypted);
           }
         }
-        // We don't complete operation in case of segmented blob, as we don't have all the header information until we fetch the segmented chunk.
-        if (e != null || !options.getBlobOptions.hasBlobSegmentIdx()) {
-          NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
-        }
+        NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
       }
-    } else if (options.getBlobOptions.hasBlobSegmentIdx()) {
-      // We have fetched the segmented chunk, and there cannot be any more chunks to fetch now.
-      fixBlobSizeIfRequired(blobInfo.getBlobProperties().getBlobSize(),
-          firstChunk.getChunkMetadataList().get(0).getSize());
-      operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel), null);
-      NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
     }
-    boolean shouldWriteToChannel = !(options.getBlobOptions.hasBlobSegmentIdx() && chunk == firstChunk);
     chunk.postCompletionCleanup();
-    if (shouldWriteToChannel && blobDataChannel != null) {
+    if (blobDataChannel != null) {
       blobDataChannel.maybeWriteToChannel();
     }
   }
