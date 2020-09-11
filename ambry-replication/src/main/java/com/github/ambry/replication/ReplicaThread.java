@@ -397,7 +397,7 @@ public class ReplicaThread implements Runnable {
           List<List<RemoteReplicaInfo>> activeReplicaSubLists =
               maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicasPerNode, maxReplicaCountPerRequest)
                   : Collections.singletonList(activeReplicasPerNode);
-
+          startTimeInMs = time.milliseconds();
           connectedChannel =
               connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
                   replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
@@ -428,11 +428,11 @@ public class ReplicaThread implements Runnable {
               exchangeMetadataResponseList = exchangeMetadataResponseListForLeaderReplicas;
             }
 
-            startTimeInMs = time.milliseconds();
             if (replicaSubList.size() > 0) {
+              startTimeInMs = time.milliseconds();
               fixMissingStoreKeys(connectedChannel, replicaSubList, exchangeMetadataResponseList, false);
+              fixMissingStoreKeysTimeInMs = time.milliseconds() - startTimeInMs;
             }
-            fixMissingStoreKeysTimeInMs = time.milliseconds() - startTimeInMs;
           }
         }
 
@@ -452,6 +452,7 @@ public class ReplicaThread implements Runnable {
             currentReplicaList = standbyReplicasTimedOutOnNoProgress;
             if (connectedChannel == null) {
               checkoutConnectionTimeInMs = -1;
+              startTimeInMs = time.milliseconds();
               connectedChannel = connectionPool.checkOutConnection(remoteNode.getHostname(),
                   standbyReplicasTimedOutOnNoProgress.get(0).getPort(),
                   replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
@@ -477,6 +478,7 @@ public class ReplicaThread implements Runnable {
             logger.debug(
                 "Sending GET request to fetch missing keys for standby remote replicas {} timed out on no progress",
                 currentReplicaList);
+            startTimeInMs = time.milliseconds();
             fixMissingStoreKeys(connectedChannel, standbyReplicasTimedOutOnNoProgress,
                 exchangeMetadataResponseListForBlockedReplicas, true);
             fixMissingStoreKeysTimeInMs = time.milliseconds() - startTimeInMs;
