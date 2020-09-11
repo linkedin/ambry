@@ -357,6 +357,7 @@ public class ReplicaThread implements Runnable {
 
       // Get a list of active replicas that needs be included for this replication cycle
       List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
+      List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
         ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
         boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
@@ -373,19 +374,12 @@ public class ReplicaThread implements Runnable {
         }
 
         if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
-          // In leader-based cross colo replication, missing blobs are only exchanged between leader replica pairs (i.e.
-          // local replica and remote replica are leaders of their partition). For all non-leader replica pairs (i.e.
-          // leader <-> standby, standby <-> leader, standby <-> standby), we expect their missing keys to come from
-          // leader pair exchanges via intra-dc replication.
-
-          // Check and process missing keys (if any) for non-leader replica pairs from their metadata exchanges in
-          // previous replication cycle. These keys should most likely be now obtained now their corresponding
-          // leader<->leader replication.
+          // check if all missing keys for standby replicas from previous replication cycle are now obtained
+          // via leader replica. If we still have missing keys, don't include them in current replication cycle
+          // to avoid sending duplicate metadata requests since their token wouldn't have advanced.
           processMissingKeysFromPreviousMetadataResponse(remoteReplicaInfo);
-
-          // If we still have some missing keys from previous metadata exchange, don't include the remote replica for
-          // current replication cycle to avoid sending duplicate metadata request.
           if (containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo)) {
+            standbyReplicasWithNoProgress.add(remoteReplicaInfo);
             continue;
           }
         }
@@ -403,7 +397,7 @@ public class ReplicaThread implements Runnable {
           List<List<RemoteReplicaInfo>> activeReplicaSubLists =
               maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicasPerNode, maxReplicaCountPerRequest)
                   : Collections.singletonList(activeReplicasPerNode);
-
+          startTimeInMs = time.milliseconds();
           connectedChannel =
               connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
                   replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
@@ -434,11 +428,11 @@ public class ReplicaThread implements Runnable {
               exchangeMetadataResponseList = exchangeMetadataResponseListForLeaderReplicas;
             }
 
-            startTimeInMs = time.milliseconds();
             if (replicaSubList.size() > 0) {
+              startTimeInMs = time.milliseconds();
               fixMissingStoreKeys(connectedChannel, replicaSubList, exchangeMetadataResponseList, false);
+              fixMissingStoreKeysTimeInMs = time.milliseconds() - startTimeInMs;
             }
-            fixMissingStoreKeysTimeInMs = time.milliseconds() - startTimeInMs;
           }
         }
 
@@ -452,11 +446,13 @@ public class ReplicaThread implements Runnable {
           // TODO: If the result to fetch a blob from local dc is Blob_Not_Found, then we can fetch it from replicas in remote datacenter.
           // This will involve co-ordination between replica threads containing replicas of same partition.
           List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress =
-              getRemoteStandbyReplicasTimedOutOnNoProgress(replicasToReplicatePerNode);
+              getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
           if (standbyReplicasTimedOutOnNoProgress.size() > 0) {
             allCaughtUp = false;
             currentReplicaList = standbyReplicasTimedOutOnNoProgress;
             if (connectedChannel == null) {
+              checkoutConnectionTimeInMs = -1;
+              startTimeInMs = time.milliseconds();
               connectedChannel = connectionPool.checkOutConnection(remoteNode.getHostname(),
                   standbyReplicasTimedOutOnNoProgress.get(0).getPort(),
                   replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
@@ -482,6 +478,7 @@ public class ReplicaThread implements Runnable {
             logger.debug(
                 "Sending GET request to fetch missing keys for standby remote replicas {} timed out on no progress",
                 currentReplicaList);
+            startTimeInMs = time.milliseconds();
             fixMissingStoreKeys(connectedChannel, standbyReplicasTimedOutOnNoProgress,
                 exchangeMetadataResponseListForBlockedReplicas, true);
             fixMissingStoreKeysTimeInMs = time.milliseconds() - startTimeInMs;
