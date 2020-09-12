@@ -46,9 +46,9 @@ public class VcrRequests extends AmbryRequests {
   public VcrRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId currentNode, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
       NotificationSystem notification, ReplicationEngine replicationEngine, StoreKeyFactory storageKeyFactory,
-      boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory) {
+      StoreKeyConverterFactory storeKeyConverterFactory) {
     super(storeManager, requestResponseChannel, clusterMap, currentNode, registry, serverMetrics, findTokenHelper,
-        notification, replicationEngine, storageKeyFactory, enableDataPrefetch, storeKeyConverterFactory);
+        notification, replicationEngine, storageKeyFactory, storeKeyConverterFactory);
   }
 
   @Override

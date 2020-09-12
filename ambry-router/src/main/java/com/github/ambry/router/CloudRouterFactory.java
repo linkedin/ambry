@@ -181,7 +181,7 @@ public class CloudRouterFactory implements RouterFactory {
     // frontend.
     AmbryRequests requests =
         new AmbryRequests(cloudStorageManager, channel, clusterMap, nodeId, registry, serverMetrics, null, null, null,
-            storeKeyFactory, serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory);
+            storeKeyFactory, storeKeyConverterFactory);
     return new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, channel, requests);
   }
 
