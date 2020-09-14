@@ -113,7 +113,20 @@ public abstract class ByteRange {
    * @return the {@link ByteRange} with start and end offsets
    * @throws IllegalArgumentException if the byte range starts past the end of the blob.
    */
-  public abstract ByteRange toResolvedByteRange(long totalSize);
+  public ByteRange toResolvedByteRange(long totalSize) {
+    return toResolvedByteRange(totalSize, false);
+  };
+
+  /**
+   * Given the total size of a blob, generate a new {@link ByteRange} of type {@link ByteRangeType#OFFSET_RANGE} with
+   * defined start and end offsets that are verified to be within the supplied total blob size.
+   * @param totalSize the total size of the blob that this range corresponds to.
+   * @param resolveRangeOnEmptyBlob {@code true} to force range resolution to succeed if the blob is empty.
+   *                                In other words, return an empty range if {@code totalSize == 0}.
+   * @return the {@link ByteRange} with start and end offsets
+   * @throws IllegalArgumentException if the byte range starts past the end of the blob.
+   */
+  public abstract ByteRange toResolvedByteRange(long totalSize, boolean resolveRangeOnEmptyBlob);
 
   @Override
   public abstract String toString();

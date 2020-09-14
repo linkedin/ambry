@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -27,7 +28,6 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
@@ -265,7 +265,8 @@ class AmbrySecurityService implements SecurityService {
     restResponseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, RestUtils.BYTE_RANGE_UNITS);
     long contentLength = blobProperties.getBlobSize();
     if (options.getRange() != null) {
-      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(options.getRange(), contentLength);
+      Pair<String, Long> rangeAndLength =
+          RestUtils.buildContentRangeAndLength(options.getRange(), contentLength, options.resolveRangeOnEmptyBlob());
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_RANGE, rangeAndLength.getFirst());
       contentLength = rangeAndLength.getSecond();
     }
@@ -289,7 +290,8 @@ class AmbrySecurityService implements SecurityService {
     restResponseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, RestUtils.BYTE_RANGE_UNITS);
     long contentLength = blobProperties.getBlobSize();
     if (options.getRange() != null) {
-      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(options.getRange(), contentLength);
+      Pair<String, Long> rangeAndLength =
+          RestUtils.buildContentRangeAndLength(options.getRange(), contentLength, options.resolveRangeOnEmptyBlob());
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_RANGE, rangeAndLength.getFirst());
       contentLength = rangeAndLength.getSecond();
     }

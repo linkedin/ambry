@@ -15,6 +15,7 @@
 package com.github.ambry.router;
 
 public class ByteRanges {
+  private static final ByteRange EMPTY_RANGE = new ClosedRange(0, -1);
 
   /**
    * Construct a range from a start offset to an end offset.
@@ -99,7 +100,10 @@ public class ByteRanges {
     }
 
     @Override
-    public ByteRange toResolvedByteRange(long totalSize) {
+    public ByteRange toResolvedByteRange(long totalSize, boolean resolveRangeOnEmptyBlob) {
+      if (totalSize == 0 && resolveRangeOnEmptyBlob) {
+        return EMPTY_RANGE;
+      }
       if (getStartOffset() >= totalSize) {
         throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
       }
@@ -133,7 +137,7 @@ public class ByteRanges {
    * A range from a start offset to the end of an object.
    */
   private static class OpenRange extends ByteRange {
-    private long startOffset;
+    private final long startOffset;
 
     /**
      * @see ByteRanges#fromStartOffset(long)
@@ -153,7 +157,10 @@ public class ByteRanges {
     }
 
     @Override
-    public ByteRange toResolvedByteRange(long totalSize) {
+    public ByteRange toResolvedByteRange(long totalSize, boolean resolveRangeOnEmptyBlob) {
+      if (totalSize == 0 && resolveRangeOnEmptyBlob) {
+        return EMPTY_RANGE;
+      }
       if (getStartOffset() >= totalSize) {
         throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
       }
@@ -187,7 +194,7 @@ public class ByteRanges {
    * A range that represents the last N bytes of an object.
    */
   private static class SuffixRange extends ByteRange {
-    private long lastNBytes;
+    private final long lastNBytes;
 
     /**
      * @see ByteRanges#fromLastNBytes(long)
@@ -212,7 +219,10 @@ public class ByteRanges {
     }
 
     @Override
-    public ByteRange toResolvedByteRange(long totalSize) {
+    public ByteRange toResolvedByteRange(long totalSize, boolean resolveRangeOnEmptyBlob) {
+      if (totalSize == 0 && resolveRangeOnEmptyBlob) {
+        return EMPTY_RANGE;
+      }
       if (totalSize < 0) {
         throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
       }

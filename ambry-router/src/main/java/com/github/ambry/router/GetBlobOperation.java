@@ -1469,7 +1469,8 @@ class GetBlobOperation extends GetOperation {
       boolean failure = false;
       try {
         if (options != null && options.getBlobOptions.getRange() != null) {
-          resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
+          resolvedByteRange = options.getBlobOptions.getRange()
+              .toResolvedByteRange(totalSize, options.getBlobOptions.resolveRangeOnEmptyBlob());
         }
       } catch (IllegalArgumentException e) {
         onInvalidRange(e);

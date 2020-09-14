@@ -425,7 +425,7 @@ public class FrontendIntegrationTest {
     // verify POST
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
     headers.add(RestUtils.Headers.LIFE_VERSION, "0");
-    getBlobAndVerify(blobId, null, GetOption.None, headers, !container.isCacheable(), content, account.getName(),
+    getBlobAndVerify(blobId, null, GetOption.None, false, headers, !container.isCacheable(), content, account.getName(),
         container.getName());
     getBlobInfoAndVerify(blobId, GetOption.None, headers, !container.isCacheable(), account.getName(),
         container.getName(), null);
@@ -448,7 +448,7 @@ public class FrontendIntegrationTest {
     uri = new URI(signedGetUrl);
     httpRequest = buildRequest(HttpMethod.GET, uri.getPath() + "?" + uri.getQuery(), null, null);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    verifyGetBlobResponse(responseParts, null, headers, !container.isCacheable(), content, account.getName(),
+    verifyGetBlobResponse(responseParts, null, false, headers, !container.isCacheable(), content, account.getName(),
         container.getName());
   }
 
@@ -506,6 +506,31 @@ public class FrontendIntegrationTest {
     updateAccountsAndVerify(editedAccount, ACCOUNT_SERVICE.generateRandomAccount());
 
     getAccountsAndVerify();
+  }
+
+  @Test
+  public void emptyBlobRangeHandlingTest() throws Exception {
+    Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
+    Container refContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    setAmbryHeadersForPut(headers, TTL_SECS, !refContainer.isCacheable(), refAccount.getName(),
+        "application/octet-stream", null, refAccount.getName(), refContainer.getName());
+    ByteBuffer content = ByteBuffer.allocate(0);
+    String blobId = postBlobAndVerify(headers, content, content.capacity());
+    ByteRange range = ByteRanges.fromOffsetRange(0, 50);
+    headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
+    headers.add(RestUtils.Headers.LIFE_VERSION, "0");
+
+    // Should get a 416 if x-ambry-resolve-range-on-empty-blob is not set
+    HttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId,
+        new DefaultHttpHeaders().add(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)), null);
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.REQUESTED_RANGE_NOT_SATISFIABLE, response.status());
+
+    // Should get a 206 if the header is set.
+    getBlobAndVerify(blobId, range, null, true, headers, !refContainer.isCacheable(), content, refAccount.getName(),
+        refContainer.getName());
   }
 
   // helpers
@@ -658,22 +683,26 @@ public class FrontendIntegrationTest {
     }
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
     headers.add(RestUtils.Headers.LIFE_VERSION, "0");
-    getBlobAndVerify(blobId, null, null, headers, isPrivate, content, expectedAccountName, expectedContainerName);
+    getBlobAndVerify(blobId, null, null, false, headers, isPrivate, content, expectedAccountName,
+        expectedContainerName);
     getHeadAndVerify(blobId, null, null, headers, isPrivate, expectedAccountName, expectedContainerName);
-    getBlobAndVerify(blobId, null, GetOption.None, headers, isPrivate, content, expectedAccountName,
+    getBlobAndVerify(blobId, null, GetOption.None, false, headers, isPrivate, content, expectedAccountName,
         expectedContainerName);
     getHeadAndVerify(blobId, null, GetOption.None, headers, isPrivate, expectedAccountName, expectedContainerName);
     ByteRange range = ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(content.capacity() + 1));
-    getBlobAndVerify(blobId, range, null, headers, isPrivate, content, expectedAccountName, expectedContainerName);
+    getBlobAndVerify(blobId, range, null, false, headers, isPrivate, content, expectedAccountName,
+        expectedContainerName);
     getHeadAndVerify(blobId, range, null, headers, isPrivate, expectedAccountName, expectedContainerName);
     if (contentSize > 0) {
       range = ByteRanges.fromStartOffset(ThreadLocalRandom.current().nextLong(content.capacity()));
-      getBlobAndVerify(blobId, range, null, headers, isPrivate, content, expectedAccountName, expectedContainerName);
+      getBlobAndVerify(blobId, range, null, false, headers, isPrivate, content, expectedAccountName,
+          expectedContainerName);
       getHeadAndVerify(blobId, range, null, headers, isPrivate, expectedAccountName, expectedContainerName);
       long random1 = ThreadLocalRandom.current().nextLong(content.capacity());
       long random2 = ThreadLocalRandom.current().nextLong(content.capacity());
       range = ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
-      getBlobAndVerify(blobId, range, null, headers, isPrivate, content, expectedAccountName, expectedContainerName);
+      getBlobAndVerify(blobId, range, null, false, headers, isPrivate, content, expectedAccountName,
+          expectedContainerName);
       getHeadAndVerify(blobId, range, null, headers, isPrivate, expectedAccountName, expectedContainerName);
     }
     getNotModifiedBlobAndVerify(blobId, null, isPrivate);
@@ -772,6 +801,8 @@ public class FrontendIntegrationTest {
    * @param blobId the blob ID of the blob to GET.
    * @param range the {@link ByteRange} for the request.
    * @param getOption the options to use while getting the blob.
+   * @param resolveRangeOnEmptyBlob {@code true} to send the {@link RestUtils.Headers#RESOLVE_RANGE_ON_EMPTY_BLOB}
+   *                                header.
    * @param expectedHeaders the expected headers in the response.
    * @param isPrivate {@code true} if the blob is private, {@code false} if not.
    * @param expectedContent the expected content of the blob.
@@ -780,9 +811,9 @@ public class FrontendIntegrationTest {
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void getBlobAndVerify(String blobId, ByteRange range, GetOption getOption, HttpHeaders expectedHeaders,
-      boolean isPrivate, ByteBuffer expectedContent, String accountName, String containerName)
-      throws ExecutionException, InterruptedException, RestServiceException {
+  private void getBlobAndVerify(String blobId, ByteRange range, GetOption getOption, boolean resolveRangeOnEmptyBlob,
+      HttpHeaders expectedHeaders, boolean isPrivate, ByteBuffer expectedContent, String accountName,
+      String containerName) throws ExecutionException, InterruptedException, RestServiceException {
     HttpHeaders headers = new DefaultHttpHeaders();
     if (range != null) {
       headers.add(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range));
@@ -790,16 +821,21 @@ public class FrontendIntegrationTest {
     if (getOption != null) {
       headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
     }
+    if (resolveRangeOnEmptyBlob) {
+      headers.add(RestUtils.Headers.RESOLVE_RANGE_ON_EMPTY_BLOB, true);
+    }
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    verifyGetBlobResponse(responseParts, range, expectedHeaders, isPrivate, expectedContent, accountName,
-        containerName);
+    verifyGetBlobResponse(responseParts, range, resolveRangeOnEmptyBlob, expectedHeaders, isPrivate, expectedContent,
+        accountName, containerName);
   }
 
   /**
    * Verifies the GET blob response.
    * @param responseParts the response received from the server.
    * @param range the {@link ByteRange} for the request.
+   * @param resolveRangeOnEmptyBlob {@code true} if the {@link RestUtils.Headers#RESOLVE_RANGE_ON_EMPTY_BLOB} header was
+   *                                sent.
    * @param expectedHeaders the expected headers in the response.
    * @param isPrivate {@code true} if the blob is private, {@code false} if not.
    * @param expectedContent the expected content of the blob.
@@ -807,9 +843,9 @@ public class FrontendIntegrationTest {
    * @param containerName the container name that should be in the response
    * @throws RestServiceException
    */
-  private void verifyGetBlobResponse(ResponseParts responseParts, ByteRange range, HttpHeaders expectedHeaders,
-      boolean isPrivate, ByteBuffer expectedContent, String accountName, String containerName)
-      throws RestServiceException {
+  private void verifyGetBlobResponse(ResponseParts responseParts, ByteRange range, boolean resolveRangeOnEmptyBlob,
+      HttpHeaders expectedHeaders, boolean isPrivate, ByteBuffer expectedContent, String accountName,
+      String containerName) throws RestServiceException {
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status",
         range == null ? HttpResponseStatus.OK : HttpResponseStatus.PARTIAL_CONTENT, response.status());
@@ -825,9 +861,9 @@ public class FrontendIntegrationTest {
     if (range != null) {
       long blobSize = Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE));
       assertEquals("Content-Range header not set correctly",
-          RestUtils.buildContentRangeAndLength(range, blobSize).getFirst(),
+          RestUtils.buildContentRangeAndLength(range, blobSize, resolveRangeOnEmptyBlob).getFirst(),
           response.headers().get(RestUtils.Headers.CONTENT_RANGE));
-      ByteRange resolvedRange = range.toResolvedByteRange(blobSize);
+      ByteRange resolvedRange = range.toResolvedByteRange(blobSize, resolveRangeOnEmptyBlob);
       expectedContentArray = Arrays.copyOfRange(expectedContentArray, (int) resolvedRange.getStartOffset(),
           (int) resolvedRange.getEndOffset() + 1);
     } else {
@@ -974,7 +1010,7 @@ public class FrontendIntegrationTest {
     checkCommonGetHeadHeaders(response.headers());
     long contentLength = Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE));
     if (range != null) {
-      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
+      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength, false);
       assertEquals("Content-Range header not set correctly", rangeAndLength.getFirst(),
           response.headers().get(RestUtils.Headers.CONTENT_RANGE));
       contentLength = rangeAndLength.getSecond();
@@ -1193,7 +1229,8 @@ public class FrontendIntegrationTest {
 
     GetOption[] options = {GetOption.Include_Deleted_Blobs, GetOption.Include_All};
     for (GetOption option : options) {
-      getBlobAndVerify(blobId, null, option, expectedHeaders, isPrivate, expectedContent, accountName, containerName);
+      getBlobAndVerify(blobId, null, option, false, expectedHeaders, isPrivate, expectedContent, accountName,
+          containerName);
       getNotModifiedBlobAndVerify(blobId, option, isPrivate);
       getUserMetadataAndVerify(blobId, option, expectedHeaders, usermetadata);
       getBlobInfoAndVerify(blobId, option, expectedHeaders, isPrivate, accountName, containerName, usermetadata);
@@ -1371,7 +1408,7 @@ public class FrontendIntegrationTest {
       expectedGetHeaders.set(RestUtils.Headers.TTL, FRONTEND_CONFIG.chunkUploadInitialChunkTtlSecs);
       expectedGetHeaders.set(RestUtils.Headers.LIFE_VERSION, "0");
       for (String id : new String[]{signedId, idAndMetadata.getFirst()}) {
-        getBlobAndVerify(id, null, GetOption.None, expectedGetHeaders, !container.isCacheable(), content,
+        getBlobAndVerify(id, null, GetOption.None, false, expectedGetHeaders, !container.isCacheable(), content,
             account.getName(), container.getName());
         getBlobInfoAndVerify(id, GetOption.None, expectedGetHeaders, !container.isCacheable(), account.getName(),
             container.getName(), null);
@@ -1415,7 +1452,7 @@ public class FrontendIntegrationTest {
     long random2 = ThreadLocalRandom.current().nextLong(fullContentArray.length);
     ranges.add(ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
     for (ByteRange range : ranges) {
-      getBlobAndVerify(stitchedBlobId, range, GetOption.None, expectedGetHeaders, !container.isCacheable(),
+      getBlobAndVerify(stitchedBlobId, range, GetOption.None, false, expectedGetHeaders, !container.isCacheable(),
           ByteBuffer.wrap(fullContentArray), account.getName(), container.getName());
       getHeadAndVerify(stitchedBlobId, range, GetOption.None, expectedGetHeaders, !container.isCacheable(),
           account.getName(), container.getName());

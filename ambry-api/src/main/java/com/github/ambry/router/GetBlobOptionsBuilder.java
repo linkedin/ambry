@@ -27,6 +27,7 @@ public class GetBlobOptionsBuilder {
   private GetBlobOptions.OperationType operationType = GetBlobOptions.OperationType.All;
   private GetOption getOption = GetOption.None;
   private ByteRange range = null;
+  private boolean resolveRangeOnEmptyBlob = false;
   private boolean rawMode = false;
   private int blobSegmentIdx = NO_BLOB_SEGMENT_IDX_SPECIFIED;
 
@@ -58,6 +59,17 @@ public class GetBlobOptionsBuilder {
   }
 
   /**
+   * @param resolveRangeOnEmptyBlob {@code true} to indicate that the router should a successful response for a range
+   *                                request against an empty (0 byte) blob instead of returning a
+   *                                {@link RouterErrorCode#RangeNotSatisfiable} error.
+   * @return this builder
+   */
+  public GetBlobOptionsBuilder resolveRangeOnEmptyBlob(boolean resolveRangeOnEmptyBlob) {
+    this.resolveRangeOnEmptyBlob = resolveRangeOnEmptyBlob;
+    return this;
+  }
+
+  /**
    * @param rawMode the raw mode flag for this get request.
    * If rawMode is true, the returned {@link GetBlobResult} will contain the raw (unserialized) blob payload in the
    * data channel and null blobInfo.  This option cannot be used in conjunction with a byte range.
@@ -81,6 +93,6 @@ public class GetBlobOptionsBuilder {
    * @return the {@link GetBlobOptions} built.
    */
   public GetBlobOptions build() {
-    return new GetBlobOptions(operationType, getOption, range, rawMode, blobSegmentIdx);
+    return new GetBlobOptions(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx);
   }
 }

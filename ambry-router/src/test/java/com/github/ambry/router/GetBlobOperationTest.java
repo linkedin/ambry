@@ -1084,34 +1084,9 @@ public class GetBlobOperationTest {
    */
   @Test
   public void testRangeRequestSimpleBlob() throws Exception {
-    // Random valid ranges
-    for (int i = 0; i < 5; i++) {
-      blobSize = random.nextInt(maxChunkSize) + 1;
-      int randomOne = random.nextInt(blobSize);
-      int randomTwo = random.nextInt(blobSize);
-      testRangeRequestOffsetRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
-    }
-    blobSize = random.nextInt(maxChunkSize) + 1;
-    // Entire blob
-    testRangeRequestOffsetRange(0, blobSize - 1, true);
-    // Range that extends to end of blob
-    testRangeRequestFromStartOffset(random.nextInt(blobSize), true);
-    // Last n bytes of the blob
-    testRangeRequestLastNBytes(random.nextInt(blobSize) + 1, true);
-    // Last blobSize + 1 bytes
-    testRangeRequestLastNBytes(blobSize + 1, true);
-    // Range over the end of the blob
-    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, true);
-    // Ranges that start past the end of the blob (should not succeed)
-    testRangeRequestFromStartOffset(blobSize, false);
-    testRangeRequestOffsetRange(blobSize, blobSize + 20, false);
-    // 0 byte range
-    testRangeRequestLastNBytes(0, true);
-    // 1 byte ranges
-    testRangeRequestOffsetRange(0, 0, true);
-    testRangeRequestOffsetRange(blobSize - 1, blobSize - 1, true);
-    testRangeRequestFromStartOffset(blobSize - 1, true);
-    testRangeRequestLastNBytes(1, true);
+    // the resolveRangeOnEmptyBlob setting should not change behavior for non-empty blobs
+    testRangeRequestSimpleBlob(false);
+    testRangeRequestSimpleBlob(true);
   }
 
   /**
@@ -1120,45 +1095,34 @@ public class GetBlobOperationTest {
    */
   @Test
   public void testRangeRequestCompositeBlob() throws Exception {
-    // Random valid ranges
-    for (int i = 0; i < 5; i++) {
-      blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
-      int randomOne = random.nextInt(blobSize);
-      int randomTwo = random.nextInt(blobSize);
-      testRangeRequestOffsetRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
-    }
+    // the resolveRangeOnEmptyBlob setting should not change behavior for non-empty blobs
+    testRangeRequestCompositeBlob(false);
+    testRangeRequestCompositeBlob(true);
+  }
 
-    blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
-    // Entire blob
-    testRangeRequestOffsetRange(0, blobSize - 1, true);
-    // Range that extends to end of blob
-    testRangeRequestFromStartOffset(random.nextInt(blobSize), true);
-    // Last n bytes of the blob
-    testRangeRequestLastNBytes(random.nextInt(blobSize) + 1, true);
-    // Last blobSize + 1 bytes
-    testRangeRequestLastNBytes(blobSize + 1, true);
-    // Range over the end of the blob
-    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, true);
-    // Ranges that start past the end of the blob (should not succeed)
-    testRangeRequestFromStartOffset(blobSize, false);
-    testRangeRequestOffsetRange(blobSize, blobSize + 20, false);
-    // 1 byte ranges
-    testRangeRequestOffsetRange(0, 0, true);
-    testRangeRequestOffsetRange(blobSize / 2, blobSize / 2, true);
-    testRangeRequestOffsetRange(blobSize - 1, blobSize - 1, true);
-    testRangeRequestFromStartOffset(blobSize - 1, true);
-    testRangeRequestLastNBytes(1, true);
+  /**
+   * Test range request behavior with 0-byte blobs.
+   * @throws Exception
+   */
+  @Test
+  public void testRangeRequestEmptyBlob() throws Exception {
+    blobSize = 0;
+    // only a last n bytes request should succeed. Any other request should fail if resolveRangeOnEmptyBlob is false,
+    // since offset 0 is past the end of the blob.
+    testRangeRequest(ByteRanges.fromStartOffset(0), false, false);
+    testRangeRequest(ByteRanges.fromStartOffset(1), false, false);
+    testRangeRequest(ByteRanges.fromOffsetRange(0, 15), false, false);
+    testRangeRequest(ByteRanges.fromOffsetRange(2, 15), false, false);
+    testRangeRequest(ByteRanges.fromLastNBytes(20), false, true);
+    testRangeRequest(ByteRanges.fromLastNBytes(0), false, true);
 
-    blobSize = maxChunkSize * 2 + random.nextInt(maxChunkSize) + 1;
-    // Single start chunk
-    testRangeRequestOffsetRange(0, maxChunkSize - 1, true);
-    // Single intermediate chunk
-    testRangeRequestOffsetRange(maxChunkSize, maxChunkSize * 2 - 1, true);
-    // Single end chunk
-    testRangeRequestOffsetRange(maxChunkSize * 2, blobSize - 1, true);
-    // Over chunk boundaries
-    testRangeRequestOffsetRange(maxChunkSize / 2, maxChunkSize + maxChunkSize / 2, true);
-    testRangeRequestFromStartOffset(maxChunkSize + maxChunkSize / 2, true);
+    // all types of range requests should succeed if resolveRangeOnEmptyBlob is true.
+    testRangeRequest(ByteRanges.fromStartOffset(0), true, true);
+    testRangeRequest(ByteRanges.fromStartOffset(1), true, true);
+    testRangeRequest(ByteRanges.fromOffsetRange(0, 15), true, true);
+    testRangeRequest(ByteRanges.fromOffsetRange(2, 15), true, true);
+    testRangeRequest(ByteRanges.fromLastNBytes(20), true, true);
+    testRangeRequest(ByteRanges.fromLastNBytes(0), true, true);
   }
 
   /**
@@ -1306,48 +1270,103 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test range requests on a single chunk blob.
+   * @param resolveRangeOnEmptyBlob the value of {@link GetBlobOptions#resolveRangeOnEmptyBlob()} to set.
+   */
+  private void testRangeRequestSimpleBlob(boolean resolveRangeOnEmptyBlob) throws Exception {
+    // Random valid ranges
+    for (int i = 0; i < 5; i++) {
+      blobSize = random.nextInt(maxChunkSize) + 1;
+      int randomOne = random.nextInt(blobSize);
+      int randomTwo = random.nextInt(blobSize);
+      testRangeRequest(ByteRanges.fromOffsetRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo)),
+          resolveRangeOnEmptyBlob, true);
+    }
+    blobSize = random.nextInt(maxChunkSize) + 1;
+    // Entire blob
+    testRangeRequest(ByteRanges.fromOffsetRange(0, blobSize - 1), resolveRangeOnEmptyBlob, true);
+    // Range that extends to end of blob
+    testRangeRequest(ByteRanges.fromStartOffset(random.nextInt(blobSize)), resolveRangeOnEmptyBlob, true);
+    // Last n bytes of the blob
+    testRangeRequest(ByteRanges.fromLastNBytes(random.nextInt(blobSize) + 1), resolveRangeOnEmptyBlob, true);
+    // Last blobSize + 1 bytes
+    testRangeRequest(ByteRanges.fromLastNBytes(blobSize + 1), resolveRangeOnEmptyBlob, true);
+    // Range over the end of the blob
+    testRangeRequest(ByteRanges.fromOffsetRange(random.nextInt(blobSize), blobSize + 5), resolveRangeOnEmptyBlob, true);
+    // Ranges that start past the end of the blob (should not succeed)
+    testRangeRequest(ByteRanges.fromStartOffset(blobSize), resolveRangeOnEmptyBlob, false);
+    testRangeRequest(ByteRanges.fromOffsetRange(blobSize, blobSize + 20), resolveRangeOnEmptyBlob, false);
+    // 0 byte range
+    testRangeRequest(ByteRanges.fromLastNBytes(0), resolveRangeOnEmptyBlob, true);
+    // 1 byte ranges
+    testRangeRequest(ByteRanges.fromOffsetRange(0, 0), resolveRangeOnEmptyBlob, true);
+    testRangeRequest(ByteRanges.fromOffsetRange(blobSize - 1, blobSize - 1), resolveRangeOnEmptyBlob, true);
+    testRangeRequest(ByteRanges.fromStartOffset(blobSize - 1), resolveRangeOnEmptyBlob, true);
+    testRangeRequest(ByteRanges.fromLastNBytes(1), resolveRangeOnEmptyBlob, true);
+  }
+
+  /**
+   * Test range requests on a composite blob
+   * @param resolveRangeOnEmptyBlob the value of {@link GetBlobOptions#resolveRangeOnEmptyBlob()} to set.
+   */
+  private void testRangeRequestCompositeBlob(boolean resolveRangeOnEmptyBlob) throws Exception {
+    // Random valid ranges
+    for (int i = 0; i < 5; i++) {
+      blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
+      int randomOne = random.nextInt(blobSize);
+      int randomTwo = random.nextInt(blobSize);
+      testRangeRequest(ByteRanges.fromOffsetRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo)),
+          resolveRangeOnEmptyBlob, true);
+    }
+
+    blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
+    // Entire blob
+    testRangeRequest(ByteRanges.fromOffsetRange(0, blobSize - 1), resolveRangeOnEmptyBlob, true);
+    // Range that extends to end of blob
+    testRangeRequest(ByteRanges.fromStartOffset(random.nextInt(blobSize)), resolveRangeOnEmptyBlob, true);
+    // Last n bytes of the blob
+    testRangeRequest(ByteRanges.fromLastNBytes(random.nextInt(blobSize) + 1), resolveRangeOnEmptyBlob, true);
+    // Last blobSize + 1 bytes
+    testRangeRequest(ByteRanges.fromLastNBytes(blobSize + 1), resolveRangeOnEmptyBlob, true);
+    // Range over the end of the blob
+    testRangeRequest(ByteRanges.fromOffsetRange(random.nextInt(blobSize), blobSize + 5), resolveRangeOnEmptyBlob, true);
+    // Ranges that start past the end of the blob (should not succeed)
+    testRangeRequest(ByteRanges.fromStartOffset(blobSize), resolveRangeOnEmptyBlob, false);
+    testRangeRequest(ByteRanges.fromOffsetRange(blobSize, blobSize + 20), resolveRangeOnEmptyBlob, false);
+    // 1 byte ranges
+    testRangeRequest(ByteRanges.fromOffsetRange(0, 0), resolveRangeOnEmptyBlob, true);
+    testRangeRequest(ByteRanges.fromOffsetRange(blobSize / 2, blobSize / 2), resolveRangeOnEmptyBlob, true);
+    testRangeRequest(ByteRanges.fromOffsetRange(blobSize - 1, blobSize - 1), resolveRangeOnEmptyBlob, true);
+    testRangeRequest(ByteRanges.fromStartOffset(blobSize - 1), resolveRangeOnEmptyBlob, true);
+    testRangeRequest(ByteRanges.fromLastNBytes(1), resolveRangeOnEmptyBlob, true);
+
+    blobSize = maxChunkSize * 2 + random.nextInt(maxChunkSize) + 1;
+    // Single start chunk
+    testRangeRequest(ByteRanges.fromOffsetRange(0, maxChunkSize - 1), resolveRangeOnEmptyBlob, true);
+    // Single intermediate chunk
+    testRangeRequest(ByteRanges.fromOffsetRange(maxChunkSize, maxChunkSize * 2 - 1), resolveRangeOnEmptyBlob, true);
+    // Single end chunk
+    testRangeRequest(ByteRanges.fromOffsetRange(maxChunkSize * 2, blobSize - 1), resolveRangeOnEmptyBlob, true);
+    // Over chunk boundaries
+    testRangeRequest(ByteRanges.fromOffsetRange(maxChunkSize / 2, maxChunkSize + maxChunkSize / 2),
+        resolveRangeOnEmptyBlob, true);
+    testRangeRequest(ByteRanges.fromStartOffset(maxChunkSize + maxChunkSize / 2), resolveRangeOnEmptyBlob, true);
+  }
+
+  /**
    * Send a range request and test that it either completes successfully or fails with a
    * {@link RouterErrorCode#RangeNotSatisfiable} error.
-   * @param startOffset The start byte offset for the range request.
-   * @param endOffset The end byte offset for the range request
+   * @param range The {@link ByteRange} to set in {@link GetBlobOptions}.
+   * @param resolveRangeOnEmptyBlob the value of {@link GetBlobOptions#resolveRangeOnEmptyBlob()} to set.
    * @param rangeSatisfiable {@code true} if the range request should succeed.
    * @throws Exception
    */
-  private void testRangeRequestOffsetRange(long startOffset, long endOffset, boolean rangeSatisfiable)
+  private void testRangeRequest(ByteRange range, boolean resolveRangeOnEmptyBlob, boolean rangeSatisfiable)
       throws Exception {
     doPut();
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .range(ByteRanges.fromOffsetRange(startOffset, endOffset))
-        .build(), false, routerMetrics.ageAtGet);
-    getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
-  }
-
-  /**
-   * Send a range request from a {@code startOffset} on and test that it either completes successfully or fails with a
-   * {@link RouterErrorCode#RangeNotSatisfiable} error.
-   * @param startOffset The start byte offset for the range request.
-   * @param rangeSatisfiable {@code true} if the range request should succeed.
-   * @throws Exception
-   */
-  private void testRangeRequestFromStartOffset(long startOffset, boolean rangeSatisfiable) throws Exception {
-    doPut();
-    options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .range(ByteRanges.fromStartOffset(startOffset))
-        .build(), false, routerMetrics.ageAtGet);
-    getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
-  }
-
-  /**
-   * Send a range request for the {@code lastNBytes} of an object and test that it either completes successfully or
-   * fails with a {@link RouterErrorCode#RangeNotSatisfiable} error.
-   * @param lastNBytes The start byte offset for the range request.
-   * @param rangeSatisfiable {@code true} if the range request should succeed.
-   * @throws Exception
-   */
-  private void testRangeRequestLastNBytes(long lastNBytes, boolean rangeSatisfiable) throws Exception {
-    doPut();
-    options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .range(ByteRanges.fromLastNBytes(lastNBytes))
+        .range(range)
+        .resolveRangeOnEmptyBlob(resolveRangeOnEmptyBlob)
         .build(), false, routerMetrics.ageAtGet);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
@@ -1540,8 +1559,9 @@ public class GetBlobOperationTest {
         && !options.getBlobOptions.isRawMode() && !options.getChunkIdsOnly) {
       int sizeWritten = blobSize;
       if (options.getBlobOptions.getRange() != null) {
-        ByteRange range = options.getBlobOptions.getRange().toResolvedByteRange(blobSize);
-        sizeWritten = (int) (range.getEndOffset() - range.getStartOffset() + 1);
+        ByteRange range = options.getBlobOptions.getRange()
+            .toResolvedByteRange(blobSize, options.getBlobOptions.resolveRangeOnEmptyBlob());
+        sizeWritten = (int) range.getRangeSize();
       }
       Assert.assertEquals("Size read must equal size written", sizeWritten, readCompleteResult.get());
     }
@@ -1621,11 +1641,12 @@ public class GetBlobOperationTest {
         putContentBuf = getBlobBuffer();
         Assert.assertNotNull("Did not find server with blob: " + blobIdStr, putContentBuf);
       } else {
-        putContentBuf = ByteBuffer.wrap(putContent);
         // If a range is set, compare the result against the specified byte range.
         if (options != null && options.getRange() != null) {
-          ByteRange range = options.getRange().toResolvedByteRange(blobSize);
+          ByteRange range = options.getRange().toResolvedByteRange(blobSize, options.resolveRangeOnEmptyBlob());
           putContentBuf = ByteBuffer.wrap(putContent, (int) range.getStartOffset(), (int) range.getRangeSize());
+        } else {
+          putContentBuf = ByteBuffer.wrap(putContent);
         }
       }
 

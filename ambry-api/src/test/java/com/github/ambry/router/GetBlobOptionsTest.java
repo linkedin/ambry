@@ -28,10 +28,9 @@ import static org.junit.Assert.*;
 public class GetBlobOptionsTest {
   /**
    * Test that the range option can be assigned and retrieved correctly.
-   * @throws Exception
    */
   @Test
-  public void testRangeOption() throws Exception {
+  public void testRangeOption() {
     long startOffset = 1;
     long endOffset = 2;
     ByteRange range = ByteRanges.fromOffsetRange(startOffset, endOffset);
@@ -41,9 +40,16 @@ public class GetBlobOptionsTest {
     assertEquals("Range from options not as expected.", range, options.getRange());
   }
 
+  @Test
+  public void testResolveRangeOnEmptyBlobOption() {
+    GetBlobOptions options = new GetBlobOptionsBuilder().build();
+    assertFalse("Default value of resolveRangeOnEmptyBlob should be false", options.resolveRangeOnEmptyBlob());
+    options = new GetBlobOptionsBuilder().resolveRangeOnEmptyBlob(true).build();
+    assertTrue("resolveRangeOnEmptyBlob should be set to true", options.resolveRangeOnEmptyBlob());
+  }
+
   /**
    * Test that the OperationType option can be assigned and retrieved correctly.
-   * @throws Exception
    */
   @Test
   public void testOperationTypeOption() {
@@ -54,7 +60,6 @@ public class GetBlobOptionsTest {
 
   /**
    * Test that the {@link GetOption} option can be assigned and retrieved correctly.
-   * @throws Exception
    */
   @Test
   public void testGetOptionOption() {

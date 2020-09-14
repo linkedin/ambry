@@ -221,6 +221,12 @@ public class RestUtils {
      * The lifeVersion of the blob.
      */
     public final static String LIFE_VERSION = "x-ambry-life-version";
+
+    /**
+     * Set to true to indicate that ambry should return a successful response for a range request against an empty
+     * (0 byte) blob instead of returning a 416 error.
+     */
+    public final static String RESOLVE_RANGE_ON_EMPTY_BLOB = "x-ambry-resolve-range-on-empty-blob";
   }
 
   public static final class TrackingHeaders {
@@ -538,28 +544,33 @@ public class RestUtils {
       throw new RestServiceException("Ranges not supported for sub-resources that aren't Segment.",
           RestServiceErrorCode.InvalidArgs);
     }
+    boolean resolveRangeOnEmptyBlob = getBooleanHeader(args, Headers.RESOLVE_RANGE_ON_EMPTY_BLOB, false);
     return new GetBlobOptionsBuilder().operationType(
         subResource == null || subResource == SubResource.Segment ? GetBlobOptions.OperationType.All
             : GetBlobOptions.OperationType.BlobInfo)
         .getOption(getOption)
         .blobSegment(blobSegmentIdx)
         .range(rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null)
+        .resolveRangeOnEmptyBlob(resolveRangeOnEmptyBlob)
         .build();
   }
 
   /**
    * Build the value for the Content-Range header that corresponds to the provided range and blob size. The returned
-   * Content-Range header value will be in the following format: {@code {a}-{b}/{c}}, where {@code {a}} is the inclusive
-   * start byte offset of the returned range, {@code {b}} is the inclusive end byte offset of the returned range, and
-   * {@code {c}} is the total size of the blob in bytes. This function also generates the range length in bytes.
+   * Content-Range header value will be in the following format: {@code bytes {a}-{b}/{c}}, where {@code {a}} is the
+   * inclusive start byte offset of the returned range, {@code {b}} is the inclusive end byte offset of the returned
+   * range, and {@code {c}} is the total size of the blob in bytes. This function also generates the range length in
+   * bytes.
    * @param range a {@link ByteRange} used to generate the Content-Range header.
    * @param blobSize the total size of the associated blob in bytes.
+   * @param resolveRangeOnEmptyBlob {@code true} to force range resolution to succeed if the blob is empty.
+   *                                In other words, return {@code bytes 1-0/0} if {@code totalSize == 0}.
    * @return a {@link Pair} containing the content range header value and the content length in bytes.
    */
-  public static Pair<String, Long> buildContentRangeAndLength(ByteRange range, long blobSize)
-      throws RestServiceException {
+  public static Pair<String, Long> buildContentRangeAndLength(ByteRange range, long blobSize,
+      boolean resolveRangeOnEmptyBlob) throws RestServiceException {
     try {
-      range = range.toResolvedByteRange(blobSize);
+      range = range.toResolvedByteRange(blobSize, resolveRangeOnEmptyBlob);
     } catch (IllegalArgumentException e) {
       throw new RestServiceException("Range provided was not satisfiable.", e,
           RestServiceErrorCode.RangeNotSatisfiable);
