@@ -94,7 +94,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
     this.storeKeyFactory = storeKeyFactory;
     totalSizeToWrite = 0;
     long startTime = SystemTime.getInstance().milliseconds();
-    calculateOffsets();
+    fetchDataFromReadSet();
     metrics.calculateOffsetMessageFormatSendTime.update(SystemTime.getInstance().milliseconds() - startTime);
     sizeWritten = 0;
     currentWriteIndex = 0;
@@ -102,10 +102,10 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
   }
 
   /**
-   * Calculates the offsets from the MessageReadSet that needs to be sent over the network
-   * based on the type of data requested as indicated by the flags
+   * Fetch data from the MessageReadSet that needs to be sent over the networkbased on the type of data requested as
+   * indicated by the flags
    */
-  private void calculateOffsets() throws IOException, MessageFormatException {
+  private void fetchDataFromReadSet() throws MessageFormatException {
     try {
       // get size
       int messageCount = readSet.count();
