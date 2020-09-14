@@ -78,19 +78,22 @@ import org.slf4j.LoggerFactory;
  * become eligible to be fetched.
  */
 class GetBlobOperation extends GetOperation {
+  private static final Logger logger = LoggerFactory.getLogger(GetBlobOperation.class);
   // the callback to use to notify the router about events and state changes
   private final RouterCallback routerCallback;
   // whether the operationCallback has been called already.
   private final AtomicBoolean operationCallbackInvoked = new AtomicBoolean(false);
   // The first chunk may be a metadata chunk if the blob is composite, or the only data chunk if the blob is simple.
   private final FirstGetChunk firstChunk;
+  // the factory to use to deserialize keys in a metadata chunk.
+  private final BlobIdFactory blobIdFactory;
+  // To find the GetChunk to hand over the response quickly.
+  private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
   // Associated with all data chunks in the case of composite blobs. Only a fixed number of these are initialized.
   // Each of these is initialized with the information required to fetch a data chunk and is responsible for
   // retrieving and adding it to the list of chunk buffers. Once complete, they are reused to fetch subsequent data
   // chunks.
   private GetChunk[] dataChunks;
-  // the factory to use to deserialize keys in a metadata chunk.
-  private final BlobIdFactory blobIdFactory;
   // the total number of data chunks associated with this blob.
   private int numChunksTotal;
   // the total number of data chunks retrieved so far (and may or may not have been written out yet).
@@ -104,16 +107,12 @@ class GetBlobOperation extends GetOperation {
   // chunk index to retrieved chunk buffer mapping.
   private Map<Integer, ByteBuf> chunkIndexToBuf;
   private Map<Integer, ByteBuf> chunkIndexToBufWaitingForRelease;
-  // To find the GetChunk to hand over the response quickly.
-  private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
   // the blob info that is populated on OperationType.BlobInfo or OperationType.All
   private BlobInfo blobInfo;
   // the ReadableStreamChannel that is populated on OperationType.Blob or OperationType.All requests.
   private BlobDataReadableStreamChannel blobDataChannel;
   // the CompositeBlobInfo that will be set if (and when) this blob turns out to be a composite blob.
   private CompositeBlobInfo compositeBlobInfo;
-
-  private static final Logger logger = LoggerFactory.getLogger(GetBlobOperation.class);
 
   /**
    * Construct a GetBlobOperation
@@ -205,9 +204,9 @@ class GetBlobOperation extends GetOperation {
       // read callback.
       setOperationException(chunk.getChunkException());
     }
+    Exception e = getOperationException();
     if (chunk == firstChunk) {
       if (operationCallbackInvoked.compareAndSet(false, true)) {
-        Exception e = getOperationException();
         if (options.getChunkIdsOnly) {
           // If this is an operation just to get the chunk ids, then these ids will be returned as part of the
           // result callback and no more chunks will be fetched, so mark the operation as complete to let the
@@ -228,22 +227,11 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
           }
           if (e == null) {
-            // In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly,
-            // we will replace the field with the size from inside of the metadata content.
             if (blobInfo != null) {
-              if (blobInfo.getBlobProperties().getBlobSize() != totalSize) {
-                if (compositeBlobInfo != null) {
-                  routerMetrics.compositeBlobSizeMismatchCount.inc();
-                  logger.debug("Blob size mismatch for composite blob: {}", getBlobIdStr());
-                } else if (blobInfo.getBlobProperties().isEncrypted()) {
-                  routerMetrics.simpleEncryptedBlobSizeMismatchCount.inc();
-                  logger.debug("Blob size mismatch for simple encrypted blob: {}", getBlobIdStr());
-                } else {
-                  routerMetrics.simpleUnencryptedBlobSizeMismatchCount.inc();
-                  logger.warn("Blob size mismatch for simple unencrypted blob (should not happen): {}", getBlobIdStr());
-                }
-                blobInfo.getBlobProperties().setBlobSize(totalSize);
-              }
+              // For segmented blob we have already filtered out not-required chunks by now. So the first chunk is the segment we need.
+              fixBlobSizeIfRequired(blobInfo.getBlobProperties().getBlobSize(),
+                  options.getBlobOptions.hasBlobSegmentIdx() ? firstChunk.getChunkMetadataList().get(0).getSize()
+                      : totalSize);
             }
             if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
               blobDataChannel = new BlobDataReadableStreamChannel();
@@ -263,6 +251,30 @@ class GetBlobOperation extends GetOperation {
     chunk.postCompletionCleanup();
     if (blobDataChannel != null) {
       blobDataChannel.maybeWriteToChannel();
+    }
+  }
+
+  /**
+   * In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly,
+   * and in case of GET for segment of a blob, replace the field with the size from inside of the metadata content.
+   * @param blobSizeFromProperties blob size obtained from blob properties.
+   * @param blobSizeFromMetadata blob size obtained from metadata of the given blob or its composite blob.
+   */
+  private void fixBlobSizeIfRequired(long blobSizeFromProperties, long blobSizeFromMetadata) {
+    // In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly,
+    // and in case of GET for segment of a blob, we will replace the field with the size from inside of the metadata content.
+    if (blobSizeFromProperties != blobSizeFromMetadata) {
+      if (compositeBlobInfo != null) {
+        routerMetrics.compositeBlobSizeMismatchCount.inc();
+        logger.debug("Blob size mismatch for composite blob: {}", getBlobIdStr());
+      } else if (blobInfo.getBlobProperties().isEncrypted()) {
+        routerMetrics.simpleEncryptedBlobSizeMismatchCount.inc();
+        logger.debug("Blob size mismatch for simple encrypted blob: {}", getBlobIdStr());
+      } else {
+        routerMetrics.simpleUnencryptedBlobSizeMismatchCount.inc();
+        logger.warn("Blob size mismatch for simple unencrypted blob (should not happen): {}", getBlobIdStr());
+      }
+      blobInfo.getBlobProperties().setBlobSize(blobSizeFromMetadata);
     }
   }
 
@@ -341,10 +353,37 @@ class GetBlobOperation extends GetOperation {
   // ReadableStreamChannel implementation:
 
   /**
+   * Different states of a GetChunk.
+   */
+  enum ChunkState {
+    /**
+     * The GetChunk is free and can be assigned to hold a chunk of the overall blob.
+     */
+    Free,
+
+    /**
+     * The GetChunk has been assigned to get and hold a chunk of the overall blob.
+     */
+    Ready,
+
+    /**
+     * The GetChunk has issued requests and the operation on the chunk it holds is in progress.
+     */
+    InProgress,
+
+    /**
+     * The GetChunk is complete.
+     */
+    Complete,
+  }
+
+  /**
    * A class that implements the result of this GetBlobOperation. This is instantiated if/when the first data chunk of
    * the blob arrives, when the operation callback is invoked.
    */
   private class BlobDataReadableStreamChannel implements ReadableStreamChannel {
+    // whether this object has called the readIntoCallback yet.
+    private final AtomicBoolean readIntoCallbackCalled = new AtomicBoolean(false);
     // whether this ReadableStreamChannel is open.
     private AtomicBoolean isOpen = new AtomicBoolean(true);
     // whether readInto() has been called yet by the caller on this ReadableStreamChannel.
@@ -359,10 +398,6 @@ class GetBlobOperation extends GetOperation {
     private AtomicLong bytesWritten = new AtomicLong(0);
     // the number of chunks that have been written out to the asyncWritableChannel.
     private AtomicInteger numChunksWrittenOut = new AtomicInteger(0);
-    // the index of the next chunk that is to be written out to the asyncWritableChannel.
-    private int indexOfNextChunkToWriteOut = 0;
-    // whether this object has called the readIntoCallback yet.
-    private final AtomicBoolean readIntoCallbackCalled = new AtomicBoolean(false);
     // the callback that is passed into the asyncWritableChannel write() operation.
     private final Callback<Long> chunkAsyncWriteCallback = new Callback<Long>() {
       @Override
@@ -380,6 +415,8 @@ class GetBlobOperation extends GetOperation {
         routerCallback.onPollReady();
       }
     };
+    // the index of the next chunk that is to be written out to the asyncWritableChannel.
+    private int indexOfNextChunkToWriteOut = 0;
 
     /**
      * The bytes that will be read from this channel is not known until the read is complete.
@@ -520,16 +557,8 @@ class GetBlobOperation extends GetOperation {
    * reinitialized and used to retrieve a subsequent chunk.
    */
   private class GetChunk {
-    // the operation tracker used to track the operation on the current chunk.
-    private OperationTracker chunkOperationTracker;
-    // the blob id of the current chunk.
-    private BlobId chunkBlobId;
-    // byte offset of the data in the chunk relative to the entire blob
-    private long offset;
-    // size of the chunk
-    private long chunkSize;
-    // whether the operation on the current chunk has completed.
-    private boolean chunkCompleted;
+    // map of correlation id to the request metadata for every request issued for this operation.
+    protected final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<>();
     // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
     protected ProgressTracker progressTracker;
     // DecryptCallBackResultInfo that holds all info about decrypt job callback
@@ -544,13 +573,21 @@ class GetBlobOperation extends GetOperation {
     // For a GetChunk, responses may be handled multiple times. Regardless of the successTarget,
     // the actual body of the response is deserialized only once.
     protected boolean successfullyDeserialized;
-    // map of correlation id to the request metadata for every request issued for this operation.
-    protected final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<>();
     // the state of the chunk.
     protected volatile ChunkState state;
     // metrics tracker to track decrypt jobs
     protected CryptoJobMetricsTracker decryptJobMetricsTracker =
         new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
+    // the operation tracker used to track the operation on the current chunk.
+    private OperationTracker chunkOperationTracker;
+    // the blob id of the current chunk.
+    private BlobId chunkBlobId;
+    // byte offset of the data in the chunk relative to the entire blob
+    private long offset;
+    // size of the chunk
+    private long chunkSize;
+    // whether the operation on the current chunk has completed.
+    private boolean chunkCompleted;
 
     /**
      * Construct a GetChunk
@@ -630,6 +667,20 @@ class GetBlobOperation extends GetOperation {
      */
     RouterException getChunkException() {
       return chunkException;
+    }
+
+    /**
+     * Set the exception associated with this chunk operation.
+     * First, if the current chunkException is null, directly set it as provided exception;
+     * Second, if the chunkException exists but the precedence level of the provided exception's error code is smaller
+     * than the precedence level of the chunkException's error code, then update the chunkException.
+     * @param exception the {@link RouterException} to possibly set.
+     */
+    void setChunkException(RouterException exception) {
+      if (chunkException == null || getPrecedenceLevel(exception.getErrorCode()) < getPrecedenceLevel(
+          chunkException.getErrorCode())) {
+        chunkException = exception;
+      }
     }
 
     /**
@@ -789,6 +840,11 @@ class GetBlobOperation extends GetOperation {
       // from concurrent operations.
       if (!successfullyDeserialized) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
+        // Note that for segment GET there is only one chunk to get, so we can be sure that its this one.
+        if (options.getBlobOptions.hasBlobSegmentIdx()) {
+          blobInfo.getBlobProperties().setBlobSize(blobData.getSize());
+        }
+
         ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
         ByteBuf chunkBuf = blobData.content();
 
@@ -1023,20 +1079,6 @@ class GetBlobOperation extends GetOperation {
      */
     RouterErrorCode processServerError(ServerErrorCode errorCode) {
       return RouterErrorCode.UnexpectedInternalError;
-    }
-
-    /**
-     * Set the exception associated with this chunk operation.
-     * First, if the current chunkException is null, directly set it as provided exception;
-     * Second, if the chunkException exists but the precedence level of the provided exception's error code is smaller
-     * than the precedence level of the chunkException's error code, then update the chunkException.
-     * @param exception the {@link RouterException} to possibly set.
-     */
-    void setChunkException(RouterException exception) {
-      if (chunkException == null || getPrecedenceLevel(exception.getErrorCode()) < getPrecedenceLevel(
-          chunkException.getErrorCode())) {
-        chunkException = exception;
-      }
     }
 
     /**
@@ -1331,6 +1373,13 @@ class GetBlobOperation extends GetOperation {
     }
 
     /**
+     * @return {@code chunkMetadataList}.
+     */
+    public List<CompositeBlobInfo.ChunkMetadata> getChunkMetadataList() {
+      return chunkMetadataList;
+    }
+
+    /**
      * Process a metadata blob to find the data chunks that need to be fetched.
      * @param blobData the metadata blob's data.
      * @param userMetadata userMetadata of the blob
@@ -1495,31 +1544,6 @@ class GetBlobOperation extends GetOperation {
       numChunksTotal = 0;
       numChunksRetrieved.set(0);
     }
-  }
-
-  /**
-   * Different states of a GetChunk.
-   */
-  enum ChunkState {
-    /**
-     * The GetChunk is free and can be assigned to hold a chunk of the overall blob.
-     */
-    Free,
-
-    /**
-     * The GetChunk has been assigned to get and hold a chunk of the overall blob.
-     */
-    Ready,
-
-    /**
-     * The GetChunk has issued requests and the operation on the chunk it holds is in progress.
-     */
-    InProgress,
-
-    /**
-     * The GetChunk is complete.
-     */
-    Complete,
   }
 }
 
