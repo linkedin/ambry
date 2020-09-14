@@ -265,18 +265,19 @@ class BlobStoreStats implements StoreStats, Closeable {
     }
     Pair<Long, NavigableMap<String, Long>> retValue = null;
     ScanResults currentScanResults = scanResults.get();
-    long referenceTimeInMs = getLogSegmentRefTimeMs(currentScanResults, timeRange);
+    long referenceTimeInMs = getLogSegmentDeleteRefTimeMs(currentScanResults, timeRange);
     if (enableBucketForLogSegmentReports) {
       if (referenceTimeInMs != REF_TIME_OUT_OF_BOUNDS) {
         retValue = currentScanResults.getValidSizePerLogSegment(referenceTimeInMs, expiryReferenceTime);
       } else {
-        if (isScanning && getLogSegmentRefTimeMs(indexScanner.newScanResults, timeRange) != REF_TIME_OUT_OF_BOUNDS) {
+        if (isScanning
+            && getLogSegmentDeleteRefTimeMs(indexScanner.newScanResults, timeRange) != REF_TIME_OUT_OF_BOUNDS) {
           scanLock.lock();
           try {
             if (isScanning) {
               if (waitCondition.await(waitTimeoutInSecs, TimeUnit.SECONDS)) {
                 currentScanResults = scanResults.get();
-                referenceTimeInMs = getLogSegmentRefTimeMs(currentScanResults, timeRange);
+                referenceTimeInMs = getLogSegmentDeleteRefTimeMs(currentScanResults, timeRange);
                 if (referenceTimeInMs != REF_TIME_OUT_OF_BOUNDS) {
                   retValue = currentScanResults.getValidSizePerLogSegment(referenceTimeInMs, expiryReferenceTime);
                 }
@@ -286,7 +287,7 @@ class BlobStoreStats implements StoreStats, Closeable {
               }
             } else {
               currentScanResults = scanResults.get();
-              referenceTimeInMs = getLogSegmentRefTimeMs(currentScanResults, timeRange);
+              referenceTimeInMs = getLogSegmentDeleteRefTimeMs(currentScanResults, timeRange);
               if (referenceTimeInMs != REF_TIME_OUT_OF_BOUNDS) {
                 retValue = currentScanResults.getValidSizePerLogSegment(referenceTimeInMs, expiryReferenceTime);
               }
@@ -649,14 +650,14 @@ class BlobStoreStats implements StoreStats, Closeable {
 
   /**
    * Given {@link ScanResults} and a {@link TimeRange}, try to find the latest point in time that is within the
-   * {@link TimeRange} and the log segment forecast range.
+   * {@link TimeRange} and the log segment forecast range for deleted.
    * @param results the {@link ScanResults} with the log segment forecast range information
    * @param timeRange the {@link TimeRange} used to find the latest shared point in time with the log segment forecast
    *                  range
    * @return the latest shared point in time in milliseconds if there is one, otherwise REF_TIME_OUT_OF_BOUNDS (-1)
    * is returned
    */
-  private long getLogSegmentRefTimeMs(ScanResults results, TimeRange timeRange) {
+  private long getLogSegmentDeleteRefTimeMs(ScanResults results, TimeRange timeRange) {
     long refTimeInMs = results == null || timeRange.getStartTimeInMs() >= results.logSegmentForecastEndTimeMsForDeleted
         || timeRange.getEndTimeInMs() < results.logSegmentForecastStartTimeMsForDeleted ? REF_TIME_OUT_OF_BOUNDS
         : timeRange.getEndTimeInMs();
@@ -706,7 +707,7 @@ class BlobStoreStats implements StoreStats, Closeable {
    * Helper function for container buckets for blob expiration/deletion related updates.
    * @param results the {@link ScanResults} to be updated
    * @param indexValue the PUT {@link IndexValue} of the expiring/deleting blob
-   * @param expOrDelTimeInMs deletion time of the blob in ms
+   * @param expOrDelTimeInMs either the expiration or deletion time of the blob in ms
    * @param operator indicating the operator of the update, 1 for add and -1 for subtract
    */
   private void handleContainerBucketUpdate(ScanResults results, IndexValue indexValue, long expOrDelTimeInMs,
