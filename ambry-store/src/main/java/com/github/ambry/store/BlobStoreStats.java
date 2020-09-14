@@ -804,12 +804,9 @@ class BlobStoreStats implements StoreStats, Closeable {
     // Now deal with log segment bucket
     // Current DELETE is always valid
     if (previousValue.isDelete()) {
-      // Previous IndexValue is a DELETE, it should already
-      // 1. Added it's size to the first bucket in the scan result
-      // 2. Subtracted original PUT's size from the previousValue.getOperationTimeInMs() bucket.
-      // We need to recover from these two operations, so
-      // 1. Subtract previous DELETE's size from bucket in the scan result.
-      // 2. Add original PUT's size to the previousValue.getOperationTimeInMs() bucket.
+      // Previous IndexValue is a DELETE, it will be invalidated by current DELETE. So we have to revert the previous
+      // DELETE here as if it doesn't exist. After reverting changes made by previous DELETE, we will process the current
+      // DELETE IndexValue.
       processDeleteUpdateLogSegmentHelper(results, key, previousValue, originalPutValue, SUBTRACT);
     } else if (previousValue.isUndelete()) {
       // Previous IndexValue is an UNDELETE, it should already
@@ -817,9 +814,23 @@ class BlobStoreStats implements StoreStats, Closeable {
       // we need to recover from this operation
       results.updateLogSegmentBaseBucket(previousValue.getOffset().getName(), SUBTRACT * previousValue.getSize());
     }
+    // Process the current DELETE IndexValue.
     processDeleteUpdateLogSegmentHelper(results, key, deleteValue, originalPutValue, ADD);
   }
 
+  /**
+   * Update deleted bucket based on given DELETE IndexValue. For DELETE IndexValue, we should
+   * 1. Add it's size to the base bucket in the {@link ScanResults}.$
+   * 2. Subtract original PUT's size from DELETE's operationTimeInMs bucket.
+   * 3. If TTL_UPDATE IndexValue exist, subtract TTL_UPDATE's size from DELETE's operationTimeInMs bucket as well.
+   * @param results the {@link ScanResults} to update the log segment deleted bucket.
+   * @param key the {@link StoreKey} of IndexValue to process.
+   * @param deleteValue the DELETE {@link IndexValue} to process.
+   * @param originalPutValue the original PUT {@link IndexValue} of the same key.
+   * @param operator if the operator is {@link #SUBTRACT}, then adding would become subtracting, and subtracting would
+   *                 become adding. Set operator to {@link #SUBTRACT} if you want to revert the operation for the given
+   *                 DELETE {@link IndexValue}.
+   */
   private void processDeleteUpdateLogSegmentHelper(ScanResults results, StoreKey key, IndexValue deleteValue,
       IndexValue originalPutValue, int operator) {
     long operationTimeInMs = deleteValue.getOperationTimeInMs();
