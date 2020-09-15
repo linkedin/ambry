@@ -87,7 +87,6 @@ public class AmbryRequests implements RequestAPI {
   protected final FindTokenHelper findTokenHelper;
   protected final NotificationSystem notification;
   protected final StoreKeyFactory storeKeyFactory;
-  private final boolean enableDataPrefetch;
   private final StoreKeyConverterFactory storeKeyConverterFactory;
 
   protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
@@ -96,7 +95,7 @@ public class AmbryRequests implements RequestAPI {
   public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
       NotificationSystem operationNotification, ReplicationAPI replicationEngine, StoreKeyFactory storeKeyFactory,
-      boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory) {
+      StoreKeyConverterFactory storeKeyConverterFactory) {
     this.storeManager = storeManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
@@ -107,7 +106,6 @@ public class AmbryRequests implements RequestAPI {
     this.replicationEngine = replicationEngine;
     this.notification = operationNotification;
     this.storeKeyFactory = storeKeyFactory;
-    this.enableDataPrefetch = enableDataPrefetch;
     this.storeKeyConverterFactory = storeKeyConverterFactory;
   }
 
@@ -304,7 +302,7 @@ public class AmbryRequests implements RequestAPI {
             StoreInfo info = storeToGet.get(dedupedStoreKeys, storeGetOptions);
             MessageFormatSend blobsToSend =
                 new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
-                    storeKeyFactory, enableDataPrefetch);
+                    storeKeyFactory);
             PartitionResponseInfo partitionResponseInfo =
                 new PartitionResponseInfo(partitionRequestInfo.getPartition(), info.getMessageReadSetInfo(),
                     blobsToSend.getMessageMetadataList());

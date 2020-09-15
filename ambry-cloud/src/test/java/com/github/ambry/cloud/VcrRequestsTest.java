@@ -80,7 +80,7 @@ public class VcrRequestsTest {
 
     vcrRequests =
         new VcrRequests(storeManager, null, clusterMap, dataNodeId, clusterMap.getMetricRegistry(), serverMetrics,
-            findTokenHelper, null, null, null, false, storeKeyConverterFactory);
+            findTokenHelper, null, null, null, storeKeyConverterFactory);
     store = new CloudBlobStore(verifiableProperties, availablePartitionId, cloudDestination, clusterMap,
         new VcrMetrics(new MetricRegistry()));
     request = new NetworkRequest() {

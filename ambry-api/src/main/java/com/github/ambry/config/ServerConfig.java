@@ -59,13 +59,6 @@ public class ServerConfig {
   public final long serverQuotaStatsAggregateIntervalInMinutes;
 
   /**
-   * The option to enable data prefetch for GET request and don't do zero copy.
-   */
-  @Config("server.enable.store.data.prefetch")
-  @Default("false")
-  public final boolean serverEnableStoreDataPrefetch;
-
-  /**
    * Implementation class for StoreKeyConverterFactory
    */
   @Config("server.store.key.converter.factory")
@@ -114,7 +107,6 @@ public class ServerConfig {
   @Default("0")
   public final long serverParticipantsConsistencyCheckerPeriodSec;
 
-
   /**
    * The ServerSecurityServiceFactory that needs to validate connections and requests coming to server.
    */
@@ -130,7 +122,6 @@ public class ServerConfig {
         verifiableProperties.getBoolean("server.stats.publish.health.report.enabled", false);
     serverQuotaStatsAggregateIntervalInMinutes =
         verifiableProperties.getLong("server.quota.stats.aggregate.interval.in.minutes", 60);
-    serverEnableStoreDataPrefetch = verifiableProperties.getBoolean("server.enable.store.data.prefetch", false);
     serverStoreKeyConverterFactory = verifiableProperties.getString("server.store.key.converter.factory",
         "com.github.ambry.store.StoreKeyConverterFactoryImpl");
     serverMessageTransformer = verifiableProperties.getString("server.message.transformer",

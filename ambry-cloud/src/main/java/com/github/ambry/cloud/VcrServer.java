@@ -171,7 +171,7 @@ public class VcrServer {
       requests =
           new VcrRequests(cloudStorageManager, networkServer.getRequestResponseChannel(), clusterMap, currentNode,
               registry, serverMetrics, new FindTokenHelper(storeKeyFactory, replicationConfig), notificationSystem,
-              vcrReplicationManager, storeKeyFactory, true, storeKeyConverterFactory);
+              vcrReplicationManager, storeKeyFactory, storeKeyConverterFactory);
 
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);

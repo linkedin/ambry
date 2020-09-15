@@ -88,8 +88,7 @@ public class AmbryServerRequests extends AmbryRequests {
       ServerConfig serverConfig, StoreKeyConverterFactory storeKeyConverterFactory, StatsManager statsManager,
       ClusterParticipant clusterParticipant) {
     super(storeManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics, findTokenHelper,
-        operationNotification, replicationEngine, storeKeyFactory, serverConfig.serverEnableStoreDataPrefetch,
-        storeKeyConverterFactory);
+        operationNotification, replicationEngine, storeKeyFactory, storeKeyConverterFactory);
     this.serverConfig = serverConfig;
     this.statsManager = statsManager;
     this.clusterParticipant = clusterParticipant;

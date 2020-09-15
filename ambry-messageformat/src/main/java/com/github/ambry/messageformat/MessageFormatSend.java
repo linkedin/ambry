@@ -88,13 +88,13 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
   }
 
   public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag, MessageFormatMetrics metrics,
-      StoreKeyFactory storeKeyFactory, boolean enableDataPrefetch) throws IOException, MessageFormatException {
+      StoreKeyFactory storeKeyFactory) throws IOException, MessageFormatException {
     this.readSet = readSet;
     this.flag = flag;
     this.storeKeyFactory = storeKeyFactory;
     totalSizeToWrite = 0;
     long startTime = SystemTime.getInstance().milliseconds();
-    calculateOffsets(enableDataPrefetch);
+    fetchDataFromReadSet();
     metrics.calculateOffsetMessageFormatSendTime.update(SystemTime.getInstance().milliseconds() - startTime);
     sizeWritten = 0;
     currentWriteIndex = 0;
@@ -102,11 +102,10 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
   }
 
   /**
-   * Calculates the offsets from the MessageReadSet that needs to be sent over the network
-   * based on the type of data requested as indicated by the flags
-   * @param enableDataPrefetch do data prefetch if this is true.
+   * Fetch data from the MessageReadSet that needs to be sent over the networkbased on the type of data requested as
+   * indicated by the flags
    */
-  private void calculateOffsets(boolean enableDataPrefetch) throws IOException, MessageFormatException {
+  private void fetchDataFromReadSet() throws MessageFormatException {
     try {
       // get size
       int messageCount = readSet.count();
@@ -123,9 +122,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
           sendInfoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
           messageMetadataList.add(i, null);
           totalSizeToWrite += readSet.sizeInBytes(i);
-          if (enableDataPrefetch) {
-            readSet.doPrefetch(i, 0, readSet.sizeInBytes(i));
-          }
+          readSet.doPrefetch(i, 0, readSet.sizeInBytes(i));
         } else {
           long startTime = SystemTime.getInstance().milliseconds();
           BufferedInputStream bufferedInputStream =
@@ -173,10 +170,8 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
             sendInfoList.add(i, new SendInfo(headerFormat.getBlobPropertiesRecordRelativeOffset(),
                 headerFormat.getBlobPropertiesRecordSize()));
             messageMetadataList.add(null);
-            if (enableDataPrefetch) {
-              readSet.doPrefetch(i, headerFormat.getBlobPropertiesRecordRelativeOffset(),
-                  headerFormat.getBlobPropertiesRecordSize());
-            }
+            readSet.doPrefetch(i, headerFormat.getBlobPropertiesRecordRelativeOffset(),
+                headerFormat.getBlobPropertiesRecordSize());
             totalSizeToWrite += headerFormat.getBlobPropertiesRecordSize();
             logger.trace("Calculate offsets, get total size of blob properties time: {}",
                 SystemTime.getInstance().milliseconds() - startTime);
@@ -188,10 +183,8 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
                     headerFormat.getBlobEncryptionKeyRecordSize())) : null);
             sendInfoList.add(i, new SendInfo(headerFormat.getUserMetadataRecordRelativeOffset(),
                 headerFormat.getUserMetadataRecordSize()));
-            if (enableDataPrefetch) {
-              readSet.doPrefetch(i, headerFormat.getUserMetadataRecordRelativeOffset(),
-                  headerFormat.getUserMetadataRecordSize());
-            }
+            readSet.doPrefetch(i, headerFormat.getUserMetadataRecordRelativeOffset(),
+                headerFormat.getUserMetadataRecordSize());
             totalSizeToWrite += headerFormat.getUserMetadataRecordSize();
             logger.trace("Calculate offsets, get total size of user metadata time: {}",
                 SystemTime.getInstance().milliseconds() - startTime);
@@ -203,10 +196,8 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
                     headerFormat.getBlobEncryptionKeyRecordSize())) : null);
             sendInfoList.add(i, new SendInfo(headerFormat.getBlobPropertiesRecordRelativeOffset(),
                 headerFormat.getBlobPropertiesRecordSize() + headerFormat.getUserMetadataRecordSize()));
-            if (enableDataPrefetch) {
-              readSet.doPrefetch(i, headerFormat.getBlobPropertiesRecordRelativeOffset(),
-                  headerFormat.getBlobPropertiesRecordSize() + headerFormat.getUserMetadataRecordSize());
-            }
+            readSet.doPrefetch(i, headerFormat.getBlobPropertiesRecordRelativeOffset(),
+                headerFormat.getBlobPropertiesRecordSize() + headerFormat.getUserMetadataRecordSize());
             totalSizeToWrite += headerFormat.getBlobPropertiesRecordSize() + headerFormat.getUserMetadataRecordSize();
             logger.trace("Calculate offsets, get total size of blob info time: {}",
                 SystemTime.getInstance().milliseconds() - startTime);
@@ -219,9 +210,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
                     headerFormat.getBlobEncryptionKeyRecordSize())) : null);
             sendInfoList.add(i,
                 new SendInfo(headerFormat.getBlobRecordRelativeOffset(), headerFormat.getBlobRecordSize()));
-            if (enableDataPrefetch) {
-              readSet.doPrefetch(i, headerFormat.getBlobRecordRelativeOffset(), headerFormat.getBlobRecordSize());
-            }
+            readSet.doPrefetch(i, headerFormat.getBlobRecordRelativeOffset(), headerFormat.getBlobRecordSize());
             totalSizeToWrite += headerFormat.getBlobRecordSize();
             logger.trace("Calculate offsets, get total size of blob time: {}",
                 SystemTime.getInstance().milliseconds() - startTime);
