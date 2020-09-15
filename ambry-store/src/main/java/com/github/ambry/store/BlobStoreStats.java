@@ -983,11 +983,12 @@ class BlobStoreStats implements StoreStats, Closeable {
     } else if (!indexValue.isDelete() && !indexValue.isUndelete() && indexValue.isTtlUpdate()) {
       IndexFinalState finalState = keyFinalStates.get(indexEntry.getKey());
       if (finalState != null && finalState.isDelete()) {
+        Offset beginningOfThisLogSegment = new Offset(indexValue.getOffset().getName(), LogSegment.HEADER_SIZE);
         IndexValue putValue =
-            index.findKey(indexEntry.getKey(), new FileSpan(index.getStartOffset(), indexValue.getOffset()),
+            index.findKey(indexEntry.getKey(), new FileSpan(beginningOfThisLogSegment, indexValue.getOffset()),
                 EnumSet.of(PersistentIndex.IndexEntryType.PUT));
-        // We know the putValue exists, otherwise, TTL_UPDATE will not be valid
-        if (putValue.getOffset().getName().equals(indexValue.getOffset().getName())) {
+        if (putValue != null) {
+          // When the Put IndexValue is in the same log segment as the TTL_UPDATE value, then TTL_UPDATE value is invalid.
           handleLogSegmentDeletedBucketUpdate(results, indexValue, finalState.getOperationTime(), SUBTRACT);
         }
       }
@@ -1029,7 +1030,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           entryCount = queueEntryCount.get();
         }
         long processStartTimeMs = time.milliseconds();
-        for (int i = 0; i < entryCount && !cancelled; i++) {
+        for (int i = 0; i < entryCount && !cancelled && !isScanning; i++) {
           EntryContext entryContext = recentEntryQueue.poll();
           if (entryContext == null) {
             throw new IllegalStateException(
