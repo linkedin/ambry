@@ -71,10 +71,11 @@ class BlobStoreStats implements StoreStats, Closeable {
   private final long bucketSpanTimeInMs;
   private final long logSegmentForecastOffsetMs;
   private final long waitTimeoutInSecs;
+  private final boolean enableBucketForLogSegmentReports;
   private final StoreMetrics metrics;
   private final ReentrantLock scanLock = new ReentrantLock();
   private final Condition waitCondition = scanLock.newCondition();
-  private final Queue<Pair<IndexValue, IndexValue>> recentEntryQueue = new LinkedBlockingQueue<>();
+  private final Queue<EntryContext> recentEntryQueue = new LinkedBlockingQueue<>();
   private final AtomicInteger queueEntryCount = new AtomicInteger(0);
   private final AtomicBoolean enabled = new AtomicBoolean(true);
 
@@ -127,9 +128,9 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   BlobStoreStats(String storeId, PersistentIndex index, int bucketCount, long bucketSpanTimeInMs,
-      long logSegmentForecastOffsetMs, long queueProcessingPeriodInMs, long waitTimeoutInSecs, Time time,
-      ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
-      DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
+      long logSegmentForecastOffsetMs, long queueProcessingPeriodInMs, long waitTimeoutInSecs,
+      boolean enableBucketForLogSegmentReports, Time time, ScheduledExecutorService longLiveTaskScheduler,
+      ScheduledExecutorService shortLiveTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
     this.storeId = storeId;
     this.index = index;
     this.time = time;
@@ -139,6 +140,7 @@ class BlobStoreStats implements StoreStats, Closeable {
     this.logSegmentForecastOffsetMs = logSegmentForecastOffsetMs;
     this.waitTimeoutInSecs = waitTimeoutInSecs;
     this.metrics = metrics;
+    this.enableBucketForLogSegmentReports = enableBucketForLogSegmentReports;
 
     if (bucketCount > 0) {
       indexScanner = new IndexScanner();
@@ -222,7 +224,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   /**
-   * Gets the size of valid data at a particular point in time for all log segments. The caller specifies a reference
+   * Gets the size of valid data at a particular point in time for all log segments. The caller specifies a delete reference
    * time and acceptable resolution for the stats in the form of a {@link TimeRange}. The store will return data
    * for a point in time within the specified range.
    * The following data are considered as valid data for this API:
@@ -240,53 +242,75 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @throws StoreException if BlobStoreStats is not enabled or closed
    */
   Pair<Long, NavigableMap<String, Long>> getValidDataSizeByLogSegment(TimeRange timeRange) throws StoreException {
+    return getValidDataSizeByLogSegment(timeRange, time.milliseconds());
+  }
+
+  /**
+   * Same as {@link #getValidDataSizeByLogSegment(TimeRange)}, but provides a expiry reference time. Blobs with expiration
+   * time less than the given expiry reference time, are considered as expired.
+   * @param timeRange the delete reference {@link TimeRange} at which the data is requested. Defines both the reference time
+   *                  and the acceptable resolution.
+   * @param expiryReferenceTime the reference time for expired blobs. Blobs with expiration time less than it would be
+   *                            considered as expired. Usually it's now.
+   * @return a {@link Pair} whose first element is the time at which stats was collected (in ms) and whose second
+   * element is the valid data size for each segment in the form of a {@link NavigableMap} of segment names to
+   * valid data sizes.
+   * @throws StoreException
+   */
+  Pair<Long, NavigableMap<String, Long>> getValidDataSizeByLogSegment(TimeRange timeRange, long expiryReferenceTime)
+      throws StoreException {
     if (!enabled.get()) {
       throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
           StoreErrorCodes.Store_Shutting_Down);
     }
-    ScanResults currentScanResults = scanResults.get();
     Pair<Long, NavigableMap<String, Long>> retValue = null;
-    long referenceTimeInMs = getLogSegmentRefTimeMs(currentScanResults, timeRange);
-    if (referenceTimeInMs != REF_TIME_OUT_OF_BOUNDS) {
-      retValue = currentScanResults.getValidSizePerLogSegment(referenceTimeInMs);
-    } else {
-      if (isScanning && getLogSegmentRefTimeMs(indexScanner.newScanResults, timeRange) != REF_TIME_OUT_OF_BOUNDS) {
-        scanLock.lock();
-        try {
-          if (isScanning) {
-            if (waitCondition.await(waitTimeoutInSecs, TimeUnit.SECONDS)) {
-              currentScanResults = scanResults.get();
-              referenceTimeInMs = getLogSegmentRefTimeMs(currentScanResults, timeRange);
-              if (referenceTimeInMs != REF_TIME_OUT_OF_BOUNDS) {
-                retValue = currentScanResults.getValidSizePerLogSegment(referenceTimeInMs);
+    ScanResults currentScanResults = scanResults.get();
+    long referenceTimeInMs = getLogSegmentDeleteRefTimeMs(currentScanResults, timeRange);
+    if (enableBucketForLogSegmentReports) {
+      if (referenceTimeInMs != REF_TIME_OUT_OF_BOUNDS) {
+        retValue = currentScanResults.getValidSizePerLogSegment(referenceTimeInMs, expiryReferenceTime);
+      } else {
+        if (isScanning
+            && getLogSegmentDeleteRefTimeMs(indexScanner.newScanResults, timeRange) != REF_TIME_OUT_OF_BOUNDS) {
+          scanLock.lock();
+          try {
+            if (isScanning) {
+              if (waitCondition.await(waitTimeoutInSecs, TimeUnit.SECONDS)) {
+                currentScanResults = scanResults.get();
+                referenceTimeInMs = getLogSegmentDeleteRefTimeMs(currentScanResults, timeRange);
+                if (referenceTimeInMs != REF_TIME_OUT_OF_BOUNDS) {
+                  retValue = currentScanResults.getValidSizePerLogSegment(referenceTimeInMs, expiryReferenceTime);
+                }
+              } else {
+                metrics.blobStoreStatsIndexScannerErrorCount.inc();
+                logger.error("Timed out while waiting for BlobStoreStats index scan to complete for store {}", storeId);
               }
             } else {
-              metrics.blobStoreStatsIndexScannerErrorCount.inc();
-              logger.error("Timed out while waiting for BlobStoreStats index scan to complete for store {}", storeId);
+              currentScanResults = scanResults.get();
+              referenceTimeInMs = getLogSegmentDeleteRefTimeMs(currentScanResults, timeRange);
+              if (referenceTimeInMs != REF_TIME_OUT_OF_BOUNDS) {
+                retValue = currentScanResults.getValidSizePerLogSegment(referenceTimeInMs, expiryReferenceTime);
+              }
             }
-          } else {
-            currentScanResults = scanResults.get();
-            referenceTimeInMs = getLogSegmentRefTimeMs(currentScanResults, timeRange);
-            if (referenceTimeInMs != REF_TIME_OUT_OF_BOUNDS) {
-              retValue = currentScanResults.getValidSizePerLogSegment(referenceTimeInMs);
-            }
+          } catch (InterruptedException e) {
+            metrics.blobStoreStatsIndexScannerErrorCount.inc();
+            throw new IllegalStateException(
+                String.format("Illegal state, wait for scan to complete is interrupted for store %s", storeId), e);
+          } finally {
+            scanLock.unlock();
           }
-        } catch (InterruptedException e) {
-          metrics.blobStoreStatsIndexScannerErrorCount.inc();
-          throw new IllegalStateException(
-              String.format("Illegal state, wait for scan to complete is interrupted for store %s", storeId), e);
-        } finally {
-          scanLock.unlock();
         }
       }
-      if (retValue == null) {
-        // retValue could be null in three scenarios:
-        // 1. timeRange is outside of current forecast coverage and there is no ongoing scan.
-        // 2. timed out while waiting for an ongoing scan.
-        // 3. rare edge case where currentScanResults updated twice since the start of the wait.
-        referenceTimeInMs = timeRange.getEndTimeInMs();
-        retValue = new Pair<>(referenceTimeInMs, collectValidDataSizeByLogSegment(referenceTimeInMs));
-      }
+    }
+
+    if (retValue == null) {
+      // retValue could be null in three scenarios:
+      // 1. timeRange is outside of current forecast coverage and there is no ongoing scan.
+      // 2. timed out while waiting for an ongoing scan.
+      // 3. rare edge case where currentScanResults updated twice since the start of the wait.
+      referenceTimeInMs = timeRange.getEndTimeInMs();
+      retValue =
+          new Pair<>(referenceTimeInMs, collectValidDataSizeByLogSegment(referenceTimeInMs, expiryReferenceTime));
     }
     return retValue;
   }
@@ -359,16 +383,19 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @param putValue the {@link IndexValue} of the new PUT
    */
   void handleNewPutEntry(IndexValue putValue) {
-    enqueueNewValue(putValue, null);
+    enqueueNewValue(null, putValue, null, null);
   }
 
   /**
    * Function that handles new DELETE after a scan to keep the current {@link ScanResults} relevant.
+   * @param key the {@link StoreKey} of the new DELETE
    * @param deleteValue the {@link IndexValue} of the new DELETE
    * @param originalPutValue the {@link IndexValue} of the original PUT that is getting deleted
+   * @param previousValue the {@link IndexValue} prior to the new DELETE.
    */
-  void handleNewDeleteEntry(IndexValue deleteValue, IndexValue originalPutValue) {
-    enqueueNewValue(deleteValue, originalPutValue);
+  void handleNewDeleteEntry(StoreKey key, IndexValue deleteValue, IndexValue originalPutValue,
+      IndexValue previousValue) {
+    enqueueNewValue(key, deleteValue, originalPutValue, previousValue);
   }
 
   /**
@@ -377,15 +404,19 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @param originalPutValue the {@link IndexValue} of the original PUT that is getting updated
    */
   void handleNewTtlUpdateEntry(IndexValue ttlUpdateValue, IndexValue originalPutValue) {
-    enqueueNewValue(ttlUpdateValue, originalPutValue);
+    enqueueNewValue(null, ttlUpdateValue, originalPutValue, null);
   }
 
   /**
    * Function that handles new UNDELETE after a scan to keep the current {@link ScanResults} relevant.
+   * @param key the {@link StoreKey} of the new DELETE
    * @param undeleteValue the {@link IndexValue} of the new UNDELETE
+   * @param originalPutValue the {@link IndexValue} of the original PUT that is getting deleted
+   * @param previousValue the {@link IndexValue} prior to the new UNDELETE.
    */
-  void handleNewUndeleteEntry(IndexValue undeleteValue) {
-    enqueueNewValue(undeleteValue, null);
+  void handleNewUndeleteEntry(StoreKey key, IndexValue undeleteValue, IndexValue originalPutValue,
+      IndexValue previousValue) {
+    enqueueNewValue(key, undeleteValue, originalPutValue, previousValue);
   }
 
   /**
@@ -404,9 +435,10 @@ class BlobStoreStats implements StoreStats, Closeable {
     }
   }
 
-  private void enqueueNewValue(IndexValue newValue, IndexValue originalPutValue) {
+  private void enqueueNewValue(StoreKey key, IndexValue newValue, IndexValue originalPutValue,
+      IndexValue previousValue) {
     if (recentEntryQueueEnabled) {
-      recentEntryQueue.offer(new Pair<>(newValue, originalPutValue));
+      recentEntryQueue.offer(new EntryContext(key, newValue, originalPutValue, previousValue));
       metrics.statsRecentEntryQueueSize.update(queueEntryCount.incrementAndGet());
     }
   }
@@ -431,7 +463,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       long indexSegmentStartProcessTimeMs = time.milliseconds();
       diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID,
           indexSegment.size());
-      forEachValidIndexEntry(indexSegment, referenceTimeInMs, keyFinalStates, true, entry -> {
+      forEachValidIndexEntry(indexSegment, referenceTimeInMs, time.milliseconds(), keyFinalStates, true, entry -> {
         IndexValue indexValue = entry.getValue();
         if (indexValue.isPut()) {
           // delete and TTL update records does not count towards valid data size for usage (containers)
@@ -453,12 +485,14 @@ class BlobStoreStats implements StoreStats, Closeable {
 
   /**
    * Walk through the entire index and collect valid size information per log segment (size of delete records included).
-   * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
+   * @param deleteReferenceTimeInMs the reference time in ms until which deletes are relevant
+   * @param expiryReferenceTimeInMs the reference tie in ms until which expiration is relevant
    * @return a {@link NavigableMap} of log segment name to valid data size
    */
-  private NavigableMap<String, Long> collectValidDataSizeByLogSegment(long referenceTimeInMs) throws StoreException {
+  private NavigableMap<String, Long> collectValidDataSizeByLogSegment(long deleteReferenceTimeInMs,
+      long expiryReferenceTimeInMs) throws StoreException {
     logger.trace("On demand index scanning to collect compaction data stats for store {} wrt ref time {}", storeId,
-        referenceTimeInMs);
+        deleteReferenceTimeInMs);
     long startTimeMs = time.milliseconds();
     Map<StoreKey, IndexFinalState> keyFinalStates = new HashMap<>();
     NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>(LogSegmentNameHelper.COMPARATOR);
@@ -472,7 +506,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       String logSegmentName = indexSegment.getLogSegmentName();
       diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID,
           indexSegment.size());
-      forEachValidIndexEntry(indexSegment, referenceTimeInMs, keyFinalStates, true,
+      forEachValidIndexEntry(indexSegment, deleteReferenceTimeInMs, expiryReferenceTimeInMs, keyFinalStates, true,
           entry -> updateMapHelper(validSizePerLogSegment, logSegmentName, entry.getValue().getSize()));
       metrics.statsOnDemandScanTimePerIndexSegmentMs.update(time.milliseconds() - indexSegmentStartProcessTimeMs,
           TimeUnit.MILLISECONDS);
@@ -493,17 +527,18 @@ class BlobStoreStats implements StoreStats, Closeable {
    * Perform an action each valid {@link IndexEntry} from a given {@link List} of {@link IndexEntry}s that belong to the
    * same {@link IndexSegment}.
    * @param indexSegment the {@link IndexSegment} where the entries came from
-   * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
+   * @param deleteReferenceTimeInMs the reference time in ms until which deletes are relevant
+   * @param expiryReferenceTimeInMs the reference time in ms until which expiration are relevant
    * @param keyFinalStates a {@link Map} of key to {@link IndexFinalState}.
-   * @param removeFromStates if {@code True}, then remove the {@link IndexFinalState} from the given map {@code keyFinalStates}
+   * @param removeFinalStateOnPut if {@code True}, then remove the {@link IndexFinalState} from the given map {@code keyFinalStates}
    *                         when encountering PUT IndexValue. This method iterates through IndexValues from most recent one to
    *                         earliest one, so PUT IndexValue is the last IndexValue for the same key.
    * @param validIndexEntryAction the action to take on each valid {@link IndexEntry} found.
    * @throws StoreException if there are problems reading the index.
    */
-  private void forEachValidIndexEntry(IndexSegment indexSegment, long referenceTimeInMs,
-      Map<StoreKey, IndexFinalState> keyFinalStates, boolean removeFromStates, IndexEntryAction validIndexEntryAction)
-      throws StoreException {
+  private void forEachValidIndexEntry(IndexSegment indexSegment, long deleteReferenceTimeInMs,
+      long expiryReferenceTimeInMs, Map<StoreKey, IndexFinalState> keyFinalStates, boolean removeFinalStateOnPut,
+      IndexEntryAction validIndexEntryAction) throws StoreException {
     ListIterator<IndexEntry> it = indexSegment.listIterator(indexSegment.size());
     while (it.hasPrevious()) {
       IndexEntry indexEntry = it.previous();
@@ -547,24 +582,31 @@ class BlobStoreStats implements StoreStats, Closeable {
           keyFinalStates.put(indexEntry.getKey(),
               new IndexFinalState(indexValue.getFlags(), operationTimeInMs, indexValue.getLifeVersion()));
         }
-        if (!isExpired(indexValue.getExpiresAtMs(), referenceTimeInMs)) {
+        if (!isExpired(indexValue.getExpiresAtMs(), expiryReferenceTimeInMs)) {
           validIndexEntryAction.accept(indexEntry);
         }
       } else if (indexValue.isTtlUpdate()) {
-        if (isTtlUpdateEntryValid(key, indexValue, referenceTimeInMs, keyFinalStates)) {
+        if (isTtlUpdateEntryValid(key, indexValue, deleteReferenceTimeInMs, keyFinalStates)) {
           validIndexEntryAction.accept(indexEntry);
         }
       } else {
-        IndexFinalState finalState = removeFromStates ? keyFinalStates.remove(key) : keyFinalStates.get(key);
-        if (finalState != null && finalState.isDelete() && finalState.getOperationTime() < referenceTimeInMs) {
+        IndexFinalState finalState = keyFinalStates.get(key);
+        if (finalState != null && finalState.isDelete() && finalState.getOperationTime() < deleteReferenceTimeInMs) {
           // Put is deleted before reference time, it's not valid.
+          if (removeFinalStateOnPut) {
+            keyFinalStates.remove(key);
+          }
           continue;
         }
         if (finalState != null && finalState.isTtlUpdate()) {
+          // indexValue is a clone of the existing IndexValue, changing IndexValue will not change existing one.
           indexValue.setExpiresAtMs(Utils.Infinite_Time);
         }
-        if (!isExpired(indexValue.getExpiresAtMs(), referenceTimeInMs)) {
+        if (!isExpired(indexValue.getExpiresAtMs(), expiryReferenceTimeInMs)) {
           validIndexEntryAction.accept(indexEntry);
+        }
+        if (removeFinalStateOnPut) {
+          keyFinalStates.remove(key);
         }
       }
     }
@@ -573,7 +615,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   /**
    * @param key the {@link StoreKey} to check
    * @param ttlUpdateValue the {@link IndexValue} of the TTL update entry of {@code key}
-   * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
+   * @param referenceTimeInMs the reference time in ms until which deletes are relevant
    * @param keyFinalStates a {@link Map} of key to {@link IndexFinalState}.
    * @return {@code true} if the ttl update entry is valid
    * @throws StoreException if there are problems accessing the index
@@ -608,19 +650,19 @@ class BlobStoreStats implements StoreStats, Closeable {
 
   /**
    * Given {@link ScanResults} and a {@link TimeRange}, try to find the latest point in time that is within the
-   * {@link TimeRange} and the log segment forecast range.
+   * {@link TimeRange} and the log segment forecast range for deleted.
    * @param results the {@link ScanResults} with the log segment forecast range information
    * @param timeRange the {@link TimeRange} used to find the latest shared point in time with the log segment forecast
    *                  range
    * @return the latest shared point in time in milliseconds if there is one, otherwise REF_TIME_OUT_OF_BOUNDS (-1)
    * is returned
    */
-  private long getLogSegmentRefTimeMs(ScanResults results, TimeRange timeRange) {
-    long refTimeInMs = results == null || timeRange.getStartTimeInMs() >= results.logSegmentForecastEndTimeMs
-        || timeRange.getEndTimeInMs() < results.logSegmentForecastStartTimeMs ? REF_TIME_OUT_OF_BOUNDS
+  private long getLogSegmentDeleteRefTimeMs(ScanResults results, TimeRange timeRange) {
+    long refTimeInMs = results == null || timeRange.getStartTimeInMs() >= results.logSegmentForecastEndTimeMsForDeleted
+        || timeRange.getEndTimeInMs() < results.logSegmentForecastStartTimeMsForDeleted ? REF_TIME_OUT_OF_BOUNDS
         : timeRange.getEndTimeInMs();
-    if (refTimeInMs != REF_TIME_OUT_OF_BOUNDS && refTimeInMs >= results.logSegmentForecastEndTimeMs) {
-      refTimeInMs = results.logSegmentLastBucketTimeMs;
+    if (refTimeInMs != REF_TIME_OUT_OF_BOUNDS && refTimeInMs >= results.logSegmentForecastEndTimeMsForDeleted) {
+      refTimeInMs = results.logSegmentLastBucketTimeMsForDeleted;
     }
     return refTimeInMs;
   }
@@ -670,6 +712,7 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   private void handleContainerBucketUpdate(ScanResults results, IndexValue indexValue, long expOrDelTimeInMs,
       int operator) {
+    // If the expiration time is Infinite_Time, then nothing will be updated
     if (isWithinRange(results.containerForecastStartTimeMs, results.containerLastBucketTimeMs, expOrDelTimeInMs)) {
       results.updateContainerBucket(results.getContainerBucketKey(expOrDelTimeInMs),
           "A[" + indexValue.getAccountId() + "]", "C[" + indexValue.getContainerId() + "]",
@@ -681,14 +724,31 @@ class BlobStoreStats implements StoreStats, Closeable {
    * Helper function for log segment buckets for blob expiration/deletion related updates.
    * @param results the {@link ScanResults} to be updated
    * @param indexValue the PUT {@link IndexValue} of the expiring/deleting blob
-   * @param expOrDelTimeInMs either the expiration or deletion time of the blob in ms
+   * @param deleteTimeInMs delete time of the blob in ms
    * @param operator indicating the operator of the update, 1 for add and -1 for subtract
    */
-  private void handleLogSegmentBucketUpdate(ScanResults results, IndexValue indexValue, long expOrDelTimeInMs,
+  private void handleLogSegmentDeletedBucketUpdate(ScanResults results, IndexValue indexValue, long deleteTimeInMs,
       int operator) {
-    if (isWithinRange(results.logSegmentForecastStartTimeMs, results.logSegmentLastBucketTimeMs, expOrDelTimeInMs)) {
-      results.updateLogSegmentBucket(results.getLogSegmentBucketKey(expOrDelTimeInMs), indexValue.getOffset().getName(),
-          indexValue.getSize() * operator);
+    if (isWithinRange(results.logSegmentForecastStartTimeMsForDeleted, results.logSegmentLastBucketTimeMsForDeleted,
+        deleteTimeInMs)) {
+      results.updateLogSegmentDeletedBucket(results.getLogSegmentDeletedBucketKey(deleteTimeInMs),
+          indexValue.getOffset().getName(), indexValue.getSize() * operator);
+    }
+  }
+
+  /**
+   * Helper function for log segment buckets for blob expiration/deletion related updates.
+   * @param results the {@link ScanResults} to be updated
+   * @param indexValue the PUT {@link IndexValue} of the expiring/deleting blob
+   * @param expiryTimeInMs expiration time of the blob in ms
+   * @param operator indicating the operator of the update, 1 for add and -1 for subtract
+   */
+  private void handleLogSegmentExpiredBucketUpdate(ScanResults results, IndexValue indexValue, long expiryTimeInMs,
+      int operator) {
+    if (isWithinRange(results.logSegmentForecastStartTimeMsForExpired, results.logSegmentLastBucketTimeMsForExpired,
+        expiryTimeInMs)) {
+      results.updateLogSegmentExpiredBucket(results.getLogSegmentExpiredBucketKey(expiryTimeInMs),
+          indexValue.getOffset().getName(), indexValue.getSize() * operator);
     }
   }
 
@@ -706,10 +766,10 @@ class BlobStoreStats implements StoreStats, Closeable {
         handleContainerBucketUpdate(results, putValue, expiresAtMs, SUBTRACT);
       }
     }
-    if (!isExpired(expiresAtMs, results.logSegmentForecastStartTimeMs)) {
+    if (!isExpired(expiresAtMs, results.logSegmentForecastStartTimeMsForExpired)) {
       results.updateLogSegmentBaseBucket(putValue.getOffset().getName(), putValue.getSize());
       if (expiresAtMs != Utils.Infinite_Time) {
-        handleLogSegmentBucketUpdate(results, putValue, expiresAtMs, SUBTRACT);
+        handleLogSegmentExpiredBucketUpdate(results, putValue, expiresAtMs, SUBTRACT);
       }
     }
   }
@@ -717,23 +777,87 @@ class BlobStoreStats implements StoreStats, Closeable {
   /**
    * Helper function to process new DELETE entries and make appropriate updates to the given {@link ScanResults}.
    * @param results the {@link ScanResults} to apply the updates to
+   * @param key the {@link StoreKey} of the new DELETE
    * @param deleteValue the {@link IndexValue} of the new DELETE
    * @param originalPutValue the {@link IndexValue} of the original PUT that is getting deleted
+   * @param previousValue the {@link IndexValue} comes prior to the new DELETE
    */
-  private void processNewDelete(ScanResults results, IndexValue deleteValue, IndexValue originalPutValue) {
+  private void processNewDelete(ScanResults results, StoreKey key, IndexValue deleteValue, IndexValue originalPutValue,
+      IndexValue previousValue) {
     long operationTimeInMs = deleteValue.getOperationTimeInMs();
     if (operationTimeInMs == Utils.Infinite_Time) {
       operationTimeInMs =
           index.getIndexSegments().floorEntry(deleteValue.getOffset()).getValue().getLastModifiedTimeMs();
     }
-    results.updateLogSegmentBaseBucket(deleteValue.getOffset().getName(), deleteValue.getSize());
+    // First deal with container bucket
+    if (previousValue.isDelete()) {
+      // The previous value is already DELETE, current DELETE would not change container bucket.
+      // Assume the record history looks like this: PUT, DELETE, DELETE.
+      // First DELETE already updated container bucket.
+    } else {
+      // If original PUT expires before this DELETE, then it will not change container bucket.
+      if (!isExpired(originalPutValue.getExpiresAtMs(), operationTimeInMs)) {
+        handleContainerBucketUpdate(results, originalPutValue, operationTimeInMs, SUBTRACT);
+        handleContainerBucketUpdate(results, originalPutValue, originalPutValue.getExpiresAtMs(), ADD);
+      }
+    }
+    // Now deal with log segment bucket
+    // Current DELETE is always valid
+    if (previousValue.isDelete()) {
+      // Previous IndexValue is a DELETE, it will be invalidated by current DELETE. So we have to revert the previous
+      // DELETE here as if it doesn't exist. After reverting changes made by previous DELETE, we will process the current
+      // DELETE IndexValue.
+      processDeleteUpdateLogSegmentHelper(results, key, previousValue, originalPutValue, SUBTRACT);
+    } else if (previousValue.isUndelete()) {
+      // Previous IndexValue is an UNDELETE, it should already
+      // 1. Added it's size to the base bucket of the scan result
+      // we need to recover from this operation
+      results.updateLogSegmentBaseBucket(previousValue.getOffset().getName(), SUBTRACT * previousValue.getSize());
+    }
+    // Process the current DELETE IndexValue.
+    processDeleteUpdateLogSegmentHelper(results, key, deleteValue, originalPutValue, ADD);
+  }
+
+  /**
+   * Update deleted bucket based on given DELETE IndexValue. For DELETE IndexValue, we should
+   * 1. Add it's size to the base bucket in the {@link ScanResults}.$
+   * 2. Subtract original PUT's size from DELETE's operationTimeInMs bucket.
+   * 3. If TTL_UPDATE IndexValue exist, subtract TTL_UPDATE's size from DELETE's operationTimeInMs bucket as well.
+   * @param results the {@link ScanResults} to update the log segment deleted bucket.
+   * @param key the {@link StoreKey} of IndexValue to process.
+   * @param deleteValue the DELETE {@link IndexValue} to process.
+   * @param originalPutValue the original PUT {@link IndexValue} of the same key.
+   * @param operator if the operator is {@link #SUBTRACT}, then adding would become subtracting, and subtracting would
+   *                 become adding. Set operator to {@link #SUBTRACT} if you want to revert the operation for the given
+   *                 DELETE {@link IndexValue}.
+   */
+  private void processDeleteUpdateLogSegmentHelper(ScanResults results, StoreKey key, IndexValue deleteValue,
+      IndexValue originalPutValue, int operator) {
+    long operationTimeInMs = deleteValue.getOperationTimeInMs();
+    if (operationTimeInMs == Utils.Infinite_Time) {
+      operationTimeInMs =
+          index.getIndexSegments().floorEntry(deleteValue.getOffset()).getValue().getLastModifiedTimeMs();
+    }
+    results.updateLogSegmentBaseBucket(deleteValue.getOffset().getName(), operator * deleteValue.getSize());
     if (!isExpired(originalPutValue.getExpiresAtMs(), operationTimeInMs)) {
-      handleContainerBucketUpdate(results, originalPutValue, operationTimeInMs, SUBTRACT);
-      handleLogSegmentBucketUpdate(results, originalPutValue, operationTimeInMs, SUBTRACT);
+      handleLogSegmentDeletedBucketUpdate(results, originalPutValue, operationTimeInMs, operator * SUBTRACT);
       if (originalPutValue.getExpiresAtMs() != Utils.Infinite_Time) {
         // make appropriate updates to avoid double counting
-        handleContainerBucketUpdate(results, originalPutValue, originalPutValue.getExpiresAtMs(), ADD);
-        handleLogSegmentBucketUpdate(results, originalPutValue, originalPutValue.getExpiresAtMs(), ADD);
+        handleLogSegmentExpiredBucketUpdate(results, originalPutValue, originalPutValue.getExpiresAtMs(),
+            operator * ADD);
+      } else if (deleteValue.isTtlUpdate()) {
+        // This blob has a PUT and TTL_UPDATE, because of DELETE, now TTL_UPDATE is not valid any more.
+        try {
+          IndexValue ttlUpdateValue =
+              index.findKey(key, new FileSpan(originalPutValue.getOffset(), deleteValue.getOffset()),
+                  EnumSet.of(PersistentIndex.IndexEntryType.TTL_UPDATE));
+          if (ttlUpdateValue != null) {
+            handleLogSegmentDeletedBucketUpdate(results, ttlUpdateValue, operationTimeInMs, operator * SUBTRACT);
+          }
+        } catch (StoreException e) {
+          logger.error(
+              "Failed to find TTL_UPDATE IndexValue for " + key + " when processing new DELETE: " + deleteValue, e);
+        }
       }
     }
   }
@@ -741,11 +865,41 @@ class BlobStoreStats implements StoreStats, Closeable {
   /**
    * Helper function to process new UNDELETE entries and make appropriate updates to the given {@link ScanResults}.
    * @param results the {@link ScanResults} to apply the updates to
+   * @param key the {@link StoreKey} of the new UNDELETE
    * @param undeleteValue the {@link IndexValue} of the new UNDELETE
    * @param originalPutValue the {@link IndexValue} of the original PUT
+   * @param previousValue the {@link IndexValue} comes prior to the new UNDELETE
    */
-  private void processNewUndelete(ScanResults results, IndexValue undeleteValue, IndexValue originalPutValue) {
-    // TODO: future work to support online updates
+  private void processNewUndelete(ScanResults results, StoreKey key, IndexValue undeleteValue,
+      IndexValue originalPutValue, IndexValue previousValue) {
+    // First deal with container bucket
+    if (!previousValue.isDelete()) {
+      // This previous value is not DELETE, current UNDELETE would not change container bucket.
+      // There are several possibility when the previous value is not DELETE.
+      // 1. PUT UNDELETE: UNDELETE doesn't change any bucket
+      // 2. PUT TTL_UPDATE UNDELETE: UNDELETE doesn't change any bucket
+      // 3. PUT DELETE UNDELETE UNDELETE: the last UNDELETE doesn't change any bucket
+      // UNDELETE would resurrect a deleted IndexValue, if the previous value is not DELETE, then the IndexValue doesn't
+      // need to be resurrected.
+    } else {
+      handleContainerBucketUpdate(results, originalPutValue, undeleteValue.getOperationTimeInMs(), ADD);
+      handleContainerBucketUpdate(results, originalPutValue, originalPutValue.getExpiresAtMs(), SUBTRACT);
+    }
+
+    // Now deal with log segment bucket
+    // Current UNDELETE is always valid
+    results.updateLogSegmentBaseBucket(undeleteValue.getOffset().getName(), undeleteValue.getSize());
+    if (previousValue.isDelete()) {
+      // Previous IndexValue is a DELETE, it will be invalidated by current DELETE. So we have to revert the previous
+      // DELETE here as if it doesn't exist. After reverting changes made by previous DELETE, we will process the current
+      // DELETE IndexValue.
+      processDeleteUpdateLogSegmentHelper(results, key, previousValue, originalPutValue, SUBTRACT);
+    } else if (previousValue.isUndelete()) {
+      // Previous IndexValue is an UNDELETE, it should already
+      // 1. Added it's size to the base bucket of the scan result
+      // we need to recover from this operation
+      results.updateLogSegmentBaseBucket(previousValue.getOffset().getName(), SUBTRACT * previousValue.getSize());
+    }
   }
 
   /**
@@ -755,7 +909,17 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @param originalPutValue the {@link IndexValue} of the original PUT
    */
   private void processNewTtlUpdate(ScanResults results, IndexValue ttlUpdateValue, IndexValue originalPutValue) {
-    // TODO: future work to support online updates
+    // First deal with container bucket
+    long originalExpiresAt = originalPutValue.getExpiresAtMs();
+    if (originalExpiresAt != Utils.Infinite_Time) {
+      handleContainerBucketUpdate(results, originalPutValue, originalExpiresAt, ADD);
+    }
+
+    // Now deal with log segment bucket
+    results.updateLogSegmentBaseBucket(ttlUpdateValue.getOffset().getName(), ttlUpdateValue.getSize());
+    if (originalExpiresAt != Utils.Infinite_Time) {
+      handleLogSegmentExpiredBucketUpdate(results, originalPutValue, originalExpiresAt, ADD);
+    }
   }
 
   /**
@@ -799,17 +963,34 @@ class BlobStoreStats implements StoreStats, Closeable {
     IndexValue indexValue = indexEntry.getValue();
     results.updateLogSegmentBaseBucket(indexValue.getOffset().getName(), indexValue.getSize());
     if (indexValue.isPut()) {
-      long expOrDelTimeInMs = indexValue.getExpiresAtMs();
+      long expiresAtMs = indexValue.getExpiresAtMs();
+      long deleteAtMs = Utils.Infinite_Time;
       IndexFinalState finalState = keyFinalStates.get(indexEntry.getKey());
       if (finalState != null && finalState.isDelete()) {
-        long deleteTimeInMs = finalState.getOperationTime();
-        expOrDelTimeInMs =
-            expOrDelTimeInMs != Utils.Infinite_Time && expOrDelTimeInMs < deleteTimeInMs ? expOrDelTimeInMs
-                : deleteTimeInMs;
+        deleteAtMs = finalState.getOperationTime();
       }
-      if (!indexValue.isTtlUpdate() || !isTtlUpdateEntryValid(indexEntry.getKey(), indexValue,
-          expOrDelTimeInMs == Utils.Infinite_Time ? expOrDelTimeInMs : expOrDelTimeInMs + 1, keyFinalStates)) {
-        handleLogSegmentBucketUpdate(results, indexValue, expOrDelTimeInMs, SUBTRACT);
+      if (expiresAtMs == Utils.Infinite_Time && deleteAtMs != Utils.Infinite_Time) {
+        handleLogSegmentDeletedBucketUpdate(results, indexValue, deleteAtMs, SUBTRACT);
+      } else if (expiresAtMs != Utils.Infinite_Time && deleteAtMs == Utils.Infinite_Time) {
+        handleLogSegmentExpiredBucketUpdate(results, indexValue, expiresAtMs, SUBTRACT);
+      } else if (expiresAtMs != Utils.Infinite_Time && deleteAtMs != Utils.Infinite_Time) {
+        if (expiresAtMs < deleteAtMs) {
+          handleLogSegmentExpiredBucketUpdate(results, indexValue, expiresAtMs, SUBTRACT);
+        } else {
+          handleLogSegmentDeletedBucketUpdate(results, indexValue, deleteAtMs, SUBTRACT);
+        }
+      }
+    } else if (!indexValue.isDelete() && !indexValue.isUndelete() && indexValue.isTtlUpdate()) {
+      IndexFinalState finalState = keyFinalStates.get(indexEntry.getKey());
+      if (finalState != null && finalState.isDelete()) {
+        Offset beginningOfThisLogSegment = new Offset(indexValue.getOffset().getName(), LogSegment.HEADER_SIZE);
+        IndexValue putValue =
+            index.findKey(indexEntry.getKey(), new FileSpan(beginningOfThisLogSegment, indexValue.getOffset()),
+                EnumSet.of(PersistentIndex.IndexEntryType.PUT));
+        if (putValue != null) {
+          // When the Put IndexValue is in the same log segment as the TTL_UPDATE value, then TTL_UPDATE value is invalid.
+          handleLogSegmentDeletedBucketUpdate(results, indexValue, finalState.getOperationTime(), SUBTRACT);
+        }
       }
     }
   }
@@ -849,27 +1030,30 @@ class BlobStoreStats implements StoreStats, Closeable {
           entryCount = queueEntryCount.get();
         }
         long processStartTimeMs = time.milliseconds();
-        for (int i = 0; i < entryCount && !cancelled; i++) {
-          Pair<IndexValue, IndexValue> entry = recentEntryQueue.poll();
-          if (entry == null) {
+        for (int i = 0; i < entryCount && !cancelled && !isScanning; i++) {
+          EntryContext entryContext = recentEntryQueue.poll();
+          if (entryContext == null) {
             throw new IllegalStateException(
                 String.format("Invalid queue state in store %s. Expected entryCount %d, current index: %d", storeId,
                     entryCount, i));
           }
           metrics.statsRecentEntryQueueSize.update(queueEntryCount.decrementAndGet());
-          IndexValue newValue = entry.getFirst();
+          StoreKey key = entryContext.key;
+          IndexValue newValue = entryContext.currentValue;
+          IndexValue originalPut = entryContext.originalPutValue;
+          IndexValue previousValue = entryContext.previousValue;
           // prevent double counting new entries that were added after enabling the queue and just before the second
           // checkpoint is taken
           if (newValue.getOffset().compareTo(currentScanResults.scannedEndOffset) >= 0) {
             if (newValue.isDelete()) {
               // new delete
-              processNewDelete(currentScanResults, newValue, entry.getSecond());
+              processNewDelete(currentScanResults, key, newValue, originalPut, previousValue);
             } else if (newValue.isUndelete()) {
               // new undelete
-              processNewUndelete(currentScanResults, newValue, entry.getSecond());
+              processNewUndelete(currentScanResults, key, newValue, originalPut, previousValue);
             } else if (newValue.isTtlUpdate()) {
               // new ttl update
-              processNewTtlUpdate(currentScanResults, newValue, entry.getSecond());
+              processNewTtlUpdate(currentScanResults, newValue, originalPut);
             } else {
               // new put
               processNewPut(currentScanResults, newValue);
@@ -1015,12 +1199,19 @@ class BlobStoreStats implements StoreStats, Closeable {
                       index.findKey(entry.getKey(), searchSpan, EnumSet.of(PersistentIndex.IndexEntryType.PUT));
                 }
               }
+              IndexValue previousValue = null;
+              if (originalPut != null) {
+                // Find the IndexValue right before current IndexValue, it might be original PUT as well.
+                previousValue =
+                    index.findKey(entry.getKey(), new FileSpan(originalPut.getOffset(), indexValue.getOffset()),
+                        EnumSet.allOf(PersistentIndex.IndexEntryType.class));
+              }
               if (originalPut == null) {
                 newScanResults.updateLogSegmentBaseBucket(indexValue.getOffset().getName(), indexValue.getSize());
               } else if (indexValue.isDelete()) {
-                processNewDelete(newScanResults, indexValue, originalPut);
+                processNewDelete(newScanResults, entry.getKey(), indexValue, previousValue, originalPut);
               } else if (indexValue.isUndelete()) {
-                processNewDelete(newScanResults, indexValue, originalPut);
+                processNewUndelete(newScanResults, entry.getKey(), indexValue, previousValue, originalPut);
               } else if (indexValue.isTtlUpdate()) {
                 processNewTtlUpdate(newScanResults, indexValue, originalPut);
               }
@@ -1054,18 +1245,19 @@ class BlobStoreStats implements StoreStats, Closeable {
           indexSegment.getFile().getName(), storeId);
 
       // valid index entries wrt log segment reference time
-      forEachValidIndexEntry(indexSegment, newScanResults.logSegmentForecastStartTimeMs, keyFinalStates, false,
-          entry -> {
+      forEachValidIndexEntry(indexSegment, newScanResults.logSegmentForecastStartTimeMsForDeleted,
+          newScanResults.logSegmentForecastStartTimeMsForExpired, keyFinalStates, false, entry -> {
             if (predicate == null || predicate.test(entry)) {
               processEntryForLogSegmentBucket(newScanResults, entry, keyFinalStates);
             }
           });
       // valid index entries wrt container reference time
-      forEachValidIndexEntry(indexSegment, newScanResults.containerForecastStartTimeMs, keyFinalStates, true, entry -> {
-        if (predicate == null || predicate.test(entry)) {
-          processEntryForContainerBucket(newScanResults, entry, keyFinalStates);
-        }
-      });
+      forEachValidIndexEntry(indexSegment, newScanResults.containerForecastStartTimeMs,
+          newScanResults.containerForecastStartTimeMs, keyFinalStates, true, entry -> {
+            if (predicate == null || predicate.test(entry)) {
+              processEntryForContainerBucket(newScanResults, entry, keyFinalStates);
+            }
+          });
     }
 
     void cancel() {
@@ -1156,6 +1348,20 @@ class BlobStoreStats implements StoreStats, Closeable {
 
     private boolean isFlagSet(IndexValue.Flags flag) {
       return (flags & (1 << flag.ordinal())) != 0;
+    }
+  }
+
+  private class EntryContext {
+    final StoreKey key; // This is for UNDELETE and DELETE
+    final IndexValue currentValue;
+    final IndexValue originalPutValue;
+    final IndexValue previousValue; // This is for UNDELETE and DELETE
+
+    EntryContext(StoreKey key, IndexValue currentValue, IndexValue originalPutValue, IndexValue previousValue) {
+      this.key = key;
+      this.currentValue = currentValue;
+      this.originalPutValue = originalPutValue;
+      this.previousValue = previousValue;
     }
   }
 }

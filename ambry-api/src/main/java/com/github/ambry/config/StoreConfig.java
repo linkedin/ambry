@@ -349,6 +349,13 @@ public class StoreConfig {
   @Default("false")
   public final boolean storeSetLocalPartitionStateEnabled;
 
+  /**
+   * True to enable bucket reports for log segment. This is only effective when the bucket count is greater than 0.
+   */
+  @Config("store.enable.bucket.for.log.segment.reports")
+  @Default("false")
+  public final boolean storeEnableBucketForLogSegmentReports;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -361,8 +368,10 @@ public class StoreConfig {
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
     storeDeletedMessageRetentionDays = verifiableProperties.getInt("store.deleted.message.retention.days", 7);
-    storeCompactionPolicySwitchTimestampDays = verifiableProperties.getIntInRange("store.compaction.policy.switch.timestamp.days", 7, 1, 14);
-    storeCompactionPolicySwitchCounterDays = verifiableProperties.getIntInRange("store.compaction.policy.switch.counter.days", 7, 1, 14);
+    storeCompactionPolicySwitchTimestampDays =
+        verifiableProperties.getIntInRange("store.compaction.policy.switch.timestamp.days", 7, 1, 14);
+    storeCompactionPolicySwitchCounterDays =
+        verifiableProperties.getIntInRange("store.compaction.policy.switch.counter.days", 7, 1, 14);
     storeContainerDeletionRetentionDays = verifiableProperties.getInt("store.container.deletion.retention.days", 14);
     storeHardDeleteOperationsBytesPerSec =
         verifiableProperties.getIntInRange("store.hard.delete.operations.bytes.per.sec", 100 * 1024, 1,
@@ -423,5 +432,7 @@ public class StoreConfig {
     storeContainerDeletionEnabled = verifiableProperties.getBoolean("store.container.deletion.enabled", false);
     storeSetLocalPartitionStateEnabled =
         verifiableProperties.getBoolean("store.set.local.partition.state.enabled", false);
+    storeEnableBucketForLogSegmentReports =
+        verifiableProperties.getBoolean("store.enable.bucket.for.log.segment.reports", false);
   }
 }

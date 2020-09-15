@@ -49,4 +49,9 @@ public class TimeRange {
   public long getEndTimeInMs() {
     return endTimeInMs;
   }
+
+  @Override
+  public String toString() {
+    return "[Start:" + startTimeInMs + "|End:" + endTimeInMs + "]";
+  }
 }
