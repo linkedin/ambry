@@ -810,7 +810,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       processDeleteUpdateLogSegmentHelper(results, key, previousValue, originalPutValue, SUBTRACT);
     } else if (previousValue.isUndelete()) {
       // Previous IndexValue is an UNDELETE, it should already
-      // 1. Added it's size to the first bucket of the scan result
+      // 1. Added it's size to the base bucket of the scan result
       // we need to recover from this operation
       results.updateLogSegmentBaseBucket(previousValue.getOffset().getName(), SUBTRACT * previousValue.getSize());
     }
@@ -890,16 +890,13 @@ class BlobStoreStats implements StoreStats, Closeable {
     // Current UNDELETE is always valid
     results.updateLogSegmentBaseBucket(undeleteValue.getOffset().getName(), undeleteValue.getSize());
     if (previousValue.isDelete()) {
-      // Previous IndexValue is a DELETE, it should already
-      // 1. Added it's size to the first bucket in the scan result
-      // 2. Subtracted original PUT's size from the previousValue.getOperationTimeInMs() bucket.
-      // We need to recover from these two operations, so
-      // 1. Subtract previous DELETE's size from first bucket in the scan result.
-      // 2. Add original PUT's size to the previousValue.getOperationTimeInMs() bucket.
+      // Previous IndexValue is a DELETE, it will be invalidated by current DELETE. So we have to revert the previous
+      // DELETE here as if it doesn't exist. After reverting changes made by previous DELETE, we will process the current
+      // DELETE IndexValue.
       processDeleteUpdateLogSegmentHelper(results, key, previousValue, originalPutValue, SUBTRACT);
     } else if (previousValue.isUndelete()) {
       // Previous IndexValue is an UNDELETE, it should already
-      // 1. Added it's size to the first bucket of the scan result
+      // 1. Added it's size to the base bucket of the scan result
       // we need to recover from this operation
       results.updateLogSegmentBaseBucket(previousValue.getOffset().getName(), SUBTRACT * previousValue.getSize());
     }
