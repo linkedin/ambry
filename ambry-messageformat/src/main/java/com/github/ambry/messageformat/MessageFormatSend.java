@@ -25,6 +25,7 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -58,7 +59,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
   private int currentWriteIndex;
   private long sizeWrittenFromCurrentIndex;
   private StoreKeyFactory storeKeyFactory;
-  private ByteBuf messageContent;
+  private ByteBuf messageContent = null;
 
   @Override
   public ByteBuf content() {
@@ -103,7 +104,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
   }
 
   /**
-   * Fetch data from the MessageReadSet that needs to be sent over the networkbased on the type of data requested as
+   * Fetch data from the MessageReadSet that needs to be sent over the network based on the type of data requested as
    * indicated by the flags
    */
   private void fetchDataFromReadSet() throws MessageFormatException {
@@ -224,7 +225,9 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
         }
         dataFromReadSet.add(readSet.getPrefetchedData(i));
       }
-      if (messageCount == 1) {
+      if (messageCount == 0) {
+        messageContent = Unpooled.EMPTY_BUFFER;
+      } else if (messageCount == 1) {
         messageContent = dataFromReadSet.get(0);
       } else {
         CompositeByteBuf compositeByteBuf = dataFromReadSet.get(0).alloc().compositeHeapBuffer(messageCount);

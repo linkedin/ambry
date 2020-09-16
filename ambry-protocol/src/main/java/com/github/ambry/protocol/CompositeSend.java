@@ -49,17 +49,26 @@ public class CompositeSend extends AbstractByteBufHolder<CompositeSend> implemen
         compositeSendContent = compositeSendList.get(0).content();
       } else {
         int numComponents = 0;
+        boolean allContentPresent = true;
         for (Send send : compositeSendList) {
           ByteBuf content = send.content();
+          if (content == null) {
+            allContentPresent = false;
+            break;
+          }
           if (content instanceof CompositeByteBuf) {
             numComponents += ((CompositeByteBuf) content).numComponents();
           } else {
             numComponents++;
           }
         }
-        compositeSendContent = compositeSendList.get(0).content().alloc().compositeHeapBuffer(numComponents);
-        for (Send send : compositeSendList) {
-          ((CompositeByteBuf) compositeSendContent).addFlattenedComponents(true, send.content());
+        if (allContentPresent) {
+          compositeSendContent = compositeSendList.get(0).content().alloc().compositeHeapBuffer(numComponents);
+          for (Send send : compositeSendList) {
+            ((CompositeByteBuf) compositeSendContent).addFlattenedComponents(true, send.content());
+          }
+        } else {
+          compositeSendContent = null;
         }
       }
     }
