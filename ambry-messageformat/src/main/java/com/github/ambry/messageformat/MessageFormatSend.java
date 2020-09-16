@@ -24,6 +24,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -46,6 +47,8 @@ import static com.github.ambry.messageformat.MessageFormatRecord.*;
 
 public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> implements Send {
 
+  private final static int BUFFERED_INPUT_STREAM_BUFFER_SIZE = 256;
+  private static final Logger logger = LoggerFactory.getLogger(MessageFormatSend.class);
   private MessageReadSet readSet;
   private MessageFormatFlags flag;
   private ArrayList<SendInfo> sendInfoList;
@@ -55,13 +58,11 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
   private int currentWriteIndex;
   private long sizeWrittenFromCurrentIndex;
   private StoreKeyFactory storeKeyFactory;
-  private static final Logger logger = LoggerFactory.getLogger(MessageFormatSend.class);
-  private final static int BUFFERED_INPUT_STREAM_BUFFER_SIZE = 256;
+  private ByteBuf messageContent;
 
   @Override
   public ByteBuf content() {
-    // TODO: Actually support ByteBufHolder for MessageFormatSend
-    return null;
+    return messageContent;
   }
 
   @Override
@@ -106,9 +107,10 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
    * indicated by the flags
    */
   private void fetchDataFromReadSet() throws MessageFormatException {
+    // get size
+    int messageCount = readSet.count();
+    ArrayList<ByteBuf> dataFromReadSet = new ArrayList<>(messageCount);
     try {
-      // get size
-      int messageCount = readSet.count();
       // for each message, determine the offset and size that needs to be sent based on the flag
       sendInfoList = new ArrayList<>(messageCount);
       messageMetadataList = new ArrayList<>(messageCount);
@@ -220,8 +222,21 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
             throw new MessageFormatException("Unknown flag in request " + flag, MessageFormatErrorCodes.IO_Error);
           }
         }
+        dataFromReadSet.add(readSet.getPrefetchedData(i));
+      }
+      if (messageCount == 1) {
+        messageContent = dataFromReadSet.get(0);
+      } else {
+        CompositeByteBuf compositeByteBuf = dataFromReadSet.get(0).alloc().compositeHeapBuffer(messageCount);
+        for (ByteBuf data : dataFromReadSet) {
+          compositeByteBuf.addComponent(true, data);
+        }
+        messageContent = compositeByteBuf;
       }
     } catch (IOException e) {
+      for (ByteBuf data : dataFromReadSet) {
+        data.release();
+      }
       logger.trace("IOError when calculating offsets");
       throw new MessageFormatException("IOError when calculating offsets ", e, MessageFormatErrorCodes.IO_Error);
     }

@@ -35,6 +35,8 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreStats;
 import com.github.ambry.store.Write;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
@@ -72,16 +74,10 @@ class InMemoryStore implements Store {
     @Override
     public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
       ByteBuffer bufferToWrite = buffers.get(index);
-      int savedPos = bufferToWrite.position();
-      int savedLimit = bufferToWrite.limit();
-      bufferToWrite.position((int) relativeOffset);
-      bufferToWrite.limit((int) Math.min(maxSize + relativeOffset, bufferToWrite.capacity()));
       int sizeToWrite = bufferToWrite.remaining();
       while (bufferToWrite.hasRemaining()) {
         channel.write(bufferToWrite);
       }
-      bufferToWrite.position(savedPos);
-      bufferToWrite.limit(savedLimit);
       return sizeToWrite;
     }
 
@@ -107,7 +103,15 @@ class InMemoryStore implements Store {
 
     @Override
     public void doPrefetch(int index, long relativeOffset, long size) {
+      ByteBuffer bufferToWrite = buffers.get(index);
+      bufferToWrite.position((int) relativeOffset);
+      bufferToWrite.limit((int) Math.min(size + relativeOffset, bufferToWrite.capacity()));
+      buffers.set(index, bufferToWrite);
+    }
 
+    @Override
+    public ByteBuf getPrefetchedData(int index) {
+      return Unpooled.wrappedBuffer(buffers.get(index));
     }
   }
 

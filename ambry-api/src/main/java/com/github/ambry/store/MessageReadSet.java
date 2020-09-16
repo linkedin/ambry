@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 
@@ -73,4 +74,9 @@ public interface MessageReadSet {
    * @throws IOException
    */
   void doPrefetch(int index, long relativeOffset, long size) throws IOException;
+
+  /**
+   *
+   */
+  ByteBuf getPrefetchedData(int index);
 }

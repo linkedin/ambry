@@ -20,6 +20,7 @@ import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferOutputStream;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -99,6 +100,11 @@ class CloudMessageReadSet implements MessageReadSet {
     } catch (StoreException ex) {
       throw new IOException("Prefetch of cloud blob " + blobReadInfo.getBlobId().getID() + " failed", ex);
     }
+  }
+
+  @Override
+  public ByteBuf getPrefetchedData(int index) {
+    return null;
   }
 
   /**

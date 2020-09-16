@@ -114,7 +114,7 @@ public class HardDeleterTest {
     ByteBuffer readRecord(StoreKey key) throws IOException, StoreException {
       BlobReadOptions readOptions = index.getBlobReadInfo(key, EnumSet.allOf(StoreGetOptions.class));
       readOptions.doPrefetch(0, readOptions.getMessageInfo().getSize());
-      return readOptions.getPrefetchedData();
+      return readOptions.getPrefetchedData().nioBuffer();
     }
 
     @Override

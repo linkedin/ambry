@@ -19,6 +19,8 @@ import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.File;
@@ -43,7 +45,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final MessageInfo info;
   private final AtomicBoolean open = new AtomicBoolean(true);
   private static final Logger logger = LoggerFactory.getLogger(BlobReadOptions.class);
-  private ByteBuffer prefetchedData;
+  private ByteBuf prefetchedData;
   private long prefetchedDataRelativeOffset = -1;
 
   static final short VERSION_0 = 0;
@@ -159,12 +161,12 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
    */
   void doPrefetch(long relativeOffset, long size) throws IOException {
     long sizeToRead = Math.min(size, getMessageInfo().getSize() - relativeOffset);
-    prefetchedData = ByteBuffer.allocate((int) sizeToRead);
-    getChannel().read(prefetchedData, offset.getOffset() + relativeOffset);
+    prefetchedData = PooledByteBufAllocator.DEFAULT.ioBuffer((int) sizeToRead);
+    prefetchedData.writeBytes(getChannel(), offset.getOffset() + relativeOffset, (int) sizeToRead);
     prefetchedDataRelativeOffset = relativeOffset;
   }
 
-  ByteBuffer getPrefetchedData() {
+  ByteBuf getPrefetchedData() {
     return prefetchedData;
   }
 
@@ -200,7 +202,7 @@ class StoreMessageReadSet implements MessageReadSet {
       logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
       written = options.getChannel().transferTo(startOffset, sizeToRead, channel);
     } else {
-      ByteBuffer buf = options.getPrefetchedData();
+      ByteBuffer buf = options.getPrefetchedData().nioBuffer();
       long bufStartOffset = relativeOffset - options.getPrefetchedDataRelativeOffset();
       buf.limit((int) (bufStartOffset + sizeToRead));
       buf.position((int) (bufStartOffset));
@@ -215,7 +217,7 @@ class StoreMessageReadSet implements MessageReadSet {
     int lastIndex = readOptions.size() - 1;
     int i = 0;
     for (BlobReadOptions options : readOptions) {
-      ByteBuffer buf = options.getPrefetchedData();
+      ByteBuffer buf = options.getPrefetchedData().nioBuffer();
       if (buf == null) {
         callback.onCompletion(null, new IllegalStateException("Data should be prefetched."));
       }
@@ -255,5 +257,10 @@ class StoreMessageReadSet implements MessageReadSet {
   @Override
   public void doPrefetch(int index, long relativeOffset, long size) throws IOException {
     readOptions.get(index).doPrefetch(relativeOffset, size);
+  }
+
+  @Override
+  public ByteBuf getPrefetchedData(int index) {
+    return readOptions.get(index).getPrefetchedData();
   }
 }

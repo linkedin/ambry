@@ -139,14 +139,7 @@ public class GetResponse extends Response {
         int maxNumComponent = 1 + toSend.content().nioBufferCount();
         CompositeByteBuf compositeByteBuf = bufferToSend.alloc().compositeHeapBuffer(maxNumComponent);
         compositeByteBuf.addComponent(true, bufferToSend);
-        if (toSend.content() instanceof CompositeByteBuf) {
-          Iterator<ByteBuf> iter = ((CompositeByteBuf) toSend.content()).iterator();
-          while (iter.hasNext()) {
-            compositeByteBuf.addComponent(true, iter.next());
-          }
-        } else {
-          compositeByteBuf.addComponent(true, toSend.content());
-        }
+        compositeByteBuf.addFlattenedComponents(true, toSend.content());
         bufferToSend = compositeByteBuf;
         toSend = null;
       }
@@ -198,23 +191,19 @@ public class GetResponse extends Response {
   }
 
   /**
-   * Return null as content to indicate that GetResponse doesn't support ByteBuf yet.
-   * @return ByteBuf
-   */
-  @Override
-  public ByteBuf content() {
-    return null;
-  }
-
-  /**
-   * Override the release method from {@link RequestOrResponse} since the {@link #content()}
-   * returns null but we still have {@link #bufferToSend} to release.
+   * Override the release method from {@link RequestOrResponse}. When the {@link #prepareBuffer()} is not invoked, there
+   * will be {@link #toSend}'s content waiting for releasing.
    * @return
    */
   @Override
   public boolean release() {
     if (bufferToSend != null) {
-      return bufferToSend.release();
+      bufferToSend.release();
+      bufferToSend = null;
+    }
+    if (toSend != null && toSend.content() != null) {
+      toSend.content().release();
+      toSend = null;
     }
     return false;
   }
