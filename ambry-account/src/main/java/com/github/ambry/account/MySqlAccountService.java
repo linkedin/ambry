@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -103,14 +102,14 @@ public class MySqlAccountService implements AccountService {
       // Retry connection to mysql if we couldn't set up previously
       createMySqlAccountStore();
 
-      // get the last sync time of accounts and containers recorded in cache
+      // get the last modified/sync time of accounts and containers from cache
       long lastModifiedTime = accountInfoMap.getLastModifiedTime();
 
       // Fetch all added/modified accounts and containers from MySql database since LMT
-      List<Account> accounts = mySqlAccountStore.getNewAccounts(lastModifiedTime);
-      List<Container> containers = mySqlAccountStore.getNewContainers(lastModifiedTime);
+      Collection<Account> accounts = mySqlAccountStore.getNewAccounts(lastModifiedTime);
+      Collection<Container> containers = mySqlAccountStore.getNewContainers(lastModifiedTime);
 
-      // Update cache
+      // Update cache with fetched accounts and containers
       infoMapLock.writeLock().lock();
       try {
         accountInfoMap.updateAccounts(accounts);
@@ -157,7 +156,7 @@ public class MySqlAccountService implements AccountService {
     }
 
     if (mySqlAccountStore == null) {
-      logger.info("MySql Account DB store is not accessible");
+      logger.warn("MySql Account DB store is not accessible");
       return false;
     }
 

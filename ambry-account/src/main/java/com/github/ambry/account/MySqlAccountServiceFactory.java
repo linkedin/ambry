@@ -55,7 +55,7 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
         // Connection to MySql DB will be retried by scheduler thread which syncs changes periodically. Until then, write
         // requests will be blocked.
         //TODO: record failure, parse exception to figure out what we did wrong. If it is a non-transient error
-        // like credential issue, we should fail start up
+        // like credential issue, we should fail creation of MySqlAccountService and return error.
         logger.error("MySQL account store creation failed", e);
       }
 

@@ -19,7 +19,6 @@ import com.github.ambry.account.mysql.MySqlDataAccessor;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import java.sql.SQLException;
 import java.util.Collection;
-import java.util.List;
 
 
 /**
@@ -83,30 +82,30 @@ public class MySqlAccountStore {
   /**
    * Gets all {@link Account}s that have been created or modified since the specified time.
    * @param updatedSince the last modified time used to filter.
-   * @return a list of {@link Account}s
+   * @return a collection of {@link Account}s
    * @throws SQLException
    */
-  public List<Account> getNewAccounts(long updatedSince) throws SQLException {
+  public Collection<Account> getNewAccounts(long updatedSince) throws SQLException {
     return accountDao.getNewAccounts(updatedSince);
   }
 
   /**
    * Gets all {@link Container}s that have been created or modified since the specified time.
    * @param updatedSince the last modified time used to filter.
-   * @return a list of {@link Container}s
+   * @return a collection of {@link Container}s
    * @throws SQLException
    */
-  public List<Container> getNewContainers(long updatedSince) throws SQLException {
+  public Collection<Container> getNewContainers(long updatedSince) throws SQLException {
     return containerDao.getNewContainers(updatedSince);
   }
 
   /**
    * Gets all {@link Container}s of a given account
    * @param accountId ID of the account
-   * @return a list of {@link Container}s
+   * @return a collection of {@link Container}s
    * @throws SQLException
    */
-  public List<Container> getContainersByAccount(short accountId) throws SQLException {
+  public Collection<Container> getContainersByAccount(short accountId) throws SQLException {
     return containerDao.getContainers(accountId);
   }
 }

@@ -78,7 +78,7 @@ class AccountInfoMap {
             "Invalid account record when reading accountMap in ZNRecord because idKey=null");
       }
       account = Account.fromJson(accountJson);
-      if (account.getId() != Short.valueOf(idKey)) {
+      if (account.getId() != Short.parseShort(idKey)) {
         accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
         throw new IllegalStateException(
             "Invalid account record when reading accountMap in ZNRecord because idKey and accountId do not match. idKey="
