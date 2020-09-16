@@ -1,3 +1,16 @@
+/*
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.account;
 
 import java.util.Collection;
@@ -24,11 +37,11 @@ import org.slf4j.LoggerFactory;
  * </p>
  */
 class AccountInfoMap {
+  private final static Logger logger = LoggerFactory.getLogger(AccountInfoMap.class);
   private final Map<String, Account> nameToAccountMap;
   private final Map<Short, Account> idToAccountMap;
   // used to track last modified time of the accounts and containers in this cache
   private long lastModifiedTime = 0;
-  private final static Logger logger = LoggerFactory.getLogger(AccountInfoMap.class);
 
   /**
    * Constructor for an empty {@code AccountInfoMap}.
@@ -195,22 +208,51 @@ class AccountInfoMap {
   }
 
   /**
+   * Checks if there are any name/ID conflicts between {@link Container}s being updated with existing {@link Container}s
+   * under its parent {@link Account}. Two {@link Container}s can be conflicting with each other if they have
+   * different {@link Container} Ids but the same {@link Container} name.
+   * @param containersToSet {@link Container}s to check for conflict
+   * @param parentAccountId parent {@link Account} id of the {@link Container}.
+   * @return true if there is any container under given parent account with same name but different id.
+   */
+  boolean hasConflictingContainer(Collection<Container> containersToSet, short parentAccountId) {
+    for (Container container : containersToSet) {
+
+      // TODO: Once we have versioning, check that version for existing container (being updated) matches.
+
+      // check that there are no other containers that conflict with the name of the container to update
+      Container potentialConflict = getContainerByNameForAccount(parentAccountId, container.getName());
+      if (potentialConflict != null && potentialConflict.getId() != (container.getId())) {
+        logger.error(
+            "Container to update in AccountId {} (containerId={} containerName={}) conflicts with an existing record (containerId={} containerName={})",
+            parentAccountId, container.getId(), container.getName(), potentialConflict.getId(),
+            potentialConflict.getName());
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Updates the {@code AccountInfoMap} with the input {@link Collection} of {@link Account}s.
    * @param accounts collection of {@link Account}s to be added.
    */
   void updateAccounts(Collection<Account> accounts) {
-    for (Account updatedAccount : accounts) {
-      Account account = idToAccountMap.get(updatedAccount.getId());
-      if (account == null) {
-        account = updatedAccount;
+    for (Account account : accounts) {
+      Account accountToUpdate = idToAccountMap.get(account.getId());
+      if (accountToUpdate == null) {
+        accountToUpdate = account;
       } else {
-        AccountBuilder accountBuilder = new AccountBuilder(account).status(updatedAccount.getStatus())
-            .snapshotVersion(updatedAccount.getSnapshotVersion());
-        updatedAccount.getAllContainers().forEach(accountBuilder::addOrUpdateContainer);
-        account = accountBuilder.build();
+        // remove name to Account mapping for existing account as name might have been updated too
+        nameToAccountMap.remove(accountToUpdate.getName());
+        AccountBuilder accountBuilder = new AccountBuilder(accountToUpdate).name(account.getName())
+            .status(account.getStatus())
+            .snapshotVersion(account.getSnapshotVersion());
+        account.getAllContainers().forEach(accountBuilder::addOrUpdateContainer);
+        accountToUpdate = accountBuilder.build();
       }
-      idToAccountMap.put(account.getId(), account);
-      nameToAccountMap.put(account.getName(), account);
+      idToAccountMap.put(accountToUpdate.getId(), accountToUpdate);
+      nameToAccountMap.put(accountToUpdate.getName(), accountToUpdate);
     }
   }
 
@@ -254,18 +296,22 @@ class AccountInfoMap {
   }
 
   /**
+   * Gets {@link Container} by its name and Parent Account id.
+   * @param accountId The id of the parent {@link Account} for this {@link Container}.
+   * @param name The name of the {@link Container} to get.
+   * @return The {@link Container} with the given name within the parent Account Id, or {@code null} if
+   * such a parent {@link Account} or {@link Container} does not exist.
+   */
+  Container getContainerByNameForAccount(Short accountId, String name) {
+    Account parentAccount = idToAccountMap.get(accountId);
+    return parentAccount == null ? null : parentAccount.getContainerByName(name);
+  }
+
+  /**
    * Gets the last modified time of accounts and containers in this in-memory cache
    * @return the last modified time of accounts and containers
    */
   long getLastModifiedTime() {
     return lastModifiedTime;
-  }
-
-  /**
-   * Sets the last modified time of accounts and containers in this in-memory cache
-   * @param lastModifiedTime time when the accounts and containers were last updated
-   */
-  void setLastModifiedTime(long lastModifiedTime) {
-    this.lastModifiedTime = lastModifiedTime;
   }
 }

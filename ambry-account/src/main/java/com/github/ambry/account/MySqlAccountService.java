@@ -11,11 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-
 package com.github.ambry.account;
 
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collection;
@@ -39,49 +39,36 @@ import static com.github.ambry.utils.Utils.*;
  */
 public class MySqlAccountService implements AccountService {
 
-  private MySqlAccountStore mySqlAccountStore = null;
+  private static final Logger logger = LoggerFactory.getLogger(MySqlAccountService.class);
+  static final String MYSQL_ACCOUNT_UPDATER_PREFIX = "mysql-account-updater";
   private final AccountServiceMetrics accountServiceMetrics;
   private final MySqlAccountServiceConfig config;
   // in-memory cache for storing account and container metadata
   private final AccountInfoMap accountInfoMap;
-  private static final Logger logger = LoggerFactory.getLogger(MySqlAccountService.class);
-  private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+  private final ReadWriteLock infoMapLock = new ReentrantReadWriteLock();
   private final ScheduledExecutorService scheduler;
+  private volatile MySqlAccountStore mySqlAccountStore;
 
   public MySqlAccountService(AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config,
-      ScheduledExecutorService scheduler) {
+      MySqlAccountStore mySqlAccountStore) {
     this.accountServiceMetrics = accountServiceMetrics;
     this.config = config;
-    this.scheduler = scheduler;
-    accountInfoMap = new AccountInfoMap(accountServiceMetrics);
-    try {
-      createMySqlAccountStore();
-    } catch (SQLException e) {
-      logger.error("MySQL account store creation failed", e);
-      // Continue account service creation. Cache will initialized with metadata from backup copy on local disk to serve read requests.
-      // Write requests will be blocked until MySql DB is up. Connection to MySql DB will be retried in polling thread that fetches new accounts.
-    }
-
+    this.mySqlAccountStore = mySqlAccountStore;
+    this.accountInfoMap = new AccountInfoMap(accountServiceMetrics);
+    this.scheduler =
+        config.updaterPollingIntervalSeconds > 0 ? Utils.newScheduler(1, MYSQL_ACCOUNT_UPDATER_PREFIX, false) : null;
     // TODO: create backup manager to manage local back up copies of Account and container metadata and lastModifiedTime
-
     initialFetchAndSchedule();
-
     // TODO: Subscribe to notifications from ZK
   }
 
   /**
-   * creates MySql Account store which establishes connection to database
+   * Creates MySql Account store which establishes connection to database
    * @throws SQLException
    */
   private void createMySqlAccountStore() throws SQLException {
     if (mySqlAccountStore == null) {
-      try {
-        mySqlAccountStore = new MySqlAccountStore(config);
-      } catch (SQLException e) {
-        // TODO: record failure, parse exception to figure out what we did wrong. If it is a non-transient error like credential issue, we should fail start up
-        logger.error("MySQL account store creation failed", e);
-        throw e;
-      }
+      mySqlAccountStore = new MySqlAccountStore(config);
     }
   }
 
@@ -96,15 +83,14 @@ public class MySqlAccountService implements AccountService {
 
     // TODO: Check local disk for back up copy and load metadata and last modified time into cache.
 
-    // Fetch added/modified accounts and containers from mysql db since LMT and update cache.
+    // Fetch added/modified accounts and containers from mysql db since LMT and update cache. Also, schedule to
+    // execute the logic periodically.
     fetchAndUpdateCache();
-
-    //Also, schedule to execute the logic periodically.
     if (scheduler != null) {
-      scheduler.scheduleAtFixedRate(this::fetchAndUpdateCache, config.updaterPollingIntervalMs,
-          config.updaterPollingIntervalMs, TimeUnit.MILLISECONDS);
-      logger.info("Background account updater will fetch accounts from mysql db at intervals of {} ms",
-          config.updaterPollingIntervalMs);
+      scheduler.scheduleAtFixedRate(this::fetchAndUpdateCache, config.updaterPollingIntervalSeconds,
+          config.updaterPollingIntervalSeconds, TimeUnit.SECONDS);
+      logger.info("Background account updater will fetch accounts from mysql db at intervals of {} seconds",
+          config.updaterPollingIntervalSeconds);
     }
   }
 
@@ -116,24 +102,21 @@ public class MySqlAccountService implements AccountService {
     try {
       // Retry connection to mysql if we couldn't set up previously
       createMySqlAccountStore();
-    } catch (SQLException e) {
-      logger.error("Fetching Accounts from MySql DB failed", e);
-      return;
-    }
 
-    // get the last sync time of accounts and containers in cache
-    long lastModifiedTime = accountInfoMap.getLastModifiedTime();
+      // get the last sync time of accounts and containers recorded in cache
+      long lastModifiedTime = accountInfoMap.getLastModifiedTime();
 
-    try {
       // Fetch all added/modified accounts and containers from MySql database since LMT
       List<Account> accounts = mySqlAccountStore.getNewAccounts(lastModifiedTime);
       List<Container> containers = mySqlAccountStore.getNewContainers(lastModifiedTime);
-      rwLock.writeLock().lock();
+
+      // Update cache
+      infoMapLock.writeLock().lock();
       try {
         accountInfoMap.updateAccounts(accounts);
         accountInfoMap.updateContainers(containers);
       } finally {
-        rwLock.writeLock().unlock();
+        infoMapLock.writeLock().unlock();
       }
 
       // TODO: Find the max LMT in the fetched accounts and containers and update the cache
@@ -145,24 +128,26 @@ public class MySqlAccountService implements AccountService {
 
   @Override
   public Account getAccountById(short accountId) {
-    rwLock.readLock().lock();
+    infoMapLock.readLock().lock();
     try {
       return accountInfoMap.getAccountById(accountId);
     } finally {
-      rwLock.readLock().unlock();
+      infoMapLock.readLock().unlock();
     }
   }
 
   @Override
   public Account getAccountByName(String accountName) {
-    rwLock.readLock().lock();
+    infoMapLock.readLock().lock();
     try {
       return accountInfoMap.getAccountByName(accountName);
     } finally {
-      rwLock.readLock().unlock();
+      infoMapLock.readLock().unlock();
     }
   }
 
+  //TODO: Revisit this interface method to see if we can throw exception instead of returning boolean so that caller can
+  // distinguish between bad input and system error.
   @Override
   public boolean updateAccounts(Collection<Account> accounts) {
     Objects.requireNonNull(accounts, "accounts cannot be null");
@@ -177,7 +162,7 @@ public class MySqlAccountService implements AccountService {
     }
 
     if (config.updateDisabled) {
-      logger.info("Updates has been disabled");
+      logger.info("Updates have been disabled");
       return false;
     }
 
@@ -187,22 +172,30 @@ public class MySqlAccountService implements AccountService {
       return false;
     }
 
-    // Make a pre check for conflict between the accounts to update and the accounts in the local cache. Will fail this
-    // update operation for all the accounts if any conflict exists. For existing accounts, there is a chance that the account to update
-    // conflicts with the accounts in the local cache, but does not conflict with those in the MySql database. This
-    // will happen if some accounts are updated but the local cache is not yet refreshed.
-    // TODO: Once we have APIs (and versioning) for updating containers, we will need to check conflicts for containers as well.
-    rwLock.readLock().lock();
+    // Check for name/id/version conflicts between the accounts and containers being updated with those in local cache.
+    // There is a slight chance that we have conflicts local cache, but not with MySql database. This will happen if
+    // but the local cache is not yet refreshed with latest account info.
+    infoMapLock.readLock().lock();
     try {
       if (accountInfoMap.hasConflictingAccount(accounts)) {
         logger.error("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
         //accountServiceMetrics.updateAccountErrorCount.inc();
         return false;
       }
+      for (Account account : accounts) {
+        if (accountInfoMap.hasConflictingContainer(account.getAllContainers(), account.getId())) {
+          logger.error(
+              "Containers={} under Account={} conflict with the containers in local cache. Cancel the update operation.",
+              account.getAllContainers(), account.getId());
+          //accountServiceMetrics.updateAccountErrorCount.inc();
+          return false;
+        }
+      }
     } finally {
-      rwLock.readLock().unlock();
+      infoMapLock.readLock().unlock();
     }
 
+    // Update database with updated accounts
     try {
       updateAccountsWithMySqlStore(accounts);
     } catch (SQLException e) {
@@ -213,28 +206,27 @@ public class MySqlAccountService implements AccountService {
       return false;
     }
 
-    // update in-memory cache with accounts
-    rwLock.writeLock().lock();
+    // Update in-memory cache with updated accounts
+    infoMapLock.writeLock().lock();
     try {
       accountInfoMap.updateAccounts(accounts);
     } finally {
-      rwLock.writeLock().unlock();
+      infoMapLock.writeLock().unlock();
     }
 
-    // TODO: can notify account updates to other nodes via ZK .
-
     // TODO: persist updated accounts and max timestamp to local back up file.
+    // TODO: can notify account updates to other nodes via ZK .
 
     return true;
   }
 
   @Override
   public Collection<Account> getAllAccounts() {
-    rwLock.readLock().lock();
+    infoMapLock.readLock().lock();
     try {
       return accountInfoMap.getAccounts();
     } finally {
-      rwLock.readLock().unlock();
+      infoMapLock.readLock().unlock();
     }
   }
 
@@ -257,7 +249,7 @@ public class MySqlAccountService implements AccountService {
   @Override
   public void close() throws IOException {
     if (scheduler != null) {
-      shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMs, TimeUnit.MILLISECONDS);
+      shutDownExecutorService(scheduler, config.updaterShutDownTimeoutSeconds, TimeUnit.SECONDS);
     }
   }
 
@@ -278,6 +270,7 @@ public class MySqlAccountService implements AccountService {
         mySqlAccountStore.addContainers(account.getAllContainers());
       } else {
         // existing account (update account table)
+        // TODO: Avoid updating account records if only container information changed.
         mySqlAccountStore.updateAccounts(Collections.singletonList(account));
         updateContainersWithMySqlStore(account.getId(), account.getAllContainers());
       }
@@ -302,13 +295,17 @@ public class MySqlAccountService implements AccountService {
       throw new IllegalArgumentException("Account with ID " + accountId + "doesn't exist");
     }
 
-    for (Container container : containers) {
-      if (accountInfoMap.getContainerByIdForAccount(container.getParentAccountId(), container.getId()) == null) {
+    for (Container containerToUpdate : containers) {
+      Container containerInCache =
+          accountInfoMap.getContainerByIdForAccount(containerToUpdate.getParentAccountId(), containerToUpdate.getId());
+      if (containerInCache == null) {
         // new container added (insert into container table)
-        mySqlAccountStore.addContainers(Collections.singletonList(container));
+        mySqlAccountStore.addContainers(Collections.singletonList(containerToUpdate));
       } else {
-        // existing container modified (update container table)
-        mySqlAccountStore.updateContainers(Collections.singletonList(container));
+        if (!containerInCache.equals(containerToUpdate)) {
+          // existing container modified (update container table)
+          mySqlAccountStore.updateContainers(Collections.singletonList(containerToUpdate));
+        }
       }
     }
   }

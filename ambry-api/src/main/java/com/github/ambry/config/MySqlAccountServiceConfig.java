@@ -21,40 +21,49 @@ public class MySqlAccountServiceConfig {
   public static final String DB_URL = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.url";
   public static final String DB_USER = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.user";
   public static final String DB_PASSWORD = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.password";
-  public static final String UPDATER_POLLING_INTERVAL_MS_KEY =
-      MYSQL_ACCOUNT_SERVICE_PREFIX + "updater.polling.interval.ms";
-  public static final String UPDATER_SHUT_DOWN_TIMEOUT_MS_KEY =
-      MYSQL_ACCOUNT_SERVICE_PREFIX + "updater.shut.down.timeout.ms";
+  public static final String UPDATER_POLLING_INTERVAL_SECONDS =
+      MYSQL_ACCOUNT_SERVICE_PREFIX + "updater.polling.interval.seconds";
+  public static final String UPDATER_SHUT_DOWN_TIMEOUT_SECONDS =
+      MYSQL_ACCOUNT_SERVICE_PREFIX + "updater.shut.down.timeout.seconds";
   public static final String BACKUP_DIRECTORY_KEY = MYSQL_ACCOUNT_SERVICE_PREFIX + "backup.dir";
   public static final String UPDATE_DISABLED = MYSQL_ACCOUNT_SERVICE_PREFIX + "update.disabled";
 
   // TODO: Might need to take an array of URLs which would have one write (master) and multiple read urls (backup)
+  /**
+   * URL of the mysql database.
+   */
   @Config(DB_URL)
   @Default("")
   public final String dbUrl;
 
+  /**
+   * Username for the mysql database.
+   */
   @Config(DB_USER)
   @Default("")
   public final String dbUser;
 
+  /**
+   * Password for the mysql database.
+   */
   @Config(DB_PASSWORD)
   @Default("")
   public final String dbPassword;
 
   /**
-   * The time interval in milli seconds between two consecutive account pulling for the background account updater of
+   * The time interval in seconds between two consecutive account pulling for the background account updater of
    * {@code MySqlAccountService}. Setting to 0 will disable it.
    */
-  @Config(UPDATER_POLLING_INTERVAL_MS_KEY)
-  @Default("2 * 1000")
-  public final int updaterPollingIntervalMs;
+  @Config(UPDATER_POLLING_INTERVAL_SECONDS)
+  @Default("60")
+  public final int updaterPollingIntervalSeconds;
 
   /**
-   * The timeout in ms to shut down the account updater of {@code MySqlAccountService}.
+   * The timeout in seconds to shut down the account updater of {@code MySqlAccountService}.
    */
-  @Config(UPDATER_SHUT_DOWN_TIMEOUT_MS_KEY)
-  @Default("5 * 1000")
-  public final int updaterShutDownTimeoutMs;
+  @Config(UPDATER_SHUT_DOWN_TIMEOUT_SECONDS)
+  @Default("5")
+  public final int updaterShutDownTimeoutSeconds;
 
   /**
    * The directory on the local machine where account data backups will be stored before updating accounts.
@@ -72,13 +81,13 @@ public class MySqlAccountServiceConfig {
   public final boolean updateDisabled;
 
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
-    dbUrl = verifiableProperties.getString(DB_URL, "");
-    dbUser = verifiableProperties.getString(DB_USER, "");
-    dbPassword = verifiableProperties.getString(DB_PASSWORD, "");
-    updaterPollingIntervalMs =
-        verifiableProperties.getIntInRange(UPDATER_POLLING_INTERVAL_MS_KEY, 2 * 1000, 0, Integer.MAX_VALUE);
-    updaterShutDownTimeoutMs =
-        verifiableProperties.getIntInRange(UPDATER_SHUT_DOWN_TIMEOUT_MS_KEY, 5 * 1000, 1, Integer.MAX_VALUE);
+    dbUrl = verifiableProperties.getString(DB_URL);
+    dbUser = verifiableProperties.getString(DB_USER);
+    dbPassword = verifiableProperties.getString(DB_PASSWORD);
+    updaterPollingIntervalSeconds =
+        verifiableProperties.getIntInRange(UPDATER_POLLING_INTERVAL_SECONDS, 60, 0, Integer.MAX_VALUE);
+    updaterShutDownTimeoutSeconds =
+        verifiableProperties.getIntInRange(UPDATER_SHUT_DOWN_TIMEOUT_SECONDS, 5, 1, Integer.MAX_VALUE);
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
   }

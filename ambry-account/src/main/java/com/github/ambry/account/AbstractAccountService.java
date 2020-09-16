@@ -83,38 +83,6 @@ abstract class AbstractAccountService implements AccountService {
   }
 
   /**
-   * Checks if there is any {@link Account} in a given collection of {@link Account}s conflicts against any {@link Account}
-   * in a {@link AccountInfoMap}, according to the Javadoc of {@link AccountService}. Two {@link Account}s can be
-   * conflicting with each other if they have different account Ids but the same account name.
-   *
-   * @param accountsToSet The collection of {@link Account}s to check conflict.
-   * @return {@code true} if there is at least one {@link Account} in {@code accountPairs} conflicts with the existing
-   *                      {@link Account}s in {@link AccountInfoMap}, {@code false} otherwise.
-   */
-  boolean hasConflictingAccount(Collection<Account> accountsToSet) {
-    for (Account account : accountsToSet) {
-      // if the account already exists, check that the snapshot version matches the expected value.
-      Account accountInMap = getAccountById(account.getId());
-      if (accountInMap != null && account.getSnapshotVersion() != accountInMap.getSnapshotVersion()) {
-        logger.error(
-            "Account to update (accountId={} accountName={}) has an unexpected snapshot version in zk (expected={}, encountered={})",
-            account.getId(), account.getName(), account.getSnapshotVersion(), accountInMap.getSnapshotVersion());
-        return true;
-      }
-      // check that there are no other accounts that conflict with the name of the account to update
-      // (case D and E from the javadoc)
-      Account potentialConflict = getAccountByName(account.getName());
-      if (potentialConflict != null && potentialConflict.getId() != account.getId()) {
-        logger.error(
-            "Account to update (accountId={} accountName={}) conflicts with an existing record (accountId={} accountName={})",
-            account.getId(), account.getName(), potentialConflict.getId(), potentialConflict.getName());
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
    * Logs and notifies account update {@link Consumer}s about any new account changes/creations.
    * @param newAccountInfoMap the new {@link AccountInfoMap} that has been set.
    * @param oldAccountInfoMap the {@link AccountInfoMap} that was cached before this change.
