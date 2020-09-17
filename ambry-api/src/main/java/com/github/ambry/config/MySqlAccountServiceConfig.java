@@ -14,7 +14,7 @@
 package com.github.ambry.config;
 
 /**
- * Config for {@link MySqlAccountServiceConfig}
+ * Configs for MySqlAccountService
  */
 public class MySqlAccountServiceConfig {
   public static final String MYSQL_ACCOUNT_SERVICE_PREFIX = "mysql.account.service.";
@@ -23,8 +23,8 @@ public class MySqlAccountServiceConfig {
   public static final String DB_PASSWORD = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.password";
   public static final String UPDATER_POLLING_INTERVAL_SECONDS =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "updater.polling.interval.seconds";
-  public static final String UPDATER_SHUT_DOWN_TIMEOUT_SECONDS =
-      MYSQL_ACCOUNT_SERVICE_PREFIX + "updater.shut.down.timeout.seconds";
+  public static final String UPDATER_SHUT_DOWN_TIMEOUT_MINUTES =
+      MYSQL_ACCOUNT_SERVICE_PREFIX + "updater.shut.down.timeout.minutes";
   public static final String BACKUP_DIRECTORY_KEY = MYSQL_ACCOUNT_SERVICE_PREFIX + "backup.dir";
   public static final String UPDATE_DISABLED = MYSQL_ACCOUNT_SERVICE_PREFIX + "update.disabled";
 
@@ -52,18 +52,18 @@ public class MySqlAccountServiceConfig {
 
   /**
    * The time interval in seconds between two consecutive account pulling for the background account updater of
-   * {@code MySqlAccountService}. Setting to 0 will disable it.
+   * {@code MySqlAccountService}. Setting to 0 will disable it. Default value is 60 seconds.
    */
   @Config(UPDATER_POLLING_INTERVAL_SECONDS)
   @Default("60")
   public final int updaterPollingIntervalSeconds;
 
   /**
-   * The timeout in seconds to shut down the account updater of {@code MySqlAccountService}.
+   * The timeout in minutes to shut down the account updater of {@code MySqlAccountService}. Default value is 2 minutes.
    */
-  @Config(UPDATER_SHUT_DOWN_TIMEOUT_SECONDS)
-  @Default("5")
-  public final int updaterShutDownTimeoutSeconds;
+  @Config(UPDATER_SHUT_DOWN_TIMEOUT_MINUTES)
+  @Default("2")
+  public final int updaterShutDownTimeoutMinutes;
 
   /**
    * The directory on the local machine where account data backups will be stored before updating accounts.
@@ -86,8 +86,8 @@ public class MySqlAccountServiceConfig {
     dbPassword = verifiableProperties.getString(DB_PASSWORD);
     updaterPollingIntervalSeconds =
         verifiableProperties.getIntInRange(UPDATER_POLLING_INTERVAL_SECONDS, 60, 0, Integer.MAX_VALUE);
-    updaterShutDownTimeoutSeconds =
-        verifiableProperties.getIntInRange(UPDATER_SHUT_DOWN_TIMEOUT_SECONDS, 5, 1, Integer.MAX_VALUE);
+    updaterShutDownTimeoutMinutes =
+        verifiableProperties.getIntInRange(UPDATER_SHUT_DOWN_TIMEOUT_MINUTES, 2, 1, Integer.MAX_VALUE);
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
   }

@@ -167,7 +167,7 @@ public class MySqlAccountService implements AccountService {
 
     if (hasDuplicateAccountIdOrName(accounts)) {
       logger.error("Duplicate account id or name exist in the accounts to update");
-      //accountServiceMetrics.updateAccountErrorCount.inc();
+      accountServiceMetrics.updateAccountErrorCount.inc();
       return false;
     }
 
@@ -178,7 +178,7 @@ public class MySqlAccountService implements AccountService {
     try {
       if (accountInfoMap.hasConflictingAccount(accounts)) {
         logger.error("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
-        //accountServiceMetrics.updateAccountErrorCount.inc();
+        accountServiceMetrics.updateAccountErrorCount.inc();
         return false;
       }
       for (Account account : accounts) {
@@ -186,7 +186,7 @@ public class MySqlAccountService implements AccountService {
           logger.error(
               "Containers={} under Account={} conflict with the containers in local cache. Cancel the update operation.",
               account.getAllContainers(), account.getId());
-          //accountServiceMetrics.updateAccountErrorCount.inc();
+          accountServiceMetrics.updateAccountErrorCount.inc();
           return false;
         }
       }
@@ -201,7 +201,7 @@ public class MySqlAccountService implements AccountService {
       logger.error("Failed updating accounts={} in MySql DB", accounts, e);
       // record failure, parse exception to figure out what we did wrong (eg. id or name collision). If it is id collision,
       // retry with incrementing ID (Account ID generation logic is currently in nuage-ambry, we might need to move it here)
-      //accountServiceMetrics.updateAccountErrorCount.inc();
+      accountServiceMetrics.updateAccountErrorCount.inc();
       return false;
     }
 
@@ -248,7 +248,7 @@ public class MySqlAccountService implements AccountService {
   @Override
   public void close() throws IOException {
     if (scheduler != null) {
-      shutDownExecutorService(scheduler, config.updaterShutDownTimeoutSeconds, TimeUnit.SECONDS);
+      shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMinutes, TimeUnit.MINUTES);
     }
   }
 
@@ -277,8 +277,7 @@ public class MySqlAccountService implements AccountService {
 
     long timeForUpdate = System.currentTimeMillis() - startTimeMs;
     logger.trace("Completed updating accounts into MySql DB, took time={} ms", timeForUpdate);
-    //accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
-
+    accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
   }
 
   /**

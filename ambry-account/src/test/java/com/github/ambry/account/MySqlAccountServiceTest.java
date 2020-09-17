@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
@@ -31,21 +32,16 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
+/**
+ * Unit tests for {@link MySqlAccountService}.
+ */
 public class MySqlAccountServiceTest {
 
   AccountService mySqlAccountService;
   Properties mySqlConfigProps = new Properties();
 
   public MySqlAccountServiceTest() {
-    resetConfig();
-  }
 
-  private void resetConfig() {
-    mySqlConfigProps.setProperty(DB_URL, "");
-    mySqlConfigProps.setProperty(DB_USER, "");
-    mySqlConfigProps.setProperty(DB_PASSWORD, "");
-    mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
-    mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
   }
 
   /**
@@ -151,8 +147,6 @@ public class MySqlAccountServiceTest {
 
     assertEquals("Background account updater thread should be stopped", 0,
         numThreadsByThisName(MySqlAccountService.MYSQL_ACCOUNT_UPDATER_PREFIX));
-
-    resetConfig();
   }
 
   /**
@@ -166,7 +160,6 @@ public class MySqlAccountServiceTest {
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mock(MySqlAccountStore.class));
     assertEquals("Background account updater thread should not be started", 0,
         numThreadsByThisName(MySqlAccountService.MYSQL_ACCOUNT_UPDATER_PREFIX));
-    resetConfig();
   }
 
   /**
@@ -184,8 +177,6 @@ public class MySqlAccountServiceTest {
     Account testAccount = new AccountBuilder((short) 1, "testAccount1", Account.AccountStatus.ACTIVE).build();
     assertFalse("Update accounts should be disabled",
         mySqlAccountService.updateAccounts(Collections.singletonList(testAccount)));
-
-    resetConfig();
   }
 
   /**
@@ -194,12 +185,15 @@ public class MySqlAccountServiceTest {
    */
   @Test
   public void testUpdateNameConflictingAccounts() {
-    mySqlAccountService = new MySqlAccountService(new AccountServiceMetrics(new MetricRegistry()),
+    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    mySqlAccountService = new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mock(MySqlAccountStore.class));
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 2, "a", Account.AccountStatus.INACTIVE).build());
     assertFalse("Wrong return value from update operation.", mySqlAccountService.updateAccounts(conflictAccounts));
+    assertEquals("UpdateAccountErrorCount in metrics should be 1", 1,
+        accountServiceMetrics.updateAccountErrorCount.getCount());
   }
 
   /**
@@ -208,12 +202,15 @@ public class MySqlAccountServiceTest {
    */
   @Test
   public void testUpdateIdConflictingAccounts() {
-    mySqlAccountService = new MySqlAccountService(new AccountServiceMetrics(new MetricRegistry()),
+    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    mySqlAccountService = new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mock(MySqlAccountStore.class));
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "b", Account.AccountStatus.INACTIVE).build());
     assertFalse("Wrong return value from update operation.", mySqlAccountService.updateAccounts(conflictAccounts));
+    assertEquals("UpdateAccountErrorCount in metrics should be 1", 1,
+        accountServiceMetrics.updateAccountErrorCount.getCount());
   }
 
   /**
@@ -221,12 +218,15 @@ public class MySqlAccountServiceTest {
    */
   @Test
   public void testUpdateDuplicateAccounts() {
-    mySqlAccountService = new MySqlAccountService(new AccountServiceMetrics(new MetricRegistry()),
+    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    mySqlAccountService = new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mock(MySqlAccountStore.class));
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
     assertFalse("Wrong return value from update operation.", mySqlAccountService.updateAccounts(conflictAccounts));
+    assertEquals("UpdateAccountErrorCount in metrics should be 1", 1,
+        accountServiceMetrics.updateAccountErrorCount.getCount());
   }
 
   /**
@@ -249,7 +249,8 @@ public class MySqlAccountServiceTest {
    */
   @Test
   public void testConflictingUpdatesWithAccounts() {
-    mySqlAccountService = new MySqlAccountService(new AccountServiceMetrics(new MetricRegistry()),
+    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    mySqlAccountService = new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mock(MySqlAccountStore.class));
 
     // write two accounts (1, "a") and (2, "b")
@@ -279,11 +280,15 @@ public class MySqlAccountServiceTest {
     accountToUpdate = new AccountBuilder((short) 4, "c", Account.AccountStatus.ACTIVE).build();
     assertFalse("Account update should fail due to name conflict",
         mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate)));
+    assertEquals("UpdateAccountErrorCount in metrics should be 1", 1,
+        accountServiceMetrics.updateAccountErrorCount.getCount());
 
     // case E: verify updating name of account  (1, "c") to (1, "b") conflicts in name with (2, "b")
     accountToUpdate = new AccountBuilder(mySqlAccountService.getAccountById((short) 1)).name("b").build();
     assertFalse("Account update should fail due to name conflict",
         mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate)));
+    assertEquals("UpdateAccountErrorCount in metrics should be 2", 2,
+        accountServiceMetrics.updateAccountErrorCount.getCount());
 
     // verify there should be 3 accounts (1, "c), (2, "b) and (3, "d) at the end of operation
     assertEquals("Mismatch in number of accounts", 3, mySqlAccountService.getAllAccounts().size());
@@ -297,7 +302,8 @@ public class MySqlAccountServiceTest {
    */
   @Test
   public void testConflictingUpdatesWithContainers() {
-    mySqlAccountService = new MySqlAccountService(new AccountServiceMetrics(new MetricRegistry()),
+    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    mySqlAccountService = new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mock(MySqlAccountStore.class));
 
     List<Container> containersList = new ArrayList<>();
@@ -329,6 +335,8 @@ public class MySqlAccountServiceTest {
     assertFalse("Account update should fail due to name conflict in containers",
         mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate)));
     accountToUpdate = new AccountBuilder(accountToUpdate).removeContainer(containerToUpdate).build();
+    assertEquals("UpdateAccountErrorCount in metrics should be 1", 1,
+        accountServiceMetrics.updateAccountErrorCount.getCount());
 
     // case C: Verify addition of new container (3,c4) is successful
     containerToUpdate =
@@ -345,5 +353,16 @@ public class MySqlAccountServiceTest {
     accountToUpdate = new AccountBuilder(accountToUpdate).addOrUpdateContainer(containerToUpdate).build();
     assertFalse("Account update should fail due to name conflict in containers",
         mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate)));
+    assertEquals("UpdateAccountErrorCount in metrics should be 2", 2,
+        accountServiceMetrics.updateAccountErrorCount.getCount());
+  }
+
+  @Before
+  public void resetConfig() {
+    mySqlConfigProps.setProperty(DB_URL, "");
+    mySqlConfigProps.setProperty(DB_USER, "");
+    mySqlConfigProps.setProperty(DB_PASSWORD, "");
+    mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
+    mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
   }
 }
