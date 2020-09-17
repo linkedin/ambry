@@ -15,7 +15,6 @@ package com.github.ambry.account.mysql;
 
 import com.github.ambry.account.AccountSerdeUtils;
 import com.github.ambry.account.Container;
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -41,6 +40,7 @@ public class ContainerDao {
   private final String insertSql;
   private final String getSinceSql;
   private final String getByAccountSql;
+  private final String updateSql;
 
   public ContainerDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = dataAccessor;
@@ -53,6 +53,9 @@ public class ContainerDao {
     getByAccountSql =
         String.format("select %s, %s, %s from %s where %s = ?", ACCOUNT_ID, CONTAINER_INFO, LAST_MODIFIED_TIME,
             CONTAINER_TABLE, ACCOUNT_ID);
+    // TODO: For update, take the version from Container object after adding the field in it.
+    updateSql = String.format("update %s set %s = ?, %s = 1, %s = now() where %s = ? AND %s = ? ", CONTAINER_TABLE,
+        CONTAINER_INFO, VERSION, LAST_MODIFIED_TIME, ACCOUNT_ID, CONTAINER_ID);
   }
 
   /**
@@ -77,9 +80,31 @@ public class ContainerDao {
   }
 
   /**
+   * Updates a container in the database.
+   * @param accountId the container's parent account id.
+   * @param container the container to update.
+   * @throws SQLException
+   */
+  public void updateContainer(int accountId, Container container) throws SQLException {
+    try {
+      // Note: assuming autocommit for now
+      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
+      updateStatement.setString(1, AccountSerdeUtils.containerToJson(container));
+      updateStatement.setInt(2, accountId);
+      updateStatement.setInt(3, container.getId());
+      updateStatement.executeUpdate();
+    } catch (SQLException e) {
+      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
+      // For now, assume connection issue.
+      dataAccessor.reset();
+      throw e;
+    }
+  }
+
+  /**
    * Gets the containers in a specified account.
-   * @param accountId the id for the account.
-   * @return a list of {@link Container}.
+   * @param accountId the id for the parent account.
+   * @return a list of {@link Container}s.
    * @throws SQLException
    */
   public List<Container> getContainers(int accountId) throws SQLException {
@@ -97,7 +122,7 @@ public class ContainerDao {
   /**
    * Gets all containers that have been created or modified since the specified time.
    * @param updatedSince the last modified time used to filter.
-   * @return a list of {@link Container}.
+   * @return a list of {@link Container}s.
    * @throws SQLException
    */
   public List<Container> getNewContainers(long updatedSince) throws SQLException {
@@ -116,7 +141,7 @@ public class ContainerDao {
   /**
    * Convert a query result set to a list of containers.
    * @param resultSet the result set.
-   * @return a list of containers.
+   * @return a list of {@link Container}s.
    * @throws SQLException
    */
   private List<Container> convertResultSet(ResultSet resultSet) throws SQLException {

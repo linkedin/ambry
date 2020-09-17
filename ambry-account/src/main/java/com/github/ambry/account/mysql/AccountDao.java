@@ -33,10 +33,12 @@ public class AccountDao {
   public static final String VERSION = "version";
   public static final String CREATION_TIME = "creationTime";
   public static final String LAST_MODIFIED_TIME = "lastModifiedTime";
+  public static final String ACCOUNT_ID = "accountId";
 
   private final MySqlDataAccessor dataAccessor;
   private final String insertSql;
   private final String getSinceSql;
+  private final String updateSql;
 
   public AccountDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = dataAccessor;
@@ -45,6 +47,9 @@ public class AccountDao {
             VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
     getSinceSql = String.format("select %s, %s from %s where %s > ?", ACCOUNT_INFO, LAST_MODIFIED_TIME, ACCOUNT_TABLE,
         LAST_MODIFIED_TIME);
+    updateSql =
+        String.format("update %s set %s = ?, %s = ?, %s = now() where %s = ? ", ACCOUNT_TABLE, ACCOUNT_INFO, VERSION,
+            LAST_MODIFIED_TIME, ACCOUNT_ID);
   }
 
   /**
@@ -69,26 +74,58 @@ public class AccountDao {
   /**
    * Gets all accounts that have been created or modified since the specified time.
    * @param updatedSince the last modified time used to filter.
-   * @return a list of {@link Account}.
+   * @return a list of {@link Account}s.
    * @throws SQLException
    */
   public List<Account> getNewAccounts(long updatedSince) throws SQLException {
-    List<Account> accounts = new ArrayList<>();
     Timestamp sinceTime = new Timestamp(updatedSince);
     PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql);
     getSinceStatement.setTimestamp(1, sinceTime);
     try (ResultSet rs = getSinceStatement.executeQuery()) {
-      while (rs.next()) {
-        String accountJson = rs.getString(ACCOUNT_INFO);
-        Account account = AccountSerdeUtils.accountFromJson(accountJson);
-        // TODO: account.setLastModifiedTime(rs.getTimestamp(LAST_MODIFIED_TIME));
-        accounts.add(account);
-      }
-      return accounts;
+      return convertResultSet(rs);
     } catch (SQLException e) {
-      // record failure, parse exception, ...
+      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
+      // For now, assume connection issue.
       dataAccessor.reset();
       throw e;
     }
+  }
+
+  /**
+   * Updates an existing account in the database.
+   * @param account the account to update.
+   * @throws SQLException
+   */
+  public void updateAccount(Account account) throws SQLException {
+    try {
+      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
+      updateStatement.setString(1, AccountSerdeUtils.accountToJson(account, true));
+      updateStatement.setInt(2, account.getSnapshotVersion());
+      updateStatement.setInt(3, account.getId());
+      updateStatement.executeUpdate();
+    } catch (SQLException e) {
+      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
+      // For now, assume connection issue.
+      dataAccessor.reset();
+      throw e;
+    }
+  }
+
+  /**
+   * Convert a query result set to a list of accounts.
+   * @param resultSet the result set.
+   * @return a list of {@link Account}s.
+   * @throws SQLException
+   */
+  private List<Account> convertResultSet(ResultSet resultSet) throws SQLException {
+    List<Account> accounts = new ArrayList<>();
+    while (resultSet.next()) {
+      String accountJson = resultSet.getString(ACCOUNT_INFO);
+      Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
+      Account account = AccountSerdeUtils.accountFromJson(accountJson);
+      //account.setLastModifiedTime(lastModifiedTime);
+      accounts.add(account);
+    }
+    return accounts;
   }
 }
