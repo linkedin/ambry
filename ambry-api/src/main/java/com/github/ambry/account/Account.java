@@ -133,8 +133,6 @@ public class Account {
         if (containerArray != null) {
           for (int index = 0; index < containerArray.length(); index++) {
             Container container = Container.fromJson(containerArray.getJSONObject(index), id);
-            checkParentAccountIdInContainers(container);
-            checkDuplicateContainerNameOrId(container);
             updateContainerMap(container);
           }
         }
@@ -161,8 +159,6 @@ public class Account {
     checkRequiredFieldsForBuild();
     if (containers != null) {
       for (Container container : containers) {
-        checkParentAccountIdInContainers(container);
-        checkDuplicateContainerNameOrId(container);
         updateContainerMap(container);
       }
     }
@@ -309,7 +305,9 @@ public class Account {
    * Adds a {@link Container} to this account and updates internal maps accordingly.
    * @param container The container to update this account.
    */
-  private void updateContainerMap(Container container) {
+  public void updateContainerMap(Container container) {
+    checkParentAccountIdInContainers(container);
+    checkDuplicateContainerNameOrId(container);
     containerIdToContainerMap.put(container.getId(), container);
     containerNameToContainerMap.put(container.getName(), container);
   }

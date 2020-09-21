@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.utils.Pair;
 import java.io.Closeable;
 import java.util.Collection;
 import java.util.HashSet;
@@ -106,6 +107,36 @@ public interface AccountService extends Closeable {
    *          exist.
    */
   public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
+
+  /**
+   * Add a new container to an existing account.
+   * @param accountName the name of account in which new container will be added.
+   * @param newContainer the new container to add.
+   * @return a pair of account id and container id strings associated with existing account and new container.
+   */
+  default Pair<String, String> addContainer(String accountName, Container newContainer) {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
+   * Update attributes of an existing container.
+   * @param accountName the name of account which container belongs to.
+   * @param updatedContainer the updated {@link Container} used to replace current one.
+   * @return {@code true} if container is successfully updated. {@code false} otherwise.
+   */
+  default boolean updateContainer(String accountName, Container updatedContainer) {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
+   * Get an existing container from a given account.
+   * @param accountName the name of account which container belongs to.
+   * @param containerId the id of container to get.
+   * @return the requested {@link Container} object or null if not present.
+   */
+  default Container getContainer(String accountName, String containerId) {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
 
   /**
    * Gets a collection of {@link Container}s in the given status.

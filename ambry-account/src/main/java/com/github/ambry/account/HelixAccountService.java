@@ -18,10 +18,13 @@ import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.router.Router;
 import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
@@ -36,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.AccountUtils.*;
+import static com.github.ambry.account.Container.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -247,6 +251,69 @@ public class HelixAccountService extends AbstractAccountService implements Accou
   }
 
   /**
+   * {@inheritDoc}
+   */
+  @Override
+  public Pair<String, String> addContainer(String accountName, Container newContainer) {
+    checkOpen();
+    if (accountName == null || accountName.isEmpty() || newContainer == null || newContainer.getName() == null
+        || newContainer.getName().isEmpty()) {
+      logger.error("Account name: {} or container: {} is invalid", accountName, newContainer);
+      throw new IllegalArgumentException("Account or container name is null or empty");
+    }
+    Account account = getAccountByName(accountName);
+    if (account == null) {
+      logger.error("Account {} is not found", accountName);
+      throw new IllegalArgumentException("Account " + accountName + " is not found");
+    }
+    String accountId = String.valueOf(account.getId());
+    for (Container container : account.getAllContainers()) {
+      // make sure there is no conflict container (conflict means a container with same name but different attributes already exists).
+      if (container.getName().equals(newContainer.getName())) {
+        if (containerEditableFieldsAreSame(container, newContainer)) {
+          // If an exactly same container already exists, we directly return its id. Adding same container multiple times
+          // should be no-op.
+          return new Pair<>(accountId, String.valueOf(container.getId()));
+        } else {
+          logger.error("A container: {} already exists with different attributes", container.getName());
+          throw new IllegalArgumentException("There is a conflicting container in account " + accountName);
+        }
+      }
+    }
+    // if code reaches here, it means no duplicate container in this account
+    // generate container id for new container
+    short nextContainerId = account.getAllContainers()
+        .stream()
+        .map(Container::getId)
+        .max(Short::compareTo)
+        .map(maxId -> (short) (maxId + 1))
+        .orElse(CONTAINER_ID_START_RANGE);
+    // construct a container based on input container and next containerId
+    Container containerToAdd = new ContainerBuilder(nextContainerId, newContainer.getName(), newContainer.getStatus(),
+        newContainer.getDescription(), account.getId()).setCacheable(newContainer.isCacheable())
+        .setEncrypted(newContainer.isEncrypted())
+        .setMediaScanDisabled(newContainer.isMediaScanDisabled())
+        .setTtlRequired(newContainer.isTtlRequired())
+        .setReplicationPolicy(newContainer.getReplicationPolicy())
+        .setSecurePathRequired(newContainer.isSecurePathRequired())
+        .setBackupEnabled(newContainer.isBackupEnabled())
+        .build();
+    account.updateContainerMap(containerToAdd);
+    List<Account> accounts = Collections.singletonList(account);
+    boolean hasSucceeded = false;
+    if (accountInfoMapRef.get().hasConflictingAccount(accounts)) {
+      logger.debug("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
+      accountServiceMetrics.updateAccountErrorCount.inc();
+    } else {
+      hasSucceeded = accountMetadataStore.updateAccounts(accounts);
+    }
+    if (!hasSucceeded) {
+      throw new IllegalStateException("Account update failed for " + accountName);
+    }
+    return new Pair<>(accountId, String.valueOf(nextContainerId));
+  }
+
+  /**
    * Helper function to update {@link Account} metadata.
    * @param accounts The {@link Account} metadata to update.
    * @param accountMetadataStore The {@link AccountMetadataStore}.
@@ -359,7 +426,8 @@ public class HelixAccountService extends AbstractAccountService implements Accou
       for (Container container : deleteInProgressContainerSet) {
         String containerIdToString = "C[" + container.getId() + "]";
         String accountIdToString = "A[" + container.getParentAccountId() + "]";
-        if (nonEmptyContainersByAccount.containsKey(accountIdToString) && nonEmptyContainersByAccount.get(accountIdToString).contains(containerIdToString)) {
+        if (nonEmptyContainersByAccount.containsKey(accountIdToString) && nonEmptyContainersByAccount.get(
+            accountIdToString).contains(containerIdToString)) {
           logger.debug("Container {} has not been compacted yet", container);
         } else {
           logger.info("Container {} has been compacted already", container);
@@ -399,9 +467,9 @@ public class HelixAccountService extends AbstractAccountService implements Accou
           Account accountToEdit = accountToUpdateMap.computeIfAbsent(accountId, this::getAccountById);
           Container containerToEdit = accountToEdit.getContainerById(container.getId());
           Container editedContainer =
-                  new ContainerBuilder(containerToEdit).setStatus(Container.ContainerStatus.INACTIVE).build();
+              new ContainerBuilder(containerToEdit).setStatus(Container.ContainerStatus.INACTIVE).build();
           accountToUpdateMap.put(accountId,
-                  new AccountBuilder(accountToEdit).addOrUpdateContainer(editedContainer).build());
+              new AccountBuilder(accountToEdit).addOrUpdateContainer(editedContainer).build());
         });
         success = updateAccounts(accountToUpdateMap.values());
         if (!success) {
@@ -410,7 +478,8 @@ public class HelixAccountService extends AbstractAccountService implements Accou
         }
       }
       if (!success) {
-        logger.error("Failed to mark containers INACTIVE in set : {}  after {} retries", inactiveContainerCandidateSet, config.maxRetryCountOnUpdateFailure);
+        logger.error("Failed to mark containers INACTIVE in set : {}  after {} retries", inactiveContainerCandidateSet,
+            config.maxRetryCountOnUpdateFailure);
         accountServiceMetrics.accountUpdatesToZkErrorCount.inc();
       }
     }

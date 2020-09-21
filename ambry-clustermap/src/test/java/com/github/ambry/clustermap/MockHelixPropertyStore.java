@@ -41,6 +41,7 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
   private CountDownLatch readLatch = null;
   private boolean shouldFailSetOperation = false;
   private boolean shouldRemoveRecordBeforeNotify = false;
+  private boolean exceptionDuringUpdater = false;
 
   /**
    * Constructor for {@code MockHelixPropertyStore}.
@@ -103,7 +104,9 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
   @Override
   public boolean update(String path, DataUpdater<T> updater, int options) {
     T newRecord = null;
-    boolean exceptionDuringUpdater = false;
+    if (exceptionDuringUpdater) {
+      return false;
+    }
     try {
       newRecord = updater.update(pathToRecords.get(path));
     } catch (Exception e) {
@@ -252,6 +255,14 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
    */
   public void setReadLatch(CountDownLatch latch) {
     readLatch = latch;
+  }
+
+  /**
+   * Whether to throw exception if update method is called.
+   * @param exceptionDuringUpdater whether exception occurs during updater.
+   */
+  public void setExceptionDuringUpdater(boolean exceptionDuringUpdater) {
+    this.exceptionDuringUpdater = exceptionDuringUpdater;
   }
 
   /**
