@@ -48,7 +48,7 @@ public class MySqlAccountServiceTest {
    * Tests in-memory cache is updated with accounts from mysql db store on start up
    */
   @Test
-  public void testInitCacheOnStartUp() throws SQLException {
+  public void testInitCacheOnStartUp() throws SQLException, IOException {
     Container testContainer =
         new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
             (short) 1).build();
@@ -72,7 +72,7 @@ public class MySqlAccountServiceTest {
    * 2. update existing {@link Account} by adding new {@link Container} to an existing {@link Account};
    */
   @Test
-  public void testUpdateAccounts() throws SQLException {
+  public void testUpdateAccounts() throws SQLException, IOException {
 
     MySqlAccountStore mockMySqlAccountStore = mock(MySqlAccountStore.class);
     when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(new ArrayList<>());
@@ -145,6 +145,10 @@ public class MySqlAccountServiceTest {
     // verify that close() stops the background updater thread
     mySqlAccountService.close();
 
+    // force shutdown background updater thread. As the default timeout value is 1 minute, it is possible that thread is
+    // present after close() due to actively executing task.
+    ((MySqlAccountService) mySqlAccountService).getScheduler().shutdownNow();
+
     assertEquals("Background account updater thread should be stopped", 0,
         numThreadsByThisName(MySqlAccountService.MYSQL_ACCOUNT_UPDATER_PREFIX));
   }
@@ -153,7 +157,7 @@ public class MySqlAccountServiceTest {
    * Tests disabling of background updater by setting {@link MySqlAccountServiceConfig#UPDATER_POLLING_INTERVAL_SECONDS} to 0.
    */
   @Test
-  public void testDisableBackgroundUpdater() {
+  public void testDisableBackgroundUpdater() throws IOException {
 
     mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
     mySqlAccountService = new MySqlAccountService(new AccountServiceMetrics(new MetricRegistry()),
@@ -166,7 +170,7 @@ public class MySqlAccountServiceTest {
    * Tests disabling account updates by setting {@link MySqlAccountServiceConfig#UPDATE_DISABLED} to true.
    */
   @Test
-  public void testUpdateDisabled() {
+  public void testUpdateDisabled() throws IOException {
 
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "true");
     MySqlAccountStore mockMySqlAccountStore = mock(MySqlAccountStore.class);
@@ -184,7 +188,7 @@ public class MySqlAccountServiceTest {
    * in name.
    */
   @Test
-  public void testUpdateNameConflictingAccounts() {
+  public void testUpdateNameConflictingAccounts() throws IOException {
     AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     mySqlAccountService = new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mock(MySqlAccountStore.class));
@@ -201,7 +205,7 @@ public class MySqlAccountServiceTest {
    * in id.
    */
   @Test
-  public void testUpdateIdConflictingAccounts() {
+  public void testUpdateIdConflictingAccounts() throws IOException {
     AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     mySqlAccountService = new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mock(MySqlAccountStore.class));
@@ -217,7 +221,7 @@ public class MySqlAccountServiceTest {
    * Tests updating a collection of {@link Account}s, where there are duplicate {@link Account}s in id and name.
    */
   @Test
-  public void testUpdateDuplicateAccounts() {
+  public void testUpdateDuplicateAccounts() throws IOException {
     AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     mySqlAccountService = new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mock(MySqlAccountStore.class));
@@ -248,7 +252,7 @@ public class MySqlAccountServiceTest {
    *
    */
   @Test
-  public void testConflictingUpdatesWithAccounts() {
+  public void testConflictingUpdatesWithAccounts() throws IOException {
     AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     mySqlAccountService = new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mock(MySqlAccountStore.class));
@@ -301,7 +305,7 @@ public class MySqlAccountServiceTest {
    * Tests name/id conflicts in Containers
    */
   @Test
-  public void testConflictingUpdatesWithContainers() {
+  public void testConflictingUpdatesWithContainers() throws IOException {
     AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     mySqlAccountService = new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mock(MySqlAccountStore.class));

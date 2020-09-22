@@ -15,12 +15,16 @@ package com.github.ambry.account;
 
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -43,20 +47,24 @@ public class MySqlAccountService implements AccountService {
   private final AccountServiceMetrics accountServiceMetrics;
   private final MySqlAccountServiceConfig config;
   // in-memory cache for storing account and container metadata
-  private final AccountInfoMap accountInfoMap;
+  private AccountInfoMap accountInfoMap;
   private final ReadWriteLock infoMapLock = new ReentrantReadWriteLock();
   private final ScheduledExecutorService scheduler;
+  private final BackupFileManager backupFileManager;
   private volatile MySqlAccountStore mySqlAccountStore;
 
   public MySqlAccountService(AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config,
-      MySqlAccountStore mySqlAccountStore) {
+      MySqlAccountStore mySqlAccountStore) throws IOException {
     this.accountServiceMetrics = accountServiceMetrics;
     this.config = config;
     this.mySqlAccountStore = mySqlAccountStore;
-    this.accountInfoMap = new AccountInfoMap(accountServiceMetrics);
     this.scheduler =
         config.updaterPollingIntervalSeconds > 0 ? Utils.newScheduler(1, MYSQL_ACCOUNT_UPDATER_PREFIX, false) : null;
-    // TODO: create backup manager to manage local back up copies of Account and container metadata and lastModifiedTime
+    // create backup file manager for persisting and retrieving Account metadata on local disk
+    backupFileManager = new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
+    // Initialize cache from backup file on disk
+    initCacheFromBackupFile();
+    // Fetches added or modified accounts and containers from mysql db and schedules to execute it periodically
     initialFetchAndSchedule();
     // TODO: Subscribe to notifications from ZK
   }
@@ -72,18 +80,29 @@ public class MySqlAccountService implements AccountService {
   }
 
   /**
-   * Initialize in-memory cache by fetching all the {@link Account}s and {@link Container}s metadata records.
-   * It consists of 2 steps:
-   * 1. Check local disk for back up copy and load metadata and last modified time of Accounts/Containers into cache.
-   * 2. Fetch added/modified accounts and containers from mysql database since the last modified time (found in step 1)
-   *    and load into cache.
+   * Initializes in-memory {@link AccountInfoMap} with accounts and containers stored in backup copy on local disk.
+   */
+  private void initCacheFromBackupFile() {
+    long aMonthAgo = SystemTime.getInstance().seconds() - TimeUnit.DAYS.toSeconds(30);
+    Map<String, String> accountMapFromFile = backupFileManager.getLatestAccountMap(aMonthAgo);
+    AccountInfoMap accountInfoMap = null;
+    if (accountMapFromFile != null) {
+      try {
+        accountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMapFromFile);
+      } catch (Exception e) {
+        logger.warn("Failure in parsing of Account Metadata from local backup file", e);
+      }
+    }
+    if (accountInfoMap == null) {
+      accountInfoMap = new AccountInfoMap(accountServiceMetrics);
+    }
+    this.accountInfoMap = accountInfoMap;
+  }
+
+  /**
+   * Fetches added or modified accounts and containers from mysql database and schedules to execute periodically.
    */
   private void initialFetchAndSchedule() {
-
-    // TODO: Check local disk for back up copy and load metadata and last modified time into cache.
-
-    // Fetch added/modified accounts and containers from mysql db since LMT and update cache. Also, schedule to
-    // execute the logic periodically.
     fetchAndUpdateCache();
     if (scheduler != null) {
       scheduler.scheduleAtFixedRate(this::fetchAndUpdateCache, config.updaterPollingIntervalSeconds,
@@ -94,32 +113,57 @@ public class MySqlAccountService implements AccountService {
   }
 
   /**
-   * Fetches all the accounts and containers that have been created or modified since the last sync time and loads into
-   * cache.
+   * Fetches all the accounts and containers that have been created or modified in the mysql database since the
+   * last modified/sync time and loads into in-memory {@link AccountInfoMap}.
    */
   private void fetchAndUpdateCache() {
     try {
       // Retry connection to mysql if we couldn't set up previously
       createMySqlAccountStore();
 
-      // get the last modified/sync time of accounts and containers from cache
-      long lastModifiedTime = accountInfoMap.getLastModifiedTime();
-
-      // Fetch all added/modified accounts and containers from MySql database since LMT
-      Collection<Account> accounts = mySqlAccountStore.getNewAccounts(lastModifiedTime);
-      Collection<Container> containers = mySqlAccountStore.getNewContainers(lastModifiedTime);
-
-      // Update cache with fetched accounts and containers
-      infoMapLock.writeLock().lock();
+      // Find max LMT of Accounts and containers in cache.
+      long lastModifiedTime = 0;
+      infoMapLock.readLock().lock();
       try {
-        accountInfoMap.updateAccounts(accounts);
-        accountInfoMap.updateContainers(containers);
+        Collection<Account> accountsInCache = accountInfoMap.getAccounts();
+        for (Account accountInCache : accountsInCache) {
+          lastModifiedTime = Math.max(lastModifiedTime, accountInCache.getLastModifiedTime());
+          for (Container containerInCache : accountInCache.getAllContainers()) {
+            lastModifiedTime = Math.max(lastModifiedTime, containerInCache.getLastModifiedTime());
+          }
+        }
       } finally {
-        infoMapLock.writeLock().unlock();
+        infoMapLock.readLock().unlock();
       }
 
-      // TODO: Find the max LMT in the fetched accounts and containers and update the cache
+      // Fetch all added/modified accounts and containers from MySql database since LMT
+      Collection<Account> updatedAccountsInDB = mySqlAccountStore.getNewAccounts(lastModifiedTime);
+      Collection<Container> updatedContainersInDB = mySqlAccountStore.getNewContainers(lastModifiedTime);
 
+      if (!updatedAccountsInDB.isEmpty() || !updatedContainersInDB.isEmpty()) {
+        // Update cache with fetched accounts and containers
+        infoMapLock.writeLock().lock();
+        try {
+          accountInfoMap.addOrUpdateAccounts(updatedAccountsInDB);
+          accountInfoMap.addOrUpdateContainers(updatedContainersInDB);
+        } finally {
+          infoMapLock.writeLock().unlock();
+        }
+
+        // Persist/Dump cache to back up file on disk.
+        Collection<Account> accountCollection;
+        infoMapLock.readLock().lock();
+        try {
+          accountCollection = accountInfoMap.getAccounts();
+        } finally {
+          infoMapLock.readLock().unlock();
+        }
+        Map<String, String> accountMap = new HashMap<>();
+        accountCollection.forEach(
+            account -> accountMap.put(Short.toString(account.getId()), account.toJson(false).toString()));
+        backupFileManager.persistAccountMap(accountMap, backupFileManager.getLatestVersion() + 1,
+            SystemTime.getInstance().seconds());
+      }
     } catch (SQLException e) {
       logger.error("Fetching Accounts from MySql DB failed", e);
     }
@@ -208,12 +252,11 @@ public class MySqlAccountService implements AccountService {
     // Update in-memory cache with updated accounts
     infoMapLock.writeLock().lock();
     try {
-      accountInfoMap.updateAccounts(accounts);
+      accountInfoMap.addOrUpdateAccounts(accounts);
     } finally {
       infoMapLock.writeLock().unlock();
     }
 
-    // TODO: persist updated accounts and max timestamp to local back up file.
     // TODO: can notify account updates to other nodes via ZK .
 
     return true;
@@ -250,6 +293,10 @@ public class MySqlAccountService implements AccountService {
     if (scheduler != null) {
       shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMinutes, TimeUnit.MINUTES);
     }
+  }
+
+  ExecutorService getScheduler() {
+    return scheduler;
   }
 
   /**

@@ -40,8 +40,6 @@ class AccountInfoMap {
   private final static Logger logger = LoggerFactory.getLogger(AccountInfoMap.class);
   private final Map<String, Account> nameToAccountMap;
   private final Map<Short, Account> idToAccountMap;
-  // used to track last modified time of the accounts and containers in this cache
-  private long lastModifiedTime = 0;
 
   /**
    * Constructor for an empty {@code AccountInfoMap}.
@@ -138,7 +136,7 @@ class AccountInfoMap {
   AccountInfoMap(List<Account> accounts) {
     nameToAccountMap = new HashMap<>();
     idToAccountMap = new HashMap<>();
-    updateAccounts(accounts);
+    addOrUpdateAccounts(accounts);
   }
 
   /**
@@ -234,20 +232,21 @@ class AccountInfoMap {
   }
 
   /**
-   * Updates the {@code AccountInfoMap} with the input {@link Collection} of {@link Account}s.
+   * Adds or updates the {@code AccountInfoMap} with the input {@link Collection} of {@link Account}s.
    * @param accounts collection of {@link Account}s to be added.
    */
-  void updateAccounts(Collection<Account> accounts) {
+  void addOrUpdateAccounts(Collection<Account> accounts) {
     for (Account account : accounts) {
       Account accountToUpdate = idToAccountMap.get(account.getId());
       if (accountToUpdate == null) {
         accountToUpdate = account;
       } else {
-        // remove name to Account mapping for existing account as name might have been updated too
+        // Remove name to Account mapping for existing account as name might have been updated.
         nameToAccountMap.remove(accountToUpdate.getName());
         AccountBuilder accountBuilder = new AccountBuilder(accountToUpdate).name(account.getName())
             .status(account.getStatus())
-            .snapshotVersion(account.getSnapshotVersion());
+            .snapshotVersion(account.getSnapshotVersion())
+            .lastModifiedTime(account.getLastModifiedTime());
         account.getAllContainers().forEach(accountBuilder::addOrUpdateContainer);
         accountToUpdate = accountBuilder.build();
       }
@@ -257,22 +256,22 @@ class AccountInfoMap {
   }
 
   /**
-   * Updates the {@code AccountInfoMap} with the input {@link Collection} of {@link Container}s.
+   * Adds or updates the {@code AccountInfoMap} with the input {@link Collection} of {@link Container}s.
    * @param containers collection of {@link Container}s to be added.
    */
-  void updateContainers(Collection<Container> containers) {
+  void addOrUpdateContainers(Collection<Container> containers) {
     for (Container container : containers) {
-      addContainer(container.getParentAccountId(), container);
+      addOrUpdateContainer(container.getParentAccountId(), container);
     }
   }
 
   /**
-   * Adds a {@link Container} to the {@link Account}.
+   * Adds or updates a {@link Container} to a parent {@link Account}.
    * @param accountId The id of the parent {@link Account} for this {@link Container}.
    * @param container {@link Container} to be added.
    * @throws IllegalArgumentException if {@link Account} with provided id doesn't exist.
    */
-  void addContainer(short accountId, Container container) {
+  void addOrUpdateContainer(short accountId, Container container) {
     Account parentAccount = idToAccountMap.get(accountId);
     if (parentAccount == null) {
       throw new IllegalArgumentException("Account with ID " + accountId + "doesn't exist");
@@ -305,13 +304,5 @@ class AccountInfoMap {
   Container getContainerByNameForAccount(Short accountId, String name) {
     Account parentAccount = idToAccountMap.get(accountId);
     return parentAccount == null ? null : parentAccount.getContainerByName(name);
-  }
-
-  /**
-   * Gets the last modified time of accounts and containers in this in-memory cache
-   * @return the last modified time of accounts and containers
-   */
-  long getLastModifiedTime() {
-    return lastModifiedTime;
   }
 }

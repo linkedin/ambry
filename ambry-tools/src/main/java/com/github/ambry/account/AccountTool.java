@@ -412,7 +412,8 @@ public class AccountTool {
     accountServiceConfig = new HelixAccountServiceConfig(verifiableProperties);
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
     registry = new MetricRegistry();
-    backupFileManager = new BackupFileManager(new AccountServiceMetrics(registry), accountServiceConfig);
+    backupFileManager = new BackupFileManager(new AccountServiceMetrics(registry), accountServiceConfig.backupDir,
+        accountServiceConfig.maxBackupFileCount);
     helixStore = CommonUtils.createHelixPropertyStore(accountServiceConfig.zkClientConnectString, storeConfig, null);
     routerStore = getRouterStore();
   }

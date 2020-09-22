@@ -14,6 +14,7 @@
 package com.github.ambry.account.mysql;
 
 import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountSerdeUtils;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -21,6 +22,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+import org.json.JSONObject;
 
 
 /**
@@ -123,7 +125,7 @@ public class AccountDao {
       String accountJson = resultSet.getString(ACCOUNT_INFO);
       Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
       Account account = AccountSerdeUtils.accountFromJson(accountJson);
-      //account.setLastModifiedTime(lastModifiedTime);
+      account = new AccountBuilder(account).lastModifiedTime(lastModifiedTime.getTime()).build();
       accounts.add(account);
     }
     return accounts;

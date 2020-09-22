@@ -95,7 +95,7 @@ abstract class AccountMetadataStore {
     }
     Map<String, String> newAccountMap = fetchAccountMetadataFromZNRecord(znRecord);
     if (newAccountMap != null) {
-      backupFileManager.persistAccountMap(newAccountMap, stat);
+      backupFileManager.persistAccountMap(newAccountMap, stat.getVersion(), stat.getMtime() / 1000);
     }
     return newAccountMap;
   }
