@@ -39,7 +39,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.AccountUtils.*;
-import static com.github.ambry.account.Container.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -270,7 +269,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
     for (Container container : account.getAllContainers()) {
       // make sure there is no conflict container (conflict means a container with same name but different attributes already exists).
       if (container.getName().equals(newContainer.getName())) {
-        if (containerEditableFieldsAreSame(container, newContainer)) {
+        if (container.isSameContainer(newContainer)) {
           // If an exactly same container already exists, we directly return its id. Adding same container multiple times
           // should be no-op.
           return new Pair<>(accountId, String.valueOf(container.getId()));
@@ -287,17 +286,10 @@ public class HelixAccountService extends AbstractAccountService implements Accou
         .map(Container::getId)
         .max(Short::compareTo)
         .map(maxId -> (short) (maxId + 1))
-        .orElse(CONTAINER_ID_START_RANGE);
+        .orElse(config.containerIdStartNumber);
     // construct a container based on input container and next containerId
-    Container containerToAdd = new ContainerBuilder(nextContainerId, newContainer.getName(), newContainer.getStatus(),
-        newContainer.getDescription(), account.getId()).setCacheable(newContainer.isCacheable())
-        .setEncrypted(newContainer.isEncrypted())
-        .setMediaScanDisabled(newContainer.isMediaScanDisabled())
-        .setTtlRequired(newContainer.isTtlRequired())
-        .setReplicationPolicy(newContainer.getReplicationPolicy())
-        .setSecurePathRequired(newContainer.isSecurePathRequired())
-        .setBackupEnabled(newContainer.isBackupEnabled())
-        .build();
+    Container containerToAdd =
+        new ContainerBuilder(newContainer).setId(nextContainerId).setParentAccountId(account.getId()).build();
     account.updateContainerMap(containerToAdd);
     List<Account> accounts = Collections.singletonList(account);
     boolean hasSucceeded = false;

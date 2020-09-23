@@ -30,8 +30,11 @@ public class HelixAccountServiceConfig {
   public static final String ENABLE_SERVE_FROM_BACKUP = HELIX_ACCOUNT_SERVICE_PREFIX + "enable.serve.from.backup";
   public static final String TOTAL_NUMBER_OF_VERSION_TO_KEEP =
       HELIX_ACCOUNT_SERVICE_PREFIX + "total.number.of.version.to.keep";
-  public static final String MAX_RETRY_COUNT_ON_UPDATE_FAILURE = HELIX_ACCOUNT_SERVICE_PREFIX + "max.retry.count.on.update.failure";
+  public static final String MAX_RETRY_COUNT_ON_UPDATE_FAILURE =
+      HELIX_ACCOUNT_SERVICE_PREFIX + "max.retry.count.on.update.failure";
   public static final String RETRY_DELAY_MS = HELIX_ACCOUNT_SERVICE_PREFIX + "retry.delay.ms";
+  public static final String CONTAINER_ID_START_NUMBER = HELIX_ACCOUNT_SERVICE_PREFIX + "container.id.start.number";
+
   /**
    * The ZooKeeper server address. This config is required when using {@code HelixAccountService}.
    */
@@ -114,6 +117,10 @@ public class HelixAccountServiceConfig {
   @Default("1000")
   public final long retryDelayMs;
 
+  @Config(CONTAINER_ID_START_NUMBER)
+  @Default("1")
+  public final short containerIdStartNumber;
+
   public HelixAccountServiceConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY);
     updaterPollingIntervalMs =
@@ -129,5 +136,7 @@ public class HelixAccountServiceConfig {
         verifiableProperties.getIntInRange(TOTAL_NUMBER_OF_VERSION_TO_KEEP, 100, 1, Integer.MAX_VALUE);
     maxRetryCountOnUpdateFailure = verifiableProperties.getIntInRange(MAX_RETRY_COUNT_ON_UPDATE_FAILURE, 10, 1, 100);
     retryDelayMs = verifiableProperties.getLongInRange(RETRY_DELAY_MS, 1000, 1, Long.MAX_VALUE);
+    containerIdStartNumber =
+        verifiableProperties.getShortInRange(CONTAINER_ID_START_NUMBER, (short) 0, (short) 0, Short.MAX_VALUE);
   }
 }

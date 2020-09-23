@@ -84,7 +84,6 @@ public class Container {
   static final boolean CACHEABLE_DEFAULT_VALUE = true;
   static final Set<String> CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE = Collections.emptySet();
 
-  public static final short CONTAINER_ID_START_RANGE = 8;
   public static final short JSON_VERSION_1 = 1;
   public static final short JSON_VERSION_2 = 2;
 
@@ -481,20 +480,19 @@ public class Container {
   }
 
   /**
-   * Check if two containers' editable fields are same.
-   * @param container1 the {@link Container} to compare.
-   * @param container2 the {@link Container} to compare.
-   * @return {@code true} if two containers are equivalent in terms of editable fields. {@code false} otherwise.
+   * Check if passed in container is same with current one.
+   * @param containerToCompare the {@link Container} to compare.
+   * @return {@code true} if two containers are equivalent. {@code false} otherwise.
    */
-  public static boolean containerEditableFieldsAreSame(Container container1, Container container2) {
+  boolean isSameContainer(Container containerToCompare) {
     //@formatter:off
-    return Objects.equals(container1.isCacheable(), container2.isCacheable())
-        && Objects.equals(container1.isEncrypted(), container2.isEncrypted())
-        && Objects.equals(container1.isMediaScanDisabled(), container2.isMediaScanDisabled())
-        && Objects.equals(container1.isTtlRequired(), container2.isTtlRequired())
-        && Objects.equals(container1.getReplicationPolicy(), container2.getReplicationPolicy())
-        && Objects.equals(container1.isSecurePathRequired(), container2.isSecurePathRequired())
-        && Objects.equals(container1.isBackupEnabled(), container2.isBackupEnabled());
+    return Objects.equals(this.isCacheable(), containerToCompare.isCacheable())
+        && Objects.equals(this.isEncrypted(), containerToCompare.isEncrypted())
+        && Objects.equals(this.isMediaScanDisabled(), containerToCompare.isMediaScanDisabled())
+        && Objects.equals(this.isTtlRequired(), containerToCompare.isTtlRequired())
+        && Objects.equals(this.getReplicationPolicy(), containerToCompare.getReplicationPolicy())
+        && Objects.equals(this.isSecurePathRequired(), containerToCompare.isSecurePathRequired())
+        && Objects.equals(this.isBackupEnabled(), containerToCompare.isBackupEnabled());
     //@formatter:on
   }
 
