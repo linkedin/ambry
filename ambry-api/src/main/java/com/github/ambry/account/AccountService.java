@@ -131,10 +131,10 @@ public interface AccountService extends Closeable {
   /**
    * Get an existing container from a given account.
    * @param accountName the name of account which container belongs to.
-   * @param containerId the id of container to get.
+   * @param containerName the name of container to get.
    * @return the requested {@link Container} object or null if not present.
    */
-  default Container getContainer(String accountName, String containerId) {
+  default Container getContainer(String accountName, String containerName) {
     throw new UnsupportedOperationException("This method is not supported");
   }
 
