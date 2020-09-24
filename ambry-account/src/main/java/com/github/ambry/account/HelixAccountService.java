@@ -253,16 +253,17 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    * {@inheritDoc}
    */
   @Override
-  public Collection<Container> addContainers(String accountName, Collection<Container> containers) {
+  public Collection<Container> addContainers(String accountName, Collection<Container> containers)
+      throws AccountServiceException {
     checkOpen();
     // input validation
     if (accountName == null || accountName.isEmpty() || containers == null || containers.isEmpty()) {
-      throw new IllegalArgumentException("Account or container is null or empty");
+      throw new AccountServiceException("Account or container is null or empty", AccountServiceErrorCode.BadRequest);
     }
     Account account = getAccountByName(accountName);
     if (account == null) {
       logger.error("Account {} is not found", accountName);
-      throw new IllegalArgumentException("Account " + accountName + " is not found");
+      throw new AccountServiceException("Account " + accountName + " is not found", AccountServiceErrorCode.NotFound);
     }
     Set<Container> existingContainers = new HashSet<>();
     Set<Container> newContainers = new HashSet<>(containers);
@@ -278,7 +279,8 @@ public class HelixAccountService extends AbstractAccountService implements Accou
           // should be no-op.
           existingContainers.add(container);
         } else {
-          throw new IllegalArgumentException("There is a conflicting container in account " + accountName);
+          throw new AccountServiceException("There is a conflicting container in account " + accountName,
+              AccountServiceErrorCode.ResourceConflict);
         }
       }
     }
@@ -305,7 +307,8 @@ public class HelixAccountService extends AbstractAccountService implements Accou
       accountCopy.updateContainerMap(createdContainers);
       boolean hasSucceeded = updateAccounts(Collections.singletonList(accountCopy));
       if (!hasSucceeded) {
-        throw new IllegalStateException("Account update failed for " + accountName);
+        throw new AccountServiceException("Account update failed for " + accountName,
+            AccountServiceErrorCode.AccountUpdateError);
       }
       // after metadata store is successfully updated, we safely update original account
       account.updateContainerMap(createdContainers);

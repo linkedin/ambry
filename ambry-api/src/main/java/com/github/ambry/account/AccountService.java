@@ -113,8 +113,10 @@ public interface AccountService extends Closeable {
    * @param containers a collection of containers to add.
    * @return a collection of containers that are successfully added. If original input containers includes existing one,
    *         the existing containers will be ignored and not present in the result.
+   * @throws AccountServiceException if exception occurs when adding containers.
    */
-  default Collection<Container> addContainers(String accountName, Collection<Container> containers) {
+  default Collection<Container> addContainers(String accountName, Collection<Container> containers)
+      throws AccountServiceException {
     throw new UnsupportedOperationException("This method is not supported");
   }
 
@@ -123,8 +125,10 @@ public interface AccountService extends Closeable {
    * @param accountName the name of account which container belongs to.
    * @param containers a collection of {@link Container} used to update current ones.
    * @return a collection of updated containers.
+   * @throws AccountServiceException if exception occurs when updating containers.
    */
-  default Collection<Container> updateContainers(String accountName, Collection<Container> containers) {
+  default Collection<Container> updateContainers(String accountName, Collection<Container> containers)
+      throws AccountServiceException {
     throw new UnsupportedOperationException("This method is not supported");
   }
 
@@ -133,8 +137,9 @@ public interface AccountService extends Closeable {
    * @param accountName the name of account which container belongs to.
    * @param containerName the name of container to get.
    * @return the requested {@link Container} object or null if not present.
+   * @throws AccountServiceException if exception occurs when getting container.
    */
-  default Container getContainer(String accountName, String containerName) {
+  default Container getContainer(String accountName, String containerName) throws AccountServiceException {
     throw new UnsupportedOperationException("This method is not supported");
   }
 

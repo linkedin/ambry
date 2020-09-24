@@ -367,7 +367,7 @@ public class HelixAccountServiceTest {
    * Test adding container to an existing account.
    */
   @Test
-  public void testAddContainer() {
+  public void testAddContainer() throws Exception {
     assumeTrue(!useNewZNodePath);
     accountService = mockHelixAccountServiceFactory.getAccountService();
     assertEquals("The number of account in HelixAccountService is incorrect", 0,
@@ -380,8 +380,8 @@ public class HelixAccountServiceTest {
     try {
       accountService.addContainers("", null);
       fail("should fail because input is invalid");
-    } catch (IllegalArgumentException e) {
-      // expected
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.BadRequest, e.getErrorCode());
     }
 
     // 2. test account is not found
@@ -392,8 +392,8 @@ public class HelixAccountServiceTest {
     try {
       accountService.addContainers(fakeAccountName, Collections.singleton(containerToAdd1));
       fail("should fail because account is not found");
-    } catch (IllegalArgumentException e) {
-      // expected
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
     }
 
     // 3. test conflict container (existing container has same name but different attributes)
@@ -401,8 +401,8 @@ public class HelixAccountServiceTest {
     try {
       accountService.addContainers(refAccountName, Collections.singleton(conflictContainer));
       fail("should fail because there is a conflicting container");
-    } catch (IllegalArgumentException e) {
-      // expected
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
     }
 
     // 4. test adding same container twice, should be no-op and return result should be empty
@@ -417,8 +417,8 @@ public class HelixAccountServiceTest {
     try {
       accountService.addContainers(refAccountName, Collections.singleton(containerToAdd1));
       fail("should fail because exception occurs when updating ZK");
-    } catch (IllegalStateException e) {
-      // expected
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.AccountUpdateError, e.getErrorCode());
     }
     mockHelixStore.setExceptionDuringUpdater(false);
 
