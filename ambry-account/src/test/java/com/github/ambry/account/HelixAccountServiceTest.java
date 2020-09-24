@@ -405,13 +405,10 @@ public class HelixAccountServiceTest {
       // expected
     }
 
-    // 4. test adding same container twice, should be no-op and return existing container id immediately
+    // 4. test adding same container twice, should be no-op and return result should be empty
     Collection<Container> addedContainers =
         accountService.addContainers(refAccountName, Collections.singleton(refContainer));
-    for (Container container : addedContainers) {
-      assertEquals("Mismatch in account id", refAccountId, container.getParentAccountId());
-      assertEquals("Mismatch in container id", refContainerId, container.getId());
-    }
+    assertTrue("Should return empty result.", addedContainers.isEmpty());
 
     // 5. test adding a different container (failure case due to ZK update failure)
     MockHelixPropertyStore<ZNRecord> mockHelixStore =

@@ -111,7 +111,8 @@ public interface AccountService extends Closeable {
    * Add a collection of containers to an existing account.
    * @param accountName the name of account in which new container will be added.
    * @param containers a collection of containers to add.
-   * @return a collection of containers that are successfully added.
+   * @return a collection of containers that are successfully added. If original input containers includes existing one,
+   *         the existing containers will be ignored and not present in the result.
    */
   default Collection<Container> addContainers(String accountName, Collection<Container> containers) {
     throw new UnsupportedOperationException("This method is not supported");
