@@ -13,9 +13,11 @@
  */
 package com.github.ambry.account;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -131,12 +133,11 @@ public class Account {
         checkRequiredFieldsForBuild();
         JSONArray containerArray = metadata.optJSONArray(CONTAINERS_KEY);
         if (containerArray != null) {
+          List<Container> containers = new ArrayList<>();
           for (int index = 0; index < containerArray.length(); index++) {
-            Container container = Container.fromJson(containerArray.getJSONObject(index), id);
-            checkParentAccountIdInContainers(container);
-            checkDuplicateContainerNameOrId(container);
-            updateContainerMap(container);
+            containers.add(Container.fromJson(containerArray.getJSONObject(index), id));
           }
+          updateContainerMap(containers);
         }
         break;
 
@@ -160,11 +161,7 @@ public class Account {
     this.snapshotVersion = snapshotVersion;
     checkRequiredFieldsForBuild();
     if (containers != null) {
-      for (Container container : containers) {
-        checkParentAccountIdInContainers(container);
-        checkDuplicateContainerNameOrId(container);
-        updateContainerMap(container);
-      }
+      updateContainerMap(containers);
     }
   }
 
@@ -306,12 +303,16 @@ public class Account {
   }
 
   /**
-   * Adds a {@link Container} to this account and updates internal maps accordingly.
-   * @param container The container to update this account.
+   * Adds a collection of {@link Container}(s) to this account and updates internal maps accordingly.
+   * @param containers The containers to update this account.
    */
-  private void updateContainerMap(Container container) {
-    containerIdToContainerMap.put(container.getId(), container);
-    containerNameToContainerMap.put(container.getName(), container);
+  public void updateContainerMap(Collection<Container> containers) {
+    for (Container container : containers) {
+      checkParentAccountIdInContainers(container);
+      checkDuplicateContainerNameOrId(container);
+      containerIdToContainerMap.put(container.getId(), container);
+      containerNameToContainerMap.put(container.getName(), container);
+    }
   }
 
   /**

@@ -92,11 +92,10 @@ class AccountTestUtils {
    * @param accountIdSet A set of ids that could not be used to generate {@link Account}s.
    * @param accountCount The number of {@link Account}s to generate.
    * @param containerCountPerAccount The number of {@link Container}s per {@link Account} to generate.
-   * @throws Exception
    */
   static void generateRefAccounts(Map<Short, Account> idToRefAccountMap,
       Map<Short, Map<Short, Container>> idToRefContainerMap, Set<Short> accountIdSet, int accountCount,
-      int containerCountPerAccount) throws Exception {
+      int containerCountPerAccount) {
     idToRefAccountMap.clear();
     idToRefContainerMap.clear();
     for (int i = 0; i < accountCount; i++) {

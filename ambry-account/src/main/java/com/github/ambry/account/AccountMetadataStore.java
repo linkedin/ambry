@@ -50,7 +50,7 @@ abstract class AccountMetadataStore {
   }
 
   /**
-   * ZKUpdater extends the {@link DataUpdater} with another method to  permform some clean up logic after
+   * ZKUpdater extends the {@link DataUpdater} with another method to perform some clean up logic after
    * an update.
    */
   interface ZKUpdater extends DataUpdater<ZNRecord> {

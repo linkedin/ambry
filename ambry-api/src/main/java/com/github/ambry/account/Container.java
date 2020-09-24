@@ -306,7 +306,8 @@ public class Container {
           DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING,
           SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
-          BACKUP_ENABLED_DEFAULT_VALUE, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID, DEFAULT_PRIVATE_CONTAINER_DELETE_TRIGGER_TIME);
+          BACKUP_ENABLED_DEFAULT_VALUE, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID,
+          DEFAULT_PRIVATE_CONTAINER_DELETE_TRIGGER_TIME);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -321,7 +322,8 @@ public class Container {
           DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING,
           SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
-          BACKUP_ENABLED_DEFAULT_VALUE, DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID, DEFAULT_PUBLIC_CONTAINER_DELETE_TRIGGER_TIME);
+          BACKUP_ENABLED_DEFAULT_VALUE, DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID,
+          DEFAULT_PUBLIC_CONTAINER_DELETE_TRIGGER_TIME);
 
   // container field variables
   private final short id;
@@ -372,7 +374,8 @@ public class Container {
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
         name = metadata.getString(CONTAINER_NAME_KEY);
         status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
-        deleteTriggerTime = metadata.optLong(CONTAINER_DELETE_TRIGGER_TIME_KEY, CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE);
+        deleteTriggerTime =
+            metadata.optLong(CONTAINER_DELETE_TRIGGER_TIME_KEY, CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE);
         description = metadata.optString(DESCRIPTION_KEY);
         encrypted = metadata.optBoolean(ENCRYPTED_KEY, ENCRYPTED_DEFAULT_VALUE);
         previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE);
@@ -474,6 +477,23 @@ public class Container {
    */
   public static void setCurrentJsonVersion(short currentJsonVersion) {
     Container.currentJsonVersion = currentJsonVersion;
+  }
+
+  /**
+   * Check if passed in container is same with current one.
+   * @param containerToCompare the {@link Container} to compare.
+   * @return {@code true} if two containers are equivalent. {@code false} otherwise.
+   */
+  boolean isSameContainer(Container containerToCompare) {
+    //@formatter:off
+    return Objects.equals(this.isCacheable(), containerToCompare.isCacheable())
+        && Objects.equals(this.isEncrypted(), containerToCompare.isEncrypted())
+        && Objects.equals(this.isMediaScanDisabled(), containerToCompare.isMediaScanDisabled())
+        && Objects.equals(this.isTtlRequired(), containerToCompare.isTtlRequired())
+        && Objects.equals(this.getReplicationPolicy(), containerToCompare.getReplicationPolicy())
+        && Objects.equals(this.isSecurePathRequired(), containerToCompare.isSecurePathRequired())
+        && Objects.equals(this.isBackupEnabled(), containerToCompare.isBackupEnabled());
+    //@formatter:on
   }
 
   /**
