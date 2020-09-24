@@ -18,8 +18,8 @@ import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.router.Router;
 import com.github.ambry.server.StatsSnapshot;
-import com.github.ambry.utils.Pair;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -253,34 +253,36 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    * {@inheritDoc}
    */
   @Override
-  public Pair<String, String> addContainer(String accountName, Container newContainer) {
+  public Collection<Container> addContainers(String accountName, Collection<Container> containers) {
     checkOpen();
-    if (accountName == null || accountName.isEmpty() || newContainer == null || newContainer.getName() == null
-        || newContainer.getName().isEmpty()) {
-      logger.error("Account name: {} or container: {} is invalid", accountName, newContainer);
-      throw new IllegalArgumentException("Account or container name is null or empty");
+    // input validation
+    if (accountName == null || accountName.isEmpty() || containers == null || containers.isEmpty()) {
+      throw new IllegalArgumentException("Account or container is null or empty");
     }
     Account account = getAccountByName(accountName);
     if (account == null) {
       logger.error("Account {} is not found", accountName);
       throw new IllegalArgumentException("Account " + accountName + " is not found");
     }
-    String accountId = String.valueOf(account.getId());
-    for (Container container : account.getAllContainers()) {
-      // make sure there is no conflict container (conflict means a container with same name but different attributes already exists).
-      if (container.getName().equals(newContainer.getName())) {
-        if (container.isSameContainer(newContainer)) {
-          // If an exactly same container already exists, we directly return its id. Adding same container multiple times
-          // should be no-op.
-          return new Pair<>(accountId, String.valueOf(container.getId()));
-        } else {
-          logger.error("A container: {} already exists with different attributes", container.getName());
-          throw new IllegalArgumentException("There is a conflicting container in account " + accountName);
+    Set<Container> existingContainers = new HashSet<>();
+    Set<Container> newContainers = new HashSet<>(containers);
+    for (Container existingContainer : account.getAllContainers()) {
+      for (Container newContainer : containers) {
+        // make sure there is no conflict container (conflict means a container with same name but different attributes already exists).
+        if (existingContainer.getName().equals(newContainer.getName())) {
+          if (existingContainer.isSameContainer(newContainer)) {
+            // If an exactly same container already exists, we directly return its id. Adding same container multiple times
+            // should be no-op.
+            existingContainers.add(existingContainer);
+          } else {
+            throw new IllegalArgumentException("There is a conflicting container in account " + accountName);
+          }
         }
       }
     }
-    // if code reaches here, it means no duplicate container in this account
-    // generate container id for new container
+    newContainers.removeAll(existingContainers);
+
+    // if code reaches here, it means no conflicting container in this account
     short nextContainerId = account.getAllContainers()
         .stream()
         .map(Container::getId)
@@ -288,21 +290,25 @@ public class HelixAccountService extends AbstractAccountService implements Accou
         .map(maxId -> (short) (maxId + 1))
         .orElse(config.containerIdStartNumber);
     // construct a container based on input container and next containerId
-    Container containerToAdd =
-        new ContainerBuilder(newContainer).setId(nextContainerId).setParentAccountId(account.getId()).build();
-    account.updateContainerMap(containerToAdd);
-    List<Account> accounts = Collections.singletonList(account);
-    boolean hasSucceeded = false;
-    if (accountInfoMapRef.get().hasConflictingAccount(accounts)) {
-      logger.debug("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
-      accountServiceMetrics.updateAccountErrorCount.inc();
-    } else {
-      hasSucceeded = accountMetadataStore.updateAccounts(accounts);
+    List<Container> createdContainers = new ArrayList<>();
+    for (Container container : newContainers) {
+      createdContainers.add(
+          new ContainerBuilder(container).setId(nextContainerId).setParentAccountId(account.getId()).build());
+      ++nextContainerId;
     }
+    // In case updating account metadata store failed, we do a deep copy of original account. Thus, we don't have to
+    // revert changes in original account when there is a failure.
+    Account accountCopy = new AccountBuilder(account).build();
+    accountCopy.updateContainerMap(createdContainers);
+    boolean hasSucceeded = updateAccounts(Collections.singletonList(accountCopy));
     if (!hasSucceeded) {
       throw new IllegalStateException("Account update failed for " + accountName);
     }
-    return new Pair<>(accountId, String.valueOf(nextContainerId));
+    // after metadata store is successfully updated, we safely update original account
+    account.updateContainerMap(createdContainers);
+    List<Container> result = new ArrayList<>(existingContainers);
+    result.addAll(createdContainers);
+    return result;
   }
 
   /**

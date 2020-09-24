@@ -22,7 +22,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Router;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
@@ -379,7 +378,7 @@ public class HelixAccountServiceTest {
 
     // 1. test invalid input
     try {
-      accountService.addContainer("", null);
+      accountService.addContainers("", null);
       fail("should fail because input is invalid");
     } catch (IllegalArgumentException e) {
       // expected
@@ -387,11 +386,11 @@ public class HelixAccountServiceTest {
 
     // 2. test account is not found
     String fakeAccountName = refAccountName + "fake";
-    Container containerToAdd =
+    Container containerToAdd1 =
         new ContainerBuilder((short) (refContainerId + 1), "newContainer", ContainerStatus.ACTIVE, "description",
             refParentAccountId).build();
     try {
-      accountService.addContainer(fakeAccountName, containerToAdd);
+      accountService.addContainers(fakeAccountName, Collections.singleton(containerToAdd1));
       fail("should fail because account is not found");
     } catch (IllegalArgumentException e) {
       // expected
@@ -400,32 +399,43 @@ public class HelixAccountServiceTest {
     // 3. test conflict container (existing container has same name but different attributes)
     Container conflictContainer = new ContainerBuilder(refContainer).setBackupEnabled(true).build();
     try {
-      accountService.addContainer(refAccountName, conflictContainer);
+      accountService.addContainers(refAccountName, Collections.singleton(conflictContainer));
       fail("should fail because there is a conflicting container");
     } catch (IllegalArgumentException e) {
       // expected
     }
 
     // 4. test adding same container twice, should be no-op and return existing container id immediately
-    Pair<String, String> accountAndContainerId = accountService.addContainer(refAccountName, refContainer);
-    assertEquals("Mismatch in account id", String.valueOf(refAccountId), accountAndContainerId.getFirst());
-    assertEquals("Mismatch in container id", String.valueOf(refContainerId), accountAndContainerId.getSecond());
+    Collection<Container> addedContainers =
+        accountService.addContainers(refAccountName, Collections.singleton(refContainer));
+    for (Container container : addedContainers) {
+      assertEquals("Mismatch in account id", refAccountId, container.getParentAccountId());
+      assertEquals("Mismatch in container id", refContainerId, container.getId());
+    }
 
     // 5. test adding a different container (failure case due to ZK update failure)
     MockHelixPropertyStore<ZNRecord> mockHelixStore =
         mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig);
     mockHelixStore.setExceptionDuringUpdater(true);
     try {
-      accountService.addContainer(refAccountName, containerToAdd);
+      accountService.addContainers(refAccountName, Collections.singleton(containerToAdd1));
       fail("should fail because exception occurs when updating ZK");
     } catch (IllegalStateException e) {
       // expected
     }
+    mockHelixStore.setExceptionDuringUpdater(false);
 
-    // 6. test adding a different container (success case)
-    accountAndContainerId = accountService.addContainer(refAccountName, containerToAdd);
-    assertEquals("Mismatch in account id", String.valueOf(refAccountId), accountAndContainerId.getFirst());
-    assertEquals("Mismatch in container id", String.valueOf(refContainerId + 1), accountAndContainerId.getSecond());
+    // 6. test adding 2 different containers (success case)
+    Container containerToAdd2 =
+        new ContainerBuilder((short) (refContainerId + 2), "newContainer2", ContainerStatus.ACTIVE, "description",
+            refParentAccountId).build();
+    addedContainers = accountService.addContainers(refAccountName, Arrays.asList(containerToAdd1, containerToAdd2));
+    short expectedContainerId = (short) (refContainerId + 1);
+    for (Container container : addedContainers) {
+      assertEquals("Mismatch in account id", refAccountId, container.getParentAccountId());
+      assertEquals("Mismatch in container id", expectedContainerId, container.getId());
+      expectedContainerId++;
+    }
   }
 
   /**
