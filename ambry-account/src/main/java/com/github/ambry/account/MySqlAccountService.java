@@ -97,6 +97,9 @@ public class MySqlAccountService implements AccountService {
       accountInfoMap = new AccountInfoMap(accountServiceMetrics);
     }
     this.accountInfoMap = accountInfoMap;
+
+    // Refresh last modified time of Accounts and Containers in cache
+    this.accountInfoMap.refreshLastModifiedTime();
   }
 
   /**
@@ -121,22 +124,10 @@ public class MySqlAccountService implements AccountService {
       // Retry connection to mysql if we couldn't set up previously
       createMySqlAccountStore();
 
-      // Find max LMT of Accounts and containers in cache.
-      long lastModifiedTime = 0;
-      infoMapLock.readLock().lock();
-      try {
-        Collection<Account> accountsInCache = accountInfoMap.getAccounts();
-        for (Account accountInCache : accountsInCache) {
-          lastModifiedTime = Math.max(lastModifiedTime, accountInCache.getLastModifiedTime());
-          for (Container containerInCache : accountInCache.getAllContainers()) {
-            lastModifiedTime = Math.max(lastModifiedTime, containerInCache.getLastModifiedTime());
-          }
-        }
-      } finally {
-        infoMapLock.readLock().unlock();
-      }
+      // Find last modified time of Accounts and containers in cache.
+      long lastModifiedTime = accountInfoMap.getLastModifiedTime();
 
-      // Fetch all added/modified accounts and containers from MySql database since LMT
+      // Fetch added/modified accounts and containers from MySql database since LMT
       Collection<Account> updatedAccountsInDB = mySqlAccountStore.getNewAccounts(lastModifiedTime);
       Collection<Container> updatedContainersInDB = mySqlAccountStore.getNewContainers(lastModifiedTime);
 
@@ -150,7 +141,10 @@ public class MySqlAccountService implements AccountService {
           infoMapLock.writeLock().unlock();
         }
 
-        // Persist/Dump cache to back up file on disk.
+        // Refresh last modified time of Accounts and Containers in cache
+        accountInfoMap.refreshLastModifiedTime();
+
+        // Persist account metadata in cache to back up file on disk.
         Collection<Account> accountCollection;
         infoMapLock.readLock().lock();
         try {
@@ -238,7 +232,7 @@ public class MySqlAccountService implements AccountService {
       infoMapLock.readLock().unlock();
     }
 
-    // Update database with updated accounts
+    // write added/modified accounts to database
     try {
       updateAccountsWithMySqlStore(accounts);
     } catch (SQLException e) {
@@ -249,7 +243,7 @@ public class MySqlAccountService implements AccountService {
       return false;
     }
 
-    // Update in-memory cache with updated accounts
+    // write added/modified accounts to in-memory cache
     infoMapLock.writeLock().lock();
     try {
       accountInfoMap.addOrUpdateAccounts(accounts);

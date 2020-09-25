@@ -79,7 +79,7 @@ public class MySqlAccountServiceConfig {
    * a new backup file, it will remove the oldest one.
    */
   @Config(MAX_BACKUP_FILE_COUNT)
-  @Default("100")
+  @Default("10")
   public final int maxBackupFileCount;
 
   /**
