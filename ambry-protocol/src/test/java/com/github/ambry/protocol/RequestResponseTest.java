@@ -474,8 +474,8 @@ public class RequestResponseTest {
     }
     response.release();
     // Test GetResponse with Send
-    for (boolean useComposite : new boolean[]{true, false}) {
-      for (boolean withContent : new boolean[]{true, false}) {
+    for (boolean useComposite : new boolean[]{false, true}) {
+      for (boolean withContent : new boolean[]{false, true}) {
         operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
         encryptionKey = TestUtils.getRandomBytes(256);
         messageInfo =

@@ -211,8 +211,8 @@ public class GetResponse extends Response {
       bufferToSend.release();
       bufferToSend = null;
     }
-    if (toSend != null && toSend.content() != null) {
-      toSend.content().release();
+    if (toSend != null) {
+      toSend.release();
       toSend = null;
     }
     return false;
