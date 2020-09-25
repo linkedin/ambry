@@ -19,10 +19,11 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 
@@ -50,6 +51,7 @@ public class CompositeSend extends AbstractByteBufHolder<CompositeSend> implemen
       } else {
         int numComponents = 0;
         boolean allContentPresent = true;
+        List<ByteBuf> byteBufs = new ArrayList<>(compositeSendList.size());
         for (Send send : compositeSendList) {
           ByteBuf content = send.content();
           if (content == null) {
@@ -61,11 +63,19 @@ public class CompositeSend extends AbstractByteBufHolder<CompositeSend> implemen
           } else {
             numComponents++;
           }
+          byteBufs.add(content);
         }
         if (allContentPresent) {
-          compositeSendContent = compositeSendList.get(0).content().alloc().compositeHeapBuffer(numComponents);
-          for (Send send : compositeSendList) {
-            ((CompositeByteBuf) compositeSendContent).addFlattenedComponents(true, send.content());
+          compositeSendContent = byteBufs.get(0).alloc().compositeHeapBuffer(numComponents);
+          for (ByteBuf content : byteBufs) {
+            if (content instanceof CompositeByteBuf) {
+              Iterator<ByteBuf> iterator = ((CompositeByteBuf) content).iterator();
+              while (iterator.hasNext()) {
+                ((CompositeByteBuf) compositeSendContent).addComponent(true, iterator.next());
+              }
+            } else {
+              ((CompositeByteBuf) compositeSendContent).addComponent(true, content);
+            }
           }
         } else {
           compositeSendContent = null;

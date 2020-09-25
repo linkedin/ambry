@@ -48,7 +48,7 @@ import static com.github.ambry.messageformat.MessageFormatRecord.*;
 
 public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> implements Send {
 
-  private final static int BUFFERED_INPUT_STREAM_BUFFER_SIZE = 256;
+  private static final int BUFFERED_INPUT_STREAM_BUFFER_SIZE = 4096;
   private static final Logger logger = LoggerFactory.getLogger(MessageFormatSend.class);
   private MessageReadSet readSet;
   private MessageFormatFlags flag;

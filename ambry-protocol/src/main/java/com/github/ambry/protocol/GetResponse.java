@@ -41,6 +41,7 @@ public class GetResponse extends Response {
   private int bufferIndex = 0;
   protected ByteBuffer[] nioBuffers;
   private Send toSend = null;
+  private int sendSizeInBufferToSend = 0;
   private InputStream stream = null;
   private final List<PartitionResponseInfo> partitionResponseInfoList;
   private int partitionResponseInfoSize;
@@ -133,14 +134,23 @@ public class GetResponse extends Response {
       }
     }
     if (toSend != null) {
-      if (toSend.content() != null) {
+      ByteBuf toSendContent = toSend.content();
+      if (toSendContent != null) {
         // Since this composite blob will be a readonly blob, we don't really care about if it's allocated
         // on a direct memory or not.
-        int maxNumComponent = 1 + toSend.content().nioBufferCount();
-        CompositeByteBuf compositeByteBuf = bufferToSend.alloc().compositeHeapBuffer(maxNumComponent);
+        int maxNumComponent = 1 + toSendContent.nioBufferCount();
+        CompositeByteBuf compositeByteBuf = bufferToSend.alloc().compositeDirectBuffer(maxNumComponent);
         compositeByteBuf.addComponent(true, bufferToSend);
-        compositeByteBuf.addFlattenedComponents(true, toSend.content());
+        if (toSendContent instanceof CompositeByteBuf) {
+          Iterator<ByteBuf> iterator = ((CompositeByteBuf) toSendContent).iterator();
+          while (iterator.hasNext()) {
+            compositeByteBuf.addComponent(true, iterator.next());
+          }
+        } else {
+          compositeByteBuf.addComponent(true, toSendContent);
+        }
         bufferToSend = compositeByteBuf;
+        sendSizeInBufferToSend = toSendContent.readableBytes();
         toSend = null;
       }
     }
@@ -215,8 +225,8 @@ public class GetResponse extends Response {
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize) + ((toSend == null) ? 0
-        : toSend.sizeInBytes());
+    return super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize) + ((toSend == null)
+        ? sendSizeInBufferToSend : toSend.sizeInBytes());
   }
 
   @Override

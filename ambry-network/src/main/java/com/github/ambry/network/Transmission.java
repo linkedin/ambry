@@ -180,6 +180,9 @@ public abstract class Transmission {
     if (networkReceive != null) {
       networkReceive.getReceivedBytes().release();
     }
+    if (networkSend != null && networkSend.shouldReleaseOnError()) {
+      networkSend.getPayload().release();
+    }
   }
 
   public NetworkReceive getNetworkReceive() {

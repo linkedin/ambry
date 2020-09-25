@@ -777,9 +777,10 @@ public class Selector implements Selectable {
    */
   private NetworkSend write(SelectionKey key, Transmission transmission) {
     long startTimeToWriteInMs = time.milliseconds();
+    NetworkSend networkSend = null;
     try {
       boolean sendComplete = transmission.write();
-      NetworkSend networkSend = transmission.getNetworkSend();
+      networkSend = transmission.getNetworkSend();
       if (sendComplete) {
         logger.trace("Finished writing, registering for read on connection {}", transmission.getRemoteSocketAddress());
         // Release the NetworkSend resource here, not in the SocketNetworkClient, because SocketServer uses Selector
@@ -794,6 +795,9 @@ public class Selector implements Selectable {
     } catch (IOException e) {
       // We have key information if we log IOException here.
       handleReadWriteIOException(e, key);
+      if (networkSend != null && networkSend.shouldReleaseOnError()) {
+        networkSend.getPayload().release();
+      }
       return null;
     } finally {
       long writeTime = time.milliseconds() - startTimeToWriteInMs;

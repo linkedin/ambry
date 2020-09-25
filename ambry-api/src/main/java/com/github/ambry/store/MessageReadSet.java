@@ -76,7 +76,9 @@ public interface MessageReadSet {
   void doPrefetch(int index, long relativeOffset, long size) throws IOException;
 
   /**
-   *
+   * Return prefetched data at given {@code index}.
+   * @param index The index into the message set.
+   * @return The prefetched data.
    */
   ByteBuf getPrefetchedData(int index);
 }
