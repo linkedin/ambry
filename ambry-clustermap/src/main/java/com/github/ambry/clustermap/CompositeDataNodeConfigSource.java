@@ -110,6 +110,15 @@ public class CompositeDataNodeConfigSource implements DataNodeConfigSource {
     return primaryResult;
   }
 
+  @Override
+  public void close() {
+    try {
+      primarySource.close();
+    } finally {
+      secondarySource.close();
+    }
+  }
+
   /**
    * Long running background task to periodically check for consistency between two listeners.
    */

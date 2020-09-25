@@ -1508,7 +1508,8 @@ public class HelixClusterManagerTest {
     public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
         String zkAddr) {
       if (helixCluster.getZkAddrs().contains(zkAddr)) {
-        return new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, znRecordMap, beBadException);
+        return helixManagers.computeIfAbsent(new ManagerKey(clusterName, instanceName, instanceType, zkAddr),
+            key -> new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, znRecordMap, beBadException));
       } else {
         throw new IllegalArgumentException("Invalid ZkAddr");
       }

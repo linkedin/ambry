@@ -15,11 +15,17 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.commons.CommonUtils;
+import com.github.ambry.config.ClusterMapConfig;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import org.apache.helix.AccessOption;
+import org.apache.helix.PropertyPathBuilder;
+import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
+import org.junit.After;
 import org.junit.Test;
 
 import static com.github.ambry.utils.TestUtils.*;
@@ -31,10 +37,32 @@ import static org.mockito.Mockito.*;
  * Test {@link PropertyStoreToDataNodeConfigAdapter}.
  */
 public class PropertyStoreToDataNodeConfigAdapterTest extends DataNodeConfigSourceTestBase {
+  private final ZkInfo zkInfo;
+  private final String zkAddress;
+  private final ClusterMapConfig clusterMapConfig;
+  private final PropertyStoreToDataNodeConfigAdapter source;
 
-  private final MockHelixPropertyStore<ZNRecord> propertyStore = new MockHelixPropertyStore<>();
-  private final DataNodeConfigSource source =
-      new PropertyStoreToDataNodeConfigAdapter(propertyStore, TestUtils.getDummyConfig());
+  /**
+   * Start a local zookeeper instance.
+   */
+  public PropertyStoreToDataNodeConfigAdapterTest() throws IOException {
+    zkInfo = new ZkInfo(getTempDir("propertyStoreTest"), DC_NAME, (byte) 1, 4321, true);
+    zkAddress = "localhost:" + zkInfo.getPort();
+    clusterMapConfig = TestUtils.getDummyConfig();
+    source = new PropertyStoreToDataNodeConfigAdapter(zkAddress, clusterMapConfig);
+  }
+
+  /**
+   * Close the {@link PropertyStoreToDataNodeConfigAdapter} and shut down the local ZK server.
+   */
+  @After
+  public void cleanup() {
+    try {
+      source.close();
+    } finally {
+      zkInfo.shutdown();
+    }
+  }
 
   /**
    * Test {@link DataNodeConfigSource} methods.
@@ -71,12 +99,23 @@ public class PropertyStoreToDataNodeConfigAdapterTest extends DataNodeConfigSour
     checkListenerCall(listener1, Collections.singleton(updatedConfig));
     checkListenerCall(listener2, Collections.singleton(updatedConfig));
 
-    // delete an existing config, this should be a no-op for listeners now.
+    // delete an existing config using another ZK client, this should be a no-op for listeners now.
     reset(listener1);
     reset(listener2);
-    propertyStore.remove(PropertyStoreToDataNodeConfigAdapter.CONFIG_PATH + "/" + updatedConfig.getInstanceName(),
-        AccessOption.PERSISTENT);
+    String rootPath = PropertyPathBuilder.propertyStore(clusterMapConfig.clusterMapClusterName);
+    HelixPropertyStore<ZNRecord> propertyStore =
+        CommonUtils.createHelixPropertyStore(zkAddress, rootPath, Collections.emptyList());
+    try {
+      assertTrue("Remove did not succeed",
+          propertyStore.remove(PropertyStoreToDataNodeConfigAdapter.CONFIG_PATH + "/" + updatedConfig.getInstanceName(),
+              AccessOption.PERSISTENT));
+    } finally {
+      propertyStore.stop();
+    }
     allConfigs.remove(updatedConfig);
+    // removal should be reflected in get() call (with some delay since this property store is informed through a watch)
+    assertTrue("Node removal did not propagate",
+        checkAndSleep(null, () -> source.get(updatedConfig.getInstanceName()), 2000));
     verify(listener1, never()).onDataNodeConfigChange(any());
     verify(listener2, never()).onDataNodeConfigChange(any());
 
@@ -84,8 +123,6 @@ public class PropertyStoreToDataNodeConfigAdapterTest extends DataNodeConfigSour
     for (DataNodeConfig config : allConfigs) {
       assertEquals("get() call returned incorrect result", config, source.get(config.getInstanceName()));
     }
-    // removal should be reflected in get() call
-    assertNull("node config should not be present", source.get(updatedConfig.getInstanceName()));
   }
 
   /**

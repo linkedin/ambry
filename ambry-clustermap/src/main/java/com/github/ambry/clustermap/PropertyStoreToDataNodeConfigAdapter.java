@@ -15,6 +15,7 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -29,6 +30,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import org.apache.helix.AccessOption;
+import org.apache.helix.PropertyPathBuilder;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
@@ -43,20 +45,19 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * An implementation of {@link DataNodeConfigSource} that reads {@link ZNRecord}s stored under the
  * "/DataNodeConfigs" path in a {@link HelixPropertyStore}.
  */
-public class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
+class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
   static final String CONFIG_PATH = "/DataNodeConfigs";
+  static final int GET_CHILDREN_RETRY_COUNT = 3;
+  static final int GET_CHILDREN_RETRY_INTERVAL = 0;
   private static final Logger LOGGER = LoggerFactory.getLogger(PropertyStoreToDataNodeConfigAdapter.class);
   private final HelixPropertyStore<ZNRecord> propertyStore;
   private final Converter converter;
   private final Executor eventExecutor;
 
-  /**
-   * @param propertyStore the {@link HelixPropertyStore} instance to use to interact with zookeeper.
-   * @param clusterMapConfig the {@link ClusterMapConfig} to use.
-   */
-  public PropertyStoreToDataNodeConfigAdapter(HelixPropertyStore<ZNRecord> propertyStore,
-      ClusterMapConfig clusterMapConfig) {
-    this.propertyStore = propertyStore;
+  PropertyStoreToDataNodeConfigAdapter(String zkAddress, ClusterMapConfig clusterMapConfig) {
+    String rootPath = PropertyPathBuilder.propertyStore(clusterMapConfig.clusterMapClusterName);
+    this.propertyStore =
+        CommonUtils.createHelixPropertyStore(zkAddress, rootPath, Collections.singletonList(rootPath + CONFIG_PATH));
     this.converter = new Converter(clusterMapConfig.clusterMapDefaultPartitionClass);
     this.eventExecutor = Executors.newSingleThreadExecutor();
   }
@@ -80,6 +81,11 @@ public class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSourc
     String path = CONFIG_PATH + "/" + instanceName;
     ZNRecord record = propertyStore.get(path, new Stat(), AccessOption.PERSISTENT);
     return record != null ? converter.convert(record) : null;
+  }
+
+  @Override
+  public void close() {
+    propertyStore.stop();
   }
 
   private class Subscription implements HelixPropertyListener {
@@ -128,7 +134,8 @@ public class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSourc
     }
 
     private Iterable<DataNodeConfig> lazyIterable(Collection<ZNRecord> records) {
-      return () -> records.stream().map(converter::convert).filter(Objects::nonNull).iterator();
+      return records == null || records.isEmpty() ? Collections.emptyList()
+          : () -> records.stream().map(converter::convert).filter(Objects::nonNull).iterator();
     }
 
     /**
@@ -163,7 +170,9 @@ public class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSourc
         if (initFuture.isDone()) {
           partialUpdateAllowed = !initFuture.isCompletedExceptionally();
         } else {
-          List<ZNRecord> records = propertyStore.getChildren(CONFIG_PATH, null, AccessOption.PERSISTENT);
+          List<ZNRecord> records =
+              propertyStore.getChildren(CONFIG_PATH, null, AccessOption.PERSISTENT, GET_CHILDREN_RETRY_COUNT,
+                  GET_CHILDREN_RETRY_INTERVAL);
           listener.onDataNodeConfigChange(lazyIterable(records));
           initFuture.complete(null);
         }

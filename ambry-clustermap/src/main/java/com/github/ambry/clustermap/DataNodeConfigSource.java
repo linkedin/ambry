@@ -18,7 +18,7 @@ package com.github.ambry.clustermap;
 /**
  * A source of {@link DataNodeConfig}s for a cluster. Can be used for config change notification and administration.
  */
-interface DataNodeConfigSource {
+interface DataNodeConfigSource extends AutoCloseable {
   /**
    * Attach a listener that will be notified when there are new or updated {@link DataNodeConfig}s.
    * @param listener the {@link DataNodeConfigChangeListener} to attach.
@@ -37,4 +37,7 @@ interface DataNodeConfigSource {
    * @return the {@link DataNodeConfig} for the specified instance.
    */
   DataNodeConfig get(String instanceName);
+
+  @Override
+  void close();
 }

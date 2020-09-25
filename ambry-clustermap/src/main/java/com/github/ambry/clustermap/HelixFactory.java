@@ -13,6 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.SystemTime;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,7 +30,9 @@ import org.slf4j.LoggerFactory;
  */
 public class HelixFactory {
   private static final Logger LOGGER = LoggerFactory.getLogger(HelixFactory.class);
-  Map<ManagerKey, HelixManager> helixManagers = new ConcurrentHashMap<>();
+  // exposed for use in testing
+  final Map<ManagerKey, HelixManager> helixManagers = new ConcurrentHashMap<>();
+  private final Map<String, DataNodeConfigSource> dataNodeConfigSources = new ConcurrentHashMap<>();
 
   /**
    * Get a reference to a {@link HelixManager}
@@ -70,9 +74,64 @@ public class HelixFactory {
   }
 
   /**
-   * Hashable key used to cache instances of {@link HelixManager} that match desired parameters.
+   * @param clusterMapConfig the {@link ClusterMapConfig} to use.
+   * @param zkAddr the ZooKeeper address to connect to. If a {@link HelixManager} is required and one is already in the
+   *               pool with this address, it will be reused.
+   * @param metrics the {@link DataNodeConfigSourceMetrics} to use.
+   * @return either a new instance of {@link DataNodeConfigSource} with the supplied configuration, or one from the pool
+   *         if there is already one created for this address.
    */
-  private static class ManagerKey {
+  public DataNodeConfigSource getDataNodeConfigSource(ClusterMapConfig clusterMapConfig, String zkAddr,
+      DataNodeConfigSourceMetrics metrics) {
+    return dataNodeConfigSources.computeIfAbsent(zkAddr, k -> buildSource(clusterMapConfig, zkAddr, metrics));
+  }
+
+  /**
+   * @param clusterMapConfig the {@link ClusterMapConfig} to use.
+   * @param zkAddr the ZooKeeper address to connect to. If a {@link HelixManager} is required and one is already in the
+   *               pool with this address, it will be reused.
+   * @param metrics the {@link DataNodeConfigSourceMetrics} to use.
+   * @return a new instance of {@link DataNodeConfigSource} with the supplied configuration.
+   */
+  private DataNodeConfigSource buildSource(ClusterMapConfig clusterMapConfig, String zkAddr,
+      DataNodeConfigSourceMetrics metrics) {
+    try {
+      InstanceConfigToDataNodeConfigAdapter instanceConfigSource = null;
+      if (clusterMapConfig.clusterMapDataNodeConfigSourceType.isInstanceConfigAware()) {
+        instanceConfigSource = new InstanceConfigToDataNodeConfigAdapter(
+            getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName,
+                ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort),
+                InstanceType.SPECTATOR, zkAddr), clusterMapConfig);
+      }
+      PropertyStoreToDataNodeConfigAdapter propertyStoreSource = null;
+      if (clusterMapConfig.clusterMapDataNodeConfigSourceType.isPropertyStoreAware()) {
+        propertyStoreSource = new PropertyStoreToDataNodeConfigAdapter(zkAddr, clusterMapConfig);
+      }
+
+      switch (clusterMapConfig.clusterMapDataNodeConfigSourceType) {
+        case INSTANCE_CONFIG:
+          return instanceConfigSource;
+        case PROPERTY_STORE:
+          return propertyStoreSource;
+        case COMPOSITE_INSTANCE_CONFIG_PRIMARY:
+          return new CompositeDataNodeConfigSource(instanceConfigSource, propertyStoreSource, SystemTime.getInstance(),
+              metrics);
+        case COMPOSITE_PROPERTY_STORE_PRIMARY:
+          return new CompositeDataNodeConfigSource(propertyStoreSource, instanceConfigSource, SystemTime.getInstance(),
+              metrics);
+        default:
+          throw new IllegalArgumentException("Unknown type: " + clusterMapConfig.clusterMapDataNodeConfigSourceType);
+      }
+    } catch (Exception e) {
+      throw new RuntimeException("Exception while instantiating DataNodeConfigSource", e);
+    }
+  }
+
+  /**
+   * Hashable key used to cache instances of {@link HelixManager} that match desired parameters.
+   * Exposed for use in testing.
+   */
+  static class ManagerKey {
     private final String clusterName;
     private final String instanceName;
     private final InstanceType instanceType;
