@@ -52,7 +52,7 @@ public class StorageQuotaConfig {
    *   }
    * }
    * The key of the top object is the acount id and the key of the inner object is the container id.
-   * The value of the each container id is the storage quota for this container.
+   * The value of the each container id is the storage quota in bytes for this container.
    *
    * If the targeted container doesn't have a storage quota in this JSON string, it's up to StorageQuotaEnforcer
    * to decide whether to allow uploads or not.
@@ -74,7 +74,8 @@ public class StorageQuotaConfig {
    */
   public StorageQuotaConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectAddress = verifiableProperties.getString(ZK_CLIENT_CONNECT_ADDRESS);
-    refresherPollingIntervalMs = verifiableProperties.getInt(REFRESHER_POLLING_INTERVAL_MS, 30 * 60 * 1000);
+    refresherPollingIntervalMs =
+        verifiableProperties.getIntInRange(REFRESHER_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);
     containerStorageQuotaInJson = verifiableProperties.getString(CONTAINER_STORAGE_QUOTA_IN_JSON, "");
     sourcePollingIntervalMs = verifiableProperties.getInt(SOURCE_POLLING_INTERVAL_MS, 30 * 60 * 1000);
   }

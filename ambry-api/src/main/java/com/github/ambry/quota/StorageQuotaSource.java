@@ -24,7 +24,8 @@ public interface StorageQuotaSource {
    * Return the storage quota of each container. The returned map should be structured as such:
    * The key of the map is the account id in string format and the value of the map is the storage quota of each
    * container under this account.
-   * The container usage map's key is the container is in string format, and the value is storage quota of this container.
+   * The container usage map's key is the container is in string format, and the value is storage quota in bytes of
+   * this container.
    * @return The storage quota for each container.
    */
   Map<String, Map<String, Long>> getContainerQuota();

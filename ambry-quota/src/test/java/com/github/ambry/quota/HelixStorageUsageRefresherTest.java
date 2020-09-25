@@ -110,9 +110,9 @@ public class HelixStorageUsageRefresherTest {
     Map<String, Map<String, Long>> obtainedUsage = storageUsageRefresher.getContainerStorageUsage();
     assertContainerUsageMap(expectedUsage, obtainedUsage);
 
-    // Use an AtomicReference to hold a CountDownLatch since we can only register callback once.
+    // Use an AtomicReference to hold a CountDownLatch since we can only register listener once.
     AtomicReference<CountDownLatch> latchHolder = new AtomicReference<>();
-    storageUsageRefresher.registerCallback(new StorageUsageRefresher.Callback() {
+    storageUsageRefresher.registerListener(new StorageUsageRefresher.Listener() {
       @Override
       public void onNewContainerStorageUsage(Map<String, Map<String, Long>> containerStorageUsage) {
         latchHolder.get().countDown();
@@ -162,7 +162,7 @@ public class HelixStorageUsageRefresherTest {
     testRefresherUpdateWithBadRecord();
     // Now place a good
     CountDownLatch latch = new CountDownLatch(1);
-    storageUsageRefresher.registerCallback(new StorageUsageRefresher.Callback() {
+    storageUsageRefresher.registerListener(new StorageUsageRefresher.Listener() {
       @Override
       public void onNewContainerStorageUsage(Map<String, Map<String, Long>> containerStorageUsage) {
         latch.countDown();

@@ -32,18 +32,18 @@ public interface StorageUsageRefresher {
   Map<String, Map<String, Long>> getContainerStorageUsage() throws Exception;
 
   /**
-   * A callback interface registered with {@link StorageUsageRefresher}. It will be invoked every time when there is a
+   * A listener interface registered with {@link StorageUsageRefresher}. It will be invoked every time when there is a
    * change in the storage usage. The new storage usage will be passed as the parameter. Notice this is a unmodifiable
    * map.
    */
-  interface Callback {
+  interface Listener {
     void onNewContainerStorageUsage(Map<String, Map<String, Long>> containerStorageUsage);
   }
 
   /**
-   * Register your callback to {@link StorageUsageRefresher}. A refresher should only have one callback and it can't be
+   * Register your listener to {@link StorageUsageRefresher}. A refresher should only have one callback and it can't be
    * registered multiple times.
-   * @param cb The callback to register.
+   * @param listener The listener to register.
    */
-  void registerCallback(Callback cb);
+  void registerListener(Listener listener);
 }

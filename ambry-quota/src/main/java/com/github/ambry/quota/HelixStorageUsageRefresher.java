@@ -50,7 +50,7 @@ public class HelixStorageUsageRefresher implements StorageUsageRefresher {
 
   private final HelixPropertyStore<ZNRecord> helixStore;
   private final AtomicReference<Map<String, Map<String, Long>>> containerStorageUsageRef = new AtomicReference<>(null);
-  private final AtomicReference<Callback> callback = new AtomicReference<>(null);
+  private final AtomicReference<Listener> callback = new AtomicReference<>(null);
   private final ScheduledExecutorService scheduler;
   private final StorageQuotaConfig config;
 
@@ -125,7 +125,7 @@ public class HelixStorageUsageRefresher implements StorageUsageRefresher {
   }
 
   @Override
-  public void registerCallback(Callback cb) {
+  public void registerListener(Listener cb) {
     Objects.requireNonNull(cb, "Callback has to be non-null");
     if (!callback.compareAndSet(null, cb)) {
       throw new IllegalStateException("Callback already registered");
@@ -153,7 +153,7 @@ public class HelixStorageUsageRefresher implements StorageUsageRefresher {
   /**
    * Fetch container storage usage from the given ZooKeeper path.
    * @param path The ZooKeeper path to fetch storage usage.
-   * @return
+   * @return The map representing container storage usage in bytes.
    * @throws IOException
    */
   private Map<String, Map<String, Long>> fetchContainerStorageUsageFromPath(String path) throws IOException {
@@ -169,7 +169,7 @@ public class HelixStorageUsageRefresher implements StorageUsageRefresher {
   /**
    * Parse the container storage usage from given {@link ZNRecord}.
    * @param znRecord The {@link ZNRecord} that contains storage usage in json format.
-   * @return The map representing container storage usage.
+   * @return The map representing container storage usage in bytes.
    * @throws IOException
    */
   private Map<String, Map<String, Long>> parseContainerStorageUsageFromZNRecord(ZNRecord znRecord) throws IOException {
