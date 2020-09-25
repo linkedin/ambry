@@ -21,6 +21,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -104,7 +105,9 @@ class CloudMessageReadSet implements MessageReadSet {
 
   @Override
   public ByteBuf getPrefetchedData(int index) {
-    return null;
+    validateIndex(index);
+    BlobReadInfo blobReadInfo = blobReadInfoList.get(index);
+    return Unpooled.wrappedBuffer(blobReadInfo.getPrefetchedBuffer());
   }
 
   /**
@@ -144,6 +147,7 @@ class CloudMessageReadSet implements MessageReadSet {
       prefetchedBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
       ByteBufferOutputStream outputStream = new ByteBufferOutputStream(prefetchedBuffer);
       blobStore.downloadBlob(blobMetadata, blobId, outputStream);
+      prefetchedBuffer.flip();
       isPrefetched = true;
     }
 
