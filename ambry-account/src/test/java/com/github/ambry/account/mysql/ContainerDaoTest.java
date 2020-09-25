@@ -16,10 +16,12 @@ package com.github.ambry.account.mysql;
 import com.github.ambry.account.AccountSerdeUtils;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.utils.SystemTime;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -58,6 +60,8 @@ public class ContainerDaoTest {
     when(mockResultSet.next()).thenReturn(true).thenReturn(false);
     when(mockResultSet.getInt(eq(ContainerDao.ACCOUNT_ID))).thenReturn((int) accountId);
     when(mockResultSet.getString(eq(ContainerDao.CONTAINER_INFO))).thenReturn(containerJson);
+    when(mockResultSet.getTimestamp(eq(ContainerDao.LAST_MODIFIED_TIME))).thenReturn(
+        new Timestamp(SystemTime.getInstance().milliseconds()));
     dataAccessor = AccountDaoTest.getDataAccessor(mockConnection);
     containerDao = new ContainerDao(dataAccessor);
   }
