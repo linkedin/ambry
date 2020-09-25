@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -34,6 +35,7 @@ import org.junit.runners.Parameterized;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
+import static com.github.ambry.account.Container.LAST_MODIFIED_TIME_KEY;
 import static org.junit.Assert.*;
 
 
@@ -99,6 +101,7 @@ public class AccountContainerTest {
     refAccountJson.put(Account.STATUS_KEY, refAccountStatus.name());
     refAccountJson.put(SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion);
     refAccountJson.put(CONTAINERS_KEY, containerJsonList);
+    refAccountJson.put(Account.LAST_MODIFIED_TIME_KEY, 0);
   }
 
   /**
@@ -996,7 +999,7 @@ public class AccountContainerTest {
       }
       refContainerTtlRequiredValues.add(random.nextBoolean());
       refContainerSignedPathRequiredValues.add(random.nextBoolean());
-      refContainerDeleteTriggerTime.add((long)0);
+      refContainerDeleteTriggerTime.add((long) 0);
       if (i == 0) {
         refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(null);
       } else if (i == 1) {
@@ -1041,6 +1044,7 @@ public class AccountContainerTest {
         containerJson.put(DESCRIPTION_KEY, container.getDescription());
         containerJson.put(IS_PRIVATE_KEY, !container.isCacheable());
         containerJson.put(PARENT_ACCOUNT_ID_KEY, container.getParentAccountId());
+        containerJson.put(LAST_MODIFIED_TIME_KEY, container.getLastModifiedTime());
         break;
       case Container.JSON_VERSION_2:
         containerJson.put(Container.JSON_VERSION_KEY, Container.JSON_VERSION_2);
@@ -1057,6 +1061,7 @@ public class AccountContainerTest {
         containerJson.putOpt(REPLICATION_POLICY_KEY, container.getReplicationPolicy());
         containerJson.put(TTL_REQUIRED_KEY, container.isTtlRequired());
         containerJson.put(SECURE_PATH_REQUIRED_KEY, container.isSecurePathRequired());
+        containerJson.put(LAST_MODIFIED_TIME_KEY, container.getLastModifiedTime());
         if (container.getContentTypeWhitelistForFilenamesOnDownload() != null
             && !container.getContentTypeWhitelistForFilenamesOnDownload().isEmpty()) {
           containerJson.put(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD,
