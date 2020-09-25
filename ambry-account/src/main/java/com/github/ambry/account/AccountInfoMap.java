@@ -16,7 +16,6 @@ package com.github.ambry.account;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -75,13 +74,13 @@ class AccountInfoMap {
       if (idKey == null) {
         accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
         throw new IllegalStateException(
-            "Invalid account record when reading accountMap in ZNRecord because idKey=null");
+            "Invalid account record when reading accountMap because idKey=null");
       }
       account = Account.fromJson(accountJson);
       if (account.getId() != Short.parseShort(idKey)) {
         accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
         throw new IllegalStateException(
-            "Invalid account record when reading accountMap in ZNRecord because idKey and accountId do not match. idKey="
+            "Invalid account record when reading accountMap because idKey and accountId do not match. idKey="
                 + idKey + " accountId=" + account.getId());
       }
       if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
@@ -123,22 +122,6 @@ class AccountInfoMap {
       idToAccountMap.put(account.getId(), account);
       nameToAccountMap.put(account.getName(), account);
     }
-  }
-
-  /**
-   * <p>
-   *   Constructs an {@code AccountInfoMap} from a group of {@link Account}s.
-   * </p>
-   * <p>
-   *   This is used when source {@link Account}s is a relational database. We won't need to check for duplicate IDs or names
-   *   since they are ensured by applying unique key constraints in the DB.
-   * </p>
-   * @param accounts A list of {@link Account}s.
-   */
-  AccountInfoMap(List<Account> accounts) {
-    nameToAccountMap = new HashMap<>();
-    idToAccountMap = new HashMap<>();
-    updateAccounts(accounts);
   }
 
   /**
@@ -234,20 +217,21 @@ class AccountInfoMap {
   }
 
   /**
-   * Updates the {@code AccountInfoMap} with the input {@link Collection} of {@link Account}s.
+   * Adds or updates the {@code AccountInfoMap} with the input {@link Collection} of {@link Account}s.
    * @param accounts collection of {@link Account}s to be added.
    */
-  void updateAccounts(Collection<Account> accounts) {
+  void addOrUpdateAccounts(Collection<Account> accounts) {
     for (Account account : accounts) {
       Account accountToUpdate = idToAccountMap.get(account.getId());
       if (accountToUpdate == null) {
         accountToUpdate = account;
       } else {
-        // remove name to Account mapping for existing account as name might have been updated too
+        // Remove name to Account mapping for existing account as name might have been updated.
         nameToAccountMap.remove(accountToUpdate.getName());
         AccountBuilder accountBuilder = new AccountBuilder(accountToUpdate).name(account.getName())
             .status(account.getStatus())
-            .snapshotVersion(account.getSnapshotVersion());
+            .snapshotVersion(account.getSnapshotVersion())
+            .lastModifiedTime(account.getLastModifiedTime());
         account.getAllContainers().forEach(accountBuilder::addOrUpdateContainer);
         accountToUpdate = accountBuilder.build();
       }
@@ -257,22 +241,22 @@ class AccountInfoMap {
   }
 
   /**
-   * Updates the {@code AccountInfoMap} with the input {@link Collection} of {@link Container}s.
+   * Adds or updates the {@code AccountInfoMap} with the input {@link Collection} of {@link Container}s.
    * @param containers collection of {@link Container}s to be added.
    */
-  void updateContainers(Collection<Container> containers) {
+  void addOrUpdateContainers(Collection<Container> containers) {
     for (Container container : containers) {
-      addContainer(container.getParentAccountId(), container);
+      addOrUpdateContainer(container.getParentAccountId(), container);
     }
   }
 
   /**
-   * Adds a {@link Container} to the {@link Account}.
+   * Adds or updates a {@link Container} to a parent {@link Account}.
    * @param accountId The id of the parent {@link Account} for this {@link Container}.
    * @param container {@link Container} to be added.
    * @throws IllegalArgumentException if {@link Account} with provided id doesn't exist.
    */
-  void addContainer(short accountId, Container container) {
+  void addOrUpdateContainer(short accountId, Container container) {
     Account parentAccount = idToAccountMap.get(accountId);
     if (parentAccount == null) {
       throw new IllegalArgumentException("Account with ID " + accountId + "doesn't exist");
@@ -308,10 +292,23 @@ class AccountInfoMap {
   }
 
   /**
-   * Gets the last modified time of accounts and containers in this in-memory cache
-   * @return the last modified time of accounts and containers
+   * Gets the last modified time of {@link Account}s and {@link Container}s in the cache
+   * @return last modified time.
    */
-  long getLastModifiedTime() {
+  public long getLastModifiedTime() {
     return lastModifiedTime;
+  }
+
+  /**
+   * Refreshes the lastModifiedTime of {@link Account}s and {@link Container}s in the cache. This is expected to be
+   * called after account metadata is fetched from db periodically.
+   */
+  public void refreshLastModifiedTime() {
+    for (Account account : idToAccountMap.values()) {
+      lastModifiedTime = Math.max(lastModifiedTime, account.getLastModifiedTime());
+      for (Container container : account.getAllContainers()) {
+        lastModifiedTime = Math.max(lastModifiedTime, container.getLastModifiedTime());
+      }
+    }
   }
 }

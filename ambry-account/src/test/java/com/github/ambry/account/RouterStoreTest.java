@@ -84,7 +84,7 @@ public class RouterStoreTest {
     properties.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, "1000");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     config = new HelixAccountServiceConfig(verifiableProperties);
-    backup = new BackupFileManager(accountServiceMetrics, config);
+    backup = new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
     helixStore = new MockHelixPropertyStore<>();
     router = new MockRouter();
   }

@@ -81,9 +81,11 @@ public class Account {
   static final String STATUS_KEY = "status";
   static final String SNAPSHOT_VERSION_KEY = "snapshotVersion";
   static final String CONTAINERS_KEY = "containers";
+  static final String LAST_MODIFIED_TIME_KEY = "lastModifiedTime";
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
+  static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
 
   /**
    * The id of unknown account.
@@ -110,6 +112,7 @@ public class Account {
   private final String name;
   private AccountStatus status;
   private final int snapshotVersion;
+  private final long lastModifiedTime;
   // internal data structure
   private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
   private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
@@ -130,6 +133,7 @@ public class Account {
         name = metadata.getString(ACCOUNT_NAME_KEY);
         status = AccountStatus.valueOf(metadata.getString(STATUS_KEY));
         snapshotVersion = metadata.optInt(SNAPSHOT_VERSION_KEY, SNAPSHOT_VERSION_DEFAULT_VALUE);
+        lastModifiedTime = metadata.optLong(LAST_MODIFIED_TIME_KEY, LAST_MODIFIED_TIME_DEFAULT_VALUE);
         checkRequiredFieldsForBuild();
         JSONArray containerArray = metadata.optJSONArray(CONTAINERS_KEY);
         if (containerArray != null) {
@@ -155,10 +159,25 @@ public class Account {
    * @param containers A collection of {@link Container}s to be part of this account.
    */
   Account(short id, String name, AccountStatus status, int snapshotVersion, Collection<Container> containers) {
+    this(id, name, status, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE);
+  }
+
+  /**
+   * Constructor that takes individual arguments.
+   * @param id The id of the account. Cannot be null.
+   * @param name The name of the account. Cannot be null.
+   * @param status The status of the account. Cannot be null.
+   * @param snapshotVersion the expected snapshot version for the account record.
+   * @param containers A collection of {@link Container}s to be part of this account.
+   * @param lastModifiedTime created/modified time of this Account
+   */
+  Account(short id, String name, AccountStatus status, int snapshotVersion, Collection<Container> containers,
+      long lastModifiedTime) {
     this.id = id;
     this.name = name;
     this.status = status;
     this.snapshotVersion = snapshotVersion;
+    this.lastModifiedTime = lastModifiedTime;
     checkRequiredFieldsForBuild();
     if (containers != null) {
       updateContainerMap(containers);
@@ -179,6 +198,7 @@ public class Account {
     metadata.put(ACCOUNT_NAME_KEY, name);
     metadata.put(STATUS_KEY, status.name());
     metadata.put(SNAPSHOT_VERSION_KEY, incrementSnapshotVersion ? snapshotVersion + 1 : snapshotVersion);
+    metadata.put(LAST_MODIFIED_TIME_KEY, lastModifiedTime);
     JSONArray containerArray = new JSONArray();
     for (Container container : containerIdToContainerMap.values()) {
       containerArray.put(container.toJson());
@@ -226,6 +246,14 @@ public class Account {
    */
   public int getSnapshotVersion() {
     return snapshotVersion;
+  }
+
+  /**
+   * Get the created/modified time of this Account
+   * @return epoch time in milliseconds
+   */
+  public long getLastModifiedTime() {
+    return lastModifiedTime;
   }
 
   /**

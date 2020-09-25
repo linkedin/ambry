@@ -61,6 +61,15 @@ import static com.github.ambry.utils.Utils.*;
  *   will not update its local cache.
  * </p>
  * <p>
+ *   Previously, {@link HelixAccountService} only keeps a backup when there is an update {@link Account} HTTP request
+ *   received by this instance. It doesn't backup mutations made by other instances. Since HTTP requests to update
+ *   {@link Account} are rare, latest backup file often holds a out-of-date view of the {@link Account} metadata at lots
+ *   of instances. In order to keep backup file up-to-date, in the new implementation, each mutation to the {@link Account}
+ *   metadata will be persisted with {@link BackupFileManager}. This is achieved by the fact the {@link HelixAccountService} will
+ *   publish each mutation to {@code ZooKeeper} and upon receiving the mutation message, all the {@link HelixAccountService}
+ *   instances will fetch the latest {@link Account} metadata. And when it does, it also persists the latest {@link Account}
+ *   metadata in the backup.
+ *
  *   Every time a mutation of account metadata is performed, a new backup file will be created for locally, in a directory
  *   specified by the {@link HelixAccountServiceConfig#backupDir}. A backup file is created when the helix listener on
  *   {@link #ACCOUNT_METADATA_CHANGE_TOPIC} is notified. And backup's filename could contain version and last modified time
@@ -129,7 +138,8 @@ public class HelixAccountService extends AbstractAccountService implements Accou
     this.notifier = notifier;
     this.scheduler = scheduler;
     this.config = config;
-    this.backupFileManager = new BackupFileManager(this.accountServiceMetrics, config);
+    this.backupFileManager =
+        new BackupFileManager(this.accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
     if (config.useNewZNodePath) {
       accountMetadataStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, false,
           config.totalNumberOfVersionToKeep);

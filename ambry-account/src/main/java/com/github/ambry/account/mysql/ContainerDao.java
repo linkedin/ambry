@@ -15,6 +15,7 @@ package com.github.ambry.account.mysql;
 
 import com.github.ambry.account.AccountSerdeUtils;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -149,8 +150,9 @@ public class ContainerDao {
     while (resultSet.next()) {
       int accountId = resultSet.getInt(ACCOUNT_ID);
       String containerJson = resultSet.getString(CONTAINER_INFO);
+      Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
       Container container = AccountSerdeUtils.containerFromJson(containerJson, (short) accountId);
-      // TODO: container.setLastModifiedTime(resultSet.getTimestamp(LAST_MODIFIED_TIME));
+      container = new ContainerBuilder(container).setLastModifiedTime(lastModifiedTime.getTime()).build();
       containers.add(container);
     }
     return containers;

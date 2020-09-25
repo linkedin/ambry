@@ -74,6 +74,7 @@ public class Container {
   static final String SECURE_PATH_REQUIRED_KEY = "securePathRequired";
   static final String CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD = "contentTypeWhitelistForFilenamesOnDownload";
   static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
+  static final String LAST_MODIFIED_TIME_KEY = "lastModifiedTime";
   static final boolean BACKUP_ENABLED_DEFAULT_VALUE = false;
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
@@ -83,6 +84,7 @@ public class Container {
   static final boolean SECURE_PATH_REQUIRED_DEFAULT_VALUE = false;
   static final boolean CACHEABLE_DEFAULT_VALUE = true;
   static final Set<String> CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE = Collections.emptySet();
+  static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
 
   public static final short JSON_VERSION_1 = 1;
   public static final short JSON_VERSION_2 = 2;
@@ -341,6 +343,7 @@ public class Container {
   private final boolean securePathRequired;
   private final Set<String> contentTypeWhitelistForFilenamesOnDownload;
   private final short parentAccountId;
+  private final long lastModifiedTime;
 
   /**
    * Constructing an {@link Container} object from container metadata.
@@ -369,6 +372,7 @@ public class Container {
         ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
         securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
         contentTypeWhitelistForFilenamesOnDownload = CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
+        lastModifiedTime = metadata.optLong(LAST_MODIFIED_TIME_KEY, LAST_MODIFIED_TIME_DEFAULT_VALUE);
         break;
       case JSON_VERSION_2:
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
@@ -394,6 +398,7 @@ public class Container {
         } else {
           contentTypeWhitelistForFilenamesOnDownload = CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
         }
+        lastModifiedTime = metadata.optLong(LAST_MODIFIED_TIME_KEY, LAST_MODIFIED_TIME_DEFAULT_VALUE);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
@@ -425,6 +430,36 @@ public class Container {
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
       boolean ttlRequired, boolean securePathRequired, Set<String> contentTypeWhitelistForFilenamesOnDownload,
       boolean backupEnabled, short parentAccountId, long deleteTriggerTime) {
+    this(id, name, status, description, encrypted, previouslyEncrypted, cacheable, mediaScanDisabled, replicationPolicy,
+        ttlRequired, securePathRequired, contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId,
+        deleteTriggerTime, LAST_MODIFIED_TIME_DEFAULT_VALUE);
+  }
+
+  /**
+   * Constructor that takes individual arguments. Cannot be null.
+   * @param id The id of the container.
+   * @param name The name of the container. Cannot be null.
+   * @param status The status of the container. Cannot be null.
+   * @param description The description of the container. Can be null.
+   * @param encrypted {@code true} if blobs in the {@link Container} should be encrypted, {@code false} otherwise.
+   * @param previouslyEncrypted {@code true} if this {@link Container} was encrypted in the past, or currently, and a
+   *                            subset of blobs in it could still be encrypted.
+   * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
+   *                  this container.
+   * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
+   * @param replicationPolicy the replication policy to use. If {@code null}, the cluster's default will be used.
+   * @param ttlRequired {@code true} if ttl is required on content created in this container.
+   * @param securePathRequired {@code true} if secure path validation is required in this container.
+   * @param contentTypeWhitelistForFilenamesOnDownload the set of content types for which the filename can be sent on
+   *                                                   download
+   * @param backupEnabled Whether backup is enabled for this container or not
+   * @param parentAccountId The id of the parent {@link Account} of this container.
+   * @param lastModifiedTime created/modified time of this container.
+   */
+  Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
+      boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
+      boolean ttlRequired, boolean securePathRequired, Set<String> contentTypeWhitelistForFilenamesOnDownload,
+      boolean backupEnabled, short parentAccountId, long deleteTriggerTime, long lastModifiedTime) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -432,6 +467,7 @@ public class Container {
     this.description = description;
     this.cacheable = cacheable;
     this.parentAccountId = parentAccountId;
+    this.lastModifiedTime = lastModifiedTime;
     switch (currentJsonVersion) {
       case JSON_VERSION_1:
         this.backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
@@ -524,6 +560,7 @@ public class Container {
         metadata.put(DESCRIPTION_KEY, description);
         metadata.put(IS_PRIVATE_KEY, !cacheable);
         metadata.put(PARENT_ACCOUNT_ID_KEY, parentAccountId);
+        metadata.put(LAST_MODIFIED_TIME_KEY, lastModifiedTime);
         break;
       case JSON_VERSION_2:
         metadata.put(Container.JSON_VERSION_KEY, JSON_VERSION_2);
@@ -547,6 +584,7 @@ public class Container {
           metadata.put(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD,
               contentTypeWhitelistForFilenamesOnDownloadJson);
         }
+        metadata.put(LAST_MODIFIED_TIME_KEY, lastModifiedTime);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -665,6 +703,14 @@ public class Container {
    */
   public short getParentAccountId() {
     return parentAccountId;
+  }
+
+  /**
+   * Get the created/modified time of this Container
+   * @return epoch time in milliseconds
+   */
+  public long getLastModifiedTime() {
+    return lastModifiedTime;
   }
 
   /**

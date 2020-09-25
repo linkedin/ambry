@@ -44,6 +44,7 @@ public class ContainerBuilder {
   private Set<String> contentTypeWhitelistForFilenamesOnDownload =
       CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
   private boolean backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
+  private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -70,6 +71,7 @@ public class ContainerBuilder {
     securePathRequired = origin.isSecurePathRequired();
     contentTypeWhitelistForFilenamesOnDownload = origin.getContentTypeWhitelistForFilenamesOnDownload();
     backupEnabled = origin.isBackupEnabled();
+    lastModifiedTime = origin.getLastModifiedTime();
   }
 
   /**
@@ -239,6 +241,16 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets the created/modified time of the {@link Container}
+   * @param lastModifiedTime epoch time in milliseconds.
+   * @return This builder.
+   */
+  public ContainerBuilder setLastModifiedTime(long lastModifiedTime) {
+    this.lastModifiedTime = lastModifiedTime;
+    return this;
+  }
+
+  /**
    * Builds a {@link Container} object. {@code id}, {@code name}, {@code status}, {@code isPrivate}, and
    * {@code parentAccountId} are required before build.
    * @return A {@link Container} object.
@@ -247,6 +259,7 @@ public class ContainerBuilder {
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
         mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
-        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId, deleteTriggerTime);
+        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId, deleteTriggerTime,
+        lastModifiedTime);
   }
 }

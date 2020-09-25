@@ -31,6 +31,7 @@ public class AccountBuilder {
   private String name;
   private AccountStatus status;
   private int snapshotVersion = Account.SNAPSHOT_VERSION_DEFAULT_VALUE;
+  private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
   private Map<Short, Container> idToContainerMetadataMap = new HashMap<>();
 
   /**
@@ -46,6 +47,7 @@ public class AccountBuilder {
     name = origin.getName();
     status = origin.getStatus();
     snapshotVersion = origin.getSnapshotVersion();
+    lastModifiedTime = origin.getLastModifiedTime();
     for (Container container : origin.getAllContainers()) {
       idToContainerMetadataMap.put(container.getId(), container);
     }
@@ -107,6 +109,16 @@ public class AccountBuilder {
   }
 
   /**
+   * Sets the created/modified time of the {@link Account} to build.
+   * @param lastModifiedTime time in milliseconds.
+   * @return This builder.
+   */
+  public AccountBuilder lastModifiedTime(long lastModifiedTime) {
+    this.lastModifiedTime = lastModifiedTime;
+    return this;
+  }
+
+  /**
    * Clear the set of containers for the {@link Account} to build and add the provided ones.
    * @param containers A collection of {@link Container}s to use. Can be {@code null} to just remove all containers.
    * @return This builder.
@@ -152,12 +164,12 @@ public class AccountBuilder {
   }
 
   /**
-   * Builds an {@link Account} object. {@code id}, {@code name}, {@code status}, and {@code containers} (if any)
-   * must be set before building.
+   * Builds an {@link Account} object. {@code id}, {@code name}, {@code status}, {@code lastModifiedTime} and
+   * {@code containers} (if any) must be set before building.
    * @return An {@link Account} object.
    * @throws IllegalStateException If any required fields is not set or there is inconsistency in containers.
    */
   public Account build() {
-    return new Account(id, name, status, snapshotVersion, idToContainerMetadataMap.values());
+    return new Account(id, name, status, snapshotVersion, idToContainerMetadataMap.values(), lastModifiedTime);
   }
 }

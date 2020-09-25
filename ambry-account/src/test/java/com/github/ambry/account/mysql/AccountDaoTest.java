@@ -18,11 +18,13 @@ import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountSerdeUtils;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.SystemTime;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.Properties;
 import org.junit.Test;
@@ -57,6 +59,8 @@ public class AccountDaoTest {
     ResultSet mockResultSet = mock(ResultSet.class);
     when(mockResultSet.next()).thenReturn(true).thenReturn(false);
     when(mockResultSet.getString(eq(AccountDao.ACCOUNT_INFO))).thenReturn(accountJson);
+    when(mockResultSet.getTimestamp(eq(AccountDao.LAST_MODIFIED_TIME))).thenReturn(
+        new Timestamp(SystemTime.getInstance().milliseconds()));
     when(mockQueryStatement.executeQuery()).thenReturn(mockResultSet);
     dataAccessor = getDataAccessor(mockConnection);
     accountDao = new AccountDao(dataAccessor);

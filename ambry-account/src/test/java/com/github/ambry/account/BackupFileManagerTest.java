@@ -90,7 +90,8 @@ public class BackupFileManagerTest {
     helixConfigProps.remove(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY);
     VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     HelixAccountServiceConfig config = new HelixAccountServiceConfig(vHelixConfigProps);
-    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
+    BackupFileManager backup =
+        new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
 
     // getLatestAccountMap should return null
     assertNull("Disabled backup shouldn't have any state", backup.getLatestAccountMap(0));
@@ -100,7 +101,7 @@ public class BackupFileManagerTest {
     stat.setVersion(1);
     stat.setMtime(System.currentTimeMillis());
 
-    backup.persistAccountMap(new HashMap<String, String>(), stat);
+    backup.persistAccountMap(new HashMap<String, String>(), stat.getVersion(), stat.getMtime() / 1000);
     assertTrue("Disabled backup shouldn't add any backup", backup.isEmpty());
   }
 
@@ -121,7 +122,8 @@ public class BackupFileManagerTest {
     Map<String, String> expected = new HashMap<>();
     expected.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
 
-    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
+    BackupFileManager backup =
+        new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
     Map<String, String> obtained = backup.getLatestAccountMap(0);
     assertTwoStringMapsEqual(expected, obtained);
     assertFalse("There are backup files", backup.isEmpty());
@@ -143,7 +145,8 @@ public class BackupFileManagerTest {
     String[] filenames = createBackupFilesWithoutVersion(accountBackupDir, count, baseModifiedTime, interval, false);
     saveAccountsToFile(Collections.singleton(refAccount), accountBackupDir.resolve(filenames[filenames.length - 1]));
 
-    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
+    BackupFileManager backup =
+        new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
     Map<String, String> obtained = backup.getLatestAccountMap(0);
     assertNull("No state should be loaded from backup file from old format", obtained);
     assertFalse("Backup should not be empty since there are files from old format", backup.isEmpty());
@@ -170,7 +173,8 @@ public class BackupFileManagerTest {
     Map<String, String> expected = new HashMap<>();
     expected.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
 
-    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
+    BackupFileManager backup =
+        new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
     Map<String, String> obtained = backup.getLatestAccountMap(0);
     assertTwoStringMapsEqual(expected, obtained);
     assertFalse("There are backup files", backup.isEmpty());
@@ -200,7 +204,8 @@ public class BackupFileManagerTest {
     createBackupFilesWithoutVersion(accountBackupDir, 10, baseModifiedTime, interval, false);
     createBackupFilesWithoutVersion(accountBackupDir, 10, baseModifiedTime, interval, true);
 
-    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
+    BackupFileManager backup =
+        new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
     assertEquals("Number of backup files mismatch", backup.size(), maxBackupFile);
 
     File[] remainingFiles = accountBackupDir.toFile().listFiles();
@@ -235,7 +240,8 @@ public class BackupFileManagerTest {
         baseModifiedTime + 2 * backupFileNoVersionCount * interval, interval, false);
     saveAccountsToFile(Collections.singleton(refAccount), accountBackupDir.resolve(filenames[filenames.length - 1]));
 
-    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
+    BackupFileManager backup =
+        new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
     assertEquals("Number of backup files mismatch", backup.size(), maxBackupFile);
 
     File[] remainingFiles = accountBackupDir.toFile().listFiles();
@@ -255,12 +261,13 @@ public class BackupFileManagerTest {
   }
 
   /**
-   * Test {@link BackupFileManager#persistAccountMap(Map, Stat)} and then recover {@link BackupFileManager} from the same backup directory.
+   * Test {@link BackupFileManager#persistAccountMap(Map, int, long)} and then recover {@link BackupFileManager} from the same backup directory.
    * @throws IOException if I/O error occurs
    */
   @Test
   public void testPersistAccountMapAndRecover() throws IOException {
-    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
+    BackupFileManager backup =
+        new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
     final int numberAccounts = maxBackupFile * 2;
     final Map<String, String> accounts = new HashMap<>(numberAccounts);
     final Stat stat = new Stat();
@@ -271,7 +278,7 @@ public class BackupFileManagerTest {
       accounts.put(String.valueOf(account.getId()), account.toJson(true).toString());
       stat.setVersion(i + 1);
       stat.setMtime(modifiedTime * 1000);
-      backup.persistAccountMap(accounts, stat);
+      backup.persistAccountMap(accounts, stat.getVersion(), stat.getMtime() / 1000);
       modifiedTime += interval;
     }
 
@@ -283,7 +290,7 @@ public class BackupFileManagerTest {
       assertEquals("Remaining backup mismatch", maxBackupFile, remaingingFiles.length);
 
       // Recover BackupFileManager from the same backup dir
-      backup = new BackupFileManager(accountServiceMetrics, config);
+      backup = new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
     }
   }
 
@@ -336,7 +343,7 @@ public class BackupFileManagerTest {
       Stat stat = new Stat();
       stat.setVersion(i);
       stat.setMtime((baseModifiedTime + (i - startVersion) * interval) * 1000);
-      String filename = BackupFileManager.getBackupFilenameFromStat(stat);
+      String filename = BackupFileManager.getBackupFilename(stat.getVersion(), stat.getMtime() / 1000);
       if (isTemp) {
         filename = filename + BackupFileManager.SEP + BackupFileManager.TEMP_FILE_SUFFIX;
       }

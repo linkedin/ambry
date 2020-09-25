@@ -27,6 +27,7 @@ public class MySqlAccountServiceConfig {
       MYSQL_ACCOUNT_SERVICE_PREFIX + "updater.shut.down.timeout.minutes";
   public static final String BACKUP_DIRECTORY_KEY = MYSQL_ACCOUNT_SERVICE_PREFIX + "backup.dir";
   public static final String UPDATE_DISABLED = MYSQL_ACCOUNT_SERVICE_PREFIX + "update.disabled";
+  private static final String MAX_BACKUP_FILE_COUNT = MYSQL_ACCOUNT_SERVICE_PREFIX + "max.backup.file.count";
 
   // TODO: Might need to take an array of URLs which would have one write (master) and multiple read urls (backup)
   /**
@@ -74,6 +75,14 @@ public class MySqlAccountServiceConfig {
   public final String backupDir;
 
   /**
+   * The maximum number of local backup files kept in disk. When account service exceeds this count, every time it creates
+   * a new backup file, it will remove the oldest one.
+   */
+  @Config(MAX_BACKUP_FILE_COUNT)
+  @Default("10")
+  public final int maxBackupFileCount;
+
+  /**
    * If true, MySqlAccountService would reject all the requests to update accounts.
    */
   @Config(UPDATE_DISABLED)
@@ -90,5 +99,6 @@ public class MySqlAccountServiceConfig {
         verifiableProperties.getIntInRange(UPDATER_SHUT_DOWN_TIMEOUT_MINUTES, 2, 1, Integer.MAX_VALUE);
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
+    maxBackupFileCount = verifiableProperties.getIntInRange(MAX_BACKUP_FILE_COUNT, 10, 1, Integer.MAX_VALUE);
   }
 }
