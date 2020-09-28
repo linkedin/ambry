@@ -27,6 +27,7 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,7 +98,10 @@ class CloudMessageReadSet implements MessageReadSet {
   public void doPrefetch(int index, long relativeOffset, long size) throws IOException {
     BlobReadInfo blobReadInfo = blobReadInfoList.get(index);
     try {
-      blobReadInfo.prefetchBlob(blobStore);
+      if (!blobReadInfo.isPrefetched()) {
+        blobReadInfo.prefetchBlob(blobStore);
+      }
+      blobReadInfo.setPositionAndSize(relativeOffset, size);
     } catch (StoreException ex) {
       throw new IOException("Prefetch of cloud blob " + blobReadInfo.getBlobId().getID() + " failed", ex);
     }
@@ -107,7 +111,16 @@ class CloudMessageReadSet implements MessageReadSet {
   public ByteBuf getPrefetchedData(int index) {
     validateIndex(index);
     BlobReadInfo blobReadInfo = blobReadInfoList.get(index);
-    return Unpooled.wrappedBuffer(blobReadInfo.getPrefetchedBuffer());
+    if (blobReadInfo.position() == -1) {
+      return Unpooled.wrappedBuffer(blobReadInfo.getPrefetchedBuffer());
+    } else {
+      int position = blobReadInfo.position();
+      int size = blobReadInfo.size();
+      ByteBuffer dup = blobReadInfo.getPrefetchedBuffer().duplicate();
+      dup.limit(size + position);
+      dup.position(position);
+      return Unpooled.wrappedBuffer(dup);
+    }
   }
 
   /**
@@ -128,6 +141,8 @@ class CloudMessageReadSet implements MessageReadSet {
     private final CloudBlobMetadata blobMetadata;
     private final BlobId blobId;
     private ByteBuffer prefetchedBuffer;
+    private int position = -1;
+    private int size = -1;
     private boolean isPrefetched;
 
     public BlobReadInfo(CloudBlobMetadata blobMetadata, BlobId blobId) {
@@ -170,11 +185,36 @@ class CloudMessageReadSet implements MessageReadSet {
     }
 
     /**
+     * Set new position and size for prefetched buffer.
+     * @param position The new position
+     * @param size The new size
+     */
+    public void setPositionAndSize(long position, long size) {
+      Objects.requireNonNull(prefetchedBuffer);
+      this.position = (int) position;
+      this.size = (int) size;
+    }
+
+    /**
      * Getter for {@code isPrefetched}
      * @return prefetch status
      */
     public boolean isPrefetched() {
       return isPrefetched;
+    }
+
+    /**
+     * @return Position of prefetched buffer.
+     */
+    public int position() {
+      return position;
+    }
+
+    /**
+     * @return Size of prefetched buffer.
+     */
+    public int size() {
+      return size;
     }
 
     /**

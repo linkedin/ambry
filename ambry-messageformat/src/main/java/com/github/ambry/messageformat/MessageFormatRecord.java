@@ -149,7 +149,7 @@ public class MessageFormatRecord {
         return new DeserializedBlobProperties(BlobProperties_Version_V1,
             BlobProperties_Format_V1.deserializeBlobPropertiesRecord(crcStream));
       default:
-        throw new MessageFormatException("blob property version not supported",
+        throw new MessageFormatException("blob property version " + version + " not supported",
             MessageFormatErrorCodes.Unknown_Format_Version);
     }
   }
