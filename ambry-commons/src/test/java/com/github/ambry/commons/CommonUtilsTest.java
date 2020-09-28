@@ -60,7 +60,8 @@ public class CommonUtilsTest {
     }
 
     try {
-      CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), null, Collections.emptyList());
+      CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), (HelixPropertyStoreConfig) null,
+          Collections.emptyList());
       fail("create HelixPropertyStore with invalid arguments should fail");
     } catch (IllegalArgumentException e) {
       //expected
