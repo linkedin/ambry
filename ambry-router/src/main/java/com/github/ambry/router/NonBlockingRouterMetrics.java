@@ -75,6 +75,8 @@ public class NonBlockingRouterMetrics {
   public final Meter deleteBlobNotOriginateLocalOperationRate;
   public final Meter undeleteBlobNotOriginateLocalOperationRate;
   public final Meter ttlUpdateBlobNotOriginateLocalOperationRate;
+  public final Meter routerGetRequestRate;
+  public final Meter routerPutRequestRate;
 
   // Latency.
   public final Histogram putBlobOperationLatencyMs;
@@ -266,6 +268,8 @@ public class NonBlockingRouterMetrics {
         MetricRegistry.name(UndeleteOperation.class, "UndeleteBlobNotOriginateLocalOperationRate"));
     ttlUpdateBlobNotOriginateLocalOperationRate = metricRegistry.meter(
         MetricRegistry.name(TtlUpdateOperation.class, "TtlUpdateBlobNotOriginateLocalOperationRate"));
+    routerGetRequestRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "RouterGetRequestRate"));
+    routerPutRequestRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "RouterPutRequestRate"));
 
     // Latency.
     putBlobOperationLatencyMs =
@@ -401,7 +405,7 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(TtlUpdateManager.class, "TtlUpdateManagerHandleResponseTimeMs"));
     chunkFillTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillTimeMs"));
     encryptTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "EncryptTimeMs"));
-    decryptTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "DecryptTimeMs"));
+    decryptTimeMs = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "DecryptTimeMs"));
     waitTimeForFreeChunkAvailabilityMs =
         metricRegistry.histogram(MetricRegistry.name(PutManager.class, "WaitTimeForFreeChunkAvailabilityMs"));
     waitTimeForChannelDataAvailabilityMs =

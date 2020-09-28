@@ -1366,6 +1366,7 @@ class PutOperation {
               replicaId.getDataNodeId());
         }
         routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestRate.mark();
+        routerMetrics.routerPutRequestRate.mark();
       }
     }
 
