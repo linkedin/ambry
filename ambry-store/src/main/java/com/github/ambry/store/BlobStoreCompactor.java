@@ -30,7 +30,6 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -42,6 +41,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -203,18 +203,10 @@ class BlobStoreCompactor {
    */
   private void getDeprecatedContainers() {
     deprecatedContainers.clear();
-    if (accountService != null) {
-      accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
-        if (container.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(config.storeContainerDeletionRetentionDays)
-            <= System.currentTimeMillis()) {
-          deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
-        }
-      });
-      //TODO: Filter out the INACTIVE containers from deprecatedContainers set if it's already been compacted.
-      accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE).forEach((container) -> {
-        deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
-      });
-    }
+    Set<Container> containers = accountService.getDeprecatedContainers(config.storeContainerDeletionRetentionDays);
+    deprecatedContainers.addAll(containers.stream()
+        .map(container -> new Pair<>(container.getParentAccountId(), container.getId()))
+        .collect(Collectors.toList()));
   }
 
   /**
@@ -855,7 +847,7 @@ class BlobStoreCompactor {
   private void cleanupUnusedTempSegments() throws StoreException {
     File[] files = dataDir.listFiles(TEMP_LOG_SEGMENTS_FILTER);
     if (files != null) {
-      logger.debug("Cleaning up {}", (Object[]) files);
+      logger.debug("Cleaning up {}", files);
       for (File file : files) {
         // TODO (DiskManager changes): This will actually return the segment to the DiskManager pool.
         if (!file.delete()) {

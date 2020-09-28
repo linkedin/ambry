@@ -13,11 +13,13 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.clustermap.VirtualReplicatorClusterFactory;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.StoreConfig;
 
 
 /**
@@ -29,17 +31,25 @@ public class HelixVcrClusterFactory implements VirtualReplicatorClusterFactory {
   private final ClusterMapConfig clusterMapConfig;
   private final ClusterMap clusterMap;
   private VirtualReplicatorCluster virtualReplicatorCluster;
+  private final AccountService accountService;
+  private final StoreConfig storeConfig;
+  private final CloudDestination cloudDestination;
 
-  public HelixVcrClusterFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
+  public HelixVcrClusterFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
+      AccountService accountService, StoreConfig storeConfig, CloudDestination cloudDestination) {
     this.cloudConfig = cloudConfig;
     this.clusterMapConfig = clusterMapConfig;
     this.clusterMap = clusterMap;
+    this.accountService = accountService;
+    this.storeConfig = storeConfig;
+    this.cloudDestination = cloudDestination;
   }
 
   @Override
   synchronized public VirtualReplicatorCluster getVirtualReplicatorCluster() throws Exception {
     if (virtualReplicatorCluster == null) {
-      virtualReplicatorCluster = new HelixVcrCluster(cloudConfig, clusterMapConfig, clusterMap);
+      virtualReplicatorCluster =
+          new HelixVcrCluster(cloudConfig, clusterMapConfig, storeConfig, clusterMap, accountService, cloudDestination);
     }
     return virtualReplicatorCluster;
   }

@@ -86,6 +86,7 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
         listener.onPartitionAdded(partitionId);
       }
     }
+    // TODO Add task for container deletion sync service here.
   }
 
   @Override

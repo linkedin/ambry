@@ -19,6 +19,7 @@ import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
@@ -48,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -108,15 +110,17 @@ class AzureCloudDestination implements CloudDestination {
    * @param isVcr whether this instance is a VCR.
    */
   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
-      AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String clusterName,
-      AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType, boolean isVcr) {
+      AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String cosmosDeletedContainerCollectionLink,
+      String clusterName, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType,
+      boolean isVcr) {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
     this.cosmosDataAccessor =
-        new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, vcrMetrics, azureMetrics);
+        new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, cosmosDeletedContainerCollectionLink,
+            vcrMetrics, azureMetrics);
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
@@ -124,6 +128,47 @@ class AzureCloudDestination implements CloudDestination {
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     this.isVcr = isVcr;
     this.cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
+  }
+
+  static CloudStorageException toCloudStorageException(String message, Exception e, AzureMetrics azureMetrics) {
+    Long retryDelayMs = null;
+    int statusCode;
+    if (e instanceof BlobStorageException) {
+      azureMetrics.storageErrorCount.inc();
+      statusCode = ((BlobStorageException) e).getStatusCode();
+    } else if (e instanceof DocumentClientException) {
+      azureMetrics.documentErrorCount.inc();
+      statusCode = ((DocumentClientException) e).getStatusCode();
+      retryDelayMs = ((DocumentClientException) e).getRetryAfterInMilliseconds();
+    } else {
+      // Note: catch-all since ABS can throw things like IOException, IllegalStateException
+      azureMetrics.storageErrorCount.inc();
+      statusCode = StatusCodes.INTERNAL_SERVER_ERROR;
+    }
+    // Everything is retryable except NOT_FOUND
+    boolean isRetryable = (statusCode != StatusCodes.NOTFOUND && !(e instanceof StoreException));
+    return new CloudStorageException(message, e, statusCode, isRetryable, retryDelayMs);
+  }
+
+  /**
+   * Return corresponding {@link AzureReplicationFeed} object for specified {@link AzureReplicationFeed.FeedType}.
+   * @param azureReplicationFeedType replication feed type.
+   * @param cosmosDataAccessor {@link CosmosDataAccessor} object.
+   * @param azureMetrics {@link AzureMetrics} object.
+   * @param queryBatchSize batch size of query for replication feed.
+   * @return {@link AzureReplicationFeed} object.
+   */
+  private static AzureReplicationFeed getReplicationFeedObj(AzureReplicationFeed.FeedType azureReplicationFeedType,
+      CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics, int queryBatchSize) {
+    switch (azureReplicationFeedType) {
+      case COSMOS_CHANGE_FEED:
+        return new CosmosChangeFeedBasedReplicationFeed(cosmosDataAccessor, azureMetrics, queryBatchSize);
+      case COSMOS_UPDATE_TIME:
+        return new CosmosUpdateTimeBasedReplicationFeed(cosmosDataAccessor, azureMetrics, queryBatchSize);
+      default:
+        throw new IllegalArgumentException(
+            String.format("Unknown cloud replication feed type: %s", azureReplicationFeedType));
+    }
   }
 
   /**
@@ -428,44 +473,15 @@ class AzureCloudDestination implements CloudDestination {
     return toCloudStorageException(message, e, azureMetrics);
   }
 
-  static CloudStorageException toCloudStorageException(String message, Exception e, AzureMetrics azureMetrics) {
-    Long retryDelayMs = null;
-    int statusCode;
-    if (e instanceof BlobStorageException) {
-      azureMetrics.storageErrorCount.inc();
-      statusCode = ((BlobStorageException) e).getStatusCode();
-    } else if (e instanceof DocumentClientException) {
-      azureMetrics.documentErrorCount.inc();
-      statusCode = ((DocumentClientException) e).getStatusCode();
-      retryDelayMs = ((DocumentClientException) e).getRetryAfterInMilliseconds();
-    } else {
-      // Note: catch-all since ABS can throw things like IOException, IllegalStateException
-      azureMetrics.storageErrorCount.inc();
-      statusCode = StatusCodes.INTERNAL_SERVER_ERROR;
-    }
-    // Everything is retryable except NOT_FOUND
-    boolean isRetryable = (statusCode != StatusCodes.NOTFOUND && !(e instanceof StoreException));
-    return new CloudStorageException(message, e, statusCode, isRetryable, retryDelayMs);
-  }
-
-  /**
-   * Return corresponding {@link AzureReplicationFeed} object for specified {@link AzureReplicationFeed.FeedType}.
-   * @param azureReplicationFeedType replication feed type.
-   * @param cosmosDataAccessor {@link CosmosDataAccessor} object.
-   * @param azureMetrics {@link AzureMetrics} object.
-   * @param queryBatchSize batch size of query for replication feed.
-   * @return {@link AzureReplicationFeed} object.
-   */
-  private static AzureReplicationFeed getReplicationFeedObj(AzureReplicationFeed.FeedType azureReplicationFeedType,
-      CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics, int queryBatchSize) {
-    switch (azureReplicationFeedType) {
-      case COSMOS_CHANGE_FEED:
-        return new CosmosChangeFeedBasedReplicationFeed(cosmosDataAccessor, azureMetrics, queryBatchSize);
-      case COSMOS_UPDATE_TIME:
-        return new CosmosUpdateTimeBasedReplicationFeed(cosmosDataAccessor, azureMetrics, queryBatchSize);
-      default:
-        throw new IllegalArgumentException(
-            String.format("Unknown cloud replication feed type: %s", azureReplicationFeedType));
+  @Override
+  public void updateDeletedContainers(Set<Container> deletedContainers) throws CloudStorageException {
+    try {
+      long lastUpdatedContainerTimestamp = cosmosDataAccessor.getLatestContainerDeletionTime();
+      cosmosDataAccessor.updateDeletedContainers(deletedContainers.stream()
+          .filter(container -> container.getDeleteTriggerTime() >= lastUpdatedContainerTimestamp)
+          .collect(Collectors.toSet()));
+    } catch (DocumentClientException dex) {
+      throw toCloudStorageException("Adding deleted containers failed.", dex);
     }
   }
 

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.replication.FindToken;
 import java.io.Closeable;
@@ -137,4 +138,11 @@ public interface CloudDestination extends Closeable {
    * Halt any compactions in progress.
    */
   void stopCompaction();
+
+  /**
+   * Update the deleted {@link Container}s to cloud.
+   * @param deletedContainers {@link Set} of deleted {@link Container}s.
+   * @throws {@link CloudStorageException} if updating fails.
+   */
+  void updateDeletedContainers(Set<Container> deletedContainers) throws CloudStorageException;
 }

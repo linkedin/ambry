@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.account.Container;
 import com.github.ambry.cloud.azure.AzureReplicationFeed;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.cloud.azure.CosmosUpdateTimeFindToken;
@@ -363,6 +364,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   @Override
   public void stopCompaction() {
+  }
+
+  @Override
+  public void updateDeletedContainers(Set<Container> deletedContainers) {
   }
 
   boolean doesBlobExist(BlobId blobId) {

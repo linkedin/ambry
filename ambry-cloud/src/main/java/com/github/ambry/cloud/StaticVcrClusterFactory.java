@@ -13,11 +13,13 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.clustermap.VirtualReplicatorClusterFactory;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.StoreConfig;
 
 
 /**
@@ -30,7 +32,8 @@ public class StaticVcrClusterFactory implements VirtualReplicatorClusterFactory 
   private final ClusterMap clusterMap;
   private VirtualReplicatorCluster virtualReplicatorCluster;
 
-  public StaticVcrClusterFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
+  public StaticVcrClusterFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
+      AccountService accountService, StoreConfig storeConfig, CloudDestination cloudDestination) {
     this.cloudConfig = cloudConfig;
     this.clusterMapConfig = clusterMapConfig;
     this.clusterMap = clusterMap;

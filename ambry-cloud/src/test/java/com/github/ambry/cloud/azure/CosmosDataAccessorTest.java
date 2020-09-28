@@ -70,7 +70,7 @@ public class CosmosDataAccessorTest {
         CloudBlobMetadata.EncryptionOrigin.NONE);
     azureMetrics = new AzureMetrics(new MetricRegistry());
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
-    cosmosAccessor = new CosmosDataAccessor(mockumentClient, "ambry/metadata", vcrMetrics, azureMetrics);
+    cosmosAccessor = new CosmosDataAccessor(mockumentClient, "ambry/metadata", "ambry/deletedContainer", vcrMetrics, azureMetrics);
   }
 
   /**

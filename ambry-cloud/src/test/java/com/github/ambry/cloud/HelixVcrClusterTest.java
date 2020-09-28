@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -20,6 +21,7 @@ import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.clustermap.VirtualReplicatorClusterListener;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
@@ -33,6 +35,7 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 
 /**
@@ -124,8 +127,10 @@ public class HelixVcrClusterTest {
     props.setProperty("vcr.ssl.port", Integer.toString(vcrSslPort));
     props.setProperty(CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING, ZK_SERVER_HOSTNAME + ":" + ZK_SERVER_PORT);
     props.setProperty(CloudConfig.VCR_CLUSTER_NAME, VCR_CLUSTER_NAME);
-    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(props));
-    return new HelixVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap).getVirtualReplicatorCluster();
+    VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
+    return new HelixVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap, Mockito.mock(AccountService.class),
+        new StoreConfig(verifiableProperties)).getVirtualReplicatorCluster();
   }
 
   private static class MockVcrListener implements VirtualReplicatorClusterListener {
