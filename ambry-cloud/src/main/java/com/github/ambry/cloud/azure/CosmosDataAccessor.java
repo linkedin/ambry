@@ -84,10 +84,10 @@ public class CosmosDataAccessor {
   private final String cosmosCollectionLink;
   private final String cosmosDeletedContainerCollectionLink;
   private final AzureMetrics azureMetrics;
-  private Callable<?> updateCallback = null;
   private final int continuationTokenLimitKb;
   private final int requestChargeThreshold;
   private final int purgeBatchSize;
+  private Callable<?> updateCallback = null;
   private boolean bulkDeleteEnabled = false;
 
   /** Production constructor */
@@ -137,6 +137,21 @@ public class CosmosDataAccessor {
     this.bulkDeleteEnabled = true;
     CloudConfig testCloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
     requestAgent = new CloudRequestAgent(testCloudConfig, vcrMetrics);
+  }
+
+  /**
+   * Returns a query like:
+   * SELECT TOP 500 * FROM c WHERE c.deletionTime BETWEEN 1 AND <7 days ago> ORDER BY c.deletionTime ASC
+   * @param fieldName the field to use in the filter condition.  Must be deletionTime or expirationTime.
+   * @return the query text.
+   */
+  private static String constructDeadBlobsQuery(String fieldName) {
+    StringBuilder builder = new StringBuilder("SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c.").append(fieldName)
+        .append(" BETWEEN " + START_TIME_PARAM + " AND " + END_TIME_PARAM)
+        .append(" ORDER BY c.")
+        .append(fieldName)
+        .append(" ASC");
+    return builder.toString();
   }
 
   /** Visible for testing */
@@ -423,21 +438,6 @@ public class CosmosDataAccessor {
       }
       throw rex;
     }
-  }
-
-  /**
-   * Returns a query like:
-   * SELECT TOP 500 * FROM c WHERE c.deletionTime BETWEEN 1 AND <7 days ago> ORDER BY c.deletionTime ASC
-   * @param fieldName the field to use in the filter condition.  Must be deletionTime or expirationTime.
-   * @return the query text.
-   */
-  private static String constructDeadBlobsQuery(String fieldName) {
-    StringBuilder builder = new StringBuilder("SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c.").append(fieldName)
-        .append(" BETWEEN " + START_TIME_PARAM + " AND " + END_TIME_PARAM)
-        .append(" ORDER BY c.")
-        .append(fieldName)
-        .append(" ASC");
-    return builder.toString();
   }
 
   /**

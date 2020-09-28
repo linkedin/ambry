@@ -18,6 +18,7 @@ import java.io.Closeable;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 
@@ -143,6 +144,24 @@ public interface AccountService extends Closeable {
       }
     }
     return selectedContainers;
+  }
+
+  /**
+   * @return {@link Set} of {@link Container}s ready for deletion.
+   */
+  default Set<Container> getDeprecatedContainers(long containerDeletionRetentionDays) {
+    Set<Container> deprecatedContainers = new HashSet<>();
+    deprecatedContainers.clear();
+    getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
+      if (container.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(containerDeletionRetentionDays)
+          <= System.currentTimeMillis()) {
+        deprecatedContainers.add(container);
+      }
+    });
+    getContainersByStatus(Container.ContainerStatus.INACTIVE).forEach((container) -> {
+      deprecatedContainers.add(container);
+    });
+    return deprecatedContainers;
   }
 
   default void selectInactiveContainersAndMarkInStore(StatsSnapshot statsSnapshot) {

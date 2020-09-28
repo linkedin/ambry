@@ -101,7 +101,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
   private final ScheduledExecutorService scheduler;
   private final HelixAccountServiceConfig config;
   private final TopicListener<String> changeTopicListener = this::onAccountChangeMessage;
-  private final AccountMetadataStore accountMetadataStore;
+  private AccountMetadataStore accountMetadataStore;
   private static final Logger logger = LoggerFactory.getLogger(HelixAccountService.class);
   private final AtomicReference<Router> router = new AtomicReference<>();
 
