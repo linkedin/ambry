@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
 public class HelixFactory {
   private static final Logger LOGGER = LoggerFactory.getLogger(HelixFactory.class);
   // exposed for use in testing
-  final Map<ManagerKey, HelixManager> helixManagers = new ConcurrentHashMap<>();
+  private final Map<ManagerKey, HelixManager> helixManagers = new ConcurrentHashMap<>();
   private final Map<String, DataNodeConfigSource> dataNodeConfigSources = new ConcurrentHashMap<>();
 
   /**
@@ -46,7 +46,7 @@ public class HelixFactory {
       String zkAddr) {
     ManagerKey managerKey = new ManagerKey(clusterName, instanceName, instanceType, zkAddr);
     return helixManagers.computeIfAbsent(managerKey,
-        k -> HelixManagerFactory.getZKHelixManager(clusterName, instanceName, instanceType, zkAddr));
+        k -> buildZKHelixManager(clusterName, instanceName, instanceType, zkAddr));
   }
 
   /**
@@ -83,7 +83,20 @@ public class HelixFactory {
    */
   public DataNodeConfigSource getDataNodeConfigSource(ClusterMapConfig clusterMapConfig, String zkAddr,
       DataNodeConfigSourceMetrics metrics) {
-    return dataNodeConfigSources.computeIfAbsent(zkAddr, k -> buildSource(clusterMapConfig, zkAddr, metrics));
+    return dataNodeConfigSources.computeIfAbsent(zkAddr,
+        k -> buildDataNodeConfigSource(clusterMapConfig, zkAddr, metrics));
+  }
+
+  /**
+   * Construct a new instance of {@link HelixManager}. Exposed so that tests can override if needed.
+   * @param clusterName the name of the cluster for the manager.
+   * @param instanceName the name of the instance for the manager.
+   * @param instanceType the {@link InstanceType} of the requester.
+   * @param zkAddr the address identifying the zk service to which this request is to be made.
+   * @return a new instance of {@link HelixManager}.
+   */
+  HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
+    return HelixManagerFactory.getZKHelixManager(clusterName, instanceName, instanceType, zkAddr);
   }
 
   /**
@@ -93,7 +106,7 @@ public class HelixFactory {
    * @param metrics the {@link DataNodeConfigSourceMetrics} to use.
    * @return a new instance of {@link DataNodeConfigSource} with the supplied configuration.
    */
-  private DataNodeConfigSource buildSource(ClusterMapConfig clusterMapConfig, String zkAddr,
+  private DataNodeConfigSource buildDataNodeConfigSource(ClusterMapConfig clusterMapConfig, String zkAddr,
       DataNodeConfigSourceMetrics metrics) {
     try {
       InstanceConfigToDataNodeConfigAdapter instanceConfigSource = null;
@@ -153,8 +166,8 @@ public class HelixFactory {
         return false;
       }
       ManagerKey that = (ManagerKey) o;
-      return Objects.equals(clusterName, that.clusterName) && Objects.equals(instanceName, that.instanceName)
-          && instanceType == that.instanceType && Objects.equals(zkAddr, that.zkAddr);
+      return Objects.equals(zkAddr, that.zkAddr) && instanceType == that.instanceType && Objects.equals(clusterName,
+          that.clusterName) && Objects.equals(instanceName, that.instanceName);
     }
 
     @Override

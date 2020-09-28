@@ -1496,23 +1496,13 @@ public class HelixClusterManagerTest {
       this.znRecordMap = znRecordMap;
     }
 
-    /**
-     * Return a {@link MockHelixManager}
-     * @param clusterName the name of the cluster for which the manager is to be gotten.
-     * @param instanceName the name of the instance on whose behalf the manager is to be gotten.
-     * @param instanceType the {@link InstanceType} of the requester.
-     * @param zkAddr the address identifying the zk service to which this request is to be made.
-     * @return the {@link MockHelixManager}
-     */
     @Override
-    public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
+    HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
         String zkAddr) {
-      if (helixCluster.getZkAddrs().contains(zkAddr)) {
-        return helixManagers.computeIfAbsent(new ManagerKey(clusterName, instanceName, instanceType, zkAddr),
-            key -> new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, znRecordMap, beBadException));
-      } else {
+      if (!helixCluster.getZkAddrs().contains(zkAddr)) {
         throw new IllegalArgumentException("Invalid ZkAddr");
       }
+      return new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, znRecordMap, beBadException);
     }
   }
 }
