@@ -623,8 +623,7 @@ class NonBlockingRouter implements Router {
     OperationController(String suffix, String defaultPartitionClass, AccountService accountService) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
       // Warm up connections to dataNodes in local and remote DCs.
-      List<ResponseInfo> responseInfos = new ArrayList<>();
-
+      List<ResponseInfo> responseInfos = Collections.synchronizedList(new ArrayList<>());
       String localDatacenter = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
       Map<Boolean, List<DataNodeId>> localAndRemoteNodes = clusterMap.getDataNodeIds()
           .stream()

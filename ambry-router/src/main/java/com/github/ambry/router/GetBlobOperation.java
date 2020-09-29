@@ -803,6 +803,7 @@ class GetBlobOperation extends GetOperation {
               replicaId.getDataNodeId());
         }
         routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getRequestRate.mark();
+        routerMetrics.routerGetRequestRate.mark();
         state = ChunkState.InProgress;
       }
     }
