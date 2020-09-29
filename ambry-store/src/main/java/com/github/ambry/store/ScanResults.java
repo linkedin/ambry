@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -78,7 +79,7 @@ class ScanResults {
   // whose key is the ContainerId and the value is the valid size of this container.
   // So {@code containerBaseBucket} is base value for all containers and the {@code containerBuckets} is the delta values
   // on each time bucket.
-  private final Map<String, Map<String, Long>> containerBaseBucket = new HashMap<>();
+  private final Map<String, Map<String, Long>> containerBaseBucket = new ConcurrentHashMap<>();
   private final NavigableMap<Long, Map<String, Map<String, Long>>> containerDeltaBuckets = new TreeMap<>();
   final long containerForecastStartTimeMs;
   final long containerLastBucketTimeMs;
