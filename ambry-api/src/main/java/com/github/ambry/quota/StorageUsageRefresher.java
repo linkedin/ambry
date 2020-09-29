@@ -17,7 +17,8 @@ import java.util.Map;
 
 
 /**
- * An interface to initialize and refresh the storage usage for each container.
+ * An interface to initialize the storage usage of each container and save them in memory. It should also refresh
+ * the in memory cache if there is any change of storage usage.
  */
 public interface StorageUsageRefresher {
 

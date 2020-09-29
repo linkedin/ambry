@@ -14,7 +14,7 @@
 package com.github.ambry.config;
 
 /**
- * Config for {@link com.github.ambry.quota.StorageQuotaService}
+ * Config for Storage Quota service.
  */
 public class StorageQuotaConfig {
   public static final String STORAGE_QUOTA_PREFIX = "storage.quota.";
