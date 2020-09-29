@@ -46,8 +46,13 @@ public class MySqlAccountServiceTest {
   AccountService mySqlAccountService;
   Properties mySqlConfigProps = new Properties();
 
-  public MySqlAccountServiceTest() {
-
+  @Before
+  public void resetConfig() {
+    mySqlConfigProps.setProperty(DB_URL, "");
+    mySqlConfigProps.setProperty(DB_USER, "");
+    mySqlConfigProps.setProperty(DB_PASSWORD, "");
+    mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
+    mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
   }
 
   /**
@@ -399,14 +404,5 @@ public class MySqlAccountServiceTest {
         mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate)));
     assertEquals("UpdateAccountErrorCount in metrics should be 2", 2,
         accountServiceMetrics.updateAccountErrorCount.getCount());
-  }
-
-  @Before
-  public void resetConfig() {
-    mySqlConfigProps.setProperty(DB_URL, "");
-    mySqlConfigProps.setProperty(DB_USER, "");
-    mySqlConfigProps.setProperty(DB_PASSWORD, "");
-    mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
-    mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
   }
 }

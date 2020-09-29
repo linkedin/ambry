@@ -13,7 +13,7 @@
  */
 package com.github.ambry.account.mysql;
 
-import com.github.ambry.account.AccountSerdeUtils;
+import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.utils.SystemTime;
@@ -48,7 +48,7 @@ public class ContainerDaoTest {
   public ContainerDaoTest() throws SQLException {
     testContainer =
         new ContainerBuilder(containerId, containerName, Container.ContainerStatus.ACTIVE, "", accountId).build();
-    containerJson = AccountSerdeUtils.containerToJson(testContainer);
+    containerJson = AccountCollectionSerde.containerToJson(testContainer).toString();
     mockConnection = mock(Connection.class);
     PreparedStatement mockInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into"))).thenReturn(mockInsertStatement);

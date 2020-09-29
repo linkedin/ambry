@@ -16,7 +16,7 @@ package com.github.ambry.config;
 /**
  * Configs for MySqlAccountService
  */
-public class MySqlAccountServiceConfig {
+public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String MYSQL_ACCOUNT_SERVICE_PREFIX = "mysql.account.service.";
   public static final String DB_URL = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.url";
   public static final String DB_USER = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.user";
@@ -90,6 +90,7 @@ public class MySqlAccountServiceConfig {
   public final boolean updateDisabled;
 
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
+    super(verifiableProperties);
     dbUrl = verifiableProperties.getString(DB_URL);
     dbUser = verifiableProperties.getString(DB_USER);
     dbPassword = verifiableProperties.getString(DB_PASSWORD);

@@ -27,6 +27,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
@@ -40,14 +41,13 @@ import static com.github.ambry.utils.Utils.*;
 /**
  * An implementation of {@link AccountService} that employs MySql database as its underlying storage.
  */
-public class MySqlAccountService implements AccountService {
+public class MySqlAccountService extends AbstractAccountService {
 
   private static final Logger logger = LoggerFactory.getLogger(MySqlAccountService.class);
   static final String MYSQL_ACCOUNT_UPDATER_PREFIX = "mysql-account-updater";
-  private final AccountServiceMetrics accountServiceMetrics;
+  protected final AtomicBoolean open = new AtomicBoolean(true);
   private final MySqlAccountServiceConfig config;
-  // in-memory cache for storing account and container metadata
-  private AccountInfoMap accountInfoMap;
+  // lock to protect in-memory metadata cache
   private final ReadWriteLock infoMapLock = new ReentrantReadWriteLock();
   private final ScheduledExecutorService scheduler;
   private final BackupFileManager backupFileManager;
@@ -55,7 +55,7 @@ public class MySqlAccountService implements AccountService {
 
   public MySqlAccountService(AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config,
       MySqlAccountStore mySqlAccountStore) throws IOException {
-    this.accountServiceMetrics = accountServiceMetrics;
+    super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"));
     this.config = config;
     this.mySqlAccountStore = mySqlAccountStore;
     this.scheduler =
@@ -96,10 +96,9 @@ public class MySqlAccountService implements AccountService {
     if (accountInfoMap == null) {
       accountInfoMap = new AccountInfoMap(accountServiceMetrics);
     }
-    this.accountInfoMap = accountInfoMap;
-
     // Refresh last modified time of Accounts and Containers in cache
-    this.accountInfoMap.refreshLastModifiedTime();
+    accountInfoMap.refreshLastModifiedTime();
+    accountInfoMapRef.set(accountInfoMap);
   }
 
   /**
@@ -125,7 +124,7 @@ public class MySqlAccountService implements AccountService {
       createMySqlAccountStore();
 
       // Find last modified time of Accounts and containers in cache.
-      long lastModifiedTime = accountInfoMap.getLastModifiedTime();
+      long lastModifiedTime = accountInfoMapRef.get().getLastModifiedTime();
 
       // Fetch added/modified accounts and containers from MySql database since LMT
       Collection<Account> updatedAccountsInDB = mySqlAccountStore.getNewAccounts(lastModifiedTime);
@@ -135,20 +134,20 @@ public class MySqlAccountService implements AccountService {
         // Update cache with fetched accounts and containers
         infoMapLock.writeLock().lock();
         try {
+          AccountInfoMap accountInfoMap = accountInfoMapRef.get();
           accountInfoMap.addOrUpdateAccounts(updatedAccountsInDB);
           accountInfoMap.addOrUpdateContainers(updatedContainersInDB);
+          // Refresh last modified time of Accounts and Containers in cache
+          accountInfoMap.refreshLastModifiedTime();
         } finally {
           infoMapLock.writeLock().unlock();
         }
-
-        // Refresh last modified time of Accounts and Containers in cache
-        accountInfoMap.refreshLastModifiedTime();
 
         // Persist account metadata in cache to back up file on disk.
         Collection<Account> accountCollection;
         infoMapLock.readLock().lock();
         try {
-          accountCollection = accountInfoMap.getAccounts();
+          accountCollection = accountInfoMapRef.get().getAccounts();
         } finally {
           infoMapLock.readLock().unlock();
         }
@@ -167,7 +166,7 @@ public class MySqlAccountService implements AccountService {
   public Account getAccountById(short accountId) {
     infoMapLock.readLock().lock();
     try {
-      return accountInfoMap.getAccountById(accountId);
+      return accountInfoMapRef.get().getAccountById(accountId);
     } finally {
       infoMapLock.readLock().unlock();
     }
@@ -177,7 +176,7 @@ public class MySqlAccountService implements AccountService {
   public Account getAccountByName(String accountName) {
     infoMapLock.readLock().lock();
     try {
-      return accountInfoMap.getAccountByName(accountName);
+      return accountInfoMapRef.get().getAccountByName(accountName);
     } finally {
       infoMapLock.readLock().unlock();
     }
@@ -214,6 +213,7 @@ public class MySqlAccountService implements AccountService {
     // but the local cache is not yet refreshed with latest account info.
     infoMapLock.readLock().lock();
     try {
+      AccountInfoMap accountInfoMap = accountInfoMapRef.get();
       if (accountInfoMap.hasConflictingAccount(accounts)) {
         logger.error("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
         accountServiceMetrics.updateAccountErrorCount.inc();
@@ -246,7 +246,7 @@ public class MySqlAccountService implements AccountService {
     // write added/modified accounts to in-memory cache
     infoMapLock.writeLock().lock();
     try {
-      accountInfoMap.addOrUpdateAccounts(accounts);
+      accountInfoMapRef.get().addOrUpdateAccounts(accounts);
     } finally {
       infoMapLock.writeLock().unlock();
     }
@@ -260,7 +260,7 @@ public class MySqlAccountService implements AccountService {
   public Collection<Account> getAllAccounts() {
     infoMapLock.readLock().lock();
     try {
-      return accountInfoMap.getAccounts();
+      return accountInfoMapRef.get().getAccounts();
     } finally {
       infoMapLock.readLock().unlock();
     }
@@ -286,6 +286,14 @@ public class MySqlAccountService implements AccountService {
   public void close() throws IOException {
     if (scheduler != null) {
       shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMinutes, TimeUnit.MINUTES);
+    }
+    open.set(false);
+  }
+
+  @Override
+  protected void checkOpen() {
+    if (!open.get()) {
+      throw new IllegalStateException("AccountService is closed.");
     }
   }
 
@@ -329,6 +337,8 @@ public class MySqlAccountService implements AccountService {
    */
   private void updateContainersWithMySqlStore(short accountId, Collection<Container> containers) throws SQLException {
     //check for account ID in in-memory cache
+    // TODO: read lock
+    AccountInfoMap accountInfoMap = accountInfoMapRef.get();
     Account accountInCache = accountInfoMap.getAccountById(accountId);
     if (accountInCache == null) {
       throw new IllegalArgumentException("Account with ID " + accountId + "doesn't exist");

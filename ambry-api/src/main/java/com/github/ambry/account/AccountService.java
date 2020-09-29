@@ -129,7 +129,7 @@ public interface AccountService extends Closeable {
    */
   default Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
-    throw new UnsupportedOperationException("This method is not supported");
+    return addContainers(accountName, containers);
   }
 
   /**
@@ -140,7 +140,8 @@ public interface AccountService extends Closeable {
    * @throws AccountServiceException if exception occurs when getting container.
    */
   default Container getContainer(String accountName, String containerName) throws AccountServiceException {
-    throw new UnsupportedOperationException("This method is not supported");
+    Account account = getAccountByName(accountName);
+    return account != null ? account.getContainerByName(containerName) : null;
   }
 
   /**

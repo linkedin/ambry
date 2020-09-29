@@ -115,7 +115,7 @@ class GetAccountsHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(frontendMetrics.getAccountsSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        ReadableStreamChannel channel = serializeJsonToChannel(AccountCollectionSerde.toJson(getAccounts()));
+        ReadableStreamChannel channel = serializeJsonToChannel(AccountCollectionSerde.accountsToJson(getAccounts()));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());

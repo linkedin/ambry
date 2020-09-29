@@ -66,7 +66,7 @@ final class JsonAccountService extends AbstractAccountService {
    */
   JsonAccountService(Path accountFile, AccountServiceMetrics accountServiceMetrics, ScheduledExecutorService scheduler,
       JsonAccountConfig accountConfig) {
-    super(accountServiceMetrics);
+    super(accountConfig, accountServiceMetrics);
 
     this.accountFile = Objects.requireNonNull(accountFile, "helixStore cannot be null");
     this.accountServiceMetrics = Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null");

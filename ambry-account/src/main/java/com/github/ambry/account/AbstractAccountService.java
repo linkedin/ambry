@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.config.AccountServiceConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
@@ -25,7 +26,7 @@ import java.util.function.Consumer;
 /**
  * Class which provides a basic implementation an {@link AccountService}. The handling of accounts is mostly the same
  * for all the implementations. The only thing the implementations (usually) differ in is what the source is of the
- * accounts (Zookeeper / Helix, local JSON file, etcd, Consul, etc).
+ * accounts (Zookeeper / Helix, MySql, local JSON file, etcd, Consul, etc).
  */
 abstract class AbstractAccountService implements AccountService {
 
@@ -35,9 +36,11 @@ abstract class AbstractAccountService implements AccountService {
   protected final ReentrantLock lock = new ReentrantLock();
   protected final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers =
       new CopyOnWriteArraySet<>();
+  private final AccountServiceConfig config;
   protected final AccountServiceMetrics accountServiceMetrics;
 
-  public AbstractAccountService(AccountServiceMetrics accountServiceMetrics) {
+  public AbstractAccountService(AccountServiceConfig config, AccountServiceMetrics accountServiceMetrics) {
+    this.config = config;
     this.accountServiceMetrics = accountServiceMetrics;
 
     this.accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
@@ -66,6 +69,70 @@ abstract class AbstractAccountService implements AccountService {
   public Collection<Account> getAllAccounts() {
     checkOpen();
     return accountInfoMapRef.get().getAccounts();
+  }
+
+  @Override
+  public Collection<Container> addContainers(String accountName, Collection<Container> containers)
+      throws AccountServiceException {
+    checkOpen();
+    // input validation
+    if (accountName == null || accountName.isEmpty() || containers == null || containers.isEmpty()) {
+      throw new AccountServiceException("Account or container is null or empty", AccountServiceErrorCode.BadRequest);
+    }
+    Account account = getAccountByName(accountName);
+    if (account == null) {
+      logger.error("Account {} is not found", accountName);
+      throw new AccountServiceException("Account " + accountName + " is not found", AccountServiceErrorCode.NotFound);
+    }
+    Set<Container> existingContainers = new HashSet<>();
+    Set<Container> newContainers = new HashSet<>(containers);
+    // create a hashmap to map the name to existing containers in account
+    Map<String, Container> existingContainersInAccount = new HashMap<>();
+    account.getAllContainers().forEach(c -> existingContainersInAccount.put(c.getName(), c));
+    for (Container container : containers) {
+      // make sure there is no conflicting container (conflicting means a container with same name but different attributes already exists).
+      Container existingContainer = existingContainersInAccount.get(container.getName());
+      if (existingContainer != null) {
+        if (existingContainer.isSameContainer(container)) {
+          // If an exactly same container already exists, we put it into existing list. Adding same container multiple times
+          // should be no-op.
+          existingContainers.add(container);
+        } else {
+          throw new AccountServiceException("There is a conflicting container in account " + accountName,
+              AccountServiceErrorCode.ResourceConflict);
+        }
+      }
+    }
+    newContainers.removeAll(existingContainers);
+    List<Container> createdContainers = new ArrayList<>();
+
+    if (!newContainers.isEmpty()) {
+      // if code reaches here, it means no conflicting container in this account
+      short nextContainerId = account.getAllContainers()
+          .stream()
+          .map(Container::getId)
+          .max(Short::compareTo)
+          .map(maxId -> (short) (maxId + 1))
+          .orElse(config.containerIdStartNumber);
+      // construct containers based on input container and next containerId
+      for (Container container : newContainers) {
+        createdContainers.add(
+            new ContainerBuilder(container).setId(nextContainerId).setParentAccountId(account.getId()).build());
+        ++nextContainerId;
+      }
+      // In case updating account metadata store failed, we do a deep copy of original account. Thus, we don't have to
+      // revert changes in original account when there is a failure.
+      Account accountCopy = new AccountBuilder(account).build();
+      accountCopy.updateContainerMap(createdContainers);
+      boolean hasSucceeded = updateAccounts(Collections.singletonList(accountCopy));
+      if (!hasSucceeded) {
+        throw new AccountServiceException("Account update failed for " + accountName,
+            AccountServiceErrorCode.AccountUpdateError);
+      }
+      // after metadata store is successfully updated, we safely update original account
+      account.updateContainerMap(createdContainers);
+    }
+    return createdContainers;
   }
 
   @Override

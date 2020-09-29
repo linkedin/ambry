@@ -13,7 +13,7 @@
  */
 package com.github.ambry.account.mysql;
 
-import com.github.ambry.account.AccountSerdeUtils;
+import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import java.sql.PreparedStatement;
@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+import org.json.JSONObject;
 
 
 /**
@@ -70,7 +71,7 @@ public class ContainerDao {
       // Note: assuming autocommit for now
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
       insertStatement.setInt(1, accountId);
-      insertStatement.setString(2, AccountSerdeUtils.containerToJson(container));
+      insertStatement.setString(2, AccountCollectionSerde.containerToJson(container).toString());
       insertStatement.executeUpdate();
     } catch (SQLException e) {
       // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
@@ -90,7 +91,7 @@ public class ContainerDao {
     try {
       // Note: assuming autocommit for now
       PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
-      updateStatement.setString(1, AccountSerdeUtils.containerToJson(container));
+      updateStatement.setString(1, AccountCollectionSerde.containerToJson(container).toString());
       updateStatement.setInt(2, accountId);
       updateStatement.setInt(3, container.getId());
       updateStatement.executeUpdate();
@@ -151,7 +152,7 @@ public class ContainerDao {
       int accountId = resultSet.getInt(ACCOUNT_ID);
       String containerJson = resultSet.getString(CONTAINER_INFO);
       Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
-      Container container = AccountSerdeUtils.containerFromJson(containerJson, (short) accountId);
+      Container container = AccountCollectionSerde.containerFromJson(new JSONObject(containerJson), (short) accountId);
       container = new ContainerBuilder(container).setLastModifiedTime(lastModifiedTime.getTime()).build();
       containers.add(container);
     }

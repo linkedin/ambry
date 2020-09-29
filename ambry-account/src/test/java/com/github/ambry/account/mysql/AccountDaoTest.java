@@ -15,7 +15,7 @@ package com.github.ambry.account.mysql;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
-import com.github.ambry.account.AccountSerdeUtils;
+import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
@@ -49,7 +49,7 @@ public class AccountDaoTest {
 
   public AccountDaoTest() throws SQLException {
     testAccount = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).build();
-    accountJson = AccountSerdeUtils.accountToJson(testAccount, true);
+    accountJson = AccountCollectionSerde.accountToJson(testAccount, true).toString();
     mockConnection = mock(Connection.class);
     PreparedStatement mockInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into"))).thenReturn(mockInsertStatement);

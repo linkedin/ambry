@@ -30,6 +30,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingBiConsumer;
 import com.github.ambry.utils.ThrowingConsumer;
@@ -70,7 +71,7 @@ public class PostAccountsHandlerTest {
   @Test
   public void validRequestsTest() throws Exception {
     ThrowingConsumer<Collection<Account>> testAction = accountsToUpdate -> {
-      String requestBody = AccountCollectionSerde.toJson(accountsToUpdate).toString();
+      String requestBody = AccountCollectionSerde.accountsToJson(accountsToUpdate).toString();
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       sendRequestGetResponse(requestBody, restResponseChannel);
       assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
@@ -108,7 +109,7 @@ public class PostAccountsHandlerTest {
     testAction.accept(new JSONObject().append("accounts", "ABC").toString(), RestServiceErrorCode.BadRequest);
     // AccountService update failure
     accountService.setShouldUpdateSucceed(false);
-    testAction.accept(AccountCollectionSerde.toJson(Collections.emptyList()).toString(),
+    testAction.accept(AccountCollectionSerde.accountsToJson(Collections.emptyList()).toString(),
         RestServiceErrorCode.BadRequest);
   }
 
@@ -120,7 +121,7 @@ public class PostAccountsHandlerTest {
   public void securityServiceDenialTest() throws Exception {
     IllegalStateException injectedException = new IllegalStateException("@@expected");
     TestUtils.ThrowingRunnable testAction =
-        () -> sendRequestGetResponse(AccountCollectionSerde.toJson(Collections.emptyList()).toString(),
+        () -> sendRequestGetResponse(AccountCollectionSerde.accountsToJson(Collections.emptyList()).toString(),
             new MockRestResponseChannel());
     ThrowingConsumer<IllegalStateException> errorChecker = e -> assertEquals("Wrong exception", injectedException, e);
     securityServiceFactory.exceptionToReturn = injectedException;
@@ -153,7 +154,7 @@ public class PostAccountsHandlerTest {
     body.add(ByteBuffer.wrap(requestBody.getBytes(StandardCharsets.UTF_8)));
     body.add(null);
     RestRequest restRequest = new MockRestRequest(data, body);
-    FutureResult<Void> future = new FutureResult<>();
+    FutureResult<ReadableStreamChannel> future = new FutureResult<>();
     handler.handle(restRequest, restResponseChannel, future::done);
     try {
       future.get(1, TimeUnit.SECONDS);

@@ -33,7 +33,7 @@ public class AccountCollectionSerde {
    * @param accounts the {@link Account}s to serialize.
    * @return the {@link JSONObject}
    */
-  public static JSONObject toJson(Collection<Account> accounts) {
+  public static JSONObject accountsToJson(Collection<Account> accounts) {
     JSONArray accountArray = new JSONArray();
     accounts.stream().map(account -> account.toJson(false)).forEach(accountArray::put);
     return new JSONObject().put(ACCOUNTS_KEY, accountArray);
@@ -44,7 +44,7 @@ public class AccountCollectionSerde {
    * @param json the {@link JSONObject} to deserialize.
    * @return a {@link Collection} of {@link Account}s.
    */
-  public static Collection<Account> fromJson(JSONObject json) {
+  public static Collection<Account> accountsFromJson(JSONObject json) {
     JSONArray accountArray = json.optJSONArray(ACCOUNTS_KEY);
     if (accountArray == null) {
       return Collections.emptyList();
@@ -56,5 +56,45 @@ public class AccountCollectionSerde {
       }
       return accounts;
     }
+  }
+
+  public static Account accountFromJson(JSONObject json) {
+    return Account.fromJson(json);
+  }
+
+  public static JSONObject accountToJson(Account account, boolean excludeContainers) {
+    JSONObject jsonObject = account.toJson(false);
+    if (excludeContainers) {
+      jsonObject.remove(Account.CONTAINERS_KEY);
+    }
+    return jsonObject;
+  }
+
+  public static JSONObject containersToJson(Collection<Container> containers) {
+    JSONArray containerArray = new JSONArray();
+    containers.stream().map(container -> container.toJson()).forEach(containerArray::put);
+    return new JSONObject().put(Account.CONTAINERS_KEY, containerArray);
+  }
+
+  public static Collection<Container> containersFromJson(JSONObject json, short accountId) {
+    JSONArray containerArray = json.optJSONArray(Account.CONTAINERS_KEY);
+    if (containerArray == null) {
+      return Collections.emptyList();
+    } else {
+      Collection<Container> containers = new ArrayList<>();
+      for (int i = 0; i < containerArray.length(); i++) {
+        JSONObject containerJson = containerArray.getJSONObject(i);
+        containers.add(Container.fromJson(containerJson, accountId));
+      }
+      return containers;
+    }
+  }
+
+  public static Container containerFromJson(JSONObject json, short accountId) {
+    return Container.fromJson(json, accountId);
+  }
+
+  public static JSONObject containerToJson(Container container) {
+    return container.toJson();
   }
 }
