@@ -96,7 +96,7 @@ import static com.github.ambry.utils.Utils.*;
 public class HelixAccountService extends AbstractAccountService implements AccountService {
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
-  
+
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final BackupFileManager backupFileManager;
   private final HelixPropertyStore<ZNRecord> helixStore;
@@ -104,7 +104,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
   private final ScheduledExecutorService scheduler;
   private final HelixAccountServiceConfig config;
   private final TopicListener<String> changeTopicListener = this::onAccountChangeMessage;
-  private AccountMetadataStore accountMetadataStore;
+  private final AccountMetadataStore accountMetadataStore;
   private static final Logger logger = LoggerFactory.getLogger(HelixAccountService.class);
   private final AtomicReference<Router> router = new AtomicReference<>();
 

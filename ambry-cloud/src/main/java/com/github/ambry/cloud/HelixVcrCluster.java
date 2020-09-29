@@ -63,10 +63,10 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   private final List<VirtualReplicatorClusterListener> listeners = new ArrayList<>();
   private final CloudConfig cloudConfig;
   private final StoreConfig storeConfig;
-  private HelixManager manager;
-  private HelixAdmin helixAdmin;
   private final AccountService accountService;
   private final CloudDestination cloudDestination;
+  private HelixManager manager;
+  private HelixAdmin helixAdmin;
 
   /**
    * Construct the helix VCR cluster.
@@ -169,15 +169,15 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   }
 
   /**
-   * Register {@link ContainerDeletionSyncTask}s to sync deleted container information from account service to VCR.
+   * Register {@link CloudContainerDeletionSyncTask}s to sync deleted container information from account service to VCR.
    * @param engine the {@link StateMachineEngine} to register the task state model.
    */
   private void registerContainerDeletionSyncTask(StateMachineEngine engine) {
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
-    taskFactoryMap.put(String.format("%s", ContainerDeletionSyncTask.class.getSimpleName()), new TaskFactory() {
+    taskFactoryMap.put(String.format("%s", CloudContainerDeletionSyncTask.class.getSimpleName()), new TaskFactory() {
       @Override
       public Task createNewTask(TaskCallbackContext context) {
-        return new ContainerDeletionSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
+        return new CloudContainerDeletionSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
             cloudDestination);
       }
     });

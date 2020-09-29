@@ -42,15 +42,15 @@ import org.mockito.Mockito;
  * Tests of HelixVcrCluster.
  */
 public class HelixVcrClusterTest {
-  private static MockClusterAgentsFactory mockClusterAgentsFactory;
-  private static MockClusterMap mockClusterMap;
   private static final String ZK_SERVER_HOSTNAME = "localhost";
   private static final int ZK_SERVER_PORT = 31900;
   private static final String ZK_CONNECT_STRING = ZK_SERVER_HOSTNAME + ":" + ZK_SERVER_PORT;
-  private static TestUtils.ZkInfo zkInfo;
   private static final String VCR_CLUSTER_NAME = "vcrTestCluster";
-  private static HelixControllerManager helixControllerManager;
   private static final int NUM_PARTITIONS = 10;
+  private static MockClusterAgentsFactory mockClusterAgentsFactory;
+  private static MockClusterMap mockClusterMap;
+  private static TestUtils.ZkInfo zkInfo;
+  private static HelixControllerManager helixControllerManager;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
@@ -130,7 +130,7 @@ public class HelixVcrClusterTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
     return new HelixVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap, Mockito.mock(AccountService.class),
-        new StoreConfig(verifiableProperties)).getVirtualReplicatorCluster();
+        new StoreConfig(verifiableProperties), null).getVirtualReplicatorCluster();
   }
 
   private static class MockVcrListener implements VirtualReplicatorClusterListener {

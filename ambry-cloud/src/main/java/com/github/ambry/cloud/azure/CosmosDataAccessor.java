@@ -61,32 +61,31 @@ import rx.observables.BlockingObservable;
 
 
 public class CosmosDataAccessor {
-  public static final String COSMOS_LAST_UPDATED_COLUMN = "_ts";
-  static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
-  static final String PROPERTY_CONTINUATION = "continuation";
-  static final String PROPERTY_DELETED = "deleted";
   private static final Logger logger = LoggerFactory.getLogger(CosmosDataAccessor.class);
   private static final String DOCS = "/docs/";
+  public static final String COSMOS_LAST_UPDATED_COLUMN = "_ts";
   private static final String START_TIME_PARAM = "@startTime";
   private static final String END_TIME_PARAM = "@endTime";
   private static final String LIMIT_PARAM = "@limit";
-  private static final String DELETED_CONTAINER_ID_COLUMN = "id";
-  private static final String CONTAINER_ID_ACCOUNT_ID_DELIM = "_";
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
-  private static final String MOST_RECENT_CONTAINER_DELETION_TIMESTAMP_QUERY =
-      "SELECT VALUE MAX(c.deleteTriggerTime) FROM c";
   private static final String CONTAINER_DELETION_TABLE = "DeletedContainer";
+  private static final String DELETED_CONTAINER_ID_COLUMN = "id";
+  private static final String CONTAINER_ID_ACCOUNT_ID_DELIM = "_";
+  static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
+  static final String PROPERTY_CONTINUATION = "continuation";
+  static final String PROPERTY_DELETED = "deleted";
+
   private final AsyncDocumentClient asyncDocumentClient;
   private final CloudRequestAgent requestAgent;
   private final String cosmosCollectionLink;
   private final String cosmosDeletedContainerCollectionLink;
   private final AzureMetrics azureMetrics;
+  private Callable<?> updateCallback = null;
   private final int continuationTokenLimitKb;
   private final int requestChargeThreshold;
   private final int purgeBatchSize;
-  private Callable<?> updateCallback = null;
   private boolean bulkDeleteEnabled = false;
 
   /** Production constructor */
@@ -136,21 +135,6 @@ public class CosmosDataAccessor {
     this.bulkDeleteEnabled = true;
     CloudConfig testCloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
     requestAgent = new CloudRequestAgent(testCloudConfig, vcrMetrics);
-  }
-
-  /**
-   * Returns a query like:
-   * SELECT TOP 500 * FROM c WHERE c.deletionTime BETWEEN 1 AND <7 days ago> ORDER BY c.deletionTime ASC
-   * @param fieldName the field to use in the filter condition.  Must be deletionTime or expirationTime.
-   * @return the query text.
-   */
-  private static String constructDeadBlobsQuery(String fieldName) {
-    StringBuilder builder = new StringBuilder("SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c.").append(fieldName)
-        .append(" BETWEEN " + START_TIME_PARAM + " AND " + END_TIME_PARAM)
-        .append(" ORDER BY c.")
-        .append(fieldName)
-        .append(" ASC");
-    return builder.toString();
   }
 
   /** Visible for testing */
@@ -440,6 +424,21 @@ public class CosmosDataAccessor {
   }
 
   /**
+   * Returns a query like:
+   * SELECT TOP 500 * FROM c WHERE c.deletionTime BETWEEN 1 AND <7 days ago> ORDER BY c.deletionTime ASC
+   * @param fieldName the field to use in the filter condition.  Must be deletionTime or expirationTime.
+   * @return the query text.
+   */
+  private static String constructDeadBlobsQuery(String fieldName) {
+    StringBuilder builder = new StringBuilder("SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c.").append(fieldName)
+        .append(" BETWEEN " + START_TIME_PARAM + " AND " + END_TIME_PARAM)
+        .append(" ORDER BY c.")
+        .append(fieldName)
+        .append(" ASC");
+    return builder.toString();
+  }
+
+  /**
    * Get the list of blobs in the specified partition matching the specified DocumentDB query.
    * @param partitionPath the partition to query.
    * @param queryText the DocumentDB query to execute.
@@ -530,6 +529,36 @@ public class CosmosDataAccessor {
   }
 
   /**
+   * Add the new deleted {@link Container}s to cosmos table.
+   * @param deletedContainers {@link Set} of deleted {@link Container}s.
+   * @return the max deletion trigger time of all the added containers to serve as checkpoint for future update.
+   */
+  public long updateDeletedContainers(Set<Container> deletedContainers) throws DocumentClientException {
+    long latestContainerDeletionTimestamp = -1;
+    for (Container container : deletedContainers) {
+      executeCosmosAction(() -> asyncDocumentClient.upsertDocument(cosmosDeletedContainerCollectionLink,
+          getDeletedContainerJson(container), new RequestOptions(), true).toBlocking().single(),
+          azureMetrics.documentCreateTime);
+      if (container.getDeleteTriggerTime() > latestContainerDeletionTimestamp) {
+        latestContainerDeletionTimestamp = container.getDeleteTriggerTime();
+      }
+    }
+    return latestContainerDeletionTimestamp;
+  }
+
+  /**
+   * Serialize {@link Container} object to save to Cosmos.
+   * @param container {@link Container} object to serialize.
+   * @return serialized {@link JSONObject}.
+   */
+  private JSONObject getDeletedContainerJson(Container container) {
+    JSONObject deletedContainerJson = container.toJson();
+    deletedContainerJson.put(DELETED_CONTAINER_ID_COLUMN,
+        container.getId() + CONTAINER_ID_ACCOUNT_ID_DELIM + container.getParentAccountId());
+    return deletedContainerJson;
+  }
+
+  /**
    * Create {@link CloudBlobMetadata} object from {@link Document} object.
    * @param document {@link Document} object from which {@link CloudBlobMetadata} object will be created.
    * @return {@link CloudBlobMetadata} object.
@@ -609,50 +638,6 @@ public class CosmosDataAccessor {
     } finally {
       operationTimer.stop();
     }
-  }
-
-  /**
-   * Get the latest time upto which deleted containers have been updated.
-   * @return Most recent container delete trigger timestamp.
-   */
-  public long getLatestContainerDeletionTime() {
-    SqlQuerySpec querySpec = new SqlQuerySpec(MOST_RECENT_CONTAINER_DELETION_TIMESTAMP_QUERY);
-    Iterator<FeedResponse<Document>> iterator =
-        asyncDocumentClient.queryDocuments(cosmosDeletedContainerCollectionLink, querySpec, new FeedOptions())
-            .toBlocking()
-            .getIterator();
-    // TODO clean this implementation.
-    if (iterator.hasNext()) {
-      FeedResponse<Document> response = iterator.next();
-      if (response.getResults().size() > 0) {
-        return response.getResults().get(0).getLong("_aggregate");
-      }
-    }
-    return -1;
-  }
-
-  /**
-   * Add the new deleted {@link Container}s to cosmos table.
-   * @param deletedContainers {@link Set} of deleted {@link Container}s.
-   */
-  public void updateDeletedContainers(Set<Container> deletedContainers) throws DocumentClientException {
-    for (Container container : deletedContainers) {
-      executeCosmosAction(() -> asyncDocumentClient.upsertDocument(cosmosDeletedContainerCollectionLink,
-          getDeletedContainerJson(container), new RequestOptions(), true).toBlocking().single(),
-          azureMetrics.documentCreateTime);
-    }
-  }
-
-  /**
-   * Serialize {@link Container} object to save to Cosmos.
-   * @param container {@link Container} object to serialize.
-   * @return serialized {@link JSONObject}.
-   */
-  private JSONObject getDeletedContainerJson(Container container) {
-    JSONObject deletedContainerJson = container.toJson();
-    deletedContainerJson.put(DELETED_CONTAINER_ID_COLUMN,
-        container.getId() + CONTAINER_ID_ACCOUNT_ID_DELIM + container.getParentAccountId());
-    return deletedContainerJson;
   }
 
   /**

@@ -86,6 +86,16 @@ public class AzureIntegrationTest {
   private String tokenFileName = "replicaTokens";
   private Properties testProperties;
 
+  /**
+   * Utility method to get blob input stream.
+   * @param blobSize size of blob to consider.
+   * @return the blob input stream.
+   */
+  private static InputStream getBlobInputStream(int blobSize) {
+    byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
+    return new ByteArrayInputStream(randomBytes);
+  }
+
   @Before
   public void setup() {
     testProperties = new Properties();
@@ -550,7 +560,7 @@ public class AzureIntegrationTest {
     int numPurged = purgeBlobsWithRetry(allBlobsInPartition, partitionPath);
     logger.info("Cleaned up {} blobs", numPurged);
     // Delete compaction checkpoint blob
-    if (azureDest.getAzureBlobDataAccessor().deleteFile(AzureStorageCompactor.CHECKPOINT_CONTAINER, partitionPath)) {
+    if (azureDest.getAzureBlobDataAccessor().deleteFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath)) {
       logger.info("Deleted compaction checkpoint");
     }
   }
@@ -670,15 +680,5 @@ public class AzureIntegrationTest {
       return findResult.getMetadataList().isEmpty();
     }
     throw new IllegalArgumentException("Unknown find token type");
-  }
-
-  /**
-   * Utility method to get blob input stream.
-   * @param blobSize size of blob to consider.
-   * @return the blob input stream.
-   */
-  private static InputStream getBlobInputStream(int blobSize) {
-    byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
-    return new ByteArrayInputStream(randomBytes);
   }
 }

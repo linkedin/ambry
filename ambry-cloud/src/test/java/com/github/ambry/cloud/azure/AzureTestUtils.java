@@ -83,6 +83,7 @@ class AzureTestUtils {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com");
     configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
+    configProps.setProperty(AzureCloudConfig.COSMOS_DELETED_CONTAINER_COLLECTION_LINK, "ambry/deletedContainer");
     configProps.setProperty(AzureCloudConfig.COSMOS_KEY, "cosmos-key");
     configProps.setProperty("clustermap.cluster.name", "main");
     configProps.setProperty("clustermap.datacenter.name", "uswest");

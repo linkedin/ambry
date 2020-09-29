@@ -13,8 +13,20 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.storage.blob.models.BlobErrorCode;
+import com.azure.storage.blob.models.BlobStorageException;
 import com.github.ambry.account.Container;
+import com.github.ambry.cloud.CloudRequestAgent;
+import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.VcrMetrics;
+import com.github.ambry.config.CloudConfig;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
 import java.util.Set;
+import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -22,15 +34,99 @@ import java.util.Set;
  * ABS and Cosmos.
  */
 public class AzureContainerCompactor {
-  private long lastContainerDeletionTimestamp;
+  static final String CONTAINER_DELETION_CHECKPOINT_FILE = "container-deletion-checkpoint";
+  private static final Logger logger = LoggerFactory.getLogger(AzureContainerCompactor.class);
 
-  public void updateDeletedContainers(Set<Container> deletedContainers) {
-    //TODO update the deleted containers in the cosmos table.
-    /*
-    Write code here to get the new deleted containers.
-    Write code in CosmosDataAccessor to actually add the container to cosmos db table.
-     */
+  private final AzureBlobDataAccessor azureBlobDataAccessor;
+  private final CosmosDataAccessor cosmosDataAccessor;
+  private final CloudConfig cloudConfig;
+  private final VcrMetrics vcrMetrics;
+  private final AzureMetrics azureMetrics;
+  private final CloudRequestAgent requestAgent;
+
+  /**
+   * Constructor for {@link AzureContainerCompactor}.
+   * @param azureBlobDataAccessor {@link AzureBlobDataAccessor} object to access Azure Blob Store.
+   * @param cosmosDataAccessor {@link CosmosDataAccessor} object to access CosmosDb.
+   * @param cloudConfig {@link CloudConfig} object.
+   * @param vcrMetrics {@link VcrMetrics} object.
+   * @param azureMetrics {@link AzureMetrics} object.
+   */
+  public AzureContainerCompactor(AzureBlobDataAccessor azureBlobDataAccessor, CosmosDataAccessor cosmosDataAccessor,
+      CloudConfig cloudConfig, VcrMetrics vcrMetrics, AzureMetrics azureMetrics) {
+    this.azureBlobDataAccessor = azureBlobDataAccessor;
+    this.cosmosDataAccessor = cosmosDataAccessor;
+    this.cloudConfig = cloudConfig;
+    this.vcrMetrics = vcrMetrics;
+    this.azureMetrics = azureMetrics;
+    requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
   }
 
+  /**
+   * Update newly deleted containers from {@code deletedContainers} to CosmosDb since last checkpoint.
+   * @param deletedContainers {@link Set} of deleted {@link Container}s.
+   * @throws CloudStorageException in case of any error.
+   */
+  public void updateDeletedContainers(Set<Container> deletedContainers) throws CloudStorageException {
+    if (deletedContainers.isEmpty()) {
+      logger.info("Got empty set to update deleted containers. Skipping update deleted containers to cloud.");
+      return;
+    }
+    long lastUpdatedContainerTimestamp = getLatestContainerDeletionTime();
+    long newLastUpdateContainerTimestamp = requestAgent.doWithRetries(() -> cosmosDataAccessor.updateDeletedContainers(
+        deletedContainers.stream()
+            .filter(container -> container.getDeleteTriggerTime() >= lastUpdatedContainerTimestamp)
+            .collect(Collectors.toSet())), "updateDeletedContainer", null);
 
+    if (newLastUpdateContainerTimestamp != -1) {
+      saveLatestContainerDeletionTime(newLastUpdateContainerTimestamp);
+    }
+  }
+
+  /**
+   * Read the deleted container update checkpoint from Azure Blob Store.
+   * @return latest delete trigger time checkpoint for deleted containers.
+   * @throws CloudStorageException in case of any error.
+   */
+  private long getLatestContainerDeletionTime() throws CloudStorageException {
+    try {
+      ByteArrayOutputStream baos = new ByteArrayOutputStream(Long.BYTES);
+      requestAgent.doWithRetries(() -> {
+        azureBlobDataAccessor.downloadFile(AzureCloudDestination.CHECKPOINT_CONTAINER,
+            CONTAINER_DELETION_CHECKPOINT_FILE, baos, true);
+        return null;
+      }, "read-container-deletion-checkpoint", null);
+      ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+      buffer.put(baos.toByteArray());
+      buffer.flip();
+      return buffer.getLong();
+    } catch (BlobStorageException bsex) {
+      if (bsex.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+        return -1;
+      }
+      throw AzureCloudDestination.toCloudStorageException("Exception while reading deleted container checkpoint", bsex,
+          azureMetrics);
+    }
+  }
+
+  /**
+   * Save the deleted container update checkpoint {@code latestContainerDeletionTimestamp} to Azure Blob Store.
+   * @param latestContainerDeletionTimestamp timestamp representing deleteTriggerTime upto which deleted containers have been updated in cloud.
+   * @throws CloudStorageException in case of any error.
+   */
+  private void saveLatestContainerDeletionTime(long latestContainerDeletionTimestamp) throws CloudStorageException {
+    try {
+      ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+      buffer.putLong(latestContainerDeletionTimestamp);
+      ByteArrayInputStream bais = new ByteArrayInputStream(buffer.array());
+      requestAgent.doWithRetries(() -> {
+        azureBlobDataAccessor.uploadFile(AzureCloudDestination.CHECKPOINT_CONTAINER, CONTAINER_DELETION_CHECKPOINT_FILE,
+            bais);
+        return null;
+      }, "update-container-deletion-checkpoint", null);
+    } catch (CloudStorageException e) {
+      logger.error("Could not save update deleted container progress", e);
+      throw e;
+    }
+  }
 }

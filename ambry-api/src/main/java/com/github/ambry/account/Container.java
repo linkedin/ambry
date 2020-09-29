@@ -540,7 +540,7 @@ public class Container {
    * @return A container object deserialized from the {@link JSONObject}.
    * @throws JSONException If parsing the {@link JSONObject} fails.
    */
-  public static Container fromJson(JSONObject json, short parentAccountId) throws JSONException {
+  static Container fromJson(JSONObject json, short parentAccountId) throws JSONException {
     return new Container(json, parentAccountId);
   }
 

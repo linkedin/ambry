@@ -62,12 +62,14 @@ import org.slf4j.LoggerFactory;
  */
 class AzureCloudDestination implements CloudDestination {
 
+  static final String CHECKPOINT_CONTAINER = "compaction-checkpoints";
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestination.class);
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
   private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
   private final CosmosDataAccessor cosmosDataAccessor;
   private final AzureStorageCompactor azureStorageCompactor;
+  private final AzureContainerCompactor azureContainerCompactor;
   private final AzureReplicationFeed azureReplicationFeed;
   private final AzureMetrics azureMetrics;
   private final int queryBatchSize;
@@ -92,6 +94,8 @@ class AzureCloudDestination implements CloudDestination {
     this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, vcrMetrics, azureMetrics);
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
+    this.azureContainerCompactor =
+        new AzureContainerCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     this.cloudConfig = cloudConfig;
@@ -124,6 +128,8 @@ class AzureCloudDestination implements CloudDestination {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
+    this.azureContainerCompactor =
+        new AzureContainerCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     this.isVcr = isVcr;
@@ -475,14 +481,7 @@ class AzureCloudDestination implements CloudDestination {
 
   @Override
   public void updateDeletedContainers(Set<Container> deletedContainers) throws CloudStorageException {
-    try {
-      long lastUpdatedContainerTimestamp = cosmosDataAccessor.getLatestContainerDeletionTime();
-      cosmosDataAccessor.updateDeletedContainers(deletedContainers.stream()
-          .filter(container -> container.getDeleteTriggerTime() >= lastUpdatedContainerTimestamp)
-          .collect(Collectors.toSet()));
-    } catch (DocumentClientException dex) {
-      throw toCloudStorageException("Adding deleted containers failed.", dex);
-    }
+    azureContainerCompactor.updateDeletedContainers(deletedContainers);
   }
 
   /**

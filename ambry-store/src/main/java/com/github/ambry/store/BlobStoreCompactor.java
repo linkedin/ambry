@@ -67,7 +67,7 @@ class BlobStoreCompactor {
   };
 
   private static final long WAIT_TIME_FOR_CLEANUP_MS = 5 * Time.MsPerSec;
-
+  private static final Logger logger = LoggerFactory.getLogger(BlobStoreCompactor.class);
   private final File dataDir;
   private final String storeId;
   private final StoreKeyFactory storeKeyFactory;
@@ -81,13 +81,12 @@ class BlobStoreCompactor {
   private final UUID sessionId;
   private final UUID incarnationId;
   private final AtomicBoolean compactionInProgress = new AtomicBoolean(false);
-  private static final Logger logger = LoggerFactory.getLogger(BlobStoreCompactor.class);
   private final IndexSegmentValidEntryFilter validEntryFilter;
   private final AccountService accountService;
+  private final Set<Pair<Short, Short>> deprecatedContainers;
+  private final boolean useDirectIO;
   private volatile boolean isActive = false;
   private PersistentIndex srcIndex;
-  private final Set<Pair<Short, Short>> deprecatedContainers;
-
   private Log tgtLog;
   private PersistentIndex tgtIndex;
   private long numSwapsUsed;
@@ -95,7 +94,6 @@ class BlobStoreCompactor {
   private CompactionLog compactionLog;
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
   private byte[] bundleReadBuffer;
-  private final boolean useDirectIO;
 
   /**
    * Constructs the compactor component.
@@ -207,6 +205,7 @@ class BlobStoreCompactor {
     deprecatedContainers.addAll(containers.stream()
         .map(container -> new Pair<>(container.getParentAccountId(), container.getId()))
         .collect(Collectors.toList()));
+    //TODO: Filter out the INACTIVE containers from deprecatedContainers set if it's already been compacted.
   }
 
   /**

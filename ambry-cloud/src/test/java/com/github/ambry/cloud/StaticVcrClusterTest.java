@@ -60,7 +60,7 @@ public class StaticVcrClusterTest {
     CloudConfig cloudConfig = new CloudConfig(vProps);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
     VirtualReplicatorClusterFactory factory =
-        new StaticVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap);
+        new StaticVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap, null, null, null);
     VirtualReplicatorCluster virtualReplicatorCluster = factory.getVirtualReplicatorCluster();
     assertEquals("CloudDataNode host name doesn't match", hostName,
         virtualReplicatorCluster.getCurrentDataNodeId().getHostname());
