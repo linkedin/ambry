@@ -75,6 +75,10 @@ public class InstanceConfigToDataNodeConfigAdapter implements DataNodeConfigSour
     return instanceConfig != null ? converter.convert(instanceConfig) : null;
   }
 
+  @Override
+  public void close() {
+  }
+
   static class Converter {
     private final ClusterMapConfig clusterMapConfig;
 

@@ -13,6 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.SystemTime;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,7 +30,9 @@ import org.slf4j.LoggerFactory;
  */
 public class HelixFactory {
   private static final Logger LOGGER = LoggerFactory.getLogger(HelixFactory.class);
-  Map<ManagerKey, HelixManager> helixManagers = new ConcurrentHashMap<>();
+  // exposed for use in testing
+  private final Map<ManagerKey, HelixManager> helixManagers = new ConcurrentHashMap<>();
+  private final Map<String, DataNodeConfigSource> dataNodeConfigSources = new ConcurrentHashMap<>();
 
   /**
    * Get a reference to a {@link HelixManager}
@@ -42,7 +46,7 @@ public class HelixFactory {
       String zkAddr) {
     ManagerKey managerKey = new ManagerKey(clusterName, instanceName, instanceType, zkAddr);
     return helixManagers.computeIfAbsent(managerKey,
-        k -> HelixManagerFactory.getZKHelixManager(clusterName, instanceName, instanceType, zkAddr));
+        k -> buildZKHelixManager(clusterName, instanceName, instanceType, zkAddr));
   }
 
   /**
@@ -70,9 +74,77 @@ public class HelixFactory {
   }
 
   /**
-   * Hashable key used to cache instances of {@link HelixManager} that match desired parameters.
+   * @param clusterMapConfig the {@link ClusterMapConfig} to use.
+   * @param zkAddr the ZooKeeper address to connect to. If a {@link HelixManager} is required and one is already in the
+   *               pool with this address, it will be reused.
+   * @param metrics the {@link DataNodeConfigSourceMetrics} to use.
+   * @return either a new instance of {@link DataNodeConfigSource} with the supplied configuration, or one from the pool
+   *         if there is already one created for this address.
    */
-  private static class ManagerKey {
+  public DataNodeConfigSource getDataNodeConfigSource(ClusterMapConfig clusterMapConfig, String zkAddr,
+      DataNodeConfigSourceMetrics metrics) {
+    return dataNodeConfigSources.computeIfAbsent(zkAddr,
+        k -> buildDataNodeConfigSource(clusterMapConfig, zkAddr, metrics));
+  }
+
+  /**
+   * Construct a new instance of {@link HelixManager}. Exposed so that tests can override if needed.
+   * @param clusterName the name of the cluster for the manager.
+   * @param instanceName the name of the instance for the manager.
+   * @param instanceType the {@link InstanceType} of the requester.
+   * @param zkAddr the address identifying the zk service to which this request is to be made.
+   * @return a new instance of {@link HelixManager}.
+   */
+  HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
+    return HelixManagerFactory.getZKHelixManager(clusterName, instanceName, instanceType, zkAddr);
+  }
+
+  /**
+   * @param clusterMapConfig the {@link ClusterMapConfig} to use.
+   * @param zkAddr the ZooKeeper address to connect to. If a {@link HelixManager} is required and one is already in the
+   *               pool with this address, it will be reused.
+   * @param metrics the {@link DataNodeConfigSourceMetrics} to use.
+   * @return a new instance of {@link DataNodeConfigSource} with the supplied configuration.
+   */
+  private DataNodeConfigSource buildDataNodeConfigSource(ClusterMapConfig clusterMapConfig, String zkAddr,
+      DataNodeConfigSourceMetrics metrics) {
+    try {
+      InstanceConfigToDataNodeConfigAdapter instanceConfigSource = null;
+      if (clusterMapConfig.clusterMapDataNodeConfigSourceType.isInstanceConfigAware()) {
+        instanceConfigSource = new InstanceConfigToDataNodeConfigAdapter(
+            getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName,
+                ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort),
+                InstanceType.SPECTATOR, zkAddr), clusterMapConfig);
+      }
+      PropertyStoreToDataNodeConfigAdapter propertyStoreSource = null;
+      if (clusterMapConfig.clusterMapDataNodeConfigSourceType.isPropertyStoreAware()) {
+        propertyStoreSource = new PropertyStoreToDataNodeConfigAdapter(zkAddr, clusterMapConfig);
+      }
+
+      switch (clusterMapConfig.clusterMapDataNodeConfigSourceType) {
+        case INSTANCE_CONFIG:
+          return instanceConfigSource;
+        case PROPERTY_STORE:
+          return propertyStoreSource;
+        case COMPOSITE_INSTANCE_CONFIG_PRIMARY:
+          return new CompositeDataNodeConfigSource(instanceConfigSource, propertyStoreSource, SystemTime.getInstance(),
+              metrics);
+        case COMPOSITE_PROPERTY_STORE_PRIMARY:
+          return new CompositeDataNodeConfigSource(propertyStoreSource, instanceConfigSource, SystemTime.getInstance(),
+              metrics);
+        default:
+          throw new IllegalArgumentException("Unknown type: " + clusterMapConfig.clusterMapDataNodeConfigSourceType);
+      }
+    } catch (Exception e) {
+      throw new RuntimeException("Exception while instantiating DataNodeConfigSource", e);
+    }
+  }
+
+  /**
+   * Hashable key used to cache instances of {@link HelixManager} that match desired parameters.
+   * Exposed for use in testing.
+   */
+  static class ManagerKey {
     private final String clusterName;
     private final String instanceName;
     private final InstanceType instanceType;
@@ -94,8 +166,8 @@ public class HelixFactory {
         return false;
       }
       ManagerKey that = (ManagerKey) o;
-      return Objects.equals(clusterName, that.clusterName) && Objects.equals(instanceName, that.instanceName)
-          && instanceType == that.instanceType && Objects.equals(zkAddr, that.zkAddr);
+      return Objects.equals(zkAddr, that.zkAddr) && instanceType == that.instanceType && Objects.equals(clusterName,
+          that.clusterName) && Objects.equals(instanceName, that.instanceName);
     }
 
     @Override

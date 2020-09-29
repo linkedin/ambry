@@ -201,7 +201,7 @@ class DatacenterInitializer {
     // call. Therefore, when the call to add a listener returns, the initial notification will have been
     // received and handled.
     DataNodeConfigSource dataNodeConfigSource =
-        ClusterMapUtils.getDataNodeConfigSource(clusterMapConfig, manager, dataNodeConfigSourceMetrics);
+        helixFactory.getDataNodeConfigSource(clusterMapConfig, zkConnectStr, dataNodeConfigSourceMetrics);
     dataNodeConfigSource.addDataNodeConfigChangeListener(clusterChangeHandler);
     logger.info("Registered instance config change listeners for Helix manager at {}", zkConnectStr);
     manager.addIdealStateChangeListener(clusterChangeHandler);
@@ -228,7 +228,7 @@ class DatacenterInitializer {
       logger.info("Stopped listening to cross colo ZK server {}", zkConnectStr);
     }
 
-    return new HelixDcInfo(dcName, dcZkInfo, manager, clusterChangeHandler);
+    return new HelixDcInfo(dcName, dcZkInfo, manager, clusterChangeHandler, dataNodeConfigSource);
   }
 
   /**

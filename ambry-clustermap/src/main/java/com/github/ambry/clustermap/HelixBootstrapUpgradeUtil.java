@@ -737,10 +737,8 @@ public class HelixBootstrapUpgradeUtil {
         ClusterMapConfig config = getClusterMapConfig(clusterName, dcName, null);
         InstanceConfigToDataNodeConfigAdapter.Converter instanceConfigConverter =
             new InstanceConfigToDataNodeConfigAdapter.Converter(config);
-        HelixPropertyStore<ZNRecord> propertyStore = createHelixPropertyStore(dcName);
-        try {
-          PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter =
-              new PropertyStoreToDataNodeConfigAdapter(propertyStore, config);
+        String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
+        try (DataNodeConfigSource source = new PropertyStoreToDataNodeConfigAdapter(zkConnectStr, config)) {
           List<String> instanceNames = helixAdmin.getInstancesInCluster(clusterName);
           logger.info("Found {} instances in cluster", instanceNames.size());
           instanceNames.forEach(instanceName -> {
@@ -748,15 +746,13 @@ public class HelixBootstrapUpgradeUtil {
             InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
             DataNodeConfig dataNodeConfig = instanceConfigConverter.convert(instanceConfig);
             logger.debug("Writing {} to property store in {}", dataNodeConfig, dcName);
-            if (!propertyStoreAdapter.set(dataNodeConfig)) {
+            if (!source.set(dataNodeConfig)) {
               logger.error("Failed to persist config for node {} in the property store.",
                   dataNodeConfig.getInstanceName());
             }
           });
-        } finally {
-          propertyStore.stop();
         }
-        logger.error("Successfully migrated to property store in {}", dcName);
+        logger.info("Successfully migrated to property store in {}", dcName);
       } catch (Throwable t) {
         logger.error("Error while migrating to property store in {}", dcName, t);
       } finally {

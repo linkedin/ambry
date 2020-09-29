@@ -103,8 +103,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       HelixManager spectatorManager =
           helixFactory.getZkHelixManagerAndConnect(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
       helixAdmin = spectatorManager.getClusterManagmentTool();
-      dataNodeConfigSource =
-          getDataNodeConfigSource(clusterMapConfig, spectatorManager, new DataNodeConfigSourceMetrics(metricRegistry));
+      dataNodeConfigSource = helixFactory.getDataNodeConfigSource(clusterMapConfig, zkConnectStr,
+          new DataNodeConfigSourceMetrics(metricRegistry));
     } catch (Exception exception) {
       throw new IllegalStateException("Error setting up administration facilities", exception);
     }

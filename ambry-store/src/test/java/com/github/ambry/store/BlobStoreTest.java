@@ -66,6 +66,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
+import org.apache.helix.InstanceType;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
@@ -1933,9 +1934,13 @@ public class BlobStoreTest {
     });
     HelixManager mockHelixManager = mock(HelixManager.class);
     when(mockHelixManager.getClusterManagmentTool()).thenReturn(mockHelixAdmin);
-    HelixFactory mockHelixFactory = mock(HelixFactory.class);
-    when(mockHelixFactory.getZkHelixManagerAndConnect(anyString(), anyString(), any(), anyString())).thenReturn(
-        mockHelixManager);
+    HelixFactory mockHelixFactory = new HelixFactory() {
+      @Override
+      public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
+          String zkAddr) {
+        return mockHelixManager;
+      }
+    };
     MockHelixParticipant.metricRegistry = new MetricRegistry();
     MockHelixParticipant mockParticipant = new MockHelixParticipant(clusterMapConfig, mockHelixFactory);
     mockParticipant.overrideDisableReplicaMethod = false;

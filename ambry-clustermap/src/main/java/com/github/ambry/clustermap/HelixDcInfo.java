@@ -24,6 +24,7 @@ import org.apache.helix.HelixManager;
  */
 class HelixDcInfo extends DcInfo {
   final HelixManager helixManager;
+  private final DataNodeConfigSource dataNodeConfigSource;
 
   /**
    * Construct a HelixDcInfo object with the given parameters.
@@ -32,17 +33,23 @@ class HelixDcInfo extends DcInfo {
    * @param helixManager the associated {@link HelixManager} for this datacenter. This can be null if the datacenter is
    *                     not managed by helix.
    * @param clusterChangeHandler the associated {@link ClusterChangeHandler} for this datacenter.
+   * @param dataNodeConfigSource the {@link DataNodeConfigSource} for this datacenter.
    */
   HelixDcInfo(String dcName, ClusterMapUtils.DcZkInfo dcZkInfo, HelixManager helixManager,
-      ClusterChangeHandler clusterChangeHandler) {
+      ClusterChangeHandler clusterChangeHandler, DataNodeConfigSource dataNodeConfigSource) {
     super(dcName, dcZkInfo, clusterChangeHandler);
     this.helixManager = helixManager;
+    this.dataNodeConfigSource = dataNodeConfigSource;
   }
 
   @Override
   public void close() {
-    if (helixManager.isConnected()) {
-      helixManager.disconnect();
+    try {
+      if (helixManager.isConnected()) {
+        helixManager.disconnect();
+      }
+    } finally {
+      dataNodeConfigSource.close();
     }
   }
 }

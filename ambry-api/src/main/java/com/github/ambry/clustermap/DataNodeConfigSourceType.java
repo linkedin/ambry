@@ -19,5 +19,34 @@ package com.github.ambry.clustermap;
  * Represent the type of {@code DataNodeConfigSource} implementation to use.
  */
 public enum DataNodeConfigSourceType {
-  INSTANCE_CONFIG, PROPERTY_STORE, COMPOSITE_INSTANCE_CONFIG_PRIMARY, COMPOSITE_PROPERTY_STORE_PRIMARY
+  INSTANCE_CONFIG(true, false),
+  PROPERTY_STORE(false, true),
+  COMPOSITE_INSTANCE_CONFIG_PRIMARY(true, true),
+  COMPOSITE_PROPERTY_STORE_PRIMARY(true, true);
+
+  private final boolean instanceConfigAware;
+  private final boolean propertyStoreAware;
+
+  /**
+   * @param instanceConfigAware {@code true} if this type depends on helix instance configs.
+   * @param propertyStoreAware {@code true} if this type depends on the helix property store.
+   */
+  DataNodeConfigSourceType(boolean instanceConfigAware, boolean propertyStoreAware) {
+    this.instanceConfigAware = instanceConfigAware;
+    this.propertyStoreAware = propertyStoreAware;
+  }
+
+  /**
+   * @return {@code true} if this type depends on helix instance configs.
+   */
+  public boolean isInstanceConfigAware() {
+    return instanceConfigAware;
+  }
+
+  /**
+   * @return {@code true} if this type depends on the helix property store.
+   */
+  public boolean isPropertyStoreAware() {
+    return propertyStoreAware;
+  }
 }
