@@ -185,9 +185,8 @@ class PostAccountsHandler {
       } catch (JSONException e) {
         throw new RestServiceException("Bad container update request body", e, RestServiceErrorCode.BadRequest);
       }
-      // TODO: Split into add and update lists using containerId = -1 to tag new containers
       try {
-        Collection<Container> updatedContainers = accountService.addContainers(accountName, containersToUpdate);
+        Collection<Container> updatedContainers = accountService.updateContainers(accountName, containersToUpdate);
         return AccountCollectionSerde.containersToJson(updatedContainers);
       } catch (AccountServiceException ex) {
         // TODO: toRestServiceErrorCode(ex.getErrorCode())

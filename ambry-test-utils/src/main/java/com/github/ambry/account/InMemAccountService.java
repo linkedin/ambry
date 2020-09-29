@@ -90,7 +90,7 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
-  public Collection<Container> addContainers(String accountName, Collection<Container> containers)
+  public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
     // input validation
     if (accountName == null || accountName.isEmpty() || containers == null || containers.isEmpty()) {

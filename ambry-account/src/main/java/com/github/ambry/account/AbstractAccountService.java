@@ -14,13 +14,21 @@
 package com.github.ambry.account;
 
 import com.github.ambry.config.AccountServiceConfig;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -72,7 +80,7 @@ abstract class AbstractAccountService implements AccountService {
   }
 
   @Override
-  public Collection<Container> addContainers(String accountName, Collection<Container> containers)
+  public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
     checkOpen();
     // input validation
@@ -84,55 +92,56 @@ abstract class AbstractAccountService implements AccountService {
       logger.error("Account {} is not found", accountName);
       throw new AccountServiceException("Account " + accountName + " is not found", AccountServiceErrorCode.NotFound);
     }
-    Set<Container> existingContainers = new HashSet<>();
-    Set<Container> newContainers = new HashSet<>(containers);
+
+    List<Container> resolvedContainers = new ArrayList<>();
     // create a hashmap to map the name to existing containers in account
     Map<String, Container> existingContainersInAccount = new HashMap<>();
     account.getAllContainers().forEach(c -> existingContainersInAccount.put(c.getName(), c));
-    for (Container container : containers) {
-      // make sure there is no conflicting container (conflicting means a container with same name but different attributes already exists).
-      Container existingContainer = existingContainersInAccount.get(container.getName());
-      if (existingContainer != null) {
-        if (existingContainer.isSameContainer(container)) {
-          // If an exactly same container already exists, we put it into existing list. Adding same container multiple times
-          // should be no-op.
-          existingContainers.add(container);
-        } else {
-          throw new AccountServiceException("There is a conflicting container in account " + accountName,
-              AccountServiceErrorCode.ResourceConflict);
-        }
-      }
-    }
-    newContainers.removeAll(existingContainers);
-    List<Container> createdContainers = new ArrayList<>();
 
-    if (!newContainers.isEmpty()) {
-      // if code reaches here, it means no conflicting container in this account
-      short nextContainerId = account.getAllContainers()
-          .stream()
-          .map(Container::getId)
-          .max(Short::compareTo)
-          .map(maxId -> (short) (maxId + 1))
-          .orElse(config.containerIdStartNumber);
-      // construct containers based on input container and next containerId
-      for (Container container : newContainers) {
-        createdContainers.add(
-            new ContainerBuilder(container).setId(nextContainerId).setParentAccountId(account.getId()).build());
-        ++nextContainerId;
+    // Generate container ids for new containers
+    short nextContainerId = account.getAllContainers()
+        .stream()
+        .map(Container::getId)
+        .max(Short::compareTo)
+        .map(maxId -> (short) (maxId + 1))
+        .orElse(config.containerIdStartNumber);
+
+    for (Container container : containers) {
+      if (container.getId() == Container.UNKNOWN_CONTAINER_ID) {
+        // new container
+        // make sure there is no conflicting container (conflicting means a container with same name but different attributes already exists).
+        Container existingContainer = existingContainersInAccount.get(container.getName());
+        if (existingContainer != null) {
+          if (existingContainer.isSameContainer(container)) {
+            // If an exactly same container already exists, ignore it. Adding same container multiple times is no-op.
+          } else {
+            throw new AccountServiceException("There is a conflicting container in account " + accountName,
+                AccountServiceErrorCode.ResourceConflict);
+          }
+        } else {
+          resolvedContainers.add(
+              new ContainerBuilder(container).setId(nextContainerId).setParentAccountId(account.getId()).build());
+          ++nextContainerId;
+        }
+      } else {
+        // existing container
+        resolvedContainers.add(container);
       }
-      // In case updating account metadata store failed, we do a deep copy of original account. Thus, we don't have to
-      // revert changes in original account when there is a failure.
-      Account accountCopy = new AccountBuilder(account).build();
-      accountCopy.updateContainerMap(createdContainers);
-      boolean hasSucceeded = updateAccounts(Collections.singletonList(accountCopy));
-      if (!hasSucceeded) {
-        throw new AccountServiceException("Account update failed for " + accountName,
-            AccountServiceErrorCode.AccountUpdateError);
-      }
-      // after metadata store is successfully updated, we safely update original account
-      account.updateContainerMap(createdContainers);
     }
-    return createdContainers;
+
+    // In case updating account metadata store failed, we do a deep copy of original account. Thus, we don't have to
+    // revert changes in original account when there is a failure.
+    Account accountCopy = new AccountBuilder(account).build();
+    accountCopy.updateContainerMap(resolvedContainers);
+    boolean hasSucceeded = updateAccounts(Collections.singletonList(accountCopy));
+    if (!hasSucceeded) {
+      throw new AccountServiceException("Account update failed for " + accountName,
+          AccountServiceErrorCode.AccountUpdateError);
+    }
+    // after metadata store is successfully updated, we safely update original account
+    account.updateContainerMap(resolvedContainers);
+
+    return resolvedContainers;
   }
 
   @Override

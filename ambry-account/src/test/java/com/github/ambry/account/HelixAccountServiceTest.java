@@ -376,9 +376,11 @@ public class HelixAccountServiceTest {
     boolean res = accountService.updateAccounts(Collections.singletonList(refAccount));
     assertTrue("Failed to create account", res);
 
+    Container brandNewContainer = new ContainerBuilder(refContainer).setId(UNKNOWN_CONTAINER_ID).build();
+
     // 1. test invalid input
     try {
-      accountService.addContainers("", null);
+      accountService.updateContainers("", null);
       fail("should fail because input is invalid");
     } catch (AccountServiceException e) {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.BadRequest, e.getErrorCode());
@@ -390,16 +392,16 @@ public class HelixAccountServiceTest {
         new ContainerBuilder((short) (refContainerId + 1), "newContainer", ContainerStatus.ACTIVE, "description",
             refParentAccountId).build();
     try {
-      accountService.addContainers(fakeAccountName, Collections.singleton(containerToAdd1));
+      accountService.updateContainers(fakeAccountName, Collections.singleton(containerToAdd1));
       fail("should fail because account is not found");
     } catch (AccountServiceException e) {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
     }
 
-    // 3. test conflict container (existing container has same name but different attributes)
-    Container conflictContainer = new ContainerBuilder(refContainer).setBackupEnabled(true).build();
+    // 3. test conflict container (new container with existing name but different attributes)
+    Container conflictContainer = new ContainerBuilder(brandNewContainer).setBackupEnabled(true).build();
     try {
-      accountService.addContainers(refAccountName, Collections.singleton(conflictContainer));
+      accountService.updateContainers(refAccountName, Collections.singleton(conflictContainer));
       fail("should fail because there is a conflicting container");
     } catch (AccountServiceException e) {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
@@ -407,7 +409,7 @@ public class HelixAccountServiceTest {
 
     // 4. test adding same container twice, should be no-op and return result should be empty
     Collection<Container> addedContainers =
-        accountService.addContainers(refAccountName, Collections.singleton(refContainer));
+        accountService.updateContainers(refAccountName, Collections.singleton(brandNewContainer));
     assertTrue("Should return empty result.", addedContainers.isEmpty());
 
     // 5. test adding a different container (failure case due to ZK update failure)
@@ -415,7 +417,7 @@ public class HelixAccountServiceTest {
         mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig);
     mockHelixStore.setExceptionDuringUpdater(true);
     try {
-      accountService.addContainers(refAccountName, Collections.singleton(containerToAdd1));
+      accountService.updateContainers(refAccountName, Collections.singleton(containerToAdd1));
       fail("should fail because exception occurs when updating ZK");
     } catch (AccountServiceException e) {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.AccountUpdateError, e.getErrorCode());
@@ -426,7 +428,7 @@ public class HelixAccountServiceTest {
     Container containerToAdd2 =
         new ContainerBuilder((short) (refContainerId + 2), "newContainer2", ContainerStatus.ACTIVE, "description",
             refParentAccountId).build();
-    addedContainers = accountService.addContainers(refAccountName, Arrays.asList(containerToAdd1, containerToAdd2));
+    addedContainers = accountService.updateContainers(refAccountName, Arrays.asList(containerToAdd1, containerToAdd2));
     short expectedContainerId = (short) (refContainerId + 1);
     for (Container container : addedContainers) {
       assertEquals("Mismatch in account id", refAccountId, container.getParentAccountId());
