@@ -65,17 +65,6 @@ public class AmbrySendToHttp2AdaptorTest {
 
     DefaultHttp2DataFrame data = channel.readOutbound();
     data.content().release();
-
-    // Test server writing the Send
-    send = new SendWithoutContent();
-    channel.writeOutbound(send);
-
-    header = channel.readOutbound();
-    Assert.assertNotNull(header.headers());
-    Assert.assertEquals(header.headers().status().toString(), "200");
-
-    data = channel.readOutbound();
-    data.content().release();
   }
 
   /**
@@ -116,27 +105,6 @@ public class AmbrySendToHttp2AdaptorTest {
     @Override
     public SendWithContent replace(ByteBuf content) {
       return null;
-    }
-  }
-
-  /**
-   * A mock {@link Send} implementation that returns null value for {@link #content()} method.
-   */
-  private static class SendWithoutContent extends SendWithContent {
-
-    @Override
-    public ByteBuf content() {
-      return null;
-    }
-
-    @Override
-    public SendWithoutContent replace(ByteBuf content) {
-      return null;
-    }
-
-    @Override
-    public boolean release() {
-      return buf.release();
     }
   }
 }
