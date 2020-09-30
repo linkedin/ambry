@@ -577,6 +577,9 @@ class BlobStoreCompactor {
         validEntryFilter.getValidEntry(indexSegmentToCopy, duplicateSearchSpan, checkAlreadyCopied);
     logger.debug("{} entries need to be copied in {}", indexEntriesToCopy.size(), indexSegmentToCopy.getFile());
 
+    if (indexEntriesToCopy.isEmpty()) {
+      return true;
+    }
     // Copy these over
     boolean copiedAll = copyRecords(logSegmentToCopy, indexEntriesToCopy, indexSegmentToCopy.getLastModifiedTimeSecs());
     // persist
