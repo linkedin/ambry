@@ -110,6 +110,14 @@ class CompactionLog implements Closeable {
     this(new File(dir, storeId + COMPACTION_LOG_SUFFIX), storeKeyFactory, time, config);
   }
 
+  /**
+   * Loads an existing compaction log from {@link File}.
+   * @param compactionLogFile The compaction log {@link File}.
+   * @param storeKeyFactory The {@link StoreKeyFactory} that is used for keys in the {@link BlobStore} being compacted.
+   * @param time The {@link Time} instance to use.
+   * @param config The store config to use in this compaction log.
+   * @throws IOException
+   */
   CompactionLog(File compactionLogFile, StoreKeyFactory storeKeyFactory, Time time, StoreConfig config)
       throws IOException {
     if (!compactionLogFile.exists()) {
@@ -387,8 +395,8 @@ class CompactionLog implements Closeable {
 
   @Override
   public String toString() {
-    StringBuffer buffer = new StringBuffer();
-    buffer.append("Version:")
+    StringBuilder sb = new StringBuilder();
+    sb.append("Version:")
         .append(CURRENT_VERSION)
         .append("\n")
         .append("StartTime:")
@@ -396,12 +404,12 @@ class CompactionLog implements Closeable {
         .append("\n")
         .append("StartOffsetOfLastIndexSegmentForDeleteCheck");
     if (startOffsetOfLastIndexSegmentForDeleteCheck == null) {
-      buffer.append("null");
+      sb.append("null");
     } else {
-      buffer.append(startOffsetOfLastIndexSegmentForDeleteCheck.toString());
+      sb.append(startOffsetOfLastIndexSegmentForDeleteCheck.toString());
     }
-    buffer.append("\n");
-    buffer.append("CurrentIndex:")
+    sb.append("\n");
+    sb.append("CurrentIndex:")
         .append(currentIdx)
         .append("\n")
         .append("CycleLogSize:")
@@ -409,9 +417,9 @@ class CompactionLog implements Closeable {
         .append("\n")
         .append("CycleLogs:");
     for (CycleLog cycleLog : cycleLogs) {
-      buffer.append(cycleLog.toString()).append("\n\n");
+      sb.append(cycleLog.toString()).append("\n\n");
     }
-    return buffer.toString();
+    return sb.toString();
   }
 
   /**
@@ -516,8 +524,8 @@ class CompactionLog implements Closeable {
 
     @Override
     public String toString() {
-      StringBuffer buffer = new StringBuffer();
-      buffer.append("CompactionDetal:")
+      StringBuilder sb = new StringBuilder();
+      sb.append("CompactionDetails:")
           .append(compactionDetails.toString())
           .append("\n")
           .append("CopyStartTime:")
@@ -532,7 +540,10 @@ class CompactionLog implements Closeable {
           .append("CycleEndTime:")
           .append(cycleEndTime)
           .append("\n");
-      return buffer.toString();
+      if (safeToken != null) {
+        sb.append("SafeToken:").append(safeToken.toString()).append("\n");
+      }
+      return sb.toString();
     }
   }
 }

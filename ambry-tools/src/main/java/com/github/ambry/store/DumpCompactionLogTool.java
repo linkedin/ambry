@@ -26,7 +26,10 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 
 
-public class DumpCompactionLog {
+/**
+ * The tool to print out the compaction log details from a given compaction log file.
+ */
+public class DumpCompactionLogTool {
 
   private static class DumpCompactionLogConfig {
     final String hardwareLayoutFilePath;
