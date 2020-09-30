@@ -151,7 +151,6 @@ public interface AccountService extends Closeable {
    */
   default Set<Container> getDeprecatedContainers(long containerDeletionRetentionDays) {
     Set<Container> deprecatedContainers = new HashSet<>();
-    deprecatedContainers.clear();
     getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
       if (container.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(containerDeletionRetentionDays)
           <= System.currentTimeMillis()) {
