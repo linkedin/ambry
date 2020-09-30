@@ -201,11 +201,13 @@ class BlobStoreCompactor {
    */
   private void getDeprecatedContainers() {
     deprecatedContainers.clear();
-    Set<Container> containers = accountService.getDeprecatedContainers(config.storeContainerDeletionRetentionDays);
-    deprecatedContainers.addAll(containers.stream()
-        .map(container -> new Pair<>(container.getParentAccountId(), container.getId()))
-        .collect(Collectors.toList()));
-    //TODO: Filter out the INACTIVE containers from deprecatedContainers set if it's already been compacted.
+    if (accountService != null) {
+      Set<Container> containers = accountService.getDeprecatedContainers(config.storeContainerDeletionRetentionDays);
+      deprecatedContainers.addAll(containers.stream()
+          .map(container -> new Pair<>(container.getParentAccountId(), container.getId()))
+          .collect(Collectors.toSet()));
+      //TODO: Filter out the INACTIVE containers from deprecatedContainers set if it's already been compacted.
+    }
   }
 
   /**
