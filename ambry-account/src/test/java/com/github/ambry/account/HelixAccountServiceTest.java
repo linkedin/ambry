@@ -1066,6 +1066,23 @@ public class HelixAccountServiceTest {
   }
 
   /**
+   * Tests {@link AccountService#getDeprecatedContainers(long)}.
+   * @throws Exception
+   */
+  @Test
+  public void testGetDeprecatedContainers() throws Exception {
+    Set<Short> accountIdSet = new HashSet<>();
+    accountIdSet.add(refAccountId);
+    long curTimestamp = System.currentTimeMillis();
+    generateRefAccountsForDeprecationTest(idToRefAccountMap, idToRefContainerMap, accountIdSet, 3, curTimestamp);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    accountService.updateAccounts(idToRefAccountMap.values());
+    assertAccountsInAccountService(idToRefAccountMap.values(), 3, accountService);
+    Set<Container> containerSet = accountService.getDeprecatedContainers(0);
+    assertEquals("Incorrect number of deprecated containers", 6, containerSet.size());
+  }
+
+  /**
    * Asserts the {@link Account}s received by the {@link Consumer} are as expected.
    * @param expectedAccounts The expected collection of {@link Account}s that should be received by the {@link Consumer}s.
    * @param expectedNumberOfConsumers The expected number of {@link Consumer}s.

@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -115,6 +116,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final ChangeFeed changeFeed = new ChangeFeed();
   private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
   private final AzureReplicationFeed.FeedType azureReplicationFeedType;
+  private final Set<Container> deletedContainers = new HashSet<>();
 
   private final static AzureReplicationFeed.FeedType DEFAULT_AZURE_REPLICATION_FEED_TYPE =
       AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
@@ -368,6 +370,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   @Override
   public void updateDeletedContainers(Set<Container> deletedContainers) {
+    this.deletedContainers.addAll(deletedContainers);
   }
 
   boolean doesBlobExist(BlobId blobId) {
@@ -416,5 +419,12 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   public boolean awaitDownload(long duration, TimeUnit timeUnit) throws InterruptedException {
     return downloadLatch.await(duration, timeUnit);
+  }
+
+  /**
+   * @return {@code deletedContainers}.
+   */
+  public Set<Container> getDeletedContainers() {
+    return deletedContainers;
   }
 }
