@@ -426,6 +426,17 @@ project(':ambry-cloud') {
     }
 }
 
+project(':ambry-quota') {
+    dependencies {
+        compile project(':ambry-api')
+        compile ("org.apache.helix:helix-core:$helixVersion") {
+            exclude group: "log4j", module: "log4j"
+        }
+        testCompile project(':ambry-test-utils')
+        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
+    }
+}
+
 project(':ambry-all') {
     dependencies {
         // this is a meta project that depends on all of the "entry-point" subprojects to make it easier to pull in the
