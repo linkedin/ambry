@@ -27,6 +27,6 @@ public class AccountServiceConfig {
 
   public AccountServiceConfig(VerifiableProperties verifiableProperties) {
     containerIdStartNumber =
-        verifiableProperties.getShortInRange(CONTAINER_ID_START_NUMBER, (short) 0, (short) 0, Short.MAX_VALUE);
+        verifiableProperties.getShortInRange(CONTAINER_ID_START_NUMBER, (short) 1, (short) 0, Short.MAX_VALUE);
   }
 }

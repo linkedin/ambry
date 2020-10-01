@@ -49,7 +49,7 @@ public class AccountDaoTest {
 
   public AccountDaoTest() throws SQLException {
     testAccount = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).build();
-    accountJson = AccountCollectionSerde.accountToJson(testAccount, true).toString();
+    accountJson = AccountCollectionSerde.accountToJsonNoContainers(testAccount).toString();
     mockConnection = mock(Connection.class);
     PreparedStatement mockInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into"))).thenReturn(mockInsertStatement);
