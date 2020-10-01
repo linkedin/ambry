@@ -39,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.frontend.Operations.*;
 
 
 /**
@@ -143,8 +144,8 @@ class PostAccountsHandler {
       return buildCallback(frontendMetrics.postAccountsReadRequestMetrics, bytesRead -> {
         JSONObject jsonPayload = readJsonFromChannel(channel);
         ReadableStreamChannel outputChannel;
-        if (restRequest.getPath().startsWith(Operations.UPDATE_ACCOUNT_CONTAINERS)) {
-          logger.debug("Got request for {} with payload {}", Operations.UPDATE_ACCOUNT_CONTAINERS, jsonPayload);
+        if (RestUtils.getRequestPath(restRequest).matchesOperation(UPDATE_ACCOUNT_CONTAINERS)) {
+          logger.debug("Got request for {} with payload {}", UPDATE_ACCOUNT_CONTAINERS, jsonPayload);
           JSONObject outputPayload = updateContainers(jsonPayload);
           outputChannel = serializeJsonToChannel(outputPayload);
         } else {
