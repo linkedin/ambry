@@ -139,7 +139,7 @@ public class PostAccountContainersHandlerTest {
     // AccountService update failure
     accountService.setShouldUpdateSucceed(false);
     request = createRestRequest(oneContainer, accountName, null);
-    testAction.accept(request, RestServiceErrorCode.BadRequest);
+    testAction.accept(request, RestServiceErrorCode.InternalServerError);
   }
 
   /**
