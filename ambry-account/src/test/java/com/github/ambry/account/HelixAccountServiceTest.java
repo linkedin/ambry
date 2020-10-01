@@ -407,10 +407,15 @@ public class HelixAccountServiceTest {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
     }
 
-    // 4. test adding same container twice, should be no-op and return result should be empty
+    // 4. test adding same container twice, should be no-op and return result should include container with id
     Collection<Container> addedContainers =
         accountService.updateContainers(refAccountName, Collections.singleton(brandNewContainer));
-    assertTrue("Should return empty result.", addedContainers.isEmpty());
+    assertEquals("Mismatch in return count", 1, addedContainers.size());
+    for (Container container : addedContainers) {
+      assertEquals("Mismatch in account id", refAccountId, container.getParentAccountId());
+      assertEquals("Mismatch in container id", refContainerId, container.getId());
+      assertEquals("Mismatch in container name", refContainerName, container.getName());
+    }
 
     // 5. test adding a different container (failure case due to ZK update failure)
     MockHelixPropertyStore<ZNRecord> mockHelixStore =

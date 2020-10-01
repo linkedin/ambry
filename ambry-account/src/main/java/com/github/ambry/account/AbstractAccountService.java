@@ -92,6 +92,7 @@ abstract class AbstractAccountService implements AccountService {
     }
 
     List<Container> resolvedContainers = new ArrayList<>();
+    List<Container> existingUnchangedContainers = new ArrayList<>();
     // create a hashmap to map the name to existing containers in account
     Map<String, Container> existingContainersInAccount = new HashMap<>();
     account.getAllContainers().forEach(c -> existingContainersInAccount.put(c.getName(), c));
@@ -111,7 +112,10 @@ abstract class AbstractAccountService implements AccountService {
         Container existingContainer = existingContainersInAccount.get(container.getName());
         if (existingContainer != null) {
           if (existingContainer.isSameContainer(container)) {
-            // If an exactly same container already exists, ignore it. Adding same container multiple times is no-op.
+            // If an exactly same container already exists, treat as no-op (may be retry after partial failure).
+            // But include it in the list returned to caller to provide the containerId.
+            logger.info("Request to create container with existing name and properties: {}", existingContainer.toJson().toString());
+            existingUnchangedContainers.add(existingContainer);
           } else {
             throw new AccountServiceException("There is a conflicting container in account " + accountName,
                 AccountServiceErrorCode.ResourceConflict);
@@ -152,6 +156,8 @@ abstract class AbstractAccountService implements AccountService {
             AccountServiceErrorCode.AccountUpdateError);
       }
     }
+
+    resolvedContainers.addAll(existingUnchangedContainers);
     return resolvedContainers;
   }
 
