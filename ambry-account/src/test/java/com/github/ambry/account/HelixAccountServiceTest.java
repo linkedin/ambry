@@ -389,7 +389,7 @@ public class HelixAccountServiceTest {
     // 2. test account is not found
     String fakeAccountName = refAccountName + "fake";
     Container containerToAdd1 =
-        new ContainerBuilder((short) (refContainerId + 1), "newContainer", ContainerStatus.ACTIVE, "description",
+        new ContainerBuilder(UNKNOWN_CONTAINER_ID, "newContainer", ContainerStatus.ACTIVE, "description",
             refParentAccountId).build();
     try {
       accountService.updateContainers(fakeAccountName, Collections.singleton(containerToAdd1));
@@ -426,14 +426,51 @@ public class HelixAccountServiceTest {
 
     // 6. test adding 2 different containers (success case)
     Container containerToAdd2 =
-        new ContainerBuilder((short) (refContainerId + 2), "newContainer2", ContainerStatus.ACTIVE, "description",
+        new ContainerBuilder(UNKNOWN_CONTAINER_ID, "newContainer2", ContainerStatus.ACTIVE, "description",
             refParentAccountId).build();
     addedContainers = accountService.updateContainers(refAccountName, Arrays.asList(containerToAdd1, containerToAdd2));
-    short expectedContainerId = (short) (refContainerId + 1);
     for (Container container : addedContainers) {
       assertEquals("Mismatch in account id", refAccountId, container.getParentAccountId());
-      assertEquals("Mismatch in container id", expectedContainerId, container.getId());
-      expectedContainerId++;
+    }
+  }
+
+  /**
+   * Test updating an existing container (id specified).
+   */
+  @Test
+  public void testUpdateContainer() throws Exception {
+    assumeTrue(!useNewZNodePath);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    assertEquals("The number of account in HelixAccountService is incorrect", 0,
+        accountService.getAllAccounts().size());
+    // add an account with single container
+    boolean res = accountService.updateAccounts(Collections.singletonList(refAccount));
+    assertTrue("Failed to create account", res);
+
+    // 1. Update existing container (success case)
+    Container modifiedContainer = new ContainerBuilder(refContainer).setDescription("Different than before").build();
+    Collection<Container> updatedContainers =
+        accountService.updateContainers(refAccountName, Collections.singleton(modifiedContainer));
+    assertEquals("Mismatch in return count", 1, updatedContainers.size());
+    assertEquals("Mismatch in container data", modifiedContainer, updatedContainers.iterator().next());
+
+    // 2. Update container with invalid name
+    Container badContainer =
+        new ContainerBuilder(refContainerId, "Unknown container", ContainerStatus.ACTIVE, "foo", refAccountId).build();
+    try {
+      accountService.updateContainers(refAccountName, Collections.singleton(badContainer));
+      fail("should fail because container is not found");
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
+    }
+
+    // 2. Update container with valid name and wrong id
+    badContainer = new ContainerBuilder(refContainer).setId((short) (refContainerId + 7)).build();
+    try {
+      accountService.updateContainers(refAccountName, Collections.singleton(badContainer));
+      fail("should fail due to wrong id");
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
     }
   }
 

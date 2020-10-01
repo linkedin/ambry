@@ -19,12 +19,9 @@ import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.router.Router;
 import com.github.ambry.server.StatsSnapshot;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
@@ -100,7 +97,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
 
-  protected final AtomicBoolean open = new AtomicBoolean(true);
+  private final AtomicBoolean open = new AtomicBoolean(true);
   private final BackupFileManager backupFileManager;
   private final HelixPropertyStore<ZNRecord> helixStore;
   private final Notifier<String> notifier;

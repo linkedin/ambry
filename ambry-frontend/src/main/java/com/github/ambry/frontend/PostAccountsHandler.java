@@ -174,7 +174,7 @@ class PostAccountsHandler {
       Account account =
           accountName != null ? accountService.getAccountByName(accountName) : accountService.getAccountById(accountId);
       if (account == null) {
-        throw new RestServiceException("Account not found: " + accountName, RestServiceErrorCode.BadRequest);
+        throw new RestServiceException("Account not found: " + accountName, RestServiceErrorCode.NotFound);
       }
       accountId = account.getId();
       accountName = account.getName();
@@ -189,9 +189,8 @@ class PostAccountsHandler {
         Collection<Container> updatedContainers = accountService.updateContainers(accountName, containersToUpdate);
         return AccountCollectionSerde.containersToJson(updatedContainers);
       } catch (AccountServiceException ex) {
-        // TODO: toRestServiceErrorCode(ex.getErrorCode())
         throw new RestServiceException("Container update failed for accountId " + accountId,
-            RestServiceErrorCode.BadRequest);
+            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
     }
 

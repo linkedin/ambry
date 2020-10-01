@@ -48,7 +48,7 @@ public class ContainerDaoTest {
   public ContainerDaoTest() throws SQLException {
     testContainer =
         new ContainerBuilder(containerId, containerName, Container.ContainerStatus.ACTIVE, "", accountId).build();
-    containerJson = AccountCollectionSerde.containerToJson(testContainer).toString();
+    containerJson = testContainer.toJson().toString();
     mockConnection = mock(Connection.class);
     PreparedStatement mockInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into"))).thenReturn(mockInsertStatement);

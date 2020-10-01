@@ -540,7 +540,7 @@ public class Container {
    * @return A container object deserialized from the {@link JSONObject}.
    * @throws JSONException If parsing the {@link JSONObject} fails.
    */
-  static Container fromJson(JSONObject json, short parentAccountId) throws JSONException {
+  public static Container fromJson(JSONObject json, short parentAccountId) throws JSONException {
     return new Container(json, parentAccountId);
   }
 
@@ -549,7 +549,7 @@ public class Container {
    * @return The metadata of the container.
    * @throws JSONException If fails to compose metadata.
    */
-  JSONObject toJson() throws JSONException {
+  public JSONObject toJson() throws JSONException {
     JSONObject metadata = new JSONObject();
     switch (currentJsonVersion) {
       case JSON_VERSION_1:

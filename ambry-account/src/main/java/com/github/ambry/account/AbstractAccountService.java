@@ -18,11 +18,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
@@ -125,22 +123,35 @@ abstract class AbstractAccountService implements AccountService {
         }
       } else {
         // existing container
-        resolvedContainers.add(container);
+        Container existingContainer = existingContainersInAccount.get(container.getName());
+        if (existingContainer == null) {
+          throw new AccountServiceException(
+              "In account " + accountName + ", container " + container.getName() + " does not exist (containerId "
+                  + container.getId() + " was supplied)", AccountServiceErrorCode.NotFound);
+        } else if (existingContainer.getId() != container.getId()) {
+          throw new AccountServiceException(
+              "In account " + accountName + ", container " + container.getName() + " has containerId "
+                  + existingContainer.getId() + " (" + container.getId() + " was supplied)",
+              AccountServiceErrorCode.ResourceConflict);
+        } else {
+          resolvedContainers.add(container);
+        }
       }
     }
 
-    // In case updating account metadata store failed, we do a deep copy of original account. Thus, we don't have to
-    // revert changes in original account when there is a failure.
-    Account accountCopy = new AccountBuilder(account).build();
-    accountCopy.updateContainerMap(resolvedContainers);
-    boolean hasSucceeded = updateAccounts(Collections.singletonList(accountCopy));
-    if (!hasSucceeded) {
-      throw new AccountServiceException("Account update failed for " + accountName,
-          AccountServiceErrorCode.AccountUpdateError);
+    if (!resolvedContainers.isEmpty()) {
+      // In case updating account metadata store failed, we do a deep copy of original account. Thus, we don't have to
+      // revert changes in original account when there is a failure.
+      AccountBuilder accountBuilder = new AccountBuilder(account);
+      resolvedContainers.forEach(accountBuilder::addOrUpdateContainer);
+      Account updatedAccount = accountBuilder.build();
+      boolean hasSucceeded = updateAccounts(Collections.singletonList(updatedAccount));
+      // TODO: updateAccounts should throw exception with specific error code
+      if (!hasSucceeded) {
+        throw new AccountServiceException("Account update failed for " + accountName,
+            AccountServiceErrorCode.AccountUpdateError);
+      }
     }
-    // after metadata store is successfully updated, we safely update original account
-    account.updateContainerMap(resolvedContainers);
-
     return resolvedContainers;
   }
 

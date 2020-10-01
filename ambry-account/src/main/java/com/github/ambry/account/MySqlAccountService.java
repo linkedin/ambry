@@ -45,7 +45,7 @@ public class MySqlAccountService extends AbstractAccountService {
 
   private static final Logger logger = LoggerFactory.getLogger(MySqlAccountService.class);
   static final String MYSQL_ACCOUNT_UPDATER_PREFIX = "mysql-account-updater";
-  protected final AtomicBoolean open = new AtomicBoolean(true);
+  private final AtomicBoolean open = new AtomicBoolean(true);
   private final MySqlAccountServiceConfig config;
   // lock to protect in-memory metadata cache
   private final ReadWriteLock infoMapLock = new ReentrantReadWriteLock();
@@ -135,6 +135,9 @@ public class MySqlAccountService extends AbstractAccountService {
         infoMapLock.writeLock().lock();
         try {
           AccountInfoMap accountInfoMap = accountInfoMapRef.get();
+          // FIXME: this is incorrect as the accounts from Mysql have no containers, so any containers
+          // in that account that have not also been updated will be lost.
+          // We need to rebuild all the accounts that have been changed (including container changes)
           accountInfoMap.addOrUpdateAccounts(updatedAccountsInDB);
           accountInfoMap.addOrUpdateContainers(updatedContainersInDB);
           // Refresh last modified time of Accounts and Containers in cache
@@ -337,9 +340,15 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   private void updateContainersWithMySqlStore(short accountId, Collection<Container> containers) throws SQLException {
     //check for account ID in in-memory cache
-    // TODO: read lock
-    AccountInfoMap accountInfoMap = accountInfoMapRef.get();
-    Account accountInCache = accountInfoMap.getAccountById(accountId);
+    AccountInfoMap accountInfoMap;
+    Account accountInCache;
+    infoMapLock.readLock().lock();
+    try {
+      accountInfoMap = accountInfoMapRef.get();
+      accountInCache = accountInfoMap.getAccountById(accountId);
+    } finally {
+      infoMapLock.readLock().unlock();
+    }
     if (accountInCache == null) {
       throw new IllegalArgumentException("Account with ID " + accountId + "doesn't exist");
     }

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.account.AccountServiceErrorCode;
 import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.router.RouterErrorCode;
 
@@ -211,6 +212,26 @@ public enum RestServiceErrorCode {
       case UnexpectedInternalError:
       case ChannelClosed:
       case LifeVersionConflict:
+      default:
+        return InternalServerError;
+    }
+  }
+
+  /**
+   * Gets the RestServiceErrorCode that corresponds to the {@code accountServiceErrorCode}.
+   * @param accountServiceErrorCode input {@link AccountServiceErrorCode}.
+   * @return the RestServiceErrorCode that the {@code accountServiceErrorCode} belongs to.
+   */
+  public static RestServiceErrorCode getRestServiceErrorCode(AccountServiceErrorCode accountServiceErrorCode) {
+    switch (accountServiceErrorCode) {
+      case NotFound:
+        return NotFound;
+      case ResourceConflict:
+        return Conflict;
+      case AccountUpdateError:
+        return InternalServerError;
+      case BadRequest:
+        return BadRequest;
       default:
         return InternalServerError;
     }

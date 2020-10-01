@@ -71,7 +71,7 @@ public class ContainerDao {
       // Note: assuming autocommit for now
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
       insertStatement.setInt(1, accountId);
-      insertStatement.setString(2, AccountCollectionSerde.containerToJson(container).toString());
+      insertStatement.setString(2, container.toJson().toString());
       insertStatement.executeUpdate();
     } catch (SQLException e) {
       // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
@@ -91,7 +91,7 @@ public class ContainerDao {
     try {
       // Note: assuming autocommit for now
       PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
-      updateStatement.setString(1, AccountCollectionSerde.containerToJson(container).toString());
+      updateStatement.setString(1, container.toJson().toString());
       updateStatement.setInt(2, accountId);
       updateStatement.setInt(3, container.getId());
       updateStatement.executeUpdate();
@@ -152,7 +152,7 @@ public class ContainerDao {
       int accountId = resultSet.getInt(ACCOUNT_ID);
       String containerJson = resultSet.getString(CONTAINER_INFO);
       Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
-      Container container = AccountCollectionSerde.containerFromJson(new JSONObject(containerJson), (short) accountId);
+      Container container = Container.fromJson(new JSONObject(containerJson), (short) accountId);
       container = new ContainerBuilder(container).setLastModifiedTime(lastModifiedTime.getTime()).build();
       containers.add(container);
     }

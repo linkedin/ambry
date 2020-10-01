@@ -62,7 +62,7 @@ public class AccountDao {
   public void addAccount(Account account) throws SQLException {
     try {
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
-      insertStatement.setString(1, AccountCollectionSerde.accountToJson(account, true).toString());
+      insertStatement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
       insertStatement.setInt(2, account.getSnapshotVersion());
       insertStatement.executeUpdate();
     } catch (SQLException e) {
@@ -101,7 +101,7 @@ public class AccountDao {
   public void updateAccount(Account account) throws SQLException {
     try {
       PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
-      updateStatement.setString(1, AccountCollectionSerde.accountToJson(account, true).toString());
+      updateStatement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
       updateStatement.setInt(2, account.getSnapshotVersion());
       updateStatement.setInt(3, account.getId());
       updateStatement.executeUpdate();
@@ -124,7 +124,7 @@ public class AccountDao {
     while (resultSet.next()) {
       String accountJson = resultSet.getString(ACCOUNT_INFO);
       Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
-      Account account = AccountCollectionSerde.accountFromJson(new JSONObject(accountJson));
+      Account account = Account.fromJson(new JSONObject(accountJson));
       account = new AccountBuilder(account).lastModifiedTime(lastModifiedTime.getTime()).build();
       accounts.add(account);
     }

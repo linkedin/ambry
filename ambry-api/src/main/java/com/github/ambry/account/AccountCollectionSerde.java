@@ -58,24 +58,34 @@ public class AccountCollectionSerde {
     }
   }
 
-  public static Account accountFromJson(JSONObject json) {
-    return Account.fromJson(json);
-  }
-
-  public static JSONObject accountToJson(Account account, boolean excludeContainers) {
+  /**
+   * Serialize an account to a json object, stripping out its containers.
+   * @param account the {@link Account}s to serialize.
+   * @return the {@link JSONObject}
+   */
+  public static JSONObject accountToJsonNoContainers(Account account) {
     JSONObject jsonObject = account.toJson(false);
-    if (excludeContainers) {
-      jsonObject.remove(Account.CONTAINERS_KEY);
-    }
+    jsonObject.remove(Account.CONTAINERS_KEY);
     return jsonObject;
   }
 
+  /**
+   * Serialize a collection of containers to a json object that can be used in requests/responses.
+   * @param containers the {@link Container}s to serialize.
+   * @return the {@link JSONObject}
+   */
   public static JSONObject containersToJson(Collection<Container> containers) {
     JSONArray containerArray = new JSONArray();
     containers.stream().map(container -> container.toJson()).forEach(containerArray::put);
     return new JSONObject().put(Account.CONTAINERS_KEY, containerArray);
   }
 
+  /**
+   * Deserialize a json object representing a collection of containers.
+   * @param json the {@link JSONObject} to deserialize.
+   * @param accountId  the parent account id of the containers.
+   * @return a {@link Collection} of {@link Container}s.
+   */
   public static Collection<Container> containersFromJson(JSONObject json, short accountId) {
     JSONArray containerArray = json.optJSONArray(Account.CONTAINERS_KEY);
     if (containerArray == null) {
@@ -88,13 +98,5 @@ public class AccountCollectionSerde {
       }
       return containers;
     }
-  }
-
-  public static Container containerFromJson(JSONObject json, short accountId) {
-    return Container.fromJson(json, accountId);
-  }
-
-  public static JSONObject containerToJson(Container container) {
-    return container.toJson();
   }
 }
