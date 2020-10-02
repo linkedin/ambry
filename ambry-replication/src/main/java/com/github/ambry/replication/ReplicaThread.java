@@ -1451,7 +1451,7 @@ public class ReplicaThread implements Runnable {
     ExchangeMetadataResponse exchangeMetadataResponse = remoteReplicaInfo.getExchangeMetadataResponse();
     Set<MessageInfo> missingStoreMessages = exchangeMetadataResponse.getMissingStoreMessages();
 
-    if (missingStoreMessages != null && !missingStoreMessages.isEmpty()) {
+    if (!missingStoreMessages.isEmpty()) {
       Set<MessageInfo> missingStoreMessagesFoundInStore = new HashSet<>();
       try {
         // construct map of message info -> converted non-null local key
@@ -1567,10 +1567,10 @@ public class ReplicaThread implements Runnable {
 
     /**
      * Get missing store messages in this metadata exchange.
-     * @return set of missing store messages
+     * @return set of missing store messages as a new collection.
      */
     synchronized Set<MessageInfo> getMissingStoreMessages() {
-      return missingStoreMessages;
+      return missingStoreMessages == null ? Collections.emptySet() : new HashSet<>(missingStoreMessages);
     }
 
     /**
@@ -1599,10 +1599,11 @@ public class ReplicaThread implements Runnable {
     /**
      * Get remote messages that were previously missing and are now received but whose blob properties (
      * ttl_update, delete, undelete) still needs to be compared to properties of blob in local store and reconciled.
-     * @return set of messages that are now found in store
+     * @return set of messages that are now found in store as a new collection
      */
     synchronized Set<MessageInfo> getReceivedStoreMessagesWithUpdatesPending() {
-      return receivedStoreMessagesWithUpdatesPending;
+      return receivedStoreMessagesWithUpdatesPending == null ? Collections.emptySet()
+          : new HashSet<>(receivedStoreMessagesWithUpdatesPending);
     }
 
     /**
@@ -1629,7 +1630,7 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
-     *  get the keys corresponding to the missing messages in local store
+     *  Get the keys corresponding to the missing messages in local store
      */
     Set<StoreKey> getMissingStoreKeys() {
       return missingStoreMessages == null ? Collections.emptySet()
