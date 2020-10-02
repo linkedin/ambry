@@ -18,8 +18,12 @@ import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 
@@ -31,12 +35,52 @@ public class CompositeSend extends AbstractByteBufHolder<CompositeSend> implemen
   private final List<Send> compositeSendList;
   private long totalSizeToWrite;
   private int currentIndexInProgress;
+  private ByteBuf compositeSendContent;
 
   public CompositeSend(List<Send> compositeSendList) {
     this.compositeSendList = compositeSendList;
     this.currentIndexInProgress = 0;
     for (Send messageFormatSend : compositeSendList) {
       totalSizeToWrite += messageFormatSend.sizeInBytes();
+    }
+    if (compositeSendList.isEmpty()) {
+      compositeSendContent = Unpooled.EMPTY_BUFFER;
+    } else {
+      if (compositeSendList.size() == 1) {
+        compositeSendContent = compositeSendList.get(0).content();
+      } else {
+        int numComponents = 0;
+        boolean allContentPresent = true;
+        List<ByteBuf> byteBufs = new ArrayList<>(compositeSendList.size());
+        for (Send send : compositeSendList) {
+          ByteBuf content = send.content();
+          if (content == null) {
+            allContentPresent = false;
+            break;
+          }
+          if (content instanceof CompositeByteBuf) {
+            numComponents += ((CompositeByteBuf) content).numComponents();
+          } else {
+            numComponents++;
+          }
+          byteBufs.add(content);
+        }
+        if (allContentPresent) {
+          compositeSendContent = byteBufs.get(0).alloc().compositeHeapBuffer(numComponents);
+          for (ByteBuf content : byteBufs) {
+            if (content instanceof CompositeByteBuf) {
+              Iterator<ByteBuf> iterator = ((CompositeByteBuf) content).iterator();
+              while (iterator.hasNext()) {
+                ((CompositeByteBuf) compositeSendContent).addComponent(true, iterator.next());
+              }
+            } else {
+              ((CompositeByteBuf) compositeSendContent).addComponent(true, content);
+            }
+          }
+        } else {
+          compositeSendContent = null;
+        }
+      }
     }
   }
 
@@ -82,8 +126,7 @@ public class CompositeSend extends AbstractByteBufHolder<CompositeSend> implemen
 
   @Override
   public ByteBuf content() {
-    // TODO: Actually support ByteBufHolder for CompositeSend
-    return null;
+    return compositeSendContent;
   }
 
   @Override

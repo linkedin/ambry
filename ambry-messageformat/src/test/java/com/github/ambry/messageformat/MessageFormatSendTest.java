@@ -25,6 +25,8 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -126,6 +128,11 @@ public class MessageFormatSendTest {
     public void doPrefetch(int index, long relativeOffset, long size) {
       this.prefetchRelativeOffset = relativeOffset;
       this.preFetchSize = size;
+    }
+
+    @Override
+    public ByteBuf getPrefetchedData(int index) {
+      return Unpooled.wrappedBuffer(buffers.get(index));
     }
 
     /**

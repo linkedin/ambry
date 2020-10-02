@@ -454,7 +454,7 @@ class Processor extends AbstractServerThread {
           selector.close(connectionId);
         } else {
           logger.trace("Socket server received response to send, registering for write: {}", curr);
-          NetworkSend networkSend = new NetworkSend(connectionId, curr.getPayload(), curr.getMetrics(), time);
+          NetworkSend networkSend = new NetworkSend(connectionId, curr.getPayload(), curr.getMetrics(), time, true);
           selector.send(networkSend);
         }
       } catch (IllegalStateException e) {

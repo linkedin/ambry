@@ -52,6 +52,7 @@ import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
 import java.nio.channels.WritableByteChannel;
@@ -128,6 +129,11 @@ class MockStorageManager extends StorageManager {
 
         @Override
         public void doPrefetch(int index, long relativeOffset, long size) {
+        }
+
+        @Override
+        public ByteBuf getPrefetchedData(int index) {
+          return null;
         }
       }, Collections.emptyList());
     }

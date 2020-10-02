@@ -14,7 +14,6 @@
 package com.github.ambry.network.http2;
 
 import com.github.ambry.network.Send;
-import com.github.ambry.utils.ByteBufChannel;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelHandler;
@@ -27,7 +26,6 @@ import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
 import io.netty.handler.codec.http2.Http2Headers;
-import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,18 +72,6 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
     DefaultHttp2HeadersFrame headersFrame = new DefaultHttp2HeadersFrame(http2Headers, false);
     ctx.write(headersFrame);
     ByteBuf dataContent = send.content();
-    if (dataContent == null) {
-      ByteBufChannel byteBufChannel = new ByteBufChannel();
-      try {
-        send.writeTo(byteBufChannel);
-        dataContent = byteBufChannel.getBuf();
-      } catch (IOException e) {
-        promise.setFailure(e);
-        return;
-      } finally {
-        send.release();
-      }
-    }
     DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(dataContent, true);
     // Caller should call writeAndFlush().
     ctx.write(dataFrame, promise);

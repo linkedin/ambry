@@ -15,6 +15,7 @@ package com.github.ambry.network;
 
 import com.github.ambry.utils.AbstractByteBufHolder;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
@@ -48,7 +49,7 @@ public class ByteBufferSend extends AbstractByteBufHolder<ByteBufferSend> implem
 
   @Override
   public ByteBuf content() {
-    return null;
+    return Unpooled.wrappedBuffer(buffer);
   }
 
   @Override
