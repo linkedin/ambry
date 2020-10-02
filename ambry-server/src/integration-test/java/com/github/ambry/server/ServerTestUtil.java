@@ -667,6 +667,8 @@ final class ServerTestUtil {
     Thread threadToRun = new Thread(runnable);
     threadToRun.start();
     assertTrue("Did not put all blobs in 2 minutes", latch.await(2, TimeUnit.MINUTES));
+    // TODO: remove this temp fix after fixing race condition in MockCluster/MockNotificationSystem
+    Thread.sleep(3000);
     List<BlobId> blobIds = runnable.getBlobIds();
     for (BlobId blobId : blobIds) {
       notificationSystem.awaitBlobCreations(blobId.getID());
@@ -745,6 +747,7 @@ final class ServerTestUtil {
     channel3.connect();
 
     int noOfParallelThreads = 3;
+    int totalBlobsToPut = 50;
     CountDownLatch latch = new CountDownLatch(noOfParallelThreads);
     List<DirectSender> runnables = new ArrayList<DirectSender>(noOfParallelThreads);
     ConnectedChannel channel = null;
@@ -757,7 +760,7 @@ final class ServerTestUtil {
         channel = channel3;
       }
       DirectSender runnable =
-          new DirectSender(cluster, channel, 50, data, usermetadata, properties, encryptionKey, latch);
+          new DirectSender(cluster, channel, totalBlobsToPut, data, usermetadata, properties, encryptionKey, latch);
       runnables.add(runnable);
       Thread threadToRun = new Thread(runnable);
       threadToRun.start();

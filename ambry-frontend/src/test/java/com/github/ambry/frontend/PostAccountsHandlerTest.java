@@ -23,6 +23,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -154,6 +155,7 @@ public class PostAccountsHandlerTest {
     body.add(ByteBuffer.wrap(requestBody.getBytes(StandardCharsets.UTF_8)));
     body.add(null);
     RestRequest restRequest = new MockRestRequest(data, body);
+    restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, RequestPath.parse(restRequest, null, null));
     FutureResult<ReadableStreamChannel> future = new FutureResult<>();
     handler.handle(restRequest, restResponseChannel, future::done);
     try {
