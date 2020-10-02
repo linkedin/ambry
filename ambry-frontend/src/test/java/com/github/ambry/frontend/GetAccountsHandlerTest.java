@@ -76,7 +76,7 @@ public class GetAccountsHandlerTest {
       assertEquals("Content-length is not as expected", channel.getSize(),
           Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
       assertEquals("Accounts do not match", new HashSet<>(expectedAccounts),
-          new HashSet<>(AccountCollectionSerde.fromJson(RestTestUtils.getJsonizedResponseBody(channel))));
+          new HashSet<>(AccountCollectionSerde.accountsFromJson(RestTestUtils.getJsonizedResponseBody(channel))));
     };
     testAction.accept(createRestRequest(null, null), accountService.getAllAccounts());
     testAction.accept(createRestRequest(account.getName(), null), Collections.singleton(account));

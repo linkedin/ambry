@@ -898,7 +898,7 @@ public class FrontendRestRequestServiceTest {
     doOperation(restRequest, restResponseChannel);
     Set<Account> expected = new HashSet<>(accountService.getAllAccounts());
     Set<Account> actual = new HashSet<>(
-        AccountCollectionSerde.fromJson(new JSONObject(new String(restResponseChannel.getResponseBody()))));
+        AccountCollectionSerde.accountsFromJson(new JSONObject(new String(restResponseChannel.getResponseBody()))));
     assertEquals("Unexpected GET /accounts response", expected, actual);
 
     // test an account not found case to ensure that it goes through the exception path
@@ -921,7 +921,7 @@ public class FrontendRestRequestServiceTest {
   public void postAccountsTest() throws Exception {
     Account accountToAdd = accountService.generateRandomAccount();
     List<ByteBuffer> body = new LinkedList<>();
-    body.add(ByteBuffer.wrap(AccountCollectionSerde.toJson(Collections.singleton(accountToAdd))
+    body.add(ByteBuffer.wrap(AccountCollectionSerde.accountsToJson(Collections.singleton(accountToAdd))
         .toString()
         .getBytes(StandardCharsets.UTF_8)));
     body.add(null);

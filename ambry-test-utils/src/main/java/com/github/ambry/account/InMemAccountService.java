@@ -16,11 +16,13 @@ package com.github.ambry.account;
 
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -85,6 +87,40 @@ public class InMemAccountService implements AccountService {
       }
     }
     return true;
+  }
+
+  @Override
+  public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
+      throws AccountServiceException {
+    // input validation
+    if (accountName == null || accountName.isEmpty() || containers == null || containers.isEmpty()) {
+      throw new AccountServiceException("Account or container is null or empty", AccountServiceErrorCode.BadRequest);
+    }
+    Account account = getAccountByName(accountName);
+    if (account == null) {
+      throw new AccountServiceException("Account " + accountName + " is not found", AccountServiceErrorCode.NotFound);
+    }
+
+    List<Container> createdContainers = new ArrayList<>();
+    short nextContainerId = account.getAllContainers()
+        .stream()
+        .map(Container::getId)
+        .max(Short::compareTo)
+        .map(maxId -> (short) (maxId + 1))
+        .orElse((short) 1);
+    // construct containers based on input container and next containerId
+    for (Container container : containers) {
+      createdContainers.add(
+          new ContainerBuilder(container).setId(nextContainerId).setParentAccountId(account.getId()).build());
+      ++nextContainerId;
+    }
+    account.updateContainerMap(createdContainers);
+    boolean hasSucceeded = updateAccounts(Collections.singletonList(account));
+    if (!hasSucceeded) {
+      throw new AccountServiceException("Account update failed for " + accountName,
+          AccountServiceErrorCode.AccountUpdateError);
+    }
+    return createdContainers;
   }
 
   @Override
@@ -187,7 +223,7 @@ public class InMemAccountService implements AccountService {
    * @param accountId the account id for the container
    * @return returns a random {@link Container} for {@code accountId}
    */
-  private Container getRandomContainer(short accountId) {
+  public Container getRandomContainer(short accountId) {
     // adding +2 so that the ID is not 0 or 1
     short refContainerId = (short) (TestUtils.RANDOM.nextInt(Short.MAX_VALUE - 1) + 2);
     String refContainerName = TestUtils.getRandomString(10);

@@ -191,7 +191,7 @@ public class Account {
    * @return The metadata of the account in {@link JSONObject}.
    * @throws JSONException If fails to compose the metadata in {@link JSONObject}.
    */
-  JSONObject toJson(boolean incrementSnapshotVersion) throws JSONException {
+  public JSONObject toJson(boolean incrementSnapshotVersion) throws JSONException {
     JSONObject metadata = new JSONObject();
     metadata.put(JSON_VERSION_KEY, CURRENT_JSON_VERSION);
     metadata.put(ACCOUNT_ID_KEY, id);
@@ -213,7 +213,7 @@ public class Account {
    * @return An account object deserialized from the {@link JSONObject}.
    * @throws JSONException If parsing the {@link JSONObject} fails.
    */
-  static Account fromJson(JSONObject json) throws JSONException {
+  public static Account fromJson(JSONObject json) throws JSONException {
     return new Account(json);
   }
 

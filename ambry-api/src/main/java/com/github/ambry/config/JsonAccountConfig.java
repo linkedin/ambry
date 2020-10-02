@@ -16,7 +16,7 @@ package com.github.ambry.config;
 /**
  * Config for {@link JsonAccountService}.
  */
-public class JsonAccountConfig {
+public class JsonAccountConfig extends AccountServiceConfig {
 
   /** Prefix used for all configuration options of the JSON account service.*/
   public static final String JSON_ACCOUNT_PREFIX = "json.account.";
@@ -40,6 +40,7 @@ public class JsonAccountConfig {
   public final int updaterPollingIntervalMs;
 
   public JsonAccountConfig(VerifiableProperties verifiableProperties) {
+    super(verifiableProperties);
     jsonAccountFilePath = verifiableProperties.getString(FILE_PATH, FILE_PATH_DEFAULT);
     updaterPollingIntervalMs =
         verifiableProperties.getIntInRange(UPDATER_POLLING_INTERVAL_MS, 60 * 1000, 0, Integer.MAX_VALUE);

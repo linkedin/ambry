@@ -506,6 +506,10 @@ public class FrontendIntegrationTest {
     updateAccountsAndVerify(editedAccount, ACCOUNT_SERVICE.generateRandomAccount());
 
     getAccountsAndVerify();
+
+    // Test adding a container to the account
+    Container newContainer = ACCOUNT_SERVICE.getRandomContainer(editedAccount.getId());
+    updateContainersAndVerify(editedAccount, newContainer);
   }
 
   @Test
@@ -1472,7 +1476,7 @@ public class FrontendIntegrationTest {
    * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
    */
   private void updateAccountsAndVerify(Account... accounts) throws Exception {
-    JSONObject accountUpdateJson = AccountCollectionSerde.toJson(Arrays.asList(accounts));
+    JSONObject accountUpdateJson = AccountCollectionSerde.accountsToJson(Arrays.asList(accounts));
     FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.ACCOUNTS, null,
         ByteBuffer.wrap(accountUpdateJson.toString().getBytes(StandardCharsets.UTF_8)));
     ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
@@ -1483,6 +1487,33 @@ public class FrontendIntegrationTest {
 
     for (Account account : accounts) {
       assertEquals("Update not reflected in AccountService", account, ACCOUNT_SERVICE.getAccountById(account.getId()));
+    }
+  }
+
+  /**
+   * Call the {@code POST /accounts/updateContainers} API to update account metadata and verify that the update succeeded.
+   * @param account the account in which to update containers.
+   * @param containers the containers to update.
+   */
+  private void updateContainersAndVerify(Account account, Container... containers) throws Exception {
+    JSONObject containersUpdateJson = AccountCollectionSerde.containersToJson(Arrays.asList(containers));
+    String accountName = account.getName();
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
+    FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.UPDATE_ACCOUNT_CONTAINERS, headers,
+        ByteBuffer.wrap(containersUpdateJson.toString().getBytes(StandardCharsets.UTF_8)));
+    ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
+    ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
+    Collection<Container> outputContainers =
+        AccountCollectionSerde.containersFromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8)),
+            account.getId());
+
+    for (Container container : outputContainers) {
+      assertEquals("Update not reflected in AccountService", container,
+          ACCOUNT_SERVICE.getContainer(accountName, container.getName()));
     }
   }
 
@@ -1522,6 +1553,6 @@ public class FrontendIntegrationTest {
     verifyTrackingHeaders(response);
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
     return new HashSet<>(
-        AccountCollectionSerde.fromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8))));
+        AccountCollectionSerde.accountsFromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8))));
   }
 }

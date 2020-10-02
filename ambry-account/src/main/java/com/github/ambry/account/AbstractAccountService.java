@@ -13,19 +13,26 @@
  */
 package com.github.ambry.account;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.util.*;
+import com.github.ambry.config.AccountServiceConfig;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Class which provides a basic implementation an {@link AccountService}. The handling of accounts is mostly the same
  * for all the implementations. The only thing the implementations (usually) differ in is what the source is of the
- * accounts (Zookeeper / Helix, local JSON file, etcd, Consul, etc).
+ * accounts (Zookeeper / Helix, MySql, local JSON file, etcd, Consul, etc).
  */
 abstract class AbstractAccountService implements AccountService {
 
@@ -35,9 +42,11 @@ abstract class AbstractAccountService implements AccountService {
   protected final ReentrantLock lock = new ReentrantLock();
   protected final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers =
       new CopyOnWriteArraySet<>();
+  private final AccountServiceConfig config;
   protected final AccountServiceMetrics accountServiceMetrics;
 
-  public AbstractAccountService(AccountServiceMetrics accountServiceMetrics) {
+  public AbstractAccountService(AccountServiceConfig config, AccountServiceMetrics accountServiceMetrics) {
+    this.config = config;
     this.accountServiceMetrics = accountServiceMetrics;
 
     this.accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
@@ -66,6 +75,90 @@ abstract class AbstractAccountService implements AccountService {
   public Collection<Account> getAllAccounts() {
     checkOpen();
     return accountInfoMapRef.get().getAccounts();
+  }
+
+  @Override
+  public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
+      throws AccountServiceException {
+    checkOpen();
+    // input validation
+    if (accountName == null || accountName.isEmpty() || containers == null || containers.isEmpty()) {
+      throw new AccountServiceException("Account or container is null or empty", AccountServiceErrorCode.BadRequest);
+    }
+    Account account = getAccountByName(accountName);
+    if (account == null) {
+      logger.error("Account {} is not found", accountName);
+      throw new AccountServiceException("Account " + accountName + " is not found", AccountServiceErrorCode.NotFound);
+    }
+
+    List<Container> resolvedContainers = new ArrayList<>();
+    List<Container> existingUnchangedContainers = new ArrayList<>();
+    // create a hashmap to map the name to existing containers in account
+    Map<String, Container> existingContainersInAccount = new HashMap<>();
+    account.getAllContainers().forEach(c -> existingContainersInAccount.put(c.getName(), c));
+
+    // Generate container ids for new containers
+    short nextContainerId = account.getAllContainers()
+        .stream()
+        .map(Container::getId)
+        .max(Short::compareTo)
+        .map(maxId -> (short) (maxId + 1))
+        .orElse(config.containerIdStartNumber);
+
+    for (Container container : containers) {
+      if (container.getId() == Container.UNKNOWN_CONTAINER_ID) {
+        // new container
+        // make sure there is no conflicting container (conflicting means a container with same name but different attributes already exists).
+        Container existingContainer = existingContainersInAccount.get(container.getName());
+        if (existingContainer != null) {
+          if (existingContainer.isSameContainer(container)) {
+            // If an exactly same container already exists, treat as no-op (may be retry after partial failure).
+            // But include it in the list returned to caller to provide the containerId.
+            logger.info("Request to create container with existing name and properties: {}", existingContainer.toJson().toString());
+            existingUnchangedContainers.add(existingContainer);
+          } else {
+            throw new AccountServiceException("There is a conflicting container in account " + accountName,
+                AccountServiceErrorCode.ResourceConflict);
+          }
+        } else {
+          resolvedContainers.add(
+              new ContainerBuilder(container).setId(nextContainerId).setParentAccountId(account.getId()).build());
+          ++nextContainerId;
+        }
+      } else {
+        // existing container
+        Container existingContainer = existingContainersInAccount.get(container.getName());
+        if (existingContainer == null) {
+          throw new AccountServiceException(
+              "In account " + accountName + ", container " + container.getName() + " does not exist (containerId "
+                  + container.getId() + " was supplied)", AccountServiceErrorCode.NotFound);
+        } else if (existingContainer.getId() != container.getId()) {
+          throw new AccountServiceException(
+              "In account " + accountName + ", container " + container.getName() + " has containerId "
+                  + existingContainer.getId() + " (" + container.getId() + " was supplied)",
+              AccountServiceErrorCode.ResourceConflict);
+        } else {
+          resolvedContainers.add(container);
+        }
+      }
+    }
+
+    if (!resolvedContainers.isEmpty()) {
+      // In case updating account metadata store failed, we do a deep copy of original account. Thus, we don't have to
+      // revert changes in original account when there is a failure.
+      AccountBuilder accountBuilder = new AccountBuilder(account);
+      resolvedContainers.forEach(accountBuilder::addOrUpdateContainer);
+      Account updatedAccount = accountBuilder.build();
+      boolean hasSucceeded = updateAccounts(Collections.singletonList(updatedAccount));
+      // TODO: updateAccounts should throw exception with specific error code
+      if (!hasSucceeded) {
+        throw new AccountServiceException("Account update failed for " + accountName,
+            AccountServiceErrorCode.AccountUpdateError);
+      }
+    }
+
+    resolvedContainers.addAll(existingUnchangedContainers);
+    return resolvedContainers;
   }
 
   @Override

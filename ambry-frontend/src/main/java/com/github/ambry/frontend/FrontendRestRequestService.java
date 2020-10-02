@@ -232,7 +232,7 @@ class FrontendRestRequestService implements RestRequestService {
     ThrowingConsumer<RequestPath> routingAction = requestPath -> {
       if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
         postAccountsHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, null, exception));
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         postBlobHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, null, exception));

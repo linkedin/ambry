@@ -17,6 +17,10 @@ package com.github.ambry.frontend;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Container;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.rest.RestRequest;
@@ -25,7 +29,8 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.commons.Callback;
+import com.github.ambry.router.ReadableStreamChannel;
+import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.GregorianCalendar;
 import org.json.JSONException;
@@ -34,13 +39,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.frontend.Operations.*;
 
 
 /**
  * Handle requests to create or update accounts using {@link AccountService}.
  */
 class PostAccountsHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(PostAccountsHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(PostAccountsHandler.class);
 
   private final SecurityService securityService;
   private final AccountService accountService;
@@ -68,7 +74,8 @@ class PostAccountsHandler {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      Callback<ReadableStreamChannel> callback) {
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
@@ -79,7 +86,7 @@ class PostAccountsHandler {
     private final RestRequest restRequest;
     private final String uri;
     private final RestResponseChannel restResponseChannel;
-    private final Callback<Void> finalCallback;
+    private final Callback<ReadableStreamChannel> finalCallback;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -87,7 +94,7 @@ class PostAccountsHandler {
      * @param finalCallback the {@link Callback} to call on completion.
      */
     private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<Void> finalCallback) {
+        Callback<ReadableStreamChannel> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;
@@ -113,7 +120,7 @@ class PostAccountsHandler {
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(frontendMetrics.postAccountsSecurityProcessRequestMetrics,
           securityCheckResult -> securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback()),
-          uri, LOGGER, finalCallback);
+          uri, logger, finalCallback);
     }
 
     /**
@@ -125,7 +132,7 @@ class PostAccountsHandler {
         RetainingAsyncWritableChannel channel =
             new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
         restRequest.readInto(channel, fetchAccountUpdateBodyCallback(channel));
-      }, uri, LOGGER, finalCallback);
+      }, uri, logger, finalCallback);
     }
 
     /**
@@ -135,11 +142,57 @@ class PostAccountsHandler {
      */
     private Callback<Long> fetchAccountUpdateBodyCallback(RetainingAsyncWritableChannel channel) {
       return buildCallback(frontendMetrics.postAccountsReadRequestMetrics, bytesRead -> {
-        updateAccounts(readJsonFromChannel(channel));
+        JSONObject jsonPayload = readJsonFromChannel(channel);
+        ReadableStreamChannel outputChannel;
+        if (RestUtils.getRequestPath(restRequest).matchesOperation(UPDATE_ACCOUNT_CONTAINERS)) {
+          logger.debug("Got request for {} with payload {}", UPDATE_ACCOUNT_CONTAINERS, jsonPayload);
+          JSONObject outputPayload = updateContainers(jsonPayload);
+          outputChannel = serializeJsonToChannel(outputPayload);
+        } else {
+          updateAccounts(jsonPayload);
+          outputChannel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
+        }
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-        finalCallback.onCompletion(null, null);
-      }, uri, LOGGER, finalCallback);
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, outputChannel.getSize());
+        finalCallback.onCompletion(outputChannel, null);
+      }, uri, logger, finalCallback);
+    }
+
+    /**
+     * Process the request json and call {@link AccountService#updateContainers} to add or update containers.
+     * @param containersPayload the request json containing the containers to update.
+     * @throws RestServiceException
+     */
+    private JSONObject updateContainers(JSONObject containersPayload) throws RestServiceException {
+      Short accountId = RestUtils.getNumericalHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_ID, false,
+          Short::parseShort);
+      String accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, false);
+      if (accountId == null && accountName == null) {
+        throw new RestServiceException("Missing required header: " + RestUtils.Headers.TARGET_ACCOUNT_NAME,
+            RestServiceErrorCode.BadRequest);
+      }
+      Account account =
+          accountName != null ? accountService.getAccountByName(accountName) : accountService.getAccountById(accountId);
+      if (account == null) {
+        throw new RestServiceException("Account not found: " + accountName, RestServiceErrorCode.NotFound);
+      }
+      accountId = account.getId();
+      accountName = account.getName();
+
+      Collection<Container> containersToUpdate;
+      try {
+        containersToUpdate = AccountCollectionSerde.containersFromJson(containersPayload, accountId);
+      } catch (JSONException e) {
+        throw new RestServiceException("Bad container update request body", e, RestServiceErrorCode.BadRequest);
+      }
+      try {
+        Collection<Container> updatedContainers = accountService.updateContainers(accountName, containersToUpdate);
+        return AccountCollectionSerde.containersToJson(updatedContainers);
+      } catch (AccountServiceException ex) {
+        throw new RestServiceException("Container update failed for accountId " + accountId,
+            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+      }
     }
 
     /**
@@ -150,7 +203,7 @@ class PostAccountsHandler {
     private void updateAccounts(JSONObject accountUpdateJson) throws RestServiceException {
       Collection<Account> accountsToUpdate;
       try {
-        accountsToUpdate = AccountCollectionSerde.fromJson(accountUpdateJson);
+        accountsToUpdate = AccountCollectionSerde.accountsFromJson(accountUpdateJson);
       } catch (JSONException e) {
         throw new RestServiceException("Bad account update request body", e, RestServiceErrorCode.BadRequest);
       }

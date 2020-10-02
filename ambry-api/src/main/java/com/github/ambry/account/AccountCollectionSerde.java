@@ -33,7 +33,7 @@ public class AccountCollectionSerde {
    * @param accounts the {@link Account}s to serialize.
    * @return the {@link JSONObject}
    */
-  public static JSONObject toJson(Collection<Account> accounts) {
+  public static JSONObject accountsToJson(Collection<Account> accounts) {
     JSONArray accountArray = new JSONArray();
     accounts.stream().map(account -> account.toJson(false)).forEach(accountArray::put);
     return new JSONObject().put(ACCOUNTS_KEY, accountArray);
@@ -44,7 +44,7 @@ public class AccountCollectionSerde {
    * @param json the {@link JSONObject} to deserialize.
    * @return a {@link Collection} of {@link Account}s.
    */
-  public static Collection<Account> fromJson(JSONObject json) {
+  public static Collection<Account> accountsFromJson(JSONObject json) {
     JSONArray accountArray = json.optJSONArray(ACCOUNTS_KEY);
     if (accountArray == null) {
       return Collections.emptyList();
@@ -55,6 +55,48 @@ public class AccountCollectionSerde {
         accounts.add(Account.fromJson(accountJson));
       }
       return accounts;
+    }
+  }
+
+  /**
+   * Serialize an account to a json object, stripping out its containers.
+   * @param account the {@link Account}s to serialize.
+   * @return the {@link JSONObject}
+   */
+  public static JSONObject accountToJsonNoContainers(Account account) {
+    JSONObject jsonObject = account.toJson(false);
+    jsonObject.remove(Account.CONTAINERS_KEY);
+    return jsonObject;
+  }
+
+  /**
+   * Serialize a collection of containers to a json object that can be used in requests/responses.
+   * @param containers the {@link Container}s to serialize.
+   * @return the {@link JSONObject}
+   */
+  public static JSONObject containersToJson(Collection<Container> containers) {
+    JSONArray containerArray = new JSONArray();
+    containers.stream().map(container -> container.toJson()).forEach(containerArray::put);
+    return new JSONObject().put(Account.CONTAINERS_KEY, containerArray);
+  }
+
+  /**
+   * Deserialize a json object representing a collection of containers.
+   * @param json the {@link JSONObject} to deserialize.
+   * @param accountId  the parent account id of the containers.
+   * @return a {@link Collection} of {@link Container}s.
+   */
+  public static Collection<Container> containersFromJson(JSONObject json, short accountId) {
+    JSONArray containerArray = json.optJSONArray(Account.CONTAINERS_KEY);
+    if (containerArray == null) {
+      return Collections.emptyList();
+    } else {
+      Collection<Container> containers = new ArrayList<>();
+      for (int i = 0; i < containerArray.length(); i++) {
+        JSONObject containerJson = containerArray.getJSONObject(i);
+        containers.add(Container.fromJson(containerJson, accountId));
+      }
+      return containers;
     }
   }
 }

@@ -108,24 +108,11 @@ public interface AccountService extends Closeable {
   public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
 
   /**
-   * Add a collection of containers to an existing account.
-   * @param accountName the name of account in which new container will be added.
-   * @param containers a collection of containers to add.
-   * @return a collection of containers that are successfully added. If original input containers includes existing one,
-   *         the existing containers will be ignored and not present in the result.
-   * @throws AccountServiceException if exception occurs when adding containers.
-   */
-  default Collection<Container> addContainers(String accountName, Collection<Container> containers)
-      throws AccountServiceException {
-    throw new UnsupportedOperationException("This method is not supported");
-  }
-
-  /**
-   * Update existing container(s).
+   * Add or update a collection of containers in an existing account.
    * @param accountName the name of account which container belongs to.
-   * @param containers a collection of {@link Container} used to update current ones.
-   * @return a collection of updated containers.
-   * @throws AccountServiceException if exception occurs when updating containers.
+   * @param containers a collection of new or modified {@link Container}s.
+   * @return a collection of added or modified containers.
+   * @throws AccountServiceException if an exception occurs.
    */
   default Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
@@ -140,7 +127,8 @@ public interface AccountService extends Closeable {
    * @throws AccountServiceException if exception occurs when getting container.
    */
   default Container getContainer(String accountName, String containerName) throws AccountServiceException {
-    throw new UnsupportedOperationException("This method is not supported");
+    Account account = getAccountByName(accountName);
+    return account != null ? account.getContainerByName(containerName) : null;
   }
 
   /**
