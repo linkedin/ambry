@@ -488,6 +488,8 @@ task allJarVcr(type: Jar, dependsOn: subprojects.assemble) {
 }
 
 task codeCoverageReport(type: JacocoReport) {
+    // This task will compile a report for whatever tests have been run.
+    // Make sure to run the desired test tasks before generating the coverate report.
     executionData fileTree(project.rootDir.absolutePath).include("**/build/jacoco/*.exec")
 
     subprojects.each {
@@ -501,7 +503,6 @@ task codeCoverageReport(type: JacocoReport) {
         csv.enabled true
     }
 }
-codeCoverageReport.dependsOn subprojects*.allTest
 
 if (hasProperty('buildScan')) {
     buildScan {
