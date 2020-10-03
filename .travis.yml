@@ -18,13 +18,6 @@ addons:
 services:
   - mysql
 before_install:
-  - mysql -e 'CREATE DATABASE AccountMetadata;'
-  - mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;'
-branches:
-  except: # don't build tags
-    - /^v\d/
-install: skip # skips unnecessary ./gradlew assemble (https://docs.travis-ci.com/user/job-lifecycle/#skipping-the-installation-phase)
-before_script:
   - wget https://repo.mysql.com//mysql-apt-config_0.8.10-1_all.deb
   - sudo dpkg -i mysql-apt-config_0.8.10-1_all.deb
   - sudo apt-get update -q
@@ -32,6 +25,12 @@ before_script:
   - sudo systemctl restart mysql
   - sudo mysql_upgrade
   - mysql --version
+  - mysql -e 'CREATE DATABASE AccountMetadata;'
+  - mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;'
+branches:
+  except: # don't build tags
+    - /^v\d/
+install: skip # skips unnecessary ./gradlew assemble (https://docs.travis-ci.com/user/job-lifecycle/#skipping-the-installation-phase)
 script:
   - ./travis-build.sh
 after_success:
