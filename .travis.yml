@@ -19,7 +19,7 @@ services:
   - mysql
 before_install:
   - mysql -e 'CREATE DATABASE AccountMetadata;'
-  - mysql -e 'SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;'
+  - mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;'
 branches:
   except: # don't build tags
     - /^v\d/
