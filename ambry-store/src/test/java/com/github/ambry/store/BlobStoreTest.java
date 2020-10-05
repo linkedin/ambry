@@ -1044,8 +1044,13 @@ public class BlobStoreTest {
     }
   }
 
+  /**
+   * Test {@link BlobStoreStats}'s handle new entries method and make sure the correct {@link IndexValue}s are passed
+   * to these methods.
+   * @throws Exception
+   */
   @Test
-  public void testBlobStoreStats() throws StoreException, InterruptedException, IOException, ExecutionException {
+  public void testBlobStoreStatsHandleNewEntries() throws Exception {
     store.shutdown();
     ReplicaId replicaId = getMockReplicaId(tempDirStr);
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
@@ -1114,7 +1119,7 @@ public class BlobStoreTest {
       assertTrue(mockBlobStoreStats.previousValue.isPut());
       assertTrue(mockBlobStoreStats.originalPutValue.isPut());
     } finally {
-      ((MockBlobStore) store).setInDeleteBetweenGetEndOffsetAndFindKey(null);
+      ((MockBlobStore) store).setOperationBeforeSynchronization(null);
       executorService.shutdownNow();
     }
   }
