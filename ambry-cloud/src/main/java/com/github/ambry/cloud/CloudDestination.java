@@ -19,6 +19,7 @@ import com.github.ambry.replication.FindToken;
 import java.io.Closeable;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -142,7 +143,9 @@ public interface CloudDestination extends Closeable {
   /**
    * Update the deleted {@link Container}s to cloud.
    * @param deletedContainers {@link Set} of deleted {@link Container}s.
+   * @param partitionIds {@link Collection} of cloud partition ids from where the container needs to be deleted.
    * @throws {@link CloudStorageException} if updating fails.
    */
-  void updateDeletedContainers(Set<Container> deletedContainers) throws CloudStorageException;
+  void updateDeletedContainers(Set<Container> deletedContainers, Collection<String> partitionIds)
+      throws CloudStorageException;
 }

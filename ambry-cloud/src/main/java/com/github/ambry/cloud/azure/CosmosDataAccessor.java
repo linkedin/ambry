@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.ContainerDeletionEntry;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
@@ -54,7 +55,6 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
-import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.observables.BlockingObservable;
@@ -529,33 +529,21 @@ public class CosmosDataAccessor {
   }
 
   /**
-   * Add the new deleted {@link Container}s to cosmos table.
-   * @param deletedContainers {@link Set} of deleted {@link Container}s.
+   * Add the {@link ContainerDeletionEntry} for newly deleted {@link Container}s to cosmos table.
+   * @param deletedContainers {@link Set} of deleted {@link ContainerDeletionEntry}s.
    * @return the max deletion trigger time of all the added containers to serve as checkpoint for future update.
    */
-  public long updateDeletedContainers(Set<Container> deletedContainers) throws DocumentClientException {
+  public long updateDeletedContainers(Set<ContainerDeletionEntry> deletedContainers) throws DocumentClientException {
     long latestContainerDeletionTimestamp = -1;
-    for (Container container : deletedContainers) {
+    for (ContainerDeletionEntry containerDeletionEntry : deletedContainers) {
       executeCosmosAction(() -> asyncDocumentClient.upsertDocument(cosmosDeletedContainerCollectionLink,
-          getDeletedContainerJson(container), new RequestOptions(), true).toBlocking().single(),
+          containerDeletionEntry.toJson(), new RequestOptions(), true).toBlocking().single(),
           azureMetrics.documentCreateTime);
-      if (container.getDeleteTriggerTime() > latestContainerDeletionTimestamp) {
-        latestContainerDeletionTimestamp = container.getDeleteTriggerTime();
+      if (containerDeletionEntry.getDeleteTriggerTimestamp() > latestContainerDeletionTimestamp) {
+        latestContainerDeletionTimestamp = containerDeletionEntry.getDeleteTriggerTimestamp();
       }
     }
     return latestContainerDeletionTimestamp;
-  }
-
-  /**
-   * Serialize {@link Container} object to save to Cosmos.
-   * @param container {@link Container} object to serialize.
-   * @return serialized {@link JSONObject}.
-   */
-  private JSONObject getDeletedContainerJson(Container container) {
-    JSONObject deletedContainerJson = container.toJson();
-    deletedContainerJson.put(DELETED_CONTAINER_ID_COLUMN,
-        container.getId() + CONTAINER_ID_ACCOUNT_ID_DELIM + container.getParentAccountId());
-    return deletedContainerJson;
   }
 
   /**

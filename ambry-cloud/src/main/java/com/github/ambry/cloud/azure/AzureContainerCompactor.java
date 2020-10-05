@@ -18,11 +18,13 @@ import com.azure.storage.blob.models.BlobStorageException;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.ContainerDeletionEntry;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.config.CloudConfig;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -64,10 +66,11 @@ public class AzureContainerCompactor {
 
   /**
    * Update newly deleted containers from {@code deletedContainers} to CosmosDb since last checkpoint.
-   * @param deletedContainers {@link Set} of deleted {@link Container}s.
+   * @param deletedContainers {@link Collection} of deleted {@link Container}s.
    * @throws CloudStorageException in case of any error.
    */
-  public void updateDeletedContainers(Set<Container> deletedContainers) throws CloudStorageException {
+  public void updateDeletedContainers(Set<Container> deletedContainers, Collection<String> partitionIds)
+      throws CloudStorageException {
     if (deletedContainers.isEmpty()) {
       logger.info("Got empty set to update deleted containers. Skipping update deleted containers to cloud.");
       return;
@@ -76,6 +79,7 @@ public class AzureContainerCompactor {
     long newLastUpdateContainerTimestamp = requestAgent.doWithRetries(() -> cosmosDataAccessor.updateDeletedContainers(
         deletedContainers.stream()
             .filter(container -> container.getDeleteTriggerTime() >= lastUpdatedContainerTimestamp)
+            .map(container -> ContainerDeletionEntry.fromContainer(container, partitionIds))
             .collect(Collectors.toSet())), "updateDeletedContainer", null);
 
     if (newLastUpdateContainerTimestamp != -1) {

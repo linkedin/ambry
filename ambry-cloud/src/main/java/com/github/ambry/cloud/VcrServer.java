@@ -135,7 +135,7 @@ public class VcrServer {
 
       // initialize cloud destination
       if (cloudDestinationFactory == null) {
-        cloudDestinationFactory = Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry);
+        cloudDestinationFactory = Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry, clusterMap);
       }
       cloudDestination = cloudDestinationFactory.getCloudDestination();
 

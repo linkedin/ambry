@@ -15,6 +15,8 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Set;
 import org.apache.helix.task.Task;
 import org.apache.helix.task.TaskResult;
@@ -31,23 +33,25 @@ public class CloudContainerDeletionSyncTask implements Task {
   private final AccountService accountService;
   private final long containerDeletionRetentionDays;
   private final CloudDestination cloudDestination;
+  private final Collection<String> allPartitionIds;
 
   /**
    * Constructor for {@link CloudContainerDeletionSyncTask}.
    * @param accountService {@link AccountService} object.
    */
   public CloudContainerDeletionSyncTask(AccountService accountService, long containerDeletionRetentionDays,
-      CloudDestination cloudDestination) {
+      CloudDestination cloudDestination, Collection<String> allPartitionIds) {
     this.accountService = accountService;
     this.containerDeletionRetentionDays = containerDeletionRetentionDays;
     this.cloudDestination = cloudDestination;
+    this.allPartitionIds = Collections.unmodifiableCollection(allPartitionIds);
   }
 
   @Override
   public TaskResult run() {
     try {
       Set<Container> deletedContainers = accountService.getDeprecatedContainers(containerDeletionRetentionDays);
-      cloudDestination.updateDeletedContainers(deletedContainers);
+      cloudDestination.updateDeletedContainers(deletedContainers, allPartitionIds);
     } catch (CloudStorageException cloudStorageException) {
       logger.error("Error in updating deleted containers from account service to cloud: ", cloudStorageException);
     }

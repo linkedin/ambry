@@ -43,6 +43,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -480,8 +481,9 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void updateDeletedContainers(Set<Container> deletedContainers) throws CloudStorageException {
-    azureContainerCompactor.updateDeletedContainers(deletedContainers);
+  public void updateDeletedContainers(Set<Container> deletedContainers, Collection<String> partitionIds)
+      throws CloudStorageException {
+    azureContainerCompactor.updateDeletedContainers(deletedContainers, partitionIds);
   }
 
   /**
