@@ -21,13 +21,16 @@ import java.util.HashSet;
 import java.util.Set;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
+import org.mockito.junit.MockitoJUnitRunner;
 
 
 /**
  * Test {@link CloudContainerDeletionSyncTask}.
  */
+@RunWith(MockitoJUnitRunner.class)
 public class CloudContainerDeletionSyncTaskTest {
 
   private final CloudContainerDeletionSyncTask cloudContainerDeletionSyncTask;
