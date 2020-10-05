@@ -24,6 +24,7 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.CloudUpdateValidator;
+import com.github.ambry.cloud.ContainerDeletionEntry;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
@@ -493,6 +494,11 @@ class AzureCloudDestination implements CloudDestination {
   public void deprecateContainers(Collection<Container> deletedContainers) throws CloudStorageException {
     azureContainerCompactor.deprecateContainers(deletedContainers,
         clusterMap.getAllPartitionIds(null).stream().map(PartitionId::toPathString).collect(Collectors.toSet()));
+  }
+
+  @Override
+  public Set<ContainerDeletionEntry> getContainersToDelete() {
+    return cosmosDataAccessor.getContainersToDelete();
   }
 
   /**

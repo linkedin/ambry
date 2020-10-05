@@ -46,6 +46,13 @@ public interface VirtualReplicatorCluster extends AutoCloseable {
   List<? extends PartitionId> getAssignedPartitionIds();
 
   /**
+   * Check is a partition is assigned to current node.
+   * @param partitionPath partition id of the partition.
+   * @return {@code true} if partition is assigned to current node. {@code false} otherwise.
+   */
+  boolean isPartitionAssigned(String partitionPath);
+
+  /**
    * Add {@link VirtualReplicatorClusterListener} to listen for cluster change.
    * @param listener to add.
    */

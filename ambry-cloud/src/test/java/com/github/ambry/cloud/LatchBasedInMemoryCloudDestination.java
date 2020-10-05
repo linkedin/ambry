@@ -384,6 +384,13 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
         .collect(Collectors.toList()));
   }
 
+  @Override
+  public Set<ContainerDeletionEntry> getContainersToDelete() {
+    return deletedContainers.stream()
+        .filter(containerDeletionEntry -> !containerDeletionEntry.isDeleted())
+        .collect(Collectors.toSet());
+  }
+
   boolean doesBlobExist(BlobId blobId) {
     return map.containsKey(blobId);
   }

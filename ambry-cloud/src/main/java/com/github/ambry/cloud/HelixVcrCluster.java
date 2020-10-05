@@ -196,6 +196,12 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   }
 
   @Override
+  public boolean isPartitionAssigned(String partitionPath) {
+    return (partitionIdMap.get(partitionPath) != null) && assignedPartitionIds.contains(
+        partitionIdMap.get(partitionPath));
+  }
+
+  @Override
   public void addListener(VirtualReplicatorClusterListener listener) {
     listeners.add(listener);
   }
