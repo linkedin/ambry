@@ -41,6 +41,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -446,6 +447,7 @@ public class BlobStoreStatsTest {
    * @throws InterruptedException
    * @throws IOException
    */
+  @Ignore // openjdk crash
   @Test
   public void testBucketingWithNewEntriesAfterScan() throws StoreException, InterruptedException, IOException {
     assumeTrue(bucketingEnabled);
