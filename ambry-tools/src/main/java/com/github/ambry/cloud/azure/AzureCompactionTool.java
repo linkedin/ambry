@@ -46,9 +46,9 @@ import org.slf4j.LoggerFactory;
  * or to report the compaction progress of all partitions.
  * Usage: java -cp /path/to/ambry.jar AzureCompactionTool -propsFile <property-file-path> [-purge partitionPath...]
  */
-public class AzureStorageCompactionTool {
+public class AzureCompactionTool {
 
-  private static final Logger logger = LoggerFactory.getLogger(AzureStorageCompactionTool.class);
+  private static final Logger logger = LoggerFactory.getLogger(AzureCompactionTool.class);
   private static final String PURGE_OPTION = "purge";
   private static final String PROPS_FILE = "propsFile";
 
@@ -58,7 +58,7 @@ public class AzureStorageCompactionTool {
         .withRequiredArg()
         .describedAs(PROPS_FILE)
         .ofType(String.class);
-    String commandName = AzureStorageCompactionTool.class.getSimpleName();
+    String commandName = AzureCompactionTool.class.getSimpleName();
     parser.accepts(PURGE_OPTION, "Flag to purge dead blobs from the partition");
     parser.nonOptions("The partitions to compact").ofType(String.class);
     OptionSet optionSet = parser.parse(args);
@@ -117,11 +117,6 @@ public class AzureStorageCompactionTool {
     }
   }
 
-  private static void printHelpAndExit(OptionParser parser) throws IOException {
-    parser.printHelpOn(System.err);
-    System.exit(1);
-  }
-
   /**
    * PartitionId implementation that returns only its path.
    */
@@ -176,5 +171,10 @@ public class AzureStorageCompactionTool {
     public int compareTo(PartitionId o) {
       return 0;
     }
+  }
+
+  private static void printHelpAndExit(OptionParser parser) throws IOException {
+    parser.printHelpOn(System.err);
+    System.exit(1);
   }
 }

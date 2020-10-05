@@ -1,3 +1,16 @@
+/**
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
@@ -21,11 +34,13 @@ import java.util.Set;
 import java.util.UUID;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 
 
+@Ignore
 @RunWith(MockitoJUnitRunner.class)
 public class AzureContainerCompactorIntegrationTest {
 
@@ -74,27 +89,8 @@ public class AzureContainerCompactorIntegrationTest {
 
   @Test
   public void testUpdateDeletedContainer() throws CloudStorageException {
-    /*
-    First create 5 containers in increasing order of deleteTriggerTimestamp
-    update deleted containers
-    Make sure that cosmos container right values
-    Make sure abs contains right values
-    Create 5 new containers (with increasing timestamps)
-    add previous 2 container to it
-    update deleted containers
-    Make sure that cosmos container right values
-    Make sure abs contains right values
-
-    update same deleted containers again
-    Make sure that cosmos container right values
-    Make sure abs contains right values
-
-    update deleted containers with empty container set
-    Make sure that cosmos container right values
-    Make sure abs contains right values
-     */
     Set<Container> containers = generateContainers(5);
-    cloudDestination.updateDeletedContainers(containers);
+    cloudDestination.updateDeletedContainers(containers, null);
     verifyCosmosData(containers);
     verifyCheckpoint(containers);
   }
@@ -104,7 +100,8 @@ public class AzureContainerCompactorIntegrationTest {
     SqlQuerySpec querySpec = new SqlQuerySpec(query);
     Timer timer = new Timer();
     cloudDestination.getCosmosDataAccessor()
-        .executeCosmosQuery(azureConfig.cosmosDeletedContainerCollectionLink, null, querySpec, new FeedOptions(), timer);
+        .executeCosmosQuery(azureConfig.cosmosDeletedContainerCollectionLink, null, querySpec, new FeedOptions(),
+            timer);
   }
 
   private void verifyCheckpoint(Set<Container> containers) {

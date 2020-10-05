@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -116,7 +117,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final ChangeFeed changeFeed = new ChangeFeed();
   private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
   private final AzureReplicationFeed.FeedType azureReplicationFeedType;
-  private final Set<Container> deletedContainers = new HashSet<>();
+  private final Set<ContainerDeletionEntry> deletedContainers = new HashSet<>();
 
   private final static AzureReplicationFeed.FeedType DEFAULT_AZURE_REPLICATION_FEED_TYPE =
       AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
@@ -369,8 +370,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void updateDeletedContainers(Set<Container> deletedContainers) {
-    this.deletedContainers.addAll(deletedContainers);
+  public void updateDeletedContainers(Set<Container> deletedContainers, Collection<String> allPartitions) {
+    this.deletedContainers.addAll(deletedContainers.stream()
+        .map(container -> ContainerDeletionEntry.fromContainer(container, allPartitions))
+        .collect(Collectors.toList()));
   }
 
   boolean doesBlobExist(BlobId blobId) {
@@ -424,7 +427,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   /**
    * @return {@code deletedContainers}.
    */
-  public Set<Container> getDeletedContainers() {
+  public Set<ContainerDeletionEntry> getDeletedContainers() {
     return deletedContainers;
   }
 }
