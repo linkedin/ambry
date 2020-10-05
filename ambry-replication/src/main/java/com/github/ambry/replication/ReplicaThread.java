@@ -1630,9 +1630,10 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
-     *  Get the keys corresponding to the missing messages in local store
+     * Get the keys corresponding to the missing messages in the local store
+     * @return store keys missing in the local store
      */
-    Set<StoreKey> getMissingStoreKeys() {
+    synchronized Set<StoreKey> getMissingStoreKeys() {
       return missingStoreMessages == null ? Collections.emptySet()
           : missingStoreMessages.stream().map(MessageInfo::getStoreKey).collect(Collectors.toSet());
     }
