@@ -18,6 +18,7 @@ import com.azure.storage.blob.models.BlobStorageException;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.ContainerDeletionEntry;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.config.CloudConfig;
 import java.io.ByteArrayInputStream;

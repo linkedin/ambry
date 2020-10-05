@@ -33,6 +33,7 @@ import org.mockito.junit.MockitoJUnitRunner;
 @RunWith(MockitoJUnitRunner.class)
 public class CloudContainerDeletionSyncTaskTest {
 
+  private static final Set<String> ALL_PARTITIONS = new HashSet<>(Arrays.asList("1", "2", "3"));
   private final CloudContainerDeletionSyncTask cloudContainerDeletionSyncTask;
   private final AccountService accountService;
   private final LatchBasedInMemoryCloudDestination cloudDestination;
@@ -45,7 +46,8 @@ public class CloudContainerDeletionSyncTaskTest {
     long containerDeletionRetentionDays = 2;
     cloudDestination = new LatchBasedInMemoryCloudDestination(new ArrayList<>());
     cloudContainerDeletionSyncTask =
-        new CloudContainerDeletionSyncTask(accountService, containerDeletionRetentionDays, cloudDestination);
+        new CloudContainerDeletionSyncTask(accountService, containerDeletionRetentionDays, cloudDestination,
+            ALL_PARTITIONS);
   }
 
   /**
