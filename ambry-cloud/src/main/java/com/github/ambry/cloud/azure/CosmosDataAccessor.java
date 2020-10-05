@@ -610,11 +610,29 @@ public class CosmosDataAccessor {
    */
   private BlockingObservable<FeedResponse<Document>> executeCosmosQuery(String partitionPath, SqlQuerySpec sqlQuerySpec,
       FeedOptions feedOptions, Timer timer) {
+    return executeCosmosQuery(cosmosCollectionLink, partitionPath, sqlQuerySpec, feedOptions, timer);
+  }
+
+  /**
+   * Utility method to call Cosmos document query method and record the query time.
+   * @param collectionLink collection link of the collection to execute query on.
+   * @param partitionPath the partition to query.
+   * @param sqlQuerySpec the DocumentDB query to execute.
+   * @param feedOptions {@link FeedOptions} object specifying the options associated with the method.
+   * @param timer the {@link Timer} to use to record query time (excluding waiting).
+   * @return {@link BlockingObservable} object containing the query response.
+   */
+  BlockingObservable<FeedResponse<Document>> executeCosmosQuery(String collectionLink, String partitionPath,
+      SqlQuerySpec sqlQuerySpec, FeedOptions feedOptions, Timer timer) {
     azureMetrics.documentQueryCount.inc();
-    logger.debug("Running query on partition {}: {}", partitionPath, sqlQuerySpec.getQueryText());
+    if (!Utils.isNullOrEmpty(partitionPath)) {
+      logger.debug("Running query on partition {}: {}", partitionPath, sqlQuerySpec.getQueryText());
+    } else {
+      logger.debug("Running query on partition {}", sqlQuerySpec.getQueryText());
+    }
     Timer.Context operationTimer = timer.time();
     try {
-      return asyncDocumentClient.queryDocuments(cosmosCollectionLink, sqlQuerySpec, feedOptions).toBlocking();
+      return asyncDocumentClient.queryDocuments(collectionLink, sqlQuerySpec, feedOptions).toBlocking();
     } finally {
       operationTimer.stop();
     }

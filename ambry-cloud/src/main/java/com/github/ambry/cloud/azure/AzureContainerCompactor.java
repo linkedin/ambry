@@ -88,7 +88,7 @@ public class AzureContainerCompactor {
    * @return latest delete trigger time checkpoint for deleted containers.
    * @throws CloudStorageException in case of any error.
    */
-  private long getLatestContainerDeletionTime() throws CloudStorageException {
+  long getLatestContainerDeletionTime() throws CloudStorageException {
     try {
       ByteArrayOutputStream baos = new ByteArrayOutputStream(Long.BYTES);
       requestAgent.doWithRetries(() -> {

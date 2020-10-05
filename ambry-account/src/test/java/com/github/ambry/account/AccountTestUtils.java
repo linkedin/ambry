@@ -13,6 +13,11 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -209,3 +214,4 @@ class AccountTestUtils {
     return containerBuilders;
   }
 }
+
