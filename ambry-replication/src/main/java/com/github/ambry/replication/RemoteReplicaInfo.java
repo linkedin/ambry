@@ -248,7 +248,7 @@ public class RemoteReplicaInfo {
    */
   synchronized void updateMissingMessagesInMetadataResponse(List<MessageInfo> messagesWrittenToStore) {
     Set<MessageInfo> missingStoreMessages = exchangeMetadataResponse.getMissingStoreMessages();
-    if (missingStoreMessages != null && !missingStoreMessages.isEmpty()) {
+    if (!missingStoreMessages.isEmpty()) {
       Set<StoreKey> keysWrittenToStore =
           messagesWrittenToStore.stream().map(MessageInfo::getStoreKey).collect(Collectors.toSet());
       Set<MessageInfo> missingMessagesFoundInStore = missingStoreMessages.stream()
