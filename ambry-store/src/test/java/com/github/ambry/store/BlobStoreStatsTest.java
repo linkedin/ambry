@@ -447,7 +447,6 @@ public class BlobStoreStatsTest {
    * @throws InterruptedException
    * @throws IOException
    */
-  @Ignore // openjdk crash
   @Test
   public void testBucketingWithNewEntriesAfterScan() throws StoreException, InterruptedException, IOException {
     assumeTrue(bucketingEnabled);
