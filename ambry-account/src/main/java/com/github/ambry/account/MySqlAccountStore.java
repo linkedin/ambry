@@ -28,11 +28,16 @@ public class MySqlAccountStore {
 
   private final AccountDao accountDao;
   private final ContainerDao containerDao;
+  private final MySqlDataAccessor mySqlDataAccessor;
 
   public MySqlAccountStore(MySqlAccountServiceConfig config) throws SQLException {
-    MySqlDataAccessor mySqlDataAccessor = new MySqlDataAccessor(config);
+    mySqlDataAccessor = new MySqlDataAccessor(config);
     accountDao = new AccountDao(mySqlDataAccessor);
     containerDao = new ContainerDao(mySqlDataAccessor);
+  }
+
+  MySqlDataAccessor getMySqlDataAccessor() {
+    return mySqlDataAccessor;
   }
 
   /**

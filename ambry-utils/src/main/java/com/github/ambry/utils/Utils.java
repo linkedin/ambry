@@ -673,7 +673,6 @@ public class Utils {
 
   /**
    * Read a properties file from the given path
-   *
    * @param filename The path of the file to read
    */
   public static Properties loadProps(String filename) throws IOException {
@@ -681,6 +680,21 @@ public class Utils {
     Properties props = new Properties();
     props.load(propStream);
     return props;
+  }
+
+  /**
+   * Read a properties file from the given named resource
+   * @param resourceName The name of the resource to read
+   */
+  public static Properties loadPropsFromResource(String resourceName) throws IOException {
+    Properties props = new Properties();
+    try (InputStream input = Thread.currentThread().getContextClassLoader().getResourceAsStream(resourceName)) {
+      if (input == null) {
+        throw new IllegalArgumentException("Could not find resource: " + resourceName);
+      }
+      props.load(input);
+      return props;
+    }
   }
 
   /**
