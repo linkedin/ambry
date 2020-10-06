@@ -1052,8 +1052,8 @@ public class FrontendIntegrationTest {
     assertEquals(RestUtils.Headers.AMBRY_CONTENT_TYPE + " does not match",
         expectedHeaders.get(RestUtils.Headers.AMBRY_CONTENT_TYPE),
         response.headers().get(RestUtils.Headers.AMBRY_CONTENT_TYPE));
-    assertTrue("No " + RestUtils.Headers.CREATION_TIME,
-        response.headers().get(RestUtils.Headers.CREATION_TIME, null) != null);
+    assertNotNull("No " + RestUtils.Headers.CREATION_TIME,
+        response.headers().get(RestUtils.Headers.CREATION_TIME, null));
     if (expectedHeaders.get(RestUtils.Headers.TTL) != null
         && Long.parseLong(expectedHeaders.get(RestUtils.Headers.TTL)) != Utils.Infinite_Time) {
       assertEquals(RestUtils.Headers.TTL + " does not match", expectedHeaders.get(RestUtils.Headers.TTL),
@@ -1254,7 +1254,7 @@ public class FrontendIntegrationTest {
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", expectedStatusCode, response.status());
-    assertTrue("No Date header", response.headers().get(HttpHeaderNames.DATE, null) != null);
+    assertNotNull("No Date header", response.headers().get(HttpHeaderNames.DATE, null));
     assertNoContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
     verifyTrackingHeaders(response);
@@ -1265,8 +1265,8 @@ public class FrontendIntegrationTest {
    * @param receivedHeaders the {@link HttpHeaders} that were received.
    */
   private void checkCommonGetHeadHeaders(HttpHeaders receivedHeaders) {
-    assertTrue("No Date header", receivedHeaders.get(HttpHeaderNames.DATE) != null);
-    assertTrue("No Last-Modified header", receivedHeaders.get(HttpHeaderNames.LAST_MODIFIED) != null);
+    assertNotNull("No Date header", receivedHeaders.get(HttpHeaderNames.DATE));
+    assertNotNull("No Last-Modified header", receivedHeaders.get(HttpHeaderNames.LAST_MODIFIED));
   }
 
   /**
@@ -1505,6 +1505,11 @@ public class FrontendIntegrationTest {
     ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    // verify regular response header
+    assertEquals("Unexpected account id in response header", account.getId(),
+        Short.parseShort(response.headers().get(RestUtils.Headers.TARGET_ACCOUNT_ID)));
+    assertEquals("Unexpected content type in response header", RestUtils.JSON_CONTENT_TYPE,
+        response.headers().get(RestUtils.Headers.CONTENT_TYPE));
     verifyTrackingHeaders(response);
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
     Collection<Container> outputContainers =
