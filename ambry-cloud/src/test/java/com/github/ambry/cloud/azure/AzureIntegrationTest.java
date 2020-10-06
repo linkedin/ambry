@@ -633,8 +633,9 @@ public class AzureIntegrationTest {
    */
   private int purgeBlobsWithRetry(List<CloudBlobMetadata> blobMetadataList, String partitionPath)
       throws CloudStorageException {
-    return cloudRequestAgent.doWithRetries(() -> azureDest.getAzureStorageCompactor().purgeBlobs(blobMetadataList),
-        "PurgeBlobs", partitionPath);
+    return cloudRequestAgent.doWithRetries(
+        () -> AzureCompactionUtil.purgeBlobs(blobMetadataList, azureDest.getAzureBlobDataAccessor(),
+            azureDest.getAzureMetrics(), azureDest.getCosmosDataAccessor()), "PurgeBlobs", partitionPath);
   }
 
   /**

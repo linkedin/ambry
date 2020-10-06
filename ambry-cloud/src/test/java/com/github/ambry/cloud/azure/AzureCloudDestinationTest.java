@@ -158,7 +158,7 @@ public class AzureCloudDestinationTest {
     clusterMap = mock(ClusterMap.class);
     azureDest =
         new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
-            azureMetrics, defaultAzureReplicationFeedType, clusterMap, false);
+            azureMetrics, defaultAzureReplicationFeedType, clusterMap, false, configProps);
   }
 
   @After
@@ -442,7 +442,7 @@ public class AzureCloudDestinationTest {
     azureDest.close();
     azureDest =
         new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
-            azureMetrics, defaultAzureReplicationFeedType, clusterMap, true);
+            azureMetrics, defaultAzureReplicationFeedType, clusterMap, true, configProps);
     // Existing blob
     List<Document> docList = Collections.singletonList(createDocumentFromCloudBlobMetadata(blobMetadata));
     Observable<FeedResponse<Document>> feedResponse = mock(Observable.class);
@@ -478,7 +478,7 @@ public class AzureCloudDestinationTest {
     try {
       azureDest =
           new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
-              azureMetrics, defaultAzureReplicationFeedType, clusterMap, false);
+              azureMetrics, defaultAzureReplicationFeedType, clusterMap, false, configProps);
       List<BlobId> blobIdList = new ArrayList<>();
       List<Document> docList = new ArrayList<>();
       for (int j = 0; j < numBlobs; j++) {
@@ -614,7 +614,7 @@ public class AzureCloudDestinationTest {
     try {
       updateTimeBasedAzureCloudDestination =
           new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
-              azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME, clusterMap, false);
+              azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME, clusterMap, false, configProps);
       testFindEntriesSinceWithUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
       testFindEntriesSinceWithNonUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
     } finally {

@@ -373,6 +373,11 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
+  public int compactContainer(short containerId, short accountId, String partitionPath) throws CloudStorageException {
+    return 0;
+  }
+
+  @Override
   public void stopCompaction() {
   }
 

@@ -70,6 +70,8 @@ public class CosmosDataAccessor {
   private static final String LIMIT_PARAM = "@limit";
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
+  private static final String CONTAINER_BLOBS_QUERY =
+      "SELECT TOP %d * FROM c WHERE c.accountId=%d and c.containerId=%d";
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
   private static final String DEPRECATED_CONTAINERS_QUERY = "SELECT TOP %d from c order by c.deleteTriggerTime";
   private static final String CONTAINER_DELETION_TABLE = "DeletedContainer";
@@ -418,6 +420,42 @@ public class CosmosDataAccessor {
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
         logger.warn("Dead blobs query {} partition {} got {}", deadBlobsQuery, partitionPath,
+            ((DocumentClientException) rex.getCause()).getStatusCode());
+        throw (DocumentClientException) rex.getCause();
+      }
+      throw rex;
+    }
+  }
+
+  List<CloudBlobMetadata> getContainerBlobs(String partitionPath, short accountId, short containerId, int queryLimit)
+      throws DocumentClientException {
+    String query = String.format(CONTAINER_BLOBS_QUERY, accountId, containerId);
+    SqlQuerySpec querySpec = new SqlQuerySpec(query);
+    FeedOptions feedOptions = new FeedOptions();
+    feedOptions.setMaxItemCount(queryLimit);
+    feedOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);
+    feedOptions.setPartitionKey(new PartitionKey(partitionPath));
+    try {
+      Iterator<FeedResponse<Document>> iterator = executeCosmosQuery(partitionPath, querySpec, feedOptions,
+          azureMetrics.deletedContainerBlobsQueryTime).getIterator();
+      List<CloudBlobMetadata> containerBlobsList = new ArrayList<>();
+      double requestCharge = 0.0;
+      while (iterator.hasNext()) {
+        FeedResponse<Document> response = iterator.next();
+        requestCharge += response.getRequestCharge();
+        response.getResults()
+            .iterator()
+            .forEachRemaining(doc -> containerBlobsList.add(createMetadataFromDocument(doc)));
+      }
+      if (requestCharge >= requestChargeThreshold) {
+        logger.info(
+            "Deleted container blobs query partition {} containerId {} accountId {} request charge {} for {} records",
+            partitionPath, containerId, accountId, requestCharge, containerBlobsList.size());
+      }
+      return containerBlobsList;
+    } catch (RuntimeException rex) {
+      if (rex.getCause() instanceof DocumentClientException) {
+        logger.warn("Dead blobs query {} partition {} got {}", query, partitionPath,
             ((DocumentClientException) rex.getCause()).getStatusCode());
         throw (DocumentClientException) rex.getCause();
       }

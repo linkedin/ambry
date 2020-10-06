@@ -77,6 +77,7 @@ class AzureCloudDestination implements CloudDestination {
   private final AzureReplicationFeed azureReplicationFeed;
   private final AzureMetrics azureMetrics;
   private final int queryBatchSize;
+  private final int containerDeletionQueryBatchSize;
   private final boolean isVcr;
   private final CloudConfig cloudConfig;
   private final ClusterMap clusterMap;
@@ -99,11 +100,13 @@ class AzureCloudDestination implements CloudDestination {
     this.azureBlobDataAccessor =
         new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
     this.queryBatchSize = azureCloudConfig.cosmosQueryBatchSize;
+    this.containerDeletionQueryBatchSize = azureCloudConfig.cosmosContainerDeletionBatchSize;
     this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, vcrMetrics, azureMetrics);
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureContainerCompactor =
-        new AzureContainerCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
+        new AzureContainerCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, azureCloudConfig,
+            vcrMetrics, azureMetrics);
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     this.cloudConfig = cloudConfig;
@@ -126,24 +129,26 @@ class AzureCloudDestination implements CloudDestination {
   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
       AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String cosmosDeletedContainerCollectionLink,
       String clusterName, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType,
-      ClusterMap clusterMap, boolean isVcr) {
+      ClusterMap clusterMap, boolean isVcr, Properties configProps) {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
+    this.containerDeletionQueryBatchSize = AzureCloudConfig.DEFAULT_COSMOS_CONTAINER_DELETION_BATCH_SIZE;
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
     this.cosmosDataAccessor =
         new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, cosmosDeletedContainerCollectionLink,
             vcrMetrics, azureMetrics);
-    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
+    this.cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
+    AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureContainerCompactor =
-        new AzureContainerCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
+        new AzureContainerCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, azureCloudConfig,
+            vcrMetrics, azureMetrics);
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     this.isVcr = isVcr;
-    this.cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
     this.clusterMap = clusterMap;
   }
 
@@ -416,6 +421,11 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
+  public int compactContainer(short containerId, short accountId, String partitionPath) throws CloudStorageException {
+    return azureContainerCompactor.compactContainer(containerId, accountId, partitionPath);
+  }
+
+  @Override
   public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream)
       throws CloudStorageException {
     // Path is partitionId path string
@@ -498,7 +508,7 @@ class AzureCloudDestination implements CloudDestination {
 
   @Override
   public Set<ContainerDeletionEntry> getContainersToDelete() {
-    return cosmosDataAccessor.getContainersToDelete();
+    return cosmosDataAccessor.getContainersToDelete(containerDeletionQueryBatchSize);
   }
 
   /**

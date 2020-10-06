@@ -16,15 +16,18 @@ package com.github.ambry.cloud.azure;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.github.ambry.account.Container;
+import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
-import com.github.ambry.cloud.ContainerDeletionEntry;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.config.CloudConfig;
+import com.microsoft.azure.cosmosdb.DocumentClientException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Collection;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +47,9 @@ public class AzureContainerCompactor {
   private final VcrMetrics vcrMetrics;
   private final AzureMetrics azureMetrics;
   private final CloudRequestAgent requestAgent;
+  private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+  private final int queryLimit;
+  private final int purgeLimit;
 
   /**
    * Constructor for {@link AzureContainerCompactor}.
@@ -54,13 +60,15 @@ public class AzureContainerCompactor {
    * @param azureMetrics {@link AzureMetrics} object.
    */
   public AzureContainerCompactor(AzureBlobDataAccessor azureBlobDataAccessor, CosmosDataAccessor cosmosDataAccessor,
-      CloudConfig cloudConfig, VcrMetrics vcrMetrics, AzureMetrics azureMetrics) {
+      CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, VcrMetrics vcrMetrics, AzureMetrics azureMetrics) {
     this.azureBlobDataAccessor = azureBlobDataAccessor;
     this.cosmosDataAccessor = cosmosDataAccessor;
     this.cloudConfig = cloudConfig;
     this.vcrMetrics = vcrMetrics;
     this.azureMetrics = azureMetrics;
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
+    this.queryLimit = azureCloudConfig.containerCompactionCosmosQueryLimit;
+    this.purgeLimit = azureCloudConfig.containerCompactionAbsPurgeLimit;
   }
 
   /**
@@ -86,6 +94,41 @@ public class AzureContainerCompactor {
     }
   }
 
+  public int compactContainer(short containerId, short accountId, String partitionPath) throws CloudStorageException {
+    int totalPurged = 0;
+    while (!isShuttingDown()) {
+      List<CloudBlobMetadata> blobs =
+          requestAgent.doWithRetries(() -> getContainerBlobs(partitionPath, accountId, containerId),
+              "GetDeletedContainerBlobs", partitionPath);
+      if (blobs.isEmpty()) {
+        // There are no more blobs in the partition that belong to the deleted container.
+        break;
+      }
+      if (isShuttingDown()) {
+        break;
+      }
+      totalPurged += requestAgent.doWithRetries(
+          () -> AzureCompactionUtil.purgeBlobs(blobs, azureBlobDataAccessor, azureMetrics, cosmosDataAccessor),
+          "PurgeBlobs", partitionPath);
+      vcrMetrics.deletedContainerCompactionRate.mark(blobs.size());
+    }
+    return totalPurged;
+  }
+
+  /**
+   * Shut down the compactor waiting for in progress operations to complete.
+   */
+  public void shutdown() {
+    shuttingDown.set(true);
+  }
+
+  /**
+   * @return whether the compactor is shutting down.
+   */
+  boolean isShuttingDown() {
+    return shuttingDown.get();
+  }
+
   /**
    * Read the deprecated container update checkpoint from Azure Blob Store.
    * @return latest delete trigger time checkpoint for deprecated containers.
@@ -109,6 +152,24 @@ public class AzureContainerCompactor {
       }
       throw AzureCloudDestination.toCloudStorageException("Exception while reading deprecated container checkpoint",
           bsex, azureMetrics);
+    }
+  }
+
+  /**
+   * Get the list of blobs in the specified container present in the specified partition.
+   * @param partitionPath the partition to query.
+   * @param accountId the account id.
+   * @param containerId the container id.
+   * @return a List of {@link CloudBlobMetadata} referencing the blobs found in the container.
+   * @throws CloudStorageException if the query fails.
+   */
+  List<CloudBlobMetadata> getContainerBlobs(String partitionPath, short accountId, short containerId)
+      throws CloudStorageException {
+    try {
+      return cosmosDataAccessor.getContainerBlobs(partitionPath, accountId, containerId, queryLimit);
+    } catch (DocumentClientException dex) {
+      throw AzureCloudDestination.toCloudStorageException(
+          "Failed to query blobs for container " + containerId + " in partition " + partitionPath, dex, azureMetrics);
     }
   }
 

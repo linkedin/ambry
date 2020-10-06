@@ -115,6 +115,15 @@ public interface CloudDestination extends Closeable {
   int compactPartition(String partitionPath) throws CloudStorageException;
 
   /**
+   * Compact the specified container in the specified partition, removing blobs that belong to the container and account.
+   * @param containerId specified id of the container.
+   * @param accountId specified account of the container.
+   * @param partitionPath the path of the partition to compact.
+   * @throws CloudStorageException
+   */
+  int compactContainer(short containerId, short accountId, String partitionPath) throws CloudStorageException;
+
+  /**
    * Upload and persist the replica tokens for the specified Ambry partition in cloud storage.
    * @param partitionPath the string form of the partitionId
    * @param tokenFileName the name of the token file to store in the cloud.
