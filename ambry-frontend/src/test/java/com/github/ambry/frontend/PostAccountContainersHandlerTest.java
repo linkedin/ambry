@@ -107,10 +107,6 @@ public class PostAccountContainersHandlerTest {
     }
     testAction.accept(containerList);
 
-    // add an exactly same container (we reuse the container created in previous case)
-    testAction.accept(Collections.singletonList(
-        new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, "Test-0", Container.ContainerStatus.ACTIVE, "",
-            accountId).build()));
     // TODO: update existing containers when support is added
   }
 
