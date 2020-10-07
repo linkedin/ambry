@@ -557,7 +557,7 @@ class MockStorageManager extends StorageManager {
 
   @Override
   public boolean addBlobStore(ReplicaId id) {
-    partitionToDiskManager.put(id.getPartitionId(), diskToDiskManager.get(id.getDiskId()));
+    updatePartitionToDiskManager(id);
     partitionNameToReplicaId.put(id.getPartitionId().toPathString(), id);
     return returnValueOfAddBlobStore;
   }

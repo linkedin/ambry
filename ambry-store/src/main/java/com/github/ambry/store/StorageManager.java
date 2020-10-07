@@ -349,6 +349,14 @@ public class StorageManager implements StoreManager {
     return true;
   }
 
+  /**
+   * Helper utility to add replicaId to partitionToDiskManager.
+   * @param replicaId the {@link ReplicaId} whose partition and disk to use.
+   */
+  protected void updatePartitionToDiskManager(ReplicaId replicaId) {
+    partitionToDiskManager.put(replicaId.getPartitionId(), diskToDiskManager.get(replicaId.getDiskId()));
+  }
+
   @Override
   public boolean startBlobStore(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
