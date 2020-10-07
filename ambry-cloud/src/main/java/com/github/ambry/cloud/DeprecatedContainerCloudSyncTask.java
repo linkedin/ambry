@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Helix task to get the deprecated containers information from {@link com.github.ambry.account.AccountService} and update
+ * Helix task to get the deprecated containers information from {@link AccountService} and update
  * it to cloud.
  */
 public class DeprecatedContainerCloudSyncTask implements Task {
