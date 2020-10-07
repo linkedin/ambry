@@ -29,4 +29,20 @@ public interface StorageQuotaSource {
    * @return The storage quota for each container.
    */
   Map<String, Map<String, Long>> getContainerQuota();
+
+  /**
+   * A listener interface registered with {@link StorageQuotaSource}. It will be invoked every time when there is a
+   * change in the storage quota. The new storage quota will be passed as the parameter. Notice this is a unmodifiable
+   * map.
+   */
+  interface Listener {
+    void onNewContainerStorageQuota(Map<String, Map<String, Long>> containerStorageQuota);
+  }
+
+  /**
+   * Register your listener to {@link StorageQuotaSource}. A source should only have one callback and it can't be
+   * registered multiple times.
+   * @param listener The listener to register.
+   */
+  void registerListener(Listener listener);
 }

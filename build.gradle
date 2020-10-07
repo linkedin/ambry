@@ -436,7 +436,8 @@ project(':ambry-cloud') {
 
 project(':ambry-quota') {
     dependencies {
-        compile project(':ambry-api')
+        compile project(':ambry-api'),
+            project(':ambry-commons')
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
         }

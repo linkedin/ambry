@@ -1,0 +1,107 @@
+/*
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+package com.github.ambry.quota;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+
+public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
+  private volatile Mode mode;
+  private volatile Map<String, Map<String, Long>> storageQuota;
+  private volatile Map<String, Map<String, Long>> storageUsage;
+
+  @Override
+  public boolean shouldThrottle(short accountId, short containerId, Operation op, long size) {
+    if (op != Operation.Upload) {
+      return false;
+    }
+    long quota =
+        ((Map<String, Long>) storageQuota.getOrDefault(String.valueOf(accountId), Collections.EMPTY_MAP)).getOrDefault(
+            String.valueOf(containerId), Long.MAX_VALUE).longValue();
+
+    AtomicBoolean exceedQuota = new AtomicBoolean(false);
+    storageUsage.computeIfAbsent(String.valueOf(accountId), k -> new ConcurrentHashMap<>())
+        .compute(String.valueOf(containerId), (k, v) -> {
+          if (v == null) {
+            return size;
+          }
+          if (v.longValue() + size < quota) {
+            return v.longValue() + size;
+          } else {
+            exceedQuota.set(true);
+            return v.longValue();
+          }
+        });
+    if (mode == Mode.Throttling) {
+      return exceedQuota.get();
+    } else {
+      return false;
+    }
+  }
+
+  @Override
+  public void setMode(Mode mode) {
+    this.mode = mode;
+  }
+
+  @Override
+  public void initStorageUsage(Map<String, Map<String, Long>> usage) {
+    storageUsage = new ConcurrentHashMap<>();
+    initMap(usage, storageUsage, true);
+  }
+
+  @Override
+  public void initStorageQuota(Map<String, Map<String, Long>> quota) {
+    storageQuota = new HashMap<>();
+    initMap(quota, storageQuota, false);
+  }
+
+  @Override
+  public StorageUsageRefresher.Listener getUsageRefresherListener() {
+    return new StorageUsageRefresher.Listener() {
+      @Override
+      public void onNewContainerStorageUsage(Map<String, Map<String, Long>> containerStorageUsage) {
+        initMap(containerStorageUsage, storageUsage, true);
+      }
+    };
+  }
+
+  @Override
+  public StorageQuotaSource.Listener getQuotaSourceListener() {
+    return new StorageQuotaSource.Listener() {
+      @Override
+      public void onNewContainerStorageQuota(Map<String, Map<String, Long>> containerStorageQuota) {
+        Map<String, Map<String, Long>> newQuota = new HashMap<>();
+        initMap(containerStorageQuota, newQuota, false);
+        storageQuota = newQuota;
+      }
+    };
+  }
+
+  private void initMap(Map<String, Map<String, Long>> mapWithValue, Map<String, Map<String, Long>> mapToInit,
+      boolean concurrentMap) {
+    for (Map.Entry<String, Map<String, Long>> mapEntry : mapWithValue.entrySet()) {
+      Map<String, Long> innerMap = mapToInit.computeIfAbsent(mapEntry.getKey(),
+          k -> concurrentMap ? new ConcurrentHashMap<>() : new HashMap<>());
+      for (Map.Entry<String, Long> innerMapEntry : mapEntry.getValue().entrySet()) {
+        // Replace the value in the map anyway.
+        innerMap.put(innerMapEntry.getKey(), innerMapEntry.getValue());
+      }
+    }
+  }
+}

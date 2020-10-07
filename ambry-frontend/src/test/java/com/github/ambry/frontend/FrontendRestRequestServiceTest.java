@@ -219,7 +219,7 @@ public class FrontendRestRequestServiceTest {
     FrontendRestRequestService frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName);
+            datacenterName, hostname, clusterName, null);
     try {
       frontendRestRequestService.start();
       fail("Test should fail if ResponseHandler is not setup");
@@ -554,25 +554,26 @@ public class FrontendRestRequestServiceTest {
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=unknownAId, cid=refCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
-          Account.UNKNOWN_ACCOUNT_ID, refContainer.getId(),
-          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
-          BlobId.BlobDataType.DATACHUNK).getID();
+      blobId =
+          new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+              refContainer.getId(), clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
+              false, BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=unknownAId, cid=unknownCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
-          Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
-          BlobId.BlobDataType.DATACHUNK).getID();
+      blobId =
+          new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+              Container.UNKNOWN_CONTAINER_ID,
+              clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+              BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, InMemAccountService.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
           RestServiceErrorCode.NotFound);
 
       // aid=unknownAId, cid=nonExistCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
-          Account.UNKNOWN_ACCOUNT_ID, (short) -1234,
-          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
-          BlobId.BlobDataType.DATACHUNK).getID();
+      blobId =
+          new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+              (short) -1234, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+              BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=nonExistAId, cid=refCId
@@ -589,9 +590,10 @@ public class FrontendRestRequestServiceTest {
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
 
       // aid=nonExistAId, cid=nonExistCId
-      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, (short) -1234,
-          (short) -11, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
-          BlobId.BlobDataType.DATACHUNK).getID();
+      blobId =
+          new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, (short) -1234, (short) -11,
+              clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+              BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
     }
   }
@@ -611,10 +613,10 @@ public class FrontendRestRequestServiceTest {
     populateAccountService();
     // it does not matter what AID and CID are supplied when constructing blobId in v1.
     // expect unknown account and container for v1 blob IDs that went through request processing only.
-    String blobId = new BlobId(BlobId.BLOB_ID_V1, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
-        refAccount.getId(), refContainer.getId(),
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
-        BlobId.BlobDataType.DATACHUNK).getID();
+    String blobId =
+        new BlobId(BlobId.BLOB_ID_V1, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, refAccount.getId(),
+            refContainer.getId(), clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
+            false, BlobId.BlobDataType.DATACHUNK).getID();
     verifyAccountAndContainerFromBlobId(blobId, InMemAccountService.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
         RestServiceErrorCode.NotFound);
 
@@ -784,7 +786,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName);
+            datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     JSONObject headers = new JSONObject();
@@ -807,7 +809,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName);
+            datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     // test good requests
@@ -1071,7 +1073,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName);
+            datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
@@ -1385,7 +1387,7 @@ public class FrontendRestRequestServiceTest {
     FrontendRestRequestService frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName);
+            datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     return frontendRestRequestService;
   }
@@ -2084,7 +2086,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, converterFactory,
             securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName);
+            datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
@@ -2116,7 +2118,7 @@ public class FrontendRestRequestServiceTest {
       frontendRestRequestService =
           new FrontendRestRequestService(frontendConfig, frontendMetrics, new FrontendTestRouter(), clusterMap,
               idConverterFactory, securityFactory, urlSigningService, idSigningService, accountService,
-              accountAndContainerInjector, datacenterName, hostname, clusterName);
+              accountAndContainerInjector, datacenterName, hostname, clusterName, null);
       frontendRestRequestService.setupResponseHandler(responseHandler);
       frontendRestRequestService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg,
@@ -2174,7 +2176,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName);
+            datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     for (RestMethod restMethod : RestMethod.values()) {
