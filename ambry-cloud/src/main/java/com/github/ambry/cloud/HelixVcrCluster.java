@@ -169,15 +169,15 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   }
 
   /**
-   * Register {@link CloudContainerDeletionSyncTask}s to sync deleted container information from account service to VCR.
+   * Register {@link DeprecatedContainerCloudSyncTask}s to sync deleted container information from account service to VCR.
    * @param engine the {@link StateMachineEngine} to register the task state model.
    */
   private void registerContainerDeletionSyncTask(StateMachineEngine engine) {
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
-    taskFactoryMap.put(String.format("%s", CloudContainerDeletionSyncTask.class.getSimpleName()), new TaskFactory() {
+    taskFactoryMap.put(DeprecatedContainerCloudSyncTask.class.getSimpleName(), new TaskFactory() {
       @Override
       public Task createNewTask(TaskCallbackContext context) {
-        return new CloudContainerDeletionSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
+        return new DeprecatedContainerCloudSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
             cloudDestination, partitionIdMap.keySet());
       }
     });

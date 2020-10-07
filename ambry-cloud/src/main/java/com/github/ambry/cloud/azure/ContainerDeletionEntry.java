@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.cloud.azure;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
@@ -82,23 +82,23 @@ public class ContainerDeletionEntry {
   }
 
   /**
-   * Private constructor for {@link ContainerDeletionEntry}. Used from deserialization.
+   * Private constructor for {@link ContainerDeletionEntry}. Used for deserialization.
    * @param version deserialized version.
    * @param containerId container id.
    * @param accountId account id of the container.
    * @param deleteTriggerTimestamp timestamp at which delete was triggered.
    * @param isDeleted {@code true} if all container blobs are deleted in cloud. {@code false} otherwise.
-   * @param deletePendingPartitions {@link Collection} of all the cloud partition ids from which container is yet to be deleted.
+   * @param pendingPartitions {@link Collection} of all the cloud partition ids from which container is yet to be deleted.
    */
   private ContainerDeletionEntry(short version, short containerId, short accountId, long deleteTriggerTimestamp,
-      boolean isDeleted, Collection<Object> deletePendingPartitions) {
+      boolean isDeleted, Collection<Object> pendingPartitions) {
     this.version = version;
     this.containerId = containerId;
     this.accountId = accountId;
     this.deleteTriggerTimestamp = deleteTriggerTimestamp;
     this.isDeleted = isDeleted;
     this.deletePendingPartitions = new HashSet<>();
-    deletePendingPartitions.forEach(partitionId -> this.deletePendingPartitions.add((String) partitionId));
+    pendingPartitions.forEach(partitionId -> this.deletePendingPartitions.add((String) partitionId));
   }
 
   /**
@@ -144,6 +144,20 @@ public class ContainerDeletionEntry {
    */
   public boolean isDeleted() {
     return isDeleted;
+  }
+
+  /**
+   * @return {@code containerId} of the container.
+   */
+  public short getContainerId() {
+    return containerId;
+  }
+
+  /**
+   * @return {@code accountId} of the container.
+   */
+  public short getAccountId() {
+    return accountId;
   }
 
   /**

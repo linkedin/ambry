@@ -481,9 +481,9 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void updateDeletedContainers(Set<Container> deletedContainers, Collection<String> partitionIds)
+  public void deprecateContainers(Set<Container> deletedContainers, Collection<String> partitionIds)
       throws CloudStorageException {
-    azureContainerCompactor.updateDeletedContainers(deletedContainers, partitionIds);
+    azureContainerCompactor.deprecateContainers(deletedContainers, partitionIds);
   }
 
   /**

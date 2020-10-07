@@ -25,21 +25,24 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Helix task to get the deleted containers information from {@link com.github.ambry.account.AccountService} and update
- * it in CosmosDb DeleteContainers table.
+ * Helix task to get the deprecated containers information from {@link com.github.ambry.account.AccountService} and update
+ * it to cloud.
  */
-public class CloudContainerDeletionSyncTask implements Task {
-  private static final Logger logger = LoggerFactory.getLogger(CloudContainerDeletionSyncTask.class);
+public class DeprecatedContainerCloudSyncTask implements Task {
+  private static final Logger logger = LoggerFactory.getLogger(DeprecatedContainerCloudSyncTask.class);
   private final AccountService accountService;
   private final long containerDeletionRetentionDays;
   private final CloudDestination cloudDestination;
   private final Collection<String> allPartitionIds;
 
   /**
-   * Constructor for {@link CloudContainerDeletionSyncTask}.
+   * Constructor for {@link DeprecatedContainerCloudSyncTask}.
    * @param accountService {@link AccountService} object.
+   * @param containerDeletionRetentionDays retention days for a deprecated container.
+   * @param cloudDestination the {@link CloudDestination} object where deprecated container information will be updated.
+   * @param allPartitionIds {@link Collection} of all the partitions in the cluster.
    */
-  public CloudContainerDeletionSyncTask(AccountService accountService, long containerDeletionRetentionDays,
+  public DeprecatedContainerCloudSyncTask(AccountService accountService, long containerDeletionRetentionDays,
       CloudDestination cloudDestination, Collection<String> allPartitionIds) {
     this.accountService = accountService;
     this.containerDeletionRetentionDays = containerDeletionRetentionDays;
@@ -50,10 +53,10 @@ public class CloudContainerDeletionSyncTask implements Task {
   @Override
   public TaskResult run() {
     try {
-      Set<Container> deletedContainers = accountService.getDeprecatedContainers(containerDeletionRetentionDays);
-      cloudDestination.updateDeletedContainers(deletedContainers, allPartitionIds);
+      Set<Container> deprecatedContainers = accountService.getDeprecatedContainers(containerDeletionRetentionDays);
+      cloudDestination.deprecateContainers(deprecatedContainers, allPartitionIds);
     } catch (CloudStorageException cloudStorageException) {
-      logger.error("Error in updating deleted containers from account service to cloud: ", cloudStorageException);
+      logger.error("Error in updating deprecated containers from account service to cloud: ", cloudStorageException);
     }
     return null;
   }

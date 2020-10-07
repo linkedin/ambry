@@ -197,7 +197,6 @@ class BlobStoreCompactor {
   /**
    * Filters deprecated {@link Container}s for compaction purpose. Deprecated containers include DELETE_IN_PROGRESS
    * containers met with retention time and all INACTIVE containers.
-   * @return the deprecated {@link Container}s' accountId & containerId pairs.
    */
   private void getDeprecatedContainers() {
     deprecatedContainers.clear();

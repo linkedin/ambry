@@ -18,7 +18,6 @@ import com.azure.storage.blob.models.BlobStorageException;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
-import com.github.ambry.cloud.ContainerDeletionEntry;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.config.CloudConfig;
 import java.io.ByteArrayInputStream;
@@ -32,7 +31,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Class that compacts containers in the Azure cloud by purging blobs of deleted containers from
+ * Class that compacts containers in the Azure cloud by purging blobs of deprecated containers from
  * ABS and Cosmos.
  */
 public class AzureContainerCompactor {
@@ -65,22 +64,22 @@ public class AzureContainerCompactor {
   }
 
   /**
-   * Update newly deleted containers from {@code deletedContainers} to CosmosDb since last checkpoint.
-   * @param deletedContainers {@link Collection} of deleted {@link Container}s.
+   * Update newly deprecated containers from {@code deprecatedContainers} to CosmosDb since last checkpoint.
+   * @param deprecatedContainers {@link Collection} of deprecatedd {@link Container}s.
    * @throws CloudStorageException in case of any error.
    */
-  public void updateDeletedContainers(Set<Container> deletedContainers, Collection<String> partitionIds)
+  public void deprecateContainers(Set<Container> deprecatedContainers, Collection<String> partitionIds)
       throws CloudStorageException {
-    if (deletedContainers.isEmpty()) {
-      logger.info("Got empty set to update deleted containers. Skipping update deleted containers to cloud.");
+    if (deprecatedContainers.isEmpty()) {
+      logger.info("Got empty set to update deprecated containers. Skipping update deprecated containers to cloud.");
       return;
     }
     long lastUpdatedContainerTimestamp = getLatestContainerDeletionTime();
-    long newLastUpdateContainerTimestamp = requestAgent.doWithRetries(() -> cosmosDataAccessor.updateDeletedContainers(
-        deletedContainers.stream()
+    long newLastUpdateContainerTimestamp = requestAgent.doWithRetries(() -> cosmosDataAccessor.deprecateContainers(
+        deprecatedContainers.stream()
             .filter(container -> container.getDeleteTriggerTime() >= lastUpdatedContainerTimestamp)
             .map(container -> ContainerDeletionEntry.fromContainer(container, partitionIds))
-            .collect(Collectors.toSet())), "updateDeletedContainer", null);
+            .collect(Collectors.toSet())), "updateDeprecatedContainers", null);
 
     if (newLastUpdateContainerTimestamp != -1) {
       saveLatestContainerDeletionTime(newLastUpdateContainerTimestamp);
@@ -88,8 +87,8 @@ public class AzureContainerCompactor {
   }
 
   /**
-   * Read the deleted container update checkpoint from Azure Blob Store.
-   * @return latest delete trigger time checkpoint for deleted containers.
+   * Read the deprecated container update checkpoint from Azure Blob Store.
+   * @return latest delete trigger time checkpoint for deprecated containers.
    * @throws CloudStorageException in case of any error.
    */
   long getLatestContainerDeletionTime() throws CloudStorageException {
@@ -108,8 +107,8 @@ public class AzureContainerCompactor {
       if (bsex.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
         return -1;
       }
-      throw AzureCloudDestination.toCloudStorageException("Exception while reading deleted container checkpoint", bsex,
-          azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException("Exception while reading deprecated container checkpoint",
+          bsex, azureMetrics);
     }
   }
 
@@ -129,7 +128,7 @@ public class AzureContainerCompactor {
         return null;
       }, "update-container-deletion-checkpoint", null);
     } catch (CloudStorageException e) {
-      logger.error("Could not save update deleted container progress", e);
+      logger.error("Could not save update deprecated container progress", e);
       throw e;
     }
   }

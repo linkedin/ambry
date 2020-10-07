@@ -56,8 +56,8 @@ public class CloudRequestAgent {
     }
     // Line should never be reached
     throw new CloudStorageException(
-        actionName + (!Utils.isNullOrEmpty(partitionPath) ? (" failed partition " + partitionPath) : "") + " made " + attempts
-            + " attempts");
+        actionName + " failed, " + (!Utils.isNullOrEmpty(partitionPath) ? ("partition " + partitionPath) : "")
+            + " made " + attempts + " attempts");
   }
 
   /**

@@ -14,7 +14,6 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.cloud.CloudDestinationFactory;
@@ -23,8 +22,6 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.FeedOptions;
-import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashSet;
@@ -40,15 +37,18 @@ import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 
 
+/**
+ * Work In Progress: Test for {@link AzureContainerCompactor}
+ */
 @Ignore
 @RunWith(MockitoJUnitRunner.class)
 public class AzureContainerCompactorIntegrationTest {
 
   private final Random random = new Random();
   private final String PROPS_FILE_NAME = "azure-test.properties";
-  private AzureCloudConfig azureConfig;
-  private VerifiableProperties verifiableProperties;
-  private AzureCloudDestination cloudDestination;
+  private static AzureCloudConfig azureConfig;
+  private static VerifiableProperties verifiableProperties;
+  private static AzureCloudDestination cloudDestination;
 
   @Before
   public void setup() throws ReflectiveOperationException {
@@ -72,7 +72,7 @@ public class AzureContainerCompactorIntegrationTest {
     testProperties.setProperty(AzureCloudConfig.AZURE_PURGE_BATCH_SIZE, "10");
     verifiableProperties = new VerifiableProperties(testProperties);
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
-    this.azureConfig = new AzureCloudConfig(verifiableProperties);
+    azureConfig = new AzureCloudConfig(verifiableProperties);
     MetricRegistry registry = new MetricRegistry();
     CloudDestinationFactory cloudDestinationFactory =
         Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties, registry);
@@ -90,22 +90,17 @@ public class AzureContainerCompactorIntegrationTest {
   @Test
   public void testUpdateDeletedContainer() throws CloudStorageException {
     Set<Container> containers = generateContainers(5);
-    cloudDestination.updateDeletedContainers(containers, null);
+    cloudDestination.deprecateContainers(containers, null);
     verifyCosmosData(containers);
     verifyCheckpoint(containers);
   }
 
   private void verifyCosmosData(Set<Container> containers) {
-    String query = "SELECT VALUE COUNT(1) FROM C";
-    SqlQuerySpec querySpec = new SqlQuerySpec(query);
-    Timer timer = new Timer();
-    cloudDestination.getCosmosDataAccessor()
-        .executeCosmosQuery(azureConfig.cosmosDeletedContainerCollectionLink, null, querySpec, new FeedOptions(),
-            timer);
+    // TODO: verify the deleted container information in cosmos table is correct.
   }
 
   private void verifyCheckpoint(Set<Container> containers) {
-
+    // TODO verify that the information in checkpoint is correct
   }
 
   /**

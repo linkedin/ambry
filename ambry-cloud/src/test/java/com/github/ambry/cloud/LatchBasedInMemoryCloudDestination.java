@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.azure.AzureReplicationFeed;
+import com.github.ambry.cloud.azure.ContainerDeletionEntry;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.cloud.azure.CosmosUpdateTimeFindToken;
 import com.github.ambry.commons.BlobId;
@@ -370,7 +371,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void updateDeletedContainers(Set<Container> deletedContainers, Collection<String> allPartitions) {
+  public void deprecateContainers(Set<Container> deletedContainers, Collection<String> allPartitions) {
     this.deletedContainers.addAll(deletedContainers.stream()
         .map(container -> ContainerDeletionEntry.fromContainer(container, allPartitions))
         .collect(Collectors.toList()));

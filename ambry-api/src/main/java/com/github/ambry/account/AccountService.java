@@ -158,9 +158,7 @@ public interface AccountService extends Closeable {
         deprecatedContainers.add(container);
       }
     });
-    getContainersByStatus(Container.ContainerStatus.INACTIVE).forEach((container) -> {
-      deprecatedContainers.add(container);
-    });
+    deprecatedContainers.addAll(getContainersByStatus(Container.ContainerStatus.INACTIVE));
     return deprecatedContainers;
   }
 

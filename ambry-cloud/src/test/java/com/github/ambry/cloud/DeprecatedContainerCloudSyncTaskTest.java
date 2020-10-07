@@ -28,33 +28,33 @@ import org.mockito.junit.MockitoJUnitRunner;
 
 
 /**
- * Test {@link CloudContainerDeletionSyncTask}.
+ * Test {@link DeprecatedContainerCloudSyncTask}.
  */
 @RunWith(MockitoJUnitRunner.class)
-public class CloudContainerDeletionSyncTaskTest {
+public class DeprecatedContainerCloudSyncTaskTest {
 
   private static final Set<String> ALL_PARTITIONS = new HashSet<>(Arrays.asList("1", "2", "3"));
-  private final CloudContainerDeletionSyncTask cloudContainerDeletionSyncTask;
+  private final DeprecatedContainerCloudSyncTask deprecatedContainerCloudSyncTask;
   private final AccountService accountService;
   private final LatchBasedInMemoryCloudDestination cloudDestination;
 
   /**
-   * Constructor for {@link CloudContainerDeletionSyncTaskTest}.
+   * Constructor for {@link DeprecatedContainerCloudSyncTaskTest}.
    */
-  public CloudContainerDeletionSyncTaskTest() {
+  public DeprecatedContainerCloudSyncTaskTest() {
     accountService = Mockito.mock(AccountService.class);
     long containerDeletionRetentionDays = 2;
     cloudDestination = new LatchBasedInMemoryCloudDestination(new ArrayList<>());
-    cloudContainerDeletionSyncTask =
-        new CloudContainerDeletionSyncTask(accountService, containerDeletionRetentionDays, cloudDestination,
+    deprecatedContainerCloudSyncTask =
+        new DeprecatedContainerCloudSyncTask(accountService, containerDeletionRetentionDays, cloudDestination,
             ALL_PARTITIONS);
   }
 
   /**
-   * Test that the {@link CloudContainerDeletionSyncTask} is able to sync between account service and cloud destination.
+   * Test that the {@link DeprecatedContainerCloudSyncTask} is able to sync between account service and cloud destination.
    */
   @Test
-  public void testContainerDeletionSyncTask() {
+  public void testDeprecatedContainerCloudSyncTask() {
     Set<Container> deleteInProgressSet =
         new HashSet<>(Arrays.asList(Mockito.mock(Container.class), Mockito.mock(Container.class)));
     Set<Container> inactiveSet =
@@ -63,10 +63,11 @@ public class CloudContainerDeletionSyncTaskTest {
     Mockito.when(accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS))
         .thenReturn(deleteInProgressSet);
     Mockito.when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(inactiveSet);
-    Assert.assertTrue("There should be no deleted containers in cloud before running the container deletion sync task",
+    Assert.assertTrue(
+        "There should be no deprecated containers in cloud before running the container deletion sync task",
         cloudDestination.getDeletedContainers().isEmpty());
-    cloudContainerDeletionSyncTask.run();
-    Assert.assertEquals("After sync deleted containers should be same in cloud and account service",
+    deprecatedContainerCloudSyncTask.run();
+    Assert.assertEquals("After sync deprecated containers should be same in cloud and account service",
         cloudDestination.getDeletedContainers().size(), deleteInProgressSet.size() + inactiveSet.size());
   }
 }

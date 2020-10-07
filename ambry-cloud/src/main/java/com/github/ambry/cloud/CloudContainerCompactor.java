@@ -15,7 +15,7 @@ package com.github.ambry.cloud;
 
 
 /**
- * Class that runs scheduled or on-demand compaction of blobs of deleted containers.
+ * Class that runs scheduled or on-demand compaction of blobs of deprecated containers.
  */
 public class CloudContainerCompactor {
 

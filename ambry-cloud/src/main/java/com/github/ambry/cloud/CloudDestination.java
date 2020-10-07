@@ -141,11 +141,11 @@ public interface CloudDestination extends Closeable {
   void stopCompaction();
 
   /**
-   * Update the deleted {@link Container}s to cloud.
-   * @param deletedContainers {@link Set} of deleted {@link Container}s.
-   * @param partitionIds {@link Collection} of cloud partition ids from where the container needs to be deleted.
+   * Deprecate the specified {@link Container}s for specified partitions in cloud.
+   * @param deprecatedContainers {@link Set} of deprecated {@link Container}s.
+   * @param partitionIds {@link Collection} of cloud partition ids from where the container needs to be deprecated.
    * @throws {@link CloudStorageException} if updating fails.
    */
-  void updateDeletedContainers(Set<Container> deletedContainers, Collection<String> partitionIds)
+  void deprecateContainers(Set<Container> deprecatedContainers, Collection<String> partitionIds)
       throws CloudStorageException;
 }

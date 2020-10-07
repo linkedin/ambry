@@ -18,7 +18,6 @@ import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
-import com.github.ambry.cloud.ContainerDeletionEntry;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
@@ -529,18 +528,28 @@ public class CosmosDataAccessor {
   }
 
   /**
-   * Add the {@link ContainerDeletionEntry} for newly deleted {@link Container}s to cosmos table.
-   * @param deletedContainers {@link Set} of deleted {@link ContainerDeletionEntry}s.
+   * Add the {@link ContainerDeletionEntry} for newly deprecated {@link Container}s to cosmos table.
+   * @param deprecatedContainers {@link Set} of deleted {@link ContainerDeletionEntry}s.
    * @return the max deletion trigger time of all the added containers to serve as checkpoint for future update.
+   * @throws {@link DocumentClientException} in case of any error.
    */
-  public long updateDeletedContainers(Set<ContainerDeletionEntry> deletedContainers) throws DocumentClientException {
+  public long deprecateContainers(Set<ContainerDeletionEntry> deprecatedContainers) throws DocumentClientException {
     long latestContainerDeletionTimestamp = -1;
-    for (ContainerDeletionEntry containerDeletionEntry : deletedContainers) {
-      executeCosmosAction(() -> asyncDocumentClient.upsertDocument(cosmosDeletedContainerCollectionLink,
-          containerDeletionEntry.toJson(), new RequestOptions(), true).toBlocking().single(),
-          azureMetrics.documentCreateTime);
-      if (containerDeletionEntry.getDeleteTriggerTimestamp() > latestContainerDeletionTimestamp) {
-        latestContainerDeletionTimestamp = containerDeletionEntry.getDeleteTriggerTimestamp();
+    for (ContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
+      try {
+        executeCosmosAction(() -> asyncDocumentClient.createDocument(cosmosDeletedContainerCollectionLink,
+            containerDeletionEntry.toJson(), new RequestOptions(), true).toBlocking().single(),
+            azureMetrics.documentCreateTime);
+        if (containerDeletionEntry.getDeleteTriggerTimestamp() > latestContainerDeletionTimestamp) {
+          latestContainerDeletionTimestamp = containerDeletionEntry.getDeleteTriggerTimestamp();
+        }
+      } catch (DocumentClientException dex) {
+        if (dex.getStatusCode() == HttpConstants.StatusCodes.CONFLICT) {
+          logger.info("Container with accountid {} and containerid {} already exists. Skipping.",
+              containerDeletionEntry.getAccountId(), containerDeletionEntry.getContainerId());
+        } else {
+          throw dex;
+        }
       }
     }
     return latestContainerDeletionTimestamp;
