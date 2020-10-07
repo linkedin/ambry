@@ -189,8 +189,9 @@ public class MySqlAccountServiceTest {
 
     // force shutdown background updater thread. As the default timeout value is 1 minute, it is possible that thread is
     // present after close() due to actively executing task.
-    ((MySqlAccountService) mySqlAccountService).getScheduler().shutdownNow();
+    mySqlAccountService.getScheduler().shutdownNow();
 
+    Thread.sleep(100);
     assertEquals("Background account updater thread should be stopped", 0,
         numThreadsByThisName(MySqlAccountService.MYSQL_ACCOUNT_UPDATER_PREFIX));
   }
