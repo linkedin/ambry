@@ -19,7 +19,20 @@ branches:
   except: # don't build tags
     - /^v\d/
 install: skip # skips unnecessary ./gradlew assemble (https://docs.travis-ci.com/user/job-lifecycle/#skipping-the-installation-phase) 
-script:
-  - ./travis-build.sh
-after_success:
-  - bash <(curl -s https://codecov.io/bash)
+
+jobs:
+  include:
+    - stage: test
+      name: "Unit Tests"
+      script: ./travis-unit-test.sh
+    - stage: test
+      name: "Integration Tests"
+      script: ./travis-int-test.sh
+    - stage: publish
+      name: "Publish To Bintray"
+      script: ./travis-publish.sh
+
+stages:
+  - name: test
+  - name: publish
+    if: branch = master and type = push

@@ -29,9 +29,9 @@ public class RequestPath {
   private final int blobSegmentIdx;
   private final String pathAfterPrefixes;
   private String operationOrBlobIdWithoutLeadingSlash = null;
-  private static char PATH_SEPARATOR_CHAR = '/';
-  private static String PATH_SEPARATOR_STRING = String.valueOf(PATH_SEPARATOR_CHAR);
-  private static String SEGMENT = SubResource.Segment.toString();
+  private static final char PATH_SEPARATOR_CHAR = '/';
+  private static final String PATH_SEPARATOR_STRING = String.valueOf(PATH_SEPARATOR_CHAR);
+  private static final String SEGMENT = SubResource.Segment.toString();
 
   /**
    * Parse the request path (and additional headers in some cases). The path will match the following regex-like
