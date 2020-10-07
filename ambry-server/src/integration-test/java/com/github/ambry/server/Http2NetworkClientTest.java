@@ -128,7 +128,7 @@ public class Http2NetworkClientTest {
   @Test
   public void putGetTest() throws Exception {
     MockClusterMap clusterMap = http2Cluster.getClusterMap();
-    DataNodeId dataNodeId = http2Cluster.getPrefetchDataNode();
+    DataNodeId dataNodeId = http2Cluster.getGeneralDataNode();
     BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
     SSLFactory sslFactory = new NettySslHttp2Factory(clientSSLConfig);
     Http2NetworkClient networkClient = new Http2NetworkClient(new Http2ClientMetrics(new MetricRegistry()),

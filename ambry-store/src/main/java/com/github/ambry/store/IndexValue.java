@@ -444,10 +444,10 @@ class IndexValue implements Comparable<IndexValue> {
 
   @Override
   public String toString() {
-    return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isDelete() + ", TTL Updated: " + isTtlUpdate()
-        + ", Undelete: " + isUndelete() + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: "
-        + getOriginalMessageOffset() + (formatVersion != PersistentIndex.VERSION_0 ? (", OperationTimeInMs "
-        + getOperationTimeInMs() + ", AccountId " + getAccountId() + ", ContainerId " + getContainerId()) : "") + (
+    return "Offset: " + offset + ", Size: " + size + ", Deleted: " + isDelete() + ", TTL Updated: " + isTtlUpdate()
+        + ", Undelete: " + isUndelete() + ", ExpiresAtMs: " + expiresAtMs + ", Original Message Offset: "
+        + originalMessageOffset + (formatVersion != PersistentIndex.VERSION_0 ? (", OperationTimeInMs "
+        + operationTimeInMs + ", AccountId " + accountId + ", ContainerId " + containerId) : "") + (
         formatVersion > PersistentIndex.VERSION_2 ? ", Life Version:" + lifeVersion : "");
   }
 

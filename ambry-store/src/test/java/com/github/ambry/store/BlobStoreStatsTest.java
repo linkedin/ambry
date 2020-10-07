@@ -39,6 +39,7 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Ignore;
@@ -741,7 +742,8 @@ public class BlobStoreStatsTest {
   }
 
   @Test
-  public void testBucketingWithEmptyIndexToBegin() throws InterruptedException, StoreException, IOException {
+  public void testBucketingWithEmptyIndexToBegin()
+      throws InterruptedException, StoreException, IOException, TimeoutException {
     assumeTrue(bucketingEnabled);
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
@@ -768,6 +770,15 @@ public class BlobStoreStatsTest {
     // delete one of the put without expiry
     MockId putWithoutExpiry = getIdToDelete(newPutEntries.get(newPutEntries.size() - 1).getKey());
     newDelete(blobStoreStats, putWithoutExpiry);
+    // Make sure the index scanner is finished and we can enqueue
+    long recentEntryQueueTimeout = 10 * SystemTime.MsPerSec + System.currentTimeMillis();
+    while (!blobStoreStats.isRecentEntryQueueEnabled()) {
+      Thread.sleep(100);
+      long now = System.currentTimeMillis();
+      if (now > recentEntryQueueTimeout) {
+        throw new TimeoutException("Time out to wait for IndexScanner to finish");
+      }
+    }
     // a probe put with a latch to inform us about the state of the queue
     CountDownLatch queueProcessedLatch = new CountDownLatch(1);
     blobStoreStats.handleNewPutEntry(new MockIndexValue(queueProcessedLatch, state.index.getCurrentEndOffset()));
@@ -782,8 +793,6 @@ public class BlobStoreStatsTest {
     state.advanceTime(timeToLiveInMs + Time.MsPerSec);
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), 0));
-    assertEquals("Throttle count mismatch from expected value", expectedThrottleCount,
-        mockThrottler.throttleCount.get());
     blobStoreStats.close();
   }
 

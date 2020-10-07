@@ -76,7 +76,7 @@ public class AccountCollectionSerde {
    */
   public static JSONObject containersToJson(Collection<Container> containers) {
     JSONArray containerArray = new JSONArray();
-    containers.stream().map(container -> container.toJson()).forEach(containerArray::put);
+    containers.stream().map(Container::toJson).forEach(containerArray::put);
     return new JSONObject().put(Account.CONTAINERS_KEY, containerArray);
   }
 

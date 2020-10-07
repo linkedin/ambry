@@ -84,6 +84,8 @@ public class PostAccountContainersHandlerTest {
       assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
       assertEquals("Content-length is not as expected", responseChannel.getSize(),
           Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+      assertEquals("Account id in response header is not as expected", accountId,
+          Short.parseShort((String) restResponseChannel.getHeader(RestUtils.Headers.TARGET_ACCOUNT_ID)));
       Collection<Container> outputContainers =
           AccountCollectionSerde.containersFromJson(RestTestUtils.getJsonizedResponseBody(responseChannel), accountId);
       assertEquals("Unexpected count returned", inputContainers.size(), outputContainers.size());

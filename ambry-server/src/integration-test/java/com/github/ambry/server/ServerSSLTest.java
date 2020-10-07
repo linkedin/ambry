@@ -121,17 +121,6 @@ public class ServerSSLTest {
   }
 
   /**
-   * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
-   */
-  @Test
-  public void endToEndSSLTestWithPrefetch() throws IOException, InstantiationException {
-    sslCluster.startServers();
-    DataNodeId dataNodeId = sslCluster.getPrefetchDataNode();
-    ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", sslCluster, clientSSLConfig1,
-        clientSSLSocketFactory1, routerProps, testEncryption);
-  }
-
-  /**
    * Do end to end cloud backup test
    */
   @Test

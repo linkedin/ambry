@@ -139,7 +139,8 @@ public class BlobStore implements Store {
       List<ReplicaStatusDelegate> replicaStatusDelegates, Time time, AccountService accountService) {
     this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler,
         diskIOScheduler, diskSpaceAllocator, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
-        replicaId.getCapacityInBytes(), factory, recovery, hardDelete, replicaStatusDelegates, time, accountService);
+        replicaId.getCapacityInBytes(), factory, recovery, hardDelete, replicaStatusDelegates, time, accountService,
+        null);
   }
 
   /**
@@ -165,15 +166,15 @@ public class BlobStore implements Store {
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, Time time) {
     this(null, storeId, config, taskScheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator, metrics,
-        storeUnderCompactionMetrics, dataDir, capacityInBytes, factory, recovery, hardDelete, null, time, null);
+        storeUnderCompactionMetrics, dataDir, capacityInBytes, factory, recovery, hardDelete, null, time, null, null);
   }
 
-  private BlobStore(ReplicaId replicaId, String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
+  BlobStore(ReplicaId replicaId, String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, List<ReplicaStatusDelegate> replicaStatusDelegates, Time time,
-      AccountService accountService) {
+      AccountService accountService, BlobStoreStats blobStoreStats) {
     this.replicaId = replicaId;
     this.storeId = storeId;
     this.dataDir = dataDir;
@@ -195,6 +196,7 @@ public class BlobStore implements Store {
     long delta = config.storeReadWriteEnableSizeThresholdPercentageDelta;
     this.thresholdBytesHigh = (long) (capacityInBytes * (threshold / 100.0));
     this.thresholdBytesLow = (long) (capacityInBytes * ((threshold - delta) / 100.0));
+    this.blobStoreStats = blobStoreStats; // Only in test will this be non-null
     ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     errorCount = new AtomicInteger(0);
     currentState = ReplicaState.OFFLINE;
@@ -249,11 +251,12 @@ public class BlobStore implements Store {
         long bucketSpanInMs = TimeUnit.MINUTES.toMillis(config.storeStatsBucketSpanInMinutes);
         long queueProcessingPeriodInMs =
             TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes);
-        blobStoreStats =
-            new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs, logSegmentForecastOffsetMs,
-                queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs,
-                config.storeEnableBucketForLogSegmentReports, time, longLivedTaskScheduler, taskScheduler,
-                diskIOScheduler, metrics);
+        if (blobStoreStats == null) {
+          blobStoreStats = new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs,
+              logSegmentForecastOffsetMs, queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs,
+              config.storeEnableBucketForLogSegmentReports, time, longLivedTaskScheduler, taskScheduler,
+              diskIOScheduler, metrics);
+        }
         checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
         onSuccess();
@@ -613,8 +616,8 @@ public class BlobStore implements Store {
                     "Cannot delete id " + info.getStoreKey() + " since there are concurrent operation while delete",
                     StoreErrorCodes.Life_Version_Conflict);
               }
+              indexValuesPriorToDelete.set(i, value);
             }
-            indexValuesPriorToDelete.set(i, value);
             i++;
           }
         }

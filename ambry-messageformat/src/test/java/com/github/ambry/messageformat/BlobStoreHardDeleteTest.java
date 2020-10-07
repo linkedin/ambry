@@ -27,6 +27,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
@@ -311,6 +312,11 @@ public class BlobStoreHardDeleteTest {
       @Override
       public void doPrefetch(int index, long relativeOffset, long size) {
         return;
+      }
+
+      @Override
+      public ByteBuf getPrefetchedData(int index) {
+        return null;
       }
     }
   }

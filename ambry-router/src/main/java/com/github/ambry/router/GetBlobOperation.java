@@ -841,11 +841,6 @@ class GetBlobOperation extends GetOperation {
       // from concurrent operations.
       if (!successfullyDeserialized) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
-        // Note that for segment GET there is only one chunk to get, so we can be sure that its this one.
-        if (options.getBlobOptions.hasBlobSegmentIdx()) {
-          blobInfo.getBlobProperties().setBlobSize(blobData.getSize());
-        }
-
         ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
         ByteBuf chunkBuf = blobData.content();
 

@@ -91,17 +91,6 @@ public class ServerPlaintextTest {
   }
 
   /**
-   * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
-   */
-  @Test
-  public void endToEndTestWithPrefetch() throws Exception {
-    plaintextCluster.startServers();
-    DataNodeId dataNodeId = plaintextCluster.getPrefetchDataNode();
-    ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", plaintextCluster, null, null,
-        routerProps, testEncryption);
-  }
-
-  /**
    * Do end to end cloud backup test
    */
   @Test

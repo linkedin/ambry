@@ -24,6 +24,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageMetadata;
+import com.github.ambry.network.Send;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
@@ -31,6 +32,7 @@ import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
@@ -46,6 +48,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -415,6 +418,7 @@ public class RequestResponseTest {
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().get(0).getBlobIds().get(0), id1);
     getRequest.release();
 
+    // Test GetResponse with InputStream
     long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     byte[] encryptionKey = TestUtils.getRandomBytes(256);
     MessageInfo messageInfo =
@@ -469,6 +473,47 @@ public class RequestResponseTest {
       Assert.assertEquals("LifeVersion mismatch", (short) 0, msgInfo.getLifeVersion());
     }
     response.release();
+    // Test GetResponse with Send
+    for (boolean useComposite : new boolean[]{false, true}) {
+      for (boolean withContent : new boolean[]{false, true}) {
+        operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+        encryptionKey = TestUtils.getRandomBytes(256);
+        messageInfo =
+            new MessageInfo(id1, 1000, false, false, true, 1000, null, accountId, containerId, operationTimeMs,
+                (short) 1);
+        messageMetadata = new MessageMetadata(ByteBuffer.wrap(encryptionKey));
+        messageInfoList.clear();
+        messageMetadataList.clear();
+        messageInfoList.add(messageInfo);
+        messageMetadataList.add(messageMetadata);
+        partitionResponseInfo =
+            new PartitionResponseInfo(clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
+                messageInfoList, messageMetadataList);
+        partitionResponseInfoList.clear();
+        partitionResponseInfoList.add(partitionResponseInfo);
+        Send send;
+        if (withContent) {
+          send = new SendWithContent(1000, useComposite);
+        } else {
+          send = new SendWithoutContent(1000, useComposite);
+        }
+        response = new GetResponse(1234, "clientId", partitionResponseInfoList, send, ServerErrorCode.No_Error);
+        requestStream = serAndPrepForRead(response, -1, false);
+        deserializedGetResponse = GetResponse.readFrom(requestStream, clusterMap);
+        Assert.assertEquals(deserializedGetResponse.getCorrelationId(), 1234);
+        Assert.assertEquals(deserializedGetResponse.getError(), ServerErrorCode.No_Error);
+        Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().size(), 1);
+        Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().size(),
+            1);
+        msgInfo = deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0);
+        Assert.assertEquals(msgInfo.getSize(), 1000);
+        Assert.assertEquals(msgInfo.getStoreKey(), id1);
+        Assert.assertEquals(msgInfo.getExpirationTimeInMs(), 1000);
+        Assert.assertEquals(
+            deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageMetadataList().size(), 1);
+        response.release();
+      }
+    }
   }
 
   @Test
@@ -1076,6 +1121,82 @@ public class RequestResponseTest {
      */
     private DeleteRequestV1(int correlationId, String clientId, BlobId blobId) {
       super(correlationId, clientId, blobId, Utils.Infinite_Time, DeleteRequest.DELETE_REQUEST_VERSION_1);
+    }
+  }
+
+  /**
+   * A mock {@link Send} implementation that returns non-null value for {@link #content()} method.
+   */
+  private static class SendWithContent extends AbstractByteBufHolder<SendWithContent> implements Send {
+    protected ByteBuf buf;
+    private final int size;
+
+    public SendWithContent(int size, boolean useComposite) {
+      this.size = size;
+      if (useComposite) {
+        int halfSize = size / 2;
+        int otherHalfSize = size - halfSize;
+        CompositeByteBuf compositeByteBuf = PooledByteBufAllocator.DEFAULT.compositeHeapBuffer(2);
+        compositeByteBuf.addComponent(true,
+            PooledByteBufAllocator.DEFAULT.heapBuffer(halfSize).writeBytes(new byte[halfSize]));
+        compositeByteBuf.addComponent(true,
+            PooledByteBufAllocator.DEFAULT.heapBuffer(otherHalfSize).writeBytes(new byte[otherHalfSize]));
+        buf = compositeByteBuf;
+      } else {
+        buf = PooledByteBufAllocator.DEFAULT.heapBuffer(this.size).writeBytes(new byte[this.size]);
+      }
+    }
+
+    @Override
+    public long writeTo(WritableByteChannel channel) throws IOException {
+      long written = channel.write(buf.nioBuffer());
+      buf.skipBytes((int) written);
+      return written;
+    }
+
+    @Override
+    public boolean isSendComplete() {
+      return buf.readableBytes() == 0;
+    }
+
+    @Override
+    public long sizeInBytes() {
+      return this.size;
+    }
+
+    @Override
+    public ByteBuf content() {
+      return buf;
+    }
+
+    @Override
+    public SendWithContent replace(ByteBuf content) {
+      return null;
+    }
+  }
+
+  /**
+   * A mock {@link Send} implementation that returns null value for {@link #content()} method.
+   */
+  private static class SendWithoutContent extends SendWithContent {
+
+    public SendWithoutContent(int size, boolean useComposite) {
+      super(size, useComposite);
+    }
+
+    @Override
+    public ByteBuf content() {
+      return null;
+    }
+
+    @Override
+    public SendWithoutContent replace(ByteBuf content) {
+      return null;
+    }
+
+    @Override
+    public boolean release() {
+      return buf.release();
     }
   }
 }

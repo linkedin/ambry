@@ -30,6 +30,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.utils.Pair;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.GregorianCalendar;
@@ -146,8 +147,10 @@ class PostAccountsHandler {
         ReadableStreamChannel outputChannel;
         if (RestUtils.getRequestPath(restRequest).matchesOperation(UPDATE_ACCOUNT_CONTAINERS)) {
           logger.debug("Got request for {} with payload {}", UPDATE_ACCOUNT_CONTAINERS, jsonPayload);
-          JSONObject outputPayload = updateContainers(jsonPayload);
-          outputChannel = serializeJsonToChannel(outputPayload);
+          Pair<Account, JSONObject> accountAndUpdatedContainers = updateContainers(jsonPayload);
+          outputChannel = serializeJsonToChannel(accountAndUpdatedContainers.getSecond());
+          restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_ID,
+              accountAndUpdatedContainers.getFirst().getId());
         } else {
           updateAccounts(jsonPayload);
           outputChannel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
@@ -162,9 +165,10 @@ class PostAccountsHandler {
     /**
      * Process the request json and call {@link AccountService#updateContainers} to add or update containers.
      * @param containersPayload the request json containing the containers to update.
+     * @return a pair of account and its updated containers.
      * @throws RestServiceException
      */
-    private JSONObject updateContainers(JSONObject containersPayload) throws RestServiceException {
+    private Pair<Account, JSONObject> updateContainers(JSONObject containersPayload) throws RestServiceException {
       Short accountId = RestUtils.getNumericalHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_ID, false,
           Short::parseShort);
       String accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, false);
@@ -188,7 +192,7 @@ class PostAccountsHandler {
       }
       try {
         Collection<Container> updatedContainers = accountService.updateContainers(accountName, containersToUpdate);
-        return AccountCollectionSerde.containersToJson(updatedContainers);
+        return new Pair<>(account, AccountCollectionSerde.containersToJson(updatedContainers));
       } catch (AccountServiceException ex) {
         throw new RestServiceException("Container update failed for accountId " + accountId,
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));

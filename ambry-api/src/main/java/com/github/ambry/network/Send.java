@@ -54,8 +54,7 @@ public interface Send extends ByteBufHolder {
   long sizeInBytes();
 
   /**
-   * Return the data which is held by this {@link ByteBufHolder}. The result could be null, if it's null,
-   * please use writeTo methods to write the content to remote peer.
+   * Return the data which is held by this {@link ByteBufHolder}.
    */
   @Override
   ByteBuf content();

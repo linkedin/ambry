@@ -1045,6 +1045,86 @@ public class BlobStoreTest {
   }
 
   /**
+   * Test {@link BlobStoreStats}'s handle new entries method and make sure the correct {@link IndexValue}s are passed
+   * to these methods.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobStoreStatsHandleNewEntries() throws Exception {
+    store.shutdown();
+    ReplicaId replicaId = getMockReplicaId(tempDirStr);
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    MetricRegistry registry = new MetricRegistry();
+    StoreMetrics metrics = new StoreMetrics(registry);
+    MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(time);
+    store = new MockBlobStore(replicaId, config, null, metrics, mockBlobStoreStats);
+    store.start();
+
+    MockId id = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    assertNotNull(mockBlobStoreStats.currentValue);
+    assertNull(mockBlobStoreStats.originalPutValue);
+    assertNull(mockBlobStoreStats.previousValue);
+    assertTrue(mockBlobStoreStats.currentValue.isPut());
+
+    updateTtl(id);
+    assertNotNull(mockBlobStoreStats.currentValue);
+    assertNotNull(mockBlobStoreStats.originalPutValue);
+    assertNull(mockBlobStoreStats.previousValue);
+    assertTrue(mockBlobStoreStats.currentValue.isTtlUpdate());
+    assertTrue(mockBlobStoreStats.originalPutValue.isPut());
+
+    delete(id);
+    assertNotNull(mockBlobStoreStats.currentValue);
+    assertNotNull(mockBlobStoreStats.originalPutValue);
+    assertNotNull(mockBlobStoreStats.previousValue);
+    assertTrue(mockBlobStoreStats.currentValue.isDelete());
+    assertTrue(mockBlobStoreStats.currentValue.isTtlUpdate());
+    assertTrue(mockBlobStoreStats.previousValue.isTtlUpdate());
+    assertTrue(mockBlobStoreStats.originalPutValue.isTtlUpdate());
+
+    // Delete a blob at the same time, put a new blob, make sure the blobstorestats still get everything.
+    MockId id2 = put(1, PUT_RECORD_SIZE, expiresAtMs).get(0);
+    final CountDownLatch synchronizationLatch = new CountDownLatch(1);
+    final CountDownLatch putLatch = new CountDownLatch(1);
+    ((MockBlobStore) store).setOperationBeforeSynchronization(() -> {
+      synchronizationLatch.countDown(); // put will wait until delete reach synchronization statement
+      putLatch.await(); // then delete will wait until put finishes
+      return null;
+    });
+    ExecutorService executorService = Executors.newFixedThreadPool(2);
+
+    try {
+      Future<Void> deleteFuture = executorService.submit(() -> {
+        delete(id2);
+        return null;
+      });
+      Future<Void> putFuture = executorService.submit(() -> {
+        // Now make sure delete already gets to synchronization
+        synchronizationLatch.await();
+        // Disable synchronization callback so put will not be blocked by it.
+        ((MockBlobStore) store).setOperationBeforeSynchronization(null);
+        put(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+        // Now make sure the put is inserted into the index before continue delete
+        putLatch.countDown();
+        return null;
+      });
+      putFuture.get();
+      deleteFuture.get();
+
+      // MockBlobStoreStats should capture delete operation
+      assertNotNull(mockBlobStoreStats.currentValue);
+      assertNotNull(mockBlobStoreStats.originalPutValue);
+      assertNotNull(mockBlobStoreStats.previousValue);
+      assertTrue(mockBlobStoreStats.currentValue.isDelete());
+      assertTrue(mockBlobStoreStats.previousValue.isPut());
+      assertTrue(mockBlobStoreStats.originalPutValue.isPut());
+    } finally {
+      ((MockBlobStore) store).setOperationBeforeSynchronization(null);
+      executorService.shutdownNow();
+    }
+  }
+
+  /**
    * Tests when the lifeVersion for put record is not 0.
    * @throws StoreException
    * @throws IOException
@@ -3294,6 +3374,14 @@ public class BlobStoreTest {
           STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, new InMemAccountService(false, false));
     }
 
+    MockBlobStore(ReplicaId replicaId, StoreConfig config, List<ReplicaStatusDelegate> replicaStatusDelegates,
+        StoreMetrics metrics, BlobStoreStats blobStoreStats) {
+      super(replicaId, replicaId.getPartitionId().toString(), config, scheduler, storeStatsScheduler, diskIOScheduler,
+          diskSpaceAllocator, metrics, metrics, replicaId.getReplicaPath(), replicaId.getCapacityInBytes(),
+          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, new InMemAccountService(false, false),
+          blobStoreStats);
+    }
+
     /**
      * Replace initial index in store with mock index which would throw specified exception when finding entries/keys.
      * @param exception the store exception to throw when finding entries or missing keys.
@@ -3317,5 +3405,45 @@ public class BlobStoreTest {
 
   private interface StoreMethodCaller {
     void invoke(Store store) throws StoreException;
+  }
+
+  private class MockBlobStoreStats extends BlobStoreStats {
+    volatile IndexValue currentValue;
+    volatile IndexValue originalPutValue;
+    volatile IndexValue previousValue;
+
+    MockBlobStoreStats(Time time) {
+      super("", null, 0, 0, 0, 0, 0, false, time, null, null, null, null);
+    }
+
+    @Override
+    public void handleNewPutEntry(IndexValue putValue) {
+      this.currentValue = putValue;
+      this.originalPutValue = null;
+      this.previousValue = null;
+    }
+
+    @Override
+    public void handleNewDeleteEntry(StoreKey key, IndexValue deleteValue, IndexValue originalPutValue,
+        IndexValue previousValue) {
+      this.currentValue = deleteValue;
+      this.originalPutValue = originalPutValue;
+      this.previousValue = previousValue;
+    }
+
+    @Override
+    public void handleNewTtlUpdateEntry(IndexValue ttlUpdateValue, IndexValue originalPutValue) {
+      this.currentValue = ttlUpdateValue;
+      this.originalPutValue = originalPutValue;
+      this.previousValue = null;
+    }
+
+    @Override
+    public void handleNewUndeleteEntry(StoreKey key, IndexValue undeleteValue, IndexValue originalPutValue,
+        IndexValue previousValue) {
+      this.currentValue = undeleteValue;
+      this.originalPutValue = originalPutValue;
+      this.previousValue = previousValue;
+    }
   }
 }

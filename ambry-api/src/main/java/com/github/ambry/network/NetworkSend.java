@@ -27,16 +27,23 @@ public class NetworkSend {
   // The creation time of this send
   private final long sendCreateTimeInMs;
   // The start time of this send
+  private final boolean releaseOnError;
   private long sendStartTimeInMs = -1;
   private final Time time;
   private final ServerNetworkResponseMetrics metrics;
 
   public NetworkSend(String connectionId, Send payload, ServerNetworkResponseMetrics metrics, Time time) {
+    this(connectionId, payload, metrics, time, false);
+  }
+
+  public NetworkSend(String connectionId, Send payload, ServerNetworkResponseMetrics metrics, Time time,
+      boolean releaseOnError) {
     this.connectionId = connectionId;
     this.payload = payload;
     this.sendCreateTimeInMs = time.milliseconds();
     this.time = time;
     this.metrics = metrics;
+    this.releaseOnError = releaseOnError;
   }
 
   public long getSendCreateTimeInMs() {
@@ -62,6 +69,10 @@ public class NetworkSend {
 
   public Send getPayload() {
     return payload;
+  }
+
+  public boolean shouldReleaseOnError() {
+    return releaseOnError;
   }
 
   public void updateServerResponseMetrics() {
