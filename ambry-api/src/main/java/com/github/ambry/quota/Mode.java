@@ -13,6 +13,9 @@
  */
 package com.github.ambry.quota;
 
+/**
+ * Quota service mode. If mode is tracking, it will not throttle traffics even if the quota is exceeded.
+ */
 public enum Mode {
   Tracking, Throttling
 }

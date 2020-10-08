@@ -20,6 +20,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 
+/**
+ * An implementation for {@link StorageQuotaService}.
+ */
 public class AmbryStorageQuotaService implements StorageQuotaService {
 
   private final StorageUsageRefresher storageUsageRefresher;

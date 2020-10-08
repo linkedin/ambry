@@ -20,6 +20,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
+/**
+ * A {@link StorageQuotaEnforcer} implementation. It keeps an in-memory map for storage quota and listens on the quota change
+ * to update this in-memory map. It also keeps another in-memory map for storage usage of each container and listens on usage
+ * change from {@link StorageUsageRefresher}.
+ *
+ * This implementation checks whether to throttle the operation only if the operation is {@link Operation#Upload}. And when the
+ * targeted account and container doesn't have a quota specified, it doesn't throttle the operation at all. Any legitimate
+ * uploads would also increase the storage usage in the in-memory map.
+ */
 public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
   private volatile Mode mode;
   private volatile Map<String, Map<String, Long>> storageQuota;

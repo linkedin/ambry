@@ -13,6 +13,9 @@
  */
 package com.github.ambry.quota;
 
+/**
+ * Operations for quota service.
+ */
 public enum Operation {
   Upload, Delete, TtlUpdate
 }

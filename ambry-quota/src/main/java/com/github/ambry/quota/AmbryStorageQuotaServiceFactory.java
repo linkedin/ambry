@@ -24,6 +24,10 @@ import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 
 
+/**
+ * An factory implementation for {@link StorageQuotaService}. It uses {@link HelixStorageUsageRefresher}, {@link JSONStringStorageQuotaSource}
+ * and {@link AmbryStorageQuotaEnforcer}.
+ */
 public class AmbryStorageQuotaServiceFactory implements StorageQuotaServiceFactory {
   private static final String STORAGE_QUOTA_SERVICE_PREFIX = "storage-quota-service";
   private final StorageQuotaService storageQuotaService;
@@ -31,10 +35,10 @@ public class AmbryStorageQuotaServiceFactory implements StorageQuotaServiceFacto
   public AmbryStorageQuotaServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry)
       throws Exception {
     StorageQuotaConfig storageQuotaConfig = new StorageQuotaConfig(verifiableProperties);
-    HelixPropertyStoreConfig helixPropertyStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
 
     HelixPropertyStore<ZNRecord> helixStore =
-        CommonUtils.createHelixPropertyStore(storageQuotaConfig.zkClientConnectAddress, helixPropertyStoreConfig, null);
+        CommonUtils.createHelixPropertyStore(storageQuotaConfig.zkClientConnectAddress,
+            storageQuotaConfig.helixPropertyRootPath, null);
     ScheduledExecutorService scheduler = Utils.newScheduler(1, STORAGE_QUOTA_SERVICE_PREFIX, false);
     HelixStorageUsageRefresher storageUsageRefresher =
         new HelixStorageUsageRefresher(helixStore, scheduler, storageQuotaConfig);

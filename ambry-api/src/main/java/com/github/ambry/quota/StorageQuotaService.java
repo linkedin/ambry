@@ -13,13 +13,44 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+
+
+/**
+ * {@link StorageQuotaService} is the component to handles storage quota for different {@link Account} and {@link Container}.
+ * It keeps track of the storage usage of different {@link Container}s and decides to throttle the Frontend operations
+ * based on the quota and the {@link Mode}.
+ * If you just want to keep track of the the usage without throttling the traffic, you can call {@link #setMode} to change
+ * {@link Mode} from {@link Mode#Throttling} to {@link Mode#Tracking}.
+ */
 public interface StorageQuotaService {
 
+  /**
+   * Start the {@link StorageQuotaService} with all the initialization logic.
+   * @throws Exception
+   */
   void start() throws Exception;
 
+  /**
+   * Shutdown the {@link StorageQuotaService}.
+   */
   void shutdown();
 
+  /**
+   * Return true if the given {@link Operation} should be throttled.
+   * @param accountId The accountId of this operation.
+   * @param containerId The containerId of this operation.
+   * @param op The {@link Operation}.
+   * @param size The size of this operation. eg, if the op is Upload, size if the size of the content.
+   * @return True is the given {@link Operation} should be throttled.
+   */
   boolean shouldThrottle(short accountId, short containerId, Operation op, long size);
 
+  /**
+   * Change the {@link StorageQuotaService}'s mode to the given value. If the mode is {@link Mode#Tracking}, then {@link StorageQuotaService}
+   * should never return true in {@link #shouldThrottle} method.
+   * @param mode The new value for {@link Mode}.
+   */
   void setMode(Mode mode);
 }
