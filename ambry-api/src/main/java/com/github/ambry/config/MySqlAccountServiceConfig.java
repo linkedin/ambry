@@ -18,9 +18,7 @@ package com.github.ambry.config;
  */
 public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String MYSQL_ACCOUNT_SERVICE_PREFIX = "mysql.account.service.";
-  public static final String DB_URL = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.url";
-  public static final String DB_USER = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.user";
-  public static final String DB_PASSWORD = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.password";
+  public static final String DB_INFO = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.info";
   public static final String UPDATER_POLLING_INTERVAL_SECONDS =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "updater.polling.interval.seconds";
   public static final String UPDATER_SHUT_DOWN_TIMEOUT_MINUTES =
@@ -29,27 +27,39 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String UPDATE_DISABLED = MYSQL_ACCOUNT_SERVICE_PREFIX + "update.disabled";
   private static final String MAX_BACKUP_FILE_COUNT = MYSQL_ACCOUNT_SERVICE_PREFIX + "max.backup.file.count";
 
-  // TODO: Might need to take an array of URLs which would have one write (master) and multiple read urls (backup)
   /**
-   * URL of the mysql database.
+   * Serialized json containing the information about all mysql end points. This information should be of the following form:
+   * <pre>
+   * {
+   *   "dbInfo" : [
+   *     {
+   *       "url":"mysql-host1"
+   *       "datacenter":"dc1",
+   *       "isWriteable": "true",
+   *       "username":"root",
+   * 	     "password":"password"
+   *     },
+   *     {
+   *       "url":"mysql-host2"
+   *       "datacenter":"dc2",
+   *       "isWriteable": "false",
+   *       "username":"root",
+   * 	     "password":"password"
+   *     },
+   *     {
+   *       "url":"mysql-host3"
+   *       "datacenter":"dc3",
+   *       "isWriteable": "false",
+   *       "username":"root",
+   * 	     "password":"password"
+   *     }
+   *   ]
+   * }
+   * </pre>
    */
-  @Config(DB_URL)
+  @Config(DB_INFO)
   @Default("")
-  public final String dbUrl;
-
-  /**
-   * Username for the mysql database.
-   */
-  @Config(DB_USER)
-  @Default("")
-  public final String dbUser;
-
-  /**
-   * Password for the mysql database.
-   */
-  @Config(DB_PASSWORD)
-  @Default("")
-  public final String dbPassword;
+  public final String dbInfo;
 
   /**
    * The time interval in seconds between two consecutive account pulling for the background account updater of
@@ -91,9 +101,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
 
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
-    dbUrl = verifiableProperties.getString(DB_URL);
-    dbUser = verifiableProperties.getString(DB_USER);
-    dbPassword = verifiableProperties.getString(DB_PASSWORD);
+    dbInfo = verifiableProperties.getString(DB_INFO);
     updaterPollingIntervalSeconds =
         verifiableProperties.getIntInRange(UPDATER_POLLING_INTERVAL_SECONDS, 60, 0, Integer.MAX_VALUE);
     updaterShutDownTimeoutMinutes =

@@ -1,0 +1,115 @@
+/*
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+package com.github.ambry.account.mysql;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+
+/**
+ * Contains utils methods for MySqlAccountService
+ */
+public class MySqlUtils {
+
+  static final String DBINFO_STR = "dbInfo";
+  static final String URL_STR = "url";
+  static final String DATACENTER_STR = "datacenter";
+  static final String ISWRITEABLE_STR = "isWriteable";
+  static final String USERNAME_STR = "username";
+  static final String PASSWORD_STR = "password";
+
+  /**
+   * Parses DB information JSON string and returns a map of datacenter name to list of {@link DbEndpoint}s.
+   * @param dbInfoJsonString the string containing the MySql DB info.
+   * @return a map of dcName -> list of {@link DbEndpoint}s.
+   * @throws JSONException if there is an error parsing the JSON.
+   */
+  public static Map<String, List<DbEndpoint>> getDbEndpointsPerDC(String dbInfoJsonString) throws JSONException {
+    Map<String, List<DbEndpoint>> dcToDbEndpoints = new HashMap<>();
+
+    JSONObject jsonObject = new JSONObject(dbInfoJsonString);
+    JSONArray dbInfo = jsonObject.getJSONArray(DBINFO_STR);
+    for (int i = 0; i < dbInfo.length(); i++) {
+      JSONObject entry = dbInfo.getJSONObject(i);
+      String url = entry.getString(URL_STR);
+      String datacenter = entry.getString(DATACENTER_STR);
+      boolean isWriteable = entry.getBoolean(ISWRITEABLE_STR);
+      String username = entry.getString(USERNAME_STR);
+      String password = entry.getString(PASSWORD_STR);
+      dcToDbEndpoints.computeIfAbsent(datacenter, key -> new ArrayList<>())
+          .add(new DbEndpoint(url, datacenter, isWriteable, username, password));
+    }
+    return dcToDbEndpoints;
+  }
+
+  /**
+   * Stores information of a mysql db endpoint
+   */
+  public static class DbEndpoint {
+    private final String url;
+    private final String datacenter;
+    private final boolean isWriteable;
+    private final String username;
+    private final String password;
+
+    public DbEndpoint(String url, String datacenter, boolean isWriteable, String username, String password) {
+      this.url = url;
+      this.datacenter = datacenter;
+      this.isWriteable = isWriteable;
+      this.username = username;
+      this.password = password;
+    }
+
+    /**
+     * @return Url of the db
+     */
+    public String getUrl() {
+      return url;
+    }
+
+    /**
+     * @return Data center of the db
+     */
+    public String getDatacenter() {
+      return datacenter;
+    }
+
+    /**
+     * Checks if db accepts writes
+     * @return true if db accepts writes
+     */
+    public boolean isWriteable() {
+      return isWriteable;
+    }
+
+    /**
+     * @return Username for the db
+     */
+    public String getUsername() {
+      return username;
+    }
+
+    /**
+     * @return Password for the db
+     */
+    public String getPassword() {
+      return password;
+    }
+  }
+}

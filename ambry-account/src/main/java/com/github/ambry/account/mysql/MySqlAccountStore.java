@@ -11,12 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.account;
+package com.github.ambry.account.mysql;
 
-import com.github.ambry.account.mysql.AccountDao;
-import com.github.ambry.account.mysql.ContainerDao;
-import com.github.ambry.account.mysql.MySqlDataAccessor;
-import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import java.sql.SQLException;
 import java.util.Collection;
 
@@ -30,8 +28,8 @@ public class MySqlAccountStore {
   private final ContainerDao containerDao;
   private final MySqlDataAccessor mySqlDataAccessor;
 
-  public MySqlAccountStore(MySqlAccountServiceConfig config) throws SQLException {
-    mySqlDataAccessor = new MySqlDataAccessor(config);
+  public MySqlAccountStore(MySqlUtils.DbEndpoint dbEndpoint) throws SQLException {
+    mySqlDataAccessor = new MySqlDataAccessor(dbEndpoint);
     accountDao = new AccountDao(mySqlDataAccessor);
     containerDao = new ContainerDao(mySqlDataAccessor);
   }

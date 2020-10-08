@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.ContainerDao;
+import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlDataAccessor;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.HelixPropertyStoreConfig;

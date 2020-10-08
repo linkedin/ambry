@@ -16,8 +16,6 @@ package com.github.ambry.account.mysql;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
-import com.github.ambry.config.MySqlAccountServiceConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
 import java.sql.Connection;
 import java.sql.Driver;
@@ -75,12 +73,9 @@ public class AccountDaoTest {
   static MySqlDataAccessor getDataAccessor(Connection mockConnection) throws SQLException {
     Driver mockDriver = mock(Driver.class);
     when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
-    Properties properties = new Properties();
-    properties.setProperty(MySqlAccountServiceConfig.DB_URL, "jdbc:mysql://localhost/AccountMetadata");
-    properties.setProperty(MySqlAccountServiceConfig.DB_USER, "ambry");
-    properties.setProperty(MySqlAccountServiceConfig.DB_PASSWORD, "ambry");
-    MySqlAccountServiceConfig config = new MySqlAccountServiceConfig(new VerifiableProperties(properties));
-    MySqlDataAccessor dataAccessor = new MySqlDataAccessor(config, mockDriver);
+    MySqlUtils.DbEndpoint dbEndPoint =
+        new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "ambry", "ambry");
+    MySqlDataAccessor dataAccessor = new MySqlDataAccessor(dbEndPoint, mockDriver);
     when(dataAccessor.getDatabaseConnection()).thenReturn(mockConnection);
     return dataAccessor;
   }

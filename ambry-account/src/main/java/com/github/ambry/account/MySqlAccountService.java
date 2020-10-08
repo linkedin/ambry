@@ -13,6 +13,8 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.account.mysql.MySqlAccountStore;
+import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.SystemTime;
@@ -51,13 +53,24 @@ public class MySqlAccountService extends AbstractAccountService {
   private final ReadWriteLock infoMapLock = new ReentrantReadWriteLock();
   private final ScheduledExecutorService scheduler;
   private final BackupFileManager backupFileManager;
+  // TODO: we could have two stores (master for writes/reads and replica for reads during failover)
   private volatile MySqlAccountStore mySqlAccountStore;
+  private final MySqlAccountStoreFactory mySqlAccountStoreFactory;
 
   public MySqlAccountService(AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config,
-      MySqlAccountStore mySqlAccountStore) throws IOException {
+      MySqlAccountStoreFactory mySqlAccountStoreFactory) throws IOException {
     super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"));
     this.config = config;
-    this.mySqlAccountStore = mySqlAccountStore;
+    this.mySqlAccountStoreFactory = mySqlAccountStoreFactory;
+    try {
+      this.mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore(true);
+    } catch (SQLException e) {
+      logger.error("MySQL account store creation failed", e);
+      //TODO: If it is a non-transient error like credential issue, we should fail creation of MySqlAccountService and
+      // return error. Else, continue account service creation and initialize cache with metadata from local file copy
+      // to serve read requests. Connection to MySql DB will be retried during periodic sync. Until then, write
+      // requests will be blocked.
+    }
     this.scheduler =
         config.updaterPollingIntervalSeconds > 0 ? Utils.newScheduler(1, MYSQL_ACCOUNT_UPDATER_PREFIX, false) : null;
     // create backup file manager for persisting and retrieving Account metadata on local disk
@@ -67,16 +80,6 @@ public class MySqlAccountService extends AbstractAccountService {
     // Fetches added or modified accounts and containers from mysql db and schedules to execute it periodically
     initialFetchAndSchedule();
     // TODO: Subscribe to notifications from ZK
-  }
-
-  /**
-   * Creates MySql Account store which establishes connection to database
-   * @throws SQLException
-   */
-  private void createMySqlAccountStore() throws SQLException {
-    if (mySqlAccountStore == null) {
-      mySqlAccountStore = new MySqlAccountStore(config);
-    }
   }
 
   /**
@@ -121,7 +124,14 @@ public class MySqlAccountService extends AbstractAccountService {
   void fetchAndUpdateCache() {
     try {
       // Retry connection to mysql if we couldn't set up previously
-      createMySqlAccountStore();
+      if (mySqlAccountStore == null) {
+        try {
+          mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore(true);
+        } catch (SQLException e) {
+          logger.error("MySQL account store creation failed", e);
+          //TODO: Add failover logic to retry connection on mysql read replica for fetch operations
+        }
+      }
 
       // Find last modified time of Accounts and containers in cache.
       long lastModifiedTime = accountInfoMapRef.get().getLastModifiedTime();
