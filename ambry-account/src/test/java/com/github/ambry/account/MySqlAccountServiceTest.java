@@ -191,9 +191,8 @@ public class MySqlAccountServiceTest {
     // present after close() due to actively executing task.
     mySqlAccountService.getScheduler().shutdownNow();
 
-    Thread.sleep(100);
-    assertEquals("Background account updater thread should be stopped", 0,
-        numThreadsByThisName(MySqlAccountService.MYSQL_ACCOUNT_UPDATER_PREFIX));
+    assertTrue("Background account updater thread should be stopped",
+        TestUtils.checkAndSleep(0, () -> numThreadsByThisName(MySqlAccountService.MYSQL_ACCOUNT_UPDATER_PREFIX), 1000));
   }
 
   /**

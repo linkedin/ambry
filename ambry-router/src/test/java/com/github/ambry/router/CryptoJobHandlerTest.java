@@ -73,11 +73,6 @@ public class CryptoJobHandlerTest {
 
   @After
   public void after() {
-    // Add delay in case buffers are released in background
-    try {
-      Thread.sleep(500);
-    } catch (InterruptedException e) {
-    }
     nettyByteBufLeakHelper.afterTest();
     nettyByteBufLeakHelper.setDisabled(false);
   }
