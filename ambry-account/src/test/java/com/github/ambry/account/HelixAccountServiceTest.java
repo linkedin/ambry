@@ -22,6 +22,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Router;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.utils.AccountTestUtils;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
@@ -62,9 +63,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static com.github.ambry.account.Account.*;
-import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.HelixAccountService.*;
+import static com.github.ambry.utils.AccountTestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;

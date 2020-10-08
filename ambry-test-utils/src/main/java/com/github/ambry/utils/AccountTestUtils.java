@@ -44,7 +44,7 @@ public class AccountTestUtils {
    * @param expectedAccountCount The expected number of {@link Account}s in the {@link AccountService}.
    * @param accountService The {@link AccountService} to assert {@link Account}s existence.
    */
-  static void assertAccountsInAccountService(Collection<Account> accounts, int expectedAccountCount,
+  public static void assertAccountsInAccountService(Collection<Account> accounts, int expectedAccountCount,
       AccountService accountService) {
     assertEquals("Wrong number of accounts in accountService", expectedAccountCount,
         accountService.getAllAccounts().size());
@@ -58,7 +58,7 @@ public class AccountTestUtils {
    * @param account The {@link Account} to assert existence.
    * @param accountService The {@link AccountService} to assert {@link Account} existence.
    */
-  static void assertAccountInAccountService(Account account, AccountService accountService) {
+  public static void assertAccountInAccountService(Account account, AccountService accountService) {
     Account accountFoundById = accountService.getAccountById(account.getId());
     Account accountFoundByName = accountService.getAccountByName(account.getName());
     assertEquals("Account got by name from accountService does not match account to assert.", account,
@@ -77,7 +77,7 @@ public class AccountTestUtils {
    * @param container The {@link Container} to assert.
    * @param accountService The {@link AccountService} to assert {@link Container} existence.
    */
-  static void assertContainerInAccountService(Container container, AccountService accountService) {
+  public static void assertContainerInAccountService(Container container, AccountService accountService) {
     Container containerFoundById =
         accountService.getAccountById(container.getParentAccountId()).getContainerById(container.getId());
     Container containerFoundByName =
@@ -97,7 +97,7 @@ public class AccountTestUtils {
    * @param accountCount The number of {@link Account}s to generate.
    * @param containerCountPerAccount The number of {@link Container}s per {@link Account} to generate.
    */
-  static void generateRefAccounts(Map<Short, Account> idToRefAccountMap,
+  public static void generateRefAccounts(Map<Short, Account> idToRefAccountMap,
       Map<Short, Map<Short, Container>> idToRefContainerMap, Set<Short> accountIdSet, int accountCount,
       int containerCountPerAccount) {
     idToRefAccountMap.clear();
