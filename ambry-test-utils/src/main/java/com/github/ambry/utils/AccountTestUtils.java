@@ -11,10 +11,13 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.account;
+package com.github.ambry.utils;
 
-import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Utils;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -32,7 +35,7 @@ import static org.junit.Assert.*;
 /**
  * Utils for testing account-related classes.
  */
-class AccountTestUtils {
+public class AccountTestUtils {
   private static final Random random = TestUtils.RANDOM;
 
   /**
@@ -129,7 +132,7 @@ class AccountTestUtils {
    * @param accountId accountId for container.
    * @return {@link List} of {@link ContainerBuilder}s.
    */
-  static List<ContainerBuilder> generateContainerBuilders(int numContainers, short accountId) {
+  public static List<ContainerBuilder> generateContainerBuilders(int numContainers, short accountId) {
     List<ContainerBuilder> containerBuilders = new ArrayList<>();
     Set<Short> containerIdSet = new HashSet<>();
     for (int j = 0; j < numContainers; j++) {

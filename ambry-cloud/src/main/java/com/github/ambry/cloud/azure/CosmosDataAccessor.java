@@ -47,6 +47,7 @@ import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +55,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.observables.BlockingObservable;
@@ -69,6 +71,7 @@ public class CosmosDataAccessor {
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
+  private static final String DEPRECATED_CONTAINERS_QUERY = "SELECT TOP %d from c order by c.deleteTriggerTime";
   private static final String CONTAINER_DELETION_TABLE = "DeletedContainer";
   private static final String DELETED_CONTAINER_ID_COLUMN = "id";
   private static final String CONTAINER_ID_ACCOUNT_ID_DELIM = "_";
@@ -553,6 +556,26 @@ public class CosmosDataAccessor {
       }
     }
     return latestContainerDeletionTimestamp;
+  }
+
+  /**
+   * @return a {@link Set} of {@link ContainerDeletionEntry} objects from cosmosdb that are not marked as deleted.
+   */
+  public Set<ContainerDeletionEntry> getDeprecatedContainers(int maxEntries) {
+    String query = String.format(DEPRECATED_CONTAINERS_QUERY, maxEntries);
+    Timer timer = new Timer();
+    Iterator<FeedResponse<Document>> iterator =
+        executeCosmosQuery(cosmosDeletedContainerCollectionLink, null, new SqlQuerySpec(query), new FeedOptions(),
+            timer).getIterator();
+    Set<ContainerDeletionEntry> containerDeletionEntries = new HashSet<>();
+    while (iterator.hasNext()) {
+      FeedResponse<Document> response = iterator.next();
+      response.getResults()
+          .iterator()
+          .forEachRemaining(
+              doc -> containerDeletionEntries.add(ContainerDeletionEntry.fromJson(new JSONObject(doc.toJson()))));
+    }
+    return containerDeletionEntries;
   }
 
   /**
