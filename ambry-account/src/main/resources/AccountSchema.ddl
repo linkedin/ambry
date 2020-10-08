@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS Accounts
     INDEX lmtIndex (lastModifiedTime),
     INDEX statusIndex (status)
 )
-CHARACTER SET utf8 COLLATE utf8-bin;
+CHARACTER SET utf8 COLLATE utf8_bin;
 
 CREATE TABLE IF NOT EXISTS Containers
 (
@@ -43,4 +43,4 @@ CREATE TABLE IF NOT EXISTS Containers
     INDEX lmtIndex (lastModifiedTime),
     INDEX statusIndex (status)
 )
-CHARACTER SET utf8 COLLATE utf8-bin;
+CHARACTER SET utf8 COLLATE utf8_bin;

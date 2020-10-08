@@ -79,21 +79,29 @@ public class NettyByteBufLeakHelper {
 
     PooledByteBufAllocatorMetric metric = PooledByteBufAllocator.DEFAULT.metric();
     List<PoolArenaMetric> heaps = metric.heapArenas();
-    long currentActiveHeapAllocations = heaps.stream().mapToLong(PoolArenaMetric::numActiveAllocations).sum();
-    long currentHeapAllocations = heaps.stream().mapToLong(PoolArenaMetric::numAllocations).sum();
-    long currentHeapDeallocations = heaps.stream().mapToLong(PoolArenaMetric::numDeallocations).sum();
-
     List<PoolArenaMetric> directs = metric.directArenas();
-    long currentActiveDirectAllocations = directs.stream().mapToLong(PoolArenaMetric::numActiveAllocations).sum();
-    long currentDirectAllocations = directs.stream().mapToLong(PoolArenaMetric::numAllocations).sum();
-    long currentDirectDeallocations = directs.stream().mapToLong(PoolArenaMetric::numDeallocations).sum();
+    // Wait up to 1 sec before declaring failure since deallocations may happen in background with some delay.
+    int checkTimeoutInMs = 1000;
 
-    String message = String.format("DirectMemoryLeak: [allocation|deallocation] before test[%d|%d], after test[%d|%d]",
-        directAllocations, directDeallocations, currentDirectAllocations, currentDirectDeallocations);
-    Assert.assertEquals(message, activeDirectAllocations, currentActiveDirectAllocations);
-    message = String.format("HeapMemoryLeak: [allocation|deallocation] before test[%d|%d], after test[%d|%d]",
-        heapAllocations, heapDeallocations, currentHeapAllocations, currentHeapDeallocations);
-    Assert.assertEquals(message, activeHeapAllocations, currentActiveHeapAllocations);
+    if (!TestUtils.checkAndSleep(activeDirectAllocations,
+        () -> directs.stream().mapToLong(PoolArenaMetric::numActiveAllocations).sum(), checkTimeoutInMs)) {
+      long currentActiveDirectAllocations = directs.stream().mapToLong(PoolArenaMetric::numActiveAllocations).sum();
+      long currentDirectAllocations = directs.stream().mapToLong(PoolArenaMetric::numAllocations).sum();
+      long currentDirectDeallocations = directs.stream().mapToLong(PoolArenaMetric::numDeallocations).sum();
+      String message =
+          String.format("DirectMemoryLeak: [allocation|deallocation] before test[%d|%d], after test[%d|%d]",
+              directAllocations, directDeallocations, currentDirectAllocations, currentDirectDeallocations);
+      Assert.assertEquals(message, activeDirectAllocations, currentActiveDirectAllocations);
+    }
+    if (!TestUtils.checkAndSleep(activeHeapAllocations,
+        () -> heaps.stream().mapToLong(PoolArenaMetric::numActiveAllocations).sum(), checkTimeoutInMs)) {
+      long currentActiveHeapAllocations = heaps.stream().mapToLong(PoolArenaMetric::numActiveAllocations).sum();
+      long currentHeapAllocations = heaps.stream().mapToLong(PoolArenaMetric::numAllocations).sum();
+      long currentHeapDeallocations = heaps.stream().mapToLong(PoolArenaMetric::numDeallocations).sum();
+      String message = String.format("HeapMemoryLeak: [allocation|deallocation] before test[%d|%d], after test[%d|%d]",
+          heapAllocations, heapDeallocations, currentHeapAllocations, currentHeapDeallocations);
+      Assert.assertEquals(message, activeHeapAllocations, currentActiveHeapAllocations);
+    }
   }
 
   /**

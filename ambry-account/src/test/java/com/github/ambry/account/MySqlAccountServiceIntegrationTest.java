@@ -14,14 +14,19 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.mysql.AccountDao;
+import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -38,30 +43,32 @@ import static org.mockito.Mockito.*;
 
 
 /**
- * Unit tests for {@link MySqlAccountService}.
+ * Integration tests for {@link MySqlAccountService}.
  */
-public class MySqlAccountServiceTest {
+public class MySqlAccountServiceIntegrationTest {
 
   MySqlAccountService mySqlAccountService;
-  MySqlAccountStore mockMySqlAccountStore;
+  MySqlAccountStore mySqlAccountStore;
+  MySqlAccountServiceConfig accountServiceConfig;
   AccountServiceMetrics accountServiceMetrics;
-  Properties mySqlConfigProps = new Properties();
+  Properties mySqlConfigProps;
 
-  public MySqlAccountServiceTest() throws IOException {
-    mySqlConfigProps.setProperty(DB_URL, "");
-    mySqlConfigProps.setProperty(DB_USER, "");
-    mySqlConfigProps.setProperty(DB_PASSWORD, "");
+  public MySqlAccountServiceIntegrationTest() throws Exception {
+    mySqlConfigProps = Utils.loadPropsFromResource("mysql.properties");
     mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
+    accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
-    mockMySqlAccountStore = mock(MySqlAccountStore.class);
+    mySqlAccountStore = spy(new MySqlAccountStore(accountServiceConfig));
+    // Start with empty database
+    cleanup();
     mySqlAccountService = getAccountService();
   }
 
-  // TODO: parametrize to use mock or real store (maybe blank url = test)
-  private MySqlAccountService getAccountService() throws IOException {
-    return new MySqlAccountService(accountServiceMetrics,
-        new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mockMySqlAccountStore);
+  private MySqlAccountService getAccountService() throws Exception {
+    accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
+    // Don't initialize account store here as it may have preinitialized data
+    return new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mySqlAccountStore);
   }
 
   /**
@@ -69,7 +76,7 @@ public class MySqlAccountServiceTest {
    * @throws IOException
    */
   @Test
-  public void testInitCacheFromDisk() throws IOException, SQLException {
+  public void testInitCacheFromDisk() throws Exception {
     Path accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
     mySqlConfigProps.setProperty(BACKUP_DIRECTORY_KEY, accountBackupDir.toString());
 
@@ -92,21 +99,22 @@ public class MySqlAccountServiceTest {
         mySqlAccountService.getAllAccounts().iterator().next());
 
     // verify that mySqlAccountStore.getNewAccounts() is called with input argument "lastModifiedTime" value as 100
-    verify(mockMySqlAccountStore, atLeastOnce()).getNewAccounts(lastModifiedTime);
-    verify(mockMySqlAccountStore, atLeastOnce()).getNewContainers(lastModifiedTime);
+    verify(mySqlAccountStore, atLeastOnce()).getNewAccounts(lastModifiedTime);
+    verify(mySqlAccountStore, atLeastOnce()).getNewContainers(lastModifiedTime);
   }
 
   /**
    * Tests in-memory cache is updated with accounts from mysql db store on start up
    */
   @Test
-  public void testInitCacheOnStartUp() throws SQLException, IOException {
+  public void testInitCacheOnStartUp() throws Exception {
     Container testContainer =
         new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
             (short) 1).build();
     Account testAccount = new AccountBuilder((short) 1, "testAccount", Account.AccountStatus.ACTIVE).containers(
         Collections.singleton(testContainer)).build();
-    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(new ArrayList<>(Collections.singletonList(testAccount)));
+    mySqlAccountStore.addAccounts(Collections.singletonList(testAccount));
+    mySqlAccountStore.addContainers(Collections.singleton(testContainer));
     mySqlAccountService = getAccountService();
 
     // Test in-memory cache is updated with accounts from mysql store on start up.
@@ -121,9 +129,8 @@ public class MySqlAccountServiceTest {
    * 2. update existing {@link Account} by adding new {@link Container} to an existing {@link Account};
    */
   @Test
-  public void testUpdateAccounts() throws SQLException, IOException {
+  public void testUpdateAccounts() throws Exception {
 
-    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(new ArrayList<>());
     Container testContainer =
         new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
             (short) 1).build();
@@ -132,7 +139,6 @@ public class MySqlAccountServiceTest {
 
     // 1. Addition of new account. Verify account is added to cache.
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, atLeastOnce()).addAccounts(Collections.singletonList(testAccount));
     List<Account> accounts = new ArrayList<>(mySqlAccountService.getAllAccounts());
     assertEquals("Mismatch in number of accounts", 1, accounts.size());
     assertEquals("Mismatch in account retrieved by ID", testAccount,
@@ -146,8 +152,6 @@ public class MySqlAccountServiceTest {
             .build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer2).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, atLeastOnce()).updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, atLeastOnce()).addContainers(Collections.singletonList(testContainer2));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
 
@@ -155,8 +159,6 @@ public class MySqlAccountServiceTest {
     testContainer = new ContainerBuilder(testContainer).setMediaScanDisabled(true).setCacheable(true).build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, atLeastOnce()).updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, atLeastOnce()).updateContainers(Collections.singletonList(testContainer));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
   }
@@ -165,12 +167,10 @@ public class MySqlAccountServiceTest {
    * Tests background updater for updating cache from mysql store periodically.
    */
   @Test
-  public void testBackgroundUpdater() throws InterruptedException, SQLException, IOException {
+  public void testBackgroundUpdater() throws Exception {
 
     mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "1");
     Account testAccount = new AccountBuilder((short) 1, "testAccount1", Account.AccountStatus.ACTIVE).build();
-    when(mockMySqlAccountStore.getNewAccounts(anyLong())).thenReturn(new ArrayList<>())
-        .thenReturn(new ArrayList<>(Collections.singletonList(testAccount)));
     mySqlAccountService = getAccountService();
 
     assertEquals("Background account updater thread should have been started", 1,
@@ -178,6 +178,10 @@ public class MySqlAccountServiceTest {
 
     // Verify cache is empty.
     assertNull("Cache should be empty", mySqlAccountService.getAccountById(testAccount.getId()));
+
+    // Add account to DB (could use second AS for this)
+    mySqlAccountStore.addAccounts(Collections.singletonList(testAccount));
+
     // sleep for polling interval time
     Thread.sleep(Long.parseLong(mySqlConfigProps.getProperty(UPDATER_POLLING_INTERVAL_SECONDS)) * 1000 + 100);
     // Verify account is added to cache by background updater.
@@ -191,77 +195,11 @@ public class MySqlAccountServiceTest {
     // present after close() due to actively executing task.
     mySqlAccountService.getScheduler().shutdownNow();
 
-    assertTrue("Background account updater thread should be stopped",
-        TestUtils.checkAndSleep(0, () -> numThreadsByThisName(MySqlAccountService.MYSQL_ACCOUNT_UPDATER_PREFIX), 1000));
-  }
-
-  /**
-   * Tests disabling of background updater by setting {@link MySqlAccountServiceConfig#UPDATER_POLLING_INTERVAL_SECONDS} to 0.
-   */
-  @Test
-  public void testDisableBackgroundUpdater() throws IOException {
-
-    mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
-    mySqlAccountService = getAccountService();
-    assertEquals("Background account updater thread should not be started", 0,
+    assertEquals("Background account updater thread should be stopped", 0,
         numThreadsByThisName(MySqlAccountService.MYSQL_ACCOUNT_UPDATER_PREFIX));
   }
 
-  /**
-   * Tests disabling account updates by setting {@link MySqlAccountServiceConfig#UPDATE_DISABLED} to true.
-   */
-  @Test
-  public void testUpdateDisabled() throws IOException {
-
-    mySqlConfigProps.setProperty(UPDATE_DISABLED, "true");
-    mySqlAccountService = getAccountService();
-
-    // Verify account update is disabled
-    Account testAccount = new AccountBuilder((short) 1, "testAccount1", Account.AccountStatus.ACTIVE).build();
-    assertFalse("Update accounts should be disabled",
-        mySqlAccountService.updateAccounts(Collections.singletonList(testAccount)));
-  }
-
-  /**
-   * Tests updating a collection of {@link Account}s, where the {@link Account}s are conflicting among themselves
-   * in name.
-   */
-  @Test
-  public void testUpdateNameConflictingAccounts() throws IOException {
-    List<Account> conflictAccounts = new ArrayList<>();
-    conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
-    conflictAccounts.add(new AccountBuilder((short) 2, "a", Account.AccountStatus.INACTIVE).build());
-    assertFalse("Wrong return value from update operation.", mySqlAccountService.updateAccounts(conflictAccounts));
-    assertEquals("UpdateAccountErrorCount in metrics should be 1", 1,
-        accountServiceMetrics.updateAccountErrorCount.getCount());
-  }
-
-  /**
-   * Tests updating a collection of {@link Account}s, where the {@link Account}s are conflicting among themselves
-   * in id.
-   */
-  @Test
-  public void testUpdateIdConflictingAccounts() throws IOException {
-    List<Account> conflictAccounts = new ArrayList<>();
-    conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
-    conflictAccounts.add(new AccountBuilder((short) 1, "b", Account.AccountStatus.INACTIVE).build());
-    assertFalse("Wrong return value from update operation.", mySqlAccountService.updateAccounts(conflictAccounts));
-    assertEquals("UpdateAccountErrorCount in metrics should be 1", 1,
-        accountServiceMetrics.updateAccountErrorCount.getCount());
-  }
-
-  /**
-   * Tests updating a collection of {@link Account}s, where there are duplicate {@link Account}s in id and name.
-   */
-  @Test
-  public void testUpdateDuplicateAccounts() throws IOException {
-    List<Account> conflictAccounts = new ArrayList<>();
-    conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
-    conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
-    assertFalse("Wrong return value from update operation.", mySqlAccountService.updateAccounts(conflictAccounts));
-    assertEquals("UpdateAccountErrorCount in metrics should be 1", 1,
-        accountServiceMetrics.updateAccountErrorCount.getCount());
-  }
+  // TODO: test 2 separate AS, first one adds/updates container and other fetches from DB
 
   /**
    * Tests following cases for name/id conflicts as specified in the JavaDoc of {@link AccountService#updateAccounts(Collection)}.
@@ -282,7 +220,7 @@ public class MySqlAccountServiceTest {
    *
    */
   @Test
-  public void testConflictingUpdatesWithAccounts() throws IOException {
+  public void testConflictingUpdatesWithAccounts() throws Exception {
 
     // write two accounts (1, "a") and (2, "b")
     List<Account> existingAccounts = new ArrayList<>();
@@ -332,7 +270,7 @@ public class MySqlAccountServiceTest {
    * Tests name/id conflicts in Containers
    */
   @Test
-  public void testConflictingUpdatesWithContainers() throws IOException {
+  public void testConflictingUpdatesWithContainers() throws Exception {
     List<Container> containersList = new ArrayList<>();
     containersList.add(
         new ContainerBuilder((short) 1, "c1", Container.ContainerStatus.ACTIVE, "c1", (short) 1).build());
@@ -384,5 +322,12 @@ public class MySqlAccountServiceTest {
         accountServiceMetrics.updateAccountErrorCount.getCount());
   }
 
-  // TODO: add updateContainers tests similar to Helix test
+  // TODO: add updateContainers tests simiilar to Helix test
+
+  private void cleanup() throws SQLException {
+    Connection dbConnection = mySqlAccountStore.getMySqlDataAccessor().getDatabaseConnection();
+    Statement statement = dbConnection.createStatement();
+    statement.executeUpdate("DELETE FROM " + AccountDao.ACCOUNT_TABLE);
+    statement.executeUpdate("DELETE FROM " + ContainerDao.CONTAINER_TABLE);
+  }
 }

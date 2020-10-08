@@ -1,8 +1,8 @@
 language: java
-dist: trusty
+dist: xenial
 sudo: required
 jdk:
-  - oraclejdk8
+  - openjdk11
 before_cache:
   - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
   - rm -fr $HOME/.gradle/caches/*/plugin-resolution/
@@ -13,12 +13,25 @@ cache:
 addons:
   apt:
     packages:
-      - oracle-java8-installer
-      - oracle-java8-unlimited-jce-policy
+      #- oracle-java8-installer
+      #- oracle-java8-unlimited-jce-policy
+services:
+  - mysql
+before_install:
+  - mysql --version
+  - wget https://repo.mysql.com//mysql-apt-config_0.8.10-1_all.deb
+  - sudo dpkg -i mysql-apt-config_0.8.10-1_all.deb
+  - sudo apt-get update -q
+  - sudo apt-get install -q -y --allow-unauthenticated -o Dpkg::Options::=--force-confnew mysql-server
+  - sudo systemctl restart mysql
+  - sudo mysql_upgrade
+  - mysql --version
+  - mysql -e 'CREATE DATABASE AccountMetadata;'
+  - mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;'
 branches:
   except: # don't build tags
     - /^v\d/
-install: skip # skips unnecessary ./gradlew assemble (https://docs.travis-ci.com/user/job-lifecycle/#skipping-the-installation-phase) 
+install: skip # skips unnecessary ./gradlew assemble (https://docs.travis-ci.com/user/job-lifecycle/#skipping-the-installation-phase)
 
 jobs:
   include:
