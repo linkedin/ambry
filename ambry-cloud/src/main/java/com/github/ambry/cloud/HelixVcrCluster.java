@@ -178,7 +178,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
       @Override
       public Task createNewTask(TaskCallbackContext context) {
         return new DeprecatedContainerCloudSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
-            cloudDestination, partitionIdMap.keySet());
+            cloudDestination);
       }
     });
     if (!taskFactoryMap.isEmpty()) {

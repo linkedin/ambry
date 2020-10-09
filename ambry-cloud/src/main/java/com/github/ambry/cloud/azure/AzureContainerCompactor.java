@@ -24,7 +24,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Collection;
-import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,7 +67,7 @@ public class AzureContainerCompactor {
    * @param deprecatedContainers {@link Collection} of deprecatedd {@link Container}s.
    * @throws CloudStorageException in case of any error.
    */
-  public void deprecateContainers(Set<Container> deprecatedContainers, Collection<String> partitionIds)
+  public void deprecateContainers(Collection<Container> deprecatedContainers, Collection<String> partitionIds)
       throws CloudStorageException {
     if (deprecatedContainers.isEmpty()) {
       logger.info("Got empty set to update deprecated containers. Skipping update deprecated containers to cloud.");

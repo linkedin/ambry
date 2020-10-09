@@ -18,13 +18,14 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.VcrTestUtil;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.AccountTestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -53,6 +54,7 @@ public class AzureContainerCompactorIntegrationTest {
 
   private final AzureCloudDestination cloudDestination;
   private final AzureContainerCompactor azureContainerCompactor;
+  private final ClusterMap clusterMap;
 
   public AzureContainerCompactorIntegrationTest() throws ReflectiveOperationException {
     // TODO Create the required cosmos table as well as the required azure blob.
@@ -80,6 +82,7 @@ public class AzureContainerCompactorIntegrationTest {
     MetricRegistry registry = new MetricRegistry();
     CloudDestinationFactory cloudDestinationFactory =
         Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties, registry);
+    clusterMap = VcrTestUtil.createMockClusterMapWithPartitions(Arrays.asList("120", "9034"));
     cloudDestination = (AzureCloudDestination) cloudDestinationFactory.getCloudDestination();
     azureContainerCompactor = new AzureContainerCompactor(cloudDestination.getAzureBlobDataAccessor(),
         cloudDestination.getCosmosDataAccessor(), cloudConfig, null, null);
@@ -97,13 +100,13 @@ public class AzureContainerCompactorIntegrationTest {
   public void testDeprecatedContainers() throws CloudStorageException {
     // Add new containers and verify that they are persisted in cloud.
     Set<Container> containers = generateContainers(5);
-    cloudDestination.deprecateContainers(containers, new ArrayList<>(Arrays.asList("120", "9034")));
+    cloudDestination.deprecateContainers(containers);
     verifyCosmosData(containers);
     verifyCheckpoint(containers);
 
     // Add more containers and verify that they are persisted after the checkpoint.
     containers.addAll(generateContainers(5));
-    cloudDestination.deprecateContainers(containers, new ArrayList<>(Arrays.asList("120", "9034")));
+    cloudDestination.deprecateContainers(containers);
     verifyCosmosData(containers);
     verifyCheckpoint(containers);
   }

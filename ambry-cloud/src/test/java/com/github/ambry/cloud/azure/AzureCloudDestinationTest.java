@@ -29,6 +29,8 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.DummyCloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrMetrics;
+import com.github.ambry.cloud.VcrTestUtil;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -89,6 +91,7 @@ public class AzureCloudDestinationTest {
       AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
   private Properties configProps = new Properties();
   private AzureCloudDestination azureDest;
+  private ClusterMap clusterMap;
   private BlobServiceClient mockServiceClient;
   private BlockBlobClient mockBlockBlobClient;
   private BlobBatchClient mockBlobBatchClient;
@@ -146,9 +149,10 @@ public class AzureCloudDestinationTest {
     configProps.setProperty("clustermap.host.name", "localhost");
     vcrMetrics = new VcrMetrics(new MetricRegistry());
     azureMetrics = new AzureMetrics(new MetricRegistry());
+    clusterMap = VcrTestUtil.createMockClusterMapWithPartitions(Collections.emptyList());
     azureDest =
         new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
-            azureMetrics, defaultAzureReplicationFeedType, false);
+            azureMetrics, defaultAzureReplicationFeedType, clusterMap, false);
   }
 
   @After
@@ -432,7 +436,7 @@ public class AzureCloudDestinationTest {
     azureDest.close();
     azureDest =
         new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
-            azureMetrics, defaultAzureReplicationFeedType, true);
+            azureMetrics, defaultAzureReplicationFeedType, clusterMap, true);
     // Existing blob
     List<Document> docList = Collections.singletonList(createDocumentFromCloudBlobMetadata(blobMetadata));
     Observable<FeedResponse<Document>> feedResponse = mock(Observable.class);
@@ -468,7 +472,7 @@ public class AzureCloudDestinationTest {
     try {
       azureDest =
           new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
-              azureMetrics, defaultAzureReplicationFeedType, false);
+              azureMetrics, defaultAzureReplicationFeedType, clusterMap, false);
       List<BlobId> blobIdList = new ArrayList<>();
       List<Document> docList = new ArrayList<>();
       for (int j = 0; j < numBlobs; j++) {
@@ -604,7 +608,7 @@ public class AzureCloudDestinationTest {
     try {
       updateTimeBasedAzureCloudDestination =
           new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
-              azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME, false);
+              azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME, clusterMap, false);
       testFindEntriesSinceWithUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
       testFindEntriesSinceWithNonUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
     } finally {
@@ -815,7 +819,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testInitClientException() throws IOException {
     CloudDestinationFactory factory =
-        new AzureCloudDestinationFactory(new VerifiableProperties(configProps), new MetricRegistry());
+        new AzureCloudDestinationFactory(new VerifiableProperties(configProps), new MetricRegistry(), clusterMap);
     CloudDestination cloudDestination = null;
     try {
       cloudDestination = factory.getCloudDestination();
@@ -836,7 +840,7 @@ public class AzureCloudDestinationTest {
     AzureCloudDestination dest = null;
     try {
       dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, vcrMetrics, azureMetrics,
-          defaultAzureReplicationFeedType);
+          defaultAzureReplicationFeedType, clusterMap);
       try {
         dest.getAzureBlobDataAccessor().testConnectivity();
         fail("Expected exception");
@@ -865,7 +869,7 @@ public class AzureCloudDestinationTest {
     try {
       // Test without proxy
       dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, vcrMetrics, azureMetrics,
-          defaultAzureReplicationFeedType);
+          defaultAzureReplicationFeedType, clusterMap);
       assertNull("Expected null proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
       assertNull("Expected null proxy for Cosmos",
           dest.getCosmosDataAccessor().getAsyncDocumentClient().getConnectionPolicy().getProxy());
@@ -883,7 +887,7 @@ public class AzureCloudDestinationTest {
     cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     try {
       dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, vcrMetrics, azureMetrics,
-          defaultAzureReplicationFeedType);
+          defaultAzureReplicationFeedType, clusterMap);
       assertNotNull("Expected proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
       InetSocketAddress proxy = dest.getCosmosDataAccessor().getAsyncDocumentClient().getConnectionPolicy().getProxy();
       assertNotNull("Expected proxy for Cosmos", proxy);

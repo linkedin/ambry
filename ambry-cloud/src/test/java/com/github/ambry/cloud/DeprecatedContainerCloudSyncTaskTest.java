@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.ClusterMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -33,7 +34,6 @@ import org.mockito.junit.MockitoJUnitRunner;
 @RunWith(MockitoJUnitRunner.class)
 public class DeprecatedContainerCloudSyncTaskTest {
 
-  private static final Set<String> ALL_PARTITIONS = new HashSet<>(Arrays.asList("1", "2", "3"));
   private final DeprecatedContainerCloudSyncTask deprecatedContainerCloudSyncTask;
   private final AccountService accountService;
   private final LatchBasedInMemoryCloudDestination cloudDestination;
@@ -44,10 +44,9 @@ public class DeprecatedContainerCloudSyncTaskTest {
   public DeprecatedContainerCloudSyncTaskTest() {
     accountService = Mockito.mock(AccountService.class);
     long containerDeletionRetentionDays = 2;
-    cloudDestination = new LatchBasedInMemoryCloudDestination(new ArrayList<>());
+    cloudDestination = new LatchBasedInMemoryCloudDestination(new ArrayList<>(), Mockito.mock(ClusterMap.class));
     deprecatedContainerCloudSyncTask =
-        new DeprecatedContainerCloudSyncTask(accountService, containerDeletionRetentionDays, cloudDestination,
-            ALL_PARTITIONS);
+        new DeprecatedContainerCloudSyncTask(accountService, containerDeletionRetentionDays, cloudDestination);
   }
 
   /**

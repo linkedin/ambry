@@ -63,11 +63,10 @@ public class VcrServerTest {
     props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, StaticVcrClusterFactory.class.getName());
     // Run this one with compaction disabled
     props.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_ENABLED, "false");
-    CloudDestinationFactory cloudDestinationFactory =
-        new LatchBasedInMemoryCloudDestinationFactory(new LatchBasedInMemoryCloudDestination(Collections.emptyList()));
+    props.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS,
+        "com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory");
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
-    VcrServer vcrServer =
-        new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory);
+    VcrServer vcrServer = new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem);
     vcrServer.startup();
     Assert.assertNull("Expected null compactor", vcrServer.getVcrReplicationManager().getCloudStorageCompactor());
     vcrServer.shutdown();
@@ -86,8 +85,8 @@ public class VcrServerTest {
     HelixControllerManager helixControllerManager =
         VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, mockClusterMap);
     Properties props = VcrTestUtil.createVcrProperties("DC1", vcrClusterName, zkConnectString, 12300, 12400, null);
-    CloudDestinationFactory cloudDestinationFactory =
-        new LatchBasedInMemoryCloudDestinationFactory(new LatchBasedInMemoryCloudDestination(Collections.emptyList()));
+    CloudDestinationFactory cloudDestinationFactory = new LatchBasedInMemoryCloudDestinationFactory(
+        new LatchBasedInMemoryCloudDestination(Collections.emptyList(), mockClusterMap));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     VcrServer vcrServer =
         new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory);

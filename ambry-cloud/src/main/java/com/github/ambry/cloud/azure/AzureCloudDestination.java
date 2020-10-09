@@ -27,6 +27,8 @@ import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -50,7 +52,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -76,6 +77,7 @@ class AzureCloudDestination implements CloudDestination {
   private final int queryBatchSize;
   private final boolean isVcr;
   private final CloudConfig cloudConfig;
+  private final ClusterMap clusterMap;
 
   /**
    * Construct an Azure cloud destination from config properties.
@@ -84,9 +86,11 @@ class AzureCloudDestination implements CloudDestination {
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    * @param azureReplicationFeedType {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
+   * @param clusterMap {@link ClusterMap}.
    */
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
-      VcrMetrics vcrMetrics, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType) {
+      VcrMetrics vcrMetrics, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType,
+      ClusterMap clusterMap) {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =
@@ -101,6 +105,7 @@ class AzureCloudDestination implements CloudDestination {
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     this.cloudConfig = cloudConfig;
     isVcr = cloudConfig.cloudIsVcr;
+    this.clusterMap = clusterMap;
     logger.info("Created Azure destination");
   }
 
@@ -112,12 +117,13 @@ class AzureCloudDestination implements CloudDestination {
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    * @param azureReplicationFeedType the {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
+   * @param clusterMap {@link ClusterMap} object.
    * @param isVcr whether this instance is a VCR.
    */
   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
       AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String cosmosDeletedContainerCollectionLink,
       String clusterName, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType,
-      boolean isVcr) {
+      ClusterMap clusterMap, boolean isVcr) {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
@@ -135,6 +141,7 @@ class AzureCloudDestination implements CloudDestination {
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     this.isVcr = isVcr;
     this.cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
+    this.clusterMap = clusterMap;
   }
 
   static CloudStorageException toCloudStorageException(String message, Exception e, AzureMetrics azureMetrics) {
@@ -481,9 +488,9 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void deprecateContainers(Set<Container> deletedContainers, Collection<String> partitionIds)
-      throws CloudStorageException {
-    azureContainerCompactor.deprecateContainers(deletedContainers, partitionIds);
+  public void deprecateContainers(Collection<Container> deletedContainers) throws CloudStorageException {
+    azureContainerCompactor.deprecateContainers(deletedContainers,
+        clusterMap.getAllPartitionIds(null).stream().map(PartitionId::toPathString).collect(Collectors.toSet()));
   }
 
   /**

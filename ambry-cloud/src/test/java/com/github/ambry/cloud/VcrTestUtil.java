@@ -22,6 +22,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
@@ -41,6 +42,8 @@ import org.apache.helix.model.builder.HelixConfigScopeBuilder;
 import org.apache.helix.tools.ClusterSetup;
 import org.apache.helix.zookeeper.api.client.HelixZkClient;
 import org.apache.helix.zookeeper.impl.factory.DedicatedZkClientFactory;
+
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -185,5 +188,21 @@ public class VcrTestUtil {
     props.setProperty("replication.token.flush.delay.seconds", "100000");
     props.setProperty("replication.token.flush.interval.seconds", "500000");
     return props;
+  }
+
+  /**
+   * Utility to create a mock {@link ClusterMap} object with the specified {@link List} of partitionIds.
+   * @param partitionIds {@link List} of partitionIds.
+   * @return {@link ClusterMap} object.
+   */
+  public static ClusterMap createMockClusterMapWithPartitions(List<String> partitionIds) {
+    ClusterMap clusterMap = mock(ClusterMap.class);
+    /*List<? extends PartitionId> partitionList = partitionIds.stream().map(partitionId -> {
+      Partition mockPartition = mock(Partition.class);
+      when(mockPartition.toPathString()).thenReturn(partitionId);
+      return mockPartition;
+    }).collect(Collectors.toList());
+    when(clusterMap.getAllPartitionIds(anyString())).thenReturn((List) partitionList);*/
+    return clusterMap;
   }
 }

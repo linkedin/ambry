@@ -22,7 +22,6 @@ import java.io.OutputStream;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 
 /**
@@ -141,11 +140,9 @@ public interface CloudDestination extends Closeable {
   void stopCompaction();
 
   /**
-   * Deprecate the specified {@link Container}s for specified partitions in cloud.
-   * @param deprecatedContainers {@link Set} of deprecated {@link Container}s.
-   * @param partitionIds {@link Collection} of cloud partition ids from where the container needs to be deprecated.
-   * @throws {@link CloudStorageException} if updating fails.
+   * Deprecate the specified {@link Container}s in cloud.
+   * @param deprecatedContainers {@link Collection} of deprecated {@link Container}s.
+   * @throws {@link CloudStorageException} if the operation fails.
    */
-  void deprecateContainers(Set<Container> deprecatedContainers, Collection<String> partitionIds)
-      throws CloudStorageException;
+  void deprecateContainers(Collection<Container> deprecatedContainers) throws CloudStorageException;
 }
