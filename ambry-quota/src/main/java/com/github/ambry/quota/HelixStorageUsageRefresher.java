@@ -140,6 +140,7 @@ public class HelixStorageUsageRefresher implements StorageUsageRefresher {
   private void refreshOnUpdate(String path) {
     try {
       Map<String, Map<String, Long>> storageUsage = fetchContainerStorageUsageFromPath(path);
+      System.out.println("Getting this from update: " + storageUsage);
       containerStorageUsageRef.set(storageUsage);
       if (callback.get() != null) {
         callback.get().onNewContainerStorageUsage(Collections.unmodifiableMap(storageUsage));

@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * uploads would also increase the storage usage in the in-memory map.
  */
 public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
-  private volatile Mode mode;
+  private volatile Mode mode = Mode.Tracking;
   private volatile Map<String, Map<String, Long>> storageQuota;
   private volatile Map<String, Map<String, Long>> storageUsage;
 
@@ -112,5 +112,13 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
         innerMap.put(innerMapEntry.getKey(), innerMapEntry.getValue());
       }
     }
+  }
+
+  Map<String, Map<String, Long>> getStorageQuota() {
+    return storageQuota;
+  }
+
+  Map<String, Map<String, Long>> getStorageUsage() {
+    return storageUsage;
   }
 }
