@@ -29,7 +29,6 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.DummyCloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrMetrics;
-import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -149,7 +148,7 @@ public class AzureCloudDestinationTest {
     configProps.setProperty("clustermap.host.name", "localhost");
     vcrMetrics = new VcrMetrics(new MetricRegistry());
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    clusterMap = VcrTestUtil.createMockClusterMapWithPartitions(Collections.emptyList());
+    clusterMap = mock(ClusterMap.class);
     azureDest =
         new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
             azureMetrics, defaultAzureReplicationFeedType, clusterMap, false);

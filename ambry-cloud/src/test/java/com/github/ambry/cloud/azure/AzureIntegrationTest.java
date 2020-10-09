@@ -21,7 +21,6 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.DummyCloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrMetrics;
-import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -54,6 +53,7 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,7 +117,7 @@ public class AzureIntegrationTest {
     testProperties.setProperty(CloudConfig.CLOUD_COMPACTION_LOOKBACK_DAYS, "7");
     testProperties.setProperty(AzureCloudConfig.AZURE_PURGE_BATCH_SIZE, "10");
     verifiableProperties = new VerifiableProperties(testProperties);
-    clusterMap = VcrTestUtil.createMockClusterMapWithPartitions(Collections.emptyList());
+    clusterMap = Mockito.mock(ClusterMap.class);
     azureDest = getAzureDestination(verifiableProperties);
     cloudRequestAgent =
         new CloudRequestAgent(new CloudConfig(verifiableProperties), new VcrMetrics(new MetricRegistry()));

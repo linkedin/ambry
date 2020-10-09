@@ -18,7 +18,6 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.CloudStorageException;
-import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -26,7 +25,6 @@ import com.github.ambry.utils.AccountTestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -40,6 +38,7 @@ import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnitRunner;
 
 
@@ -82,7 +81,7 @@ public class AzureContainerCompactorIntegrationTest {
     MetricRegistry registry = new MetricRegistry();
     CloudDestinationFactory cloudDestinationFactory =
         Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties, registry);
-    clusterMap = VcrTestUtil.createMockClusterMapWithPartitions(Arrays.asList("120", "9034"));
+    clusterMap = Mockito.mock(ClusterMap.class);
     cloudDestination = (AzureCloudDestination) cloudDestinationFactory.getCloudDestination();
     azureContainerCompactor = new AzureContainerCompactor(cloudDestination.getAzureBlobDataAccessor(),
         cloudDestination.getCosmosDataAccessor(), cloudConfig, null, null);
