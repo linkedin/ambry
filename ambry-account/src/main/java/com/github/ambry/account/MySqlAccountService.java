@@ -135,9 +135,6 @@ public class MySqlAccountService extends AbstractAccountService {
         infoMapLock.writeLock().lock();
         try {
           AccountInfoMap accountInfoMap = accountInfoMapRef.get();
-          // FIXME: this is incorrect as the accounts from Mysql have no containers, so any containers
-          // in that account that have not also been updated will be lost.
-          // We need to rebuild all the accounts that have been changed (including container changes)
           accountInfoMap.addOrUpdateAccounts(updatedAccountsInDB);
           accountInfoMap.addOrUpdateContainers(updatedContainersInDB);
           // Refresh last modified time of Accounts and Containers in cache

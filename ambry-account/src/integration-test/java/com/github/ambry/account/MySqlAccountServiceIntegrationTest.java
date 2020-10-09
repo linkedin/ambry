@@ -235,19 +235,19 @@ public class MySqlAccountServiceIntegrationTest {
     long lmt = consumerAccountService.accountInfoMapRef.get().getLastModifiedTime();
     assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
 
-    // Update account only (needs bugfix)
-    /*
-    a1 = new AccountBuilder(a1).name("a1-updated").build();
+    // Update account only
+    String newAccountName = "a1-updated";
+    a1 = new AccountBuilder(a1).name(newAccountName).build();
     producerAccountService.updateAccounts(Collections.singletonList(a1));
-    verify(producerAccountStore, never()).addContainers(anyCollection());
-    verify(producerAccountStore, never()).updateContainers(anyCollection());
+    expectedUpdateAccounts++;
+    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, expectedAddContainers,
+        expectedUpdateContainers);
     consumerAccountService.fetchAndUpdateCache();
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
     verify(consumerAccountStore).getNewContainers(eq(lmt));
-    assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
-    */
-
-    // Update a1, update one container, add one container, verify consumer match
+    assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(newAccountName));
+    assertNull("Expected no account with old name", consumerAccountService.getAccountByName(accountName));
+    accountName = newAccountName;
 
     // Update container only
     Container c1Mod = new ContainerBuilder(containers.get(0)).setStatus(ContainerStatus.DELETE_IN_PROGRESS).build();
@@ -284,9 +284,10 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals("Container mismatch", cNew, consumerAccountService.getContainer(accountName, "c4"));
     assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
 
-    // Future: add container in AS1, call AS2.getContainer() to force fetch
-    // Future: add C1 in AS1, add C2 in AS2 (before sync, test conflict resolution)
-    // Future: add C1 in AS1, add C1 in AS2 (should succeed and return existing id)
+    // TODO:
+    // Add container in AS1, call AS2.getContainer() to force fetch
+    // Add C1 in AS1, add C2 in AS2 (before sync, test conflict resolution)
+    // Add C1 in AS1, add C1 in AS2 (should succeed and return existing id)
   }
 
   /**
