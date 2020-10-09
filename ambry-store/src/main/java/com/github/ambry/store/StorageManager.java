@@ -442,6 +442,14 @@ public class StorageManager implements StoreManager {
   }
 
   /**
+   * Helper utility to add replicaId to partitionToDiskManager.
+   * @param replicaId the {@link ReplicaId} whose partition and disk to use.
+   */
+  protected void updatePartitionToDiskManager(ReplicaId replicaId) {
+    partitionToDiskManager.put(replicaId.getPartitionId(), diskToDiskManager.get(replicaId.getDiskId()));
+  }
+
+  /**
    * Implementation of {@link PartitionStateChangeListener} to capture state changes and take actions accordingly.
    */
   private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
@@ -681,14 +689,6 @@ public class StorageManager implements StoreManager {
       }
       partitionNameToReplicaId.remove(partitionName);
       logger.info("Partition {} is successfully dropped on current node", partitionName);
-    }
-
-    /**
-     * Helper utility to add replicaId to partitionToDiskManager.
-     * @param replicaId the {@link ReplicaId} whose partition and disk to use.
-     */
-    protected void updatePartitionToDiskManager(ReplicaId replicaId) {
-      partitionToDiskManager.put(replicaId.getPartitionId(), diskToDiskManager.get(replicaId.getDiskId()));
     }
 
     /**

@@ -146,7 +146,7 @@ public class MySqlAccountServiceTest {
             .build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer2).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, atLeastOnce()).updateAccounts(Collections.singletonList(testAccount));
+    verify(mockMySqlAccountStore, never()).updateAccounts(Collections.singletonList(testAccount));
     verify(mockMySqlAccountStore, atLeastOnce()).addContainers(Collections.singletonList(testContainer2));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
@@ -155,7 +155,7 @@ public class MySqlAccountServiceTest {
     testContainer = new ContainerBuilder(testContainer).setMediaScanDisabled(true).setCacheable(true).build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, atLeastOnce()).updateAccounts(Collections.singletonList(testAccount));
+    verify(mockMySqlAccountStore, never()).updateAccounts(Collections.singletonList(testAccount));
     verify(mockMySqlAccountStore, atLeastOnce()).updateContainers(Collections.singletonList(testContainer));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
