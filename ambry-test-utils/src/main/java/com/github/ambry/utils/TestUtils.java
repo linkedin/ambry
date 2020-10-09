@@ -426,6 +426,16 @@ public class TestUtils {
   }
 
   /**
+   * Periodically check boolean condition until timeout.
+   * @param conditionToCheck the condition to check.
+   * @param timeoutInMs the time out in millisecond.
+   * @return true if condition is true before timeout.
+   */
+  public static boolean checkAndSleep(Supplier<Boolean> conditionToCheck, int timeoutInMs) {
+    return checkAndSleep(true, conditionToCheck, timeoutInMs);
+  }
+
+  /**
    * Generate certain type of {@link StatsSnapshot} based on the given parameters that would have been produced by a
    * {@link com.github.ambry.store.Store}.
    * @param accountCount number of account entry in the {@link StatsSnapshot}

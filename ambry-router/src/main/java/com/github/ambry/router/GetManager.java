@@ -221,7 +221,7 @@ class GetManager {
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     GetRequest getRequest = (GetRequest) routerRequestInfo.getRequest();
     GetOperation getOperation = correlationIdToGetOperation.remove(getRequest.getCorrelationId());
-    if (getOperations.contains(getOperation)) {
+    if (getOperation != null && getOperations.contains(getOperation)) {
       try {
         getOperation.handleResponse(responseInfo, getResponse);
         if (getOperation.isOperationComplete()) {
