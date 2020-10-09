@@ -118,7 +118,7 @@ public class MySqlAccountService extends AbstractAccountService {
    * Fetches all the accounts and containers that have been created or modified in the mysql database since the
    * last modified/sync time and loads into in-memory {@link AccountInfoMap}.
    */
-  private void fetchAndUpdateCache() {
+  void fetchAndUpdateCache() {
     try {
       // Retry connection to mysql if we couldn't set up previously
       createMySqlAccountStore();
@@ -135,9 +135,6 @@ public class MySqlAccountService extends AbstractAccountService {
         infoMapLock.writeLock().lock();
         try {
           AccountInfoMap accountInfoMap = accountInfoMapRef.get();
-          // FIXME: this is incorrect as the accounts from Mysql have no containers, so any containers
-          // in that account that have not also been updated will be lost.
-          // We need to rebuild all the accounts that have been changed (including container changes)
           accountInfoMap.addOrUpdateAccounts(updatedAccountsInDB);
           accountInfoMap.addOrUpdateContainers(updatedContainersInDB);
           // Refresh last modified time of Accounts and Containers in cache
@@ -315,14 +312,18 @@ public class MySqlAccountService extends AbstractAccountService {
 
     // write Accounts and containers to MySql
     for (Account account : accounts) {
-      if (getAccountById(account.getId()) == null) {
+      Account existingAccount = getAccountById(account.getId());
+      if (existingAccount == null) {
         // new account (insert the containers and account into db tables)
         mySqlAccountStore.addAccounts(Collections.singletonList(account));
         mySqlAccountStore.addContainers(account.getAllContainers());
       } else {
         // existing account (update account table)
-        // TODO: Avoid updating account records if only container information changed.
-        mySqlAccountStore.updateAccounts(Collections.singletonList(account));
+        // Avoid updating account records if only container information changed.
+        if (!AccountCollectionSerde.accountToJsonNoContainers(existingAccount)
+            .similar(AccountCollectionSerde.accountToJsonNoContainers(account))) {
+          mySqlAccountStore.updateAccounts(Collections.singletonList(account));
+        }
         updateContainersWithMySqlStore(account.getId(), account.getAllContainers());
       }
     }

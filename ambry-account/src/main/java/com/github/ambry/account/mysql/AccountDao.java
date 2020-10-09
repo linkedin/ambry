@@ -45,12 +45,12 @@ public class AccountDao {
   public AccountDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = dataAccessor;
     insertSql =
-        String.format("insert into %s (%s, %s, %s, %s) values (?, ?, now(), now())", ACCOUNT_TABLE, ACCOUNT_INFO,
+        String.format("insert into %s (%s, %s, %s, %s) values (?, ?, now(3), now(3))", ACCOUNT_TABLE, ACCOUNT_INFO,
             VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
     getSinceSql = String.format("select %s, %s from %s where %s > ?", ACCOUNT_INFO, LAST_MODIFIED_TIME, ACCOUNT_TABLE,
         LAST_MODIFIED_TIME);
     updateSql =
-        String.format("update %s set %s = ?, %s = ?, %s = now() where %s = ? ", ACCOUNT_TABLE, ACCOUNT_INFO, VERSION,
+        String.format("update %s set %s = ?, %s = ?, %s = now(3) where %s = ? ", ACCOUNT_TABLE, ACCOUNT_INFO, VERSION,
             LAST_MODIFIED_TIME, ACCOUNT_ID);
   }
 

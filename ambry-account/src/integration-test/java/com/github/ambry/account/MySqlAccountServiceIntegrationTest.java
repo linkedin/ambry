@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Properties;
 import org.junit.Test;
 
+import static com.github.ambry.account.Container.*;
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
@@ -47,11 +48,12 @@ import static org.mockito.Mockito.*;
  */
 public class MySqlAccountServiceIntegrationTest {
 
-  MySqlAccountService mySqlAccountService;
-  MySqlAccountStore mySqlAccountStore;
-  MySqlAccountServiceConfig accountServiceConfig;
-  AccountServiceMetrics accountServiceMetrics;
-  Properties mySqlConfigProps;
+  private static final String DESCRIPTION = "Indescribable";
+  private final MySqlAccountStore mySqlAccountStore;
+  private final AccountServiceMetrics accountServiceMetrics;
+  private final Properties mySqlConfigProps;
+  private MySqlAccountServiceConfig accountServiceConfig;
+  private MySqlAccountService mySqlAccountService;
 
   public MySqlAccountServiceIntegrationTest() throws Exception {
     mySqlConfigProps = Utils.loadPropsFromResource("mysql.properties");
@@ -195,11 +197,98 @@ public class MySqlAccountServiceIntegrationTest {
     // present after close() due to actively executing task.
     mySqlAccountService.getScheduler().shutdownNow();
 
-    assertEquals("Background account updater thread should be stopped", 0,
-        numThreadsByThisName(MySqlAccountService.MYSQL_ACCOUNT_UPDATER_PREFIX));
+    assertTrue("Background account updater thread should be stopped",
+        TestUtils.checkAndSleep(0, () -> numThreadsByThisName(MySqlAccountService.MYSQL_ACCOUNT_UPDATER_PREFIX), 1000));
   }
 
-  // TODO: test 2 separate AS, first one adds/updates container and other fetches from DB
+  /** Producer-consumer test for multiple account services. */
+  @Test
+  public void testAccountRefresh() throws Exception {
+    MySqlAccountService producerAccountService = mySqlAccountService;
+    MySqlAccountStore producerAccountStore = mySqlAccountStore;
+    // Create second account service with scheduled polling disabled
+    mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
+    accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
+    MySqlAccountStore consumerAccountStore = spy(new MySqlAccountStore(accountServiceConfig));
+    // TODO: need separate metrics for this service?
+    MySqlAccountService consumerAccountService =
+        new MySqlAccountService(accountServiceMetrics, accountServiceConfig, consumerAccountStore);
+
+    // Add account with 3 containers
+    short accountId = 101;
+    String accountName = "a1";
+    // Number of calls expected in producer account store
+    int expectedAddAccounts = 0, expectedUpdateAccounts = 0;
+    int expectedAddContainers = 0, expectedUpdateContainers = 0;
+    List<Container> containers = new ArrayList<>();
+    containers.add(new ContainerBuilder((short) 1, "c1", ContainerStatus.ACTIVE, DESCRIPTION, accountId).build());
+    containers.add(new ContainerBuilder((short) 2, "c2", ContainerStatus.ACTIVE, DESCRIPTION, accountId).build());
+    containers.add(new ContainerBuilder((short) 3, "c3", ContainerStatus.ACTIVE, DESCRIPTION, accountId).build());
+    Account a1 =
+        new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).containers(containers).build();
+    producerAccountService.updateAccounts(Collections.singletonList(a1));
+    expectedAddAccounts++;
+    expectedAddContainers++;
+    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, expectedAddContainers,
+        expectedUpdateContainers);
+    consumerAccountService.fetchAndUpdateCache();
+    long lmt = consumerAccountService.accountInfoMapRef.get().getLastModifiedTime();
+    assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
+
+    // Update account only
+    String newAccountName = "a1-updated";
+    a1 = new AccountBuilder(a1).name(newAccountName).build();
+    producerAccountService.updateAccounts(Collections.singletonList(a1));
+    expectedUpdateAccounts++;
+    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, expectedAddContainers,
+        expectedUpdateContainers);
+    consumerAccountService.fetchAndUpdateCache();
+    verify(consumerAccountStore).getNewAccounts(eq(lmt));
+    verify(consumerAccountStore).getNewContainers(eq(lmt));
+    assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(newAccountName));
+    assertNull("Expected no account with old name", consumerAccountService.getAccountByName(accountName));
+    accountName = newAccountName;
+
+    // Update container only
+    Container c1Mod = new ContainerBuilder(containers.get(0)).setStatus(ContainerStatus.DELETE_IN_PROGRESS).build();
+    containers.set(0, c1Mod);
+    a1 = new AccountBuilder(a1).containers(containers).build();
+    Collection<Container> result =
+        producerAccountService.updateContainers(accountName, Collections.singletonList(c1Mod));
+    // Account should not have been touched
+    expectedUpdateContainers++;
+    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, expectedAddContainers,
+        expectedUpdateContainers);
+    assertEquals("Expected one result", 1, result.size());
+    assertEquals("Container mismatch", c1Mod, result.iterator().next());
+    consumerAccountService.fetchAndUpdateCache();
+    verify(consumerAccountStore).getNewAccounts(eq(lmt));
+    verify(consumerAccountStore).getNewContainers(eq(lmt));
+    assertEquals("Container mismatch", c1Mod, consumerAccountService.getContainer(accountName, "c1"));
+    assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
+    lmt = consumerAccountService.accountInfoMapRef.get().getLastModifiedTime();
+
+    // Add container only
+    Container cNew = makeNewContainer("c4", accountId, ContainerStatus.ACTIVE);
+    result = producerAccountService.updateContainers(accountName, Collections.singletonList(cNew));
+    expectedAddContainers++;
+    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, expectedAddContainers,
+        expectedUpdateContainers);
+    assertEquals("Expected one result", 1, result.size());
+    cNew = result.iterator().next();
+    containers.add(cNew);
+    a1 = new AccountBuilder(a1).containers(containers).build();
+    consumerAccountService.fetchAndUpdateCache();
+    verify(consumerAccountStore).getNewAccounts(eq(lmt));
+    verify(consumerAccountStore).getNewContainers(eq(lmt));
+    assertEquals("Container mismatch", cNew, consumerAccountService.getContainer(accountName, "c4"));
+    assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
+
+    // TODO:
+    // Add container in AS1, call AS2.getContainer() to force fetch
+    // Add C1 in AS1, add C2 in AS2 (before sync, test conflict resolution)
+    // Add C1 in AS1, add C1 in AS2 (should succeed and return existing id)
+  }
 
   /**
    * Tests following cases for name/id conflicts as specified in the JavaDoc of {@link AccountService#updateAccounts(Collection)}.
@@ -272,10 +361,8 @@ public class MySqlAccountServiceIntegrationTest {
   @Test
   public void testConflictingUpdatesWithContainers() throws Exception {
     List<Container> containersList = new ArrayList<>();
-    containersList.add(
-        new ContainerBuilder((short) 1, "c1", Container.ContainerStatus.ACTIVE, "c1", (short) 1).build());
-    containersList.add(
-        new ContainerBuilder((short) 2, "c2", Container.ContainerStatus.ACTIVE, "c2", (short) 1).build());
+    containersList.add(new ContainerBuilder((short) 1, "c1", ContainerStatus.ACTIVE, "c1", (short) 1).build());
+    containersList.add(new ContainerBuilder((short) 2, "c2", ContainerStatus.ACTIVE, "c2", (short) 1).build());
     Account accountToUpdate =
         new AccountBuilder((short) 1, "a", Account.AccountStatus.ACTIVE).containers(containersList).build();
 
@@ -286,15 +373,14 @@ public class MySqlAccountServiceIntegrationTest {
 
     // case A: Verify that changing name of container (1,c1) to (1,c3) replaces existing record
     Container containerToUpdate =
-        new ContainerBuilder((short) 1, "c3", Container.ContainerStatus.ACTIVE, "c3", (short) 1).build();
+        new ContainerBuilder((short) 1, "c3", ContainerStatus.ACTIVE, "c3", (short) 1).build();
     accountToUpdate = new AccountBuilder(accountToUpdate).addOrUpdateContainer(containerToUpdate).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate));
     assertEquals("Mismatch in container information", containerToUpdate,
         mySqlAccountService.getAccountById((short) 1).getContainerById((short) 1));
 
     // case B: Verify addition of new container (3,c3) conflicts in name with existing container (1,c3)
-    containerToUpdate =
-        new ContainerBuilder((short) 3, "c3", Container.ContainerStatus.ACTIVE, "c3", (short) 1).build();
+    containerToUpdate = new ContainerBuilder((short) 3, "c3", ContainerStatus.ACTIVE, "c3", (short) 1).build();
     accountToUpdate =
         new AccountBuilder(accountToUpdate).containers(Collections.singletonList(containerToUpdate)).build();
     assertFalse("Account update should fail due to name conflict in containers",
@@ -304,8 +390,7 @@ public class MySqlAccountServiceIntegrationTest {
         accountServiceMetrics.updateAccountErrorCount.getCount());
 
     // case C: Verify addition of new container (3,c4) is successful
-    containerToUpdate =
-        new ContainerBuilder((short) 3, "c4", Container.ContainerStatus.ACTIVE, "c4", (short) 1).build();
+    containerToUpdate = new ContainerBuilder((short) 3, "c4", ContainerStatus.ACTIVE, "c4", (short) 1).build();
     accountToUpdate = new AccountBuilder(accountToUpdate).addOrUpdateContainer(containerToUpdate).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate));
     assertEquals("Mismatch in container information", containerToUpdate,
@@ -322,8 +407,38 @@ public class MySqlAccountServiceIntegrationTest {
         accountServiceMetrics.updateAccountErrorCount.getCount());
   }
 
-  // TODO: add updateContainers tests simiilar to Helix test
+  /**
+   * Create a new container to add to an account.
+   * @param name container name
+   * @param parentAccountId id of parent account
+   * @param status container status
+   * @return the generated container
+   */
+  private Container makeNewContainer(String name, short parentAccountId, ContainerStatus status) {
+    return new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, name, status, DESCRIPTION, parentAccountId).build();
+  }
 
+  /**
+   * Checks that {@link MySqlAccountStore} methods were called the expected number of times.
+   * @param accountStore
+   * @param expectedAddAccounts
+   * @param expectedUpdateAccounts
+   * @param expectedAddContainers
+   * @param expectedUpdateContainers
+   * @throws Exception
+   */
+  private void verifyStoreInteractions(MySqlAccountStore accountStore, int expectedAddAccounts,
+      int expectedUpdateAccounts, int expectedAddContainers, int expectedUpdateContainers) throws Exception {
+    verify(accountStore, times(expectedAddAccounts)).addAccounts(anyCollection());
+    verify(accountStore, times(expectedUpdateAccounts)).updateAccounts(anyCollection());
+    verify(accountStore, times(expectedAddContainers)).addContainers(anyCollection());
+    verify(accountStore, times(expectedUpdateContainers)).updateContainers(anyCollection());
+  }
+
+  /**
+   * Empties the accounts and containers tables.
+   * @throws SQLException
+   */
   private void cleanup() throws SQLException {
     Connection dbConnection = mySqlAccountStore.getMySqlDataAccessor().getDatabaseConnection();
     Statement statement = dbConnection.createStatement();
