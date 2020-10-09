@@ -17,14 +17,17 @@ package com.github.ambry.frontend;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Container;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.utils.Pair;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.GregorianCalendar;
@@ -32,6 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.frontend.Operations.*;
 
 
 class GetAccountsHandler {
@@ -115,7 +119,16 @@ class GetAccountsHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(frontendMetrics.getAccountsSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        ReadableStreamChannel channel = serializeJsonToChannel(AccountCollectionSerde.accountsToJson(getAccounts()));
+        ReadableStreamChannel channel;
+        if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
+          LOGGER.debug("Received request for getting single container with arguments: {}", restRequest.getArgs());
+          Pair<Account, Container> accountContainerPair = getContainer();
+          channel = serializeJsonToChannel(
+              AccountCollectionSerde.containersToJson(Collections.singletonList(accountContainerPair.getSecond())));
+          restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_ID, accountContainerPair.getFirst().getId());
+        } else {
+          channel = serializeJsonToChannel(AccountCollectionSerde.accountsToJson(getAccounts()));
+        }
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
@@ -151,6 +164,31 @@ class GetAccountsHandler {
         accounts = Collections.singleton(account);
       }
       return accounts;
+    }
+
+    /**
+     * @return a pair of account and the container to get.
+     * @throws RestServiceException
+     */
+    private Pair<Account, Container> getContainer() throws RestServiceException {
+      String accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
+      String containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
+      Container container;
+      Account account = accountService.getAccountByName(accountName);
+      if (account == null) {
+        throw new RestServiceException("Account " + accountName + " is not found.", RestServiceErrorCode.NotFound);
+      }
+      try {
+        container = accountService.getContainer(accountName, containerName);
+      } catch (AccountServiceException e) {
+        throw new RestServiceException("Failed to get container " + containerName + " from account " + accountName,
+            RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
+      }
+      if (container == null) {
+        throw new RestServiceException("Container " + containerName + " in account " + accountName + " is not found.",
+            RestServiceErrorCode.NotFound);
+      }
+      return new Pair<>(account, container);
     }
   }
 }
