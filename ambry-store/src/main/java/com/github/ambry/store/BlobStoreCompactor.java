@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountUtils;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
@@ -201,7 +202,8 @@ class BlobStoreCompactor {
   private void getDeprecatedContainers() {
     deprecatedContainers.clear();
     if (accountService != null) {
-      Set<Container> containers = accountService.getDeprecatedContainers(config.storeContainerDeletionRetentionDays);
+      Set<Container> containers =
+          AccountUtils.getDeprecatedContainers(accountService, config.storeContainerDeletionRetentionDays);
       deprecatedContainers.addAll(containers.stream()
           .map(container -> new Pair<>(container.getParentAccountId(), container.getId()))
           .collect(Collectors.toSet()));

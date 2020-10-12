@@ -23,7 +23,6 @@ import java.util.Set;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnitRunner;
 
@@ -58,7 +57,6 @@ public class DeprecatedContainerCloudSyncTaskTest {
         new HashSet<>(Arrays.asList(Mockito.mock(Container.class), Mockito.mock(Container.class)));
     Set<Container> inactiveSet =
         new HashSet<>(Arrays.asList(Mockito.mock(Container.class), Mockito.mock(Container.class)));
-    Mockito.when(accountService.getDeprecatedContainers(ArgumentMatchers.anyLong())).thenCallRealMethod();
     Mockito.when(accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS))
         .thenReturn(deleteInProgressSet);
     Mockito.when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(inactiveSet);

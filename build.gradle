@@ -411,6 +411,7 @@ project(':ambry-cloud') {
         compile project(':ambry-api'),
             project(':ambry-utils'),
             project(':ambry-commons'),
+            project(':ambry-account'),
             project(':ambry-replication')
         compile "com.azure:azure-storage-blob:$azureStorageVersion"
         compile "com.azure:azure-storage-blob-batch:$azureStorageVersion"

@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountUtils;
 import com.github.ambry.account.Container;
 import java.util.Set;
 import org.apache.helix.task.Task;
@@ -48,7 +49,8 @@ public class DeprecatedContainerCloudSyncTask implements Task {
   @Override
   public TaskResult run() {
     try {
-      Set<Container> deprecatedContainers = accountService.getDeprecatedContainers(containerDeletionRetentionDays);
+      Set<Container> deprecatedContainers =
+          AccountUtils.getDeprecatedContainers(accountService, containerDeletionRetentionDays);
       cloudDestination.deprecateContainers(deprecatedContainers);
     } catch (CloudStorageException cloudStorageException) {
       logger.error("Error in updating deprecated containers from account service to cloud: ", cloudStorageException);

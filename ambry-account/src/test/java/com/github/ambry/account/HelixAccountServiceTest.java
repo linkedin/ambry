@@ -1068,7 +1068,7 @@ public class HelixAccountServiceTest {
   }
 
   /**
-   * Tests {@link AccountService#getDeprecatedContainers(long)}.
+   * Tests {@link AccountUtils#getDeprecatedContainers(AccountService, long)}.
    * @throws Exception
    */
   @Test
@@ -1080,7 +1080,7 @@ public class HelixAccountServiceTest {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     accountService.updateAccounts(idToRefAccountMap.values());
     assertAccountsInAccountService(idToRefAccountMap.values(), 3, accountService);
-    Set<Container> containerSet = accountService.getDeprecatedContainers(0);
+    Set<Container> containerSet = AccountUtils.getDeprecatedContainers(accountService, 0);
     assertEquals("Incorrect number of deprecated containers", 6, containerSet.size());
   }
 
