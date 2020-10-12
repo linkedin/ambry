@@ -14,6 +14,8 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.mysql.MySqlAccountStore;
+import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
@@ -43,25 +45,26 @@ import static org.mockito.Mockito.*;
 public class MySqlAccountServiceTest {
 
   MySqlAccountService mySqlAccountService;
+  MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
   MySqlAccountStore mockMySqlAccountStore;
   AccountServiceMetrics accountServiceMetrics;
   Properties mySqlConfigProps = new Properties();
 
-  public MySqlAccountServiceTest() throws IOException {
-    mySqlConfigProps.setProperty(DB_URL, "");
-    mySqlConfigProps.setProperty(DB_USER, "");
-    mySqlConfigProps.setProperty(DB_PASSWORD, "");
+  public MySqlAccountServiceTest() throws IOException, SQLException {
+    mySqlConfigProps.setProperty(DB_INFO, "");
     mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
     accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
     mockMySqlAccountStore = mock(MySqlAccountStore.class);
+    when(mockMySqlAccountStoreFactory.getMySqlAccountStore(anyBoolean())).thenReturn(mockMySqlAccountStore);
     mySqlAccountService = getAccountService();
   }
 
   // TODO: parametrize to use mock or real store (maybe blank url = test)
   private MySqlAccountService getAccountService() throws IOException {
     return new MySqlAccountService(accountServiceMetrics,
-        new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mockMySqlAccountStore);
+        new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mockMySqlAccountStoreFactory);
   }
 
   /**

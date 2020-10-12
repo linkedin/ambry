@@ -14,12 +14,11 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
-import java.sql.SQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 /**
  * MySql based implementation of {@link AccountServiceFactory}.
@@ -30,6 +29,7 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
   private static final Logger logger = LoggerFactory.getLogger(MySqlAccountServiceFactory.class);
   protected final MySqlAccountServiceConfig accountServiceConfig;
   protected final AccountServiceMetrics accountServiceMetrics;
+  protected final MySqlAccountStoreFactory mySqlAccountStoreFactory;
 
   /**
    * Constructor.
@@ -39,6 +39,7 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
   public MySqlAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this.accountServiceConfig = new MySqlAccountServiceConfig(verifiableProperties);
     this.accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
+    this.mySqlAccountStoreFactory = new MySqlAccountStoreFactory(verifiableProperties);
   }
 
   @Override
@@ -46,21 +47,8 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
     try {
       long startTimeMs = System.currentTimeMillis();
       logger.info("Starting a MySqlAccountService");
-
-      MySqlAccountStore mySqlAccountStore = null;
-      try {
-        mySqlAccountStore = new MySqlAccountStore(accountServiceConfig);
-      } catch (SQLException e) {
-        // Continue account service creation and initialize cache with metadata from local file copy to serve read requests.
-        // Connection to MySql DB will be retried by scheduler thread which syncs changes periodically. Until then, write
-        // requests will be blocked.
-        //TODO: record failure, parse exception to figure out what we did wrong. If it is a non-transient error
-        // like credential issue, we should fail creation of MySqlAccountService and return error.
-        logger.error("MySQL account store creation failed", e);
-      }
-
       MySqlAccountService mySqlAccountService =
-          new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mySqlAccountStore);
+          new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mySqlAccountStoreFactory);
       long spentTimeMs = System.currentTimeMillis() - startTimeMs;
       logger.info("MySqlAccountService started, took {} ms", spentTimeMs);
       accountServiceMetrics.startupTimeInMs.update(spentTimeMs);

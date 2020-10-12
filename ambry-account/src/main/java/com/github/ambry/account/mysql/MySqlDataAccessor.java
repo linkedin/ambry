@@ -13,7 +13,6 @@
  */
 package com.github.ambry.account.mysql;
 
-import com.github.ambry.config.MySqlAccountServiceConfig;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
@@ -40,12 +39,10 @@ public class MySqlDataAccessor {
   private final Map<String, PreparedStatement> statementCache = new HashMap<>();
 
   /** Production constructor */
-  public MySqlDataAccessor(MySqlAccountServiceConfig config) throws SQLException {
-    // TODO: this will become a list of url's with info on which ones are writeable
-    // Q: Can we assume url's share credentials or does each need its own?
-    mysqlUrl = config.dbUrl;
-    mysqlUser = config.dbUser;
-    mysqlPassword = config.dbPassword;
+  public MySqlDataAccessor(MySqlUtils.DbEndpoint dbEndpoint) throws SQLException {
+    mysqlUrl = dbEndpoint.getUrl();
+    mysqlUser = dbEndpoint.getUsername();
+    mysqlPassword = dbEndpoint.getPassword();
     // Initialize driver
     mysqlDriver = DriverManager.getDriver(mysqlUrl);
     // AccountService needs to work if mysql is down.  Mysql can also reboot.
@@ -57,10 +54,10 @@ public class MySqlDataAccessor {
   }
 
   /** Test constructor */
-  public MySqlDataAccessor(MySqlAccountServiceConfig config, Driver mysqlDriver) {
-    mysqlUrl = config.dbUrl;
-    mysqlUser = config.dbUser;
-    mysqlPassword = config.dbPassword;
+  public MySqlDataAccessor(MySqlUtils.DbEndpoint dbEndpoint, Driver mysqlDriver) {
+    mysqlUrl = dbEndpoint.getUrl();
+    mysqlUser = dbEndpoint.getUsername();
+    mysqlPassword = dbEndpoint.getPassword();
     this.mysqlDriver = mysqlDriver;
   }
 
@@ -75,7 +72,6 @@ public class MySqlDataAccessor {
     if (activeConnection != null) {
       activeConnection.close();
     }
-    // TODO: when we have list of hosts, try them in order and track whether the one we get can handle writes
     Properties credentials = new Properties();
     credentials.setProperty("user", mysqlUser);
     credentials.setProperty("password", mysqlPassword);

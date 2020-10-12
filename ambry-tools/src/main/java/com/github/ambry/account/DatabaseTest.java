@@ -14,8 +14,8 @@
 package com.github.ambry.account;
 
 import com.github.ambry.account.mysql.ContainerDao;
+import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.account.mysql.MySqlDataAccessor;
-import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
@@ -54,8 +54,8 @@ public class DatabaseTest {
   }
 
   private static void perfTest(VerifiableProperties verifiableProperties) throws Exception {
-    MySqlAccountServiceConfig config = new MySqlAccountServiceConfig(verifiableProperties);
-    MySqlDataAccessor dataAccessor = new MySqlDataAccessor(config);
+    MySqlDataAccessor dataAccessor =
+        new MySqlAccountStoreFactory(verifiableProperties).getMySqlAccountStore(true).getMySqlDataAccessor();
     ContainerDao containerDao = new ContainerDao(dataAccessor);
     // Use high account id to avoid conflict
     short startAccountId = 30000;
