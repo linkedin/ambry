@@ -145,8 +145,8 @@ class PostAccountsHandler {
       return buildCallback(frontendMetrics.postAccountsReadRequestMetrics, bytesRead -> {
         JSONObject jsonPayload = readJsonFromChannel(channel);
         ReadableStreamChannel outputChannel;
-        if (RestUtils.getRequestPath(restRequest).matchesOperation(UPDATE_ACCOUNT_CONTAINERS)) {
-          logger.debug("Got request for {} with payload {}", UPDATE_ACCOUNT_CONTAINERS, jsonPayload);
+        if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
+          logger.debug("Got request for {} with payload {}", ACCOUNTS_CONTAINERS, jsonPayload);
           Pair<Account, JSONObject> accountAndUpdatedContainers = updateContainers(jsonPayload);
           outputChannel = serializeJsonToChannel(accountAndUpdatedContainers.getSecond());
           restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_ID,

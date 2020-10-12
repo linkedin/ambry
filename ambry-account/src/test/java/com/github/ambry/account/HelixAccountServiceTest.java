@@ -425,7 +425,7 @@ public class HelixAccountServiceTest {
       accountService.updateContainers(refAccountName, Collections.singleton(containerToAdd1));
       fail("should fail because exception occurs when updating ZK");
     } catch (AccountServiceException e) {
-      assertEquals("Mismatch in error code", AccountServiceErrorCode.AccountUpdateError, e.getErrorCode());
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.InternalError, e.getErrorCode());
     }
     mockHelixStore.setExceptionDuringUpdater(false);
 

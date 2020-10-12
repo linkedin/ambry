@@ -156,7 +156,7 @@ public class PostAccountContainersHandlerTest {
   private RestRequest createRestRequest(String requestBody, String accountName, String accountId) throws Exception {
     JSONObject data = new JSONObject();
     data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.POST.name());
-    data.put(MockRestRequest.URI_KEY, Operations.UPDATE_ACCOUNT_CONTAINERS);
+    data.put(MockRestRequest.URI_KEY, Operations.ACCOUNTS_CONTAINERS);
     JSONObject headers = new JSONObject();
     if (accountName != null) {
       headers.put(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
