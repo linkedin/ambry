@@ -27,7 +27,6 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
-import com.github.ambry.utils.Pair;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.GregorianCalendar;
@@ -122,10 +121,10 @@ class GetAccountsHandler {
         ReadableStreamChannel channel;
         if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
           LOGGER.debug("Received request for getting single container with arguments: {}", restRequest.getArgs());
-          Pair<Account, Container> accountContainerPair = getContainer();
-          channel = serializeJsonToChannel(
-              AccountCollectionSerde.containersToJson(Collections.singletonList(accountContainerPair.getSecond())));
-          restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_ID, accountContainerPair.getFirst().getId());
+          Container container = getContainer();
+          channel =
+              serializeJsonToChannel(AccountCollectionSerde.containersToJson(Collections.singletonList(container)));
+          restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_ID, container.getParentAccountId());
         } else {
           channel = serializeJsonToChannel(AccountCollectionSerde.accountsToJson(getAccounts()));
         }
@@ -167,17 +166,13 @@ class GetAccountsHandler {
     }
 
     /**
-     * @return a pair of account and the container to get.
+     * @return requested container.
      * @throws RestServiceException
      */
-    private Pair<Account, Container> getContainer() throws RestServiceException {
+    private Container getContainer() throws RestServiceException {
       String accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
       String containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
       Container container;
-      Account account = accountService.getAccountByName(accountName);
-      if (account == null) {
-        throw new RestServiceException("Account " + accountName + " is not found.", RestServiceErrorCode.NotFound);
-      }
       try {
         container = accountService.getContainer(accountName, containerName);
       } catch (AccountServiceException e) {
@@ -188,7 +183,7 @@ class GetAccountsHandler {
         throw new RestServiceException("Container " + containerName + " in account " + accountName + " is not found.",
             RestServiceErrorCode.NotFound);
       }
-      return new Pair<>(account, container);
+      return container;
     }
   }
 }
