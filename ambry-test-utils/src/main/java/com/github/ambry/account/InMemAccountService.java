@@ -44,12 +44,12 @@ public class InMemAccountService implements AccountService {
           Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
           Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
               Container.DEFAULT_PRIVATE_CONTAINER));
-  private boolean shouldUpdateSucceed = true;
   private final boolean shouldReturnOnlyUnknown;
   private final boolean notifyConsumers;
   private final Map<Short, Account> idToAccountMap = new HashMap<>();
   private final Map<String, Account> nameToAccountMap = new HashMap<>();
   private final Set<Consumer<Collection<Account>>> accountUpdateConsumers = new HashSet<>();
+  private boolean shouldUpdateSucceed = true;
 
   /**
    * Constructor.
@@ -118,7 +118,7 @@ public class InMemAccountService implements AccountService {
     boolean hasSucceeded = updateAccounts(Collections.singletonList(account));
     if (!hasSucceeded) {
       throw new AccountServiceException("Account update failed for " + accountName,
-          AccountServiceErrorCode.AccountUpdateError);
+          AccountServiceErrorCode.InternalError);
     }
     return createdContainers;
   }

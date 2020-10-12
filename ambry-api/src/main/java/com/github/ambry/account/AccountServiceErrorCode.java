@@ -30,7 +30,7 @@ public enum AccountServiceErrorCode {
    */
   ResourceConflict,
   /**
-   * Error occurred when updating account in metadata store.
+   * Account service experienced an internal error.
    */
-  AccountUpdateError
+  InternalError
 }
