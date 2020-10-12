@@ -66,9 +66,7 @@ public class AccountDao {
       insertStatement.setInt(2, account.getSnapshotVersion());
       insertStatement.executeUpdate();
     } catch (SQLException e) {
-      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
-      // For now, assume connection issue.
-      dataAccessor.reset();
+      dataAccessor.onException(e);
       throw e;
     }
   }
@@ -86,9 +84,7 @@ public class AccountDao {
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       return convertResultSet(rs);
     } catch (SQLException e) {
-      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
-      // For now, assume connection issue.
-      dataAccessor.reset();
+      dataAccessor.onException(e);
       throw e;
     }
   }
@@ -106,9 +102,7 @@ public class AccountDao {
       updateStatement.setInt(3, account.getId());
       updateStatement.executeUpdate();
     } catch (SQLException e) {
-      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
-      // For now, assume connection issue.
-      dataAccessor.reset();
+      dataAccessor.onException(e);
       throw e;
     }
   }

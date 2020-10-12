@@ -13,11 +13,13 @@
  */
 package com.github.ambry.account.mysql;
 
+import com.mysql.cj.exceptions.MysqlErrorNumbers;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -49,7 +51,11 @@ public class MySqlDataAccessor {
     try {
       getDatabaseConnection();
     } catch (SQLException e) {
-      // try again later
+      if (isCredentialError(e)) {
+        throw e;
+      } else {
+        // try again later
+      }
     }
   }
 
@@ -93,6 +99,16 @@ public class MySqlDataAccessor {
     statement = connection.prepareStatement(sql);
     statementCache.put(sql, statement);
     return statement;
+  }
+
+  void onException(SQLException e) {
+    if (e instanceof SQLTransientConnectionException) {
+      reset();
+    }
+  }
+
+  public static boolean isCredentialError(SQLException e) {
+    return e.getErrorCode() == MysqlErrorNumbers.ER_ACCESS_DENIED_ERROR;
   }
 
   /**

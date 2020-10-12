@@ -45,8 +45,17 @@ public class MySqlAccountStore {
    */
   public void addAccounts(Collection<Account> accounts) throws SQLException {
     for (Account account : accounts) {
-      accountDao.addAccount(account);
+      addAccount(account);
     }
+  }
+
+  /**
+   * Adds new {@link Account} to Account table in MySql DB
+   * @param account {@link Account} to be inserted
+   * @throws SQLException
+   */
+  public void addAccount(Account account) throws SQLException {
+      accountDao.addAccount(account);
   }
 
   /**
@@ -56,8 +65,17 @@ public class MySqlAccountStore {
    */
   public void addContainers(Collection<Container> containers) throws SQLException {
     for (Container container : containers) {
-      containerDao.addContainer(container.getParentAccountId(), container);
+      addContainer(container);
     }
+  }
+
+  /**
+   * Adds new {@link Container} to Container table in MySql DB
+   * @param container {@link Container} to be inserted
+   * @throws SQLException
+   */
+  public void addContainer(Container container) throws SQLException {
+    containerDao.addContainer(container.getParentAccountId(), container);
   }
 
   /**
@@ -72,14 +90,32 @@ public class MySqlAccountStore {
   }
 
   /**
+   * Updates existing {@link Account} in Account table in MySql DB
+   * @param account {@link Account} to be updated
+   * @throws SQLException
+   */
+  public void updateAccount(Account account) throws SQLException {
+    accountDao.updateAccount(account);
+  }
+
+  /**
    * Updates existing {@link Container}s in Container table in MySql DB
-   * @param containers collection of {@link Account}s to be updated
+   * @param containers collection of {@link Container}s to be updated
    * @throws SQLException
    */
   public void updateContainers(Collection<Container> containers) throws SQLException {
     for (Container container : containers) {
       containerDao.updateContainer(container.getParentAccountId(), container);
     }
+  }
+
+  /**
+   * Updates existing {@link Container} in Container table in MySql DB
+   * @param container {@link Container} to be updated
+   * @throws SQLException
+   */
+  public void updateContainer(Container container) throws SQLException {
+    containerDao.updateContainer(container.getParentAccountId(), container);
   }
 
   /**

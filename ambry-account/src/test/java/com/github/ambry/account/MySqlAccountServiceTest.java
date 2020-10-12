@@ -62,7 +62,7 @@ public class MySqlAccountServiceTest {
   }
 
   // TODO: parametrize to use mock or real store (maybe blank url = test)
-  private MySqlAccountService getAccountService() throws IOException {
+  private MySqlAccountService getAccountService() throws IOException, SQLException {
     return new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mockMySqlAccountStoreFactory);
   }
@@ -124,7 +124,7 @@ public class MySqlAccountServiceTest {
    * 2. update existing {@link Account} by adding new {@link Container} to an existing {@link Account};
    */
   @Test
-  public void testUpdateAccounts() throws SQLException, IOException {
+  public void testUpdateAccounts() throws Exception {
 
     when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(new ArrayList<>());
     Container testContainer =
@@ -159,7 +159,7 @@ public class MySqlAccountServiceTest {
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
     verify(mockMySqlAccountStore, never()).updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, atLeastOnce()).updateContainers(Collections.singletonList(testContainer));
+    verify(mockMySqlAccountStore, atLeastOnce()).updateContainer(testContainer);
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
   }
@@ -202,7 +202,7 @@ public class MySqlAccountServiceTest {
    * Tests disabling of background updater by setting {@link MySqlAccountServiceConfig#UPDATER_POLLING_INTERVAL_SECONDS} to 0.
    */
   @Test
-  public void testDisableBackgroundUpdater() throws IOException {
+  public void testDisableBackgroundUpdater() throws IOException, SQLException {
 
     mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
     mySqlAccountService = getAccountService();
@@ -214,7 +214,7 @@ public class MySqlAccountServiceTest {
    * Tests disabling account updates by setting {@link MySqlAccountServiceConfig#UPDATE_DISABLED} to true.
    */
   @Test
-  public void testUpdateDisabled() throws IOException {
+  public void testUpdateDisabled() throws Exception {
 
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "true");
     mySqlAccountService = getAccountService();
@@ -230,7 +230,7 @@ public class MySqlAccountServiceTest {
    * in name.
    */
   @Test
-  public void testUpdateNameConflictingAccounts() throws IOException {
+  public void testUpdateNameConflictingAccounts() throws Exception {
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 2, "a", Account.AccountStatus.INACTIVE).build());
@@ -244,7 +244,7 @@ public class MySqlAccountServiceTest {
    * in id.
    */
   @Test
-  public void testUpdateIdConflictingAccounts() throws IOException {
+  public void testUpdateIdConflictingAccounts() throws Exception {
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "b", Account.AccountStatus.INACTIVE).build());
@@ -257,7 +257,7 @@ public class MySqlAccountServiceTest {
    * Tests updating a collection of {@link Account}s, where there are duplicate {@link Account}s in id and name.
    */
   @Test
-  public void testUpdateDuplicateAccounts() throws IOException {
+  public void testUpdateDuplicateAccounts() throws Exception {
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build());
@@ -285,7 +285,7 @@ public class MySqlAccountServiceTest {
    *
    */
   @Test
-  public void testConflictingUpdatesWithAccounts() throws IOException {
+  public void testConflictingUpdatesWithAccounts() throws Exception {
 
     // write two accounts (1, "a") and (2, "b")
     List<Account> existingAccounts = new ArrayList<>();
@@ -335,7 +335,7 @@ public class MySqlAccountServiceTest {
    * Tests name/id conflicts in Containers
    */
   @Test
-  public void testConflictingUpdatesWithContainers() throws IOException {
+  public void testConflictingUpdatesWithContainers() throws Exception {
     List<Container> containersList = new ArrayList<>();
     containersList.add(
         new ContainerBuilder((short) 1, "c1", Container.ContainerStatus.ACTIVE, "c1", (short) 1).build());

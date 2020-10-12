@@ -18,6 +18,7 @@ import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
+import com.github.ambry.account.mysql.MySqlDataAccessor;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
@@ -37,6 +38,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
@@ -50,6 +53,7 @@ import static org.mockito.Mockito.*;
  */
 public class MySqlAccountServiceIntegrationTest {
 
+  private static final Logger logger = LoggerFactory.getLogger(MySqlAccountServiceIntegrationTest.class);
   private static final String DESCRIPTION = "Indescribable";
   private final MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
   private MySqlAccountStore mySqlAccountStore;
@@ -77,6 +81,19 @@ public class MySqlAccountServiceIntegrationTest {
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     // Don't initialize account store here as it may have preinitialized data
     return new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
+  }
+
+  @Test
+  public void testBadCredentials() throws Exception {
+    /*
+    mySqlConfigProps.setProperty(DB_USER, "evildoer");
+    accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
+    try {
+      new MySqlAccountStore(accountServiceConfig);
+      fail("Store creation should fail with bad credentials");
+    } catch (SQLException e) {
+      assertTrue(MySqlDataAccessor.isCredentialError(e));
+    }*/
   }
 
   /**
@@ -122,7 +139,7 @@ public class MySqlAccountServiceIntegrationTest {
     Account testAccount = new AccountBuilder((short) 1, "testAccount", Account.AccountStatus.ACTIVE).containers(
         Collections.singleton(testContainer)).build();
     mySqlAccountStore.addAccounts(Collections.singletonList(testAccount));
-    mySqlAccountStore.addContainers(Collections.singleton(testContainer));
+    mySqlAccountStore.addContainer(testContainer);
     mySqlAccountService = getAccountService();
 
     // Test in-memory cache is updated with accounts from mysql store on start up.
@@ -237,7 +254,7 @@ public class MySqlAccountServiceIntegrationTest {
         new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).containers(containers).build();
     producerAccountService.updateAccounts(Collections.singletonList(a1));
     expectedAddAccounts++;
-    expectedAddContainers++;
+    expectedAddContainers += 3;
     verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, expectedAddContainers,
         expectedUpdateContainers);
     consumerAccountService.fetchAndUpdateCache();
@@ -295,8 +312,26 @@ public class MySqlAccountServiceIntegrationTest {
 
     // TODO:
     // Add container in AS1, call AS2.getContainer() to force fetch
-    // Add C1 in AS1, add C2 in AS2 (before sync, test conflict resolution)
     // Add C1 in AS1, add C1 in AS2 (should succeed and return existing id)
+    Container cNewProd = makeNewContainer("c5", accountId, ContainerStatus.ACTIVE);
+    result = producerAccountService.updateContainers(accountName, Collections.singletonList(cNewProd));
+    short newId = result.iterator().next().getId();
+    // Add the same container to second AS with stale cache
+    // Expect it to fail first time (conflict), refresh cache and succeed on retry
+    result = consumerAccountService.updateContainers(accountName, Collections.singletonList(cNewProd));
+    assertEquals(newId, result.iterator().next().getId());
+    assertEquals(1, accountServiceMetrics.updateAccountErrorCount.getCount());
+    assertEquals(1, accountServiceMetrics.conflictRetryCount.getCount());
+
+    // Add C1 in AS1, add C2 in AS2
+    cNewProd = makeNewContainer("c6", accountId, ContainerStatus.ACTIVE);
+    result = producerAccountService.updateContainers(accountName, Collections.singletonList(cNewProd));
+    newId = result.iterator().next().getId();
+    Container cNewCons = makeNewContainer("c7", accountId, ContainerStatus.ACTIVE);
+    result = consumerAccountService.updateContainers(accountName, Collections.singletonList(cNewCons));
+    assertNotSame(newId, result.iterator().next().getId());
+    assertEquals(2, accountServiceMetrics.updateAccountErrorCount.getCount());
+    assertEquals(2, accountServiceMetrics.conflictRetryCount.getCount());
   }
 
   /**
@@ -438,10 +473,10 @@ public class MySqlAccountServiceIntegrationTest {
    */
   private void verifyStoreInteractions(MySqlAccountStore accountStore, int expectedAddAccounts,
       int expectedUpdateAccounts, int expectedAddContainers, int expectedUpdateContainers) throws Exception {
-    verify(accountStore, times(expectedAddAccounts)).addAccounts(anyCollection());
-    verify(accountStore, times(expectedUpdateAccounts)).updateAccounts(anyCollection());
-    verify(accountStore, times(expectedAddContainers)).addContainers(anyCollection());
-    verify(accountStore, times(expectedUpdateContainers)).updateContainers(anyCollection());
+    verify(accountStore, times(expectedAddAccounts)).addAccount(any());
+    verify(accountStore, times(expectedUpdateAccounts)).updateAccount(any());
+    verify(accountStore, times(expectedAddContainers)).addContainer(any());
+    verify(accountStore, times(expectedUpdateContainers)).updateContainer(any());
   }
 
   /**

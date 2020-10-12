@@ -15,12 +15,14 @@ package com.github.ambry.account;
 
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
+import com.github.ambry.account.mysql.MySqlDataAccessor;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -56,9 +58,10 @@ public class MySqlAccountService extends AbstractAccountService {
   // TODO: we could have two stores (master for writes/reads and replica for reads during failover)
   private volatile MySqlAccountStore mySqlAccountStore;
   private final MySqlAccountStoreFactory mySqlAccountStoreFactory;
+  private boolean needRefresh = false;
 
   public MySqlAccountService(AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config,
-      MySqlAccountStoreFactory mySqlAccountStoreFactory) throws IOException {
+      MySqlAccountStoreFactory mySqlAccountStoreFactory) throws SQLException, IOException {
     super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"));
     this.config = config;
     this.mySqlAccountStoreFactory = mySqlAccountStoreFactory;
@@ -66,10 +69,14 @@ public class MySqlAccountService extends AbstractAccountService {
       this.mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore(true);
     } catch (SQLException e) {
       logger.error("MySQL account store creation failed", e);
-      //TODO: If it is a non-transient error like credential issue, we should fail creation of MySqlAccountService and
-      // return error. Else, continue account service creation and initialize cache with metadata from local file copy
+      // If it is a non-transient error like credential issue, creation should fail.
+      // Otherwise, continue account service creation and initialize cache with metadata from local file copy
       // to serve read requests. Connection to MySql DB will be retried during periodic sync. Until then, write
       // requests will be blocked.
+      if (MySqlDataAccessor.isCredentialError(e)) {
+        // Fatal error, fail fast
+        throw e;
+      }
     }
     this.scheduler =
         config.updaterPollingIntervalSeconds > 0 ? Utils.newScheduler(1, MYSQL_ACCOUNT_UPDATER_PREFIX, false) : null;
@@ -121,7 +128,7 @@ public class MySqlAccountService extends AbstractAccountService {
    * Fetches all the accounts and containers that have been created or modified in the mysql database since the
    * last modified/sync time and loads into in-memory {@link AccountInfoMap}.
    */
-  void fetchAndUpdateCache() {
+  synchronized void fetchAndUpdateCache() {
     try {
       // Retry connection to mysql if we couldn't set up previously
       if (mySqlAccountStore == null) {
@@ -152,6 +159,8 @@ public class MySqlAccountService extends AbstractAccountService {
         } finally {
           infoMapLock.writeLock().unlock();
         }
+        // At this point we can safely say cash is refreshed
+        needRefresh = false;
 
         // Persist account metadata in cache to back up file on disk.
         Collection<Account> accountCollection;
@@ -195,7 +204,7 @@ public class MySqlAccountService extends AbstractAccountService {
   //TODO: Revisit this interface method to see if we can throw exception instead of returning boolean so that caller can
   // distinguish between bad input and system error.
   @Override
-  public boolean updateAccounts(Collection<Account> accounts) {
+  public boolean updateAccounts(Collection<Account> accounts) throws AccountServiceException {
     Objects.requireNonNull(accounts, "accounts cannot be null");
     if (accounts.isEmpty()) {
       logger.debug("Empty account collection to update.");
@@ -247,10 +256,11 @@ public class MySqlAccountService extends AbstractAccountService {
       updateAccountsWithMySqlStore(accounts);
     } catch (SQLException e) {
       logger.error("Failed updating accounts={} in MySql DB", accounts, e);
-      // record failure, parse exception to figure out what we did wrong (eg. id or name collision). If it is id collision,
-      // retry with incrementing ID (Account ID generation logic is currently in nuage-ambry, we might need to move it here)
-      accountServiceMetrics.updateAccountErrorCount.inc();
-      return false;
+      try {
+        handleSQLException(e);
+      } catch (AccountServiceException ase) {
+        return false;
+      }
     }
 
     // write added/modified accounts to in-memory cache
@@ -311,6 +321,43 @@ public class MySqlAccountService extends AbstractAccountService {
     return scheduler;
   }
 
+  @Override
+  public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
+      throws AccountServiceException {
+    // TODO: make transactional
+    try {
+      return super.updateContainers(accountName, containers);
+    } catch (AccountServiceException ase) {
+      if (needRefresh) {
+        // refresh and retry (with regenerated containerIds)
+        accountServiceMetrics.conflictRetryCount.inc();
+        this.fetchAndUpdateCache();
+        return super.updateContainers(accountName, containers);
+      } else {
+        throw ase;
+      }
+    }
+  }
+
+  @Override
+  protected void updateResolvedContainers(Account account, Collection<Container> resolvedContainers)
+      throws AccountServiceException {
+    try {
+      updateContainersWithMySqlStore(account.getId(), resolvedContainers);
+    } catch (SQLException e) {
+      logger.error("Failed updating containers {} in MySql DB", resolvedContainers, e);
+      handleSQLException(e);
+    }
+
+    // write added/modified containers to in-memory cache
+    infoMapLock.writeLock().lock();
+    try {
+      accountInfoMapRef.get().addOrUpdateContainers(resolvedContainers);
+    } finally {
+      infoMapLock.writeLock().unlock();
+    }
+  }
+
   /**
    * Updates MySql DB with added or modified {@link Account}s
    * @param accounts collection of {@link Account}s
@@ -321,18 +368,19 @@ public class MySqlAccountService extends AbstractAccountService {
     logger.trace("Start updating accounts={} into MySql DB", accounts);
 
     // write Accounts and containers to MySql
+    // TODO: make transactional
     for (Account account : accounts) {
       Account existingAccount = getAccountById(account.getId());
       if (existingAccount == null) {
         // new account (insert the containers and account into db tables)
-        mySqlAccountStore.addAccounts(Collections.singletonList(account));
+        mySqlAccountStore.addAccount(account);
         mySqlAccountStore.addContainers(account.getAllContainers());
       } else {
         // existing account (update account table)
         // Avoid updating account records if only container information changed.
         if (!AccountCollectionSerde.accountToJsonNoContainers(existingAccount)
             .similar(AccountCollectionSerde.accountToJsonNoContainers(account))) {
-          mySqlAccountStore.updateAccounts(Collections.singletonList(account));
+          mySqlAccountStore.updateAccount(account);
         }
         updateContainersWithMySqlStore(account.getId(), account.getAllContainers());
       }
@@ -369,13 +417,40 @@ public class MySqlAccountService extends AbstractAccountService {
           accountInfoMap.getContainerByIdForAccount(containerToUpdate.getParentAccountId(), containerToUpdate.getId());
       if (containerInCache == null) {
         // new container added (insert into container table)
-        mySqlAccountStore.addContainers(Collections.singletonList(containerToUpdate));
+        mySqlAccountStore.addContainer(containerToUpdate);
       } else {
         if (!containerInCache.equals(containerToUpdate)) {
           // existing container modified (update container table)
-          mySqlAccountStore.updateContainers(Collections.singletonList(containerToUpdate));
+          mySqlAccountStore.updateContainer(containerToUpdate);
         }
       }
+    }
+  }
+
+  private void handleSQLException(SQLException e) throws AccountServiceException {
+    // record failure, parse exception to figure out what we did wrong (eg. id or name collision). If it is id collision,
+    // retry with incrementing ID (Account ID generation logic is currently in nuage-ambry, we might need to move it here)
+    accountServiceMetrics.updateAccountErrorCount.inc();
+    if (e instanceof SQLIntegrityConstraintViolationException) {
+      needRefresh = true;
+      SQLIntegrityConstraintViolationException icve = (SQLIntegrityConstraintViolationException) e;
+      String message;
+      if (icve.getMessage().contains("containers.accountContainer")) {
+        // Example: Duplicate entry '101-5' for key 'containers.accountContainer'
+        // duplicate container id: need to update cache and retry
+        message = "Duplicate containerId";
+      } else if (icve.getMessage().contains("containers.uniqueName")) {
+        // duplicate container name: need to update cache but retry may fail
+        message = "Duplicate container name";
+      } else {
+        message = "Constraint violation";
+      }
+      throw new AccountServiceException(message, AccountServiceErrorCode.ResourceConflict);
+    } else if (MySqlDataAccessor.isCredentialError(e)) {
+      // TODO: BadCredentials
+      throw new AccountServiceException("Invalid db credentials", AccountServiceErrorCode.BadRequest);
+    } else {
+      throw new AccountServiceException(e.getMessage(), AccountServiceErrorCode.AccountUpdateError);
     }
   }
 }

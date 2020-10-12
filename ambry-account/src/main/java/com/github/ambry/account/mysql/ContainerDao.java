@@ -19,6 +19,8 @@ import com.github.ambry.account.ContainerBuilder;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
+import java.sql.SQLTransientException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
@@ -74,9 +76,7 @@ public class ContainerDao {
       insertStatement.setString(2, container.toJson().toString());
       insertStatement.executeUpdate();
     } catch (SQLException e) {
-      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
-      // For now, assume connection issue.
-      dataAccessor.reset();
+      dataAccessor.onException(e);
       throw e;
     }
   }
@@ -96,9 +96,7 @@ public class ContainerDao {
       updateStatement.setInt(3, container.getId());
       updateStatement.executeUpdate();
     } catch (SQLException e) {
-      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
-      // For now, assume connection issue.
-      dataAccessor.reset();
+      dataAccessor.onException(e);
       throw e;
     }
   }
@@ -115,8 +113,7 @@ public class ContainerDao {
     try (ResultSet rs = getByAccountStatement.executeQuery()) {
       return convertResultSet(rs);
     } catch (SQLException e) {
-      // record failure, parse exception, ...
-      dataAccessor.reset();
+      dataAccessor.onException(e);
       throw e;
     }
   }
@@ -134,8 +131,7 @@ public class ContainerDao {
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       return convertResultSet(rs);
     } catch (SQLException e) {
-      // record failure, parse exception, ...
-      dataAccessor.reset();
+      dataAccessor.onException(e);
       throw e;
     }
   }

@@ -83,7 +83,7 @@ public interface AccountService extends Closeable {
    *                      operation has failed, and none of the account has been updated. This is an either succeed-all
    *                      or fail-all operation.
    */
-  public boolean updateAccounts(Collection<Account> accounts);
+  public boolean updateAccounts(Collection<Account> accounts) throws AccountServiceException;
 
   /**
    * Gets all the {@link Account}s in this {@code AccountService}. The {@link Account}s <em>MUST</em> have their

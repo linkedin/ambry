@@ -71,7 +71,7 @@ public class InMemoryUnknownAccountServiceTest {
    * Tests {@code null} inputs.
    */
   @Test
-  public void testNullInputs() {
+  public void testNullInputs() throws Exception {
     try {
       accountService.updateAccounts(null);
       fail("should have thrown");
@@ -90,7 +90,7 @@ public class InMemoryUnknownAccountServiceTest {
    * Tests adding/removing {@link Consumer}.
    */
   @Test
-  public void testAddRemoveConsumer() {
+  public void testAddRemoveConsumer() throws Exception {
     List<Collection<Account>> updatedAccountsReceivedByConsumers = new ArrayList<>();
     // add consumers
     Consumer<Collection<Account>> accountUpdateConsumer = updatedAccounts -> {

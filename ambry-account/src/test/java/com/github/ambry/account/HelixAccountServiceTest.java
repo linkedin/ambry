@@ -194,7 +194,7 @@ public class HelixAccountServiceTest {
    * exists on the {@code ZooKeeper}.
    */
   @Test
-  public void testCreateAccount() {
+  public void testCreateAccount() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     assertEquals("The number of account in HelixAccountService is incorrect", 0,
         accountService.getAllAccounts().size());
@@ -689,7 +689,7 @@ public class HelixAccountServiceTest {
    * Tests a number of bad inputs.
    */
   @Test
-  public void testNullInputs() throws IOException {
+  public void testNullInputs() throws Exception {
     try {
       new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier, null, mockRouter).getAccountService();
       fail("should have thrown");
@@ -1049,7 +1049,7 @@ public class HelixAccountServiceTest {
    * account update request should be rejected.
    */
   @Test
-  public void testUpdateDisabled() {
+  public void testUpdateDisabled() throws Exception {
     helixConfigProps.setProperty(HelixAccountServiceConfig.UPDATE_DISABLED, "true");
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
