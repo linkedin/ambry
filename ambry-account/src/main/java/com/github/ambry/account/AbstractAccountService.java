@@ -42,8 +42,8 @@ abstract class AbstractAccountService implements AccountService {
   protected final ReentrantLock lock = new ReentrantLock();
   protected final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers =
       new CopyOnWriteArraySet<>();
-  private final AccountServiceConfig config;
   protected final AccountServiceMetrics accountServiceMetrics;
+  private final AccountServiceConfig config;
 
   public AbstractAccountService(AccountServiceConfig config, AccountServiceMetrics accountServiceMetrics) {
     this.config = config;
@@ -114,7 +114,8 @@ abstract class AbstractAccountService implements AccountService {
           if (existingContainer.isSameContainer(container)) {
             // If an exactly same container already exists, treat as no-op (may be retry after partial failure).
             // But include it in the list returned to caller to provide the containerId.
-            logger.info("Request to create container with existing name and properties: {}", existingContainer.toJson().toString());
+            logger.info("Request to create container with existing name and properties: {}",
+                existingContainer.toJson().toString());
             existingUnchangedContainers.add(existingContainer);
           } else {
             throw new AccountServiceException("There is a conflicting container in account " + accountName,
@@ -153,7 +154,7 @@ abstract class AbstractAccountService implements AccountService {
       // TODO: updateAccounts should throw exception with specific error code
       if (!hasSucceeded) {
         throw new AccountServiceException("Account update failed for " + accountName,
-            AccountServiceErrorCode.AccountUpdateError);
+            AccountServiceErrorCode.InternalError);
       }
     }
 
@@ -179,7 +180,7 @@ abstract class AbstractAccountService implements AccountService {
    * Logs and notifies account update {@link Consumer}s about any new account changes/creations.
    * @param newAccountInfoMap the new {@link AccountInfoMap} that has been set.
    * @param oldAccountInfoMap the {@link AccountInfoMap} that was cached before this change.
-   * @param isCalledFromListener {@code true} if the caller is the account update listener, {@@code false} otherwise.
+   * @param isCalledFromListener {@code true} if the caller is the account update listener, {@code false} otherwise.
    */
   protected void notifyAccountUpdateConsumers(AccountInfoMap newAccountInfoMap, AccountInfoMap oldAccountInfoMap,
       boolean isCalledFromListener) {

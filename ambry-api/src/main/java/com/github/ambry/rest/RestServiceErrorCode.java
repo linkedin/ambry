@@ -228,8 +228,6 @@ public enum RestServiceErrorCode {
         return NotFound;
       case ResourceConflict:
         return Conflict;
-      case AccountUpdateError:
-        return InternalServerError;
       case BadRequest:
         return BadRequest;
       default:

@@ -17,9 +17,11 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountCollectionSerde;
+import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -78,9 +80,11 @@ public class GetAccountsHandlerTest {
       assertEquals("Accounts do not match", new HashSet<>(expectedAccounts),
           new HashSet<>(AccountCollectionSerde.accountsFromJson(RestTestUtils.getJsonizedResponseBody(channel))));
     };
-    testAction.accept(createRestRequest(null, null), accountService.getAllAccounts());
-    testAction.accept(createRestRequest(account.getName(), null), Collections.singleton(account));
-    testAction.accept(createRestRequest(null, Short.toString(account.getId())), Collections.singleton(account));
+    testAction.accept(createRestRequest(null, null, null, Operations.ACCOUNTS), accountService.getAllAccounts());
+    testAction.accept(createRestRequest(account.getName(), null, null, Operations.ACCOUNTS),
+        Collections.singleton(account));
+    testAction.accept(createRestRequest(null, Short.toString(account.getId()), null, Operations.ACCOUNTS),
+        Collections.singleton(account));
   }
 
   /**
@@ -97,13 +101,14 @@ public class GetAccountsHandlerTest {
           e -> assertEquals("Unexpected error code", expectedErrorCode, e.getErrorCode()));
     };
     // cannot supply both ID and name
-    testAction.accept(createRestRequest(existingAccount.getName(), Short.toString(existingAccount.getId())),
-        RestServiceErrorCode.BadRequest);
+    testAction.accept(createRestRequest(existingAccount.getName(), Short.toString(existingAccount.getId()), null,
+        Operations.ACCOUNTS), RestServiceErrorCode.BadRequest);
     // non-numerical ID
-    testAction.accept(createRestRequest(null, "ABC"), RestServiceErrorCode.InvalidArgs);
+    testAction.accept(createRestRequest(null, "ABC", null, Operations.ACCOUNTS), RestServiceErrorCode.InvalidArgs);
     // account that doesn't exist
-    testAction.accept(createRestRequest(nonExistentAccount.getName(), null), RestServiceErrorCode.NotFound);
-    testAction.accept(createRestRequest(null, Short.toString(nonExistentAccount.getId())),
+    testAction.accept(createRestRequest(nonExistentAccount.getName(), null, null, Operations.ACCOUNTS),
+        RestServiceErrorCode.NotFound);
+    testAction.accept(createRestRequest(null, Short.toString(nonExistentAccount.getId()), null, Operations.ACCOUNTS),
         RestServiceErrorCode.NotFound);
   }
 
@@ -115,7 +120,8 @@ public class GetAccountsHandlerTest {
   public void securityServiceDenialTest() throws Exception {
     IllegalStateException injectedException = new IllegalStateException("@@expected");
     TestUtils.ThrowingRunnable testAction =
-        () -> sendRequestGetResponse(createRestRequest(null, null), new MockRestResponseChannel());
+        () -> sendRequestGetResponse(createRestRequest(null, null, null, Operations.ACCOUNTS),
+            new MockRestResponseChannel());
     ThrowingConsumer<IllegalStateException> errorChecker = e -> assertEquals("Wrong exception", injectedException, e);
     securityServiceFactory.exceptionToReturn = injectedException;
     securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.ProcessRequest;
@@ -130,20 +136,68 @@ public class GetAccountsHandlerTest {
     TestUtils.assertException(IllegalStateException.class, testAction, errorChecker);
   }
 
+  /**
+   * Test success case of getting single container.
+   * @throws Exception
+   */
+  @Test
+  public void getSingleContainerSuccessTest() throws Exception {
+    Account existingAccount = accountService.createAndAddRandomAccount();
+    Container existingContainer = existingAccount.getAllContainers().iterator().next();
+    ThrowingBiConsumer<RestRequest, Container> testAction = (request, expectedContainer) -> {
+      RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      ReadableStreamChannel channel = sendRequestGetResponse(request, restResponseChannel);
+      assertNotNull("There should be a response", channel);
+      Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+      assertEquals("Content-type is not as expected", RestUtils.JSON_CONTENT_TYPE,
+          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+      assertEquals("Content-length is not as expected", channel.getSize(),
+          Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+      assertEquals("Container does not match", Collections.singletonList(expectedContainer),
+          AccountCollectionSerde.containersFromJson(RestTestUtils.getJsonizedResponseBody(channel),
+              existingAccount.getId()));
+    };
+    testAction.accept(
+        createRestRequest(existingAccount.getName(), null, existingContainer.getName(), Operations.ACCOUNTS_CONTAINERS),
+        existingContainer);
+  }
+
+  /**
+   * Test failure case of getting single container.
+   * @throws Exception
+   */
+  @Test
+  public void getSingleContainerFailureTest() throws Exception {
+    ThrowingBiConsumer<RestRequest, RestServiceErrorCode> testAction = (request, expectedErrorCode) -> {
+      TestUtils.assertException(RestServiceException.class,
+          () -> sendRequestGetResponse(request, new MockRestResponseChannel()),
+          e -> assertEquals("Unexpected error code", expectedErrorCode, e.getErrorCode()));
+    };
+    // 1. invalid header (i.e. missing container name)
+    testAction.accept(createRestRequest("test-account", null, null, Operations.ACCOUNTS_CONTAINERS),
+        RestServiceErrorCode.MissingArgs);
+    // 2. account not found
+    testAction.accept(createRestRequest("fake-account", null, "fake-container", Operations.ACCOUNTS_CONTAINERS),
+        RestServiceErrorCode.NotFound);
+  }
+
   // helpers
   // general
 
   /**
-   * Creates a {@link RestRequest} for a GET /accounts request
+   * Creates a {@link RestRequest} for a GET /accounts or /accounts/containers request
    * @param accountName if set, add this account name as a request header.
    * @param accountId if set, add this account ID as a request header.
+   * @param containerName if set, add this container name as request header.
+   * @param operation the operation this request will perform.
    * @return the {@link RestRequest}
    * @throws Exception
    */
-  private RestRequest createRestRequest(String accountName, String accountId) throws Exception {
+  private RestRequest createRestRequest(String accountName, String accountId, String containerName, String operation)
+      throws Exception {
     JSONObject data = new JSONObject();
     data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET.name());
-    data.put(MockRestRequest.URI_KEY, Operations.ACCOUNTS);
+    data.put(MockRestRequest.URI_KEY, operation);
     JSONObject headers = new JSONObject();
     if (accountName != null) {
       headers.put(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
@@ -151,8 +205,13 @@ public class GetAccountsHandlerTest {
     if (accountId != null) {
       headers.put(RestUtils.Headers.TARGET_ACCOUNT_ID, accountId);
     }
+    if (containerName != null) {
+      headers.put(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
+    }
     data.put(MockRestRequest.HEADERS_KEY, headers);
-    return new MockRestRequest(data, null);
+    RestRequest restRequest = new MockRestRequest(data, null);
+    restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, RequestPath.parse(restRequest, null, null));
+    return restRequest;
   }
 
   /**

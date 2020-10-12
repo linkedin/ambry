@@ -489,11 +489,11 @@ public class FrontendIntegrationTest {
   }
 
   /**
-   * Tests for the account get/update API.
+   * Tests for the account/container get/update API.
    */
   @Test
   public void accountApiTest() throws Exception {
-    getAccountsAndVerify();
+    verifyGetAccountsAndContainer();
 
     // update and add accounts
     Map<Short, Account> accountsById =
@@ -505,7 +505,7 @@ public class FrontendIntegrationTest {
     editedAccount = new AccountBuilder(editedAccount).addOrUpdateContainer(editedContainer).build();
     updateAccountsAndVerify(editedAccount, ACCOUNT_SERVICE.generateRandomAccount());
 
-    getAccountsAndVerify();
+    verifyGetAccountsAndContainer();
 
     // Test adding a container to the account
     Container newContainer = ACCOUNT_SERVICE.getRandomContainer(editedAccount.getId());
@@ -787,8 +787,8 @@ public class FrontendIntegrationTest {
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.status());
     assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
-    assertTrue("No " + RestUtils.Headers.CREATION_TIME,
-        response.headers().get(RestUtils.Headers.CREATION_TIME, null) != null);
+    assertNotNull("No " + RestUtils.Headers.CREATION_TIME,
+        response.headers().get(RestUtils.Headers.CREATION_TIME, null));
     assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
     String blobId = response.headers().get(HttpHeaderNames.LOCATION, null);
     assertNotNull("Blob ID from POST should not be null", blobId);
@@ -1500,7 +1500,7 @@ public class FrontendIntegrationTest {
     String accountName = account.getName();
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
-    FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.UPDATE_ACCOUNT_CONTAINERS, headers,
+    FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.ACCOUNTS_CONTAINERS, headers,
         ByteBuffer.wrap(containersUpdateJson.toString().getBytes(StandardCharsets.UTF_8)));
     ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
@@ -1523,9 +1523,10 @@ public class FrontendIntegrationTest {
   }
 
   /**
-   * Call the {@code GET /accounts} API and verify the response for all accounts managed by {@link #ACCOUNT_SERVICE}.
+   * Call the {@code GET /accounts} and {@code Get /accounts/containers} API and verify the response for all accounts
+   * managed by {@link #ACCOUNT_SERVICE}.
    */
-  private void getAccountsAndVerify() throws Exception {
+  private void verifyGetAccountsAndContainer() throws Exception {
     Collection<Account> expectedAccounts = ACCOUNT_SERVICE.getAllAccounts();
     // fetch snapshot of all accounts
     assertEquals("GET /accounts returned wrong result", new HashSet<>(expectedAccounts), getAccounts(null, null));
@@ -1533,9 +1534,37 @@ public class FrontendIntegrationTest {
     for (Account account : expectedAccounts) {
       assertEquals("Fetching of single account by name failed", Collections.singleton(account),
           getAccounts(account.getName(), null));
-      assertEquals("Fetching of single account by name failed", Collections.singleton(account),
+      assertEquals("Fetching of single account by id failed", Collections.singleton(account),
           getAccounts(null, account.getId()));
     }
+    // fetch container one by one from specific account
+    Account account = expectedAccounts.iterator().next();
+    for (Container container : account.getAllContainers()) {
+      assertEquals("Mismatch in container", container, getContainer(account.getName(), container.getName()));
+    }
+  }
+
+  /**
+   * Get a container from given account.
+   * @param accountName name of account which container belongs to.
+   * @param containerName name of container
+   * @return the requested container.
+   * @throws Exception
+   */
+  private Container getContainer(String accountName, String containerName) throws Exception {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
+    headers.add(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
+
+    FullHttpRequest request = buildRequest(HttpMethod.GET, Operations.ACCOUNTS_CONTAINERS, headers, null);
+    ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
+    short accountId = Short.parseShort(response.headers().get(RestUtils.Headers.TARGET_ACCOUNT_ID));
+    ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
+    return AccountCollectionSerde.containersFromJson(
+        new JSONObject(new String(content.array(), StandardCharsets.UTF_8)), accountId).iterator().next();
   }
 
   /**
