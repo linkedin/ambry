@@ -48,21 +48,6 @@ public class ContainerDeletionEntry {
    * @param containerId container id.
    * @param accountId account id of the container.
    * @param deleteTriggerTimestamp timestamp at which delete was triggered.
-   */
-  public ContainerDeletionEntry(short containerId, short accountId, long deleteTriggerTimestamp) {
-    this.containerId = containerId;
-    this.accountId = accountId;
-    this.deleteTriggerTimestamp = deleteTriggerTimestamp;
-    this.isDeleted = true;
-    this.deletePendingPartitions = Collections.emptySet();
-    this.version = JSON_VERSION_1;
-  }
-
-  /**
-   * Constructor for {@link ContainerDeletionEntry}.
-   * @param containerId container id.
-   * @param accountId account id of the container.
-   * @param deleteTriggerTimestamp timestamp at which delete was triggered.
    * @param isDeleted {@code true} if all container blobs are deleted in cloud. {@code false} otherwise.
    * @param partitionIds {@link Collection} of all the cloud partition ids from which container is yet to be deleted.
    */
