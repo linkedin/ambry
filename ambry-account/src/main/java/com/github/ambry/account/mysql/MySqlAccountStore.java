@@ -34,7 +34,7 @@ public class MySqlAccountStore {
     containerDao = new ContainerDao(mySqlDataAccessor);
   }
 
-  MySqlDataAccessor getMySqlDataAccessor() {
+  public MySqlDataAccessor getMySqlDataAccessor() {
     return mySqlDataAccessor;
   }
 

@@ -17,10 +17,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
-import com.github.ambry.account.mysql.MySqlDataAccessor;
+import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.HelixPropertyStoreConfig;
-import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.SystemTime;
@@ -86,7 +85,6 @@ public class MySqlAccountsDBTool {
   static final String RELATIVE_ACCOUNT_METADATA_PATH = "/account_metadata/full_data";
 
   private final MySqlAccountStore mySqlAccountStore;
-  private final MySqlDataAccessor mySqlDataAccessor;
   private final HelixPropertyStore<ZNRecord> helixPropertyStore;
   private final String fullZKAccountMetadataPath;
 
@@ -187,8 +185,7 @@ public class MySqlAccountsDBTool {
 
   public MySqlAccountsDBTool(VerifiableProperties verifiableProperties, String zkServer) throws SQLException {
 
-    this.mySqlDataAccessor = new MySqlDataAccessor(new MySqlAccountServiceConfig(verifiableProperties));
-    this.mySqlAccountStore = new MySqlAccountStore(new MySqlAccountServiceConfig(verifiableProperties));
+    this.mySqlAccountStore = new MySqlAccountStoreFactory(verifiableProperties).getMySqlAccountStore(true);
     //Create helix property store
     HelixPropertyStoreConfig helixPropertyStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
     this.helixPropertyStore = CommonUtils.createHelixPropertyStore(zkServer, helixPropertyStoreConfig, null);
@@ -198,7 +195,7 @@ public class MySqlAccountsDBTool {
   }
 
   private void cleanup() throws SQLException {
-    Statement statement = mySqlDataAccessor.getDatabaseConnection().createStatement();
+    Statement statement = mySqlAccountStore.getMySqlDataAccessor().getDatabaseConnection().createStatement();
     int numDeleted = statement.executeUpdate("delete from " + ContainerDao.CONTAINER_TABLE);
     logger.info("Deleted {} containers", numDeleted);
     int numDeletedAccounts = statement.executeUpdate("delete from " + AccountDao.ACCOUNT_TABLE);

@@ -16,6 +16,8 @@ package com.github.ambry.account;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.ContainerDao;
+import com.github.ambry.account.mysql.MySqlAccountStore;
+import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
@@ -49,7 +51,8 @@ import static org.mockito.Mockito.*;
 public class MySqlAccountServiceIntegrationTest {
 
   private static final String DESCRIPTION = "Indescribable";
-  private final MySqlAccountStore mySqlAccountStore;
+  private final MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
+  private MySqlAccountStore mySqlAccountStore;
   private final AccountServiceMetrics accountServiceMetrics;
   private final Properties mySqlConfigProps;
   private MySqlAccountServiceConfig accountServiceConfig;
@@ -61,7 +64,10 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
-    mySqlAccountStore = spy(new MySqlAccountStore(accountServiceConfig));
+    mySqlAccountStore =
+        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore(true));
+    mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
+    when(mockMySqlAccountStoreFactory.getMySqlAccountStore(anyBoolean())).thenReturn(mySqlAccountStore);
     // Start with empty database
     cleanup();
     mySqlAccountService = getAccountService();
@@ -70,7 +76,7 @@ public class MySqlAccountServiceIntegrationTest {
   private MySqlAccountService getAccountService() throws Exception {
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     // Don't initialize account store here as it may have preinitialized data
-    return new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mySqlAccountStore);
+    return new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
   }
 
   /**
@@ -209,10 +215,13 @@ public class MySqlAccountServiceIntegrationTest {
     // Create second account service with scheduled polling disabled
     mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
-    MySqlAccountStore consumerAccountStore = spy(new MySqlAccountStore(accountServiceConfig));
     // TODO: need separate metrics for this service?
+    MySqlAccountStore consumerAccountStore =
+        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore(true));
+    MySqlAccountStoreFactory mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
+    when(mockMySqlAccountStoreFactory.getMySqlAccountStore(anyBoolean())).thenReturn(consumerAccountStore);
     MySqlAccountService consumerAccountService =
-        new MySqlAccountService(accountServiceMetrics, accountServiceConfig, consumerAccountStore);
+        new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
 
     // Add account with 3 containers
     short accountId = 101;

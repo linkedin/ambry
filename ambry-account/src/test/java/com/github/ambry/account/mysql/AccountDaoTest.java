@@ -73,9 +73,9 @@ public class AccountDaoTest {
   static MySqlDataAccessor getDataAccessor(Connection mockConnection) throws SQLException {
     Driver mockDriver = mock(Driver.class);
     when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
-    MySqlUtils.DbEndpoint dbEndPoint =
+    MySqlUtils.DbEndpoint dbEndpoint =
         new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "ambry", "ambry");
-    MySqlDataAccessor dataAccessor = new MySqlDataAccessor(dbEndPoint, mockDriver);
+    MySqlDataAccessor dataAccessor = new MySqlDataAccessor(dbEndpoint, mockDriver);
     when(dataAccessor.getDatabaseConnection()).thenReturn(mockConnection);
     return dataAccessor;
   }

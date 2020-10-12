@@ -30,8 +30,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   /**
    * Serialized json containing the information about all mysql end points. This information should be of the following form:
    * <pre>
-   * {
-   *   "dbInfo" : [
+   *   [
    *     {
    *       "url":"mysql-host1"
    *       "datacenter":"dc1",
@@ -54,7 +53,6 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
    * 	     "password":"password"
    *     }
    *   ]
-   * }
    * </pre>
    */
   @Config(DB_INFO)

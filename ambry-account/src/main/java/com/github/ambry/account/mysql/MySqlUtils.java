@@ -27,7 +27,6 @@ import org.json.JSONObject;
  */
 public class MySqlUtils {
 
-  static final String DBINFO_STR = "dbInfo";
   static final String URL_STR = "url";
   static final String DATACENTER_STR = "datacenter";
   static final String ISWRITEABLE_STR = "isWriteable";
@@ -43,8 +42,7 @@ public class MySqlUtils {
   public static Map<String, List<DbEndpoint>> getDbEndpointsPerDC(String dbInfoJsonString) throws JSONException {
     Map<String, List<DbEndpoint>> dcToDbEndpoints = new HashMap<>();
 
-    JSONObject jsonObject = new JSONObject(dbInfoJsonString);
-    JSONArray dbInfo = jsonObject.getJSONArray(DBINFO_STR);
+    JSONArray dbInfo = new JSONArray(dbInfoJsonString);
     for (int i = 0; i < dbInfo.length(); i++) {
       JSONObject entry = dbInfo.getJSONObject(i);
       String url = entry.getString(URL_STR);

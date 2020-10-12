@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import static com.github.ambry.account.mysql.MySqlUtils.*;
 
 
@@ -46,8 +47,8 @@ public class MySqlAccountStoreFactory {
    * @throws SQLException
    */
   public MySqlAccountStore getMySqlAccountStore(boolean writeable) throws SQLException {
-    Map<String, List<MySqlUtils.DbEndpoint>> dcToMySqlDBEndPoints = getDbEndpointsPerDC(accountServiceConfig.dbInfo);
-    for (List<MySqlUtils.DbEndpoint> dbEndpoints : dcToMySqlDBEndPoints.values()) {
+    Map<String, List<MySqlUtils.DbEndpoint>> dcToMySqlDBEndpoints = getDbEndpointsPerDC(accountServiceConfig.dbInfo);
+    for (List<MySqlUtils.DbEndpoint> dbEndpoints : dcToMySqlDBEndpoints.values()) {
       // TODO: Can have logic to try mysql end point on local DC first
       for (MySqlUtils.DbEndpoint dbEndpoint : dbEndpoints) {
         if ((dbEndpoint.isWriteable() && writeable) || (!dbEndpoint.isWriteable() && !writeable)) {
