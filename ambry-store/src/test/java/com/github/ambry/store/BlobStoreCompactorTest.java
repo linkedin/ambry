@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.account.AccountUtils;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -48,7 +47,6 @@ import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 
 import static com.github.ambry.store.CuratedLogIndexState.*;
@@ -1005,9 +1003,6 @@ public class BlobStoreCompactorTest {
       cleanedUpSize += indexEntry.getValue().getSize();
     }
 
-    Mockito.when(
-        AccountUtils.getDeprecatedContainers(ArgumentMatchers.any(AccountService.class), ArgumentMatchers.anyLong()))
-        .thenCallRealMethod();
     Mockito.when(accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS))
         .thenReturn(deleteInProgressSet);
     Mockito.when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(InactiveSet);
