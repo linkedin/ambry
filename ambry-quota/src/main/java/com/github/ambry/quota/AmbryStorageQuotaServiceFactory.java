@@ -15,9 +15,7 @@ package com.github.ambry.quota;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.CommonUtils;
-import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.StorageQuotaConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.util.concurrent.ScheduledExecutorService;
 import org.apache.helix.store.HelixPropertyStore;
@@ -32,10 +30,14 @@ public class AmbryStorageQuotaServiceFactory implements StorageQuotaServiceFacto
   private static final String STORAGE_QUOTA_SERVICE_PREFIX = "storage-quota-service";
   private final StorageQuotaService storageQuotaService;
 
-  public AmbryStorageQuotaServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry)
+  /**
+   * Constructor to create {@link AmbryStorageQuotaServiceFactory}.
+   * @param storageQuotaConfig The {@link StorageQuotaConfig}.
+   * @param metricRegistry The {@link MetricRegistry} to register new metrics.
+   * @throws Exception
+   */
+  public AmbryStorageQuotaServiceFactory(StorageQuotaConfig storageQuotaConfig, MetricRegistry metricRegistry)
       throws Exception {
-    StorageQuotaConfig storageQuotaConfig = new StorageQuotaConfig(verifiableProperties);
-
     HelixPropertyStore<ZNRecord> helixStore =
         CommonUtils.createHelixPropertyStore(storageQuotaConfig.zkClientConnectAddress,
             storageQuotaConfig.helixPropertyRootPath, null);

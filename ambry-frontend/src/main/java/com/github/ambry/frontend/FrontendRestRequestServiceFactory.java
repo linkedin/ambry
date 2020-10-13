@@ -17,6 +17,7 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.StorageQuotaService;
 import com.github.ambry.quota.StorageQuotaServiceFactory;
@@ -88,8 +89,9 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
               urlSigningService, idSigningService, accountAndContainerInjector);
       StorageQuotaService storageQuotaService = null;
       if (frontendConfig.enableStorageQuotaService) {
+        StorageQuotaConfig storageQuotaConfig = new StorageQuotaConfig(verifiableProperties);
         storageQuotaService =
-            Utils.<StorageQuotaServiceFactory>getObj(frontendConfig.storageQuotaServiceFactory, verifiableProperties,
+            Utils.<StorageQuotaServiceFactory>getObj(frontendConfig.storageQuotaServiceFactory, storageQuotaConfig,
                 clusterMap.getMetricRegistry()).getStorageQuotaService();
       }
       return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
