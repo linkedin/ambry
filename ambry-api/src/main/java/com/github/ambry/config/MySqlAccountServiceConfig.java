@@ -28,7 +28,8 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   private static final String MAX_BACKUP_FILE_COUNT = MYSQL_ACCOUNT_SERVICE_PREFIX + "max.backup.file.count";
 
   /**
-   * Serialized json containing the information about all mysql end points. This information should be of the following form:
+   * Serialized json array containing the information about all mysql end points.
+   * This information should be of the following form:
    * <pre>
    *   [
    *     {

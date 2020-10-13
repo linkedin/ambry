@@ -30,6 +30,8 @@ before_install:
   - mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;'
   - mysql -e 'CREATE DATABASE ambry_container_storage_stats;'
   - mysql -e 'USE ambry_container_storage_stats; SOURCE ./ambry-server/src/main/resources/AmbryContainerStorageStats.ddl;'
+  - mysql -e 'CREATE DATABASE AmbryNamedBlobs;'
+  - mysql -e 'USE AmbryNamedBlobs; SOURCE ./ambry-named-mysql/src/main/resources/NamedBlobsSchema.ddl;'
 branches:
   except: # don't build tags
     - /^v\d/
