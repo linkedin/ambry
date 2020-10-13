@@ -13,9 +13,13 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.account.Container;
 import com.github.ambry.cloud.azure.AzureReplicationFeed;
+import com.github.ambry.cloud.azure.ContainerDeletionEntry;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.cloud.azure.CosmosUpdateTimeFindToken;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Pair;
@@ -25,9 +29,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -114,6 +120,8 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final ChangeFeed changeFeed = new ChangeFeed();
   private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
   private final AzureReplicationFeed.FeedType azureReplicationFeedType;
+  private final Set<ContainerDeletionEntry> deprecatedContainers = new HashSet<>();
+  private final ClusterMap clusterMap;
 
   private final static AzureReplicationFeed.FeedType DEFAULT_AZURE_REPLICATION_FEED_TYPE =
       AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
@@ -122,13 +130,15 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
    * Instantiate {@link LatchBasedInMemoryCloudDestination}.
    * Use this constructor for tests where type of azure replication feed doesn't matter.
    * @param blobIdsToTrack a list of blobs that {@link LatchBasedInMemoryCloudDestination} tracks.
+   * @param clusterMap {@link ClusterMap} object.
    */
-  public LatchBasedInMemoryCloudDestination(List<BlobId> blobIdsToTrack) {
+  public LatchBasedInMemoryCloudDestination(List<BlobId> blobIdsToTrack, ClusterMap clusterMap) {
     logger.debug("Constructing LatchBasedInMemoryCloudDestination with {} tracked blobs", blobIdsToTrack.size());
     this.blobIdsToTrack.addAll(blobIdsToTrack);
     uploadLatch = new CountDownLatch(blobIdsToTrack.size());
     downloadLatch = new CountDownLatch(blobIdsToTrack.size());
     this.azureReplicationFeedType = DEFAULT_AZURE_REPLICATION_FEED_TYPE;
+    this.clusterMap = clusterMap;
   }
 
   /**
@@ -137,12 +147,13 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
    * @param azureReplicationFeedType {@link AzureReplicationFeed.FeedType} object.
    */
   public LatchBasedInMemoryCloudDestination(List<BlobId> blobIdsToTrack,
-      AzureReplicationFeed.FeedType azureReplicationFeedType) {
+      AzureReplicationFeed.FeedType azureReplicationFeedType, ClusterMap clusterMap) {
     logger.debug("Constructing LatchBasedInMemoryCloudDestination with {} tracked blobs", blobIdsToTrack.size());
     this.blobIdsToTrack.addAll(blobIdsToTrack);
     uploadLatch = new CountDownLatch(blobIdsToTrack.size());
     downloadLatch = new CountDownLatch(blobIdsToTrack.size());
     this.azureReplicationFeedType = azureReplicationFeedType;
+    this.clusterMap = clusterMap;
   }
 
   @Override
@@ -365,6 +376,14 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   public void stopCompaction() {
   }
 
+  @Override
+  public void deprecateContainers(Collection<Container> deletedContainers) {
+    this.deprecatedContainers.addAll(deletedContainers.stream()
+        .map(container -> ContainerDeletionEntry.fromContainer(container,
+            clusterMap.getAllPartitionIds(null).stream().map(PartitionId::toPathString).collect(Collectors.toSet())))
+        .collect(Collectors.toList()));
+  }
+
   boolean doesBlobExist(BlobId blobId) {
     return map.containsKey(blobId);
   }
@@ -411,5 +430,12 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   public boolean awaitDownload(long duration, TimeUnit timeUnit) throws InterruptedException {
     return downloadLatch.await(duration, timeUnit);
+  }
+
+  /**
+   * @return {@code deletedContainers}.
+   */
+  public Set<ContainerDeletionEntry> getDeletedContainers() {
+    return deprecatedContainers;
   }
 }

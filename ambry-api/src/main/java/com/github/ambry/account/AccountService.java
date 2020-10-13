@@ -38,14 +38,14 @@ public interface AccountService extends Closeable {
    * @param accountId The id of an {@link Account} to get.
    * @return The {@link Account} with the specified id. {@code null} if such an {@link Account} does not exist.
    */
-  public Account getAccountById(short accountId);
+  Account getAccountById(short accountId);
 
   /**
    * Gets an {@link Account} by its name.
    * @param accountName The name of an {@link Account} to get. Cannot be {@code null}.
    * @return The {@link Account} with the specified name. {@code null} if such an {@link Account} does not exist.
    */
-  public Account getAccountByName(String accountName);
+  Account getAccountByName(String accountName);
 
   /**
    * <p>
@@ -83,21 +83,21 @@ public interface AccountService extends Closeable {
    *                      operation has failed, and none of the account has been updated. This is an either succeed-all
    *                      or fail-all operation.
    */
-  public boolean updateAccounts(Collection<Account> accounts);
+  boolean updateAccounts(Collection<Account> accounts);
 
   /**
    * Gets all the {@link Account}s in this {@code AccountService}. The {@link Account}s <em>MUST</em> have their
    * ids and names one-to-one mapped.
    * @return A collection of {@link Account}s.
    */
-  public Collection<Account> getAllAccounts();
+  Collection<Account> getAllAccounts();
 
   /**
    * Adds a {@link Consumer} for newly created or updated {@link Account}s.
    * @param accountUpdateConsumer The {@link Consumer} to add. Cannot be {@code null}.
    * @return {@code true} if the specified {@link Consumer} was not previously added, {@code false} otherwise.
    */
-  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
+  boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
 
   /**
    * Removes a previously-added {@link Consumer} from the {@link AccountService}.
@@ -105,7 +105,7 @@ public interface AccountService extends Closeable {
    * @return {@code true} if the {@link Consumer} exists and removed, {@code false} if the {@link Consumer} does not
    *          exist.
    */
-  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
+  boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
 
   /**
    * Add or update a collection of containers in an existing account.

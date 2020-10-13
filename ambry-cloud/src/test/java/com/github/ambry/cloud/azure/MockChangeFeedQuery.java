@@ -31,7 +31,7 @@ public class MockChangeFeedQuery extends CosmosDataAccessor {
   private int continuationTokenCounter = -1;
 
   MockChangeFeedQuery() {
-    super(mock(AsyncDocumentClient.class), "", mock(VcrMetrics.class), mock(AzureMetrics.class));
+    super(mock(AsyncDocumentClient.class), "", "", mock(VcrMetrics.class), mock(AzureMetrics.class));
   }
 
   /**

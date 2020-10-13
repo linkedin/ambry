@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.Timer;
+import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
@@ -46,12 +47,15 @@ import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.observables.BlockingObservable;
@@ -67,6 +71,10 @@ public class CosmosDataAccessor {
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
+  private static final String DEPRECATED_CONTAINERS_QUERY = "SELECT TOP %d from c order by c.deleteTriggerTime";
+  private static final String CONTAINER_DELETION_TABLE = "DeletedContainer";
+  private static final String DELETED_CONTAINER_ID_COLUMN = "id";
+  private static final String CONTAINER_ID_ACCOUNT_ID_DELIM = "_";
   static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
   static final String PROPERTY_CONTINUATION = "continuation";
   static final String PROPERTY_DELETED = "deleted";
@@ -74,6 +82,7 @@ public class CosmosDataAccessor {
   private final AsyncDocumentClient asyncDocumentClient;
   private final CloudRequestAgent requestAgent;
   private final String cosmosCollectionLink;
+  private final String cosmosDeletedContainerCollectionLink;
   private final AzureMetrics azureMetrics;
   private Callable<?> updateCallback = null;
   private final int continuationTokenLimitKb;
@@ -108,6 +117,7 @@ public class CosmosDataAccessor {
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
 
     this.cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
+    this.cosmosDeletedContainerCollectionLink = azureCloudConfig.cosmosDeletedContainerCollectionLink;
     this.continuationTokenLimitKb = azureCloudConfig.cosmosContinuationTokenLimitKb;
     this.requestChargeThreshold = azureCloudConfig.cosmosRequestChargeThreshold;
     this.purgeBatchSize = azureCloudConfig.cosmosPurgeBatchSize;
@@ -115,10 +125,11 @@ public class CosmosDataAccessor {
   }
 
   /** Test constructor */
-  CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, VcrMetrics vcrMetrics,
-      AzureMetrics azureMetrics) {
+  CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink,
+      String cosmosDeletedContainerCollectionLink, VcrMetrics vcrMetrics, AzureMetrics azureMetrics) {
     this.asyncDocumentClient = asyncDocumentClient;
     this.cosmosCollectionLink = cosmosCollectionLink;
+    this.cosmosDeletedContainerCollectionLink = cosmosDeletedContainerCollectionLink;
     this.continuationTokenLimitKb = AzureCloudConfig.DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT;
     this.requestChargeThreshold = AzureCloudConfig.DEFAULT_COSMOS_REQUEST_CHARGE_THRESHOLD;
     this.purgeBatchSize = AzureCloudConfig.DEFAULT_PURGE_BATCH_SIZE;
@@ -520,6 +531,54 @@ public class CosmosDataAccessor {
   }
 
   /**
+   * Add the {@link ContainerDeletionEntry} for newly deprecated {@link Container}s to cosmos table.
+   * @param deprecatedContainers {@link Set} of deleted {@link ContainerDeletionEntry}s.
+   * @return the max deletion trigger time of all the added containers to serve as checkpoint for future update.
+   * @throws {@link DocumentClientException} in case of any error.
+   */
+  public long deprecateContainers(Set<ContainerDeletionEntry> deprecatedContainers) throws DocumentClientException {
+    long latestContainerDeletionTimestamp = -1;
+    for (ContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
+      try {
+        executeCosmosAction(() -> asyncDocumentClient.createDocument(cosmosDeletedContainerCollectionLink,
+            containerDeletionEntry.toJson(), new RequestOptions(), true).toBlocking().single(),
+            azureMetrics.documentCreateTime);
+        if (containerDeletionEntry.getDeleteTriggerTimestamp() > latestContainerDeletionTimestamp) {
+          latestContainerDeletionTimestamp = containerDeletionEntry.getDeleteTriggerTimestamp();
+        }
+      } catch (DocumentClientException dex) {
+        if (dex.getStatusCode() == HttpConstants.StatusCodes.CONFLICT) {
+          logger.info("Container with accountid {} and containerid {} already exists. Skipping.",
+              containerDeletionEntry.getAccountId(), containerDeletionEntry.getContainerId());
+        } else {
+          throw dex;
+        }
+      }
+    }
+    return latestContainerDeletionTimestamp;
+  }
+
+  /**
+   * @return a {@link Set} of {@link ContainerDeletionEntry} objects from cosmosdb that are not marked as deleted.
+   */
+  public Set<ContainerDeletionEntry> getDeprecatedContainers(int maxEntries) {
+    String query = String.format(DEPRECATED_CONTAINERS_QUERY, maxEntries);
+    Timer timer = new Timer();
+    Iterator<FeedResponse<Document>> iterator =
+        executeCosmosQuery(cosmosDeletedContainerCollectionLink, null, new SqlQuerySpec(query), new FeedOptions(),
+            timer).getIterator();
+    Set<ContainerDeletionEntry> containerDeletionEntries = new HashSet<>();
+    while (iterator.hasNext()) {
+      FeedResponse<Document> response = iterator.next();
+      response.getResults()
+          .iterator()
+          .forEachRemaining(
+              doc -> containerDeletionEntries.add(ContainerDeletionEntry.fromJson(new JSONObject(doc.toJson()))));
+    }
+    return containerDeletionEntries;
+  }
+
+  /**
    * Create {@link CloudBlobMetadata} object from {@link Document} object.
    * @param document {@link Document} object from which {@link CloudBlobMetadata} object will be created.
    * @return {@link CloudBlobMetadata} object.
@@ -571,11 +630,29 @@ public class CosmosDataAccessor {
    */
   private BlockingObservable<FeedResponse<Document>> executeCosmosQuery(String partitionPath, SqlQuerySpec sqlQuerySpec,
       FeedOptions feedOptions, Timer timer) {
+    return executeCosmosQuery(cosmosCollectionLink, partitionPath, sqlQuerySpec, feedOptions, timer);
+  }
+
+  /**
+   * Utility method to call Cosmos document query method and record the query time.
+   * @param collectionLink collection link of the collection to execute query on.
+   * @param partitionPath the partition to query.
+   * @param sqlQuerySpec the DocumentDB query to execute.
+   * @param feedOptions {@link FeedOptions} object specifying the options associated with the method.
+   * @param timer the {@link Timer} to use to record query time (excluding waiting).
+   * @return {@link BlockingObservable} object containing the query response.
+   */
+  BlockingObservable<FeedResponse<Document>> executeCosmosQuery(String collectionLink, String partitionPath,
+      SqlQuerySpec sqlQuerySpec, FeedOptions feedOptions, Timer timer) {
     azureMetrics.documentQueryCount.inc();
-    logger.debug("Running query on partition {}: {}", partitionPath, sqlQuerySpec.getQueryText());
+    if (!Utils.isNullOrEmpty(partitionPath)) {
+      logger.debug("Running query on partition {}: {}", partitionPath, sqlQuerySpec.getQueryText());
+    } else {
+      logger.debug("Running query on partition {}", sqlQuerySpec.getQueryText());
+    }
     Timer.Context operationTimer = timer.time();
     try {
-      return asyncDocumentClient.queryDocuments(cosmosCollectionLink, sqlQuerySpec, feedOptions).toBlocking();
+      return asyncDocumentClient.queryDocuments(collectionLink, sqlQuerySpec, feedOptions).toBlocking();
     } finally {
       operationTimer.stop();
     }

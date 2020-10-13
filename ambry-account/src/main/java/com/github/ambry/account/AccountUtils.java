@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +24,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Utils for Account-related operations.
  */
-class AccountUtils {
+public class AccountUtils {
   private static final Logger logger = LoggerFactory.getLogger(AccountUtils.class);
 
   /**
@@ -49,5 +50,24 @@ class AccountUtils {
       }
     }
     return res;
+  }
+
+  /**
+   * Returns {@link Set} of deprecated {@link Container}s ready for deletion from {@link AccountService}.
+   * @param accountService {@link AccountService} object.
+   * @param containerDeletionRetentionDays Number of days upto which deprecated containers can be marked as ACTIVE.
+   * @return {@link Set} of deprecated {@link Container}s.
+   */
+  public static Set<Container> getDeprecatedContainers(AccountService accountService,
+      long containerDeletionRetentionDays) {
+    Set<Container> deprecatedContainers = new HashSet<>();
+    accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
+      if (container.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(containerDeletionRetentionDays)
+          <= System.currentTimeMillis()) {
+        deprecatedContainers.add(container);
+      }
+    });
+    deprecatedContainers.addAll(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE));
+    return deprecatedContainers;
   }
 }

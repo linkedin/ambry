@@ -68,6 +68,7 @@ public class AzureStorageCompactorTest {
   private final String storageConnection =
       "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
   private final String collectionLink = "ambry/metadata";
+  private final String cosmosDeletedContainerCollectionLink = "ambry/deletedContainer";
   private final String clusterName = "main";
   private final int blobSize = 1024;
   private final String partitionPath = String.valueOf(partition);
@@ -103,7 +104,8 @@ public class AzureStorageCompactorTest {
     AzureBlobDataAccessor azureBlobDataAccessor =
         new AzureBlobDataAccessor(mockServiceClient, mockBlobBatchClient, clusterName, azureMetrics);
     CosmosDataAccessor cosmosDataAccessor =
-        new CosmosDataAccessor(mockumentClient, collectionLink, vcrMetrics, azureMetrics);
+        new CosmosDataAccessor(mockumentClient, collectionLink, cosmosDeletedContainerCollectionLink, vcrMetrics,
+            azureMetrics);
     azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
 

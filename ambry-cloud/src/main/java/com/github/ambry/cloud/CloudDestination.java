@@ -13,14 +13,15 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.replication.FindToken;
 import java.io.Closeable;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 
 /**
@@ -137,4 +138,11 @@ public interface CloudDestination extends Closeable {
    * Halt any compactions in progress.
    */
   void stopCompaction();
+
+  /**
+   * Deprecate the specified {@link Container}s in cloud.
+   * @param deprecatedContainers {@link Collection} of deprecated {@link Container}s.
+   * @throws {@link CloudStorageException} if the operation fails.
+   */
+  void deprecateContainers(Collection<Container> deprecatedContainers) throws CloudStorageException;
 }

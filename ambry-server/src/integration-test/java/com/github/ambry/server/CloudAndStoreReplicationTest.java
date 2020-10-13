@@ -173,7 +173,8 @@ public class CloudAndStoreReplicationTest {
         ServerTestUtil.createBlobIds(blobCount, recoveryCluster.getClusterMap(), accountId, containerId, partitionId);
 
     // Create cloud destination and start vcr server.
-    latchBasedInMemoryCloudDestination = new LatchBasedInMemoryCloudDestination(cloudBlobIds);
+    latchBasedInMemoryCloudDestination =
+        new LatchBasedInMemoryCloudDestination(cloudBlobIds, recoveryCluster.getClusterMap());
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
     vcrServer =

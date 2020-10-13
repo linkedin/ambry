@@ -15,6 +15,8 @@ package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.jmx.JmxReporter;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
@@ -131,14 +133,22 @@ public class VcrServer {
       // verify the configs
       properties.verify();
 
-      virtualReplicatorCluster =
-          ((VirtualReplicatorClusterFactory) Utils.getObj(cloudConfig.virtualReplicatorClusterFactoryClass, cloudConfig,
-              clusterMapConfig, clusterMap)).getVirtualReplicatorCluster();
-
       // initialize cloud destination
       if (cloudDestinationFactory == null) {
-        cloudDestinationFactory = Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry);
+        cloudDestinationFactory =
+            Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry, clusterMap);
       }
+      cloudDestination = cloudDestinationFactory.getCloudDestination();
+
+      // TODO Make sure that config.updaterPollingIntervalMs value is large (~one day) for VCR.
+      AccountServiceFactory accountServiceFactory =
+          Utils.getObj(serverConfig.serverAccountServiceFactory, properties, registry);
+      AccountService accountService = accountServiceFactory.getAccountService();
+
+      virtualReplicatorCluster =
+          ((VirtualReplicatorClusterFactory) Utils.getObj(cloudConfig.virtualReplicatorClusterFactoryClass, cloudConfig,
+              clusterMapConfig, clusterMap, accountService, storeConfig,
+              cloudDestination)).getVirtualReplicatorCluster();
 
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
@@ -148,7 +158,6 @@ public class VcrServer {
 
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
-      cloudDestination = cloudDestinationFactory.getCloudDestination();
       VcrMetrics vcrMetrics = new VcrMetrics(registry);
       CloudStorageManager cloudStorageManager =
           new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);

@@ -14,14 +14,11 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.rest.Response;
-import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobServiceClient;
-import com.azure.storage.blob.batch.BlobBatch;
 import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobDownloadResponse;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobProperties;
-import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.codahale.metrics.MetricRegistry;
@@ -32,6 +29,7 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.DummyCloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrMetrics;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -47,17 +45,14 @@ import com.microsoft.azure.cosmosdb.FeedResponse;
 import com.microsoft.azure.cosmosdb.RequestOptions;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
-import com.microsoft.azure.cosmosdb.StoredProcedureResponse;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -91,8 +86,11 @@ public class AzureCloudDestinationTest {
   private final String storageConnection =
       "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
   private final String clusterName = "main";
+  private final AzureReplicationFeed.FeedType defaultAzureReplicationFeedType =
+      AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
   private Properties configProps = new Properties();
   private AzureCloudDestination azureDest;
+  private ClusterMap clusterMap;
   private BlobServiceClient mockServiceClient;
   private BlockBlobClient mockBlockBlobClient;
   private BlobBatchClient mockBlobBatchClient;
@@ -108,8 +106,16 @@ public class AzureCloudDestinationTest {
   private long creationTime = System.currentTimeMillis();
   private long deletionTime = creationTime + 10000;
   private long expirationTime = Utils.Infinite_Time;
-  private final AzureReplicationFeed.FeedType defaultAzureReplicationFeedType =
-      AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
+
+  /**
+   * Utility method to get blob input stream.
+   * @param blobSize size of blob to consider.
+   * @return the blob input stream.
+   */
+  private static InputStream getBlobInputStream(int blobSize) {
+    byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
+    return new ByteArrayInputStream(randomBytes);
+  }
 
   @Before
   public void setup() throws Exception {
@@ -135,14 +141,17 @@ public class AzureCloudDestinationTest {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com:443");
     configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
+    configProps.setProperty(AzureCloudConfig.COSMOS_DELETED_CONTAINER_COLLECTION_LINK, "ambry/deletedContainer");
     configProps.setProperty(AzureCloudConfig.COSMOS_KEY, "cosmos-key");
     configProps.setProperty("clustermap.cluster.name", "main");
     configProps.setProperty("clustermap.datacenter.name", "uswest");
     configProps.setProperty("clustermap.host.name", "localhost");
     vcrMetrics = new VcrMetrics(new MetricRegistry());
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-        azureMetrics, defaultAzureReplicationFeedType, false);
+    clusterMap = mock(ClusterMap.class);
+    azureDest =
+        new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
+            azureMetrics, defaultAzureReplicationFeedType, clusterMap, false);
   }
 
   @After
@@ -424,8 +433,9 @@ public class AzureCloudDestinationTest {
     // Test 2: isVcr = true
     //
     azureDest.close();
-    azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-        azureMetrics, defaultAzureReplicationFeedType, true);
+    azureDest =
+        new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
+            azureMetrics, defaultAzureReplicationFeedType, clusterMap, true);
     // Existing blob
     List<Document> docList = Collections.singletonList(createDocumentFromCloudBlobMetadata(blobMetadata));
     Observable<FeedResponse<Document>> feedResponse = mock(Observable.class);
@@ -459,8 +469,9 @@ public class AzureCloudDestinationTest {
     // Reset metrics
     azureMetrics = new AzureMetrics(new MetricRegistry());
     try {
-      azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-          azureMetrics, defaultAzureReplicationFeedType, false);
+      azureDest =
+          new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
+              azureMetrics, defaultAzureReplicationFeedType, clusterMap, false);
       List<BlobId> blobIdList = new ArrayList<>();
       List<Document> docList = new ArrayList<>();
       for (int j = 0; j < numBlobs; j++) {
@@ -595,8 +606,8 @@ public class AzureCloudDestinationTest {
     AzureCloudDestination updateTimeBasedAzureCloudDestination = null;
     try {
       updateTimeBasedAzureCloudDestination =
-          new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", clusterName,
-              azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME, false);
+          new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
+              azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME, clusterMap, false);
       testFindEntriesSinceWithUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
       testFindEntriesSinceWithNonUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
     } finally {
@@ -807,7 +818,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testInitClientException() throws IOException {
     CloudDestinationFactory factory =
-        new AzureCloudDestinationFactory(new VerifiableProperties(configProps), new MetricRegistry());
+        new AzureCloudDestinationFactory(new VerifiableProperties(configProps), new MetricRegistry(), clusterMap);
     CloudDestination cloudDestination = null;
     try {
       cloudDestination = factory.getCloudDestination();
@@ -828,7 +839,7 @@ public class AzureCloudDestinationTest {
     AzureCloudDestination dest = null;
     try {
       dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, vcrMetrics, azureMetrics,
-          defaultAzureReplicationFeedType);
+          defaultAzureReplicationFeedType, clusterMap);
       try {
         dest.getAzureBlobDataAccessor().testConnectivity();
         fail("Expected exception");
@@ -857,7 +868,7 @@ public class AzureCloudDestinationTest {
     try {
       // Test without proxy
       dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, vcrMetrics, azureMetrics,
-          defaultAzureReplicationFeedType);
+          defaultAzureReplicationFeedType, clusterMap);
       assertNull("Expected null proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
       assertNull("Expected null proxy for Cosmos",
           dest.getCosmosDataAccessor().getAsyncDocumentClient().getConnectionPolicy().getProxy());
@@ -875,7 +886,7 @@ public class AzureCloudDestinationTest {
     cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     try {
       dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, vcrMetrics, azureMetrics,
-          defaultAzureReplicationFeedType);
+          defaultAzureReplicationFeedType, clusterMap);
       assertNotNull("Expected proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
       InetSocketAddress proxy = dest.getCosmosDataAccessor().getAsyncDocumentClient().getConnectionPolicy().getProxy();
       assertNotNull("Expected proxy for Cosmos", proxy);
@@ -977,15 +988,5 @@ public class AzureCloudDestinationTest {
   private BlobId generateBlobId() {
     return new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, blobId.getPartition(), false,
         BlobDataType.DATACHUNK);
-  }
-
-  /**
-   * Utility method to get blob input stream.
-   * @param blobSize size of blob to consider.
-   * @return the blob input stream.
-   */
-  private static InputStream getBlobInputStream(int blobSize) {
-    byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
-    return new ByteArrayInputStream(randomBytes);
   }
 }

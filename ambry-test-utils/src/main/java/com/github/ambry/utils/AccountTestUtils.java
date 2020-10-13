@@ -11,19 +11,23 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.account;
+package com.github.ambry.utils;
 
-import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Utils;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.*;
 
@@ -31,7 +35,7 @@ import static org.junit.Assert.*;
 /**
  * Utils for testing account-related classes.
  */
-class AccountTestUtils {
+public class AccountTestUtils {
   private static final Random random = TestUtils.RANDOM;
 
   /**
@@ -40,7 +44,7 @@ class AccountTestUtils {
    * @param expectedAccountCount The expected number of {@link Account}s in the {@link AccountService}.
    * @param accountService The {@link AccountService} to assert {@link Account}s existence.
    */
-  static void assertAccountsInAccountService(Collection<Account> accounts, int expectedAccountCount,
+  public static void assertAccountsInAccountService(Collection<Account> accounts, int expectedAccountCount,
       AccountService accountService) {
     assertEquals("Wrong number of accounts in accountService", expectedAccountCount,
         accountService.getAllAccounts().size());
@@ -54,7 +58,7 @@ class AccountTestUtils {
    * @param account The {@link Account} to assert existence.
    * @param accountService The {@link AccountService} to assert {@link Account} existence.
    */
-  static void assertAccountInAccountService(Account account, AccountService accountService) {
+  public static void assertAccountInAccountService(Account account, AccountService accountService) {
     Account accountFoundById = accountService.getAccountById(account.getId());
     Account accountFoundByName = accountService.getAccountByName(account.getName());
     assertEquals("Account got by name from accountService does not match account to assert.", account,
@@ -73,7 +77,7 @@ class AccountTestUtils {
    * @param container The {@link Container} to assert.
    * @param accountService The {@link AccountService} to assert {@link Container} existence.
    */
-  static void assertContainerInAccountService(Container container, AccountService accountService) {
+  public static void assertContainerInAccountService(Container container, AccountService accountService) {
     Container containerFoundById =
         accountService.getAccountById(container.getParentAccountId()).getContainerById(container.getId());
     Container containerFoundByName =
@@ -93,7 +97,7 @@ class AccountTestUtils {
    * @param accountCount The number of {@link Account}s to generate.
    * @param containerCountPerAccount The number of {@link Container}s per {@link Account} to generate.
    */
-  static void generateRefAccounts(Map<Short, Account> idToRefAccountMap,
+  public static void generateRefAccounts(Map<Short, Account> idToRefAccountMap,
       Map<Short, Map<Short, Container>> idToRefContainerMap, Set<Short> accountIdSet, int accountCount,
       int containerCountPerAccount) {
     idToRefAccountMap.clear();
@@ -107,36 +111,12 @@ class AccountTestUtils {
       String accountName = UUID.randomUUID().toString();
       Account.AccountStatus accountStatus =
           random.nextBoolean() ? Account.AccountStatus.ACTIVE : Account.AccountStatus.INACTIVE;
-      Map<Short, Container> idToContainers = new HashMap<>();
       List<Container> containers = new ArrayList<>();
-      Set<Short> containerIdSet = new HashSet<>();
-      for (int j = 0; j < containerCountPerAccount; j++) {
-        short containerId = Utils.getRandomShort(random);
-        if (!containerIdSet.add(containerId)) {
-          j--;
-          continue;
-        }
-        String containerName = UUID.randomUUID().toString();
-        Container.ContainerStatus containerStatus =
-            random.nextBoolean() ? Container.ContainerStatus.ACTIVE : Container.ContainerStatus.INACTIVE;
-        String containerDescription = UUID.randomUUID().toString();
-        boolean containerCaching = random.nextBoolean();
-        boolean containerEncryption = random.nextBoolean();
-        boolean containerPreviousEncryption = containerEncryption || random.nextBoolean();
-        boolean mediaScanDisabled = random.nextBoolean();
-        String replicationPolicy = TestUtils.getRandomString(10);
-        boolean ttlRequired = random.nextBoolean();
-        Container container = new ContainerBuilder(containerId, containerName, containerStatus, containerDescription,
-            accountId).setEncrypted(containerEncryption)
-            .setPreviouslyEncrypted(containerPreviousEncryption)
-            .setCacheable(containerCaching)
-            .setMediaScanDisabled(mediaScanDisabled)
-            .setReplicationPolicy(replicationPolicy)
-            .setTtlRequired(ttlRequired)
-            .build();
-        containers.add(container);
-        idToContainers.put(containerId, container);
-      }
+      List<ContainerBuilder> containerBuilders = generateContainerBuilders(containerCountPerAccount, accountId);
+
+      containers.addAll(containerBuilders.stream().map(ContainerBuilder::build).collect(Collectors.toList()));
+      Map<Short, Container> idToContainers =
+          containers.stream().collect(Collectors.toMap(Container::getId, Function.identity()));
       Account account = new AccountBuilder(accountId, accountName, accountStatus).containers(containers).build();
       assertEquals("Wrong number of generated containers for the account", containerCountPerAccount,
           account.getAllContainers().size());
@@ -145,4 +125,43 @@ class AccountTestUtils {
     }
     assertEquals("Wrong number of generated accounts", accountCount, idToRefAccountMap.size());
   }
+
+  /**
+   * Generate {@link ContainerBuilder}s for specified {@code accountId}.
+   * @param numContainers number of {@link ContainerBuilder}s to generate.
+   * @param accountId accountId for container.
+   * @return {@link List} of {@link ContainerBuilder}s.
+   */
+  public static List<ContainerBuilder> generateContainerBuilders(int numContainers, short accountId) {
+    List<ContainerBuilder> containerBuilders = new ArrayList<>();
+    Set<Short> containerIdSet = new HashSet<>();
+    for (int j = 0; j < numContainers; j++) {
+      short containerId = Utils.getRandomShort(random);
+      if (!containerIdSet.add(containerId)) {
+        j--;
+        continue;
+      }
+      String containerName = UUID.randomUUID().toString();
+      Container.ContainerStatus containerStatus =
+          random.nextBoolean() ? Container.ContainerStatus.ACTIVE : Container.ContainerStatus.INACTIVE;
+      String containerDescription = UUID.randomUUID().toString();
+      boolean containerCaching = random.nextBoolean();
+      boolean containerEncryption = random.nextBoolean();
+      boolean containerPreviousEncryption = containerEncryption || random.nextBoolean();
+      boolean mediaScanDisabled = random.nextBoolean();
+      String replicationPolicy = TestUtils.getRandomString(10);
+      boolean ttlRequired = random.nextBoolean();
+      ContainerBuilder containerBuilder =
+          new ContainerBuilder(containerId, containerName, containerStatus, containerDescription,
+              accountId).setEncrypted(containerEncryption)
+              .setPreviouslyEncrypted(containerPreviousEncryption)
+              .setCacheable(containerCaching)
+              .setMediaScanDisabled(mediaScanDisabled)
+              .setReplicationPolicy(replicationPolicy)
+              .setTtlRequired(ttlRequired);
+      containerBuilders.add(containerBuilder);
+    }
+    return containerBuilders;
+  }
 }
+

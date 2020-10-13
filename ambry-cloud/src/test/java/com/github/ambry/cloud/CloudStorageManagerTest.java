@@ -56,7 +56,7 @@ public class CloudStorageManagerTest {
 
     VerifiableProperties properties = new VerifiableProperties(props);
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
-    CloudDestination cloudDestination = new LatchBasedInMemoryCloudDestination(Collections.emptyList());
+    CloudDestination cloudDestination = new LatchBasedInMemoryCloudDestination(Collections.emptyList(), clusterMap);
     MockClusterMap clusterMap = new MockClusterMap();
     return new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);
   }

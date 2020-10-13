@@ -70,7 +70,7 @@ public class VcrRequestsTest {
     ServerMetrics serverMetrics =
         new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, this.getClass());
 
-    CloudDestination cloudDestination = new LatchBasedInMemoryCloudDestination(Collections.emptyList());
+    CloudDestination cloudDestination = new LatchBasedInMemoryCloudDestination(Collections.emptyList(), clusterMap);
     StoreManager storeManager =
         new CloudStorageManager(verifiableProperties, new VcrMetrics(new MetricRegistry()), cloudDestination,
             clusterMap);

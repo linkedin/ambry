@@ -83,8 +83,8 @@ public class AzureCompactionTool {
 
     AzureCloudDestination azureDest = null;
     try {
-      azureDest = (AzureCloudDestination) new AzureCloudDestinationFactory(verifiableProperties,
-          new MetricRegistry()).getCloudDestination();
+      azureDest = (AzureCloudDestination) new AzureCloudDestinationFactory(verifiableProperties, new MetricRegistry(),
+          null).getCloudDestination();
       CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
       CloudStorageCompactor compactor =
           new CloudStorageCompactor(azureDest, cloudConfig, partitionIdSet, new VcrMetrics(new MetricRegistry()));
