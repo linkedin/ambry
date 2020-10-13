@@ -14,7 +14,7 @@
 package com.github.ambry.quota;
 
 /**
- * {@code StorageQuotaServiceFactory} is a factory to generate all the supporting cast required to instantiate an
+ * {@link StorageQuotaServiceFactory} is a factory to generate all the supporting cast required to instantiate an
  * {@link StorageQuotaService}. Usually called with the canonical class name and as such might have to support appropriate
  * (multiple) constructors.
  */

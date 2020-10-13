@@ -14,8 +14,8 @@
 package com.github.ambry.quota;
 
 /**
- * Operations for quota service.
+ * Quota service mode. If mode is tracking, it will not throttle traffics even if the quota is exceeded.
  */
-public enum Operation {
-  Upload, Delete, TtlUpdate
+public enum QuotaMode {
+  Tracking, Throttling
 }

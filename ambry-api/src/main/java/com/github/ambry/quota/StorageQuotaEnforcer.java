@@ -21,7 +21,7 @@ import java.util.Map;
  *
  * Each traffic that changes storage usage is targeted at a specific account and container. Enforcer enforces storage
  * quota on each container. Before evaluating any traffic, enforcer has to retrieve storage quota of each container from
- * {@link StorageQuotaSource} and current storage uasage of each container from {@link StorageUsageRefresher}, by calling
+ * {@link StorageQuotaSource} and current storage usage of each container from {@link StorageUsageRefresher}, by calling
  * {@link #initStorageQuota} and {@link #initStorageUsage} respectively.
  *
  * Container storage quota can be dynamic, it can be updated to increase or decrease the quota for specific containers.
@@ -63,19 +63,19 @@ public interface StorageQuotaEnforcer {
   StorageQuotaSource.Listener getQuotaSourceListener();
 
   /**
-   * Return true if the given {@link Operation} should be throttled.
+   * Return true if the given {@link QuotaOperation} should be throttled.
    * @param accountId The accountId of this operation.
    * @param containerId The containerId of this operation.
-   * @param op The {@link Operation}.
-   * @param size The size of this operation. eg, if the op is Upload, size if the size of the content.
-   * @return True is the given {@link Operation} should be throttled.
+   * @param op The {@link QuotaOperation}.
+   * @param size The size of this operation. eg, if the op is {@link QuotaOperation#Post}, size if the size of the content.
+   * @return True is the given {@link QuotaOperation} should be throttled.
    */
-  boolean shouldThrottle(short accountId, short containerId, Operation op, long size);
+  boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size);
 
   /**
-   * Change the {@link StorageQuotaEnforcer}'s mode to the given value. If the mode is {@link Mode#Tracking}, then {@link StorageQuotaEnforcer}
+   * Change the {@link StorageQuotaEnforcer}'s mode to the given value. If the mode is {@link QuotaMode#Tracking}, then {@link StorageQuotaEnforcer}
    * should never return true in {@link #shouldThrottle} method.
-   * @param mode The new value for {@link Mode}.
+   * @param mode The new value for {@link QuotaMode}.
    */
-  void setMode(Mode mode);
+  void setQuotaMode(QuotaMode mode);
 }

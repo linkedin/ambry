@@ -27,7 +27,7 @@ public class StorageQuotaConfig {
   //////////////// Config for HelixStorageUsageRefresher ///////////////
 
   /**
-   * The root path of helix property store in ZooKeepr for HelixStorageUsageRefresher. Must start with {@code /}, and
+   * The root path of helix property store in ZooKeeper for HelixStorageUsageRefresher. Must start with {@code /}, and
    * must not end with {@code /}. The root path should be {@code /{clustername}/PROPERTYSTORE}
    */
   @Config(HELIX_PROPERTY_ROOT_PATH)
@@ -86,6 +86,7 @@ public class StorageQuotaConfig {
     refresherPollingIntervalMs =
         verifiableProperties.getIntInRange(REFRESHER_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);
     containerStorageQuotaInJson = verifiableProperties.getString(CONTAINER_STORAGE_QUOTA_IN_JSON, "");
-    sourcePollingIntervalMs = verifiableProperties.getInt(SOURCE_POLLING_INTERVAL_MS, 30 * 60 * 1000);
+    sourcePollingIntervalMs =
+        verifiableProperties.getIntInRange(SOURCE_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);
   }
 }

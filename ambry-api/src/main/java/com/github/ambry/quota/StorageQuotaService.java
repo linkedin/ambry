@@ -20,9 +20,10 @@ import com.github.ambry.account.Container;
 /**
  * {@link StorageQuotaService} is the component to handles storage quota for different {@link Account} and {@link Container}.
  * It keeps track of the storage usage of different {@link Container}s and decides to throttle the Frontend operations
- * based on the quota and the {@link Mode}.
- * If you just want to keep track of the the usage without throttling the traffic, you can call {@link #setMode} to change
- * {@link Mode} from {@link Mode#Throttling} to {@link Mode#Tracking}.
+ * based on the quota and the {@link QuotaMode}.
+ * If you just want to keep track of the the usage without throttling the traffic, you can call {@link #setQuotaMode} to change
+ * {@link QuotaMode} from {@link QuotaMode#Throttling} to {@link QuotaMode#Tracking}.
+ * TODO: add a new method to deal with deleted containers.
  */
 public interface StorageQuotaService {
 
@@ -38,19 +39,19 @@ public interface StorageQuotaService {
   void shutdown();
 
   /**
-   * Return true if the given {@link Operation} should be throttled.
+   * Return true if the given {@link QuotaOperation} should be throttled.
    * @param accountId The accountId of this operation.
    * @param containerId The containerId of this operation.
-   * @param op The {@link Operation}.
+   * @param op The {@link QuotaOperation}.
    * @param size The size of this operation. eg, if the op is Upload, size if the size of the content.
-   * @return True is the given {@link Operation} should be throttled.
+   * @return True is the given {@link QuotaOperation} should be throttled.
    */
-  boolean shouldThrottle(short accountId, short containerId, Operation op, long size);
+  boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size);
 
   /**
-   * Change the {@link StorageQuotaService}'s mode to the given value. If the mode is {@link Mode#Tracking}, then {@link StorageQuotaService}
+   * Change the {@link StorageQuotaService}'s quotaMode to the given value. If the quotaMode is {@link QuotaMode#Tracking}, then {@link StorageQuotaService}
    * should never return true in {@link #shouldThrottle} method.
-   * @param mode The new value for {@link Mode}.
+   * @param quotaMode The new value for {@link QuotaMode}.
    */
-  void setMode(Mode mode);
+  void setQuotaMode(QuotaMode quotaMode);
 }
