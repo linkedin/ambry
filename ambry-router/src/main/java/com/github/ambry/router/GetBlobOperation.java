@@ -59,6 +59,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -715,13 +716,17 @@ class GetBlobOperation extends GetOperation {
         // Only when the blob is encrypted should we need to call this method. When finish decryption, we don't need
         // response info anymore.
         if (decryptCallbackResultInfo.exception == null) {
-          chunkIndexToBuf.put(chunkIndex,
-              filterChunkToRange(decryptCallbackResultInfo.result.getDecryptedBlobContent()));
-          numChunksRetrieved.incrementAndGet();
+          DecryptJob.DecryptJobResult result = null;
+          // Nullify result so we know we already passed the bytebuf to chunkIndexToBuf map
+          if ((result = decryptCallbackResultInfo.result.getAndSet(null)) != null) {
+            chunkIndexToBuf.put(chunkIndex, filterChunkToRange(result.getDecryptedBlobContent()));
+            numChunksRetrieved.incrementAndGet();
+          } else {
+            // only in maybeReleaseDecryptionResultBuffer() will result be set to null, this means the bytebuf has been
+            // released, don't have to release it again here.
+          }
           logger.trace("Decrypt result successfully updated for data chunk {}", chunkBlobId);
           progressTracker.setCryptoJobSuccess();
-          // Nullify result so we know we already passed the bytebuf to chunkIndexToBuf map
-          decryptCallbackResultInfo.result = null;
         } else {
           decryptJobMetricsTracker.incrementOperationError();
           logger.trace("Setting operation exception as decryption callback invoked with exception {} for data chunk {}",
@@ -742,9 +747,9 @@ class GetBlobOperation extends GetOperation {
      */
     protected void maybeReleaseDecryptionResultBuffer() {
       if (isInProgress() && progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
-        if (decryptCallbackResultInfo.result != null) {
-          decryptCallbackResultInfo.result.getDecryptedBlobContent().release();
-          decryptCallbackResultInfo.result = null;
+        DecryptJob.DecryptJobResult result = null;
+        if ((result = decryptCallbackResultInfo.result.getAndSet(null)) != null) {
+          result.getDecryptedBlobContent().release();
         }
       }
     }
@@ -1222,32 +1227,35 @@ class GetBlobOperation extends GetOperation {
           if (blobType == BlobType.MetadataBlob) {
             logger.trace("Processing stored decryption callback result for Metadata blob {}", blobId);
             initializeDataChunks();
-            blobInfo =
-                new BlobInfo(serverBlobProperties, decryptCallbackResultInfo.result.getDecryptedUserMetadata().array(),
-                    lifeVersion);
+            blobInfo = new BlobInfo(serverBlobProperties,
+                decryptCallbackResultInfo.result.get().getDecryptedUserMetadata().array(), lifeVersion);
             progressTracker.setCryptoJobSuccess();
             logger.trace("BlobContent available to process for Metadata blob {}", blobId);
           } else {
             logger.trace("Processing stored decryption callback result for simple blob {}", blobId);
             // In case of simple blobs, user-metadata may or may not be passed into decryption job based on GetOptions flag.
             // Only in-case of GetBlobInfo and GetBlobAll, user-metadata is required to be decrypted
-            if (decryptCallbackResultInfo.result.getDecryptedUserMetadata() != null) {
-              blobInfo = new BlobInfo(serverBlobProperties,
-                  decryptCallbackResultInfo.result.getDecryptedUserMetadata().array(), lifeVersion);
-            }
-            ByteBuf decryptedBlobContent = decryptCallbackResultInfo.result.getDecryptedBlobContent();
-            totalSize = decryptedBlobContent.readableBytes();
-            if (!resolveRange(totalSize)) {
-              chunkIndexToBuf.put(0, filterChunkToRange(decryptedBlobContent));
-              numChunksRetrieved.set(1);
-              progressTracker.setCryptoJobSuccess();
-              logger.trace("BlobContent available to process for simple blob {}", blobId);
+            DecryptJob.DecryptJobResult result = null;
+            if ((result = decryptCallbackResultInfo.result.getAndSet(null)) != null) {
+              if (result.getDecryptedUserMetadata() != null) {
+                blobInfo = new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array(), lifeVersion);
+              }
+              ByteBuf decryptedBlobContent = result.getDecryptedBlobContent();
+              totalSize = decryptedBlobContent.readableBytes();
+              if (!resolveRange(totalSize)) {
+                chunkIndexToBuf.put(0, filterChunkToRange(decryptedBlobContent));
+                numChunksRetrieved.set(1);
+                progressTracker.setCryptoJobSuccess();
+                logger.trace("BlobContent available to process for simple blob {}", blobId);
+              } else {
+                decryptedBlobContent.release();
+                progressTracker.setCryptoJobFailed();
+              }
             } else {
-              decryptedBlobContent.release();
-              progressTracker.setCryptoJobFailed();
+              // only in maybeReleaseDecryptionResultBuffer() will result be set to null, this means the bytebuf has been
+              // released, don't have to release it again here.
             }
           }
-          decryptCallbackResultInfo.result = null;
         }
         decryptJobMetricsTracker.onJobResultProcessingComplete();
       }
@@ -1549,7 +1557,7 @@ class GetBlobOperation extends GetOperation {
 class DecryptCallBackResultInfo {
   volatile boolean decryptJobComplete;
   volatile Exception exception;
-  volatile DecryptJob.DecryptJobResult result;
+  AtomicReference<DecryptJob.DecryptJobResult> result = new AtomicReference<>();
 
   /**
    * Sets the result and exception from decrypt job callback
@@ -1557,7 +1565,7 @@ class DecryptCallBackResultInfo {
    * @param exception {@link Exception} from the decrypt job callback. Could be null if the decrypt job succeeded.
    */
   void setResultAndException(DecryptJob.DecryptJobResult result, Exception exception) {
-    this.result = result;
+    this.result.set(result);
     this.exception = exception;
     this.decryptJobComplete = true;
   }

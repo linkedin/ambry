@@ -417,14 +417,14 @@ public class BlobStoreStatsTest {
     // proceed only when the scan is started
     assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
-    for (long i = logSegmentForecastStartTimeInMs; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS;
+    for (long i = state.beginningTime; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS;
         i += TEST_TIME_INTERVAL_IN_MS) {
       verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(i, 0L));
     }
     // advance time to let the added puts to expire
     long timeToLiveInMs = expiresAtInMs - state.time.milliseconds() < 0 ? 0 : expiresAtInMs - state.time.milliseconds();
     state.advanceTime(timeToLiveInMs + Time.MsPerSec);
-    for (long i = logSegmentForecastStartTimeInMs; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS;
+    for (long i = state.beginningTime; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS;
         i += TEST_TIME_INTERVAL_IN_MS) {
       verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(i, 0L));
     }
@@ -662,7 +662,9 @@ public class BlobStoreStatsTest {
     blobStoreStats.handleNewPutEntry(new MockIndexValue(queueProcessedLatch, state.index.getCurrentEndOffset()));
     assertTrue("QueueProcessor took too long to process the new entries",
         queueProcessedLatch.await(3, TimeUnit.SECONDS));
-    for (long i = 0; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS; i += TEST_TIME_INTERVAL_IN_MS) {
+    // verifying log segment from beginning time of the state, since most of the deletes and expiration starting from this time.
+    for (long i = state.beginningTime; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS;
+        i += TEST_TIME_INTERVAL_IN_MS) {
       verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(i, 0L));
     }
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
@@ -752,7 +754,15 @@ public class BlobStoreStatsTest {
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
     int bucketCount = 50;
     BlobStoreStats blobStoreStats = setupBlobStoreStats(bucketCount, 0);
-    int expectedThrottleCount = state.referenceIndex.size();
+    // Make sure the index scanner is finished and we can enqueue
+    long recentEntryQueueTimeout = 10 * SystemTime.MsPerSec + System.currentTimeMillis();
+    while (!blobStoreStats.isRecentEntryQueueEnabled()) {
+      Thread.sleep(100);
+      long now = System.currentTimeMillis();
+      if (now > recentEntryQueueTimeout) {
+        throw new TimeoutException("Time out to wait for IndexScanner to finish");
+      }
+    }
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), 0));
     long expiresAtInMs = state.time.milliseconds() + ((long) bucketCount - 2) * BUCKET_SPAN_IN_MS;
@@ -769,15 +779,6 @@ public class BlobStoreStatsTest {
     // delete one of the put without expiry
     MockId putWithoutExpiry = getIdToDelete(newPutEntries.get(newPutEntries.size() - 1).getKey());
     newDelete(blobStoreStats, putWithoutExpiry);
-    // Make sure the index scanner is finished and we can enqueue
-    long recentEntryQueueTimeout = 10 * SystemTime.MsPerSec + System.currentTimeMillis();
-    while (!blobStoreStats.isRecentEntryQueueEnabled()) {
-      Thread.sleep(100);
-      long now = System.currentTimeMillis();
-      if (now > recentEntryQueueTimeout) {
-        throw new TimeoutException("Time out to wait for IndexScanner to finish");
-      }
-    }
     // a probe put with a latch to inform us about the state of the queue
     CountDownLatch queueProcessedLatch = new CountDownLatch(1);
     blobStoreStats.handleNewPutEntry(new MockIndexValue(queueProcessedLatch, state.index.getCurrentEndOffset()));
@@ -1167,8 +1168,16 @@ public class BlobStoreStatsTest {
             expectedContainerValidSize, actualContainerValidSize);
         totalValidSize += expectedContainerValidSize;
       }
-      assertEquals("Mismatch in number of containerIds in serviceId: " + serviceId, innerMap.size(),
-          actualContainerValidSizeMap.get(serviceId).size());
+      if (innerMap.size() != actualContainerValidSizeMap.get(serviceId).size()) {
+        // make sure all the new items have value 0
+        for (Map.Entry<String, Long> actualContainerEntry : actualContainerValidSizeMap.get(serviceId).entrySet()) {
+          if (!innerMap.containsKey(actualContainerEntry.getKey())) {
+            assertEquals(
+                "Expecting 0 value for service id " + serviceId + " and container " + actualContainerEntry.getKey(), 0,
+                actualContainerEntry.getValue().longValue());
+          }
+        }
+      }
       actualContainerValidSizeMap.remove(serviceId);
     }
     for (Map.Entry<String, Map<String, Long>> actualContainerValidSizeEntry : actualContainerValidSizeMap.entrySet()) {
