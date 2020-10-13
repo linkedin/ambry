@@ -112,6 +112,8 @@ public class CloudStorageCompactor implements Runnable {
       logger.info("Skipping compaction as no partitions are assigned.");
       return 0;
     }
+    logger.info("Starting compaction on {} assigned partitions", partitions.size());
+
     List<PartitionId> partitionSnapshot = new ArrayList<>(partitions);
     long compactionStartTime = System.currentTimeMillis();
     long timeToQuit = System.currentTimeMillis() + compactionTimeLimitMs;
