@@ -135,7 +135,7 @@ public class MySqlAccountServiceTest {
 
     // 1. Addition of new account. Verify account is added to cache.
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, atLeastOnce()).addAccounts(Collections.singletonList(testAccount));
+    verify(mockMySqlAccountStore, atLeastOnce()).addAccount(testAccount);
     List<Account> accounts = new ArrayList<>(mySqlAccountService.getAllAccounts());
     assertEquals("Mismatch in number of accounts", 1, accounts.size());
     assertEquals("Mismatch in account retrieved by ID", testAccount,
@@ -149,8 +149,8 @@ public class MySqlAccountServiceTest {
             .build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer2).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, never()).updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, atLeastOnce()).addContainers(Collections.singletonList(testContainer2));
+    verify(mockMySqlAccountStore, never()).updateAccount(testAccount);
+    verify(mockMySqlAccountStore, atLeastOnce()).addContainer(testContainer2);
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
 
@@ -158,7 +158,7 @@ public class MySqlAccountServiceTest {
     testContainer = new ContainerBuilder(testContainer).setMediaScanDisabled(true).setCacheable(true).build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, never()).updateAccounts(Collections.singletonList(testAccount));
+    verify(mockMySqlAccountStore, never()).updateAccount(testAccount);
     verify(mockMySqlAccountStore, atLeastOnce()).updateContainer(testContainer);
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
