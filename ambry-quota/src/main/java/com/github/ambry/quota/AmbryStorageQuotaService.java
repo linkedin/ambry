@@ -27,7 +27,7 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
 
   private final StorageUsageRefresher storageUsageRefresher;
   private final StorageQuotaSource storageQuotaSource;
-  private final StorageQuotaEnforcer storageQuotaEnforer;
+  private final StorageQuotaEnforcer storageQuotaEnforcer;
   private final ScheduledExecutorService scheduler;
   private final StorageQuotaConfig config;
 
@@ -35,21 +35,21 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
       StorageQuotaEnforcer storageQuotaEnforcer, ScheduledExecutorService scheduler, StorageQuotaConfig config) {
     this.storageUsageRefresher = Objects.requireNonNull(storageUsageRefresher, "StorageUsageRefresher empty");
     this.storageQuotaSource = Objects.requireNonNull(storageQuotaSource, "StorageQuotaSource empty");
-    this.storageQuotaEnforer = Objects.requireNonNull(storageQuotaEnforcer, "StorageQuotaEnforcer empty");
+    this.storageQuotaEnforcer = Objects.requireNonNull(storageQuotaEnforcer, "StorageQuotaEnforcer empty");
     this.config = Objects.requireNonNull(config, "StorageQuotaConfig empty");
     this.scheduler = scheduler;
   }
 
   @Override
   public void start() throws Exception {
-    storageQuotaEnforer.initStorageUsage(storageUsageRefresher.getContainerStorageUsage());
-    storageQuotaEnforer.initStorageQuota(storageQuotaSource.getContainerQuota());
+    storageQuotaEnforcer.initStorageUsage(storageUsageRefresher.getContainerStorageUsage());
+    storageQuotaEnforcer.initStorageQuota(storageQuotaSource.getContainerQuota());
 
-    StorageQuotaSource.Listener sourceListener = storageQuotaEnforer.getQuotaSourceListener();
+    StorageQuotaSource.Listener sourceListener = storageQuotaEnforcer.getQuotaSourceListener();
     if (sourceListener != null) {
       storageQuotaSource.registerListener(sourceListener);
     }
-    StorageUsageRefresher.Listener refresherListener = storageQuotaEnforer.getUsageRefresherListener();
+    StorageUsageRefresher.Listener refresherListener = storageQuotaEnforcer.getUsageRefresherListener();
     if (refresherListener != null) {
       storageUsageRefresher.registerListener(refresherListener);
     }
@@ -64,12 +64,12 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
   }
 
   @Override
-  public boolean shouldThrottle(short accountId, short containerId, Operation op, long size) {
-    return this.storageQuotaEnforer.shouldThrottle(accountId, containerId, op, size);
+  public boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
+    return this.storageQuotaEnforcer.shouldThrottle(accountId, containerId, op, size);
   }
 
   @Override
-  public void setMode(Mode mode) {
-    this.storageQuotaEnforer.setMode(mode);
+  public void setQuotaMode(QuotaMode mode) {
+    this.storageQuotaEnforcer.setQuotaMode(mode);
   }
 }

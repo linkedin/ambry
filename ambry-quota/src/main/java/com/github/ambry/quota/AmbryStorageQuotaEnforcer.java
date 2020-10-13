@@ -13,7 +13,6 @@
  */
 package com.github.ambry.quota;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,23 +24,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * to update this in-memory map. It also keeps another in-memory map for storage usage of each container and listens on usage
  * change from {@link StorageUsageRefresher}.
  *
- * This implementation checks whether to throttle the operation only if the operation is {@link Operation#Upload}. And when the
+ * This implementation checks whether to throttle the operation only if the operation is {@link QuotaOperation#Post}. And when the
  * targeted account and container doesn't have a quota specified, it doesn't throttle the operation at all. Any legitimate
  * uploads would also increase the storage usage in the in-memory map.
  */
 public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
-  private volatile Mode mode = Mode.Tracking;
+  private volatile QuotaMode mode = QuotaMode.Tracking;
   private volatile Map<String, Map<String, Long>> storageQuota;
   private volatile Map<String, Map<String, Long>> storageUsage;
 
   @Override
-  public boolean shouldThrottle(short accountId, short containerId, Operation op, long size) {
-    if (op != Operation.Upload) {
+  public boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
+    if (op != QuotaOperation.Post) {
       return false;
     }
-    long quota =
-        ((Map<String, Long>) storageQuota.getOrDefault(String.valueOf(accountId), Collections.EMPTY_MAP)).getOrDefault(
-            String.valueOf(containerId), Long.MAX_VALUE).longValue();
+    long quota = storageQuota.getOrDefault(String.valueOf(accountId), new HashMap<>())
+        .getOrDefault(String.valueOf(containerId), Long.MAX_VALUE);
 
     AtomicBoolean exceedQuota = new AtomicBoolean(false);
     storageUsage.computeIfAbsent(String.valueOf(accountId), k -> new ConcurrentHashMap<>())
@@ -49,22 +47,18 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
           if (v == null) {
             return size;
           }
-          if (v.longValue() + size < quota) {
-            return v.longValue() + size;
+          if (v + size < quota) {
+            return v + size;
           } else {
             exceedQuota.set(true);
-            return v.longValue();
+            return v;
           }
         });
-    if (mode == Mode.Throttling) {
-      return exceedQuota.get();
-    } else {
-      return false;
-    }
+    return mode == QuotaMode.Throttling ? exceedQuota.get() : false;
   }
 
   @Override
-  public void setMode(Mode mode) {
+  public void setQuotaMode(QuotaMode mode) {
     this.mode = mode;
   }
 
