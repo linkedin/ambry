@@ -71,8 +71,9 @@ public class CompositeSend extends AbstractByteBufHolder<CompositeSend> implemen
             if (content instanceof CompositeByteBuf) {
               Iterator<ByteBuf> iterator = ((CompositeByteBuf) content).iterator();
               while (iterator.hasNext()) {
-                ((CompositeByteBuf) compositeSendContent).addComponent(true, iterator.next());
+                ((CompositeByteBuf) compositeSendContent).addComponent(true, iterator.next().retain());
               }
+              content.release();
             } else {
               ((CompositeByteBuf) compositeSendContent).addComponent(true, content);
             }

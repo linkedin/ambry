@@ -144,8 +144,9 @@ public class GetResponse extends Response {
         if (toSendContent instanceof CompositeByteBuf) {
           Iterator<ByteBuf> iterator = ((CompositeByteBuf) toSendContent).iterator();
           while (iterator.hasNext()) {
-            compositeByteBuf.addComponent(true, iterator.next());
+            compositeByteBuf.addComponent(true, iterator.next().retain());
           }
+          toSendContent.release();
         } else {
           compositeByteBuf.addComponent(true, toSendContent);
         }

@@ -716,9 +716,9 @@ class GetBlobOperation extends GetOperation {
         // Only when the blob is encrypted should we need to call this method. When finish decryption, we don't need
         // response info anymore.
         if (decryptCallbackResultInfo.exception == null) {
-          DecryptJob.DecryptJobResult result = null;
           // Nullify result so we know we already passed the bytebuf to chunkIndexToBuf map
-          if ((result = decryptCallbackResultInfo.result.getAndSet(null)) != null) {
+          DecryptJob.DecryptJobResult result = decryptCallbackResultInfo.result.getAndSet(null);
+          if (result != null) {
             chunkIndexToBuf.put(chunkIndex, filterChunkToRange(result.getDecryptedBlobContent()));
             numChunksRetrieved.incrementAndGet();
           } else {
@@ -747,8 +747,8 @@ class GetBlobOperation extends GetOperation {
      */
     protected void maybeReleaseDecryptionResultBuffer() {
       if (isInProgress() && progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
-        DecryptJob.DecryptJobResult result = null;
-        if ((result = decryptCallbackResultInfo.result.getAndSet(null)) != null) {
+        DecryptJob.DecryptJobResult result = decryptCallbackResultInfo.result.getAndSet(null);
+        if (result != null) {
           result.getDecryptedBlobContent().release();
         }
       }
@@ -1235,8 +1235,8 @@ class GetBlobOperation extends GetOperation {
             logger.trace("Processing stored decryption callback result for simple blob {}", blobId);
             // In case of simple blobs, user-metadata may or may not be passed into decryption job based on GetOptions flag.
             // Only in-case of GetBlobInfo and GetBlobAll, user-metadata is required to be decrypted
-            DecryptJob.DecryptJobResult result = null;
-            if ((result = decryptCallbackResultInfo.result.getAndSet(null)) != null) {
+            DecryptJob.DecryptJobResult result = decryptCallbackResultInfo.result.getAndSet(null);
+            if (result != null) {
               if (result.getDecryptedUserMetadata() != null) {
                 blobInfo = new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array(), lifeVersion);
               }

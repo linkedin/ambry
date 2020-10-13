@@ -64,9 +64,8 @@ import org.junit.Assert;
  * {@link RouterServerSSLTest} for example usage.
  */
 class RouterServerTestFramework {
-  static final int AWAIT_TIMEOUT = 25;
+  static final int AWAIT_TIMEOUT = 50;
   static final int CHUNK_SIZE = 1024 * 1024;
-  private static final double BALANCE_FACTOR = 3.0;
 
   private final MockClusterMap clusterMap;
   private final MockNotificationSystem notificationSystem;
@@ -350,8 +349,9 @@ class RouterServerTestFramework {
             if (checkDeleted) {
               checkDeleted();
             } else {
-              checkBlobInfo(get().getBlobInfo(), opChain, getOperationName());
-              checkBlob(get().getBlobDataChannel(), opChain, getOperationName());
+              GetBlobResult result = get();
+              checkBlobInfo(result.getBlobInfo(), opChain, getOperationName());
+              checkBlob(result.getBlobDataChannel(), opChain, getOperationName());
             }
           }
         };

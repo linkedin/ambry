@@ -755,13 +755,8 @@ public class BlobStoreStatsTest {
     int bucketCount = 50;
     BlobStoreStats blobStoreStats = setupBlobStoreStats(bucketCount, 0);
     // Make sure the index scanner is finished and we can enqueue
-    long recentEntryQueueTimeout = 10 * SystemTime.MsPerSec + System.currentTimeMillis();
-    while (!blobStoreStats.isRecentEntryQueueEnabled()) {
-      Thread.sleep(100);
-      long now = System.currentTimeMillis();
-      if (now > recentEntryQueueTimeout) {
-        throw new TimeoutException("Time out to wait for IndexScanner to finish");
-      }
+    if (!TestUtils.checkAndSleep(() -> blobStoreStats.isRecentEntryQueueEnabled(), 10000)) {
+      throw new TimeoutException("Time out to wait for IndexScanner to finish");
     }
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), 0));
