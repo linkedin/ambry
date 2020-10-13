@@ -1097,6 +1097,7 @@ public class ReplicaThread implements Runnable {
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
+      // TODO: if remoteReplicaInfo.getLocalStore() is closed, write will fail
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         if (exchangeMetadataResponse.missingStoreMessages.size() > 0) {
           PartitionResponseInfo partitionResponseInfo =

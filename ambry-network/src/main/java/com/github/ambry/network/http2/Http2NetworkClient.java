@@ -149,8 +149,8 @@ public class Http2NetworkClient implements NetworkClient {
                     // When success, handler would release the request.
                   } else {
                     http2ClientMetrics.http2StreamWriteAndFlushErrorCount.inc();
-                    logger.warn("Stream {} {} writeAndFlush fail. Cause: ", streamChannel.hashCode(), streamChannel,
-                        future.cause());
+                    logger.warn("Stream {} {} writeAndFlush fail. Cause: {}", streamChannel.hashCode(), streamChannel,
+                        future.cause().toString());
                     RequestInfo requestInfoFromChannelAttr = releaseAndCloseStreamChannel(streamChannel);
                     if (requestInfoFromChannelAttr != null) {
                       http2ClientResponseHandler.getResponseInfoQueue()

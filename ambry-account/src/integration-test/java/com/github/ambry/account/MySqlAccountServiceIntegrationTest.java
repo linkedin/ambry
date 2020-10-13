@@ -42,6 +42,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Container.*;
+import static com.github.ambry.account.mysql.MySqlUtils.*;
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
@@ -85,15 +86,14 @@ public class MySqlAccountServiceIntegrationTest {
 
   @Test
   public void testBadCredentials() throws Exception {
-    /*
-    mySqlConfigProps.setProperty(DB_USER, "evildoer");
-    accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
+    DbEndpoint endpoint =
+        new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword");
     try {
-      new MySqlAccountStore(accountServiceConfig);
+      new MySqlAccountStore(endpoint);
       fail("Store creation should fail with bad credentials");
     } catch (SQLException e) {
       assertTrue(MySqlDataAccessor.isCredentialError(e));
-    }*/
+    }
   }
 
   /**

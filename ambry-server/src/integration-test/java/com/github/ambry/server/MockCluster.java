@@ -397,6 +397,7 @@ class ServerShutdown implements Runnable {
  * Tracks the arrival of events and allows waiting on all events of a particular type to arrive
  */
 class EventTracker {
+  private static final int WAIT_SECONDS = 10;
   private final int numberOfReplicas;
   private final Helper creationHelper;
   private final Helper deletionHelper;
@@ -514,7 +515,7 @@ class EventTracker {
    * @throws InterruptedException
    */
   boolean awaitBlobCreations() throws InterruptedException {
-    return creationHelper.await(10, TimeUnit.SECONDS);
+    return creationHelper.await(WAIT_SECONDS, TimeUnit.SECONDS);
   }
 
   /**
@@ -523,7 +524,7 @@ class EventTracker {
    * @throws InterruptedException
    */
   boolean awaitBlobDeletions() throws InterruptedException {
-    return deletionHelper.await(10, TimeUnit.SECONDS);
+    return deletionHelper.await(WAIT_SECONDS, TimeUnit.SECONDS);
   }
 
   /**
@@ -532,7 +533,7 @@ class EventTracker {
    * @throws InterruptedException
    */
   boolean awaitBlobUndeletes() throws InterruptedException {
-    return undeleteHelper.await(10, TimeUnit.SECONDS);
+    return undeleteHelper.await(WAIT_SECONDS, TimeUnit.SECONDS);
   }
 
   /**
@@ -543,7 +544,7 @@ class EventTracker {
    * @throws InterruptedException
    */
   boolean awaitBlobUpdates(UpdateType updateType) throws InterruptedException {
-    return updateHelpers.computeIfAbsent(updateType, type -> new Helper()).await(10, TimeUnit.SECONDS);
+    return updateHelpers.computeIfAbsent(updateType, type -> new Helper()).await(WAIT_SECONDS, TimeUnit.SECONDS);
   }
 
   /**
@@ -589,6 +590,7 @@ class MockNotificationSystem implements NotificationSystem {
 
   private final ConcurrentHashMap<String, EventTracker> objectTracker = new ConcurrentHashMap<String, EventTracker>();
   private final ClusterMap clusterMap;
+  private static final int TRACKER_TIMEOUT_MS = 2000;
 
   public MockNotificationSystem(ClusterMap clusterMap) {
     this.clusterMap = clusterMap;
@@ -658,6 +660,7 @@ class MockNotificationSystem implements NotificationSystem {
    */
   void awaitBlobCreations(String blobId) {
     try {
+      waitForTracker(blobId);
       if (!objectTracker.get(blobId).awaitBlobCreations()) {
         Assert.fail("Failed awaiting for " + blobId + " creations");
       }
@@ -672,6 +675,7 @@ class MockNotificationSystem implements NotificationSystem {
    */
   void awaitBlobDeletions(String blobId) {
     try {
+      waitForTracker(blobId);
       if (!objectTracker.get(blobId).awaitBlobDeletions()) {
         Assert.fail("Failed awaiting for " + blobId + " deletions");
       }
@@ -687,6 +691,7 @@ class MockNotificationSystem implements NotificationSystem {
    */
   void awaitBlobUpdates(String blobId, UpdateType updateType) {
     try {
+      waitForTracker(blobId);
       if (!objectTracker.get(blobId).awaitBlobUpdates(updateType)) {
         Assert.fail("Failed awaiting for " + blobId + " updates of type " + updateType);
       }
@@ -701,6 +706,7 @@ class MockNotificationSystem implements NotificationSystem {
    */
   void awaitBlobUndeletes(String blobId) {
     try {
+      waitForTracker(blobId);
       if (!objectTracker.get(blobId).awaitBlobUndeletes()) {
         Assert.fail("Failed awaiting for " + blobId + " undeletes");
       }
@@ -741,6 +747,16 @@ class MockNotificationSystem implements NotificationSystem {
    */
   synchronized void decrementUpdatedReplica(String blobId, String host, int port, UpdateType updateType) {
     objectTracker.get(blobId).decrementDeleted(host, port);
+  }
+
+  /**
+   * Wait for event tracker to be created for {@code blobId}
+   * @param blobId the ID of the blob
+   */
+  private void waitForTracker(String blobId) {
+    if (!TestUtils.checkAndSleep(() -> objectTracker.containsKey(blobId), TRACKER_TIMEOUT_MS)) {
+      Assert.fail("Tracker not found for " + blobId);
+    }
   }
 
   /**

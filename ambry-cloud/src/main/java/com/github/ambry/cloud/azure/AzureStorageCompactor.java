@@ -128,6 +128,7 @@ public class AzureStorageCompactor {
     long queryStartTime = now - TimeUnit.DAYS.toMillis(lookbackDays);
     int totalBlobsPurged = 0;
 
+    // TODO (optimization): start with field with bigger backlog
     for (String fieldName : compactionFields) {
       try {
         long optimizedStartTime = Math.max(queryStartTime, checkpoints.get(fieldName));

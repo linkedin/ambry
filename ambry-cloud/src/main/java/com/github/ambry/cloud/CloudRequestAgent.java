@@ -74,7 +74,7 @@ public class CloudRequestAgent {
       String cause = cse.getCause() != null ? cse.getCause().getClass().getSimpleName() : "Unknown";
       if (cse.isRetryable() && attempts < maxAttempts) {
         long delay = (cse.getRetryDelayMs() > 0) ? cse.getRetryDelayMs() : defaultRetryDelay;
-        logger.warn("{} failed partition {} statusCode {} cause {} attempt {}, retrying after {} ms.", actionName,
+        logger.debug("{} failed partition {} statusCode {} cause {} attempt {}, retrying after {} ms.", actionName,
             partitionPath, statusCode, cause, attempts, delay);
         try {
           Thread.sleep(delay);

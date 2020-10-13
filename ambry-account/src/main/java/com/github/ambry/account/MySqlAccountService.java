@@ -448,9 +448,9 @@ public class MySqlAccountService extends AbstractAccountService {
       throw new AccountServiceException(message, AccountServiceErrorCode.ResourceConflict);
     } else if (MySqlDataAccessor.isCredentialError(e)) {
       // TODO: BadCredentials
-      throw new AccountServiceException("Invalid db credentials", AccountServiceErrorCode.BadRequest);
+      throw new AccountServiceException("Invalid db credentials", AccountServiceErrorCode.InternalError);
     } else {
-      throw new AccountServiceException(e.getMessage(), AccountServiceErrorCode.AccountUpdateError);
+      throw new AccountServiceException(e.getMessage(), AccountServiceErrorCode.InternalError);
     }
   }
 }
