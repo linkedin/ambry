@@ -135,7 +135,7 @@ public class FrontendIntegrationTest {
       FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
       ACCOUNT_SERVICE.clear();
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
-    } catch (IOException | GeneralSecurityException e) {
+    } catch (Exception e) {
       throw new IllegalStateException(e);
     }
   }

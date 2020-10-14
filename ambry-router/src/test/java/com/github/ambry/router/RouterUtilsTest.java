@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
@@ -117,7 +118,7 @@ public class RouterUtilsTest {
    * Test {@link RouterUtils#getAccountContainer(AccountService, short, short)}.
    */
   @Test
-  public void testGetAccountContainer() {
+  public void testGetAccountContainer() throws AccountServiceException {
     AccountService accountService = new InMemAccountService(false, false);
     // Both accountId and containerId are not tracked by AccountService.
     Pair<Account, Container> accountContainer =

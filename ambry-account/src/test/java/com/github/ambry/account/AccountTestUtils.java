@@ -85,6 +85,23 @@ class AccountTestUtils {
   }
 
   /**
+   * Updates a collection of {@link Account}s and verifies that an {@link AccountServiceException} with the expected
+   * error code is thrown.
+   * @param accounts the accounts to update.
+   * @param expectedErrorCode the {@link AccountServiceErrorCode} expected.
+   * @param accountService The {@link AccountService} to update.
+   */
+  static void assertUpdateAccountsFails(Collection<Account> accounts, AccountServiceErrorCode expectedErrorCode,
+      AccountService accountService) {
+    try {
+      accountService.updateAccounts(accounts);
+      fail("Expected update to fail");
+    } catch (AccountServiceException ase) {
+      assertEquals("Unexpected error code", expectedErrorCode, ase.getErrorCode());
+    }
+  }
+
+  /**
    * Randomly generates a collection of {@link Account}s, which do not have the same id or name. The {@link Container}s
    * of the same {@link Account} also do not have the same id or name.
    * @param idToRefAccountMap A map from id to {@link Account} to populate with the generated {@link Account}s.

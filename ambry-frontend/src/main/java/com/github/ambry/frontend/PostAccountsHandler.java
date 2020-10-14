@@ -213,9 +213,9 @@ class PostAccountsHandler {
       }
       try {
         accountService.updateAccounts(accountsToUpdate);
-      } catch (AccountServiceException ex) {
-        throw new RestServiceException("Account update failed",
-            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+      } catch (AccountServiceException ase) {
+        throw new RestServiceException("Account update failed: " + ase.getMessage(),
+            RestServiceErrorCode.getRestServiceErrorCode(ase.getErrorCode()));
       }
     }
   }

@@ -41,6 +41,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.mysql.MySqlUtils.*;
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
@@ -380,15 +381,15 @@ public class MySqlAccountServiceIntegrationTest {
 
     // case D: verify adding new account (4, "c") conflicts in name with (1, "c")
     accountToUpdate = new AccountBuilder((short) 4, "c", Account.AccountStatus.ACTIVE).build();
-    assertFalse("Account update should fail due to name conflict",
-        mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate)));
+    assertUpdateAccountsFails(Collections.singletonList(accountToUpdate), AccountServiceErrorCode.ResourceConflict,
+        mySqlAccountService);
     assertEquals("UpdateAccountErrorCount in metrics should be 1", 1,
         accountServiceMetrics.updateAccountErrorCount.getCount());
 
     // case E: verify updating name of account  (1, "c") to (1, "b") conflicts in name with (2, "b")
     accountToUpdate = new AccountBuilder(mySqlAccountService.getAccountById((short) 1)).name("b").build();
-    assertFalse("Account update should fail due to name conflict",
-        mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate)));
+    assertUpdateAccountsFails(Collections.singletonList(accountToUpdate), AccountServiceErrorCode.ResourceConflict,
+        mySqlAccountService);
     assertEquals("UpdateAccountErrorCount in metrics should be 2", 2,
         accountServiceMetrics.updateAccountErrorCount.getCount());
 
@@ -427,8 +428,8 @@ public class MySqlAccountServiceIntegrationTest {
     containerToUpdate = new ContainerBuilder((short) 3, "c3", ContainerStatus.ACTIVE, "c3", (short) 1).build();
     accountToUpdate =
         new AccountBuilder(accountToUpdate).containers(Collections.singletonList(containerToUpdate)).build();
-    assertFalse("Account update should fail due to name conflict in containers",
-        mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate)));
+    assertUpdateAccountsFails(Collections.singletonList(accountToUpdate), AccountServiceErrorCode.ResourceConflict,
+        mySqlAccountService);
     accountToUpdate = new AccountBuilder(accountToUpdate).removeContainer(containerToUpdate).build();
     assertEquals("UpdateAccountErrorCount in metrics should be 1", 1,
         accountServiceMetrics.updateAccountErrorCount.getCount());
@@ -445,8 +446,8 @@ public class MySqlAccountServiceIntegrationTest {
         new ContainerBuilder(mySqlAccountService.getAccountById((short) 1).getContainerById((short) 3)).setName("c2")
             .build();
     accountToUpdate = new AccountBuilder(accountToUpdate).addOrUpdateContainer(containerToUpdate).build();
-    assertFalse("Account update should fail due to name conflict in containers",
-        mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate)));
+    assertUpdateAccountsFails(Collections.singletonList(accountToUpdate), AccountServiceErrorCode.ResourceConflict,
+        mySqlAccountService);
     assertEquals("UpdateAccountErrorCount in metrics should be 2", 2,
         accountServiceMetrics.updateAccountErrorCount.getCount());
   }

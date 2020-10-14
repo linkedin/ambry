@@ -136,6 +136,7 @@ import org.json.JSONObject;
  *   </pre>
  * </p>
  */
+// TODO: only works with HelixAccountService, not MySql
 public class AccountTool {
   private final MetricRegistry registry;
   private final BackupFileManager backupFileManager;
@@ -447,7 +448,7 @@ public class AccountTool {
    * @param accounts The new {@link Account} metadata.
    * @return True if the update succeeds.
    */
-  private boolean updateAccounts(Collection<Account> accounts) {
+  private boolean updateAccounts(Collection<Account> accounts) throws AccountServiceException {
     Collection<Account> existingAccounts = accountService.getAllAccounts();
     Map<Short, Account> existingAccountsMap = new HashMap<>();
     for (Account account : existingAccounts) {

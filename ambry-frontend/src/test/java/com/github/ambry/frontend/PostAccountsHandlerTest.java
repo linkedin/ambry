@@ -111,7 +111,7 @@ public class PostAccountsHandlerTest {
     // AccountService update failure
     accountService.setShouldUpdateSucceed(false);
     testAction.accept(AccountCollectionSerde.accountsToJson(Collections.emptyList()).toString(),
-        RestServiceErrorCode.BadRequest);
+        RestServiceErrorCode.InternalServerError);
   }
 
   /**

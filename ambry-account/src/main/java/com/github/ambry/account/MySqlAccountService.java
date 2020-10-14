@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -201,8 +200,6 @@ public class MySqlAccountService extends AbstractAccountService {
     }
   }
 
-  //TODO: Revisit this interface method to see if we can throw exception instead of returning boolean so that caller can
-  // distinguish between bad input and system error.
   @Override
   public boolean updateAccounts(Collection<Account> accounts) throws AccountServiceException {
     Objects.requireNonNull(accounts, "accounts cannot be null");
@@ -212,8 +209,7 @@ public class MySqlAccountService extends AbstractAccountService {
     }
 
     if (mySqlAccountStore == null) {
-      logger.warn("MySql Account DB store is not accessible");
-      return false;
+      throw new AccountServiceException("MySql Account store is not accessible", AccountServiceErrorCode.InternalError);
     }
 
     if (config.updateDisabled) {
@@ -222,9 +218,9 @@ public class MySqlAccountService extends AbstractAccountService {
     }
 
     if (hasDuplicateAccountIdOrName(accounts)) {
-      logger.error("Duplicate account id or name exist in the accounts to update");
       accountServiceMetrics.updateAccountErrorCount.inc();
-      return false;
+      throw new AccountServiceException("Duplicate account id or name exist in the accounts to update",
+          AccountServiceErrorCode.ResourceConflict);
     }
 
     // Check for name/id/version conflicts between the accounts and containers being updated with those in local cache.
@@ -236,7 +232,8 @@ public class MySqlAccountService extends AbstractAccountService {
       if (accountInfoMap.hasConflictingAccount(accounts)) {
         logger.error("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
         accountServiceMetrics.updateAccountErrorCount.inc();
-        return false;
+        throw new AccountServiceException("Input accounts conflict with the accounts in local cache",
+            AccountServiceErrorCode.ResourceConflict);
       }
       for (Account account : accounts) {
         if (accountInfoMap.hasConflictingContainer(account.getAllContainers(), account.getId())) {
@@ -244,7 +241,8 @@ public class MySqlAccountService extends AbstractAccountService {
               "Containers={} under Account={} conflict with the containers in local cache. Cancel the update operation.",
               account.getAllContainers(), account.getId());
           accountServiceMetrics.updateAccountErrorCount.inc();
-          return false;
+          throw new AccountServiceException("Containers in account " + account.getId() + " conflict with local cache",
+              AccountServiceErrorCode.ResourceConflict);
         }
       }
     } finally {
@@ -256,11 +254,7 @@ public class MySqlAccountService extends AbstractAccountService {
       updateAccountsWithMySqlStore(accounts);
     } catch (SQLException e) {
       logger.error("Failed updating accounts={} in MySql DB", accounts, e);
-      try {
-        handleSQLException(e);
-      } catch (AccountServiceException ase) {
-        return false;
-      }
+      handleSQLException(e);
     }
 
     // write added/modified accounts to in-memory cache
@@ -270,8 +264,6 @@ public class MySqlAccountService extends AbstractAccountService {
     } finally {
       infoMapLock.writeLock().unlock();
     }
-
-    // TODO: can notify account updates to other nodes via ZK .
 
     return true;
   }

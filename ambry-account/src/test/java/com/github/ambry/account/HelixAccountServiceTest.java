@@ -732,7 +732,7 @@ public class HelixAccountServiceTest {
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE).build());
-    assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
+    assertUpdateAccountsFails(conflictAccounts, AccountServiceErrorCode.ResourceConflict, accountService);
   }
 
   /**
@@ -746,7 +746,7 @@ public class HelixAccountServiceTest {
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE).build());
-    assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
+    assertUpdateAccountsFails(conflictAccounts, AccountServiceErrorCode.ResourceConflict, accountService);
   }
 
   /**
@@ -759,7 +759,7 @@ public class HelixAccountServiceTest {
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
-    assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
+    assertUpdateAccountsFails(conflictAccounts, AccountServiceErrorCode.ResourceConflict, accountService);
   }
 
   /**
@@ -823,7 +823,7 @@ public class HelixAccountServiceTest {
     writeAccountsForConflictTest();
     Collection<Account> conflictAccounts =
         Collections.singleton((new AccountBuilder((short) 3, "a", AccountStatus.INACTIVE).build()));
-    assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
+    assertUpdateAccountsFails(conflictAccounts, AccountServiceErrorCode.ResourceConflict, accountService);
     assertEquals("Wrong account number in HelixAccountService", 2, accountService.getAllAccounts().size());
     assertNull("Wrong account got from HelixAccountService", accountService.getAccountById((short) 3));
   }
@@ -841,7 +841,7 @@ public class HelixAccountServiceTest {
     writeAccountsForConflictTest();
     Collection<Account> conflictAccounts =
         Collections.singleton((new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE).build()));
-    assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
+    assertUpdateAccountsFails(conflictAccounts, AccountServiceErrorCode.ResourceConflict, accountService);
     assertEquals("Wrong account number in HelixAccountService", 2, accountService.getAllAccounts().size());
     assertEquals("Wrong account name got from HelixAccountService", "a",
         accountService.getAccountById((short) 1).getName());
@@ -861,7 +861,7 @@ public class HelixAccountServiceTest {
       int snapshotVersionToUse = currentSnapshotVersion + snapshotVersionOffset;
       Collection<Account> conflictAccounts = Collections.singleton(
           new AccountBuilder((short) 1, "c", AccountStatus.INACTIVE).snapshotVersion(snapshotVersionToUse).build());
-      assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
+      assertUpdateAccountsFails(conflictAccounts, AccountServiceErrorCode.ResourceConflict, accountService);
       assertEquals("Wrong account number in HelixAccountService", 2, accountService.getAllAccounts().size());
       Account account = accountService.getAccountById((short) 1);
       assertEquals("Account should not have been updated", expectedAccount, account);
@@ -930,7 +930,7 @@ public class HelixAccountServiceTest {
 
     Account conflictingAccount = new AccountBuilder((short) 3, "b", AccountStatus.INACTIVE).build();
     accounts = Collections.singletonList(conflictingAccount);
-    assertFalse(accountService.updateAccounts(accounts));
+    assertUpdateAccountsFails(accounts, AccountServiceErrorCode.InternalError, accountService);
     assertEquals("Number of account is wrong.", 1, accountService.getAllAccounts().size());
     assertAccountInAccountService(account1, accountService);
   }
@@ -1118,7 +1118,15 @@ public class HelixAccountServiceTest {
    */
   private void updateAccountsAndAssertAccountExistence(Collection<Account> accounts, int expectedAccountCount,
       boolean shouldUpdateSucceed) throws Exception {
-    boolean hasUpdateAccountSucceed = accountService.updateAccounts(accounts);
+    boolean hasUpdateAccountSucceed = false;
+    try {
+      hasUpdateAccountSucceed = accountService.updateAccounts(accounts);
+    } catch (AccountServiceException ase) {
+      if (shouldUpdateSucceed) {
+        // Wasn't expecting this, rethrow.
+        throw ase;
+      }
+    }
     assertEquals("Wrong update return status", shouldUpdateSucceed, hasUpdateAccountSucceed);
     if (shouldUpdateSucceed) {
       assertAccountsInAccountService(accounts, expectedAccountCount, accountService);

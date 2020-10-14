@@ -252,7 +252,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    * </p>
    */
   @Override
-  public boolean updateAccounts(Collection<Account> accounts) {
+  public boolean updateAccounts(Collection<Account> accounts) throws AccountServiceException {
     return updateAccountsWithAccountMetadataStore(accounts, accountMetadataStore);
   }
 
@@ -263,7 +263,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    * @return True when the update operation succeeds.
    */
   boolean updateAccountsWithAccountMetadataStore(Collection<Account> accounts,
-      AccountMetadataStore accountMetadataStore) {
+      AccountMetadataStore accountMetadataStore) throws AccountServiceException {
     checkOpen();
     Objects.requireNonNull(accounts, "accounts cannot be null");
     if (accounts.isEmpty()) {
@@ -275,9 +275,9 @@ public class HelixAccountService extends AbstractAccountService implements Accou
       return false;
     }
     if (hasDuplicateAccountIdOrName(accounts)) {
-      logger.debug("Duplicate account id or name exist in the accounts to update");
       accountServiceMetrics.updateAccountErrorCount.inc();
-      return false;
+      throw new AccountServiceException("Duplicate account id or name exist in the accounts to update",
+          AccountServiceErrorCode.ResourceConflict);
     }
     long startTimeMs = System.currentTimeMillis();
     logger.trace("Start updating to HelixPropertyStore with accounts={}", accounts);
@@ -289,9 +289,11 @@ public class HelixAccountService extends AbstractAccountService implements Accou
     if (accountInfoMapRef.get().hasConflictingAccount(accounts)) {
       logger.debug("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
       accountServiceMetrics.updateAccountErrorCount.inc();
-    } else {
-      hasSucceeded = accountMetadataStore.updateAccounts(accounts);
+      throw new AccountServiceException("Input accounts conflict with the accounts in local cache",
+          AccountServiceErrorCode.ResourceConflict);
     }
+
+    hasSucceeded = accountMetadataStore.updateAccounts(accounts);
     long timeForUpdate = System.currentTimeMillis() - startTimeMs;
     if (hasSucceeded) {
       logger.trace("Completed updating accounts, took time={} ms", timeForUpdate);
@@ -305,11 +307,13 @@ public class HelixAccountService extends AbstractAccountService implements Accou
         logger.error("Failed to send notification for account metadata change");
         accountServiceMetrics.notifyAccountDataChangeErrorCount.inc();
       }
+      return true;
     } else {
       logger.error("Failed updating accounts={}, took {} ms", accounts, timeForUpdate);
       accountServiceMetrics.updateAccountErrorCount.inc();
+      throw new AccountServiceException("Failed updating accounts to Helix property store",
+          AccountServiceErrorCode.InternalError);
     }
-    return hasSucceeded;
   }
 
   @Override
@@ -400,6 +404,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
   void markContainerInactiveOnZk(Set<Container> inactiveContainerCandidateSet) throws InterruptedException {
     if (inactiveContainerCandidateSet != null) {
       boolean success = false;
+      Exception updateException = null;
       int retry = 0;
       while (!success && retry < config.maxRetryCountOnUpdateFailure) {
         Map<Short, Account> accountToUpdateMap = new HashMap<>();
@@ -414,15 +419,17 @@ public class HelixAccountService extends AbstractAccountService implements Accou
           accountToUpdateMap.put(accountId,
               new AccountBuilder(accountToEdit).addOrUpdateContainer(editedContainer).build());
         });
-        success = updateAccounts(accountToUpdateMap.values());
-        if (!success) {
+        try {
+          success = updateAccounts(accountToUpdateMap.values());
+        } catch (AccountServiceException ase) {
+          updateException = ase;
           retry++;
           Thread.sleep(config.retryDelayMs);
         }
       }
-      if (!success) {
+      if (updateException != null) {
         logger.error("Failed to mark containers INACTIVE in set : {}  after {} retries", inactiveContainerCandidateSet,
-            config.maxRetryCountOnUpdateFailure);
+            config.maxRetryCountOnUpdateFailure, updateException);
         accountServiceMetrics.accountUpdatesToZkErrorCount.inc();
       }
     }
