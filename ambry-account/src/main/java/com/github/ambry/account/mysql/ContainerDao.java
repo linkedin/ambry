@@ -13,14 +13,11 @@
  */
 package com.github.ambry.account.mysql;
 
-import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.SQLIntegrityConstraintViolationException;
-import java.sql.SQLTransientException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,9 +45,8 @@ public class ContainerDao {
 
   public ContainerDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = dataAccessor;
-    insertSql =
-        String.format("insert into %s (%s, %s, %s, %s, %s) values (?, ?, 1, now(3), now(3))", CONTAINER_TABLE, ACCOUNT_ID,
-            CONTAINER_INFO, VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
+    insertSql = String.format("insert into %s (%s, %s, %s, %s, %s) values (?, ?, 1, now(3), now(3))", CONTAINER_TABLE,
+        ACCOUNT_ID, CONTAINER_INFO, VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
     getSinceSql =
         String.format("select %s, %s, %s from %s where %s > ?", ACCOUNT_ID, CONTAINER_INFO, LAST_MODIFIED_TIME,
             CONTAINER_TABLE, LAST_MODIFIED_TIME);

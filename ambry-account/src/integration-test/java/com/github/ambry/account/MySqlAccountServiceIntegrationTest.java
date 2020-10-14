@@ -41,10 +41,10 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.mysql.MySqlUtils.*;
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
+import static com.github.ambry.utils.AccountTestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
