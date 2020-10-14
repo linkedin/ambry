@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountUtils;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
@@ -30,7 +31,6 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -42,6 +42,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,7 +68,7 @@ class BlobStoreCompactor {
   };
 
   private static final long WAIT_TIME_FOR_CLEANUP_MS = 5 * Time.MsPerSec;
-
+  private static final Logger logger = LoggerFactory.getLogger(BlobStoreCompactor.class);
   private final File dataDir;
   private final String storeId;
   private final StoreKeyFactory storeKeyFactory;
@@ -81,13 +82,12 @@ class BlobStoreCompactor {
   private final UUID sessionId;
   private final UUID incarnationId;
   private final AtomicBoolean compactionInProgress = new AtomicBoolean(false);
-  private static final Logger logger = LoggerFactory.getLogger(BlobStoreCompactor.class);
   private final IndexSegmentValidEntryFilter validEntryFilter;
   private final AccountService accountService;
+  private final Set<Pair<Short, Short>> deprecatedContainers;
+  private final boolean useDirectIO;
   private volatile boolean isActive = false;
   private PersistentIndex srcIndex;
-  private final Set<Pair<Short, Short>> deprecatedContainers;
-
   private Log tgtLog;
   private PersistentIndex tgtIndex;
   private long numSwapsUsed;
@@ -95,7 +95,6 @@ class BlobStoreCompactor {
   private CompactionLog compactionLog;
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
   private byte[] bundleReadBuffer;
-  private final boolean useDirectIO;
 
   /**
    * Constructs the compactor component.
@@ -199,21 +198,16 @@ class BlobStoreCompactor {
   /**
    * Filters deprecated {@link Container}s for compaction purpose. Deprecated containers include DELETE_IN_PROGRESS
    * containers met with retention time and all INACTIVE containers.
-   * @return the deprecated {@link Container}s' accountId & containerId pairs.
    */
   private void getDeprecatedContainers() {
     deprecatedContainers.clear();
     if (accountService != null) {
-      accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).forEach((container) -> {
-        if (container.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(config.storeContainerDeletionRetentionDays)
-            <= System.currentTimeMillis()) {
-          deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
-        }
-      });
+      Set<Container> containers =
+          AccountUtils.getDeprecatedContainers(accountService, config.storeContainerDeletionRetentionDays);
+      deprecatedContainers.addAll(containers.stream()
+          .map(container -> new Pair<>(container.getParentAccountId(), container.getId()))
+          .collect(Collectors.toSet()));
       //TODO: Filter out the INACTIVE containers from deprecatedContainers set if it's already been compacted.
-      accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE).forEach((container) -> {
-        deprecatedContainers.add(new Pair<>(container.getParentAccountId(), container.getId()));
-      });
     }
   }
 
@@ -855,7 +849,7 @@ class BlobStoreCompactor {
   private void cleanupUnusedTempSegments() throws StoreException {
     File[] files = dataDir.listFiles(TEMP_LOG_SEGMENTS_FILTER);
     if (files != null) {
-      logger.debug("Cleaning up {}", (Object[]) files);
+      logger.debug("Cleaning up {}", files);
       for (File file : files) {
         // TODO (DiskManager changes): This will actually return the segment to the DiskManager pool.
         if (!file.delete()) {

@@ -22,6 +22,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Router;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.utils.AccountTestUtils;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
@@ -45,6 +46,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -61,9 +63,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static com.github.ambry.account.Account.*;
-import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.HelixAccountService.*;
+import static com.github.ambry.utils.AccountTestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
@@ -1063,6 +1065,66 @@ public class HelixAccountServiceTest {
     Account newAccountWithoutContainer = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
     List<Account> accountsToUpdate = Collections.singletonList(newAccountWithoutContainer);
     assertFalse("Update accounts should be disabled", accountService.updateAccounts(accountsToUpdate));
+  }
+
+  /**
+   * Tests {@link AccountUtils#getDeprecatedContainers(AccountService, long)}.
+   * @throws Exception
+   */
+  @Test
+  public void testGetDeprecatedContainers() throws Exception {
+    Set<Short> accountIdSet = new HashSet<>();
+    accountIdSet.add(refAccountId);
+    long curTimestamp = System.currentTimeMillis();
+    generateRefAccountsForDeprecationTest(idToRefAccountMap, idToRefContainerMap, accountIdSet, 3, curTimestamp);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    accountService.updateAccounts(idToRefAccountMap.values());
+    assertAccountsInAccountService(idToRefAccountMap.values(), 3, accountService);
+    Set<Container> containerSet = AccountUtils.getDeprecatedContainers(accountService, 0);
+    assertEquals("Incorrect number of deprecated containers", 6, containerSet.size());
+  }
+
+  /**
+   * Randomly generates a collection of {@link Account}s, which do not have the same id or name with needed container status.
+   * @param idToRefAccountMap A map from id to {@link Account} to populate with the generated {@link Account}s.
+   * @param idToRefContainerMap A map from name to {@link Account} to populate with the generated {@link Account}s.
+   * @param accountIdSet A set of ids that could not be used to generate {@link Account}s.
+   * @param accountCount The number of {@link Account}s to generate.
+   * @param timestamp timestamp for delete trigger time.
+   */
+  static void generateRefAccountsForDeprecationTest(Map<Short, Account> idToRefAccountMap,
+      Map<Short, Map<Short, Container>> idToRefContainerMap, Set<Short> accountIdSet, int accountCount,
+      long timestamp) {
+    idToRefAccountMap.clear();
+    idToRefContainerMap.clear();
+    for (int i = 0; i < accountCount; i++) {
+      short accountId = Utils.getRandomShort(random);
+      if (!accountIdSet.add(accountId)) {
+        i--;
+        continue;
+      }
+      String accountName = UUID.randomUUID().toString();
+      Account.AccountStatus accountStatus =
+          random.nextBoolean() ? Account.AccountStatus.ACTIVE : Account.AccountStatus.INACTIVE;
+      Map<Short, Container> idToContainers = new HashMap<>();
+      List<Container> containers = new ArrayList<>();
+      List<ContainerBuilder> containerBuilders = AccountTestUtils.generateContainerBuilders(4, accountId);
+      containerBuilders.get(0).setStatus(Container.ContainerStatus.ACTIVE);
+      containerBuilders.get(1).setStatus(Container.ContainerStatus.INACTIVE);
+      containerBuilders.get(2).setStatus(Container.ContainerStatus.DELETE_IN_PROGRESS);
+      containerBuilders.get(2).setDeleteTriggerTime(timestamp);
+      containerBuilders.get(3).setStatus(Container.ContainerStatus.DELETE_IN_PROGRESS);
+      containerBuilders.get(3).setDeleteTriggerTime(timestamp + 10000);
+
+      containers.addAll(
+          containerBuilders.stream().map(containerBuilder -> containerBuilder.build()).collect(Collectors.toList()));
+      idToContainers = containers.stream().collect(Collectors.toMap(Container::getId, Function.identity()));
+      Account account = new AccountBuilder(accountId, accountName, accountStatus).containers(containers).build();
+      assertEquals("Wrong number of generated containers for the account", 4, account.getAllContainers().size());
+      idToRefAccountMap.put(accountId, account);
+      idToRefContainerMap.put(accountId, idToContainers);
+    }
+    assertEquals("Wrong number of generated accounts", accountCount, idToRefAccountMap.size());
   }
 
   /**

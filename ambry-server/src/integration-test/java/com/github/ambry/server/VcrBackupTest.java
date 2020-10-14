@@ -135,7 +135,7 @@ public class VcrBackupTest {
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, clusterMapPort,
             12410, null, vcrHelixStateModelFactoryClass);
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
-        new LatchBasedInMemoryCloudDestination(blobIds);
+        new LatchBasedInMemoryCloudDestination(blobIds, mockCluster.getClusterMap());
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
     VcrServer vcrServer =
@@ -161,7 +161,7 @@ public class VcrBackupTest {
     sendBlobToDataNode(dataNode, numberOfBlobs);
     // Create in memory cloud destination.
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
-        new LatchBasedInMemoryCloudDestination(new ArrayList<>());
+        new LatchBasedInMemoryCloudDestination(new ArrayList<>(), mockCluster.getClusterMap());
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
     // Start the VCR with token persistor off.
@@ -205,7 +205,8 @@ public class VcrBackupTest {
         vcrServer.getVcrReplicationManager().getVcrMetrics().removePartitionErrorCount.getCount());
 
     // Start VCR again with different cloud destination
-    latchBasedInMemoryCloudDestination = new LatchBasedInMemoryCloudDestination(new ArrayList<>());
+    latchBasedInMemoryCloudDestination =
+        new LatchBasedInMemoryCloudDestination(new ArrayList<>(), mockCluster.getClusterMap());
     cloudDestinationFactory = new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
 
     vcrNotificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
@@ -239,7 +240,7 @@ public class VcrBackupTest {
     sendBlobToDataNode(dataNode, numberOfBlobs);
     // Create in memory cloud destination.
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
-        new LatchBasedInMemoryCloudDestination(new ArrayList<>());
+        new LatchBasedInMemoryCloudDestination(new ArrayList<>(), mockCluster.getClusterMap());
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
     // Start the VCR with token persistor on.
@@ -284,7 +285,7 @@ public class VcrBackupTest {
 
     // Start VCR again with token.
     LatchBasedInMemoryCloudDestination newLatchBasedInMemoryCloudDestination =
-        new LatchBasedInMemoryCloudDestination(new ArrayList<>());
+        new LatchBasedInMemoryCloudDestination(new ArrayList<>(), mockCluster.getClusterMap());
     for (Map.Entry<String, byte[]> entry : latchBasedInMemoryCloudDestination.getTokenMap().entrySet()) {
       newLatchBasedInMemoryCloudDestination.getTokenMap().put(entry.getKey(), entry.getValue());
     }
@@ -319,7 +320,7 @@ public class VcrBackupTest {
     int initialNumOfVcrs = 5;
     // create a shared in memory destination.
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
-        new LatchBasedInMemoryCloudDestination(new ArrayList<>());
+        new LatchBasedInMemoryCloudDestination(new ArrayList<>(), mockCluster.getClusterMap());
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
     // 1st phase: Start VCRs to do backup.

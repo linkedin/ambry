@@ -37,6 +37,7 @@ import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
@@ -85,7 +86,6 @@ import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.replication.FindTokenFactory;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.NonBlockingRouterFactory;
@@ -683,7 +683,7 @@ final class ServerTestUtil {
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
             vcrSSLProps);
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
-        new LatchBasedInMemoryCloudDestination(blobIds);
+        new LatchBasedInMemoryCloudDestination(blobIds, clusterAgentsFactory.getClusterMap());
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
 

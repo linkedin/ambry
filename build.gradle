@@ -44,11 +44,19 @@ subprojects {
     apply plugin: 'java'
 
     if (!project.hasProperty('disableShipkit')) {
-      apply from: "$rootDir/gradle/java-publishing.gradle"
+        apply from: "$rootDir/gradle/java-publishing.gradle"
     }
 
     sourceCompatibility = 1.8
     targetCompatibility = 1.8
+
+    if (JavaVersion.current().java9Compatible) {
+        // Our consumers still run on java 8, so this flag ensures that our builds are backwards compatible at runtime
+        // with java 8 platform APIs.
+        compileJava {
+            options.compilerArgs.addAll(['--release', '8'])
+        }
+    }
 
     sourceSets {
         // separate source set for integration tests
@@ -411,6 +419,7 @@ project(':ambry-cloud') {
         compile project(':ambry-api'),
             project(':ambry-utils'),
             project(':ambry-commons'),
+            project(':ambry-account'),
             project(':ambry-replication')
         compile "com.azure:azure-storage-blob:$azureStorageVersion"
         compile "com.azure:azure-storage-blob-batch:$azureStorageVersion"

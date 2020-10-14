@@ -23,6 +23,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.pool.AbstractChannelPoolHandler;
 import io.netty.channel.pool.ChannelPoolHandler;
+import io.netty.channel.unix.Errors.NativeIoException;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
 import io.netty.handler.codec.http2.Http2FrameLogger;
@@ -82,6 +83,8 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
       if (cause instanceof Http2Exception.StreamException) {
         // This usually happens when server returns response for a request which was already dropped.
         logger.info("StreamException: {}", cause.getMessage());
+      } else if (cause instanceof NativeIoException) {
+        logger.info("Remote peer not available: " + cause.toString());
       } else {
         logger.warn("Connection inbound exception:", cause);
       }

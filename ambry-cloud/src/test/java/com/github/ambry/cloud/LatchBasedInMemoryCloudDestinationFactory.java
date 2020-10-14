@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.Collections;
 
@@ -32,9 +33,15 @@ public class LatchBasedInMemoryCloudDestinationFactory implements CloudDestinati
     this.destination = destination;
   }
 
+  /**
+   * Constructor for {@link LatchBasedInMemoryCloudDestinationFactory}.
+   * @param verifiableProperties {@link VerifiableProperties} object.
+   * @param metricRegistry  {@link MetricRegistry} object.
+   * @param clusterMap {@link ClusterMap} object.
+   */
   public LatchBasedInMemoryCloudDestinationFactory(VerifiableProperties verifiableProperties,
-      MetricRegistry metricRegistry) {
-    destination = new LatchBasedInMemoryCloudDestination(Collections.emptyList());
+      MetricRegistry metricRegistry, ClusterMap clusterMap) {
+    destination = new LatchBasedInMemoryCloudDestination(Collections.emptyList(), clusterMap);
   }
 
   @Override

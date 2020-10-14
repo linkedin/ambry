@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.utils.Utils;
 import java.util.concurrent.Callable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +56,8 @@ public class CloudRequestAgent {
     }
     // Line should never be reached
     throw new CloudStorageException(
-        actionName + " failed partition " + partitionPath + " made " + attempts + " attempts");
+        actionName + " failed, " + (!Utils.isNullOrEmpty(partitionPath) ? ("partition " + partitionPath) : "")
+            + " made " + attempts + " attempts");
   }
 
   /**

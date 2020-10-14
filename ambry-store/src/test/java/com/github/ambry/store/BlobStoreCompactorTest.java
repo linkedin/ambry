@@ -49,8 +49,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
-import static com.github.ambry.store.StoreTestUtils.*;
 import static com.github.ambry.store.CuratedLogIndexState.*;
+import static com.github.ambry.store.StoreTestUtils.*;
 import static org.junit.Assert.*;
 
 

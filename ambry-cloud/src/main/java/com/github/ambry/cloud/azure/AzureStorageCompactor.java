@@ -45,6 +45,8 @@ import org.slf4j.LoggerFactory;
  * ABS and Cosmos.
  */
 public class AzureStorageCompactor {
+  static final Map<String, Long> emptyCheckpoints;
+  static final long DEFAULT_TIME = 0L;
   private static final Logger logger = LoggerFactory.getLogger(AzureStorageCompactor.class);
   private static final ObjectMapper objectMapper = new ObjectMapper();
   private static final int CHECKPOINT_BUFFER_SIZE = 64;
@@ -62,9 +64,6 @@ public class AzureStorageCompactor {
   private final AzureMetrics azureMetrics;
   private final CloudRequestAgent requestAgent;
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
-  static final Map<String, Long> emptyCheckpoints;
-  static final String CHECKPOINT_CONTAINER = "compaction-checkpoints";
-  static final long DEFAULT_TIME = 0L;
 
   static {
     Map<String, Long> temp = new HashMap<>();
@@ -313,7 +312,8 @@ public class AzureStorageCompactor {
     // TODO: change return type to POJO with getters and serde methods
     String payload = requestAgent.doWithRetries(() -> {
       ByteArrayOutputStream baos = new ByteArrayOutputStream(CHECKPOINT_BUFFER_SIZE);
-      boolean hasCheckpoint = azureBlobDataAccessor.downloadFile(CHECKPOINT_CONTAINER, partitionPath, baos, false);
+      boolean hasCheckpoint =
+          azureBlobDataAccessor.downloadFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath, baos, false);
       return hasCheckpoint ? baos.toString() : null;
     }, "Download compaction checkpoint", partitionPath);
     if (payload == null) {
@@ -355,7 +355,7 @@ public class AzureStorageCompactor {
       String json = objectMapper.writeValueAsString(checkpoints);
       ByteArrayInputStream bais = new ByteArrayInputStream(json.getBytes());
       requestAgent.doWithRetries(() -> {
-        azureBlobDataAccessor.uploadFile(CHECKPOINT_CONTAINER, partitionPath, bais);
+        azureBlobDataAccessor.uploadFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath, bais);
         return null;
       }, "Update compaction progress", partitionPath);
       logger.info("Marked compaction of partition {} complete up to {} {}", partitionPath, fieldName,
@@ -376,7 +376,7 @@ public class AzureStorageCompactor {
   List<Pair<String, Long>> getAllCompactionProgress() throws Exception {
     // Read all checkpoint files and dump results into sortable table.
     BlobContainerClient containerClient =
-        azureBlobDataAccessor.getStorageClient().getBlobContainerClient(CHECKPOINT_CONTAINER);
+        azureBlobDataAccessor.getStorageClient().getBlobContainerClient(AzureCloudDestination.CHECKPOINT_CONTAINER);
     List<String> checkpoints = new ArrayList<>();
     containerClient.listBlobs().forEach(item -> {
       checkpoints.add(item.getName());

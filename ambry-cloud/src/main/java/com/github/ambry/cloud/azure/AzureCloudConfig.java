@@ -26,6 +26,7 @@ public class AzureCloudConfig {
   public static final String AZURE_STORAGE_CONNECTION_STRING = "azure.storage.connection.string";
   public static final String COSMOS_ENDPOINT = "cosmos.endpoint";
   public static final String COSMOS_COLLECTION_LINK = "cosmos.collection.link";
+  public static final String COSMOS_DELETED_CONTAINER_COLLECTION_LINK = "cosmos.deleted.container.collection.link";
   public static final String COSMOS_KEY = "cosmos.key";
   public static final String COSMOS_DIRECT_HTTPS = "cosmos.direct.https";
   public static final String COSMOS_QUERY_BATCH_SIZE = "cosmos.query.batch.size";
@@ -62,6 +63,12 @@ public class AzureCloudConfig {
    */
   @Config(COSMOS_COLLECTION_LINK)
   public final String cosmosCollectionLink;
+
+  /**
+   * The link (URL) for the Cosmos DB deleted container collection.
+   */
+  @Config(COSMOS_DELETED_CONTAINER_COLLECTION_LINK)
+  public final String cosmosDeletedContainerCollectionLink;
 
   /**
    * The Cosmos DB connection key.
@@ -114,6 +121,7 @@ public class AzureCloudConfig {
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING);
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
     cosmosCollectionLink = verifiableProperties.getString(COSMOS_COLLECTION_LINK);
+    cosmosDeletedContainerCollectionLink = verifiableProperties.getString(COSMOS_DELETED_CONTAINER_COLLECTION_LINK);
     cosmosKey = verifiableProperties.getString(COSMOS_KEY);
     cosmosQueryBatchSize = verifiableProperties.getInt(COSMOS_QUERY_BATCH_SIZE, DEFAULT_QUERY_BATCH_SIZE);
     cosmosContinuationTokenLimitKb =

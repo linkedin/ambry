@@ -28,7 +28,6 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.ServerConfig;
@@ -39,7 +38,6 @@ import com.github.ambry.network.LocalRequestResponseChannel;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.SocketNetworkClientFactory;
-import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestHandlerPool;
@@ -135,7 +133,7 @@ public class CloudRouterFactory implements RouterFactory {
       MetricRegistry registry = clusterMap.getMetricRegistry();
       CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
       CloudDestinationFactory cloudDestinationFactory =
-          Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties, registry);
+          Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties, registry, clusterMap);
       CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
       RequestHandlerPool requestHandlerPool =
           getRequestHandlerPool(verifiableProperties, clusterMap, cloudDestination, cloudConfig);

@@ -16,8 +16,10 @@ package com.github.ambry.cloud.azure;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.Partition;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.TestUtils;
@@ -29,10 +31,12 @@ import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
+import java.util.stream.Collectors;
 import org.apache.commons.codec.binary.Base64;
 import rx.Observable;
 import rx.observables.BlockingObservable;
@@ -60,8 +64,7 @@ class AzureTestUtils {
    * @param cloudBlobMetadata {@link CloudBlobMetadata} object.
    * @return {@link Document} object.
    */
-  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata)
-      throws IOException {
+  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata) throws IOException {
     Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
     document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, System.currentTimeMillis());
     return document;
@@ -73,7 +76,8 @@ class AzureTestUtils {
    * @param uploadTime specified upload time.
    * @return {@link Document} object.
    */
-  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, long uploadTime) throws JsonProcessingException {
+  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, long uploadTime)
+      throws JsonProcessingException {
     Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
     document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, uploadTime);
     return document;
@@ -83,6 +87,7 @@ class AzureTestUtils {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com");
     configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
+    configProps.setProperty(AzureCloudConfig.COSMOS_DELETED_CONTAINER_COLLECTION_LINK, "ambry/deletedContainer");
     configProps.setProperty(AzureCloudConfig.COSMOS_KEY, "cosmos-key");
     configProps.setProperty("clustermap.cluster.name", "main");
     configProps.setProperty("clustermap.datacenter.name", "uswest");

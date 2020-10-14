@@ -137,7 +137,8 @@ public class VcrRecoveryTest {
         ServerTestUtil.createBlobIds(blobCount, recoveryCluster.getClusterMap(), accountId, containerId, partitionId);
 
     // Create cloud destination and start vcr server.
-    latchBasedInMemoryCloudDestination = new LatchBasedInMemoryCloudDestination(blobIds);
+    latchBasedInMemoryCloudDestination =
+        new LatchBasedInMemoryCloudDestination(blobIds, recoveryCluster.getClusterMap());
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
     vcrServer =

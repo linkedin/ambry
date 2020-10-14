@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
@@ -22,9 +23,11 @@ import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.clustermap.VirtualReplicatorClusterListener;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +39,12 @@ import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerFactory;
 import org.apache.helix.InstanceType;
+import org.apache.helix.participant.StateMachineEngine;
+import org.apache.helix.task.Task;
+import org.apache.helix.task.TaskCallbackContext;
+import org.apache.helix.task.TaskConstants;
+import org.apache.helix.task.TaskFactory;
+import org.apache.helix.task.TaskStateModelFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,6 +62,9 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   private final HelixVcrClusterMetrics metrics;
   private final List<VirtualReplicatorClusterListener> listeners = new ArrayList<>();
   private final CloudConfig cloudConfig;
+  private final StoreConfig storeConfig;
+  private final AccountService accountService;
+  private final CloudDestination cloudDestination;
   private HelixManager manager;
   private HelixAdmin helixAdmin;
 
@@ -62,13 +74,15 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
    * @param clusterMapConfig The clusterMap configuration to use.
    * @param clusterMap The clusterMap to use.
    */
-  public HelixVcrCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
+  public HelixVcrCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, StoreConfig storeConfig,
+      ClusterMap clusterMap, AccountService accountService, CloudDestination cloudDestination) {
     if (Utils.isNullOrEmpty(cloudConfig.vcrClusterZkConnectString)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING);
     } else if (Utils.isNullOrEmpty(cloudConfig.vcrClusterName)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_CLUSTER_NAME);
     }
     this.cloudConfig = cloudConfig;
+    this.storeConfig = storeConfig;
     currentDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
     List<? extends PartitionId> allPartitions = clusterMap.getAllPartitionIds(null);
     logger.info("All partitions from clusterMap: {}.", allPartitions);
@@ -77,6 +91,8 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
     vcrInstanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
     metrics = new HelixVcrClusterMetrics(clusterMap.getMetricRegistry(), assignedPartitionIds);
+    this.accountService = accountService;
+    this.cloudDestination = cloudDestination;
   }
 
   /**
@@ -146,9 +162,29 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
         cloudConfig.vcrClusterZkConnectString);
     VcrStateModelFactory stateModelFactory = Utils.getObj(cloudConfig.vcrHelixStateModelFactoryClass, this);
     manager.getStateMachineEngine().registerStateModelFactory(stateModelFactory.getStateModelName(), stateModelFactory);
+    registerContainerDeletionSyncTask(manager.getStateMachineEngine());
     manager.connect();
     helixAdmin = manager.getClusterManagmentTool();
     logger.info("Participated in HelixVcrCluster successfully.");
+  }
+
+  /**
+   * Register {@link DeprecatedContainerCloudSyncTask}s to sync deleted container information from account service to VCR.
+   * @param engine the {@link StateMachineEngine} to register the task state model.
+   */
+  private void registerContainerDeletionSyncTask(StateMachineEngine engine) {
+    Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
+    taskFactoryMap.put(DeprecatedContainerCloudSyncTask.class.getSimpleName(), new TaskFactory() {
+      @Override
+      public Task createNewTask(TaskCallbackContext context) {
+        return new DeprecatedContainerCloudSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
+            cloudDestination);
+      }
+    });
+    if (!taskFactoryMap.isEmpty()) {
+      engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
+          new TaskStateModelFactory(manager, taskFactoryMap));
+    }
   }
 
   @Override

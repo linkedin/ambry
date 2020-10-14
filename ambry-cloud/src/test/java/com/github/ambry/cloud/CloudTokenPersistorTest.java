@@ -107,7 +107,7 @@ public class CloudTokenPersistorTest {
 
     LatchBasedInMemoryCloudDestination cloudDestination =
         new LatchBasedInMemoryCloudDestination(Collections.emptyList(),
-            AzureCloudDestinationFactory.getReplicationFeedType(new VerifiableProperties(props)));
+            AzureCloudDestinationFactory.getReplicationFeedType(new VerifiableProperties(props)), clusterMap);
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(props));
     CloudTokenPersistor cloudTokenPersistor = new CloudTokenPersistor("replicaTokens", mountPathToPartitionInfoList,
         new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap,

@@ -115,6 +115,7 @@ class CuratedLogIndexState {
   // the time instance that will be used in the index
   final MockTime time = new MockTime();
   final boolean isLogSegmented;
+  final long beginningTime;
 
   // the scheduler used in the index
   ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
@@ -181,6 +182,7 @@ class CuratedLogIndexState {
     this.isLogSegmented = isLogSegmented;
     // advance time here so when we set delete's operation time to 0, it will fall within retention day.
     advanceTime(TimeUnit.DAYS.toMillis(CuratedLogIndexState.deleteRetentionDay));
+    beginningTime = time.milliseconds();
     this.tempDir = tempDir;
     tempDirStr = tempDir.getAbsolutePath();
     long segmentCapacity = isLogSegmented ? CuratedLogIndexState.SEGMENT_CAPACITY : CuratedLogIndexState.LOG_CAPACITY;

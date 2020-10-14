@@ -121,8 +121,8 @@ public class CloudRouterTest extends NonBlockingRouterTest {
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
     CloudDestinationFactory cloudDestinationFactory =
-        Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties,
-            mockClusterMap.getMetricRegistry());
+        Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties, mockClusterMap.getMetricRegistry(),
+            mockClusterMap);
     CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
     RequestHandlerPool requestHandlerPool =
         CloudRouterFactory.getRequestHandlerPool(verifiableProperties, mockClusterMap, cloudDestination, cloudConfig);

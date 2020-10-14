@@ -147,7 +147,7 @@ public class CloudBlobStoreTest {
     properties.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(cacheLimit));
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     cloudConfig = new CloudConfig(verifiableProperties);
-    dest = inMemoryDestination ? new LatchBasedInMemoryCloudDestination(Collections.emptyList())
+    dest = inMemoryDestination ? new LatchBasedInMemoryCloudDestination(Collections.emptyList(), clusterMap)
         : mock(CloudDestination.class);
     vcrMetrics = new VcrMetrics(new MetricRegistry());
     store = new CloudBlobStore(verifiableProperties, partitionId, dest, clusterMap, vcrMetrics);
@@ -858,7 +858,7 @@ public class CloudBlobStoreTest {
     CloudDataNode cloudDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
 
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
-        new LatchBasedInMemoryCloudDestination(blobIdList);
+        new LatchBasedInMemoryCloudDestination(blobIdList, clusterMap);
     CloudReplica cloudReplica = new CloudReplica(partitionId, cloudDataNode);
     CloudBlobStore cloudBlobStore =
         new CloudBlobStore(new VerifiableProperties(props), partitionId, latchBasedInMemoryCloudDestination, clusterMap,

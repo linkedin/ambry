@@ -21,6 +21,7 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.DummyCloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrMetrics;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -52,6 +53,7 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,6 +76,7 @@ public class AzureIntegrationTest {
   private VerifiableProperties verifiableProperties;
   private AzureCloudDestination azureDest;
   private CloudRequestAgent cloudRequestAgent;
+  private ClusterMap clusterMap;
   private DummyCloudUpdateValidator dummyCloudUpdateValidator = new DummyCloudUpdateValidator();
   private int blobSize = 1024;
   private byte dataCenterId = 66;
@@ -85,6 +88,16 @@ public class AzureIntegrationTest {
   private String propFileName = "azure-test.properties";
   private String tokenFileName = "replicaTokens";
   private Properties testProperties;
+
+  /**
+   * Utility method to get blob input stream.
+   * @param blobSize size of blob to consider.
+   * @return the blob input stream.
+   */
+  private static InputStream getBlobInputStream(int blobSize) {
+    byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
+    return new ByteArrayInputStream(randomBytes);
+  }
 
   @Before
   public void setup() {
@@ -104,6 +117,7 @@ public class AzureIntegrationTest {
     testProperties.setProperty(CloudConfig.CLOUD_COMPACTION_LOOKBACK_DAYS, "7");
     testProperties.setProperty(AzureCloudConfig.AZURE_PURGE_BATCH_SIZE, "10");
     verifiableProperties = new VerifiableProperties(testProperties);
+    clusterMap = Mockito.mock(ClusterMap.class);
     azureDest = getAzureDestination(verifiableProperties);
     cloudRequestAgent =
         new CloudRequestAgent(new CloudConfig(verifiableProperties), new VcrMetrics(new MetricRegistry()));
@@ -114,8 +128,8 @@ public class AzureIntegrationTest {
    * @param verProps the {@link VerifiableProperties} to use.
    */
   private AzureCloudDestination getAzureDestination(VerifiableProperties verProps) {
-    return (AzureCloudDestination) new AzureCloudDestinationFactory(verProps,
-        new MetricRegistry()).getCloudDestination();
+    return (AzureCloudDestination) new AzureCloudDestinationFactory(verProps, new MetricRegistry(),
+        clusterMap).getCloudDestination();
   }
 
   @After
@@ -357,8 +371,9 @@ public class AzureIntegrationTest {
     ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
     FindTokenFactory findTokenFactory =
         new FindTokenHelper(null, replicationConfig).getFindTokenFactoryFromReplicaType(ReplicaType.CLOUD_BACKED);
-    azureDest = (AzureCloudDestination) new AzureCloudDestinationFactory(verifiableProperties,
-        new MetricRegistry()).getCloudDestination();
+    azureDest =
+        (AzureCloudDestination) new AzureCloudDestinationFactory(verifiableProperties, new MetricRegistry(), clusterMap)
+            .getCloudDestination();
 
     cleanup();
 
@@ -550,7 +565,7 @@ public class AzureIntegrationTest {
     int numPurged = purgeBlobsWithRetry(allBlobsInPartition, partitionPath);
     logger.info("Cleaned up {} blobs", numPurged);
     // Delete compaction checkpoint blob
-    if (azureDest.getAzureBlobDataAccessor().deleteFile(AzureStorageCompactor.CHECKPOINT_CONTAINER, partitionPath)) {
+    if (azureDest.getAzureBlobDataAccessor().deleteFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath)) {
       logger.info("Deleted compaction checkpoint");
     }
   }
@@ -670,15 +685,5 @@ public class AzureIntegrationTest {
       return findResult.getMetadataList().isEmpty();
     }
     throw new IllegalArgumentException("Unknown find token type");
-  }
-
-  /**
-   * Utility method to get blob input stream.
-   * @param blobSize size of blob to consider.
-   * @return the blob input stream.
-   */
-  private static InputStream getBlobInputStream(int blobSize) {
-    byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
-    return new ByteArrayInputStream(randomBytes);
   }
 }
