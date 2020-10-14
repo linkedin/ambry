@@ -16,6 +16,8 @@ package com.github.ambry.utils;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceErrorCode;
+import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import java.util.ArrayList;
@@ -95,7 +97,7 @@ public class AccountTestUtils {
    * @param expectedErrorCode the {@link AccountServiceErrorCode} expected.
    * @param accountService The {@link AccountService} to update.
    */
-  static void assertUpdateAccountsFails(Collection<Account> accounts, AccountServiceErrorCode expectedErrorCode,
+  public static void assertUpdateAccountsFails(Collection<Account> accounts, AccountServiceErrorCode expectedErrorCode,
       AccountService accountService) {
     try {
       accountService.updateAccounts(accounts);

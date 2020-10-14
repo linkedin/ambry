@@ -33,8 +33,8 @@ import java.util.Map;
 import java.util.Properties;
 import org.junit.Test;
 
-import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
+import static com.github.ambry.utils.AccountTestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
