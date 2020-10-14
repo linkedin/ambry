@@ -284,6 +284,46 @@ class CuratedLogIndexState {
   }
 
   /**
+   * Add an existing Put IndexEntry forcely to index to create duplicate PUTs in index.
+   * @param id The {@link MockId} of this duplicate put.
+   * @param value The {@link IndexValue} of this duplicate put.
+   * @param bytes The content of this duplicate put.
+   * @throws StoreException
+   */
+  void forceAddPutEntry(MockId id, IndexValue value, byte[] bytes) throws StoreException {
+    if (!value.isPut()) {
+      throw new IllegalArgumentException("Value has to be a put: " + value);
+    }
+    Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
+    ByteBuffer buffer = ByteBuffer.wrap(bytes);
+    ReadableByteChannel channel = Channels.newChannel(new ByteBufferInputStream(buffer));
+    log.appendFrom(channel, buffer.capacity());
+
+    FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, bytes.length);
+    Offset indexSegmentStartOffset = generateReferenceIndexSegmentStartOffset(fileSpan.getStartOffset());
+    if (!referenceIndex.containsKey(indexSegmentStartOffset)) {
+      // rollover will occur
+      advanceTime(DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS);
+      referenceIndex.put(indexSegmentStartOffset, new TreeMap<>());
+    }
+
+    IndexValue newValue = new IndexValue(value);
+    newValue.setNewOffset(fileSpan.getStartOffset());
+    IndexEntry entry = new IndexEntry(id, newValue);
+    logOrder.put(fileSpan.getStartOffset(), new Pair<>(id, new LogEntry(bytes, value)));
+    allKeys.computeIfAbsent(id, k -> new TreeSet<>()).add(value);
+    referenceIndex.get(indexSegmentStartOffset).computeIfAbsent(id, k -> new TreeSet<>()).add(value);
+    long expiresAtMs = value.getExpiresAtMs();
+    if (expiresAtMs != Utils.Infinite_Time && expiresAtMs < time.milliseconds()) {
+      expiredKeys.add(id);
+    } else {
+      liveKeys.add(id);
+    }
+    index.addToIndex(Collections.singletonList(entry), fileSpan);
+    lastModifiedTimesInSecs.put(indexSegmentStartOffset, value.getOperationTimeInMs() / Time.MsPerSec);
+  }
+
+  /**
    * Makes the TTL of {@code id} infinite.
    * @param id the {@link MockId} whose TTL needs to be made infinite.
    * @param forcePut if {@code true}, forces a ttl update record to be created even if a PUT isn't present. Does NOT
