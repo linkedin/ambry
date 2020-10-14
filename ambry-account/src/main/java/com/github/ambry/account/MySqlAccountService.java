@@ -22,7 +22,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.SQLException;
-import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -85,7 +84,6 @@ public class MySqlAccountService extends AbstractAccountService {
     initCacheFromBackupFile();
     // Fetches added or modified accounts and containers from mysql db and schedules to execute it periodically
     initialFetchAndSchedule();
-    // TODO: Subscribe to notifications from ZK
   }
 
   /**
@@ -419,30 +417,19 @@ public class MySqlAccountService extends AbstractAccountService {
     }
   }
 
+  /**
+   * Handle a {@link SQLException} and throw the corresponding {@link AccountServiceException}.
+   * @param e the input exception.
+   * @throws AccountServiceException the translated {@link AccountServiceException}.
+   */
   private void handleSQLException(SQLException e) throws AccountServiceException {
     // record failure, parse exception to figure out what we did wrong (eg. id or name collision). If it is id collision,
     // retry with incrementing ID (Account ID generation logic is currently in nuage-ambry, we might need to move it here)
     accountServiceMetrics.updateAccountErrorCount.inc();
-    if (e instanceof SQLIntegrityConstraintViolationException) {
+    AccountServiceException ase = MySqlDataAccessor.translateSQLException(e);
+    if (ase.getErrorCode() == AccountServiceErrorCode.ResourceConflict) {
       needRefresh = true;
-      SQLIntegrityConstraintViolationException icve = (SQLIntegrityConstraintViolationException) e;
-      String message;
-      if (icve.getMessage().contains("containers.accountContainer")) {
-        // Example: Duplicate entry '101-5' for key 'containers.accountContainer'
-        // duplicate container id: need to update cache and retry
-        message = "Duplicate containerId";
-      } else if (icve.getMessage().contains("containers.uniqueName")) {
-        // duplicate container name: need to update cache but retry may fail
-        message = "Duplicate container name";
-      } else {
-        message = "Constraint violation";
-      }
-      throw new AccountServiceException(message, AccountServiceErrorCode.ResourceConflict);
-    } else if (MySqlDataAccessor.isCredentialError(e)) {
-      // TODO: BadCredentials
-      throw new AccountServiceException("Invalid db credentials", AccountServiceErrorCode.InternalError);
-    } else {
-      throw new AccountServiceException(e.getMessage(), AccountServiceErrorCode.InternalError);
     }
+    throw ase;
   }
 }
