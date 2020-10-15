@@ -49,7 +49,6 @@ public class CompositeSend extends AbstractByteBufHolder<CompositeSend> implemen
       if (compositeSendList.size() == 1) {
         compositeSendContent = compositeSendList.get(0).content();
       } else {
-        int numComponents = 0;
         boolean allContentPresent = true;
         List<ByteBuf> byteBufs = new ArrayList<>(compositeSendList.size());
         for (Send send : compositeSendList) {
@@ -58,24 +57,12 @@ public class CompositeSend extends AbstractByteBufHolder<CompositeSend> implemen
             allContentPresent = false;
             break;
           }
-          if (content instanceof CompositeByteBuf) {
-            numComponents += ((CompositeByteBuf) content).numComponents();
-          } else {
-            numComponents++;
-          }
           byteBufs.add(content);
         }
         if (allContentPresent) {
-          compositeSendContent = byteBufs.get(0).alloc().compositeHeapBuffer(numComponents);
+          compositeSendContent = byteBufs.get(0).alloc().compositeDirectBuffer(compositeSendList.size());
           for (ByteBuf content : byteBufs) {
-            if (content instanceof CompositeByteBuf) {
-              Iterator<ByteBuf> iterator = ((CompositeByteBuf) content).iterator();
-              while (iterator.hasNext()) {
-                ((CompositeByteBuf) compositeSendContent).addComponent(true, iterator.next());
-              }
-            } else {
-              ((CompositeByteBuf) compositeSendContent).addComponent(true, content);
-            }
+            ((CompositeByteBuf) compositeSendContent).addComponent(true, content);
           }
         } else {
           compositeSendContent = null;

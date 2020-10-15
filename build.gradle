@@ -120,7 +120,6 @@ subprojects {
         systemProperty 'io.netty.allocator.smallCacheSize', '0'
         systemProperty 'io.netty.allocator.normalCacheSize', '0'
         systemProperty 'io.netty.allocator.maxCachedBufferCapacity', '0'
-        systemProperty 'io.netty.leakDetection.acquireAndReleaseOnly', 'true'
     }
 
     task intTest(type: Test) {

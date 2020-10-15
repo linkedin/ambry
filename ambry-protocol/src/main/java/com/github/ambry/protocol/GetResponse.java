@@ -138,17 +138,10 @@ public class GetResponse extends Response {
       if (toSendContent != null) {
         // Since this composite blob will be a readonly blob, we don't really care about if it's allocated
         // on a direct memory or not.
+        CompositeByteBuf compositeByteBuf = bufferToSend.alloc().compositeDirectBuffer();
         int maxNumComponent = 1 + toSendContent.nioBufferCount();
-        CompositeByteBuf compositeByteBuf = bufferToSend.alloc().compositeDirectBuffer(maxNumComponent);
         compositeByteBuf.addComponent(true, bufferToSend);
-        if (toSendContent instanceof CompositeByteBuf) {
-          Iterator<ByteBuf> iterator = ((CompositeByteBuf) toSendContent).iterator();
-          while (iterator.hasNext()) {
-            compositeByteBuf.addComponent(true, iterator.next());
-          }
-        } else {
-          compositeByteBuf.addComponent(true, toSendContent);
-        }
+        compositeByteBuf.addComponent(true, toSendContent);
         bufferToSend = compositeByteBuf;
         sendSizeInBufferToSend = toSendContent.readableBytes();
         toSend = null;
