@@ -89,10 +89,10 @@ public class Http2NetworkClient implements NetworkClient {
         Channel streamChannel = correlationIdInFlightToChannelMap.remove(correlationId);
         if (streamChannel != null) {
           logger.warn("Drop request on streamChannel: {}", streamChannel);
-          // Drop a request triggers exception on writeAndFlush failure or Http2ClientResponseHandler.exceptionCaught()
-          // We can't release a stream channel twice because a stream counter is maintained per physical channel, but we
-          // could add multiple ResponseInfos for same RequestInfo, because router will ignore these after the first one.
-          RequestInfo requestInfo = releaseAndCloseStreamChannel(streamChannel);
+          // Drop request just generates a ResponseInfo with TimeoutError to router.
+          // The stream is still transmitting, but router will ignore ResponseInfo with the same correlationId.
+          // We need stream reset to cancel the stream in transmitting.
+          RequestInfo requestInfo = streamChannel.attr(Http2NetworkClient.REQUEST_INFO).get();
           if (requestInfo != null) {
             readyResponseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.TimeoutError, null));
           }
