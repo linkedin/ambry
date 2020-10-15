@@ -84,7 +84,7 @@ public class AzureContainerCompactorIntegrationTest {
     clusterMap = Mockito.mock(ClusterMap.class);
     cloudDestination = (AzureCloudDestination) cloudDestinationFactory.getCloudDestination();
     azureContainerCompactor = new AzureContainerCompactor(cloudDestination.getAzureBlobDataAccessor(),
-        cloudDestination.getCosmosDataAccessor(), cloudConfig, null, null);
+        cloudDestination.getCosmosDataAccessor(), cloudConfig, null, null, null);
   }
 
   @After

@@ -145,7 +145,7 @@ public interface AccountService extends Closeable {
     }
     return selectedContainers;
   }
-
+  
   /**
    * @return {@link Set} of {@link Container}s ready for deletion.
    */

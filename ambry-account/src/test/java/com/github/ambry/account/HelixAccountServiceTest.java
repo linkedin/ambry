@@ -1070,11 +1070,7 @@ public class HelixAccountServiceTest {
   }
 
   /**
-<<<<<<< HEAD
    * Tests {@link AccountUtils#getDeprecatedContainers(AccountService, long)}.
-=======
-   * Tests {@link AccountService#getDeprecatedContainers(long)}.
->>>>>>> bf1bb0d24... Add unit tests
    * @throws Exception
    */
   @Test
@@ -1091,7 +1087,6 @@ public class HelixAccountServiceTest {
   }
 
   /**
-<<<<<<< HEAD
    * Randomly generates a collection of {@link Account}s, which do not have the same id or name with needed container status.
    * @param idToRefAccountMap A map from id to {@link Account} to populate with the generated {@link Account}s.
    * @param idToRefContainerMap A map from name to {@link Account} to populate with the generated {@link Account}s.
@@ -1135,8 +1130,6 @@ public class HelixAccountServiceTest {
   }
 
   /**
-=======
->>>>>>> bf1bb0d24... Add unit tests
    * Asserts the {@link Account}s received by the {@link Consumer} are as expected.
    * @param expectedAccounts The expected collection of {@link Account}s that should be received by the {@link Consumer}s.
    * @param expectedNumberOfConsumers The expected number of {@link Consumer}s.

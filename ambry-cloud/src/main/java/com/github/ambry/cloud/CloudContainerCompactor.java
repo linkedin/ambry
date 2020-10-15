@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.cloud.azure.ContainerDeletionEntry;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import java.util.Collection;
 import java.util.Collections;
@@ -77,7 +78,7 @@ public class CloudContainerCompactor {
    * assigned to current node.
    */
   private void fetchContainerDeletionEntries() {
-    Set<ContainerDeletionEntry> containerDeletionEntrySet = cloudDestination.getContainersToDelete();
+    Set<ContainerDeletionEntry> containerDeletionEntrySet = cloudDestination.getDeprecatedContainers();
     Set<ContainerDeletionEntry> assignedPartitionContainerDeletionEntries = new HashSet<>();
     Set<String> assignedParitions = virtualReplicatorCluster.getAssignedPartitionIds()
         .stream()

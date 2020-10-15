@@ -390,8 +390,8 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public Set<ContainerDeletionEntry> getContainersToDelete() {
-    return deletedContainers.stream()
+  public Set<ContainerDeletionEntry> getDeprecatedContainers() {
+    return deprecatedContainers.stream()
         .filter(containerDeletionEntry -> !containerDeletionEntry.isDeleted())
         .collect(Collectors.toSet());
   }

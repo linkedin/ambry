@@ -24,7 +24,6 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.CloudUpdateValidator;
-import com.github.ambry.cloud.ContainerDeletionEntry;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
@@ -507,8 +506,8 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public Set<ContainerDeletionEntry> getContainersToDelete() {
-    return cosmosDataAccessor.getContainersToDelete(containerDeletionQueryBatchSize);
+  public Set<ContainerDeletionEntry> getDeprecatedContainers() {
+    return cosmosDataAccessor.getDeprecatedContainers(containerDeletionQueryBatchSize);
   }
 
   /**

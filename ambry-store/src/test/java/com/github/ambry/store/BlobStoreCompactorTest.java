@@ -49,7 +49,6 @@ import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 
 import static com.github.ambry.store.CuratedLogIndexState.*;
@@ -1061,7 +1060,6 @@ public class BlobStoreCompactorTest {
       cleanedUpSize += indexEntry.getValue().getSize();
     }
 
-    Mockito.when(accountService.getDeprecatedContainers(ArgumentMatchers.anyLong())).thenCallRealMethod();
     Mockito.when(accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS))
         .thenReturn(deleteInProgressSet);
     Mockito.when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(InactiveSet);

@@ -153,6 +153,13 @@ public class ContainerDeletionEntry {
   }
 
   /**
+   * @return {@code deletePendingPartitions}.
+   */
+  public Set<String> getDeletePendingPartitions() {
+    return deletePendingPartitions;
+  }
+
+  /**
    * Serialize {@link Container} object to save to Cosmos.
    * @return serialized {@link JSONObject}.
    */
