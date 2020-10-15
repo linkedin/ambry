@@ -57,6 +57,7 @@ public class CompositeSend extends AbstractByteBufHolder<CompositeSend> implemen
             allContentPresent = false;
             break;
           }
+          byteBufs.add(content);
         }
         if (allContentPresent) {
           compositeSendContent = byteBufs.get(0).alloc().compositeDirectBuffer(compositeSendList.size());
