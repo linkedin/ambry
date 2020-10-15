@@ -44,15 +44,7 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
   public void start() throws Exception {
     storageQuotaEnforcer.initStorageUsage(storageUsageRefresher.getContainerStorageUsage());
     storageQuotaEnforcer.initStorageQuota(storageQuotaSource.getContainerQuota());
-
-    StorageQuotaSource.Listener sourceListener = storageQuotaEnforcer.getQuotaSourceListener();
-    if (sourceListener != null) {
-      storageQuotaSource.registerListener(sourceListener);
-    }
-    StorageUsageRefresher.Listener refresherListener = storageQuotaEnforcer.getUsageRefresherListener();
-    if (refresherListener != null) {
-      storageUsageRefresher.registerListener(refresherListener);
-    }
+    storageQuotaEnforcer.registerListeners(storageQuotaSource, storageUsageRefresher);
   }
 
   @Override

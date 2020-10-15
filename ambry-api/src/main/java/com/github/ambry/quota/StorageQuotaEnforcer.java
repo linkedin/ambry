@@ -43,24 +43,17 @@ public interface StorageQuotaEnforcer {
   void initStorageUsage(Map<String, Map<String, Long>> usage);
 
   /**
-   * Return a {@link StorageUsageRefresher.Listener} to listen on the change of current storage usage.
-   * Return null if {@link StorageQuotaEnforcer} doesn't want to listen on the changes.
-   * @return The {@link StorageUsageRefresher.Listener}.
-   */
-  StorageUsageRefresher.Listener getUsageRefresherListener();
-
-  /**
    * Initialize the storage quota in {@link StorageQuotaSource}.
    * @param quota The initial quota from {@link StorageQuotaSource}.
    */
   void initStorageQuota(Map<String, Map<String, Long>> quota);
 
   /**
-   * Return a {@link StorageQuotaSource.Listener} to listen on the change of storage quota.
-   * Return null if {@link StorageQuotaEnforcer} doesn't want to listen on the changes.
-   * @return The {@link StorageQuotaSource.Listener}.
+   * Register listeners in {@link StorageQuotaSource} and {@link StorageUsageRefresher}.
+   * @param storageQuotaSource The {@link StorageQuotaSource} to register listener.
+   * @param storageUsageRefresher The {@link StorageUsageRefresher} to register listener.
    */
-  StorageQuotaSource.Listener getQuotaSourceListener();
+  void registerListeners(StorageQuotaSource storageQuotaSource, StorageUsageRefresher storageUsageRefresher);
 
   /**
    * Return true if the given {@link QuotaOperation} should be throttled.
@@ -68,7 +61,7 @@ public interface StorageQuotaEnforcer {
    * @param containerId The containerId of this operation.
    * @param op The {@link QuotaOperation}.
    * @param size The size of this operation. eg, if the op is {@link QuotaOperation#Post}, size if the size of the content.
-   * @return True is the given {@link QuotaOperation} should be throttled.
+   * @return True if the given {@link QuotaOperation} should be throttled.
    */
   boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size);
 

@@ -75,27 +75,40 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
   }
 
   @Override
-  public StorageUsageRefresher.Listener getUsageRefresherListener() {
-    return new StorageUsageRefresher.Listener() {
-      @Override
-      public void onNewContainerStorageUsage(Map<String, Map<String, Long>> containerStorageUsage) {
-        initMap(containerStorageUsage, storageUsage, true);
-      }
+  public void registerListeners(StorageQuotaSource storageQuotaSource, StorageUsageRefresher storageUsageRefresher) {
+    storageQuotaSource.registerListener(getQuotaSourceListener());
+    storageUsageRefresher.registerListener(getUsageRefresherListener());
+  }
+
+  /**
+   * Return a {@link StorageQuotaSource.Listener}, only used in test.
+   * @return {@link StorageQuotaSource.Listener}.
+   */
+  StorageQuotaSource.Listener getQuotaSourceListener() {
+    return containerStorageQuota -> {
+      Map<String, Map<String, Long>> newQuota = new HashMap<>();
+      initMap(containerStorageQuota, newQuota, false);
+      storageQuota = newQuota;
     };
   }
 
-  @Override
-  public StorageQuotaSource.Listener getQuotaSourceListener() {
-    return new StorageQuotaSource.Listener() {
-      @Override
-      public void onNewContainerStorageQuota(Map<String, Map<String, Long>> containerStorageQuota) {
-        Map<String, Map<String, Long>> newQuota = new HashMap<>();
-        initMap(containerStorageQuota, newQuota, false);
-        storageQuota = newQuota;
-      }
+  /**
+   * Return a {@link StorageUsageRefresher.Listener}, only used in test.
+   * @return {@link StorageUsageRefresher.Listener}.
+   */
+  StorageUsageRefresher.Listener getUsageRefresherListener() {
+    return containerStorageUsage -> {
+      initMap(containerStorageUsage, storageUsage, true);
     };
   }
 
+  /**
+   * Initialize the map with another given map and replace the value in the map with the value from given map.
+   * @param mapWithValue The given map used to initialize a different map.
+   * @param mapToInit The map to be initialized.
+   * @param concurrentMap If true, then create a concurent hashmap for the inner map when it doesn't exist in the map
+   *                      to be initialized.
+   */
   private void initMap(Map<String, Map<String, Long>> mapWithValue, Map<String, Map<String, Long>> mapToInit,
       boolean concurrentMap) {
     for (Map.Entry<String, Map<String, Long>> mapEntry : mapWithValue.entrySet()) {
@@ -108,10 +121,18 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
     }
   }
 
+  /**
+   * Return the in-memory copy of the storage quota, only used in test.
+   * @return The in-memory copy of the storage quota.
+   */
   Map<String, Map<String, Long>> getStorageQuota() {
     return storageQuota;
   }
 
+  /**
+   * Return the in-memory copy of the storage usage, only used in test.
+   * @return The in-memory copy of the storage usage.
+   */
   Map<String, Map<String, Long>> getStorageUsage() {
     return storageUsage;
   }
