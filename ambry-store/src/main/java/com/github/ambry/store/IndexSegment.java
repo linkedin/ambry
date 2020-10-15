@@ -266,6 +266,9 @@ class IndexSegment implements Iterable<IndexEntry> {
    */
   int size() {
     if (sealed.get()) {
+      if (serEntries == null) {
+        return 0;
+      }
       return numberOfEntries(serEntries);
     } else {
       return getNumberOfItems();

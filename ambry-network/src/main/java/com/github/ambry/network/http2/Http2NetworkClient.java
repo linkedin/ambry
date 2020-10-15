@@ -31,6 +31,7 @@ import io.netty.channel.pool.ChannelPoolMap;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
 import io.netty.util.AttributeKey;
+import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.InetSocketAddress;
@@ -156,11 +157,7 @@ public class Http2NetworkClient implements NetworkClient {
                       http2ClientResponseHandler.getResponseInfoQueue()
                           .put(new ResponseInfo(requestInfoFromChannelAttr, NetworkClientErrorCode.NetworkError, null));
                     }
-                    if (!(future.cause() instanceof ClosedChannelException)) {
-                      // If it's ClosedChannelException caused by drop request, it's probably refCnt has been decreased.
-                      // TODO: a round solution is needed.
-                      requestInfo.getRequest().release();
-                    }
+                    ReferenceCountUtil.safeRelease(requestInfo.getRequest());
                   }
                 }
               });
