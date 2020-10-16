@@ -14,7 +14,6 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.account.Container;
-import com.github.ambry.cloud.azure.ContainerDeletionEntry;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.replication.FindToken;
 import java.io.Closeable;
@@ -23,7 +22,6 @@ import java.io.OutputStream;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 
 /**
@@ -158,7 +156,7 @@ public interface CloudDestination extends Closeable {
   void deprecateContainers(Collection<Container> deprecatedContainers) throws CloudStorageException;
 
   /**
-   * @return {@link Set} of deprecated {@link Container}s.
+   * @return {@link CloudContainerCompactor} object that would do container compaction for cloud.
    */
-  Set<ContainerDeletionEntry> getDeprecatedContainers();
+  CloudContainerCompactor getContainerCompactor();
 }

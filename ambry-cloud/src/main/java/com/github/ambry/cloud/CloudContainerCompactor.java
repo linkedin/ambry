@@ -13,106 +13,17 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.cloud.azure.ContainerDeletionEntry;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
-import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.github.ambry.clustermap.PartitionId;
+import java.util.List;
 
 
 /**
- * Class that runs scheduled or on-demand compaction of blobs of deleted containers.
+ * Interface that provides methods for compacting deprecated container from assigned partitions.
  */
-public class CloudContainerCompactor implements Runnable {
-  private static final Logger logger = LoggerFactory.getLogger(CloudContainerCompactor.class);
-
-  private final CloudDestination cloudDestination;
-  private final VirtualReplicatorCluster virtualReplicatorCluster;
-  private ContainerDeletionEntryCache containerDeletionEntryCache;
-
+public interface CloudContainerCompactor {
   /**
-   * Constructor for {@link CloudContainerCompactor}.
-   * @param cloudDestination {@link CloudDestination} object.
-   * @param virtualReplicatorCluster {@link VirtualReplicatorCluster} object.
+   * Compact deprecated containers from partitions assigned to this vcr node.
+   * @param assignedPartitions {@link List} of {@link PartitionId}s assigned to this node.
    */
-  CloudContainerCompactor(CloudDestination cloudDestination, VirtualReplicatorCluster virtualReplicatorCluster) {
-    this.cloudDestination = cloudDestination;
-    this.virtualReplicatorCluster = virtualReplicatorCluster;
-  }
-
-  public void run() {
-    compactDeprecatedContainerBlobs();
-  }
-
-  /**
-   * Compact blobs of the deleted container from cloud.
-   */
-  private void compactDeprecatedContainerBlobs() {
-    while (!containerDeletionEntryCache.isEmpty()) {
-      fetchContainerDeletionEntries();
-      if (containerDeletionEntryCache.isEmpty()) {
-        // this means there are no more blobs of container to be deleted in partitions assigned to current node
-        break;
-      }
-      ContainerDeletionEntry containerDeletionEntry = containerDeletionEntryCache.pop();
-      for (String partitionId : containerDeletionEntry.getDeletePendingPartitions()) {
-        try {
-          int blobCompactedCount = cloudDestination.compactContainer(containerDeletionEntry.getContainerId(),
-              containerDeletionEntry.getAccountId(), partitionId);
-        } catch (CloudStorageException csEx) {
-          logger.error("Container compaction failed for account {} container {} in partition {}",
-              containerDeletionEntry.getAccountId(), containerDeletionEntry.getContainerId(), partitionId);
-        }
-      }
-    }
-  }
-
-  /**
-   * Fetch the {@link ContainerDeletionEntry} from cloud and create a cache with entries that have atleast one partition
-   * assigned to current node.
-   */
-  private void fetchContainerDeletionEntries() {
-    Set<ContainerDeletionEntry> containerDeletionEntrySet = cloudDestination.getDeprecatedContainers();
-    Set<ContainerDeletionEntry> assignedPartitionContainerDeletionEntries = new HashSet<>();
-    Set<String> assignedParitions = virtualReplicatorCluster.getAssignedPartitionIds()
-        .stream()
-        .map(partition -> partition.toPathString())
-        .collect(Collectors.toSet());
-    for (ContainerDeletionEntry containerDeletionEntry : containerDeletionEntrySet) {
-      Set<String> assignedDeletePendingPartitions = containerDeletionEntry.getDeletePendingPartitions()
-          .stream()
-          .filter(partitionId -> assignedParitions.contains(partitionId))
-          .collect(Collectors.toSet());
-      if (assignedDeletePendingPartitions.size() > 0) {
-        assignedPartitionContainerDeletionEntries.add(
-            new ContainerDeletionEntry(containerDeletionEntry.getContainerId(), containerDeletionEntry.getAccountId(),
-                containerDeletionEntry.getDeleteTriggerTimestamp(), false, assignedDeletePendingPartitions));
-      }
-    }
-    containerDeletionEntryCache = new ContainerDeletionEntryCache(assignedPartitionContainerDeletionEntries);
-  }
-
-  class ContainerDeletionEntryCache {
-    private final SortedSet<ContainerDeletionEntry> containerDeletionEntries;
-
-    public ContainerDeletionEntryCache(Collection<ContainerDeletionEntry> containerDeletionEntryList) {
-      this.containerDeletionEntries = Collections.unmodifiableSortedSet(new TreeSet<>(containerDeletionEntryList));
-    }
-
-    public ContainerDeletionEntry pop() {
-      ContainerDeletionEntry containerDeletionEntry = containerDeletionEntries.first();
-      containerDeletionEntries.remove(containerDeletionEntry);
-      return containerDeletionEntry;
-    }
-
-    public boolean isEmpty() {
-      return containerDeletionEntries.isEmpty();
-    }
-  }
+  void compactAssignedDeprecatedContainers(List<? extends PartitionId> assignedPartitions);
 }

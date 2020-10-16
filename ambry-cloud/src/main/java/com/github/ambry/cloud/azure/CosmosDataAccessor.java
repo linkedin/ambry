@@ -578,14 +578,15 @@ public class CosmosDataAccessor {
   }
 
   /**
-   * Add the {@link ContainerDeletionEntry} for newly deprecated {@link Container}s to cosmos table.
-   * @param deprecatedContainers {@link Set} of deleted {@link ContainerDeletionEntry}s.
+   * Add the {@link CosmosContainerDeletionEntry} for newly deprecated {@link Container}s to cosmos table.
+   * @param deprecatedContainers {@link Set} of deleted {@link CosmosContainerDeletionEntry}s.
    * @return the max deletion trigger time of all the added containers to serve as checkpoint for future update.
    * @throws {@link DocumentClientException} in case of any error.
    */
-  public long deprecateContainers(Set<ContainerDeletionEntry> deprecatedContainers) throws DocumentClientException {
+  public long deprecateContainers(Set<CosmosContainerDeletionEntry> deprecatedContainers)
+      throws DocumentClientException {
     long latestContainerDeletionTimestamp = -1;
-    for (ContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
+    for (CosmosContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
       try {
         executeCosmosAction(() -> asyncDocumentClient.createDocument(cosmosDeletedContainerCollectionLink,
             containerDeletionEntry.toJson(), new RequestOptions(), true).toBlocking().single(),
@@ -596,7 +597,7 @@ public class CosmosDataAccessor {
       } catch (DocumentClientException dex) {
         if (dex.getStatusCode() == HttpConstants.StatusCodes.CONFLICT) {
           logger.info("Container with accountid {} and containerid {} already exists. Skipping.",
-              containerDeletionEntry.getAccountId(), containerDeletionEntry.getContainerId());
+              containerDeletionEntry.getParentAccountId(), containerDeletionEntry.getContainerId());
         } else {
           throw dex;
         }
@@ -606,21 +607,21 @@ public class CosmosDataAccessor {
   }
 
   /**
-   * @return a {@link Set} of {@link ContainerDeletionEntry} objects from cosmosdb that are not marked as deleted.
+   * @return a {@link Set} of {@link CosmosContainerDeletionEntry} objects from cosmosdb that are not marked as deleted.
    */
-  public Set<ContainerDeletionEntry> getDeprecatedContainers(int maxEntries) {
+  public Set<CosmosContainerDeletionEntry> getDeprecatedContainers(int maxEntries) {
     String query = String.format(DEPRECATED_CONTAINERS_QUERY, maxEntries);
     Timer timer = new Timer();
     Iterator<FeedResponse<Document>> iterator =
         executeCosmosQuery(cosmosDeletedContainerCollectionLink, null, new SqlQuerySpec(query), new FeedOptions(),
             timer).getIterator();
-    Set<ContainerDeletionEntry> containerDeletionEntries = new HashSet<>();
+    Set<CosmosContainerDeletionEntry> containerDeletionEntries = new HashSet<>();
     while (iterator.hasNext()) {
       FeedResponse<Document> response = iterator.next();
       response.getResults()
           .iterator()
           .forEachRemaining(
-              doc -> containerDeletionEntries.add(ContainerDeletionEntry.fromJson(new JSONObject(doc.toJson()))));
+              doc -> containerDeletionEntries.add(CosmosContainerDeletionEntry.fromJson(new JSONObject(doc.toJson()))));
     }
     return containerDeletionEntries;
   }

@@ -15,8 +15,8 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.azure.AzureReplicationFeed;
-import com.github.ambry.cloud.azure.ContainerDeletionEntry;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
+import com.github.ambry.cloud.azure.CosmosContainerDeletionEntry;
 import com.github.ambry.cloud.azure.CosmosUpdateTimeFindToken;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -120,7 +120,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final ChangeFeed changeFeed = new ChangeFeed();
   private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
   private final AzureReplicationFeed.FeedType azureReplicationFeedType;
-  private final Set<ContainerDeletionEntry> deprecatedContainers = new HashSet<>();
+  private final Set<CosmosContainerDeletionEntry> deprecatedContainers = new HashSet<>();
   private final ClusterMap clusterMap;
 
   private final static AzureReplicationFeed.FeedType DEFAULT_AZURE_REPLICATION_FEED_TYPE =
@@ -384,16 +384,18 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   public void deprecateContainers(Collection<Container> deletedContainers) {
     this.deprecatedContainers.addAll(deletedContainers.stream()
-        .map(container -> ContainerDeletionEntry.fromContainer(container,
+        .map(container -> CosmosContainerDeletionEntry.fromContainer(container,
             clusterMap.getAllPartitionIds(null).stream().map(PartitionId::toPathString).collect(Collectors.toSet())))
         .collect(Collectors.toList()));
   }
 
   @Override
-  public Set<ContainerDeletionEntry> getDeprecatedContainers() {
-    return deprecatedContainers.stream()
-        .filter(containerDeletionEntry -> !containerDeletionEntry.isDeleted())
-        .collect(Collectors.toSet());
+  public CloudContainerCompactor getContainerCompactor() {
+    return new CloudContainerCompactor() {
+      @Override
+      public void compactAssignedDeprecatedContainers(List<? extends PartitionId> assignedPartitions) {
+      }
+    };
   }
 
   boolean doesBlobExist(BlobId blobId) {
@@ -447,7 +449,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   /**
    * @return {@code deletedContainers}.
    */
-  public Set<ContainerDeletionEntry> getDeletedContainers() {
+  public Set<CosmosContainerDeletionEntry> getDeletedContainers() {
     return deprecatedContainers;
   }
 }

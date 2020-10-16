@@ -21,6 +21,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudContainerCompactor;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.CloudUpdateValidator;
@@ -52,7 +53,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -76,7 +76,6 @@ class AzureCloudDestination implements CloudDestination {
   private final AzureReplicationFeed azureReplicationFeed;
   private final AzureMetrics azureMetrics;
   private final int queryBatchSize;
-  private final int containerDeletionQueryBatchSize;
   private final boolean isVcr;
   private final CloudConfig cloudConfig;
   private final ClusterMap clusterMap;
@@ -99,7 +98,7 @@ class AzureCloudDestination implements CloudDestination {
     this.azureBlobDataAccessor =
         new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
     this.queryBatchSize = azureCloudConfig.cosmosQueryBatchSize;
-    this.containerDeletionQueryBatchSize = azureCloudConfig.cosmosContainerDeletionBatchSize;
+
     this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, vcrMetrics, azureMetrics);
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
@@ -133,7 +132,6 @@ class AzureCloudDestination implements CloudDestination {
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
-    this.containerDeletionQueryBatchSize = AzureCloudConfig.DEFAULT_COSMOS_CONTAINER_DELETION_BATCH_SIZE;
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
     this.cosmosDataAccessor =
         new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, cosmosDeletedContainerCollectionLink,
@@ -506,8 +504,8 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public Set<ContainerDeletionEntry> getDeprecatedContainers() {
-    return cosmosDataAccessor.getDeprecatedContainers(containerDeletionQueryBatchSize);
+  public CloudContainerCompactor getContainerCompactor() {
+    return azureContainerCompactor;
   }
 
   /**

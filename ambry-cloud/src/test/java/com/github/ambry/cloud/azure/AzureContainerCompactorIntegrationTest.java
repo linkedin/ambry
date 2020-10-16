@@ -115,10 +115,10 @@ public class AzureContainerCompactorIntegrationTest {
    * @param containers {@link Set} of {@link Container}s that should be present in cosmos.
    */
   private void verifyCosmosData(Set<Container> containers) {
-    Set<ContainerDeletionEntry> entries = cloudDestination.getCosmosDataAccessor().getDeprecatedContainers(100);
+    Set<CosmosContainerDeletionEntry> entries = cloudDestination.getCosmosDataAccessor().getDeprecatedContainers(100);
     Assert.assertEquals(containers.size(), entries.size());
     Set<Short> containerIds = containers.stream().map(Container::getId).collect(Collectors.toSet());
-    for (ContainerDeletionEntry entry : entries) {
+    for (CosmosContainerDeletionEntry entry : entries) {
       Assert.assertTrue(containerIds.contains(entry.getContainerId()));
     }
   }
