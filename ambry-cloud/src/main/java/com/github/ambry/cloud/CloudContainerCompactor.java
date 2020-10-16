@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Class that runs scheduled or on-demand compaction of blobs of deleted containers.
  */
-public class CloudContainerCompactor {
+public class CloudContainerCompactor implements Runnable {
   private static final Logger logger = LoggerFactory.getLogger(CloudContainerCompactor.class);
 
   private final CloudDestination cloudDestination;
@@ -47,13 +47,13 @@ public class CloudContainerCompactor {
   }
 
   public void run() {
-    compactDeletedContainers();
+    compactDeprecatedContainerBlobs();
   }
 
   /**
    * Compact blobs of the deleted container from cloud.
    */
-  private void compactDeletedContainers() {
+  private void compactDeprecatedContainerBlobs() {
     while (!containerDeletionEntryCache.isEmpty()) {
       fetchContainerDeletionEntries();
       if (containerDeletionEntryCache.isEmpty()) {

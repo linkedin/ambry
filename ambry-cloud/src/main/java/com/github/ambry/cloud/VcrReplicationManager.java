@@ -54,6 +54,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final VcrMetrics vcrMetrics;
   private final VirtualReplicatorCluster virtualReplicatorCluster;
   private final CloudStorageCompactor cloudStorageCompactor;
+  private final CloudContainerCompactor cloudContainerCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
   private final boolean trackPerDatacenterLagInMetric;
 
@@ -77,6 +78,9 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudStorageCompactor =
         cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
             partitionToPartitionInfo.keySet(), vcrMetrics) : null;
+    this.cloudContainerCompactor =
+        cloudConfig.cloudContainerCompactionEnabled ? new CloudContainerCompactor(cloudDestination,
+            virtualReplicatorCluster) : null;
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     // We need a datacenter to replicate from, which should be specified in the cloud config.
     if (cloudConfig.vcrSourceDatacenters.isEmpty()) {
@@ -126,16 +130,37 @@ public class VcrReplicationManager extends ReplicationEngine {
     scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
         replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
 
-    if (cloudConfig.cloudBlobCompactionEnabled) {
-      // Schedule thread to purge dead blobs for this VCR's partitions
+    // Schedule thread to purge dead blobs for this VCR's partitions
+    // after delay to allow startup to finish.
+    scheduleCompactionTask(cloudStorageCompactor, cloudConfig.cloudBlobCompactionEnabled,
+        cloudConfig.cloudBlobCompactionStartupDelaySecs, cloudConfig.cloudBlobCompactionIntervalHours,
+        "cloud blob compaction");
+
+    // Schedule thread to purge blobs belonging to deprecated containers for this VCR's partitions
+    // after delay to allow startup to finish.
+    scheduleCompactionTask(cloudContainerCompactor, cloudConfig.cloudContainerCompactionEnabled,
+        cloudConfig.cloudContainerCompactionStartupDelaySecs, cloudConfig.cloudContainerCompactionIntervalHours,
+        "cloud container compaction");
+  }
+
+  /**
+   * Schedule the specified compaction task if enabled with the specified delay and interval.
+   * @param task {@link Runnable} task to be scheduled.
+   * @param isEnabled flag indicating if the task is enabled. If false the task is not scheduled.
+   * @param delaySec initial delay to allow startup to finish before starting task.
+   * @param intervalHours period between successive executions.
+   * @param taskName name of the compaction task being scheduled.
+   */
+  private void scheduleCompactionTask(Runnable task, boolean isEnabled, long delaySec, long intervalHours,
+      String taskName) {
+    if (isEnabled) {
+      // Schedule thread to purge blobs belonging to deprecated containers for this VCR's partitions
       // after delay to allow startup to finish.
-      long delaySec = cloudConfig.cloudBlobCompactionStartupDelaySecs;
-      long intervalSec = TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours);
-      scheduler.scheduleAtFixedRate(cloudStorageCompactor, delaySec, intervalSec, TimeUnit.SECONDS);
-      logger.info("Scheduled compaction task to run every {} hours starting in {} seconds.",
-          cloudConfig.cloudBlobCompactionIntervalHours, delaySec);
+      long intervalSec = TimeUnit.HOURS.toSeconds(intervalHours);
+      scheduler.scheduleAtFixedRate(task, delaySec, intervalSec, TimeUnit.SECONDS);
+      logger.info("Scheduled {} task to run every {} hours starting in {} seconds.", taskName, intervalHours, delaySec);
     } else {
-      logger.warn("Running with compaction turned off!");
+      logger.warn("Running with {} turned off!", taskName);
     }
   }
 

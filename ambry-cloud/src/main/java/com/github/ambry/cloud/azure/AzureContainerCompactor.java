@@ -110,7 +110,7 @@ public class AzureContainerCompactor {
       totalPurged += requestAgent.doWithRetries(
           () -> AzureCompactionUtil.purgeBlobs(blobs, azureBlobDataAccessor, azureMetrics, cosmosDataAccessor),
           "PurgeBlobs", partitionPath);
-      vcrMetrics.deletedContainerCompactionRate.mark(blobs.size());
+      vcrMetrics.deprecatedContainerCompactionRate.mark(blobs.size());
     }
     return totalPurged;
   }
@@ -145,6 +145,7 @@ public class AzureContainerCompactor {
       ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
       buffer.put(baos.toByteArray());
       buffer.flip();
+      // TODO test what happens if the downloaded file is empty
       return buffer.getLong();
     } catch (BlobStorageException bsex) {
       if (bsex.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {

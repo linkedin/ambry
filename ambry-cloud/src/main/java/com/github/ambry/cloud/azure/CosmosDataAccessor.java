@@ -427,6 +427,15 @@ public class CosmosDataAccessor {
     }
   }
 
+  /**
+   * Get the list of blobs in the specified partition that belong to the specified container.
+   * @param partitionPath the partition to query.
+   * @param accountId account id of the container.
+   * @param containerId container id of the container.
+   * @param queryLimit max number of blobs to return.
+   * @return a List of {@link CloudBlobMetadata} referencing the blobs belonging to the deprecated containers.
+   * @throws DocumentClientException in case of any error.
+   */
   List<CloudBlobMetadata> getContainerBlobs(String partitionPath, short accountId, short containerId, int queryLimit)
       throws DocumentClientException {
     String query = String.format(CONTAINER_BLOBS_QUERY, accountId, containerId);
