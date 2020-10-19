@@ -116,18 +116,20 @@ public class AzureContainerCompactorIntegrationTest {
     verifyCheckpoint(containers);
 
     // Add more containers and verify that they are persisted after the checkpoint.
-    /*containers.addAll(generateContainers(5));
+    containers.addAll(generateContainers(5));
     cloudDestination.deprecateContainers(containers);
     verifyCosmosData(containers);
-    verifyCheckpoint(containers);*/
+    verifyCheckpoint(containers);
   }
 
   @Test
   public void testCompactAssignedDeprecatedContainers() throws CloudStorageException {
-   /* Set<Container> containers = generateContainers(5);
+    Set<Container> containers = generateContainers(5);
     cloudDestination.deprecateContainers(containers);
     verifyCosmosData(containers);
-    verifyCheckpoint(containers);*/
+    verifyCheckpoint(containers);
+
+    // TODO Create blobs in test container and then call compact container
   }
 
   /**
