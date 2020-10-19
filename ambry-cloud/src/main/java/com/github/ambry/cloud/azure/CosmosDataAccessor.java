@@ -588,16 +588,16 @@ public class CosmosDataAccessor {
     long latestContainerDeletionTimestamp = -1;
     for (CosmosContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
       try {
-        executeCosmosAction(() -> asyncDocumentClient.createDocument(cosmosDeletedContainerCollectionLink,
-            containerDeletionEntry.toJson(), new RequestOptions(), true).toBlocking().single(),
-            azureMetrics.documentCreateTime);
+        executeCosmosAction(
+            () -> asyncDocumentClient.createDocument(cosmosDeletedContainerCollectionLink, containerDeletionEntry,
+                new RequestOptions(), true).toBlocking().single(), azureMetrics.documentCreateTime);
         if (containerDeletionEntry.getDeleteTriggerTimestamp() > latestContainerDeletionTimestamp) {
           latestContainerDeletionTimestamp = containerDeletionEntry.getDeleteTriggerTimestamp();
         }
       } catch (DocumentClientException dex) {
         if (dex.getStatusCode() == HttpConstants.StatusCodes.CONFLICT) {
           logger.info("Container with accountid {} and containerid {} already exists. Skipping.",
-              containerDeletionEntry.getParentAccountId(), containerDeletionEntry.getContainerId());
+              containerDeletionEntry.getAccountId(), containerDeletionEntry.getContainerId());
         } else {
           throw dex;
         }

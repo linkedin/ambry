@@ -39,7 +39,7 @@ public class CosmosContainerDeletionEntry {
 
   private final short version;
   private final short containerId;
-  private final short parentAccountId;
+  private final short accountId;
   private final String id;
   private final Set<String> deletePendingPartitions;
   private final long deleteTriggerTimestamp;
@@ -57,7 +57,7 @@ public class CosmosContainerDeletionEntry {
       boolean isDeleted, Collection<String> partitionIds) {
     this.version = JSON_VERSION_1;
     this.containerId = containerId;
-    this.parentAccountId = accountId;
+    this.accountId = accountId;
     this.deleteTriggerTimestamp = deleteTriggerTimestamp;
     this.isDeleted = isDeleted;
     if (!isDeleted) {
@@ -82,7 +82,7 @@ public class CosmosContainerDeletionEntry {
       boolean isDeleted, Collection<Object> pendingPartitions) {
     this.version = version;
     this.containerId = containerId;
-    this.parentAccountId = accountId;
+    this.accountId = accountId;
     this.deleteTriggerTimestamp = deleteTriggerTimestamp;
     this.isDeleted = isDeleted;
     this.deletePendingPartitions = new HashSet<>();
@@ -162,8 +162,8 @@ public class CosmosContainerDeletionEntry {
   /**
    * @return {@code accountId} of the container.
    */
-  public short getParentAccountId() {
-    return parentAccountId;
+  public short getAccountId() {
+    return accountId;
   }
 
   /**
@@ -181,6 +181,13 @@ public class CosmosContainerDeletionEntry {
   }
 
   /**
+   * @return {@code version}.
+   */
+  public short getVersion() {
+    return version;
+  }
+
+  /**
    * Serialize {@link Container} object to save to Cosmos.
    * @return serialized {@link JSONObject}.
    */
@@ -188,7 +195,7 @@ public class CosmosContainerDeletionEntry {
     JSONObject metadata = new JSONObject();
     metadata.put(VERSION_KEY, version);
     metadata.put(CONTAINER_ID_KEY, containerId);
-    metadata.put(ACCOUNT_ID_KEY, parentAccountId);
+    metadata.put(ACCOUNT_ID_KEY, accountId);
     metadata.put(IS_DELETED_KEY, isDeleted);
     metadata.put(CONTAINER_DELETE_TRIGGER_TIME_KEY, deleteTriggerTimestamp);
     metadata.put(DELETE_PENDING_PARTITIONS_KEY, deletePendingPartitions);

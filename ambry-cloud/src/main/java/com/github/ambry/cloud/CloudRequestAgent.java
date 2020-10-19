@@ -56,8 +56,8 @@ public class CloudRequestAgent {
     }
     // Line should never be reached
     throw new CloudStorageException(
-        actionName + " failed, " + (!Utils.isNullOrEmpty(partitionPath) ? ("partition " + partitionPath) : "")
-            + " made " + attempts + " attempts");
+        actionName + " failed, " + (Utils.isNullOrEmpty(partitionPath) ? "" : ("partition " + partitionPath)) + " made "
+            + attempts + " attempts");
   }
 
   /**
@@ -92,7 +92,8 @@ public class CloudRequestAgent {
       }
     } else {
       // Unexpected exception
-      throw new CloudStorageException(actionName + " failed partition " + partitionPath, e);
+      throw new CloudStorageException(
+          actionName + " failed " + (Utils.isNullOrEmpty(partitionPath) ? "." : "partition " + partitionPath), e);
     }
   }
 }

@@ -80,13 +80,15 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
    * Update newly deprecated containers from {@code deprecatedContainers} to CosmosDb since last checkpoint.
    * This method is one of the two entry points in {@link AzureContainerCompactor} along with
    * {@link AzureContainerCompactor#compactAssignedDeprecatedContainers(List)}.
-   * @param deprecatedContainers {@link Collection} of deprecatedd {@link Container}s.
+   * @param deprecatedContainers {@link Collection} of deprecated {@link Container}s.
+   * @param partitionIds list of partition ids from where the containers have to be removed.
    * @throws CloudStorageException in case of any error.
    */
   public void deprecateContainers(Collection<Container> deprecatedContainers, Collection<String> partitionIds)
       throws CloudStorageException {
-    if (deprecatedContainers.isEmpty()) {
-      logger.info("Got empty set to update deprecated containers. Skipping update deprecated containers to cloud.");
+    if (deprecatedContainers.isEmpty() || partitionIds.isEmpty()) {
+      logger.warn(
+          "Got either empty container set or empty partition list. Skipping update deprecated containers to cloud.");
       return;
     }
     long lastUpdatedContainerTimestamp = getLatestContainerDeletionTime();
@@ -117,11 +119,11 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
         for (String partitionId : containerDeletionEntry.getDeletePendingPartitions()) {
           try {
             int blobCompactedCount =
-                compactContainer(containerDeletionEntry.getContainerId(), containerDeletionEntry.getParentAccountId(),
+                compactContainer(containerDeletionEntry.getContainerId(), containerDeletionEntry.getAccountId(),
                     partitionId);
           } catch (CloudStorageException csEx) {
             logger.error("Container compaction failed for account {} container {} in partition {}",
-                containerDeletionEntry.getParentAccountId(), containerDeletionEntry.getContainerId(), partitionId);
+                containerDeletionEntry.getAccountId(), containerDeletionEntry.getContainerId(), partitionId);
           }
         }
         if (containerDeletionEntrySet.isEmpty()) {
@@ -151,12 +153,15 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
       ByteArrayOutputStream baos = new ByteArrayOutputStream(Long.BYTES);
       requestAgent.doWithRetries(() -> {
         azureBlobDataAccessor.downloadFile(AzureCloudDestination.CHECKPOINT_CONTAINER,
-            CONTAINER_DELETION_CHECKPOINT_FILE, baos, true);
+            CONTAINER_DELETION_CHECKPOINT_FILE, baos, false);
         return null;
       }, "read-container-deletion-checkpoint", null);
       ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
       buffer.put(baos.toByteArray());
       buffer.flip();
+      if (!buffer.hasRemaining()) {
+        return -1;
+      }
       // TODO test what happens if the downloaded file is empty
       return buffer.getLong();
     } catch (BlobStorageException bsex) {
@@ -264,7 +269,7 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
       if (assignedDeletePendingPartitions.size() > 0) {
         assignedPartitionContainerDeletionEntries.add(
             new CosmosContainerDeletionEntry(containerDeletionEntry.getContainerId(),
-                containerDeletionEntry.getParentAccountId(), containerDeletionEntry.getDeleteTriggerTimestamp(), false,
+                containerDeletionEntry.getAccountId(), containerDeletionEntry.getDeleteTriggerTimestamp(), false,
                 assignedDeletePendingPartitions));
       }
     }
