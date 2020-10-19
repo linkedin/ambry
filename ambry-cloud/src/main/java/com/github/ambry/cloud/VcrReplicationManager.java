@@ -126,36 +126,33 @@ public class VcrReplicationManager extends ReplicationEngine {
 
     // start background persistent thread
     // start scheduler thread to persist index in the background
-    scheduleCompactionTask(persistor, true, replicationConfig.replicationTokenFlushDelaySeconds,
+    scheduleTask(persistor, true, replicationConfig.replicationTokenFlushDelaySeconds,
         replicationConfig.replicationTokenFlushIntervalSeconds, "replica token persistor");
 
     // Schedule thread to purge dead blobs for this VCR's partitions
     // after delay to allow startup to finish.
-    scheduleCompactionTask(cloudStorageCompactor, cloudConfig.cloudBlobCompactionEnabled,
+    scheduleTask(cloudStorageCompactor, cloudConfig.cloudBlobCompactionEnabled,
         cloudConfig.cloudBlobCompactionStartupDelaySecs,
         TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), "cloud blob compaction");
 
     // Schedule thread to purge blobs belonging to deprecated containers for this VCR's partitions
     // after delay to allow startup to finish.
-    scheduleCompactionTask(() -> cloudContainerCompactor.compactAssignedDeprecatedContainers(
+    scheduleTask(() -> cloudContainerCompactor.compactAssignedDeprecatedContainers(
         virtualReplicatorCluster.getAssignedPartitionIds()), cloudConfig.cloudContainerCompactionEnabled,
         cloudConfig.cloudContainerCompactionStartupDelaySecs,
         TimeUnit.HOURS.toSeconds(cloudConfig.cloudContainerCompactionIntervalHours), "cloud container compaction");
   }
 
   /**
-   * Schedule the specified compaction task if enabled with the specified delay and interval.
+   * Schedule the specified task if enabled with the specified delay and interval.
    * @param task {@link Runnable} task to be scheduled.
    * @param isEnabled flag indicating if the task is enabled. If false the task is not scheduled.
    * @param delaySec initial delay to allow startup to finish before starting task.
    * @param intervalSec period between successive executions.
-   * @param taskName name of the compaction task being scheduled.
+   * @param taskName name of the task being scheduled.
    */
-  private void scheduleCompactionTask(Runnable task, boolean isEnabled, long delaySec, long intervalSec,
-      String taskName) {
+  private void scheduleTask(Runnable task, boolean isEnabled, long delaySec, long intervalSec, String taskName) {
     if (isEnabled) {
-      // Schedule thread to purge blobs belonging to deprecated containers for this VCR's partitions
-      // after delay to allow startup to finish.
       scheduler.scheduleAtFixedRate(task, delaySec, intervalSec, TimeUnit.SECONDS);
       logger.info("Scheduled {} task to run every {} seconds starting in {} seconds.", taskName, intervalSec, delaySec);
     } else {
@@ -246,6 +243,9 @@ public class VcrReplicationManager extends ReplicationEngine {
     // TODO: can do these in parallel
     if (cloudStorageCompactor != null) {
       cloudStorageCompactor.shutdown();
+    }
+    if(cloudContainerCompactor != null) {
+      cloudContainerCompactor.shutdown();
     }
     super.shutdown();
   }

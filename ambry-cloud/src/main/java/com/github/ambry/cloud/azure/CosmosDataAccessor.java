@@ -649,7 +649,7 @@ public class CosmosDataAccessor {
 
     AtomicBoolean fieldsChanged = new AtomicBoolean(false);
     updateFields.accept(doc, fieldsChanged);
-    if (fieldsChanged.get()) {
+    if (!fieldsChanged.get()) {
       logger.debug("No change in value for container deletion entry {}", doc.toJson());
       return null;
     }

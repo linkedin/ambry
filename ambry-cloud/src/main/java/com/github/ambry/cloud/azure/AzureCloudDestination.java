@@ -418,11 +418,6 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public int compactContainer(short containerId, short accountId, String partitionPath) throws CloudStorageException {
-    return azureContainerCompactor.compactContainer(containerId, accountId, partitionPath);
-  }
-
-  @Override
   public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream)
       throws CloudStorageException {
     // Path is partitionId path string

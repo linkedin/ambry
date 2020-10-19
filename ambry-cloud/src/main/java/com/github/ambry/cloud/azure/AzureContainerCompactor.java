@@ -24,7 +24,6 @@ import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
 import com.microsoft.azure.cosmosdb.Document;
-import com.microsoft.azure.cosmosdb.DocumentClientException;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -47,14 +46,10 @@ import org.slf4j.LoggerFactory;
  * ABS and Cosmos.
  */
 public class AzureContainerCompactor implements CloudContainerCompactor {
-  private static final Logger logger = LoggerFactory.getLogger(AzureContainerCompactor.class);
-  private static final String GET_CONTAINER_DELETION_ENTRY_QUERY =
-      "SELECT * FROM C WHERE C.ACCOUNTID=%s AND C.CONTAINERID=%s";
   static final String CONTAINER_DELETION_CHECKPOINT_FILE = "container-deletion-checkpoint";
-
+  private static final Logger logger = LoggerFactory.getLogger(AzureContainerCompactor.class);
   private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final CosmosDataAccessor cosmosDataAccessor;
-  private final CloudConfig cloudConfig;
   private final VcrMetrics vcrMetrics;
   private final AzureMetrics azureMetrics;
   private final CloudRequestAgent requestAgent;
@@ -74,7 +69,6 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
       CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, VcrMetrics vcrMetrics, AzureMetrics azureMetrics) {
     this.azureBlobDataAccessor = azureBlobDataAccessor;
     this.cosmosDataAccessor = cosmosDataAccessor;
-    this.cloudConfig = cloudConfig;
     this.vcrMetrics = vcrMetrics;
     this.azureMetrics = azureMetrics;
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
@@ -105,6 +99,46 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
     if (newLastUpdateContainerTimestamp != -1) {
       saveLatestContainerDeletionTime(newLastUpdateContainerTimestamp);
     }
+  }
+
+  /**
+   * Compact blobs of the deprecated container from cloud. This method is one of the two entry points in the
+   * {@link AzureContainerCompactor} class along with {@link AzureContainerCompactor#deprecateContainers(Collection, Collection)}.
+   * Note that this method is not thread safe as it is expected to run in a single thread.
+   */
+  @Override
+  public void compactAssignedDeprecatedContainers(List<? extends PartitionId> assignedPartitions) {
+    try {
+      SortedSet<CosmosContainerDeletionEntry> containerDeletionEntrySet =
+          fetchContainerDeletionEntries(assignedPartitions);
+      while (!containerDeletionEntrySet.isEmpty()) {
+        CosmosContainerDeletionEntry containerDeletionEntry = containerDeletionEntrySet.first();
+        containerDeletionEntrySet.remove(containerDeletionEntry);
+        for (String partitionId : containerDeletionEntry.getDeletePendingPartitions()) {
+          try {
+            int blobCompactedCount =
+                compactContainer(containerDeletionEntry.getContainerId(), containerDeletionEntry.getParentAccountId(),
+                    partitionId);
+          } catch (CloudStorageException csEx) {
+            logger.error("Container compaction failed for account {} container {} in partition {}",
+                containerDeletionEntry.getParentAccountId(), containerDeletionEntry.getContainerId(), partitionId);
+          }
+        }
+        if (containerDeletionEntrySet.isEmpty()) {
+          containerDeletionEntrySet = fetchContainerDeletionEntries(assignedPartitions);
+        }
+      }
+    } catch (CloudStorageException csEx) {
+      logger.error("Container compaction failed due to {}", csEx.toString(), csEx);
+    }
+  }
+
+  /**
+   * Shut down the compactor waiting for in progress operations to complete.
+   */
+  @Override
+  public void shutdown() {
+    shuttingDown.set(true);
   }
 
   /**
@@ -163,20 +197,16 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
    * @return number of blobs purged.
    * @throws CloudStorageException in case of any error.
    */
-  public int compactContainer(short containerId, short accountId, String partitionPath) throws CloudStorageException {
+  private int compactContainer(short containerId, short accountId, String partitionPath) throws CloudStorageException {
     int totalPurged = 0;
     while (!isShuttingDown()) {
-      List<CloudBlobMetadata> blobs =
-          requestAgent.doWithRetries(() -> getContainerBlobs(partitionPath, accountId, containerId),
-              "GetDeletedContainerBlobs", partitionPath);
+      List<CloudBlobMetadata> blobs = requestAgent.doWithRetries(
+          () -> cosmosDataAccessor.getContainerBlobs(partitionPath, accountId, containerId, queryLimit),
+          "GetDeprecatedContainerBlobs", partitionPath);
+
       if (blobs.isEmpty()) {
         // this means all the blobs of this container have been purged from the partition
-        try {
-          updateCompactionProgress(containerId, accountId, partitionPath);
-        } catch (DocumentClientException dex) {
-          throw AzureCloudDestination.toCloudStorageException("Updating the progress of container compaction failed",
-              dex, azureMetrics);
-        }
+        updateCompactionProgress(containerId, accountId, partitionPath);
         break;
       }
       if (isShuttingDown()) {
@@ -196,13 +226,13 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
    * @param containerId container id of the container.
    * @param accountId account if of the container.
    * @param partitionPath partition id from which all blobs of the container have been deleted.
-   * @throws DocumentClientException in case of any error.
+   * @throws CloudStorageException in case of any error.
    */
   private void updateCompactionProgress(short containerId, short accountId, String partitionPath)
-      throws DocumentClientException {
+      throws CloudStorageException {
     // TODO: update the cache and cosmos container deletion entry table to remove the partitionId from deletePendingPartitions list
-    ResourceResponse<Document> updatedDocument =
-        cosmosDataAccessor.updateContainerDeletionEntry(containerId, accountId, (document, fieldsChanged) -> {
+    ResourceResponse<Document> updatedDocument = requestAgent.doWithRetries(
+        () -> cosmosDataAccessor.updateContainerDeletionEntry(containerId, accountId, (document, fieldsChanged) -> {
           Set<String> deletePendingPartitions =
               (Set<String>) document.get(CosmosContainerDeletionEntry.DELETE_PENDING_PARTITIONS_KEY);
           fieldsChanged.set(deletePendingPartitions.remove(partitionPath));
@@ -211,53 +241,7 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
             document.set(CosmosContainerDeletionEntry.IS_DELETED_KEY, true);
             fieldsChanged.set(true);
           }
-        });
-  }
-
-  /**
-   * Get the list of blobs in the specified container present in the specified partition.
-   * @param partitionPath the partition to query.
-   * @param accountId the account id.
-   * @param containerId the container id.
-   * @return a List of {@link CloudBlobMetadata} referencing the blobs found in the container.
-   * @throws CloudStorageException if the query fails.
-   */
-  List<CloudBlobMetadata> getContainerBlobs(String partitionPath, short accountId, short containerId)
-      throws CloudStorageException {
-    try {
-      return cosmosDataAccessor.getContainerBlobs(partitionPath, accountId, containerId, queryLimit);
-    } catch (DocumentClientException dex) {
-      throw AzureCloudDestination.toCloudStorageException(
-          "Failed to query blobs for container " + containerId + " in partition " + partitionPath, dex, azureMetrics);
-    }
-  }
-
-  /**
-   * Compact blobs of the deprecated container from cloud. This method is one of the two entry points in the
-   * {@link AzureContainerCompactor} class along with {@link AzureContainerCompactor#deprecateContainers(Collection, Collection)}.
-   * Note that this method is not thread safe as it is expected to run in a single thread.
-   */
-  @Override
-  public void compactAssignedDeprecatedContainers(List<? extends PartitionId> assignedPartitions) {
-    SortedSet<CosmosContainerDeletionEntry> containerDeletionEntrySet =
-        fetchContainerDeletionEntries(assignedPartitions);
-    while (!containerDeletionEntrySet.isEmpty()) {
-      CosmosContainerDeletionEntry containerDeletionEntry = containerDeletionEntrySet.first();
-      containerDeletionEntrySet.remove(containerDeletionEntry);
-      for (String partitionId : containerDeletionEntry.getDeletePendingPartitions()) {
-        try {
-          int blobCompactedCount =
-              compactContainer(containerDeletionEntry.getContainerId(), containerDeletionEntry.getParentAccountId(),
-                  partitionId);
-        } catch (CloudStorageException csEx) {
-          logger.error("Container compaction failed for account {} container {} in partition {}",
-              containerDeletionEntry.getParentAccountId(), containerDeletionEntry.getContainerId(), partitionId);
-        }
-      }
-      if (containerDeletionEntrySet.isEmpty()) {
-        containerDeletionEntrySet = fetchContainerDeletionEntries(assignedPartitions);
-      }
-    }
+        }), "UpdateContainerDeletionProgress", partitionPath);
   }
 
   /**
@@ -265,16 +249,17 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
    * assigned to current node.
    */
   private SortedSet<CosmosContainerDeletionEntry> fetchContainerDeletionEntries(
-      List<? extends PartitionId> assignedPartitions) {
+      List<? extends PartitionId> assignedPartitions) throws CloudStorageException {
     Set<CosmosContainerDeletionEntry> containerDeletionEntrySet =
-        cosmosDataAccessor.getDeprecatedContainers(containerDeletionQueryBatchSize);
+        requestAgent.doWithRetries(() -> cosmosDataAccessor.getDeprecatedContainers(containerDeletionQueryBatchSize),
+            "GetDeprectedContainers", null);
     Set<CosmosContainerDeletionEntry> assignedPartitionContainerDeletionEntries = new HashSet<>();
     Set<String> assignedPartitionSet =
-        assignedPartitions.stream().map(partition -> partition.toPathString()).collect(Collectors.toSet());
+        assignedPartitions.stream().map(PartitionId::toPathString).collect(Collectors.toSet());
     for (CosmosContainerDeletionEntry containerDeletionEntry : containerDeletionEntrySet) {
       Set<String> assignedDeletePendingPartitions = containerDeletionEntry.getDeletePendingPartitions()
           .stream()
-          .filter(partitionId -> assignedPartitionSet.contains(partitionId))
+          .filter(assignedPartitionSet::contains)
           .collect(Collectors.toSet());
       if (assignedDeletePendingPartitions.size() > 0) {
         assignedPartitionContainerDeletionEntries.add(
@@ -283,17 +268,10 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
                 assignedDeletePendingPartitions));
       }
     }
-    SortedSet<CosmosContainerDeletionEntry> sortedContainerDeletionEntrySet = new TreeSet<CosmosContainerDeletionEntry>(
-        Comparator.comparing(CosmosContainerDeletionEntry::getDeleteTriggerTimestamp));
-    sortedContainerDeletionEntrySet.addAll(containerDeletionEntrySet);
+    SortedSet<CosmosContainerDeletionEntry> sortedContainerDeletionEntrySet =
+        new TreeSet<>(Comparator.comparing(CosmosContainerDeletionEntry::getDeleteTriggerTimestamp));
+    sortedContainerDeletionEntrySet.addAll(assignedPartitionContainerDeletionEntries);
     return sortedContainerDeletionEntrySet;
-  }
-
-  /**
-   * Shut down the compactor waiting for in progress operations to complete.
-   */
-  public void shutdown() {
-    shuttingDown.set(true);
   }
 
   /**

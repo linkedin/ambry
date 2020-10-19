@@ -26,4 +26,9 @@ public interface CloudContainerCompactor {
    * @param assignedPartitions {@link List} of {@link PartitionId}s assigned to this node.
    */
   void compactAssignedDeprecatedContainers(List<? extends PartitionId> assignedPartitions);
+
+  /**
+   * Shutdown the compactor.
+   */
+  void shutdown();
 }
