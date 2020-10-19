@@ -50,7 +50,7 @@ import static org.junit.Assert.*;
  */
 class RouterTestHelpers {
   private static final int AWAIT_TIMEOUT_SECONDS = 10;
-  static final int AWAIT_TIMEOUT_MS = 2000;
+  static final int AWAIT_TIMEOUT_MS = 10000;
   private static final short BLOB_ID_VERSION = CommonTestUtils.getCurrentBlobIdVersion();
 
   /**
