@@ -104,7 +104,7 @@ public class TtlUpdateManagerTest {
       BlobProperties putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, TTL_SECS,
           Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null);
       String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build())
-          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          .get(AWAIT_TIMEOUT_MS * 5, TimeUnit.MILLISECONDS);
       blobIds.add(blobId);
     }
     ttlUpdateManager =
