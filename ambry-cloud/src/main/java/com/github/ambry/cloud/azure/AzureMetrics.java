@@ -35,6 +35,7 @@ public class AzureMetrics {
   public static final String BLOB_UPDATE_CONFLICT_COUNT = "BlobUpdateConflictCount";
   public static final String DOCUMENT_CREATE_TIME = "DocumentCreateTime";
   public static final String DOCUMENT_READ_TIME = "DocumentReadTime";
+  public static final String CONTAINER_DELETION_ENTRY_READ_TIME = "ContainerDeletionEntryReadTime";
   public static final String DOCUMENT_UPDATE_TIME = "DocumentUpdateTime";
   public static final String DOCUMENT_DELETE_TIME = "DocumentDeleteTime";
   public static final String DOCUMENT_QUERY_COUNT = "DocumentQueryCount";
@@ -84,6 +85,7 @@ public class AzureMetrics {
   public final Timer blobUpdateTime;
   public final Timer documentCreateTime;
   public final Timer documentReadTime;
+  public final Timer continerDeletionEntryReadTime;
   public final Timer documentUpdateTime;
   public final Timer documentDeleteTime;
   public final Timer missingKeysQueryTime;
@@ -140,6 +142,8 @@ public class AzureMetrics {
     blobUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TIME));
     documentCreateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_CREATE_TIME));
     documentReadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_READ_TIME));
+    continerDeletionEntryReadTime =
+        registry.timer(MetricRegistry.name(AzureContainerCompactor.class, CONTAINER_DELETION_ENTRY_READ_TIME));
     documentUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_UPDATE_TIME));
     documentDeleteTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_DELETE_TIME));
     documentQueryCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_QUERY_COUNT));

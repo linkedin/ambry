@@ -23,7 +23,9 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
+import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
+import com.microsoft.azure.cosmosdb.ResourceResponse;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -45,8 +47,10 @@ import org.slf4j.LoggerFactory;
  * ABS and Cosmos.
  */
 public class AzureContainerCompactor implements CloudContainerCompactor {
-  static final String CONTAINER_DELETION_CHECKPOINT_FILE = "container-deletion-checkpoint";
   private static final Logger logger = LoggerFactory.getLogger(AzureContainerCompactor.class);
+  private static final String GET_CONTAINER_DELETION_ENTRY_QUERY =
+      "SELECT * FROM C WHERE C.ACCOUNTID=%s AND C.CONTAINERID=%s";
+  static final String CONTAINER_DELETION_CHECKPOINT_FILE = "container-deletion-checkpoint";
 
   private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final CosmosDataAccessor cosmosDataAccessor;
@@ -151,6 +155,14 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
     }
   }
 
+  /**
+   * Purge all blobs of the specified container from the specified partition.
+   * @param containerId container id of the specified container.
+   * @param accountId account oid of the specified container.
+   * @param partitionPath partition id from which the blobs have to be deleted.
+   * @return number of blobs purged.
+   * @throws CloudStorageException in case of any error.
+   */
   public int compactContainer(short containerId, short accountId, String partitionPath) throws CloudStorageException {
     int totalPurged = 0;
     while (!isShuttingDown()) {
@@ -158,7 +170,13 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
           requestAgent.doWithRetries(() -> getContainerBlobs(partitionPath, accountId, containerId),
               "GetDeletedContainerBlobs", partitionPath);
       if (blobs.isEmpty()) {
-        updateCompactionProgress(containerId, accountId, partitionPath);
+        // this means all the blobs of this container have been purged from the partition
+        try {
+          updateCompactionProgress(containerId, accountId, partitionPath);
+        } catch (DocumentClientException dex) {
+          throw AzureCloudDestination.toCloudStorageException("Updating the progress of container compaction failed",
+              dex, azureMetrics);
+        }
         break;
       }
       if (isShuttingDown()) {
@@ -172,8 +190,28 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
     return totalPurged;
   }
 
-  private void updateCompactionProgress(short containerId, short accountId, String partitionPath) {
+  /**
+   * Update the container deletion entry of the specified container to remove the partition from which all blobs of the
+   * container have been compacted. If there are no more partitions left to compact then mark the container deletion entry as deleted.
+   * @param containerId container id of the container.
+   * @param accountId account if of the container.
+   * @param partitionPath partition id from which all blobs of the container have been deleted.
+   * @throws DocumentClientException in case of any error.
+   */
+  private void updateCompactionProgress(short containerId, short accountId, String partitionPath)
+      throws DocumentClientException {
     // TODO: update the cache and cosmos container deletion entry table to remove the partitionId from deletePendingPartitions list
+    ResourceResponse<Document> updatedDocument =
+        cosmosDataAccessor.updateContainerDeletionEntry(containerId, accountId, (document, fieldsChanged) -> {
+          Set<String> deletePendingPartitions =
+              (Set<String>) document.get(CosmosContainerDeletionEntry.DELETE_PENDING_PARTITIONS_KEY);
+          fieldsChanged.set(deletePendingPartitions.remove(partitionPath));
+          document.set(CosmosContainerDeletionEntry.DELETE_PENDING_PARTITIONS_KEY, deletePendingPartitions);
+          if (deletePendingPartitions.isEmpty()) {
+            document.set(CosmosContainerDeletionEntry.IS_DELETED_KEY, true);
+            fieldsChanged.set(true);
+          }
+        });
   }
 
   /**

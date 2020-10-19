@@ -26,19 +26,21 @@ import org.json.JSONObject;
  * Class representing container deletion status in cloud.
  */
 public class CosmosContainerDeletionEntry {
-
   static final String VERSION_KEY = "version";
   static final String CONTAINER_ID_KEY = "containerId";
   static final String ACCOUNT_ID_KEY = "accountId";
   static final String CONTAINER_DELETE_TRIGGER_TIME_KEY = "deleteTriggerTime";
   static final String IS_DELETED_KEY = "isDeleted";
   static final String DELETE_PENDING_PARTITIONS_KEY = "deletePendingPartitions";
+  private static final String ID_KEY = "id";
+  private static final String CONTAINER_ID_ACCOUNT_ID_DELIM = "_";
 
   private static short JSON_VERSION_1 = 1;
 
   private final short version;
   private final short containerId;
   private final short parentAccountId;
+  private final String id;
   private final Set<String> deletePendingPartitions;
   private final long deleteTriggerTimestamp;
   private boolean isDeleted;
@@ -64,6 +66,7 @@ public class CosmosContainerDeletionEntry {
     } else {
       deletePendingPartitions = Collections.emptySet();
     }
+    this.id = generateContainerDeletionEntryId(accountId, containerId);
   }
 
   /**
@@ -83,7 +86,18 @@ public class CosmosContainerDeletionEntry {
     this.deleteTriggerTimestamp = deleteTriggerTimestamp;
     this.isDeleted = isDeleted;
     this.deletePendingPartitions = new HashSet<>();
+    this.id = generateContainerDeletionEntryId(accountId, containerId);
     pendingPartitions.forEach(partitionId -> this.deletePendingPartitions.add((String) partitionId));
+  }
+
+  /**
+   * Generate unique id for {@link CosmosContainerDeletionEntry} cosmos entry.
+   * @param accountId account id.
+   * @param containerId container id.
+   * @return concatenation of account id and container id with a delimiter to act as unique key.
+   */
+  static String generateContainerDeletionEntryId(short accountId, short containerId) {
+    return String.join(CONTAINER_ID_ACCOUNT_ID_DELIM, String.valueOf(accountId), String.valueOf(containerId));
   }
 
   /**
@@ -122,6 +136,13 @@ public class CosmosContainerDeletionEntry {
    */
   public void removePartition(String partitionId) {
     deletePendingPartitions.remove(partitionId);
+  }
+
+  /**
+   * @return unique id for the {@link CosmosContainerDeletionEntry} entry in cosmos db.
+   */
+  public String getId() {
+    return id;
   }
 
   /**

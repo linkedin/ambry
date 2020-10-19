@@ -54,6 +54,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -75,8 +77,6 @@ public class CosmosDataAccessor {
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
   private static final String DEPRECATED_CONTAINERS_QUERY = "SELECT TOP %d from c order by c.deleteTriggerTime";
   private static final String CONTAINER_DELETION_TABLE = "DeletedContainer";
-  private static final String DELETED_CONTAINER_ID_COLUMN = "id";
-  private static final String CONTAINER_ID_ACCOUNT_ID_DELIM = "_";
   static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
   static final String PROPERTY_CONTINUATION = "continuation";
   static final String PROPERTY_DELETED = "deleted";
@@ -627,6 +627,58 @@ public class CosmosDataAccessor {
   }
 
   /**
+   * Update the container deletion entry document in the CosmosDB collection.
+   * @param containerId the container id for which document is replaced.
+   * @param accountId the account id for which document is replaced.
+   * @param updateFields {@link BiConsumer} object to use as callback to update the required fields.
+   * @return the {@link ResourceResponse} returned by the operation, if successful.
+   * Returns {@Null} if the field already has the specified value.
+   * @throws DocumentClientException if the record was not found or if the operation failed.
+   */
+  ResourceResponse<Document> updateContainerDeletionEntry(short containerId, short accountId,
+      BiConsumer<Document, AtomicBoolean> updateFields) throws DocumentClientException {
+
+    // Read the existing record
+    String id = CosmosContainerDeletionEntry.generateContainerDeletionEntryId(accountId, containerId);
+    String docLink = getContainerDeletionEntryDocumentLink(id);
+    RequestOptions options = getRequestOptions(id);
+    ResourceResponse<Document> readResponse =
+        executeCosmosAction(() -> asyncDocumentClient.readDocument(docLink, options).toBlocking().single(),
+            azureMetrics.continerDeletionEntryReadTime);
+    Document doc = readResponse.getResource();
+
+    AtomicBoolean fieldsChanged = new AtomicBoolean(false);
+    updateFields.accept(doc, fieldsChanged);
+    if (fieldsChanged.get()) {
+      logger.debug("No change in value for container deletion entry {}", doc.toJson());
+      return null;
+    }
+
+    // For testing conflict handling
+    if (updateCallback != null) {
+      try {
+        updateCallback.call();
+      } catch (Exception ex) {
+        logger.error("Error in update callback", ex);
+      }
+    }
+
+    // Set condition to ensure we don't clobber a concurrent update
+    AccessCondition accessCondition = new AccessCondition();
+    accessCondition.setCondition(doc.getETag());
+    options.setAccessCondition(accessCondition);
+    try {
+      return executeCosmosAction(() -> asyncDocumentClient.replaceDocument(doc, options).toBlocking().single(),
+          azureMetrics.documentUpdateTime);
+    } catch (DocumentClientException e) {
+      if (e.getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
+        azureMetrics.blobUpdateConflictCount.inc();
+      }
+      throw e;
+    }
+  }
+
+  /**
    * Create {@link CloudBlobMetadata} object from {@link Document} object.
    * @param document {@link Document} object from which {@link CloudBlobMetadata} object will be created.
    * @return {@link CloudBlobMetadata} object.
@@ -736,6 +788,10 @@ public class CosmosDataAccessor {
 
   private String getDocumentLink(String documentId) {
     return cosmosCollectionLink + DOCS + documentId;
+  }
+
+  private String getContainerDeletionEntryDocumentLink(String documentId) {
+    return cosmosDeletedContainerCollectionLink + DOCS + documentId;
   }
 
   private RequestOptions getRequestOptions(String partitionPath) {
