@@ -211,8 +211,11 @@ class PostAccountsHandler {
       } catch (JSONException e) {
         throw new RestServiceException("Bad account update request body", e, RestServiceErrorCode.BadRequest);
       }
-      if (!accountService.updateAccounts(accountsToUpdate)) {
-        throw new RestServiceException("Account update failed", RestServiceErrorCode.BadRequest);
+      try {
+        accountService.updateAccounts(accountsToUpdate);
+      } catch (AccountServiceException ase) {
+        throw new RestServiceException("Account update failed: " + ase.getMessage(),
+            RestServiceErrorCode.getRestServiceErrorCode(ase.getErrorCode()));
       }
     }
   }

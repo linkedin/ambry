@@ -13,7 +13,6 @@
  */
 package com.github.ambry.account.mysql;
 
-import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import java.sql.PreparedStatement;
@@ -46,9 +45,8 @@ public class ContainerDao {
 
   public ContainerDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = dataAccessor;
-    insertSql =
-        String.format("insert into %s (%s, %s, %s, %s, %s) values (?, ?, 1, now(3), now(3))", CONTAINER_TABLE, ACCOUNT_ID,
-            CONTAINER_INFO, VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
+    insertSql = String.format("insert into %s (%s, %s, %s, %s, %s) values (?, ?, 1, now(3), now(3))", CONTAINER_TABLE,
+        ACCOUNT_ID, CONTAINER_INFO, VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
     getSinceSql =
         String.format("select %s, %s, %s from %s where %s > ?", ACCOUNT_ID, CONTAINER_INFO, LAST_MODIFIED_TIME,
             CONTAINER_TABLE, LAST_MODIFIED_TIME);
@@ -74,9 +72,7 @@ public class ContainerDao {
       insertStatement.setString(2, container.toJson().toString());
       insertStatement.executeUpdate();
     } catch (SQLException e) {
-      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
-      // For now, assume connection issue.
-      dataAccessor.reset();
+      dataAccessor.onException(e);
       throw e;
     }
   }
@@ -96,9 +92,7 @@ public class ContainerDao {
       updateStatement.setInt(3, container.getId());
       updateStatement.executeUpdate();
     } catch (SQLException e) {
-      // TODO: record failure, parse exception to figure out what we did wrong (eg. id or name collision)
-      // For now, assume connection issue.
-      dataAccessor.reset();
+      dataAccessor.onException(e);
       throw e;
     }
   }
@@ -115,8 +109,7 @@ public class ContainerDao {
     try (ResultSet rs = getByAccountStatement.executeQuery()) {
       return convertResultSet(rs);
     } catch (SQLException e) {
-      // record failure, parse exception, ...
-      dataAccessor.reset();
+      dataAccessor.onException(e);
       throw e;
     }
   }
@@ -134,8 +127,7 @@ public class ContainerDao {
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       return convertResultSet(rs);
     } catch (SQLException e) {
-      // record failure, parse exception, ...
-      dataAccessor.reset();
+      dataAccessor.onException(e);
       throw e;
     }
   }

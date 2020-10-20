@@ -136,6 +136,7 @@ import org.json.JSONObject;
  *   </pre>
  * </p>
  */
+// TODO: only works with HelixAccountService, not MySql
 public class AccountTool {
   private final MetricRegistry registry;
   private final BackupFileManager backupFileManager;
@@ -361,19 +362,21 @@ public class AccountTool {
           }
           break;
         case ROLLBACK:
-          succeeded = accountTool.rollback(version);
-          if (succeeded) {
+          try {
+            accountTool.rollback(version);
             System.out.println("Successfully rollback account metadata to version " + version);
-          } else {
+          } catch (Exception e) {
             System.out.println("Fail to rollback account metadata to version " + version);
+            throw e;
           }
           break;
         case UPDATE:
-          succeeded = accountTool.updateFromFile(accountJsonPath);
-          if (succeeded) {
+          try {
+            accountTool.updateFromFile(accountJsonPath);
             System.out.println("Successfully update account metadata from file " + accountJsonPath);
-          } else {
+          } catch (Exception e) {
             System.out.println("Fail to update account metadata from file " + accountJsonPath);
+            throw e;
           }
           break;
       }
@@ -445,9 +448,9 @@ public class AccountTool {
    * Overwrite the current {@link Account} metadata with the given {@link Collection} and publish the new {@link Account}
    * metadata if the update succeeds.
    * @param accounts The new {@link Account} metadata.
-   * @return True if the update succeeds.
+   * @throws AccountServiceException if the update fails.
    */
-  private boolean updateAccounts(Collection<Account> accounts) {
+  private void updateAccounts(Collection<Account> accounts) throws AccountServiceException {
     Collection<Account> existingAccounts = accountService.getAllAccounts();
     Map<Short, Account> existingAccountsMap = new HashMap<>();
     for (Account account : existingAccounts) {
@@ -463,7 +466,7 @@ public class AccountTool {
         newAccounts.add(account);
       }
     }
-    return accountService.updateAccountsWithAccountMetadataStore(newAccounts, routerStore);
+    accountService.updateAccountsWithAccountMetadataStore(newAccounts, routerStore);
   }
 
   /**
@@ -473,11 +476,10 @@ public class AccountTool {
    * a file, then a new version 11 will be created with teh same content in the file.
    * It will publish the new {@link Account} metadata to all the listener if the rollback operation succeeds.
    * @param accountJsonPath The file to read the {@link Account} metadata from.
-   * @return True if the update operation succeeds.
-   * @throws Exception Andy unexpected error.
+   * @throws Exception Any unexpected error.
    */
-  public boolean updateFromFile(String accountJsonPath) throws Exception {
-    return updateAccounts(getAccountsFromJson(accountJsonPath));
+  public void updateFromFile(String accountJsonPath) throws Exception {
+    updateAccounts(getAccountsFromJson(accountJsonPath));
   }
 
   /**
@@ -487,16 +489,15 @@ public class AccountTool {
    * with the same content of version 8.
    * It will publish the new {@link Account} metadata to all the listener if the rollback operation succeeds.
    * @param version The version to roll back to.
-   * @return True if the rollback operation succeeds.
-   * @throws Exception Andy unexpected error.
+   * @throws Exception Any unexpected error.
    */
-  public boolean rollback(int version) throws Exception {
+  public void rollback(int version) throws Exception {
     Collection<String> accountJsons = viewAccountMetadata(version);
     Collection<Account> accounts = new ArrayList<>();
     for (String accountJson : accountJsons) {
       accounts.add(Account.fromJson(new JSONObject(accountJson)));
     }
-    return updateAccounts(accounts);
+    updateAccounts(accounts);
   }
 
   /**

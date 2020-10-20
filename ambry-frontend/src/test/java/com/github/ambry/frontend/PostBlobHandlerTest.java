@@ -93,19 +93,17 @@ public class PostBlobHandlerTest {
   static {
     try {
       CLUSTER_MAP = new MockClusterMap();
-    } catch (IOException e) {
+      Account account = ACCOUNT_SERVICE.createAndAddRandomAccount();
+      Container publicContainer = account.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+      Container ttlRequiredContainer = new ContainerBuilder(publicContainer).setTtlRequired(true).build();
+      Account newAccount = new AccountBuilder(account).addOrUpdateContainer(ttlRequiredContainer).build();
+      ACCOUNT_SERVICE.updateAccounts(Collections.singleton(newAccount));
+      REF_ACCOUNT = ACCOUNT_SERVICE.getAccountById(newAccount.getId());
+      REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
+      REF_CONTAINER_WITH_TTL_REQUIRED = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+    } catch (Exception e) {
       throw new IllegalStateException(e);
     }
-    Account account = ACCOUNT_SERVICE.createAndAddRandomAccount();
-    Container publicContainer = account.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
-    Container ttlRequiredContainer = new ContainerBuilder(publicContainer).setTtlRequired(true).build();
-    Account newAccount = new AccountBuilder(account).addOrUpdateContainer(ttlRequiredContainer).build();
-    if (!ACCOUNT_SERVICE.updateAccounts(Collections.singleton(newAccount))) {
-      throw new IllegalStateException("Account could not be created");
-    }
-    REF_ACCOUNT = ACCOUNT_SERVICE.getAccountById(newAccount.getId());
-    REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
-    REF_CONTAINER_WITH_TTL_REQUIRED = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
   }
 
   private final MockTime time = new MockTime();

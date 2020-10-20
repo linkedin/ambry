@@ -32,5 +32,9 @@ public enum AccountServiceErrorCode {
   /**
    * Account service experienced an internal error.
    */
-  InternalError
+  InternalError,
+  /**
+   * Updates to the account service are disabled.
+   */
+  UpdateDisabled
 }

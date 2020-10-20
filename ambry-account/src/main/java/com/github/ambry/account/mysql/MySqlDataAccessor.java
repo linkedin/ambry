@@ -13,11 +13,16 @@
  */
 package com.github.ambry.account.mysql;
 
+import com.github.ambry.account.AccountServiceErrorCode;
+import com.github.ambry.account.AccountServiceException;
+import com.mysql.cj.exceptions.MysqlErrorNumbers;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
+import java.sql.SQLTransientConnectionException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -31,6 +36,8 @@ import org.slf4j.LoggerFactory;
 public class MySqlDataAccessor {
 
   private static final Logger logger = LoggerFactory.getLogger(MySqlDataAccessor.class);
+  private static final String INDEX_ACCOUNT_CONTAINER = "containers.accountContainer";
+  private static final String INDEX_CONTAINER_NAME = "containers.uniqueName";
   private final String mysqlUrl;
   private final String mysqlUser;
   private final String mysqlPassword;
@@ -49,7 +56,11 @@ public class MySqlDataAccessor {
     try {
       getDatabaseConnection();
     } catch (SQLException e) {
-      // try again later
+      if (isCredentialError(e)) {
+        throw e;
+      } else {
+        // try again later
+      }
     }
   }
 
@@ -93,6 +104,50 @@ public class MySqlDataAccessor {
     statement = connection.prepareStatement(sql);
     statementCache.put(sql, statement);
     return statement;
+  }
+
+  /**
+   * Translate a {@link SQLException} to a {@link AccountServiceException}.
+   * @param e the input exception.
+   * @return the corresponding {@link AccountServiceException}.
+   */
+  public static AccountServiceException translateSQLException(SQLException e) {
+    if (e instanceof SQLIntegrityConstraintViolationException) {
+      SQLIntegrityConstraintViolationException icve = (SQLIntegrityConstraintViolationException) e;
+      String message;
+      if (icve.getMessage().contains(INDEX_ACCOUNT_CONTAINER)) {
+        // Example: Duplicate entry '101-5' for key 'containers.accountContainer'
+        message = "Duplicate containerId";
+      } else if (icve.getMessage().contains(INDEX_CONTAINER_NAME)) {
+        // duplicate container name: need to update cache but retry may fail
+        message = "Duplicate container name";
+      } else {
+        message = "Constraint violation";
+      }
+      return new AccountServiceException(message, AccountServiceErrorCode.ResourceConflict);
+    } else if (MySqlDataAccessor.isCredentialError(e)) {
+      return new AccountServiceException("Invalid database credentials", AccountServiceErrorCode.InternalError);
+    } else {
+      return new AccountServiceException(e.getMessage(), AccountServiceErrorCode.InternalError);
+    }
+  }
+
+  /**
+   * @return true if the exception indicates invalid database credentials.
+   * @param e the {@link SQLException}
+   */
+  public static boolean isCredentialError(SQLException e) {
+    return e.getErrorCode() == MysqlErrorNumbers.ER_ACCESS_DENIED_ERROR;
+  }
+
+  /**
+   * Handle a SQL exception on a database operation.
+   * @param e the {@link SQLException} encountered.
+   */
+  void onException(SQLException e) {
+    if (e instanceof SQLTransientConnectionException) {
+      reset();
+    }
   }
 
   /**

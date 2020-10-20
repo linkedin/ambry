@@ -272,24 +272,21 @@ public class AccountUpdateToolTest {
   private void updateAccountsWithSmallerSnapshotVersionAndWait(Collection<Account> accounts) throws Exception {
     String jsonFilePath = tempDirPath + File.separator + UUID.randomUUID().toString() + ".json";
     writeAccountsToFile(accounts, jsonFilePath);
-    boolean hasRuntimeException = false;
     try (AccountService accountService = AccountUpdateTool.getHelixAccountService(ZK_SERVER_ADDRESS,
         HELIX_STORE_ROOT_PATH, BACKUP_DIR, ZK_CONNECTION_TIMEOUT_MS, ZK_SESSION_TIMEOUT_MS)) {
       new AccountUpdateTool(accountService, containerJsonVersion).updateAccountsFromFile(jsonFilePath, false);
-    } catch (RuntimeException e) {
-      hasRuntimeException = true;
+      fail("Expected update to fail");
+    } catch (AccountServiceException e) {
+      assertEquals("Unexpected error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
     }
-    assertTrue(hasRuntimeException);
 
-    hasRuntimeException = false;
     accountUpdateConsumer.reset();
     try (AccountService accountService = AccountUpdateTool.getHelixAccountService(ZK_SERVER_ADDRESS,
         HELIX_STORE_ROOT_PATH, BACKUP_DIR, ZK_CONNECTION_TIMEOUT_MS, ZK_SESSION_TIMEOUT_MS)) {
       new AccountUpdateTool(accountService, containerJsonVersion).updateAccountsFromFile(jsonFilePath, true);
-    } catch (RuntimeException e) {
-      hasRuntimeException = true;
+    } catch (AccountServiceException e) {
+      fail("Expected update to succeed");
     }
-    assertFalse(hasRuntimeException);
     accountUpdateConsumer.awaitUpdate();
   }
 

@@ -55,8 +55,7 @@ public class InMemoryUnknownAccountServiceTest {
     assertEquals("Wrong size of account collection", 1, accountService.getAllAccounts().size());
     // updating the InMemoryUnknownAccountService should fail.
     Account account = new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build();
-    assertFalse("Wrong return value from an unsuccessful update operation",
-        accountService.updateAccounts(Collections.singletonList(account)));
+    accountService.updateAccounts(Collections.singletonList(account));
     assertEquals("Wrong size of account collection", 1, accountService.getAllAccounts().size());
     try {
       accountService.getAllAccounts().add(account);
@@ -71,7 +70,7 @@ public class InMemoryUnknownAccountServiceTest {
    * Tests {@code null} inputs.
    */
   @Test
-  public void testNullInputs() {
+  public void testNullInputs() throws Exception {
     try {
       accountService.updateAccounts(null);
       fail("should have thrown");
@@ -90,7 +89,7 @@ public class InMemoryUnknownAccountServiceTest {
    * Tests adding/removing {@link Consumer}.
    */
   @Test
-  public void testAddRemoveConsumer() {
+  public void testAddRemoveConsumer() throws Exception {
     List<Collection<Account>> updatedAccountsReceivedByConsumers = new ArrayList<>();
     // add consumers
     Consumer<Collection<Account>> accountUpdateConsumer = updatedAccounts -> {

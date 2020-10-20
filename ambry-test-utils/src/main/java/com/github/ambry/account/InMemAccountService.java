@@ -73,9 +73,9 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
-  public synchronized boolean updateAccounts(Collection<Account> accounts) {
+  public synchronized void updateAccounts(Collection<Account> accounts) throws AccountServiceException {
     if (!shouldUpdateSucceed) {
-      return false;
+      throw new AccountServiceException("Update failed", AccountServiceErrorCode.InternalError);
     }
     for (Account account : accounts) {
       idToAccountMap.put(account.getId(), account);
@@ -86,7 +86,6 @@ public class InMemAccountService implements AccountService {
         accountUpdateConsumer.accept(accounts);
       }
     }
-    return true;
   }
 
   @Override
@@ -115,11 +114,7 @@ public class InMemAccountService implements AccountService {
       ++nextContainerId;
     }
     account.updateContainerMap(createdContainers);
-    boolean hasSucceeded = updateAccounts(Collections.singletonList(account));
-    if (!hasSucceeded) {
-      throw new AccountServiceException("Account update failed for " + accountName,
-          AccountServiceErrorCode.InternalError);
-    }
+    updateAccounts(Collections.singletonList(account));
     return createdContainers;
   }
 
@@ -167,7 +162,11 @@ public class InMemAccountService implements AccountService {
    */
   public synchronized Account createAndAddRandomAccount() {
     Account account = generateRandomAccount();
-    updateAccounts(Collections.singletonList(account));
+    try {
+      updateAccounts(Collections.singletonList(account));
+    } catch (AccountServiceException ase) {
+      throw new IllegalStateException(ase);
+    }
     return account;
   }
 
@@ -211,11 +210,13 @@ public class InMemAccountService implements AccountService {
    * @return the new container object with the appropriate replication policy if the operation suceeded. {@code null}
    * otherwise
    */
-  public Container addReplicationPolicyToContainer(Container container, String replicationPolicy) {
+  public Container addReplicationPolicyToContainer(Container container, String replicationPolicy)
+      throws AccountServiceException {
     Container newContainer = new ContainerBuilder(container).setReplicationPolicy(replicationPolicy).build();
     Account account = getAccountById(container.getParentAccountId());
     Account newAccount = new AccountBuilder(account).addOrUpdateContainer(newContainer).build();
-    return updateAccounts(Collections.singleton(newAccount)) ? newContainer : null;
+    updateAccounts(Collections.singleton(newAccount));
+    return newContainer;
   }
 
   /**

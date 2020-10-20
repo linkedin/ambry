@@ -145,21 +145,27 @@ abstract class AbstractAccountService implements AccountService {
     }
 
     if (!resolvedContainers.isEmpty()) {
-      // In case updating account metadata store failed, we do a deep copy of original account. Thus, we don't have to
-      // revert changes in original account when there is a failure.
-      AccountBuilder accountBuilder = new AccountBuilder(account);
-      resolvedContainers.forEach(accountBuilder::addOrUpdateContainer);
-      Account updatedAccount = accountBuilder.build();
-      boolean hasSucceeded = updateAccounts(Collections.singletonList(updatedAccount));
-      // TODO: updateAccounts should throw exception with specific error code
-      if (!hasSucceeded) {
-        throw new AccountServiceException("Account update failed for " + accountName,
-            AccountServiceErrorCode.InternalError);
-      }
+      updateResolvedContainers(account, resolvedContainers);
     }
 
     resolvedContainers.addAll(existingUnchangedContainers);
     return resolvedContainers;
+  }
+
+  /**
+   * Update the containers that have been vetted as non-duplicates and populated with ids.
+   * @param account the account owning the containers.
+   * @param resolvedContainers the resolved containers.
+   * @throws AccountServiceException
+   */
+  protected void updateResolvedContainers(Account account, Collection<Container> resolvedContainers)
+      throws AccountServiceException {
+    // In case updating account metadata store failed, we do a deep copy of original account. Thus, we don't have to
+    // revert changes in original account when there is a failure.
+    AccountBuilder accountBuilder = new AccountBuilder(account);
+    resolvedContainers.forEach(accountBuilder::addOrUpdateContainer);
+    Account updatedAccount = accountBuilder.build();
+    updateAccounts(Collections.singletonList(updatedAccount));
   }
 
   @Override

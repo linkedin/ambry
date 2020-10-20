@@ -79,11 +79,10 @@ public interface AccountService extends Closeable {
    * E      1           "b"           yes            fail update                  conflicts with existing name.
    * </pre>
    * @param accounts The collection of {@link Account}s to update. Cannot be {@code null}.
-   * @return {@code true} indicates that the accounts have been successfully updated, {@code false} indicates the
-   *                      operation has failed, and none of the account has been updated. This is an either succeed-all
-   *                      or fail-all operation.
+   * @throws AccountServiceException if the operation has failed, and none of the account has been updated.
+   *         This is an either succeed-all or fail-all operation.
    */
-  boolean updateAccounts(Collection<Account> accounts);
+  void updateAccounts(Collection<Account> accounts) throws AccountServiceException;
 
   /**
    * Gets all the {@link Account}s in this {@code AccountService}. The {@link Account}s <em>MUST</em> have their

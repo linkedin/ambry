@@ -119,11 +119,10 @@ final class JsonAccountService extends AbstractAccountService {
    * for all nodes. Therefor calling this method will always throw an {@link UnsupportedOperationException}.
    *
    * @param accounts The collection of {@link Account}s to update. Cannot be {@code null}.
-   * @return
    * @throws UnsupportedOperationException Always thrown when this method is invoked.
    */
   @Override
-  public boolean updateAccounts(Collection<Account> accounts) {
+  public void updateAccounts(Collection<Account> accounts) {
     throw new UnsupportedOperationException(
         "Service does not support updating of accountsById via API. Modify account JSON files on all nodes instead.");
   }

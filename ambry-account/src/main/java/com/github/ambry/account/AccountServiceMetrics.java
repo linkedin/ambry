@@ -38,6 +38,7 @@ public class AccountServiceMetrics {
   public final Counter unrecognizedMessageErrorCount;
   public final Counter notifyAccountDataChangeErrorCount;
   public final Counter updateAccountErrorCount;
+  public final Counter conflictRetryCount;
   public final Counter fetchRemoteAccountErrorCount;
   public final Counter remoteDataCorruptionErrorCount;
   public final Counter backupErrorCount;
@@ -71,7 +72,9 @@ public class AccountServiceMetrics {
     notifyAccountDataChangeErrorCount =
             metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NotifyAccountDataChangeErrorCount"));
     updateAccountErrorCount =
-            metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "UpdateAccountErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "UpdateAccountErrorCount"));
+    conflictRetryCount =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "ConflictRetryCount"));
     accountUpdatesToZkErrorCount =
             metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountUpdatesToZkErrorCount"));
     fetchRemoteAccountErrorCount =

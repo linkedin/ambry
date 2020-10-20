@@ -16,6 +16,8 @@ package com.github.ambry.utils;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceErrorCode;
+import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import java.util.ArrayList;
@@ -86,6 +88,23 @@ public class AccountTestUtils {
         containerFoundById, containerFoundByName);
     assertEquals("Container got by id from accountService/account does not match the container to assert",
         containerFoundById, container);
+  }
+
+  /**
+   * Updates a collection of {@link Account}s and verifies that an {@link AccountServiceException} with the expected
+   * error code is thrown.
+   * @param accounts the accounts to update.
+   * @param expectedErrorCode the {@link AccountServiceErrorCode} expected.
+   * @param accountService The {@link AccountService} to update.
+   */
+  public static void assertUpdateAccountsFails(Collection<Account> accounts, AccountServiceErrorCode expectedErrorCode,
+      AccountService accountService) {
+    try {
+      accountService.updateAccounts(accounts);
+      fail("Expected update to fail");
+    } catch (AccountServiceException ase) {
+      assertEquals("Unexpected error code", expectedErrorCode, ase.getErrorCode());
+    }
   }
 
   /**

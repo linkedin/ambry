@@ -20,7 +20,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedWriter;
-import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -243,7 +242,7 @@ public class AccountUpdateTool {
    * @throws InterruptedException
    */
   void editAccounts(Collection<String> accountNames, boolean ignoreSnapshotVersion)
-      throws IOException, InterruptedException {
+      throws IOException, InterruptedException, AccountServiceException {
     Path accountJsonPath = Files.createTempFile("account-update-", ".json");
     JSONArray accountsToEdit = new JSONArray();
     accountNames.stream()
@@ -273,7 +272,8 @@ public class AccountUpdateTool {
    * @param ignoreSnapshotVersion if {@code true}, don't verify the snapshot version.
    * @throws IOException
    */
-  void updateAccountsFromFile(String accountJsonPath, boolean ignoreSnapshotVersion) throws IOException {
+  void updateAccountsFromFile(String accountJsonPath, boolean ignoreSnapshotVersion)
+      throws IOException, AccountServiceException {
     long startTime = System.currentTimeMillis();
     Collection<Account> accountsToUpdate = getAccountsFromJson(accountJsonPath);
     if (!hasDuplicateAccountIdOrName(accountsToUpdate)) {
@@ -296,13 +296,10 @@ public class AccountUpdateTool {
         }
         accountsToUpdate = newAccounts;
       }
-      if (accountService.updateAccounts(accountsToUpdate)) {
-        System.out.println(
-            accountsToUpdate.size() + " account(s) successfully created or updated, took " + (System.currentTimeMillis()
-                - startTime) + " ms");
-      } else {
-        throw new RuntimeException("Updating accounts failed. See log for details.");
-      }
+      accountService.updateAccounts(accountsToUpdate);
+      System.out.println(
+          accountsToUpdate.size() + " account(s) successfully created or updated, took " + (System.currentTimeMillis()
+              - startTime) + " ms");
     } else {
       throw new IllegalArgumentException("Duplicate id or name exists in the accounts to update");
     }
