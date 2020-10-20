@@ -63,10 +63,9 @@ class InMemoryUnknownAccountService implements AccountService {
   }
 
   @Override
-  public boolean updateAccounts(Collection<Account> accounts) {
+  public void updateAccounts(Collection<Account> accounts) {
     checkOpen();
     Objects.requireNonNull(accounts, "accounts cannot be null");
-    return false;
   }
 
   @Override

@@ -73,7 +73,7 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
-  public synchronized boolean updateAccounts(Collection<Account> accounts) throws AccountServiceException {
+  public synchronized void updateAccounts(Collection<Account> accounts) throws AccountServiceException {
     if (!shouldUpdateSucceed) {
       throw new AccountServiceException("Update failed", AccountServiceErrorCode.InternalError);
     }
@@ -86,7 +86,6 @@ public class InMemAccountService implements AccountService {
         accountUpdateConsumer.accept(accounts);
       }
     }
-    return true;
   }
 
   @Override
@@ -115,11 +114,7 @@ public class InMemAccountService implements AccountService {
       ++nextContainerId;
     }
     account.updateContainerMap(createdContainers);
-    boolean hasSucceeded = updateAccounts(Collections.singletonList(account));
-    if (!hasSucceeded) {
-      throw new AccountServiceException("Account update failed for " + accountName,
-          AccountServiceErrorCode.InternalError);
-    }
+    updateAccounts(Collections.singletonList(account));
     return createdContainers;
   }
 
@@ -220,7 +215,8 @@ public class InMemAccountService implements AccountService {
     Container newContainer = new ContainerBuilder(container).setReplicationPolicy(replicationPolicy).build();
     Account account = getAccountById(container.getParentAccountId());
     Account newAccount = new AccountBuilder(account).addOrUpdateContainer(newContainer).build();
-    return updateAccounts(Collections.singleton(newAccount)) ? newContainer : null;
+    updateAccounts(Collections.singleton(newAccount));
+    return newContainer;
   }
 
   /**

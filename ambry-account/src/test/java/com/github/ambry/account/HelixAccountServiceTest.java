@@ -200,8 +200,7 @@ public class HelixAccountServiceTest {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     assertEquals("The number of account in HelixAccountService is incorrect", 0,
         accountService.getAllAccounts().size());
-    boolean res = accountService.updateAccounts(idToRefAccountMap.values());
-    assertTrue("Failed to update accounts", res);
+    accountService.updateAccounts(idToRefAccountMap.values());
     assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
   }
 
@@ -375,8 +374,7 @@ public class HelixAccountServiceTest {
     assertEquals("The number of account in HelixAccountService is incorrect", 0,
         accountService.getAllAccounts().size());
     // add an account with single container
-    boolean res = accountService.updateAccounts(Collections.singletonList(refAccount));
-    assertTrue("Failed to create account", res);
+    accountService.updateAccounts(Collections.singletonList(refAccount));
 
     Container brandNewContainer = new ContainerBuilder(refContainer).setId(UNKNOWN_CONTAINER_ID).build();
 
@@ -451,8 +449,7 @@ public class HelixAccountServiceTest {
     assertEquals("The number of account in HelixAccountService is incorrect", 0,
         accountService.getAllAccounts().size());
     // add an account with single container
-    boolean res = accountService.updateAccounts(Collections.singletonList(refAccount));
-    assertTrue("Failed to create account", res);
+    accountService.updateAccounts(Collections.singletonList(refAccount));
 
     // 1. Update existing container (success case)
     Container modifiedContainer = new ContainerBuilder(refContainer).setDescription("Different than before").build();
@@ -1064,7 +1061,12 @@ public class HelixAccountServiceTest {
     // add a new account
     Account newAccountWithoutContainer = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
     List<Account> accountsToUpdate = Collections.singletonList(newAccountWithoutContainer);
-    assertFalse("Update accounts should be disabled", accountService.updateAccounts(accountsToUpdate));
+    try {
+      accountService.updateAccounts(accountsToUpdate);
+      fail("Update accounts should be disabled");
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.UpdateDisabled, e.getErrorCode());
+    }
   }
 
   /**
@@ -1180,16 +1182,14 @@ public class HelixAccountServiceTest {
    */
   private void updateAccountsAndAssertAccountExistence(Collection<Account> accounts, int expectedAccountCount,
       boolean shouldUpdateSucceed) throws Exception {
-    boolean hasUpdateAccountSucceed = false;
     try {
-      hasUpdateAccountSucceed = accountService.updateAccounts(accounts);
+      accountService.updateAccounts(accounts);
     } catch (AccountServiceException ase) {
       if (shouldUpdateSucceed) {
         // Wasn't expecting this, rethrow.
         throw ase;
       }
     }
-    assertEquals("Wrong update return status", shouldUpdateSucceed, hasUpdateAccountSucceed);
     if (shouldUpdateSucceed) {
       assertAccountsInAccountService(accounts, expectedAccountCount, accountService);
       if (helixConfigProps.containsKey(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY)) {

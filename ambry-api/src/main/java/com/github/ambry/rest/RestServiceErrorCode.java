@@ -230,6 +230,8 @@ public enum RestServiceErrorCode {
         return Conflict;
       case BadRequest:
         return BadRequest;
+      case UpdateDisabled:
+        return ServiceUnavailable;
       default:
         return InternalServerError;
     }

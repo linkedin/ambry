@@ -55,8 +55,7 @@ public class InMemoryUnknownAccountServiceTest {
     assertEquals("Wrong size of account collection", 1, accountService.getAllAccounts().size());
     // updating the InMemoryUnknownAccountService should fail.
     Account account = new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build();
-    assertFalse("Wrong return value from an unsuccessful update operation",
-        accountService.updateAccounts(Collections.singletonList(account)));
+    accountService.updateAccounts(Collections.singletonList(account));
     assertEquals("Wrong size of account collection", 1, accountService.getAllAccounts().size());
     try {
       accountService.getAllAccounts().add(account);

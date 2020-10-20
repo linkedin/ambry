@@ -165,12 +165,7 @@ abstract class AbstractAccountService implements AccountService {
     AccountBuilder accountBuilder = new AccountBuilder(account);
     resolvedContainers.forEach(accountBuilder::addOrUpdateContainer);
     Account updatedAccount = accountBuilder.build();
-    boolean hasSucceeded = updateAccounts(Collections.singletonList(updatedAccount));
-    // TODO: updateAccounts should throw exception with specific error code
-    if (!hasSucceeded) {
-      throw new AccountServiceException("Account update failed for " + account.getName(),
-          AccountServiceErrorCode.InternalError);
-    }
+    updateAccounts(Collections.singletonList(updatedAccount));
   }
 
   @Override

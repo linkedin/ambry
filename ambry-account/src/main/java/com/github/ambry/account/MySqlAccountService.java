@@ -156,7 +156,7 @@ public class MySqlAccountService extends AbstractAccountService {
         } finally {
           infoMapLock.writeLock().unlock();
         }
-        // At this point we can safely say cash is refreshed
+        // At this point we can safely say cache is refreshed
         needRefresh = false;
 
         // Persist account metadata in cache to back up file on disk.
@@ -199,20 +199,17 @@ public class MySqlAccountService extends AbstractAccountService {
   }
 
   @Override
-  public boolean updateAccounts(Collection<Account> accounts) throws AccountServiceException {
+  public void updateAccounts(Collection<Account> accounts) throws AccountServiceException {
     Objects.requireNonNull(accounts, "accounts cannot be null");
     if (accounts.isEmpty()) {
-      logger.debug("Empty account collection to update.");
-      return false;
+      throw new IllegalArgumentException("Empty account collection to update.");
     }
-
     if (mySqlAccountStore == null) {
       throw new AccountServiceException("MySql Account store is not accessible", AccountServiceErrorCode.InternalError);
     }
 
     if (config.updateDisabled) {
-      logger.info("Updates have been disabled");
-      return false;
+      throw new AccountServiceException("Updates have been disabled", AccountServiceErrorCode.UpdateDisabled);
     }
 
     if (hasDuplicateAccountIdOrName(accounts)) {
@@ -262,8 +259,6 @@ public class MySqlAccountService extends AbstractAccountService {
     } finally {
       infoMapLock.writeLock().unlock();
     }
-
-    return true;
   }
 
   @Override

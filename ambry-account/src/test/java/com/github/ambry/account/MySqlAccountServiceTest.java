@@ -222,8 +222,12 @@ public class MySqlAccountServiceTest {
 
     // Verify account update is disabled
     Account testAccount = new AccountBuilder((short) 1, "testAccount1", Account.AccountStatus.ACTIVE).build();
-    assertFalse("Update accounts should be disabled",
-        mySqlAccountService.updateAccounts(Collections.singletonList(testAccount)));
+    try {
+      mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
+      fail("Update accounts should be disabled");
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.UpdateDisabled, e.getErrorCode());
+    }
   }
 
   /**

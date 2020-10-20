@@ -252,27 +252,25 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    * </p>
    */
   @Override
-  public boolean updateAccounts(Collection<Account> accounts) throws AccountServiceException {
-    return updateAccountsWithAccountMetadataStore(accounts, accountMetadataStore);
+  public void updateAccounts(Collection<Account> accounts) throws AccountServiceException {
+    updateAccountsWithAccountMetadataStore(accounts, accountMetadataStore);
   }
 
   /**
    * Helper function to update {@link Account} metadata.
    * @param accounts The {@link Account} metadata to update.
    * @param accountMetadataStore The {@link AccountMetadataStore}.
-   * @return True when the update operation succeeds.
+   * @throws AccountServiceException when the update operation fails.
    */
-  boolean updateAccountsWithAccountMetadataStore(Collection<Account> accounts,
+  void updateAccountsWithAccountMetadataStore(Collection<Account> accounts,
       AccountMetadataStore accountMetadataStore) throws AccountServiceException {
     checkOpen();
     Objects.requireNonNull(accounts, "accounts cannot be null");
     if (accounts.isEmpty()) {
-      logger.debug("Empty account collection to update.");
-      return false;
+      throw new IllegalArgumentException("Empty account collection to update.");
     }
     if (config.updateDisabled) {
-      logger.info("Updates has been disabled");
-      return false;
+      throw new AccountServiceException("Updates have been disabled", AccountServiceErrorCode.UpdateDisabled);
     }
     if (hasDuplicateAccountIdOrName(accounts)) {
       accountServiceMetrics.updateAccountErrorCount.inc();
@@ -307,7 +305,6 @@ public class HelixAccountService extends AbstractAccountService implements Accou
         logger.error("Failed to send notification for account metadata change");
         accountServiceMetrics.notifyAccountDataChangeErrorCount.inc();
       }
-      return true;
     } else {
       logger.error("Failed updating accounts={}, took {} ms", accounts, timeForUpdate);
       accountServiceMetrics.updateAccountErrorCount.inc();
@@ -420,7 +417,8 @@ public class HelixAccountService extends AbstractAccountService implements Accou
               new AccountBuilder(accountToEdit).addOrUpdateContainer(editedContainer).build());
         });
         try {
-          success = updateAccounts(accountToUpdateMap.values());
+          updateAccounts(accountToUpdateMap.values());
+          success = true;
         } catch (AccountServiceException ase) {
           updateException = ase;
           retry++;
