@@ -18,12 +18,20 @@ package com.github.ambry.config;
  */
 public class StorageQuotaConfig {
   public static final String STORAGE_QUOTA_PREFIX = "storage.quota.";
+  public static final String HELIX_PROPERTY_ROOT_PATH = STORAGE_QUOTA_PREFIX + "helix.property.root.path";
   public static final String ZK_CLIENT_CONNECT_ADDRESS = STORAGE_QUOTA_PREFIX + "zk.client.connect.address";
   public static final String REFRESHER_POLLING_INTERVAL_MS = STORAGE_QUOTA_PREFIX + "refresher.polling.interval.ms";
   public static final String CONTAINER_STORAGE_QUOTA_IN_JSON = STORAGE_QUOTA_PREFIX + "container.storage.quota.in.json";
   public static final String SOURCE_POLLING_INTERVAL_MS = STORAGE_QUOTA_PREFIX + "source.polling.interval.ms";
 
   //////////////// Config for HelixStorageUsageRefresher ///////////////
+
+  /**
+   * The root path of helix property store in ZooKeeper for HelixStorageUsageRefresher. Must start with {@code /}, and
+   * must not end with {@code /}. The root path should be {@code /{clustername}/PROPERTYSTORE}
+   */
+  @Config(HELIX_PROPERTY_ROOT_PATH)
+  public final String helixPropertyRootPath;
 
   /**
    * The ZooKeeper server address to connect to. This config is required.
@@ -73,10 +81,12 @@ public class StorageQuotaConfig {
    * @param verifiableProperties The {@link VerifiableProperties} that contains all the properties.
    */
   public StorageQuotaConfig(VerifiableProperties verifiableProperties) {
+    helixPropertyRootPath = verifiableProperties.getString(HELIX_PROPERTY_ROOT_PATH);
     zkClientConnectAddress = verifiableProperties.getString(ZK_CLIENT_CONNECT_ADDRESS);
     refresherPollingIntervalMs =
         verifiableProperties.getIntInRange(REFRESHER_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);
     containerStorageQuotaInJson = verifiableProperties.getString(CONTAINER_STORAGE_QUOTA_IN_JSON, "");
-    sourcePollingIntervalMs = verifiableProperties.getInt(SOURCE_POLLING_INTERVAL_MS, 30 * 60 * 1000);
+    sourcePollingIntervalMs =
+        verifiableProperties.getIntInRange(SOURCE_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);
   }
 }

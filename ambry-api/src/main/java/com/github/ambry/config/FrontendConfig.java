@@ -14,6 +14,7 @@
 package com.github.ambry.config;
 
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.StorageQuotaServiceFactory;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
@@ -37,6 +38,8 @@ public class FrontendConfig {
       PREFIX + "max.acceptable.ttl.secs.if.ttl.required";
   public static final String MAX_JSON_REQUEST_SIZE_BYTES_KEY = PREFIX + "max.json.request.size.bytes";
   public static final String ENABLE_UNDELETE = PREFIX + "enable.undelete";
+  public static final String ENABLE_STORAGE_QUOTA_SERVICE = PREFIX + "enable.storage.quota.service";
+  public static final String STORAGE_QUOTA_SERVICE_FACTORY = PREFIX + "storage.quota.service.factory";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -48,6 +51,8 @@ public class FrontendConfig {
   private static final String DEFAULT_REST_REQUEST_QUOTA_STRING =
       "{\"PUT\": \"-1\",\"GET\": \"-1\",\"POST\": \"-1\",\"HEAD\": \"-1\",\"OPTIONS\": \"-1\",\"UNKNOWN\": \"-1\",\"DELETE\": \"-1\"}";
 
+  private static final String DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY =
+      "com.github.ambry.quota.AmbryStorageQuotaServiceFactory";
 
   /**
    * Cache validity in seconds for non-private blobs for GET.
@@ -203,9 +208,26 @@ public class FrontendConfig {
   @Default("20 * 1024 * 1024")
   public final int maxJsonRequestSizeBytes;
 
+  /**
+   * Set to true to enable undelete in frontend.
+   */
   @Config(ENABLE_UNDELETE)
   @Default("false")
   public final boolean enableUndelete;
+
+  /**
+   * Set to true to enable storage quota in frontend.
+   */
+  @Config(ENABLE_STORAGE_QUOTA_SERVICE)
+  @Default("false")
+  public final boolean enableStorageQuotaService;
+
+  /**
+   * The {@link StorageQuotaServiceFactory}.
+   */
+  @Config(STORAGE_QUOTA_SERVICE_FACTORY)
+  @Default(DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY)
+  public final String storageQuotaServiceFactory;
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -253,6 +275,9 @@ public class FrontendConfig {
     maxJsonRequestSizeBytes =
         verifiableProperties.getIntInRange(MAX_JSON_REQUEST_SIZE_BYTES_KEY, 20 * 1024 * 1024, 0, Integer.MAX_VALUE);
     enableUndelete = verifiableProperties.getBoolean(ENABLE_UNDELETE, false);
+    enableStorageQuotaService = verifiableProperties.getBoolean(ENABLE_STORAGE_QUOTA_SERVICE, false);
+    storageQuotaServiceFactory =
+        verifiableProperties.getString(STORAGE_QUOTA_SERVICE_FACTORY, DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY);
   }
 
   /**

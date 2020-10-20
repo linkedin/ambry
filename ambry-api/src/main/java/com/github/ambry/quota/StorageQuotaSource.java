@@ -24,9 +24,25 @@ public interface StorageQuotaSource {
    * Return the storage quota of each container. The returned map should be structured as such:
    * The key of the map is the account id in string format and the value of the map is the storage quota of each
    * container under this account.
-   * The container usage map's key is the container is in string format, and the value is storage quota in bytes of
+   * The container usage map's key is the container id in string format, and the value is storage quota in bytes of
    * this container.
    * @return The storage quota for each container.
    */
   Map<String, Map<String, Long>> getContainerQuota();
+
+  /**
+   * A listener interface registered with {@link StorageQuotaSource}. It will be invoked every time when there is a
+   * change in the storage quota. The new storage quota will be passed as the parameter. Notice this is a unmodifiable
+   * map.
+   */
+  interface Listener {
+    void onNewContainerStorageQuota(Map<String, Map<String, Long>> containerStorageQuota);
+  }
+
+  /**
+   * Register your listener to {@link StorageQuotaSource}. A source should only have one callback and it can't be
+   * registered multiple times.
+   * @param listener The listener to register.
+   */
+  void registerListener(Listener listener);
 }

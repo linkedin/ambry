@@ -53,4 +53,10 @@ public class JSONStringStorageQuotaSource implements StorageQuotaSource {
   public Map<String, Map<String, Long>> getContainerQuota() {
     return Collections.unmodifiableMap(containerStorageQuota);
   }
+
+  @Override
+  public void registerListener(Listener listener) {
+    // no-op
+    return;
+  }
 }

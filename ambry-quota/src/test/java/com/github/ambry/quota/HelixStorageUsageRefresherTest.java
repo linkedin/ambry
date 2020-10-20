@@ -23,7 +23,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -58,6 +57,7 @@ public class HelixStorageUsageRefresherTest {
     mockHelixStore = new MockHelixPropertyStore<>();
     Properties properties = new Properties();
     properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, ZK_CLIENT_CONNECT_ADDRESS);
+    properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
     storageQuotaConfig = new StorageQuotaConfig(new VerifiableProperties(properties));
   }
 
@@ -84,7 +84,7 @@ public class HelixStorageUsageRefresherTest {
     Map<String, Map<String, Long>> expectedUsage = makeStorageUsageAndWriteToHelix(10, 10);
     storageUsageRefresher = new HelixStorageUsageRefresher(mockHelixStore, null, storageQuotaConfig);
     Map<String, Map<String, Long>> obtainedUsage = storageUsageRefresher.getContainerStorageUsage();
-    assertContainerUsageMap(expectedUsage, obtainedUsage);
+    TestUtils.assertContainerMap(expectedUsage, obtainedUsage);
   }
 
   /**
@@ -108,7 +108,7 @@ public class HelixStorageUsageRefresherTest {
     Map<String, Map<String, Long>> expectedUsage = makeStorageUsageAndWriteToHelix(initialNumAccounts, 10);
     storageUsageRefresher = new HelixStorageUsageRefresher(mockHelixStore, null, storageQuotaConfig);
     Map<String, Map<String, Long>> obtainedUsage = storageUsageRefresher.getContainerStorageUsage();
-    assertContainerUsageMap(expectedUsage, obtainedUsage);
+    TestUtils.assertContainerMap(expectedUsage, obtainedUsage);
 
     // Use an AtomicReference to hold a CountDownLatch since we can only register listener once.
     AtomicReference<CountDownLatch> latchHolder = new AtomicReference<>();
@@ -121,7 +121,8 @@ public class HelixStorageUsageRefresherTest {
 
     int numUpdates = 10;
     for (int i = 1; i <= numUpdates; i++) {
-      Map<String, Map<String, Long>> additionalUsage = makeStorageUsageAndWriteToHelix(1, 10);
+      Map<String, Map<String, Long>> additionalUsage =
+          TestUtils.makeStorageMap(1, 10, MAX_CONTAINER_USAGE, MIN_CONTAINER_USAGE);
       expectedUsage.put(String.valueOf(initialNumAccounts + i), additionalUsage.remove("1"));
       CountDownLatch latch = new CountDownLatch(1);
       latchHolder.set(latch);
@@ -129,7 +130,7 @@ public class HelixStorageUsageRefresherTest {
       latch.await(UPDATE_TIMEOUT_IN_SECOND, TimeUnit.SECONDS);
 
       obtainedUsage = storageUsageRefresher.getContainerStorageUsage();
-      assertContainerUsageMap(expectedUsage, obtainedUsage);
+      TestUtils.assertContainerMap(expectedUsage, obtainedUsage);
     }
   }
 
@@ -142,7 +143,7 @@ public class HelixStorageUsageRefresherTest {
     Map<String, Map<String, Long>> expectedUsage = makeStorageUsageAndWriteToHelix(10, 10);
     storageUsageRefresher = new HelixStorageUsageRefresher(mockHelixStore, null, storageQuotaConfig);
     Map<String, Map<String, Long>> obtainedUsage = storageUsageRefresher.getContainerStorageUsage();
-    assertContainerUsageMap(expectedUsage, obtainedUsage);
+    TestUtils.assertContainerMap(expectedUsage, obtainedUsage);
 
     // write a bad znrecord to helix
     writeToHelix("BAD ZNRECORD");
@@ -150,7 +151,7 @@ public class HelixStorageUsageRefresherTest {
     Thread.sleep(1000);
     // Make sure it doesn't ruin the in-memory cache
     obtainedUsage = storageUsageRefresher.getContainerStorageUsage();
-    assertContainerUsageMap(expectedUsage, obtainedUsage);
+    TestUtils.assertContainerMap(expectedUsage, obtainedUsage);
   }
 
   /**
@@ -171,7 +172,7 @@ public class HelixStorageUsageRefresherTest {
     Map<String, Map<String, Long>> expectedUsage = makeStorageUsageAndWriteToHelix(10, 10);
     latch.await(UPDATE_TIMEOUT_IN_SECOND, TimeUnit.SECONDS);
     Map<String, Map<String, Long>> obtainedUsage = storageUsageRefresher.getContainerStorageUsage();
-    assertContainerUsageMap(expectedUsage, obtainedUsage);
+    TestUtils.assertContainerMap(expectedUsage, obtainedUsage);
   }
 
   /**
@@ -183,7 +184,7 @@ public class HelixStorageUsageRefresherTest {
     Map<String, Map<String, Long>> expectedUsage = makeStorageUsageAndWriteToHelix(10, 10);
     storageUsageRefresher = new HelixStorageUsageRefresher(mockHelixStore, scheduler, storageQuotaConfig);
     Map<String, Map<String, Long>> obtainedUsage = storageUsageRefresher.getContainerStorageUsage();
-    assertContainerUsageMap(expectedUsage, obtainedUsage);
+    TestUtils.assertContainerMap(expectedUsage, obtainedUsage);
   }
 
   /**
@@ -195,23 +196,8 @@ public class HelixStorageUsageRefresherTest {
    */
   private Map<String, Map<String, Long>> makeStorageUsageAndWriteToHelix(int numAccounts, int numContainerPerAccount)
       throws Exception {
-    Random random = new Random();
-    Map<String, Map<String, Long>> accountUsage = new HashMap<>();
-
-    short accountId = 1;
-    for (int i = 0; i < numAccounts; i++) {
-      Map<String, Long> containerUsage = new HashMap<>();
-      accountUsage.put(String.valueOf(accountId), containerUsage);
-
-      short containerId = 1;
-      for (int j = 0; j < numContainerPerAccount; j++) {
-        long usage = Math.abs(random.nextLong()) % (MAX_CONTAINER_USAGE - MIN_CONTAINER_USAGE) + MIN_CONTAINER_USAGE;
-        containerUsage.put(String.valueOf(containerId), usage);
-        containerId++;
-      }
-      accountId++;
-    }
-
+    Map<String, Map<String, Long>> accountUsage =
+        TestUtils.makeStorageMap(numAccounts, numContainerPerAccount, MAX_CONTAINER_USAGE, MIN_CONTAINER_USAGE);
     writeStorageUsageToHelix(accountUsage);
     return accountUsage;
   }
@@ -251,30 +237,5 @@ public class HelixStorageUsageRefresherTest {
     znRecord.setSimpleField(HelixStorageUsageRefresher.VALID_SIZE_FILED_NAME, value);
     HelixStoreOperator storeOperator = new HelixStoreOperator(mockHelixStore);
     storeOperator.write(HelixStorageUsageRefresher.AGGREGATED_CONTAINER_STORAGE_USAGE_PATH, znRecord);
-  }
-
-  /**
-   * Compare two storage usage map and fail the test when they are not equal.
-   * @param expectedUsage The expected storage usage.
-   * @param obtainedUsage The obtained storage usage.
-   */
-  private void assertContainerUsageMap(Map<String, Map<String, Long>> expectedUsage,
-      Map<String, Map<String, Long>> obtainedUsage) {
-    assertEquals(expectedUsage.size(), obtainedUsage.size());
-    for (Map.Entry<String, Map<String, Long>> expectedEntry : expectedUsage.entrySet()) {
-      String accountId = expectedEntry.getKey();
-      Map<String, Long> expectedContainerUsage = expectedEntry.getValue();
-      assertTrue("Obtained map does contain account id " + accountId, obtainedUsage.containsKey(accountId));
-      Map<String, Long> obtainedContainerUsage = obtainedUsage.get(accountId);
-      assertEquals("Size doesn't match for account id " + accountId, expectedContainerUsage.size(),
-          obtainedContainerUsage.size());
-      for (Map.Entry<String, Long> expectedContainerEntry : expectedContainerUsage.entrySet()) {
-        String containerId = expectedContainerEntry.getKey();
-        assertTrue("Obtained map doesn't contain container id " + containerId + " in account id " + accountId,
-            obtainedContainerUsage.containsKey(containerId));
-        assertEquals("Usage doesn't match for account id " + accountId + " container id " + containerId,
-            expectedContainerEntry.getValue().longValue(), obtainedContainerUsage.get(containerId).longValue());
-      }
-    }
   }
 }

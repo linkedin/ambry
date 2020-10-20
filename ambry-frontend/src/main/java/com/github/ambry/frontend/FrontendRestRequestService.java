@@ -21,6 +21,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.StorageQuotaService;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -112,12 +113,13 @@ class FrontendRestRequestService implements RestRequestService {
    * @param datacenterName the local datacenter name for this frontend.
    * @param hostname the hostname for this frontend.
    * @param clusterName the name of the storage cluster that the router communicates with.
+   * @param storageQuotaService the {@link StorageQuotaService} used to throttle traffics.
    */
   FrontendRestRequestService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics, Router router,
       ClusterMap clusterMap, IdConverterFactory idConverterFactory, SecurityServiceFactory securityServiceFactory,
       UrlSigningService urlSigningService, IdSigningService idSigningService, AccountService accountService,
       AccountAndContainerInjector accountAndContainerInjector, String datacenterName, String hostname,
-      String clusterName) {
+      String clusterName, StorageQuotaService storageQuotaService) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.router = router;

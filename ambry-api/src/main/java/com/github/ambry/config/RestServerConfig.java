@@ -17,8 +17,9 @@ package com.github.ambry.config;
  * Configuration parameters required by RestServer and Rest infrastructure
  */
 public class RestServerConfig {
-  public final static String CONFIG_PREFIX = "rest.server.";
-  public final static String ENABLE_ADDED_CHANNEL_HANDLERS = CONFIG_PREFIX + "enable.added.channel.handlers";
+  public static final String CONFIG_PREFIX = "rest.server.";
+  public static final String ENABLE_ADDED_CHANNEL_HANDLERS = CONFIG_PREFIX + "enable.added.channel.handlers";
+
   /**
    * The RestRequestServiceFactory that needs to be used by the RestServer
    * for bootstrapping the RestRequestService.
@@ -105,8 +106,9 @@ public class RestServerConfig {
         verifiableProperties.getString("rest.server.nio.server.factory", "com.github.ambry.rest.FrontendNettyFactory");
     restServerRequestHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.request.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
-    restServerRequestResponseHandlerFactory = verifiableProperties.getString("rest.server.request.response.handler.factory",
-        "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
+    restServerRequestResponseHandlerFactory =
+        verifiableProperties.getString("rest.server.request.response.handler.factory",
+            "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerResponseHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.response.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
     restServerAccountServiceFactory = verifiableProperties.getString("rest.server.account.service.factory",

@@ -17,7 +17,10 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.StorageQuotaService;
+import com.github.ambry.quota.StorageQuotaServiceFactory;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestRequestServiceFactory;
 import com.github.ambry.router.Router;
@@ -84,10 +87,17 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
               urlSigningService, idSigningService, accountAndContainerInjector);
+      StorageQuotaService storageQuotaService = null;
+      if (frontendConfig.enableStorageQuotaService) {
+        StorageQuotaConfig storageQuotaConfig = new StorageQuotaConfig(verifiableProperties);
+        storageQuotaService =
+            Utils.<StorageQuotaServiceFactory>getObj(frontendConfig.storageQuotaServiceFactory, storageQuotaConfig,
+                clusterMap.getMetricRegistry()).getStorageQuotaService();
+      }
       return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
           securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
           clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
-          clusterMapConfig.clusterMapClusterName);
+          clusterMapConfig.clusterMapClusterName, storageQuotaService);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate FrontendRestRequestService", e);
     }
