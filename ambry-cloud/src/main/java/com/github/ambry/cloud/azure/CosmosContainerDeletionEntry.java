@@ -29,8 +29,8 @@ public class CosmosContainerDeletionEntry {
   static final String VERSION_KEY = "version";
   static final String CONTAINER_ID_KEY = "containerId";
   static final String ACCOUNT_ID_KEY = "accountId";
-  static final String CONTAINER_DELETE_TRIGGER_TIME_KEY = "deleteTriggerTime";
-  static final String IS_DELETED_KEY = "isDeleted";
+  static final String CONTAINER_DELETE_TRIGGER_TIME_KEY = "deleteTriggerTimestamp";
+  static final String DELETED_KEY = "deleted";
   static final String DELETE_PENDING_PARTITIONS_KEY = "deletePendingPartitions";
   private static final String ID_KEY = "id";
   private static final String CONTAINER_ID_ACCOUNT_ID_DELIM = "_";
@@ -119,7 +119,7 @@ public class CosmosContainerDeletionEntry {
   public static CosmosContainerDeletionEntry fromJson(JSONObject jsonObject) {
     return new CosmosContainerDeletionEntry((short) jsonObject.getInt(VERSION_KEY),
         (short) jsonObject.getInt(CONTAINER_ID_KEY), (short) jsonObject.getInt(ACCOUNT_ID_KEY),
-        jsonObject.getLong(CONTAINER_DELETE_TRIGGER_TIME_KEY), jsonObject.getBoolean(IS_DELETED_KEY),
+        jsonObject.getLong(CONTAINER_DELETE_TRIGGER_TIME_KEY), jsonObject.getBoolean(DELETED_KEY),
         jsonObject.getJSONArray(DELETE_PENDING_PARTITIONS_KEY).toList());
   }
 
@@ -196,7 +196,7 @@ public class CosmosContainerDeletionEntry {
     metadata.put(VERSION_KEY, version);
     metadata.put(CONTAINER_ID_KEY, containerId);
     metadata.put(ACCOUNT_ID_KEY, accountId);
-    metadata.put(IS_DELETED_KEY, isDeleted);
+    metadata.put(DELETED_KEY, isDeleted);
     metadata.put(CONTAINER_DELETE_TRIGGER_TIME_KEY, deleteTriggerTimestamp);
     metadata.put(DELETE_PENDING_PARTITIONS_KEY, deletePendingPartitions);
     return metadata;

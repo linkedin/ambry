@@ -243,7 +243,7 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
           fieldsChanged.set(deletePendingPartitions.remove(partitionPath));
           document.set(CosmosContainerDeletionEntry.DELETE_PENDING_PARTITIONS_KEY, deletePendingPartitions);
           if (deletePendingPartitions.isEmpty()) {
-            document.set(CosmosContainerDeletionEntry.IS_DELETED_KEY, true);
+            document.set(CosmosContainerDeletionEntry.DELETED_KEY, true);
             fieldsChanged.set(true);
           }
         }), "UpdateContainerDeletionProgress", partitionPath);

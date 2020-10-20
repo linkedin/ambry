@@ -75,7 +75,8 @@ public class CosmosDataAccessor {
   private static final String CONTAINER_BLOBS_QUERY =
       "SELECT TOP %d * FROM c WHERE c.accountId=%d and c.containerId=%d";
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
-  private static final String DEPRECATED_CONTAINERS_QUERY = "SELECT TOP %d from c order by c.deleteTriggerTime";
+  private static final String DEPRECATED_CONTAINERS_QUERY =
+      "SELECT TOP %d * from c WHERE c.deleted=false order by c.deleteTriggerTimestamp";
   private static final String CONTAINER_DELETION_TABLE = "DeletedContainer";
   static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
   static final String PROPERTY_CONTINUATION = "continuation";
@@ -607,21 +608,33 @@ public class CosmosDataAccessor {
   }
 
   /**
-   * @return a {@link Set} of {@link CosmosContainerDeletionEntry} objects from cosmosdb that are not marked as deleted.
+   * Fetch a {@link Set} of {@link CosmosContainerDeletionEntry} objects from cosmos db that are not marked as deleted.
+   * @param maxEntries Max number of entries to fetch on one query.
+   * @return {@link Set} of {@link CosmosContainerDeletionEntry} objects.
+   * @throws DocumentClientException in case of any error.
    */
-  public Set<CosmosContainerDeletionEntry> getDeprecatedContainers(int maxEntries) {
+  public Set<CosmosContainerDeletionEntry> getDeprecatedContainers(int maxEntries) throws DocumentClientException {
     String query = String.format(DEPRECATED_CONTAINERS_QUERY, maxEntries);
     Timer timer = new Timer();
-    Iterator<FeedResponse<Document>> iterator =
-        executeCosmosQuery(cosmosDeletedContainerCollectionLink, null, new SqlQuerySpec(query), new FeedOptions(),
-            timer).getIterator();
     Set<CosmosContainerDeletionEntry> containerDeletionEntries = new HashSet<>();
-    while (iterator.hasNext()) {
-      FeedResponse<Document> response = iterator.next();
-      response.getResults()
-          .iterator()
-          .forEachRemaining(
-              doc -> containerDeletionEntries.add(CosmosContainerDeletionEntry.fromJson(new JSONObject(doc.toJson()))));
+    try {
+      Iterator<FeedResponse<Document>> iterator =
+          executeCosmosQuery(cosmosDeletedContainerCollectionLink, null, new SqlQuerySpec(query), new FeedOptions(),
+              timer).getIterator();
+      while (iterator.hasNext()) {
+        FeedResponse<Document> response = iterator.next();
+        response.getResults()
+            .iterator()
+            .forEachRemaining(doc -> containerDeletionEntries.add(
+                CosmosContainerDeletionEntry.fromJson(new JSONObject(doc.toJson()))));
+      }
+    } catch (RuntimeException rex) {
+      if (rex.getCause() instanceof DocumentClientException) {
+        logger.warn("Get deprecated containers query {} got {}", query,
+            ((DocumentClientException) rex.getCause()).getStatusCode());
+        throw (DocumentClientException) rex.getCause();
+      }
+      throw rex;
     }
     return containerDeletionEntries;
   }
@@ -696,7 +709,7 @@ public class CosmosDataAccessor {
    * @return the result of the action.
    * @throws DocumentClientException
    */
-  private ResourceResponse<Document> executeCosmosAction(Callable<? extends ResourceResponse<Document>> action,
+  static ResourceResponse<Document> executeCosmosAction(Callable<? extends ResourceResponse<Document>> action,
       Timer timer) throws DocumentClientException {
     ResourceResponse<Document> resourceResponse;
     Timer.Context operationTimer = null;
