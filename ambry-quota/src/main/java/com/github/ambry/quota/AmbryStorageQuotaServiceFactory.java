@@ -27,7 +27,6 @@ import org.apache.helix.zookeeper.datamodel.ZNRecord;
  * and {@link AmbryStorageQuotaEnforcer}.
  */
 public class AmbryStorageQuotaServiceFactory implements StorageQuotaServiceFactory {
-  private static final String STORAGE_QUOTA_SERVICE_PREFIX = "storage-quota-service";
   private final StorageQuotaService storageQuotaService;
 
   /**
@@ -38,17 +37,7 @@ public class AmbryStorageQuotaServiceFactory implements StorageQuotaServiceFacto
    */
   public AmbryStorageQuotaServiceFactory(StorageQuotaConfig storageQuotaConfig, MetricRegistry metricRegistry)
       throws Exception {
-    HelixPropertyStore<ZNRecord> helixStore =
-        CommonUtils.createHelixPropertyStore(storageQuotaConfig.zkClientConnectAddress,
-            storageQuotaConfig.helixPropertyRootPath, null);
-    ScheduledExecutorService scheduler = Utils.newScheduler(1, STORAGE_QUOTA_SERVICE_PREFIX, false);
-    HelixStorageUsageRefresher storageUsageRefresher =
-        new HelixStorageUsageRefresher(helixStore, scheduler, storageQuotaConfig);
-    JSONStringStorageQuotaSource storageQuotaSource = new JSONStringStorageQuotaSource(storageQuotaConfig);
-    AmbryStorageQuotaEnforcer storageQuotaEnforcer = new AmbryStorageQuotaEnforcer();
-    storageQuotaService =
-        new AmbryStorageQuotaService(storageUsageRefresher, storageQuotaSource, storageQuotaEnforcer, scheduler,
-            storageQuotaConfig);
+    storageQuotaService = new AmbryStorageQuotaService(storageQuotaConfig);
   }
 
   @Override

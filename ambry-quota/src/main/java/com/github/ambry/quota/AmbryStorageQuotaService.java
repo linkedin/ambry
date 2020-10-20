@@ -13,17 +13,21 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.utils.Utils;
-import java.util.Objects;
+import java.io.IOException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.apache.helix.store.HelixPropertyStore;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 
 
 /**
  * An implementation for {@link StorageQuotaService}.
  */
 public class AmbryStorageQuotaService implements StorageQuotaService {
+  private static final String STORAGE_QUOTA_SERVICE_PREFIX = "storage-quota-service";
 
   private final StorageUsageRefresher storageUsageRefresher;
   private final StorageQuotaSource storageQuotaSource;
@@ -31,13 +35,15 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
   private final ScheduledExecutorService scheduler;
   private final StorageQuotaConfig config;
 
-  public AmbryStorageQuotaService(StorageUsageRefresher storageUsageRefresher, StorageQuotaSource storageQuotaSource,
-      StorageQuotaEnforcer storageQuotaEnforcer, ScheduledExecutorService scheduler, StorageQuotaConfig config) {
-    this.storageUsageRefresher = Objects.requireNonNull(storageUsageRefresher, "StorageUsageRefresher empty");
-    this.storageQuotaSource = Objects.requireNonNull(storageQuotaSource, "StorageQuotaSource empty");
-    this.storageQuotaEnforcer = Objects.requireNonNull(storageQuotaEnforcer, "StorageQuotaEnforcer empty");
-    this.config = Objects.requireNonNull(config, "StorageQuotaConfig empty");
-    this.scheduler = scheduler;
+  public AmbryStorageQuotaService(StorageQuotaConfig storageQuotaConfig) throws IOException {
+    HelixPropertyStore<ZNRecord> helixStore =
+        CommonUtils.createHelixPropertyStore(storageQuotaConfig.zkClientConnectAddress,
+            storageQuotaConfig.helixPropertyRootPath, null);
+    this.scheduler = Utils.newScheduler(1, STORAGE_QUOTA_SERVICE_PREFIX, false);
+    this.storageUsageRefresher = new HelixStorageUsageRefresher(helixStore, this.scheduler, storageQuotaConfig);
+    this.storageQuotaSource = new JSONStringStorageQuotaSource(storageQuotaConfig);
+    this.storageQuotaEnforcer = new AmbryStorageQuotaEnforcer();
+    this.config = storageQuotaConfig;
   }
 
   @Override
