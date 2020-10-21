@@ -38,12 +38,14 @@ import static com.github.ambry.utils.Utils.*;
 public class CompositeAccountService implements AccountService {
 
   private static final Logger logger = LoggerFactory.getLogger(CompositeAccountService.class);
-  static final String ACCOUNT_DATA_CONSISTENCY_CHECKER_PREFIX = "account-data-consistency-checker";
+  private static final String ACCOUNT_DATA_CONSISTENCY_CHECKER_PREFIX = "account-data-consistency-checker";
   private final AccountService primaryAccountService;
   private final AccountService secondaryAccountService;
   private final AccountServiceMetrics accountServiceMetrics;
   private final CompositeAccountServiceConfig config;
   private final ScheduledExecutorService scheduler;
+  private static long getAccountRequestCount = 0;
+  private static long getContainerRequestCount = 0;
 
   public CompositeAccountService(AccountService primaryAccountService, AccountService secondaryAccountService,
       AccountServiceMetrics accountServiceMetrics, CompositeAccountServiceConfig config) {
@@ -60,7 +62,8 @@ public class CompositeAccountService implements AccountService {
   public Account getAccountById(short accountId) {
     Account primaryResult = primaryAccountService.getAccountById(accountId);
     Account secondaryResult = secondaryAccountService.getAccountById(accountId);
-    if (primaryResult != null && !primaryResult.equals(secondaryResult)) {
+    if ((++getAccountRequestCount % 100 < config.samplingPercentageForGetAccountConsistencyCheck)
+        && primaryResult != null && !primaryResult.equals(secondaryResult)) {
       logger.warn("Inconsistency detected between primary and secondary for accountId ={}", accountId);
       accountServiceMetrics.getAccountDataInconsistencyCount.inc();
     }
@@ -71,7 +74,8 @@ public class CompositeAccountService implements AccountService {
   public Account getAccountByName(String accountName) {
     Account primaryResult = primaryAccountService.getAccountByName(accountName);
     Account secondaryResult = secondaryAccountService.getAccountByName(accountName);
-    if (primaryResult != null && !primaryResult.equals(secondaryResult)) {
+    if (++getAccountRequestCount % 100 < config.samplingPercentageForGetAccountConsistencyCheck && primaryResult != null
+        && !primaryResult.equals(secondaryResult)) {
       logger.warn("Inconsistency detected between primary and secondary for accountName ={}", accountName);
       accountServiceMetrics.getAccountDataInconsistencyCount.inc();
     }
@@ -83,8 +87,10 @@ public class CompositeAccountService implements AccountService {
     primaryAccountService.updateAccounts(accounts);
     try {
       secondaryAccountService.updateAccounts(accounts);
+      // Not comparing updated accounts list as it could increase latency of update operation.
     } catch (Exception e) {
       logger.error("Update accounts failed for secondary source", e);
+      accountServiceMetrics.updateAccountInconsistencyCount.inc();
     }
   }
 
@@ -109,8 +115,10 @@ public class CompositeAccountService implements AccountService {
     Collection<Container> primaryResult = primaryAccountService.updateContainers(accountName, containers);
     try {
       secondaryAccountService.updateContainers(accountName, containers);
+      // Not comparing updated containers list as it could increase latency of update operation.
     } catch (Exception e) {
       logger.error("Update containers failed for secondary source", e);
+      accountServiceMetrics.updateContainerInconsistencyCount.inc();
     }
     return primaryResult;
   }
@@ -120,7 +128,8 @@ public class CompositeAccountService implements AccountService {
     Container primaryResult = primaryAccountService.getContainer(accountName, containerName);
     try {
       Container secondaryResult = secondaryAccountService.getContainer(accountName, containerName);
-      if (primaryResult != null && !primaryResult.equals(secondaryResult)) {
+      if (++getContainerRequestCount % 100 < config.samplingPercentageForGetContainerConsistencyCheck
+          && primaryResult != null && !primaryResult.equals(secondaryResult)) {
         logger.warn("Inconsistency detected between primary and secondary for accountName ={}, containerName = {}",
             accountName, containerName);
         accountServiceMetrics.getContainerDataInconsistencyCount.inc();
@@ -153,6 +162,7 @@ public class CompositeAccountService implements AccountService {
       secondaryAccountService.selectInactiveContainersAndMarkInZK(statsSnapshot);
     } catch (Exception e) {
       logger.warn("Marking containers as inactive failed for secondary", e);
+      accountServiceMetrics.updateContainerInconsistencyCount.inc();
     }
   }
 

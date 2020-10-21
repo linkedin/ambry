@@ -22,6 +22,10 @@ public class CompositeAccountServiceConfig {
       COMPOSITE_ACCOUNT_SERVICE_PREFIX + "consistency.checker.interval.minutes";
   public static final String CONSISTENCY_CHECKER_SHUTDOWN_TIMEOUT_MINUTES =
       COMPOSITE_ACCOUNT_SERVICE_PREFIX + "consistency.checker.shutdown.timeout.minutes";
+  public static final String SAMPLING_PERCENTAGE_FOR_GET_ACCOUNT_CONSISTENCY_CHECK =
+      COMPOSITE_ACCOUNT_SERVICE_PREFIX + "sampling.percentage.for.get.account.consistency.check";
+  public static final String SAMPLING_PERCENTAGE_FOR_GET_CONTAINER_CONSISTENCY_CHECK =
+      COMPOSITE_ACCOUNT_SERVICE_PREFIX + "sampling.percentage.for.get.container.consistency.check";
 
   /**
    * The time interval in minutes for checking consistency in account data between primary and secondary sources.
@@ -38,10 +42,33 @@ public class CompositeAccountServiceConfig {
   @Default("1")
   public final int consistencyCheckerShutdownTimeoutMinutes;
 
+  /**
+   * Percentage of {@link com.github.ambry.account.AccountService#getAccountByName(String)} and
+   * {@link com.github.ambry.account.AccountService#getAccountById(short)} requests for which we want to compare
+   * results between primary and secondary sources. Default value is 50%. If we want to avoid latency due to comparision,
+   * this value can be set to 0.
+   */
+  @Config(SAMPLING_PERCENTAGE_FOR_GET_ACCOUNT_CONSISTENCY_CHECK)
+  @Default("50")
+  public final int samplingPercentageForGetAccountConsistencyCheck;
+
+  /**
+   * Percentage of {@link com.github.ambry.account.AccountService#getContainer(String, String)} requests for which we
+   * want to compare results between primary and secondary sources. Default value is 50%. If we want to avoid
+   * latency due to comparision, this value can be set to 0.
+   */
+  @Config(SAMPLING_PERCENTAGE_FOR_GET_CONTAINER_CONSISTENCY_CHECK)
+  @Default("50")
+  public final int samplingPercentageForGetContainerConsistencyCheck;
+
   public CompositeAccountServiceConfig(VerifiableProperties verifiableProperties) {
     consistencyCheckerIntervalMinutes =
         verifiableProperties.getIntInRange(CONSISTENCY_CHECKER_INTERVAL_MINUTES, 5, 0, Integer.MAX_VALUE);
     consistencyCheckerShutdownTimeoutMinutes =
         verifiableProperties.getIntInRange(CONSISTENCY_CHECKER_SHUTDOWN_TIMEOUT_MINUTES, 1, 0, Integer.MAX_VALUE);
+    samplingPercentageForGetAccountConsistencyCheck =
+        verifiableProperties.getIntInRange(SAMPLING_PERCENTAGE_FOR_GET_ACCOUNT_CONSISTENCY_CHECK, 50, 0, 100);
+    samplingPercentageForGetContainerConsistencyCheck =
+        verifiableProperties.getIntInRange(SAMPLING_PERCENTAGE_FOR_GET_CONTAINER_CONSISTENCY_CHECK, 50, 0, 100);
   }
 }
