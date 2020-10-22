@@ -24,6 +24,7 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.ClusterSpectator;
 import com.github.ambry.clustermap.ClusterSpectatorFactory;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
@@ -65,7 +66,6 @@ import com.github.ambry.rest.NettyMetrics;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -81,6 +81,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -106,6 +107,7 @@ public class AmbryServer {
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
   private final ClusterSpectatorFactory clusterSpectatorFactory;
+  private final Function<MetricRegistry, JmxReporter> reporterFactory;
   private ClusterMap clusterMap;
   private List<ClusterParticipant> clusterParticipants;
   private ClusterSpectator vcrClusterSpectator;
@@ -125,22 +127,33 @@ public class AmbryServer {
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       ClusterSpectatorFactory clusterSpectatorFactory, Time time) throws InstantiationException {
-    this(properties, clusterAgentsFactory, clusterSpectatorFactory, new LoggingNotificationSystem(), time);
+    this(properties, clusterAgentsFactory, clusterSpectatorFactory, new LoggingNotificationSystem(), time, null);
   }
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       NotificationSystem notificationSystem, Time time) throws InstantiationException {
-    this(properties, clusterAgentsFactory, null, notificationSystem, time);
+    this(properties, clusterAgentsFactory, null, notificationSystem, time, null);
   }
 
+  /**
+   * @param properties {@link VerifiableProperties} object containing configs for the server.
+   * @param clusterAgentsFactory The {@link ClusterAgentsFactory} to use.
+   * @param clusterSpectatorFactory a {@link ClusterSpectatorFactory} instance. Required if replicating from a VCR.
+   * @param notificationSystem the {@link NotificationSystem} to use.
+   * @param time The {@link Time} instance to use.
+   * @param reporterFactory if non-null, use this function to set up a {@link JmxReporter} with custom settings. If this
+   *                        option is null the default settings for the reporter will be used.
+   * @throws InstantiationException if there was an error during startup.
+   */
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      ClusterSpectatorFactory clusterSpectatorFactory, NotificationSystem notificationSystem, Time time)
-      throws InstantiationException {
+      ClusterSpectatorFactory clusterSpectatorFactory, NotificationSystem notificationSystem, Time time,
+      Function<MetricRegistry, JmxReporter> reporterFactory) throws InstantiationException {
     this.properties = properties;
     this.clusterAgentsFactory = clusterAgentsFactory;
     this.clusterSpectatorFactory = clusterSpectatorFactory;
     this.notificationSystem = notificationSystem;
     this.time = time;
+    this.reporterFactory = reporterFactory;
 
     try {
       clusterMap = clusterAgentsFactory.getClusterMap();
@@ -165,7 +178,7 @@ public class AmbryServer {
       logger.info("Setting up JMX.");
 
       long startTime = SystemTime.getInstance().milliseconds();
-      reporter = JmxReporter.forRegistry(registry).build();
+      reporter = reporterFactory != null ? reporterFactory.apply(registry) : JmxReporter.forRegistry(registry).build();
       reporter.start();
 
       logger.info("creating configs");

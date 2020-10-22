@@ -66,7 +66,7 @@ public class VcrServerTest {
     props.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS,
         "com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory");
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
-    VcrServer vcrServer = new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem);
+    VcrServer vcrServer = new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, null);
     vcrServer.startup();
     Assert.assertNull("Expected null compactor", vcrServer.getVcrReplicationManager().getCloudStorageCompactor());
     vcrServer.shutdown();
@@ -89,7 +89,7 @@ public class VcrServerTest {
         new LatchBasedInMemoryCloudDestination(Collections.emptyList(), mockClusterMap));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     VcrServer vcrServer =
-        new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory);
+        new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory, null);
     vcrServer.startup();
     Assert.assertNotNull("Expected compactor", vcrServer.getVcrReplicationManager().getCloudStorageCompactor());
     vcrServer.shutdown();

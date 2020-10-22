@@ -63,7 +63,7 @@ public class VcrTestUtil {
    */
   public static VcrServer createVcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory) {
-    return new VcrServer(properties, clusterAgentsFactory, notificationSystem, cloudDestinationFactory);
+    return new VcrServer(properties, clusterAgentsFactory, notificationSystem, cloudDestinationFactory, null);
   }
 
   /**

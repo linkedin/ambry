@@ -42,7 +42,7 @@ public class VcrMain {
           Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
               options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       logger.info("Bootstrapping VcrServer");
-      vcrServer = new VcrServer(verifiableProperties, clusterAgentsFactory, new LoggingNotificationSystem());
+      vcrServer = new VcrServer(verifiableProperties, clusterAgentsFactory, new LoggingNotificationSystem(), null);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {

@@ -274,10 +274,10 @@ public class MockCluster {
     if (mockClusterAgentsFactory != null) {
       server =
           new AmbryServer(createInitProperties(dataNodeId, enableHardDeletes, sslProperties), mockClusterAgentsFactory,
-              mockClusterSpectatorFactory, notificationSystem, time);
+              mockClusterSpectatorFactory, notificationSystem, time, null);
     } else {
       server = new AmbryServer(createInitProperties(dataNodeId, enableHardDeletes, sslProperties),
-          this.mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time);
+          this.mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time, null);
     }
     return server;
   }

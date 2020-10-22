@@ -38,6 +38,7 @@ import io.netty.channel.ChannelHandler;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -160,7 +161,7 @@ public class RestServer {
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem, SSLFactory sslFactory) throws Exception {
-    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, null);
+    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, null, null);
   }
 
   /**
@@ -171,17 +172,20 @@ public class RestServer {
    * @param sslFactory the {@link SSLFactory} to be used. This can be {@code null} if no components require SSL support.
    * @param addedChannelHandlers a list of {@link ChannelHandler} to add to the {@link io.netty.channel.ChannelInitializer} before
    *                             the final handler.
+   * @param reporterFactory if non-null, use this function to set up a {@link JmxReporter} with custom settings. If this
+   *                        option is null the default settings for the reporter will be used.
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, SSLFactory sslFactory, List<ChannelHandler> addedChannelHandlers)
-      throws Exception {
+      NotificationSystem notificationSystem, SSLFactory sslFactory, List<ChannelHandler> addedChannelHandlers,
+      Function<MetricRegistry, JmxReporter> reporterFactory) throws Exception {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of RestServer");
     }
     MetricRegistry metricRegistry = clusterMap.getMetricRegistry();
     RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
-    reporter = JmxReporter.forRegistry(metricRegistry).build();
+    reporter = reporterFactory != null ? reporterFactory.apply(metricRegistry)
+        : JmxReporter.forRegistry(metricRegistry).build();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
     restServerMetrics = new RestServerMetrics(metricRegistry, restServerState);
