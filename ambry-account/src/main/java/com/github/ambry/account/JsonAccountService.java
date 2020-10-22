@@ -26,6 +26,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -155,7 +156,13 @@ final class JsonAccountService extends AbstractAccountService {
     try {
       AccountInfoMap newAccountInfoMap = new AccountInfoMap(accountsJsonString);
       AccountInfoMap oldAccountInfoMap = accountInfoMapRef.getAndSet(newAccountInfoMap);
-      notifyAccountUpdateConsumers(newAccountInfoMap, oldAccountInfoMap, false);
+
+      //Notify modified accounts to consumers
+      Collection<Account> updatedAccounts = newAccountInfoMap.getAccounts()
+          .stream()
+          .filter(newAccount -> !newAccount.equals(oldAccountInfoMap.getAccountById(newAccount.getId())))
+          .collect(Collectors.toSet());
+      notifyAccountUpdateConsumers(updatedAccounts, false);
     } finally {
       lock.unlock();
     }
@@ -191,8 +198,7 @@ final class JsonAccountService extends AbstractAccountService {
       }
 
       FileTime accountFileLastModified = Files.getLastModifiedTime(accountFile);
-      if (accountFilePreviousModified == null
-          || accountFilePreviousModified.compareTo(accountFileLastModified) < 0) {
+      if (accountFilePreviousModified == null || accountFilePreviousModified.compareTo(accountFileLastModified) < 0) {
         logger.debug("JSON Account file has changed or has never been loaded before. "
                 + "Previous last know modified time: {}, new last known modified time: {}", accountFilePreviousModified,
             accountFileLastModified);

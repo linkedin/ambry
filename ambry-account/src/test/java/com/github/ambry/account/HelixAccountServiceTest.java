@@ -247,10 +247,10 @@ public class HelixAccountServiceTest {
       accountId++;
     }
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 4, true);
-    Set<Container> inactiveContainerSet =
-        ((HelixAccountService) accountService).selectInactiveContainerCandidates(statsSnapshot);
+    Set<Container> inactiveContainerSet = AccountUtils.selectInactiveContainerCandidates(statsSnapshot,
+        accountService.getContainersByStatus(ContainerStatus.DELETE_IN_PROGRESS));
     assertEquals("Mismatch in container Set after detect", expectContainerSet, inactiveContainerSet);
-    ((HelixAccountService) accountService).markContainerInactiveOnZk(inactiveContainerSet);
+    ((HelixAccountService) accountService).markContainersInactive(inactiveContainerSet);
     Account testAccount0 = accountService.getAccountById((short) 0);
     for (Container container : testAccount0.getAllContainers()) {
       assertEquals("Based on the stats report, container has not been compacted yet",

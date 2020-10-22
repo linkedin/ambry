@@ -17,22 +17,22 @@ import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.account.mysql.MySqlDataAccessor;
 import com.github.ambry.config.MySqlAccountServiceConfig;
-import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -159,7 +159,15 @@ public class MySqlAccountService extends AbstractAccountService {
         // At this point we can safely say cache is refreshed
         needRefresh = false;
 
-        // Persist account metadata in cache to back up file on disk.
+        // Notify updated accounts to consumers
+        Set<Account> updatedAccounts = new HashSet<>();
+        updatedAccountsInDB.forEach(
+            account -> updatedAccounts.add(accountInfoMapRef.get().getAccountById(account.getId())));
+        updatedContainersInDB.forEach(
+            container -> updatedAccounts.add(accountInfoMapRef.get().getAccountById(container.getParentAccountId())));
+        notifyAccountUpdateConsumers(updatedAccounts, false);
+
+        // Persist all account metadata to back up file on disk.
         Collection<Account> accountCollection;
         infoMapLock.readLock().lock();
         try {
@@ -272,22 +280,6 @@ public class MySqlAccountService extends AbstractAccountService {
   }
 
   @Override
-  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
-    return false;
-  }
-
-  @Override
-  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
-    return false;
-  }
-
-  @Override
-  public void selectInactiveContainersAndMarkInZK(StatsSnapshot statsSnapshot) {
-    // TODO: Work with Sophie to implement this method in MySqlAccountService
-    throw new UnsupportedOperationException("This method is not supported");
-  }
-
-  @Override
   public void close() throws IOException {
     if (scheduler != null) {
       shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMinutes, TimeUnit.MINUTES);
@@ -365,6 +357,8 @@ public class MySqlAccountService extends AbstractAccountService {
         // Avoid updating account records if only container information changed.
         if (!AccountCollectionSerde.accountToJsonNoContainers(existingAccount)
             .similar(AccountCollectionSerde.accountToJsonNoContainers(account))) {
+          // increment the version of account record
+          account = new AccountBuilder(account).snapshotVersion(account.getSnapshotVersion() + 1).build();
           mySqlAccountStore.updateAccount(account);
         }
         updateContainersWithMySqlStore(account.getId(), account.getAllContainers());
@@ -401,11 +395,14 @@ public class MySqlAccountService extends AbstractAccountService {
       Container containerInCache =
           accountInfoMap.getContainerByIdForAccount(containerToUpdate.getParentAccountId(), containerToUpdate.getId());
       if (containerInCache == null) {
-        // new container added (insert into container table)
+        // new container added. Insert record into container table.
         mySqlAccountStore.addContainer(containerToUpdate);
       } else {
         if (!containerInCache.equals(containerToUpdate)) {
-          // existing container modified (update container table)
+          // Existing container modified. Increase the version of container and update container record
+          containerToUpdate =
+              new ContainerBuilder(containerToUpdate).setSnapshotVersion(containerToUpdate.getSnapshotVersion() + 1)
+                  .build();
           mySqlAccountStore.updateContainer(containerToUpdate);
         }
       }

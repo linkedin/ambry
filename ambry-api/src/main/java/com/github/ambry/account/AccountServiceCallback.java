@@ -43,6 +43,6 @@ public class AccountServiceCallback implements Callback<StatsSnapshot> {
       logger.info(
           "Aggregator task encountered an exception but result is not null. Processing the result as aggregation is complete.");
     }
-    accountService.selectInactiveContainersAndMarkInZK(results);
+    accountService.selectInactiveContainersAndMarkInStore(results);
   }
 }

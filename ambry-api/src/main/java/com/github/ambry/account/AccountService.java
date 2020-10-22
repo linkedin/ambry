@@ -145,7 +145,7 @@ public interface AccountService extends Closeable {
     return selectedContainers;
   }
 
-  default void selectInactiveContainersAndMarkInZK(StatsSnapshot statsSnapshot) {
+  default void selectInactiveContainersAndMarkInStore(StatsSnapshot statsSnapshot) {
     throw new UnsupportedOperationException("This method is not supported");
   }
 }

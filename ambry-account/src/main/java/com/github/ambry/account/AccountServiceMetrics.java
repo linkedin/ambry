@@ -47,8 +47,8 @@ public class AccountServiceMetrics {
   public final Counter accountUpdatesToAmbryServerErrorCount;
   public final Counter accountDeletesToAmbryServerErrorCount;
   public final Counter accountFetchFromAmbryServerErrorCount;
-  public final Counter accountUpdatesToZkErrorCount;
   public final Counter accountDataInconsistencyCount;
+  public final Counter accountUpdatesToStoreErrorCount;
 
   public AccountServiceMetrics(MetricRegistry metricRegistry) {
     // Histogram
@@ -74,9 +74,9 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NotifyAccountDataChangeErrorCount"));
     updateAccountErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "UpdateAccountErrorCount"));
-    conflictRetryCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, "ConflictRetryCount"));
-    accountUpdatesToZkErrorCount =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountUpdatesToZkErrorCount"));
+    conflictRetryCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "ConflictRetryCount"));
+    accountUpdatesToStoreErrorCount =
+        metricRegistry.counter(MetricRegistry.name(AbstractAccountService.class, "AccountUpdatesToStoreErrorCount"));
     fetchRemoteAccountErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountErrorCount"));
     remoteDataCorruptionErrorCount =
