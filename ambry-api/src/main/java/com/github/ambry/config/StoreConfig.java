@@ -356,6 +356,12 @@ public class StoreConfig {
   @Default("false")
   public final boolean storeEnableBucketForLogSegmentReports;
 
+  @Config(storeAlwaysEnableTargetIndexDuplicateCheckingName)
+  @Default("false")
+  public final boolean storeAlwaysEnableTargetIndexDuplicateChecking;
+  public static final String storeAlwaysEnableTargetIndexDuplicateCheckingName =
+      "store.always.enable.target.index.duplicate.checking";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -434,5 +440,7 @@ public class StoreConfig {
         verifiableProperties.getBoolean("store.set.local.partition.state.enabled", false);
     storeEnableBucketForLogSegmentReports =
         verifiableProperties.getBoolean("store.enable.bucket.for.log.segment.reports", false);
+    storeAlwaysEnableTargetIndexDuplicateChecking =
+        verifiableProperties.getBoolean(storeAlwaysEnableTargetIndexDuplicateCheckingName, false);
   }
 }

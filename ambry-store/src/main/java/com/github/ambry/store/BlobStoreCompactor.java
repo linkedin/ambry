@@ -563,8 +563,8 @@ class BlobStoreCompactor {
     logger.debug("Copying data from {}", indexSegmentToCopy.getFile());
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
-    boolean checkAlreadyCopied =
-        recoveryStartToken != null && recoveryStartToken.getOffset().equals(indexSegmentToCopy.getStartOffset());
+    boolean checkAlreadyCopied = config.storeAlwaysEnableTargetIndexDuplicateChecking || (recoveryStartToken != null
+        && recoveryStartToken.getOffset().equals(indexSegmentToCopy.getStartOffset()));
     logger.trace("Should check already copied for {}: {} ", indexSegmentToCopy.getFile(), checkAlreadyCopied);
 
     List<IndexEntry> indexEntriesToCopy =

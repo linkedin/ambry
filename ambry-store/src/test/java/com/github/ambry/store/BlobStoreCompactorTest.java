@@ -39,6 +39,8 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -69,6 +71,7 @@ public class BlobStoreCompactorTest {
   private final boolean doDirectIO;
   private final boolean withUndelete;
   private final StoreConfig config;
+  private boolean alwaysEnableTargetIndexDuplicateChecking = false;
 
   private CuratedLogIndexState state = null;
   private BlobStoreCompactor compactor = null;
@@ -369,6 +372,55 @@ public class BlobStoreCompactorTest {
           tempDir.listFiles(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length);
       verifySavedBytesCount(logSegmentsBeforeCompaction, 0);
     }
+  }
+
+  @Test
+  public void testDuplicatePuts() throws Exception {
+    testDuplicatePutsHelper();
+    alwaysEnableTargetIndexDuplicateChecking = true;
+    try {
+      testDuplicatePutsHelper();
+    } finally {
+      alwaysEnableTargetIndexDuplicateChecking = false;
+    }
+  }
+
+  private void testDuplicatePutsHelper() throws Exception {
+    // Construct a blob store, where there is a duplicate PUT indexValue in different log segment.
+    refreshState(false, false);
+    writeDataToMeetRequiredSegmentCount(1, Collections.singletonList(Utils.Infinite_Time));
+    // we know all the IndexEntries are PUT entries.
+    TreeMap<MockId, TreeSet<IndexValue>> lastEntry = state.referenceIndex.lastEntry().getValue();
+    MockId id = lastEntry.firstKey();
+    IndexValue value = lastEntry.get(id).first();
+    byte[] bytes = state.logOrder.get(value.getOffset()).getSecond().buffer;
+
+    // Delete some PUT entries, so we know the first log segment will be compacted
+    for (MockId toDelete : state.referenceIndex.firstEntry().getValue().keySet()) {
+      state.addDeleteEntry(toDelete);
+    }
+    state.forceAddPutEntry(id, value, bytes);
+    writeDataToMeetRequiredSegmentCount(3, Collections.singletonList(Utils.Infinite_Time));
+
+    // Now compact the blobstore, it will fail because of duplicate puts
+    state.reloadIndex(true, false);
+    long deleteReferenceTimeMs = state.time.milliseconds();
+    List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
+    compactor.initialize(state.index);
+    if (alwaysEnableTargetIndexDuplicateChecking) {
+      compactor.compact(details, bundleReadBuffer);
+    } else {
+      try {
+        compactor.compact(details, bundleReadBuffer);
+        fail("Should fail with duplicate put");
+      } catch (StoreException e) {
+        assertEquals(StoreErrorCodes.Unknown_Error, e.getErrorCode());
+        assertTrue(e.getMessage().contains("duplicate PUT"));
+      }
+    }
+    compactor.close(0);
   }
 
   /**
@@ -2393,6 +2445,8 @@ public class BlobStoreCompactorTest {
     if (withUndelete) {
       state.properties.put("store.compaction.filter", "IndexSegmentValidEntryWithUndelete");
     }
+    state.properties.put(StoreConfig.storeAlwaysEnableTargetIndexDuplicateCheckingName,
+        Boolean.toString(alwaysEnableTargetIndexDuplicateChecking));
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
