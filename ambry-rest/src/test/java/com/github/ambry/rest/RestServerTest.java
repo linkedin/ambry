@@ -13,6 +13,10 @@
  */
 package com.github.ambry.rest;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.jmx.DefaultObjectNameFactory;
+import com.codahale.metrics.jmx.JmxReporter;
+import com.codahale.metrics.jmx.ObjectNameFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -21,10 +25,13 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.InMemoryRouterFactory;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Properties;
+import java.util.function.Function;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -46,6 +53,29 @@ public class RestServerTest {
 
     RestServer server = new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY);
     server.start();
+    server.shutdown();
+    server.awaitShutdown();
+  }
+
+  /**
+   * Tests {@link RestServer#start()} and {@link RestServer#shutdown()} with a custom {@link JmxReporter} factory.
+   * @throws Exception
+   */
+  @Test
+  public void startShutdownTestWithReporterFactory() throws Exception {
+    Properties properties = new Properties();
+    VerifiableProperties verifiableProperties = getVProps(properties);
+    ClusterMap clusterMap = new MockClusterMap();
+    NotificationSystem notificationSystem = new LoggingNotificationSystem();
+    ObjectNameFactory spyObjectNameFactory = spy(new DefaultObjectNameFactory());
+    Function<MetricRegistry, JmxReporter> reporterFactory =
+        reporter -> JmxReporter.forRegistry(reporter).createsObjectNamesWith(spyObjectNameFactory).build();
+    RestServer server =
+        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, Collections.emptyList(),
+            reporterFactory);
+    server.start();
+    // check that the custom ObjectNameFactory specified in reporterFactory was used.
+    verify(spyObjectNameFactory, atLeastOnce()).createName(anyString(), anyString(), anyString());
     server.shutdown();
     server.awaitShutdown();
   }
