@@ -25,6 +25,7 @@ import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.util.ReferenceCountUtil;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -260,15 +261,16 @@ public class PutRequest extends RequestOrResponse {
   @Override
   public boolean release() {
     if (blob != null) {
-      blob.release();
+      ReferenceCountUtil.safeRelease(blob);
       blob = null;
     }
     if (crcByteBuf != null) {
-      crcByteBuf.release();
+      ReferenceCountUtil.safeRelease(crcByteBuf);
       crcByteBuf = null;
     }
     if (bufferToSend != null) {
-      bufferToSend.release();
+      ReferenceCountUtil.safeRelease(bufferToSend);
+      bufferToSend = null;
     }
     return false;
   }

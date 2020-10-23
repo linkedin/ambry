@@ -22,6 +22,7 @@ import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.util.ReferenceCountUtil;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -201,11 +202,11 @@ public class GetResponse extends Response {
   @Override
   public boolean release() {
     if (bufferToSend != null) {
-      bufferToSend.release();
+      ReferenceCountUtil.safeRelease(bufferToSend);
       bufferToSend = null;
     }
     if (toSend != null) {
-      toSend.release();
+      ReferenceCountUtil.safeRelease(toSend);
       toSend = null;
     }
     return false;
