@@ -13,6 +13,10 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.jmx.DefaultObjectNameFactory;
+import com.codahale.metrics.jmx.JmxReporter;
+import com.codahale.metrics.jmx.ObjectNameFactory;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.CloudConfig;
@@ -23,6 +27,7 @@ import com.github.ambry.utils.TestUtils;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Properties;
+import java.util.function.Function;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -58,17 +63,29 @@ public class VcrServerTest {
    */
   @Test
   public void testVCRServerWithStaticCluster() throws Exception {
-    Properties props = VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "", 12300, 12400, null);
-    props.setProperty(CloudConfig.VCR_ASSIGNED_PARTITIONS, "0,1");
-    props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, StaticVcrClusterFactory.class.getName());
-    // Run this one with compaction disabled
-    props.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_ENABLED, "false");
-    props.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS,
-        "com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory");
-    VerifiableProperties verifiableProperties = new VerifiableProperties(props);
-    VcrServer vcrServer = new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem);
+    VerifiableProperties verifiableProperties = getStaticClusterVcrProps();
+    VcrServer vcrServer = new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, null);
     vcrServer.startup();
     Assert.assertNull("Expected null compactor", vcrServer.getVcrReplicationManager().getCloudStorageCompactor());
+    vcrServer.shutdown();
+  }
+
+  /**
+   * Bring up the VCR server and then shut it down with {@link StaticVcrCluster} and a custom {@link JmxReporter}
+   * factory.
+   * @throws Exception
+   */
+  @Test
+  public void testVCRServerWithReporterFactory() throws Exception {
+    VerifiableProperties verifiableProperties = getStaticClusterVcrProps();
+    ObjectNameFactory spyObjectNameFactory = spy(new DefaultObjectNameFactory());
+    Function<MetricRegistry, JmxReporter> reporterFactory =
+        reporter -> JmxReporter.forRegistry(reporter).createsObjectNamesWith(spyObjectNameFactory).build();
+    VcrServer vcrServer =
+        new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, reporterFactory);
+    vcrServer.startup();
+    // check that the custom ObjectNameFactory specified in reporterFactory was used.
+    verify(spyObjectNameFactory, atLeastOnce()).createName(anyString(), anyString(), anyString());
     vcrServer.shutdown();
   }
 
@@ -89,11 +106,26 @@ public class VcrServerTest {
         new LatchBasedInMemoryCloudDestination(Collections.emptyList(), mockClusterMap));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     VcrServer vcrServer =
-        new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory);
+        new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory,
+            null);
     vcrServer.startup();
     Assert.assertNotNull("Expected compactor", vcrServer.getVcrReplicationManager().getCloudStorageCompactor());
     vcrServer.shutdown();
     helixControllerManager.syncStop();
     zkInfo.shutdown();
+  }
+
+  /**
+   * @return {@link VerifiableProperties} to start a VCR with a static cluster.
+   */
+  private VerifiableProperties getStaticClusterVcrProps() {
+    Properties props = VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "", 12300, 12400, null);
+    props.setProperty(CloudConfig.VCR_ASSIGNED_PARTITIONS, "0,1");
+    props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, StaticVcrClusterFactory.class.getName());
+    // Run this one with compaction disabled
+    props.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_ENABLED, "false");
+    props.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS,
+        "com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory");
+    return new VerifiableProperties(props);
   }
 }

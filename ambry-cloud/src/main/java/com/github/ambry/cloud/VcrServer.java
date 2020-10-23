@@ -50,6 +50,7 @@ import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,6 +75,7 @@ public class VcrServer {
   private JmxReporter reporter = null;
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
+  private final Function<MetricRegistry, JmxReporter> reporterFactory;
   private CloudDestinationFactory cloudDestinationFactory;
   private VcrRequests requests;
   private RequestHandlerPool requestHandlerPool;
@@ -84,12 +86,15 @@ public class VcrServer {
    * @param properties the config properties to use.
    * @param clusterAgentsFactory the {@link ClusterAgentsFactory} to use.
    * @param notificationSystem the {@link NotificationSystem} to use.
+   * @param reporterFactory if non-null, use this function to set up a {@link JmxReporter} with custom settings. If this
+   *                        option is null the default settings for the reporter will be used.
    */
   public VcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      NotificationSystem notificationSystem) {
+      NotificationSystem notificationSystem, Function<MetricRegistry, JmxReporter> reporterFactory) {
     this.properties = properties;
     this.clusterAgentsFactory = clusterAgentsFactory;
     this.notificationSystem = notificationSystem;
+    this.reporterFactory = reporterFactory;
   }
 
   /**
@@ -98,10 +103,13 @@ public class VcrServer {
    * @param clusterAgentsFactory the {@link ClusterAgentsFactory} to use.
    * @param notificationSystem the {@link NotificationSystem} to use.
    * @param cloudDestinationFactory the {@link CloudDestinationFactory} to use.
+   * @param reporterFactory if non-null, use this function to set up a {@link JmxReporter} with custom settings. If this
+   *                        option is null the default settings for the reporter will be used.
    */
   VcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory) {
-    this(properties, clusterAgentsFactory, notificationSystem);
+      NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory,
+      Function<MetricRegistry, JmxReporter> reporterFactory) {
+    this(properties, clusterAgentsFactory, notificationSystem, reporterFactory);
     this.cloudDestinationFactory = cloudDestinationFactory;
   }
 
@@ -118,7 +126,7 @@ public class VcrServer {
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
-      reporter = JmxReporter.forRegistry(registry).build();
+      reporter = reporterFactory != null ? reporterFactory.apply(registry) : JmxReporter.forRegistry(registry).build();
       reporter.start();
 
       logger.info("creating configs");
