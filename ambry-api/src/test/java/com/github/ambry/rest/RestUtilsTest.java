@@ -46,6 +46,7 @@ import org.junit.Test;
 
 import static com.github.ambry.router.GetBlobOptions.*;
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -721,6 +722,23 @@ public class RestUtilsTest {
     assertFalse("Should report that headers are not set",
         RestUtils.setUserMetadataHeaders(userMetadata, responseChannel));
     assertEquals("No headers should have been set", 0, responseChannel.getResponseHeaders().size());
+
+    // user metadata that needs to be encoded
+    usermetadataMap.clear();
+    headers = new JSONObject();
+    String filenameValue = "death\nstar";
+    usermetadataMap.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "filename", filenameValue);
+    setUserMetadataHeaders(headers, usermetadataMap);
+    restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
+    responseChannel = spy(new MockRestResponseChannel());
+    doThrow(new IllegalArgumentException("Bad header")).when(responseChannel).setHeader(any(), eq(filenameValue));
+    assertTrue("Should report that headers are set", RestUtils.setUserMetadataHeaders(userMetadata, responseChannel));
+    Map<String, Object> encodedHeaders = responseChannel.getResponseHeaders();
+    assertEquals("Expected a header", 1, encodedHeaders.size());
+    Object encodedValue = encodedHeaders.get(RestUtils.Headers.USER_META_DATA_ENCODED_HEADER_PREFIX + "filename");
+    assertNotNull("Expected encoded header", encodedValue);
+    assertNotSame("Expected different value", filenameValue, encodedValue);
   }
 
   // helpers.

@@ -25,6 +25,7 @@ import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.lang.reflect.Field;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
@@ -211,6 +212,11 @@ public class RestUtils {
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
+
+    /**
+     * prefix for header containing encoded user metadata.
+     */
+    public final static String USER_META_DATA_ENCODED_HEADER_PREFIX = "x-ambry-enc-um-";
 
     /**
      * Response header indicating the reason a request is non compliant.
@@ -863,7 +869,24 @@ public class RestUtils {
     boolean setHeaders = userMetadataMap != null;
     if (setHeaders) {
       for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
-        restResponseChannel.setHeader(entry.getKey(), entry.getValue());
+        String headerName = entry.getKey();
+        String headerValue = entry.getValue();
+        try {
+          restResponseChannel.setHeader(headerName, headerValue);
+        } catch (IllegalArgumentException iae) {
+          try {
+            // Value may require encoding to set in response header.
+            // Set in special header designated for encoded values.  The client receiving the response
+            // will need to check these headers and perform the decode.
+            headerName = headerName.replaceFirst(Headers.USER_META_DATA_HEADER_PREFIX,
+                Headers.USER_META_DATA_ENCODED_HEADER_PREFIX);
+            headerValue = URLEncoder.encode(headerValue, StandardCharsets.US_ASCII.name());
+            restResponseChannel.setHeader(headerName, headerValue);
+            logger.debug("Set encoded value in response header {}", headerName);
+          } catch (Exception e) {
+            logger.error("Unable to set response header {} to value {}", headerName, headerValue, e);
+          }
+        }
       }
     }
     return setHeaders;
