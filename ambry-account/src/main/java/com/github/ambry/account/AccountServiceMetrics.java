@@ -48,11 +48,7 @@ public class AccountServiceMetrics {
   public final Counter accountDeletesToAmbryServerErrorCount;
   public final Counter accountFetchFromAmbryServerErrorCount;
   public final Counter accountUpdatesToZkErrorCount;
-  public final Counter accountMetadataInconsistencyCount;
-  public final Counter getAccountDataInconsistencyCount;
-  public final Counter getContainerDataInconsistencyCount;
-  public final Counter updateAccountInconsistencyCount;
-  public final Counter updateContainerInconsistencyCount;
+  public final Counter accountDataInconsistencyCount;
 
   public AccountServiceMetrics(MetricRegistry metricRegistry) {
     // Histogram
@@ -95,15 +91,7 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountDeletesToAmbryServerErrorCount"));
     accountFetchFromAmbryServerErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryServerErrorCount"));
-    accountMetadataInconsistencyCount =
-        metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, "AccountMetadataInconsistencyCount"));
-    getAccountDataInconsistencyCount =
-        metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, "GetAccountDataInconsistencyCount"));
-    getContainerDataInconsistencyCount = metricRegistry.counter(
-        MetricRegistry.name(CompositeAccountService.class, "getContainerDataInconsistencyCount"));
-    updateAccountInconsistencyCount =
-        metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, "updateAccountInconsistencyCount"));
-    updateContainerInconsistencyCount =
-        metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, "updateContainerInconsistencyCount"));
+    accountDataInconsistencyCount =
+        metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, "AccountDataInconsistencyCount"));
   }
 }

@@ -17,9 +17,11 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.CompositeAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import org.junit.Test;
@@ -28,6 +30,9 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
+/**
+ * Unit tests for {@link CompositeAccountService}.
+ */
 public class CompositeAccountServiceTest {
 
   AccountService primaryAccountService = mock(HelixAccountService.class);
@@ -35,8 +40,13 @@ public class CompositeAccountServiceTest {
   AccountServiceMetrics metrics = new AccountServiceMetrics(new MetricRegistry());
   Properties props = new Properties();
   AccountService compositeAccountService;
+  Container testContainer =
+      new ContainerBuilder((short) 1, "c1", Container.ContainerStatus.ACTIVE, "c1", (short) 1).build();
+  Account testAccount =
+      new AccountBuilder((short) 1, "a1", Account.AccountStatus.ACTIVE).addOrUpdateContainer(testContainer).build();
 
   public CompositeAccountServiceTest() {
+    props.setProperty(CompositeAccountServiceConfig.SAMPLING_PERCENTAGE_FOR_GET_CONSISTENCY_CHECK, "100");
     compositeAccountService = new CompositeAccountService(primaryAccountService, secondaryAccountService, metrics,
         new CompositeAccountServiceConfig(new VerifiableProperties(props)));
   }
@@ -46,13 +56,12 @@ public class CompositeAccountServiceTest {
    */
   @Test
   public void testGetAccountByIdBothSuccess() {
-    Account testAccount = getTestAccount();
     when(primaryAccountService.getAccountById(anyShort())).thenReturn(testAccount);
     when(secondaryAccountService.getAccountById(anyShort())).thenReturn(testAccount);
     assertEquals("Unexpected response", testAccount, compositeAccountService.getAccountById(testAccount.getId()));
     verify(primaryAccountService).getAccountById(testAccount.getId());
     verify(secondaryAccountService).getAccountById(testAccount.getId());
-    assertEquals("Expected zero inconsistency", 0, metrics.getAccountDataInconsistencyCount.getCount());
+    assertEquals("Expected zero inconsistency", 0, metrics.accountDataInconsistencyCount.getCount());
   }
 
   /**
@@ -60,14 +69,13 @@ public class CompositeAccountServiceTest {
    */
   @Test
   public void testGetAccountByIdResultsDifferent() {
-    Account testAccount = getTestAccount();
     when(primaryAccountService.getAccountById(anyShort())).thenReturn(testAccount);
     when(secondaryAccountService.getAccountById(anyShort())).thenReturn(null);
     assertEquals("Expected response from primary", testAccount,
         compositeAccountService.getAccountById(testAccount.getId()));
     verify(primaryAccountService).getAccountById(testAccount.getId());
     verify(secondaryAccountService).getAccountById(testAccount.getId());
-    assertEquals("Expected one inconsistency", 1, metrics.getAccountDataInconsistencyCount.getCount());
+    assertEquals("Expected one inconsistency", 1, metrics.accountDataInconsistencyCount.getCount());
   }
 
   /**
@@ -75,13 +83,12 @@ public class CompositeAccountServiceTest {
    */
   @Test
   public void testGetAccountByNameBothSuccess() {
-    Account testAccount = getTestAccount();
     when(primaryAccountService.getAccountByName(any())).thenReturn(testAccount);
     when(secondaryAccountService.getAccountByName(any())).thenReturn(testAccount);
     assertEquals("Unexpected response", testAccount, compositeAccountService.getAccountByName(testAccount.getName()));
     verify(primaryAccountService).getAccountByName(testAccount.getName());
     verify(secondaryAccountService).getAccountByName(testAccount.getName());
-    assertEquals("Expected zero inconsistency", 0, metrics.getAccountDataInconsistencyCount.getCount());
+    assertEquals("Expected zero inconsistency", 0, metrics.accountDataInconsistencyCount.getCount());
   }
 
   /**
@@ -89,7 +96,6 @@ public class CompositeAccountServiceTest {
    */
   @Test
   public void testGetAccountByNameResultsDifferent() {
-    Account testAccount = getTestAccount();
     when(primaryAccountService.getAccountByName(any())).thenReturn(testAccount);
     when(secondaryAccountService.getAccountByName(any())).thenReturn(
         new AccountBuilder(testAccount).status(Account.AccountStatus.INACTIVE).build());
@@ -97,16 +103,14 @@ public class CompositeAccountServiceTest {
         compositeAccountService.getAccountByName(testAccount.getName()));
     verify(primaryAccountService).getAccountByName(testAccount.getName());
     verify(secondaryAccountService).getAccountByName(testAccount.getName());
-    assertEquals("Expected one inconsistency", 1, metrics.getAccountDataInconsistencyCount.getCount());
+    assertEquals("Expected one inconsistency", 1, metrics.accountDataInconsistencyCount.getCount());
   }
 
   /**
    * Test composite getContainer(accountName, containerName) with both sources returning the same result.
-   * @throws AccountServiceException
    */
   @Test
   public void testGetContainerByNameBothSuccess() throws AccountServiceException {
-    Account testAccount = getTestAccount();
     Container testContainer = testAccount.getAllContainers().iterator().next();
     when(primaryAccountService.getContainer(any(), any())).thenReturn(testContainer);
     when(secondaryAccountService.getContainer(any(), any())).thenReturn(testContainer);
@@ -114,7 +118,7 @@ public class CompositeAccountServiceTest {
         compositeAccountService.getContainer(testAccount.getName(), testContainer.getName()));
     verify(primaryAccountService).getContainer(testAccount.getName(), testContainer.getName());
     verify(secondaryAccountService).getContainer(testAccount.getName(), testContainer.getName());
-    assertEquals("Expected zero inconsistency", 0, metrics.getContainerDataInconsistencyCount.getCount());
+    assertEquals("Expected zero inconsistency", 0, metrics.accountDataInconsistencyCount.getCount());
   }
 
   /**
@@ -122,7 +126,6 @@ public class CompositeAccountServiceTest {
    */
   @Test
   public void testGetContainerByNameResultsDifferent() throws AccountServiceException {
-    Account testAccount = getTestAccount();
     Container testContainer = testAccount.getAllContainers().iterator().next();
     when(primaryAccountService.getContainer(any(), any())).thenReturn(testContainer);
     when(secondaryAccountService.getContainer(any(), any())).thenReturn(null);
@@ -130,7 +133,7 @@ public class CompositeAccountServiceTest {
         compositeAccountService.getContainer(testAccount.getName(), testContainer.getName()));
     verify(primaryAccountService).getContainer(testAccount.getName(), testContainer.getName());
     verify(secondaryAccountService).getContainer(testAccount.getName(), testContainer.getName());
-    assertEquals("Expected one inconsistency", 1, metrics.getContainerDataInconsistencyCount.getCount());
+    assertEquals("Expected one inconsistency", 1, metrics.accountDataInconsistencyCount.getCount());
   }
 
   /**
@@ -138,8 +141,6 @@ public class CompositeAccountServiceTest {
    */
   @Test
   public void testGetContainerByStatusBothSuccess() {
-    Account testAccount = getTestAccount();
-    Container testContainer = testAccount.getAllContainers().iterator().next();
     Set<Container> activeContainers = new HashSet<>(Collections.singletonList(testContainer));
     when(primaryAccountService.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(activeContainers);
     when(secondaryAccountService.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(activeContainers);
@@ -147,7 +148,7 @@ public class CompositeAccountServiceTest {
         compositeAccountService.getContainersByStatus(Container.ContainerStatus.ACTIVE));
     verify(primaryAccountService).getContainersByStatus(Container.ContainerStatus.ACTIVE);
     verify(secondaryAccountService).getContainersByStatus(Container.ContainerStatus.ACTIVE);
-    assertEquals("Expected zero inconsistency", 0, metrics.getContainerDataInconsistencyCount.getCount());
+    assertEquals("Expected zero inconsistency", 0, metrics.accountDataInconsistencyCount.getCount());
   }
 
   /**
@@ -155,8 +156,6 @@ public class CompositeAccountServiceTest {
    */
   @Test
   public void testGetContainersByStatusResultsDifferent() {
-    Account testAccount = getTestAccount();
-    Container testContainer = testAccount.getAllContainers().iterator().next();
     Set<Container> primaryResult = new HashSet<>(Collections.singletonList(testContainer));
     Set<Container> secondaryResult = new HashSet<>();
     when(primaryAccountService.getContainersByStatus(any())).thenReturn(primaryResult);
@@ -164,7 +163,7 @@ public class CompositeAccountServiceTest {
     assertEquals("", primaryResult, compositeAccountService.getContainersByStatus(Container.ContainerStatus.ACTIVE));
     verify(primaryAccountService).getContainersByStatus(Container.ContainerStatus.ACTIVE);
     verify(secondaryAccountService).getContainersByStatus(Container.ContainerStatus.ACTIVE);
-    assertEquals("Expected one inconsistency", 1, metrics.getContainerDataInconsistencyCount.getCount());
+    assertEquals("Expected one inconsistency", 1, metrics.accountDataInconsistencyCount.getCount());
   }
 
   /**
@@ -172,7 +171,6 @@ public class CompositeAccountServiceTest {
    */
   @Test
   public void testUpdateAccountsBothSuccess() throws AccountServiceException {
-    Account testAccount = getTestAccount();
     Account updatedTestAccount = new AccountBuilder(testAccount).status(Account.AccountStatus.INACTIVE).build();
     Collection<Account> accountsToUpdate = Collections.singletonList(updatedTestAccount);
     compositeAccountService.updateAccounts(accountsToUpdate);
@@ -185,7 +183,6 @@ public class CompositeAccountServiceTest {
    */
   @Test
   public void testUpdateAccountsException() throws Exception {
-    Account testAccount = getTestAccount();
     Account updatedTestAccount = new AccountBuilder(testAccount).status(Account.AccountStatus.INACTIVE).build();
     Collection<Account> accountsToUpdate = Collections.singletonList(updatedTestAccount);
     // exception in primary should be thrown
@@ -200,7 +197,8 @@ public class CompositeAccountServiceTest {
     reset(primaryAccountService, secondaryAccountService);
     doThrow(new AccountServiceException("", AccountServiceErrorCode.InternalError)).when(secondaryAccountService)
         .updateAccounts(any());
-    compositeAccountService.updateAccounts(accountsToUpdate);
+    TestUtils.assertException(AccountServiceException.class,
+        () -> compositeAccountService.updateAccounts(accountsToUpdate), null);
     verify(primaryAccountService).updateAccounts(accountsToUpdate);
     verify(secondaryAccountService).updateAccounts(accountsToUpdate);
   }
@@ -210,8 +208,6 @@ public class CompositeAccountServiceTest {
    */
   @Test
   public void testUpdateContainersBothSuccess() throws Exception {
-    Account testAccount = getTestAccount();
-    Container testContainer = testAccount.getAllContainers().iterator().next();
     Collection<Container> updatedContainers = Collections.singletonList(
         new ContainerBuilder(testContainer).setStatus(Container.ContainerStatus.INACTIVE).build());
     when(primaryAccountService.updateContainers(testAccount.getName(), updatedContainers)).thenReturn(
@@ -229,8 +225,6 @@ public class CompositeAccountServiceTest {
    */
   @Test
   public void testUpdateContainersException() throws Exception {
-    Account testAccount = getTestAccount();
-    Container testContainer = testAccount.getAllContainers().iterator().next();
     Collection<Container> updatedContainers = Collections.singletonList(
         new ContainerBuilder(testContainer).setStatus(Container.ContainerStatus.INACTIVE).build());
 
@@ -248,17 +242,37 @@ public class CompositeAccountServiceTest {
     when(primaryAccountService.updateContainers(any(), any())).thenReturn(updatedContainers);
     when(secondaryAccountService.updateContainers(any(), any())).thenThrow(
         new AccountServiceException("", AccountServiceErrorCode.InternalError));
-    assertEquals("Unexpected response", updatedContainers,
-        compositeAccountService.updateContainers(testAccount.getName(), updatedContainers));
+    TestUtils.assertException(AccountServiceException.class,
+        () -> compositeAccountService.updateContainers(testAccount.getName(), updatedContainers), null);
     verify(primaryAccountService).updateContainers(testAccount.getName(), updatedContainers);
     verify(secondaryAccountService).updateContainers(testAccount.getName(), updatedContainers);
   }
 
-  private Account getTestAccount() {
-    Container testContainer =
-        new ContainerBuilder((short) 1, "test container", Container.ContainerStatus.ACTIVE, "test container", (short) 1)
-            .build();
-    return new AccountBuilder((short) 1, "test account", Account.AccountStatus.ACTIVE).addOrUpdateContainer(
-        testContainer).build();
+  @Test
+  public void testCompareAccountMetadata() throws AccountServiceException {
+    Account a1 = testAccount;
+    Container c1 = testContainer;
+    Container c2 = new ContainerBuilder((short) 2, "c2", Container.ContainerStatus.ACTIVE, "c2", (short) 1).build();
+    Container c2Updated = new ContainerBuilder(c2).setStatus(Container.ContainerStatus.INACTIVE).build();
+    Container c3 = new ContainerBuilder((short) 3, "c3", Container.ContainerStatus.ACTIVE, "c3", (short) 1).build();
+
+    List<Account> accountsInSecondary =
+        Collections.singletonList(new AccountBuilder(a1).addOrUpdateContainer(c2).build());
+
+    List<Account> accountsInPrimary =
+        Arrays.asList(new AccountBuilder(a1).addOrUpdateContainer(c2Updated).addOrUpdateContainer(c3).build(),
+            new AccountBuilder((short) 2, "a2", Account.AccountStatus.ACTIVE).build());
+
+    when(primaryAccountService.getAllAccounts()).thenReturn(accountsInPrimary);
+    when(secondaryAccountService.getAllAccounts()).thenReturn(accountsInSecondary);
+    when(secondaryAccountService.getAccountById((short) 1)).thenReturn(accountsInSecondary.iterator().next());
+    when(secondaryAccountService.getContainer("a1", "c1")).thenReturn(c1);
+    when(secondaryAccountService.getContainer("a1", "c2")).thenReturn(c2);
+
+    ((CompositeAccountService) compositeAccountService).compareAccountMetadata();
+    verify(primaryAccountService, atLeastOnce()).getAllAccounts();
+    verify(secondaryAccountService, atLeastOnce()).getAllAccounts();
+    assertEquals("Expected 1 inconsistency between primary and secondary", 1,
+        metrics.accountDataInconsistencyCount.getCount());
   }
 }
