@@ -394,14 +394,14 @@ public class StorageManagerTest {
     storageManager.startBlobStore(localReplica.getPartitionId());
     // 5. store is disabled due to disk I/O error
     BlobStore localStore = (BlobStore) storageManager.getStore(localReplica.getPartitionId());
-    localStore.setDisabledOnError(true);
+    localStore.setDisableState(true);
     try {
       mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
       fail("should fail because store is disabled");
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
-    localStore.setDisabledOnError(false);
+    localStore.setDisableState(false);
     // 6. success case (verify both replica's state and decommission file)
     mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
     assertEquals("local store state should be set to INACTIVE", ReplicaState.INACTIVE,

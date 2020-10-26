@@ -172,9 +172,9 @@ public interface Store {
   boolean recoverFromDecommission();
 
   /**
-   * @return {@code true} if the store is disabled on error (due to disk I/O issue).
+   * @return {@code true} if the store is disabled due to disk I/O error or by admin operation(i.e. stop replica).
    */
-  boolean disabledOnError();
+  boolean isDisabled();
 
   /**
    * Shuts down the store

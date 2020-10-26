@@ -148,15 +148,10 @@ public class AmbryServerRequestsTest {
   private final String localDc;
   private final ReplicaStatusDelegate mockDelegate = Mockito.mock(ReplicaStatusDelegate.class);
   private final boolean validateRequestOnStoreState;
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
   private MockStorageManager storageManager;
   private MockHelixParticipant helixParticipant;
   private AmbryServerRequests ambryRequests;
-  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
-
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
-  }
 
   public AmbryServerRequestsTest(boolean validateRequestOnStoreState)
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
@@ -191,6 +186,11 @@ public class AmbryServerRequestsTest {
     storageManager.start();
     Mockito.when(mockDelegate.unseal(any())).thenReturn(true);
     Mockito.when(mockDelegate.unmarkStopped(anyList())).thenReturn(true);
+  }
+
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
   }
 
   private static Properties createProperties(boolean validateRequestOnStoreState,
@@ -496,6 +496,7 @@ public class AmbryServerRequestsTest {
   public void controlBlobStoreSuccessTest() throws Exception {
     // Recreate storage manager and ambryRequest to pass in HelixParticipant
     storageManager.shutdown();
+    helixParticipant.overrideDisableReplicaMethod = true;
     storageManager =
         new MockStorageManager(validKeysInStore, clusterMap, dataNodeId, findTokenHelper, helixParticipant);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
@@ -521,6 +522,8 @@ public class AmbryServerRequestsTest {
     assertTrue("Origins list should be empty", replicationManager.originsVal.isEmpty());
     assertEquals("Replication on given BlobStore should be disabled", false, replicationManager.enableVal);
     assertEquals("Partition shutdown not as expected", id, storageManager.shutdownPartitionId);
+    assertEquals("Partition disabled not as expected", id.toPathString(),
+        helixParticipant.getDisabledReplicas().get(0));
     // start BlobStore
     sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.No_Error);
@@ -543,6 +546,7 @@ public class AmbryServerRequestsTest {
     sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.No_Error);
     storageManager.overrideStoreToReturn = null;
+    helixParticipant.overrideDisableReplicaMethod = false;
   }
 
   @Test
@@ -624,8 +628,9 @@ public class AmbryServerRequestsTest {
         clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
         storeKeyConverterFactory, statsManager, helixParticipant);
 
-    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
-    PartitionId id = partitionIds.get(0);
+    // find a partition that has a replica on current node
+    ReplicaId localReplica = clusterMap.getReplicaIds(dataNodeId).get(0);
+    MockPartitionId id = (MockPartitionId) localReplica.getPartitionId();
     short numReplicasCaughtUpPerPartition = 3;
     // test start BlobStore failure
     storageManager.returnValueOfStartingBlobStore = false;
@@ -654,9 +659,11 @@ public class AmbryServerRequestsTest {
     storageManager.exceptionToThrowOnControllingCompaction = null;
     // test HelixParticipant resets partition error
     helixParticipant.resetPartitionVal = false;
+    id.replicaAndState.put(localReplica, ReplicaState.ERROR);
     sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     helixParticipant.resetPartitionVal = true;
+    id.replicaAndState.put(localReplica, ReplicaState.STANDBY);
     // test stop list update failure
     helixParticipant.setStoppedStateReturnVal = false;
     sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
@@ -1573,6 +1580,14 @@ public class AmbryServerRequestsTest {
     private final InputStream stream;
 
     /**
+     * Constructs a {@link MockRequest}.
+     * @param stream the {@link InputStream} that will be returned on a call to {@link #getInputStream()}.
+     */
+    private MockRequest(InputStream stream) {
+      this.stream = stream;
+    }
+
+    /**
      * Constructs a {@link MockRequest} from {@code request}.
      * @param request the {@link RequestOrResponse} to construct the {@link MockRequest} for.
      * @return an instance of {@link MockRequest} that represents {@code request}.
@@ -1586,14 +1601,6 @@ public class AmbryServerRequestsTest {
       // read length (to bring it to a state where AmbryRequests can handle it).
       buffer.getLong();
       return new MockRequest(new ByteBufferDataInputStream(buffer));
-    }
-
-    /**
-     * Constructs a {@link MockRequest}.
-     * @param stream the {@link InputStream} that will be returned on a call to {@link #getInputStream()}.
-     */
-    private MockRequest(InputStream stream) {
-      this.stream = stream;
     }
 
     @Override

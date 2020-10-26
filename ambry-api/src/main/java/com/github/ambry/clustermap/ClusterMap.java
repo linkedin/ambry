@@ -47,7 +47,7 @@ public interface ClusterMap extends AutoCloseable {
   List<? extends PartitionId> getWritablePartitionIds(String partitionClass);
 
   /**
-   * Get a writable partition chosen at random that belongs to given partitionclass.
+   * Get a writable partition chosen at random that belongs to given partition class.
    * @param partitionClass the partition class whose writable partitions are required. Can be {@code null}
    * @param partitionsToExclude list of partitions that shouldn't be considered as a possible partition returned
    * @return chosen random partition. Can be {@code null}

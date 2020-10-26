@@ -562,10 +562,11 @@ public class StorageManager implements StoreManager {
           throw new StateTransitionException("Store " + partitionName + " is not found on current node",
               ReplicaNotFound);
         }
-        if (localStore.disabledOnError()) {
-          // if store is disabled due to disk I/O error, we explicitly throw an exception to mark partition as ERROR state
-          throw new StateTransitionException("Store " + partitionName + " is disabled due to I/O error",
-              ReplicaOperationFailure);
+        if (localStore.isDisabled()) {
+          // if store is disabled due to disk I/O error or by admin operation, we explicitly throw an exception to mark
+          // partition in Helix ERROR state
+          throw new StateTransitionException("Store " + partitionName + " is already disabled due to I/O error or by "
+              + "admin operation", ReplicaOperationFailure);
         }
         // 0. as long as local replica exists, we create a decommission file in its dir
         File decommissionFile = new File(replica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
