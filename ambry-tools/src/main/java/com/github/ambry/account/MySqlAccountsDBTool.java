@@ -29,7 +29,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
@@ -262,59 +261,8 @@ public class MySqlAccountsDBTool {
       accountSetFromDB.add(accountBuilder.build());
     }
 
-    //Accounts missing (or different) in DB = accounts in ZK - accounts in DB
-    accountSetFromZK.removeAll(accountSetFromDB);
-
-    if (accountSetFromZK.size() > 0) {
-
-      Map<Short, Account> accountMapFromDB = new HashMap<>();
-      accountSetFromDB.forEach(account -> {
-        accountMapFromDB.put(account.getId(), account);
-      });
-
-      Set<Account> accountsMissingInDB = accountSetFromZK.stream()
-          .filter(account -> !accountMapFromDB.containsKey(account.getId()))
-          .collect(Collectors.toSet());
-      logger.info("======================= Accounts missing in DB =======================");
-      logger.info("{}", accountsMissingInDB);
-
-      logger.info("\r\n");
-
-      accountSetFromZK.removeAll(accountsMissingInDB);
-      logger.info("=======================  Accounts different in DB =======================");
-      logger.info("{}", accountSetFromZK);
-
-      logger.info("\r\n");
-
-      logger.info(
-          "======================= Detailed Information for accounts that are different =======================");
-
-      for (Account accountFromZK : accountSetFromZK) {
-        Account accountFromDB = accountMapFromDB.get(accountFromZK.getId());
-        Set<Container> containersDiffInZK = new HashSet<>(accountFromZK.getAllContainers());
-        containersDiffInZK.removeAll(accountFromDB.getAllContainers());
-
-        logger.info("\r\n");
-        logger.info("----------------------- Account ID: {}, Account Name: {} -----------------------",
-            accountFromZK.getId(), accountFromZK.getName());
-        logger.info("........................ Containers missing or different in DB ........................");
-        logger.info("{}", containersDiffInZK);
-
-        logger.info("\r\n");
-        for (Container containerInZK : containersDiffInZK) {
-          Container containerInDB = accountFromDB.getContainerById(containerInZK.getId());
-          if (containerInDB != null) {
-            logger.info("........................ Container ID: {}, Container Name: {} ........................",
-                containerInZK.getId(), containerInZK.getName());
-            logger.info("Container info in zk: {}", containerInZK.toJson().toString());
-            logger.info("Container info in DB: {}", containerInDB.toJson().toString());
-            logger.info("\r\n");
-          }
-        }
-      }
-    } else {
-      logger.info("Accounts/Containers are in sync at ZK and DB");
-    }
+    // Compare accounts in ZK and DB
+    AccountUtils.compareAccounts(accountSetFromZK, accountSetFromDB);
   }
 
   Map<String, String> fetchAccountMetadataFromZK() {

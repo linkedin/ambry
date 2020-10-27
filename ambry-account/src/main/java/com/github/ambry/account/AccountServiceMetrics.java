@@ -19,9 +19,9 @@ import com.codahale.metrics.MetricRegistry;
 
 
 /**
- * {@link HelixAccountService} specific metrics tracking.
+ * {@link AccountService} specific metrics tracking.
  * <p/>
- * Exports metrics that are triggered by the {@link HelixAccountService} to the provided {@link MetricRegistry}.
+ * Exports metrics that are triggered by the {@link AccountService} to the provided {@link MetricRegistry}.
  */
 public class AccountServiceMetrics {
   // Histogram
@@ -48,48 +48,50 @@ public class AccountServiceMetrics {
   public final Counter accountDeletesToAmbryServerErrorCount;
   public final Counter accountFetchFromAmbryServerErrorCount;
   public final Counter accountUpdatesToZkErrorCount;
+  public final Counter accountDataInconsistencyCount;
 
   public AccountServiceMetrics(MetricRegistry metricRegistry) {
     // Histogram
     startupTimeInMs = metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "StartupTimeInMs"));
     updateAccountTimeInMs =
-            metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "UpdateAccountTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "UpdateAccountTimeInMs"));
     fetchRemoteAccountTimeInMs =
-            metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountTimeInMs"));
     accountUpdateConsumerTimeInMs =
-            metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountUpdateConsumerTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountUpdateConsumerTimeInMs"));
     accountUpdateToAmbryTimeInMs =
-            metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountUpdateToAmbryTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountUpdateToAmbryTimeInMs"));
     accountFetchFromAmbryTimeInMs =
-            metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryTimeInMs"));
     backupWriteTimeInMs =
-            metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "BackupWriteTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "BackupWriteTimeInMs"));
     backupReadTimeInMs = metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "BackupReadTimeInMs"));
 
     // Counter
     unrecognizedMessageErrorCount =
-            metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "UnrecognizedMessageErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "UnrecognizedMessageErrorCount"));
     notifyAccountDataChangeErrorCount =
-            metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NotifyAccountDataChangeErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NotifyAccountDataChangeErrorCount"));
     updateAccountErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "UpdateAccountErrorCount"));
-    conflictRetryCount =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "ConflictRetryCount"));
+    conflictRetryCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, "ConflictRetryCount"));
     accountUpdatesToZkErrorCount =
-            metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountUpdatesToZkErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountUpdatesToZkErrorCount"));
     fetchRemoteAccountErrorCount =
-            metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountErrorCount"));
     remoteDataCorruptionErrorCount =
-            metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "RemoteDataCorruptionErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "RemoteDataCorruptionErrorCount"));
     backupErrorCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "BackupErrorCount"));
     nullNotifierCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NullNotifierCount"));
     accountUpdatesCapturedByScheduledUpdaterCount = metricRegistry.counter(
-            MetricRegistry.name(HelixAccountService.class, "AccountUpdatesCapturedByScheduledUpdaterCount"));
+        MetricRegistry.name(HelixAccountService.class, "AccountUpdatesCapturedByScheduledUpdaterCount"));
     accountUpdatesToAmbryServerErrorCount =
-            metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountUpdatesToAmbryServerErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountUpdatesToAmbryServerErrorCount"));
     accountDeletesToAmbryServerErrorCount =
-            metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountDeletesToAmbryServerErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountDeletesToAmbryServerErrorCount"));
     accountFetchFromAmbryServerErrorCount =
-            metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryServerErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryServerErrorCount"));
+    accountDataInconsistencyCount =
+        metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, "AccountDataInconsistencyCount"));
   }
 }
