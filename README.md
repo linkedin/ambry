@@ -1,6 +1,6 @@
 # Ambry
 
-[![Build Status](https://travis-ci.org/linkedin/ambry.svg?branch=master)](https://travis-ci.org/linkedin/ambry) 
+[![Build Status](https://travis-ci.com/linkedin/ambry.svg?branch=master)](https://travis-ci.com/linkedin/ambry)
 [![codecov.io](https://codecov.io/github/linkedin/ambry/branch/master/graph/badge.svg)](https://codecov.io/github/linkedin/ambry)
 [ ![Download](https://api.bintray.com/packages/linkedin/maven/ambry/images/download.svg) ](https://bintray.com/linkedin/maven/ambry/_latestVersion)
 [![license](https://img.shields.io/github/license/linkedin/ambry.svg)](LICENSE)
