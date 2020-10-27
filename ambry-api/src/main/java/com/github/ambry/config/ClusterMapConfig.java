@@ -296,6 +296,15 @@ public class ClusterMapConfig {
   @Config("clustermap.retry.disable.partition.completion.backoff.ms")
   public final int clustermapRetryDisablePartitionCompletionBackoffMs;
 
+  public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
+      "clustermap.enable.aggregated.monthly.account.report";
+  /**
+   * True to enable aggregation task to generate a base account report for each month.
+   */
+  @Config(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT)
+  @Default("false")
+  public final boolean clustermapEnableAggregatedMonthlyAccountReport;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -361,5 +370,7 @@ public class ClusterMapConfig {
     clustermapRetryDisablePartitionCompletionBackoffMs =
         verifiableProperties.getIntInRange("clustermap.retry.disable.partition.completion.backoff.ms", 10 * 1000, 1,
             Integer.MAX_VALUE);
+    clustermapEnableAggregatedMonthlyAccountReport =
+        verifiableProperties.getBoolean(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, false);
   }
 }
