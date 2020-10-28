@@ -239,31 +239,30 @@ abstract class AbstractAccountService implements AccountService {
    */
   void markContainersInactive(Set<Container> inactiveContainerCandidateSet) throws InterruptedException {
     if (inactiveContainerCandidateSet != null) {
-      boolean success = false;
       Exception updateException = null;
       int retry = 0;
-      while (!success && retry < config.maxRetryCountOnUpdateFailure) {
-        Map<Short, Account> accountToUpdateMap = new HashMap<>();
-        inactiveContainerCandidateSet.forEach(container -> {
-          // start by getting account, and then get container from account to make sure that we are editing the most
-          // recent snapshot
-          short accountId = container.getParentAccountId();
-          Account accountToEdit = accountToUpdateMap.computeIfAbsent(accountId, this::getAccountById);
-          Container containerToEdit = accountToEdit.getContainerById(container.getId());
-          Container editedContainer =
-              new ContainerBuilder(containerToEdit).setStatus(Container.ContainerStatus.INACTIVE).build();
-          accountToUpdateMap.put(accountId,
-              new AccountBuilder(accountToEdit).addOrUpdateContainer(editedContainer).build());
-        });
+      Map<Short, Account> accountToUpdateMap = new HashMap<>();
+      inactiveContainerCandidateSet.forEach(container -> {
+        // start by getting account, and then get container from account to make sure that we are editing the most
+        // recent snapshot
+        short accountId = container.getParentAccountId();
+        Account accountToEdit = accountToUpdateMap.computeIfAbsent(accountId, this::getAccountById);
+        Container containerToEdit = accountToEdit.getContainerById(container.getId());
+        Container editedContainer =
+            new ContainerBuilder(containerToEdit).setStatus(Container.ContainerStatus.INACTIVE).build();
+        accountToUpdateMap.put(accountId,
+            new AccountBuilder(accountToEdit).addOrUpdateContainer(editedContainer).build());
+      });
+      do {
         try {
           updateAccounts(accountToUpdateMap.values());
-          success = true;
+          updateException = null;
         } catch (AccountServiceException ase) {
           updateException = ase;
           retry++;
           Thread.sleep(config.retryDelayMs);
         }
-      }
+      } while (updateException != null && retry < config.maxRetryCountOnUpdateFailure);
       if (updateException != null) {
         logger.error("Failed to mark containers INACTIVE in set : {}  after {} retries", inactiveContainerCandidateSet,
             config.maxRetryCountOnUpdateFailure, updateException);

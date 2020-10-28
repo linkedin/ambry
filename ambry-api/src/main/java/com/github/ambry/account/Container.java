@@ -723,6 +723,16 @@ public class Container {
   }
 
   /**
+   * The snapshot version is generally the number of modifications to the container that were expected to have occurred
+   * before the current time. This is used to validate that there were no unexpected container modifications that could be
+   * inadvertently overwritten by an container update.
+   * @return the expected version for the container record.
+   */
+  public int getSnapshotVersion() {
+    return snapshotVersion;
+  }
+
+  /**
    * Generates a String representation that uniquely identifies this container. The string
    * is in the format of {@code Container[accountId:containerId]}.
    * @return The String representation of this container.
@@ -748,7 +758,8 @@ public class Container {
         && deleteTriggerTime == container.deleteTriggerTime && Objects.equals(description, container.description)
         && Objects.equals(replicationPolicy, container.replicationPolicy) && ttlRequired == container.ttlRequired
         && securePathRequired == container.securePathRequired && Objects.equals(
-        contentTypeWhitelistForFilenamesOnDownload, container.contentTypeWhitelistForFilenamesOnDownload);
+        contentTypeWhitelistForFilenamesOnDownload, container.contentTypeWhitelistForFilenamesOnDownload)
+        && backupEnabled == container.backupEnabled && snapshotVersion == container.snapshotVersion;
   }
 
   @Override
@@ -771,16 +782,6 @@ public class Container {
     if (encrypted && !previouslyEncrypted) {
       throw new IllegalStateException("previouslyEncrypted should be true if the container is currently encrypted");
     }
-  }
-
-  /**
-   * The snapshot version is generally the number of modifications to the container that were expected to have occurred
-   * before the current time. This is used to validate that there were no unexpected container modifications that could be
-   * inadvertently overwritten by an container update.
-   * @return the expected version for the container record.
-   */
-  public int getSnapshotVersion() {
-    return snapshotVersion;
   }
 
   /**

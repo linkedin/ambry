@@ -163,11 +163,9 @@ public class MySqlAccountServiceTest {
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
     verify(mockMySqlAccountStore, never()).updateAccount(testAccount);
-    Container finalTestContainer =
+    testContainer =
         new ContainerBuilder(testContainer).setSnapshotVersion(testContainer.getSnapshotVersion() + 1).build();
-    verify(mockMySqlAccountStore, atLeastOnce()).updateContainer(argThat(
-        container -> container.equals(finalTestContainer)
-            && container.getSnapshotVersion() == finalTestContainer.getSnapshotVersion()));
+    verify(mockMySqlAccountStore, atLeastOnce()).updateContainer(testContainer);
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
   }
