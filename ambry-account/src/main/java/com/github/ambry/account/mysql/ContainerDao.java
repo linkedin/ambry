@@ -145,8 +145,10 @@ public class ContainerDao {
       int accountId = resultSet.getInt(ACCOUNT_ID);
       String containerJson = resultSet.getString(CONTAINER_INFO);
       Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
-      Container container = Container.fromJson(new JSONObject(containerJson), (short) accountId);
-      container = new ContainerBuilder(container).setLastModifiedTime(lastModifiedTime.getTime()).build();
+      int version = resultSet.getInt(VERSION);
+      Container container = new ContainerBuilder(
+          Container.fromJson(new JSONObject(containerJson), (short) accountId)).setLastModifiedTime(
+          lastModifiedTime.getTime()).setSnapshotVersion(version).build();
       containers.add(container);
     }
     return containers;

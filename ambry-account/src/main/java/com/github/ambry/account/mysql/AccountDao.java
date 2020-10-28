@@ -118,8 +118,11 @@ public class AccountDao {
     while (resultSet.next()) {
       String accountJson = resultSet.getString(ACCOUNT_INFO);
       Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
-      Account account = Account.fromJson(new JSONObject(accountJson));
-      account = new AccountBuilder(account).lastModifiedTime(lastModifiedTime.getTime()).build();
+      int version = resultSet.getInt(VERSION);
+      Account account =
+          new AccountBuilder(Account.fromJson(new JSONObject(accountJson))).lastModifiedTime(lastModifiedTime.getTime())
+              .snapshotVersion(version)
+              .build();
       accounts.add(account);
     }
     return accounts;

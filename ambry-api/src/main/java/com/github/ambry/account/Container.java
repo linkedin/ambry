@@ -758,8 +758,7 @@ public class Container {
         && deleteTriggerTime == container.deleteTriggerTime && Objects.equals(description, container.description)
         && Objects.equals(replicationPolicy, container.replicationPolicy) && ttlRequired == container.ttlRequired
         && securePathRequired == container.securePathRequired && Objects.equals(
-        contentTypeWhitelistForFilenamesOnDownload, container.contentTypeWhitelistForFilenamesOnDownload)
-        && backupEnabled == container.backupEnabled && snapshotVersion == container.snapshotVersion;
+        contentTypeWhitelistForFilenamesOnDownload, container.contentTypeWhitelistForFilenamesOnDownload);
   }
 
   @Override
