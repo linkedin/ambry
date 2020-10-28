@@ -36,8 +36,11 @@ install: skip # skips unnecessary ./gradlew assemble (https://docs.travis-ci.com
 jobs:
   include:
     - stage: test
-      name: "Unit Tests"
+      name: "Unit Tests excluding ambry-store"
       script: ./travis-unit-test.sh
+    - stage: test
+      name: "Unit Tests for ambry-store"
+      script: ./travis-store-test.sh
     - stage: test
       name: "Integration Tests"
       script: ./travis-int-test.sh
