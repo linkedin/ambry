@@ -75,6 +75,7 @@ public class Container {
   static final String CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD = "contentTypeWhitelistForFilenamesOnDownload";
   static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
   static final String LAST_MODIFIED_TIME_KEY = "lastModifiedTime";
+  static final String SNAPSHOT_VERSION_KEY = "snapshotVersion";
   static final boolean BACKUP_ENABLED_DEFAULT_VALUE = false;
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
@@ -85,6 +86,7 @@ public class Container {
   static final boolean CACHEABLE_DEFAULT_VALUE = true;
   static final Set<String> CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE = Collections.emptySet();
   static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
+  static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
 
   public static final short JSON_VERSION_1 = 1;
   public static final short JSON_VERSION_2 = 2;
@@ -344,6 +346,7 @@ public class Container {
   private final Set<String> contentTypeWhitelistForFilenamesOnDownload;
   private final short parentAccountId;
   private final long lastModifiedTime;
+  private final int snapshotVersion;
 
   /**
    * Constructing an {@link Container} object from container metadata.
@@ -373,6 +376,7 @@ public class Container {
         securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
         contentTypeWhitelistForFilenamesOnDownload = CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
         lastModifiedTime = metadata.optLong(LAST_MODIFIED_TIME_KEY, LAST_MODIFIED_TIME_DEFAULT_VALUE);
+        snapshotVersion = metadata.optInt(SNAPSHOT_VERSION_KEY, SNAPSHOT_VERSION_DEFAULT_VALUE);
         break;
       case JSON_VERSION_2:
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
@@ -399,6 +403,7 @@ public class Container {
           contentTypeWhitelistForFilenamesOnDownload = CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
         }
         lastModifiedTime = metadata.optLong(LAST_MODIFIED_TIME_KEY, LAST_MODIFIED_TIME_DEFAULT_VALUE);
+        snapshotVersion = metadata.optInt(SNAPSHOT_VERSION_KEY, SNAPSHOT_VERSION_DEFAULT_VALUE);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
@@ -432,7 +437,7 @@ public class Container {
       boolean backupEnabled, short parentAccountId, long deleteTriggerTime) {
     this(id, name, status, description, encrypted, previouslyEncrypted, cacheable, mediaScanDisabled, replicationPolicy,
         ttlRequired, securePathRequired, contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId,
-        deleteTriggerTime, LAST_MODIFIED_TIME_DEFAULT_VALUE);
+        deleteTriggerTime, LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE);
   }
 
   /**
@@ -459,7 +464,8 @@ public class Container {
   Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
       boolean ttlRequired, boolean securePathRequired, Set<String> contentTypeWhitelistForFilenamesOnDownload,
-      boolean backupEnabled, short parentAccountId, long deleteTriggerTime, long lastModifiedTime) {
+      boolean backupEnabled, short parentAccountId, long deleteTriggerTime, long lastModifiedTime,
+      int snapshotVersion) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -468,6 +474,7 @@ public class Container {
     this.cacheable = cacheable;
     this.parentAccountId = parentAccountId;
     this.lastModifiedTime = lastModifiedTime;
+    this.snapshotVersion = snapshotVersion;
     switch (currentJsonVersion) {
       case JSON_VERSION_1:
         this.backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
@@ -561,6 +568,7 @@ public class Container {
         metadata.put(IS_PRIVATE_KEY, !cacheable);
         metadata.put(PARENT_ACCOUNT_ID_KEY, parentAccountId);
         metadata.put(LAST_MODIFIED_TIME_KEY, lastModifiedTime);
+        metadata.put(SNAPSHOT_VERSION_KEY, snapshotVersion);
         break;
       case JSON_VERSION_2:
         metadata.put(Container.JSON_VERSION_KEY, JSON_VERSION_2);
@@ -585,6 +593,7 @@ public class Container {
               contentTypeWhitelistForFilenamesOnDownloadJson);
         }
         metadata.put(LAST_MODIFIED_TIME_KEY, lastModifiedTime);
+        metadata.put(SNAPSHOT_VERSION_KEY, snapshotVersion);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -711,6 +720,16 @@ public class Container {
    */
   public long getLastModifiedTime() {
     return lastModifiedTime;
+  }
+
+  /**
+   * The snapshot version is generally the number of modifications to the container that were expected to have occurred
+   * before the current time. This is used to validate that there were no unexpected container modifications that could be
+   * inadvertently overwritten by an container update.
+   * @return the expected version for the container record.
+   */
+  public int getSnapshotVersion() {
+    return snapshotVersion;
   }
 
   /**

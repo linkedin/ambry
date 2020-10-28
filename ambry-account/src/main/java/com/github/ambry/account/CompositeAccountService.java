@@ -147,9 +147,9 @@ public class CompositeAccountService implements AccountService {
   }
 
   @Override
-  public void selectInactiveContainersAndMarkInZK(StatsSnapshot statsSnapshot) {
-    primaryAccountService.selectInactiveContainersAndMarkInZK(statsSnapshot);
-    secondaryAccountService.selectInactiveContainersAndMarkInZK(statsSnapshot);
+  public void selectInactiveContainersAndMarkInStore(StatsSnapshot statsSnapshot) {
+    primaryAccountService.selectInactiveContainersAndMarkInStore(statsSnapshot);
+    secondaryAccountService.selectInactiveContainersAndMarkInStore(statsSnapshot);
   }
 
   @Override

@@ -45,16 +45,13 @@ public class ContainerDao {
 
   public ContainerDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = dataAccessor;
-    insertSql = String.format("insert into %s (%s, %s, %s, %s, %s) values (?, ?, 1, now(3), now(3))", CONTAINER_TABLE,
+    insertSql = String.format("insert into %s (%s, %s, %s, %s, %s) values (?, ?, ?, now(3), now(3))", CONTAINER_TABLE,
         ACCOUNT_ID, CONTAINER_INFO, VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
-    getSinceSql =
-        String.format("select %s, %s, %s from %s where %s > ?", ACCOUNT_ID, CONTAINER_INFO, LAST_MODIFIED_TIME,
-            CONTAINER_TABLE, LAST_MODIFIED_TIME);
-    getByAccountSql =
-        String.format("select %s, %s, %s from %s where %s = ?", ACCOUNT_ID, CONTAINER_INFO, LAST_MODIFIED_TIME,
-            CONTAINER_TABLE, ACCOUNT_ID);
-    // TODO: For update, take the version from Container object after adding the field in it.
-    updateSql = String.format("update %s set %s = ?, %s = 1, %s = now(3) where %s = ? AND %s = ? ", CONTAINER_TABLE,
+    getSinceSql = String.format("select %s, %s, %s, %s from %s where %s > ?", ACCOUNT_ID, CONTAINER_INFO, VERSION,
+        LAST_MODIFIED_TIME, CONTAINER_TABLE, LAST_MODIFIED_TIME);
+    getByAccountSql = String.format("select %s, %s, %s, %s from %s where %s = ?", ACCOUNT_ID, CONTAINER_INFO, VERSION,
+        LAST_MODIFIED_TIME, CONTAINER_TABLE, ACCOUNT_ID);
+    updateSql = String.format("update %s set %s = ?, %s = ?, %s = now(3) where %s = ? AND %s = ? ", CONTAINER_TABLE,
         CONTAINER_INFO, VERSION, LAST_MODIFIED_TIME, ACCOUNT_ID, CONTAINER_ID);
   }
 
@@ -70,6 +67,7 @@ public class ContainerDao {
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
       insertStatement.setInt(1, accountId);
       insertStatement.setString(2, container.toJson().toString());
+      insertStatement.setInt(3, container.getSnapshotVersion());
       insertStatement.executeUpdate();
     } catch (SQLException e) {
       dataAccessor.onException(e);
@@ -88,8 +86,9 @@ public class ContainerDao {
       // Note: assuming autocommit for now
       PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
       updateStatement.setString(1, container.toJson().toString());
-      updateStatement.setInt(2, accountId);
-      updateStatement.setInt(3, container.getId());
+      updateStatement.setInt(2, container.getSnapshotVersion());
+      updateStatement.setInt(3, accountId);
+      updateStatement.setInt(4, container.getId());
       updateStatement.executeUpdate();
     } catch (SQLException e) {
       dataAccessor.onException(e);
@@ -144,8 +143,10 @@ public class ContainerDao {
       int accountId = resultSet.getInt(ACCOUNT_ID);
       String containerJson = resultSet.getString(CONTAINER_INFO);
       Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
-      Container container = Container.fromJson(new JSONObject(containerJson), (short) accountId);
-      container = new ContainerBuilder(container).setLastModifiedTime(lastModifiedTime.getTime()).build();
+      int version = resultSet.getInt(VERSION);
+      Container container = new ContainerBuilder(
+          Container.fromJson(new JSONObject(containerJson), (short) accountId)).setLastModifiedTime(
+          lastModifiedTime.getTime()).setSnapshotVersion(version).build();
       containers.add(container);
     }
     return containers;

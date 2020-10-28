@@ -28,9 +28,12 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.function.Consumer;
 import org.junit.Test;
 
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
@@ -134,7 +137,7 @@ public class MySqlAccountServiceTest {
     Account testAccount = new AccountBuilder((short) 1, "testAccount", Account.AccountStatus.ACTIVE).containers(
         Collections.singleton(testContainer)).build();
 
-    // 1. Addition of new account. Verify account is added to cache.
+    // 1. Addition of new account. Verify account is added to cache and written to mysql store.
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
     verify(mockMySqlAccountStore, atLeastOnce()).addAccount(testAccount);
     List<Account> accounts = new ArrayList<>(mySqlAccountService.getAllAccounts());
@@ -144,7 +147,7 @@ public class MySqlAccountServiceTest {
     assertEquals("Mismatch in account retrieved by name", testAccount,
         mySqlAccountService.getAccountByName(testAccount.getName()));
 
-    // 2. Update existing account by adding new container. Verify account is updated in cache.
+    // 2. Update existing account by adding new container. Verify account is updated in cache and written to mysql store.
     Container testContainer2 =
         new ContainerBuilder((short) 2, "testContainer2", Container.ContainerStatus.ACTIVE, "testContainer2", (short) 1)
             .build();
@@ -155,12 +158,16 @@ public class MySqlAccountServiceTest {
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
 
-    // 3. Update existing container. Verify container is updated in cache.
+    // 3. Update existing container. Verify container is updated in cache and written to mysql store.
     testContainer = new ContainerBuilder(testContainer).setMediaScanDisabled(true).setCacheable(true).build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
     verify(mockMySqlAccountStore, never()).updateAccount(testAccount);
-    verify(mockMySqlAccountStore, atLeastOnce()).updateContainer(testContainer);
+    Container finalTestContainer =
+        new ContainerBuilder(testContainer).setSnapshotVersion(testContainer.getSnapshotVersion() + 1).build();
+    verify(mockMySqlAccountStore, atLeastOnce()).updateContainer(argThat(
+        container -> container.equals(finalTestContainer)
+            && container.getSnapshotVersion() == finalTestContainer.getSnapshotVersion()));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
   }
@@ -314,6 +321,16 @@ public class MySqlAccountServiceTest {
     assertEquals("UpdateAccountErrorCount in metrics should be 2", 2,
         accountServiceMetrics.updateAccountErrorCount.getCount());
 
+    // case F: verify updating account (1, "c") with incorrect version throws resource conflict
+    accountToUpdate =
+        new AccountBuilder(mySqlAccountService.getAccountById((short) 1)).status(Account.AccountStatus.INACTIVE)
+            .snapshotVersion(mySqlAccountService.getAccountById((short) 1).getSnapshotVersion() + 1)
+            .build();
+    assertUpdateAccountsFails(Collections.singletonList(accountToUpdate), AccountServiceErrorCode.ResourceConflict,
+        mySqlAccountService);
+    assertEquals("UpdateAccountErrorCount in metrics should be 3", 3,
+        accountServiceMetrics.updateAccountErrorCount.getCount());
+
     // verify there should be 3 accounts (1, "c), (2, "b) and (3, "d) at the end of operation
     assertEquals("Mismatch in number of accounts", 3, mySqlAccountService.getAllAccounts().size());
     assertEquals("Mismatch in name of account", "c", mySqlAccountService.getAccountById((short) 1).getName());
@@ -375,5 +392,69 @@ public class MySqlAccountServiceTest {
         mySqlAccountService);
     assertEquals("UpdateAccountErrorCount in metrics should be 2", 2,
         accountServiceMetrics.updateAccountErrorCount.getCount());
+
+    // case E: Verify updating container (3,c4) with incorrect version throws resource conflict
+    containerToUpdate = mySqlAccountService.getAccountById((short) 1).getContainerById((short) 3);
+    containerToUpdate = new ContainerBuilder(containerToUpdate).setStatus(Container.ContainerStatus.INACTIVE)
+        .setSnapshotVersion(containerToUpdate.getSnapshotVersion() + 1)
+        .build();
+    accountToUpdate = new AccountBuilder(accountToUpdate).addOrUpdateContainer(containerToUpdate).build();
+    assertUpdateAccountsFails(Collections.singletonList(accountToUpdate), AccountServiceErrorCode.ResourceConflict,
+        mySqlAccountService);
+    assertEquals("UpdateAccountErrorCount in metrics should be 3", 3,
+        accountServiceMetrics.updateAccountErrorCount.getCount());
+  }
+
+  /**
+   * Tests adding/removing {@link Consumer}.
+   * @throws Exception
+   */
+  @Test
+  public void testAccountUpdateConsumer() throws Exception {
+
+    List<Collection<Account>> updatedAccountsReceivedByConsumers = new ArrayList<>();
+    Consumer<Collection<Account>> accountUpdateConsumer = updatedAccountsReceivedByConsumers::add;
+
+    // add consumers
+    mySqlAccountService.addAccountUpdateConsumer(accountUpdateConsumer);
+
+    // accounts and containers to be updated
+    List<Container> containersList = new ArrayList<>();
+    containersList.add(
+        new ContainerBuilder((short) 1, "c1", Container.ContainerStatus.ACTIVE, "c1", (short) 1).build());
+    containersList.add(
+        new ContainerBuilder((short) 2, "c2", Container.ContainerStatus.ACTIVE, "c2", (short) 1).build());
+    List<Account> accountsList = new ArrayList<>();
+    accountsList.add(new AccountBuilder((short) 1, "a1", Account.AccountStatus.ACTIVE).build());
+    accountsList.add(new AccountBuilder((short) 2, "a2", Account.AccountStatus.ACTIVE).build());
+
+    when(mockMySqlAccountStore.getNewAccounts(anyLong())).thenReturn(accountsList);
+    when(mockMySqlAccountStore.getNewContainers(anyLong())).thenReturn(containersList);
+
+    // fetch updated accounts and containers from db
+    mySqlAccountService.fetchAndUpdateCache();
+
+    Set<Account> accountsInMap = new HashSet<>(mySqlAccountService.getAllAccounts());
+
+    // verify consumers are notified of updated accounts
+    assertEquals("Number of updates by consumer received should be 1", 1, updatedAccountsReceivedByConsumers.size());
+    assertEquals("Mismatch in number of accounts received by consumer", accountsInMap.size(),
+        updatedAccountsReceivedByConsumers.get(0).size());
+    assertTrue("Mismatch in accounts received by consumer",
+        accountsInMap.containsAll(updatedAccountsReceivedByConsumers.get(0)));
+
+    //Remove consumer
+    mySqlAccountService.removeAccountUpdateConsumer(accountUpdateConsumer);
+    updatedAccountsReceivedByConsumers.clear();
+
+    Container newContainer =
+        new ContainerBuilder((short) 3, "c3", Container.ContainerStatus.ACTIVE, "c3", (short) 1).build();
+    when(mockMySqlAccountStore.getNewContainers(anyLong())).thenReturn(Collections.singletonList(newContainer));
+
+    // fetch updated accounts and containers from db
+    mySqlAccountService.fetchAndUpdateCache();
+
+    // verify consumers are not notified
+    assertEquals("No updates should be received", 0, updatedAccountsReceivedByConsumers.size());
   }
 }

@@ -73,15 +73,14 @@ class AccountInfoMap {
       JSONObject accountJson = new JSONObject(valueString);
       if (idKey == null) {
         accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-        throw new IllegalStateException(
-            "Invalid account record when reading accountMap because idKey=null");
+        throw new IllegalStateException("Invalid account record when reading accountMap because idKey=null");
       }
       account = Account.fromJson(accountJson);
       if (account.getId() != Short.parseShort(idKey)) {
         accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
         throw new IllegalStateException(
-            "Invalid account record when reading accountMap because idKey and accountId do not match. idKey="
-                + idKey + " accountId=" + account.getId());
+            "Invalid account record when reading accountMap because idKey and accountId do not match. idKey=" + idKey
+                + " accountId=" + account.getId());
       }
       if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
         throw new IllegalStateException(
@@ -173,7 +172,7 @@ class AccountInfoMap {
       Account accountInMap = getAccountById(account.getId());
       if (accountInMap != null && account.getSnapshotVersion() != accountInMap.getSnapshotVersion()) {
         logger.error(
-            "Account to update (accountId={} accountName={}) has an unexpected snapshot version in zk (expected={}, encountered={})",
+            "Account to update (accountId={} accountName={}) has an unexpected snapshot version in store (expected={}, encountered={})",
             account.getId(), account.getName(), account.getSnapshotVersion(), accountInMap.getSnapshotVersion());
         return true;
       }
@@ -200,16 +199,21 @@ class AccountInfoMap {
    */
   boolean hasConflictingContainer(Collection<Container> containersToSet, short parentAccountId) {
     for (Container container : containersToSet) {
-
-      // TODO: Once we have versioning, check that version for existing container (being updated) matches.
+      // if the container already exists, check that the snapshot version matches the expected value.
+      Container containerInMap = getContainerByNameForAccount(container.getParentAccountId(), container.getName());
+      if (containerInMap != null && container.getSnapshotVersion() != containerInMap.getSnapshotVersion()) {
+        logger.error(
+            "Container to update in AccountId {} (containerId={} containerName={}) has an unexpected snapshot version in store (expected={}, encountered={})",
+            parentAccountId, container.getId(), container.getName(), container.getSnapshotVersion(),
+            containerInMap.getSnapshotVersion());
+        return true;
+      }
 
       // check that there are no other containers that conflict with the name of the container to update
-      Container potentialConflict = getContainerByNameForAccount(parentAccountId, container.getName());
-      if (potentialConflict != null && potentialConflict.getId() != (container.getId())) {
+      if (containerInMap != null && containerInMap.getId() != (container.getId())) {
         logger.error(
             "Container to update in AccountId {} (containerId={} containerName={}) conflicts with an existing record (containerId={} containerName={})",
-            parentAccountId, container.getId(), container.getName(), potentialConflict.getId(),
-            potentialConflict.getName());
+            parentAccountId, container.getId(), container.getName(), containerInMap.getId(), containerInMap.getName());
         return true;
       }
     }

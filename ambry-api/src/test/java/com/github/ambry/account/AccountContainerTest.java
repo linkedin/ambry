@@ -13,7 +13,6 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -35,7 +34,6 @@ import org.junit.runners.Parameterized;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
-import static com.github.ambry.account.Container.LAST_MODIFIED_TIME_KEY;
 import static org.junit.Assert.*;
 
 
@@ -52,7 +50,7 @@ public class AccountContainerTest {
   private short refAccountId;
   private String refAccountName;
   private AccountStatus refAccountStatus;
-  private int refAccountSnapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
+  private int refAccountSnapshotVersion;
   private JSONObject refAccountJson;
 
   // Reference Container fields
@@ -99,7 +97,7 @@ public class AccountContainerTest {
     refAccountJson.put(ACCOUNT_ID_KEY, refAccountId);
     refAccountJson.put(ACCOUNT_NAME_KEY, refAccountName);
     refAccountJson.put(Account.STATUS_KEY, refAccountStatus.name());
-    refAccountJson.put(SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion);
+    refAccountJson.put(Account.SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion);
     refAccountJson.put(CONTAINERS_KEY, containerJsonList);
     refAccountJson.put(Account.LAST_MODIFIED_TIME_KEY, 0);
   }
@@ -818,13 +816,13 @@ public class AccountContainerTest {
     assertEquals("Failed to compare account to a reference account", Account.fromJson(refAccountJson), account);
     JSONObject expectedAccountJson = deepCopy(refAccountJson);
     if (incrementSnapshotVersion) {
-      expectedAccountJson.put(SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion + 1);
+      expectedAccountJson.put(Account.SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion + 1);
     }
     JSONObject accountJson = account.toJson(incrementSnapshotVersion);
     // extra check for snapshot version since the lengths would likely not differ even if the snapshot version was not
     // correct
-    assertEquals("Snapshot versions in JSON do not match", expectedAccountJson.get(SNAPSHOT_VERSION_KEY),
-        accountJson.get(SNAPSHOT_VERSION_KEY));
+    assertEquals("Snapshot versions in JSON do not match", expectedAccountJson.get(Account.SNAPSHOT_VERSION_KEY),
+        accountJson.get(Account.SNAPSHOT_VERSION_KEY));
     // The order of containers in json string may be different, so we cannot compare the exact string.
     assertEquals("Wrong metadata JsonObject from toJson()", expectedAccountJson.toString().length(),
         accountJson.toString().length());
@@ -921,8 +919,8 @@ public class AccountContainerTest {
   private void createAccountWithBadContainersAndFail(List<Container> containers,
       Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass,
-        () -> new Account(refAccountId, refAccountName, refAccountStatus, SNAPSHOT_VERSION_DEFAULT_VALUE, containers),
-        null);
+        () -> new Account(refAccountId, refAccountName, refAccountStatus, Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
+            containers), null);
   }
 
   /**
@@ -1044,7 +1042,8 @@ public class AccountContainerTest {
         containerJson.put(DESCRIPTION_KEY, container.getDescription());
         containerJson.put(IS_PRIVATE_KEY, !container.isCacheable());
         containerJson.put(PARENT_ACCOUNT_ID_KEY, container.getParentAccountId());
-        containerJson.put(LAST_MODIFIED_TIME_KEY, container.getLastModifiedTime());
+        containerJson.put(Container.LAST_MODIFIED_TIME_KEY, container.getLastModifiedTime());
+        containerJson.put(Container.SNAPSHOT_VERSION_KEY, container.getSnapshotVersion());
         break;
       case Container.JSON_VERSION_2:
         containerJson.put(Container.JSON_VERSION_KEY, Container.JSON_VERSION_2);
@@ -1061,7 +1060,8 @@ public class AccountContainerTest {
         containerJson.putOpt(REPLICATION_POLICY_KEY, container.getReplicationPolicy());
         containerJson.put(TTL_REQUIRED_KEY, container.isTtlRequired());
         containerJson.put(SECURE_PATH_REQUIRED_KEY, container.isSecurePathRequired());
-        containerJson.put(LAST_MODIFIED_TIME_KEY, container.getLastModifiedTime());
+        containerJson.put(Container.LAST_MODIFIED_TIME_KEY, container.getLastModifiedTime());
+        containerJson.put(Container.SNAPSHOT_VERSION_KEY, container.getSnapshotVersion());
         if (container.getContentTypeWhitelistForFilenamesOnDownload() != null
             && !container.getContentTypeWhitelistForFilenamesOnDownload().isEmpty()) {
           containerJson.put(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD,

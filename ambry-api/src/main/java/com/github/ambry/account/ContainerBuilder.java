@@ -45,6 +45,7 @@ public class ContainerBuilder {
       CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
   private boolean backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
   private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
+  private int snapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -72,6 +73,7 @@ public class ContainerBuilder {
     contentTypeWhitelistForFilenamesOnDownload = origin.getContentTypeWhitelistForFilenamesOnDownload();
     backupEnabled = origin.isBackupEnabled();
     lastModifiedTime = origin.getLastModifiedTime();
+    snapshotVersion = origin.getSnapshotVersion();
   }
 
   /**
@@ -251,6 +253,16 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets the snapshot version of the {@link Container} to build.
+   * @param snapshotVersion The version to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setSnapshotVersion(int snapshotVersion) {
+    this.snapshotVersion = snapshotVersion;
+    return this;
+  }
+
+  /**
    * Builds a {@link Container} object. {@code id}, {@code name}, {@code status}, {@code isPrivate}, and
    * {@code parentAccountId} are required before build.
    * @return A {@link Container} object.
@@ -259,7 +271,7 @@ public class ContainerBuilder {
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
         mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
-        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId, deleteTriggerTime,
-        lastModifiedTime);
+        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId, deleteTriggerTime, lastModifiedTime,
+        snapshotVersion);
   }
 }

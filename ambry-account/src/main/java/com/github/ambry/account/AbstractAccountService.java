@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.github.ambry.config.AccountServiceConfig;
+import com.github.ambry.server.StatsSnapshot;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -21,10 +22,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -138,6 +141,11 @@ abstract class AbstractAccountService implements AccountService {
               "In account " + accountName + ", container " + container.getName() + " has containerId "
                   + existingContainer.getId() + " (" + container.getId() + " was supplied)",
               AccountServiceErrorCode.ResourceConflict);
+        } else if (existingContainer.getSnapshotVersion() != container.getSnapshotVersion()) {
+          throw new AccountServiceException(
+              "In account " + accountName + ", container " + container.getName() + " has version "
+                  + existingContainer.getSnapshotVersion() + " (" + container.getSnapshotVersion() + " was supplied)",
+              AccountServiceErrorCode.ResourceConflict);
         } else {
           resolvedContainers.add(container);
         }
@@ -184,30 +192,21 @@ abstract class AbstractAccountService implements AccountService {
 
   /**
    * Logs and notifies account update {@link Consumer}s about any new account changes/creations.
-   * @param newAccountInfoMap the new {@link AccountInfoMap} that has been set.
-   * @param oldAccountInfoMap the {@link AccountInfoMap} that was cached before this change.
+   * @param updatedAccounts collection of updated accounts
    * @param isCalledFromListener {@code true} if the caller is the account update listener, {@code false} otherwise.
    */
-  protected void notifyAccountUpdateConsumers(AccountInfoMap newAccountInfoMap, AccountInfoMap oldAccountInfoMap,
-      boolean isCalledFromListener) {
-    Map<Short, Account> idToUpdatedAccounts = new HashMap<>();
-    for (Account newAccount : newAccountInfoMap.getAccounts()) {
-      if (!newAccount.equals(oldAccountInfoMap.getAccountById(newAccount.getId()))) {
-        idToUpdatedAccounts.put(newAccount.getId(), newAccount);
-      }
-    }
-    if (idToUpdatedAccounts.size() > 0) {
-      logger.info("Received updates for {} accounts. Received from listener={}. Account IDs={}",
-          idToUpdatedAccounts.size(), isCalledFromListener, idToUpdatedAccounts.keySet());
+  protected void notifyAccountUpdateConsumers(Collection<Account> updatedAccounts, boolean isCalledFromListener) {
+    if (updatedAccounts.size() > 0) {
+      logger.info("Received updates for {} accounts. Received from listener={}. Account IDs={}", updatedAccounts.size(),
+          isCalledFromListener, updatedAccounts.stream().map(Account::getId).collect(Collectors.toList()));
       // @todo In long run, this metric is not necessary.
       if (isCalledFromListener) {
         accountServiceMetrics.accountUpdatesCapturedByScheduledUpdaterCount.inc();
       }
-      Collection<Account> updatedAccounts = Collections.unmodifiableCollection(idToUpdatedAccounts.values());
       for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
         long startTime = System.currentTimeMillis();
         try {
-          accountUpdateConsumer.accept(updatedAccounts);
+          accountUpdateConsumer.accept(Collections.unmodifiableCollection(updatedAccounts));
           long consumerExecutionTimeInMs = System.currentTimeMillis() - startTime;
           logger.trace("Consumer={} has been notified for account change, took {} ms", accountUpdateConsumer,
               consumerExecutionTimeInMs);
@@ -218,6 +217,57 @@ abstract class AbstractAccountService implements AccountService {
       }
     } else {
       logger.debug("HelixAccountService is updated with 0 updated account");
+    }
+  }
+
+  /**
+   * Selects {@link Container}s to be marked as INACTIVE and marked in underlying account store.
+   */
+  public void selectInactiveContainersAndMarkInStore(StatsSnapshot statsSnapshot) {
+    Set<Container> inactiveContainerCandidateSet = AccountUtils.selectInactiveContainerCandidates(statsSnapshot,
+        getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS));
+    try {
+      markContainersInactive(inactiveContainerCandidateSet);
+    } catch (InterruptedException e) {
+      logger.error("Mark inactive container in zookeeper is interrupted", e);
+    }
+  }
+
+  /**
+   * Mark the given {@link Container}s status to INACTIVE in account store.
+   * @param inactiveContainerCandidateSet DELETE_IN_PROGRESS {@link Container} set which has been deleted successfully during compaction.
+   */
+  void markContainersInactive(Set<Container> inactiveContainerCandidateSet) throws InterruptedException {
+    if (inactiveContainerCandidateSet != null) {
+      Exception updateException = null;
+      int retry = 0;
+      Map<Short, Account> accountToUpdateMap = new HashMap<>();
+      inactiveContainerCandidateSet.forEach(container -> {
+        // start by getting account, and then get container from account to make sure that we are editing the most
+        // recent snapshot
+        short accountId = container.getParentAccountId();
+        Account accountToEdit = accountToUpdateMap.computeIfAbsent(accountId, this::getAccountById);
+        Container containerToEdit = accountToEdit.getContainerById(container.getId());
+        Container editedContainer =
+            new ContainerBuilder(containerToEdit).setStatus(Container.ContainerStatus.INACTIVE).build();
+        accountToUpdateMap.put(accountId,
+            new AccountBuilder(accountToEdit).addOrUpdateContainer(editedContainer).build());
+      });
+      do {
+        try {
+          updateAccounts(accountToUpdateMap.values());
+          updateException = null;
+        } catch (AccountServiceException ase) {
+          updateException = ase;
+          retry++;
+          Thread.sleep(config.retryDelayMs);
+        }
+      } while (updateException != null && retry < config.maxRetryCountOnUpdateFailure);
+      if (updateException != null) {
+        logger.error("Failed to mark containers INACTIVE in set : {}  after {} retries", inactiveContainerCandidateSet,
+            config.maxRetryCountOnUpdateFailure, updateException);
+        accountServiceMetrics.accountUpdatesToStoreErrorCount.inc();
+      }
     }
   }
 }
