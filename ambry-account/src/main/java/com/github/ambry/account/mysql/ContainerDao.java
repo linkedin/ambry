@@ -47,12 +47,10 @@ public class ContainerDao {
     this.dataAccessor = dataAccessor;
     insertSql = String.format("insert into %s (%s, %s, %s, %s, %s) values (?, ?, ?, now(3), now(3))", CONTAINER_TABLE,
         ACCOUNT_ID, CONTAINER_INFO, VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
-    getSinceSql =
-        String.format("select %s, %s, %s from %s where %s > ?", ACCOUNT_ID, CONTAINER_INFO, LAST_MODIFIED_TIME,
-            CONTAINER_TABLE, LAST_MODIFIED_TIME);
-    getByAccountSql =
-        String.format("select %s, %s, %s from %s where %s = ?", ACCOUNT_ID, CONTAINER_INFO, LAST_MODIFIED_TIME,
-            CONTAINER_TABLE, ACCOUNT_ID);
+    getSinceSql = String.format("select %s, %s, %s, %s from %s where %s > ?", ACCOUNT_ID, CONTAINER_INFO, VERSION,
+        LAST_MODIFIED_TIME, CONTAINER_TABLE, LAST_MODIFIED_TIME);
+    getByAccountSql = String.format("select %s, %s, %s, %s from %s where %s = ?", ACCOUNT_ID, CONTAINER_INFO, VERSION,
+        LAST_MODIFIED_TIME, CONTAINER_TABLE, ACCOUNT_ID);
     updateSql = String.format("update %s set %s = ?, %s = ?, %s = now(3) where %s = ? AND %s = ? ", CONTAINER_TABLE,
         CONTAINER_INFO, VERSION, LAST_MODIFIED_TIME, ACCOUNT_ID, CONTAINER_ID);
   }
