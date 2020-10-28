@@ -19,6 +19,9 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 
+/**
+ * Utility class to help with blob compaction.
+ */
 public class AzureCompactionUtil {
   /**
    * Permanently delete the specified blobs in Azure storage.

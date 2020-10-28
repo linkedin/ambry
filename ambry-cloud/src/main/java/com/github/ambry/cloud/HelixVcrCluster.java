@@ -26,9 +26,9 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -191,8 +191,8 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   }
 
   @Override
-  public List<? extends PartitionId> getAssignedPartitionIds() {
-    return new LinkedList<>(assignedPartitionIds);
+  public Collection<? extends PartitionId> getAssignedPartitionIds() {
+    return Collections.unmodifiableCollection(assignedPartitionIds);
   }
 
   @Override

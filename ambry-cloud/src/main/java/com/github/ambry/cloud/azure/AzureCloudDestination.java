@@ -494,7 +494,7 @@ class AzureCloudDestination implements CloudDestination {
 
   @Override
   public void deprecateContainers(Collection<Container> deletedContainers) throws CloudStorageException {
-    //TODO need to set correct partition class for video cluster in call to getAllPartitionIds.
+    //TODO need to account for all possible partition classes in call to getAllPartitionIds.
     azureContainerCompactor.deprecateContainers(deletedContainers,
         clusterMap.getAllPartitionIds(null).stream().map(PartitionId::toPathString).collect(Collectors.toSet()));
   }

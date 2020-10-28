@@ -33,7 +33,7 @@ public class VcrMetrics {
   // Compaction metrics
   // Rate of blob compaction for VCR instance
   public final Meter blobCompactionRate;
-  public final Meter deprecatedContainerCompactionRate;
+  public final Meter deprecatedContainerBlobCompactionRate;
   public final Counter compactionFailureCount;
   public final Counter compactionShutdownTimeoutCount;
   // Cache counters
@@ -67,8 +67,8 @@ public class VcrMetrics {
     retryCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryCount"));
     retryWaitTimeMsec = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryWaitTimeMsec"));
     blobCompactionRate = registry.meter(MetricRegistry.name(CloudStorageCompactor.class, "BlobCompactionRate"));
-    deprecatedContainerCompactionRate =
-        registry.meter(MetricRegistry.name(CloudContainerCompactor.class, "DeprecatedContainerCompactionRate"));
+    deprecatedContainerBlobCompactionRate =
+        registry.meter(MetricRegistry.name(CloudContainerCompactor.class, "DeprecatedContainerBlobCompactionRate"));
     compactionFailureCount =
         registry.counter(MetricRegistry.name(CloudStorageCompactor.class, "CompactionFailureCount"));
     compactionShutdownTimeoutCount =

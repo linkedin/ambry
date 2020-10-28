@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.PartitionId;
+import java.util.Collection;
 import java.util.List;
 
 
@@ -23,9 +24,9 @@ import java.util.List;
 public interface CloudContainerCompactor {
   /**
    * Compact deprecated containers from partitions assigned to this vcr node.
-   * @param assignedPartitions {@link List} of {@link PartitionId}s assigned to this node.
+   * @param assignedPartitions {@link Collection} of {@link PartitionId}s assigned to this node.
    */
-  void compactAssignedDeprecatedContainers(List<? extends PartitionId> assignedPartitions);
+  void compactAssignedDeprecatedContainers(Collection<? extends PartitionId> assignedPartitions);
 
   /**
    * Shutdown the compactor.

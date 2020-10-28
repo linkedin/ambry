@@ -32,7 +32,6 @@ public class CosmosContainerDeletionEntry {
   static final String CONTAINER_DELETE_TRIGGER_TIME_KEY = "deleteTriggerTimestamp";
   static final String DELETED_KEY = "deleted";
   static final String DELETE_PENDING_PARTITIONS_KEY = "deletePendingPartitions";
-  private static final String ID_KEY = "id";
   private static final String CONTAINER_ID_ACCOUNT_ID_DELIM = "_";
 
   private static short JSON_VERSION_1 = 1;

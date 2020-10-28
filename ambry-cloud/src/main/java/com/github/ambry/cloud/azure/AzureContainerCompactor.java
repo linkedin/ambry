@@ -79,7 +79,7 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
   /**
    * Update newly deprecated containers from {@code deprecatedContainers} to CosmosDb since last checkpoint.
    * This method is one of the two entry points in {@link AzureContainerCompactor} along with
-   * {@link AzureContainerCompactor#compactAssignedDeprecatedContainers(List)}.
+   * {@link AzureContainerCompactor#compactAssignedDeprecatedContainers(Collection)}.
    * @param deprecatedContainers {@link Collection} of deprecated {@link Container}s.
    * @param partitionIds list of partition ids from where the containers have to be removed.
    * @throws CloudStorageException in case of any error.
@@ -107,9 +107,10 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
    * Compact blobs of the deprecated container from cloud. This method is one of the two entry points in the
    * {@link AzureContainerCompactor} class along with {@link AzureContainerCompactor#deprecateContainers(Collection, Collection)}.
    * Note that this method is not thread safe as it is expected to run in a single thread.
+   * @param assignedPartitions the {@link Collection} of {@link PartitionId}s assigned to this node.
    */
   @Override
-  public void compactAssignedDeprecatedContainers(List<? extends PartitionId> assignedPartitions) {
+  public void compactAssignedDeprecatedContainers(Collection<? extends PartitionId> assignedPartitions) {
     try {
       SortedSet<CosmosContainerDeletionEntry> containerDeletionEntrySet =
           fetchContainerDeletionEntries(assignedPartitions);
@@ -220,7 +221,7 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
       totalPurged += requestAgent.doWithRetries(
           () -> AzureCompactionUtil.purgeBlobs(blobs, azureBlobDataAccessor, azureMetrics, cosmosDataAccessor),
           "PurgeBlobs", partitionPath);
-      vcrMetrics.deprecatedContainerCompactionRate.mark(blobs.size());
+      vcrMetrics.deprecatedContainerBlobCompactionRate.mark(blobs.size());
     }
     return totalPurged;
   }
@@ -254,10 +255,10 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
    * assigned to current node.
    */
   private SortedSet<CosmosContainerDeletionEntry> fetchContainerDeletionEntries(
-      List<? extends PartitionId> assignedPartitions) throws CloudStorageException {
+      Collection<? extends PartitionId> assignedPartitions) throws CloudStorageException {
     Set<CosmosContainerDeletionEntry> containerDeletionEntrySet =
         requestAgent.doWithRetries(() -> cosmosDataAccessor.getDeprecatedContainers(containerDeletionQueryBatchSize),
-            "GetDeprectedContainers", null);
+            "GetDeprecatedContainers", null);
     Set<CosmosContainerDeletionEntry> assignedPartitionContainerDeletionEntries = new HashSet<>();
     Set<String> assignedPartitionSet =
         assignedPartitions.stream().map(PartitionId::toPathString).collect(Collectors.toSet());

@@ -24,6 +24,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -90,8 +91,8 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
   }
 
   @Override
-  public List<? extends PartitionId> getAssignedPartitionIds() {
-    return new ArrayList<>(assignedPartitionIds);
+  public Collection<? extends PartitionId> getAssignedPartitionIds() {
+    return Collections.unmodifiableCollection(assignedPartitionIds);
   }
 
   @Override

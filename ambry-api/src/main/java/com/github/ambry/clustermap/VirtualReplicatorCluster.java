@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import java.util.Collection;
 import java.util.List;
 
 
@@ -41,9 +42,9 @@ public interface VirtualReplicatorCluster extends AutoCloseable {
 
   /**
    * Gets all {@link PartitionId}s assigned to current node.
-   * @return list of PartitionId
+   * @return {@link Collection} of PartitionId
    */
-  List<? extends PartitionId> getAssignedPartitionIds();
+  Collection<? extends PartitionId> getAssignedPartitionIds();
 
   /**
    * Check is a partition is assigned to current node.

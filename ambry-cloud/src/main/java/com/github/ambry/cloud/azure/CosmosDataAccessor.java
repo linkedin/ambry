@@ -70,10 +70,13 @@ public class CosmosDataAccessor {
   private static final String START_TIME_PARAM = "@startTime";
   private static final String END_TIME_PARAM = "@endTime";
   private static final String LIMIT_PARAM = "@limit";
+  private static final String ACCOUNT_ID_PARAM = "@accountId";
+  private static final String CONTAINER_ID_PARAM = "@containerId";
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
   private static final String CONTAINER_BLOBS_QUERY =
-      "SELECT TOP %d * FROM c WHERE c.accountId=%d and c.containerId=%d";
+      "SELECT TOP %d " + LIMIT_PARAM + " FROM c WHERE c.accountId=" + ACCOUNT_ID_PARAM + " and c.containerId="
+          + CONTAINER_ID_PARAM;
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
   private static final String DEPRECATED_CONTAINERS_QUERY =
       "SELECT TOP %d * from c WHERE c.deleted=false order by c.deleteTriggerTimestamp";
@@ -440,7 +443,9 @@ public class CosmosDataAccessor {
   List<CloudBlobMetadata> getContainerBlobs(String partitionPath, short accountId, short containerId, int queryLimit)
       throws DocumentClientException {
     String query = String.format(CONTAINER_BLOBS_QUERY, accountId, containerId);
-    SqlQuerySpec querySpec = new SqlQuerySpec(query);
+    SqlQuerySpec querySpec = new SqlQuerySpec(query,
+        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, queryLimit),
+            new SqlParameter(CONTAINER_ID_PARAM, containerId), new SqlParameter(ACCOUNT_ID_PARAM, accountId)));
     FeedOptions feedOptions = new FeedOptions();
     feedOptions.setMaxItemCount(queryLimit);
     feedOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);

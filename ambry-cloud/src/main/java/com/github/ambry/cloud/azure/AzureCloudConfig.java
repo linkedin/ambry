@@ -215,6 +215,6 @@ public class AzureCloudConfig {
     containerCompactionAbsPurgeLimit =
         verifiableProperties.getInt(CONTAINER_COMPACTION_ABS_PURGE_LIMIT, DEFAULT_CONTAINER_COMPACTION_ABS_PURGE_LIMIT);
     containerCompactionCosmosQueryLimit = verifiableProperties.getInt(CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT,
-        DEFAULT_COSMOS_CONTAINER_DELETION_BATCH_SIZE);
+        DEFAULT_CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT);
   }
 }

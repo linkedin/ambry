@@ -78,8 +78,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudStorageCompactor =
         cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
             partitionToPartitionInfo.keySet(), vcrMetrics) : null;
-    this.cloudContainerCompactor =
-        cloudConfig.cloudContainerCompactionEnabled ? cloudDestination.getContainerCompactor() : null;
+    this.cloudContainerCompactor = cloudDestination.getContainerCompactor();
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     // We need a datacenter to replicate from, which should be specified in the cloud config.
     if (cloudConfig.vcrSourceDatacenters.isEmpty()) {
@@ -244,7 +243,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (cloudStorageCompactor != null) {
       cloudStorageCompactor.shutdown();
     }
-    if(cloudContainerCompactor != null) {
+    if (cloudContainerCompactor != null) {
       cloudContainerCompactor.shutdown();
     }
     super.shutdown();

@@ -207,7 +207,7 @@ public class CloudConfig {
    * Whether deprecated container compaction is enabled.
    */
   @Config(CLOUD_CONTAINER_COMPACTION_ENABLED)
-  @Default("true")
+  @Default("false")
   public final boolean cloudContainerCompactionEnabled;
 
   /**
@@ -398,7 +398,7 @@ public class CloudConfig {
     cloudContainerCompactionIntervalHours = verifiableProperties.getInt(CLOUD_CONTAINER_COMPACTION_INTERVAL_HOURS, 24);
     cloudBlobCompactionStartupDelaySecs = verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_STARTUP_DELAY_SECS, 600);
     cloudContainerCompactionStartupDelaySecs =
-        verifiableProperties.getInt(CLOUD_CONTAINER_COMPACTION_STARTUP_DELAY_SECS, 600);
+        verifiableProperties.getIntInRange(CLOUD_CONTAINER_COMPACTION_STARTUP_DELAY_SECS, 600, 0, 3600);
     cloudBlobCompactionQueryLimit =
         verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_QUERY_LIMIT, DEFAULT_COMPACTION_QUERY_LIMIT);
     cloudBlobCompactionShutdownTimeoutSecs =
