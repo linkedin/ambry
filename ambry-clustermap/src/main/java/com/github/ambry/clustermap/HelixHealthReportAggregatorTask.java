@@ -134,20 +134,20 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
             String.format("%s%s%s", AGGREGATED_REPORT_PREFIX, healthReportName, AGGREGATED_MONTHLY_REPORT_SUFFIX);
         path = String.format("/%s", resultId);
         Stat stat = new Stat();
-        ZNRecord monthBaseReportZNRecord = manager.getHelixPropertyStore().get(path, stat, AccessOption.PERSISTENT);
+        ZNRecord monthlyReportZNRecord = manager.getHelixPropertyStore().get(path, stat, AccessOption.PERSISTENT);
         String currentMonthValue =
             LocalDateTime.ofEpochSecond(time.seconds(), 0, zoneOffset).format(TIMESTAMP_FORMATTER);
-        if (monthBaseReportZNRecord == null || !currentMonthValue.equals(
-            monthBaseReportZNRecord.getSimpleField(MONTH_NAME))) {
-          monthBaseReportZNRecord = new ZNRecord(resultId);
-          monthBaseReportZNRecord.setSimpleField(MONTH_NAME, currentMonthValue);
-          monthBaseReportZNRecord.setSimpleField(RAW_VALID_SIZE_FIELD_NAME,
-              mapper.writeValueAsString(results.getFirst()));
-          monthBaseReportZNRecord.setSimpleField(VALID_SIZE_FIELD_NAME, mapper.writeValueAsString(results.getSecond()));
-          monthBaseReportZNRecord.setSimpleField(TIMESTAMP_FIELD_NAME, String.valueOf(time.milliseconds()));
-          monthBaseReportZNRecord.setListField(ERROR_OCCURRED_INSTANCES_FIELD_NAME,
+        if (monthlyReportZNRecord == null || !currentMonthValue.equals(
+            monthlyReportZNRecord.getSimpleField(MONTH_NAME))) {
+          monthlyReportZNRecord = new ZNRecord(resultId);
+          monthlyReportZNRecord.setSimpleField(MONTH_NAME, currentMonthValue);
+          monthlyReportZNRecord.setSimpleField(RAW_VALID_SIZE_FIELD_NAME,
+              znRecord.getSimpleField(RAW_VALID_SIZE_FIELD_NAME));
+          monthlyReportZNRecord.setSimpleField(VALID_SIZE_FIELD_NAME, znRecord.getSimpleField(VALID_SIZE_FIELD_NAME));
+          monthlyReportZNRecord.setSimpleField(TIMESTAMP_FIELD_NAME, String.valueOf(time.milliseconds()));
+          monthlyReportZNRecord.setListField(ERROR_OCCURRED_INSTANCES_FIELD_NAME,
               clusterAggregator.getExceptionOccurredInstances(statsReportType));
-          manager.getHelixPropertyStore().set(path, monthBaseReportZNRecord, AccessOption.PERSISTENT);
+          manager.getHelixPropertyStore().set(path, monthlyReportZNRecord, AccessOption.PERSISTENT);
         }
       }
       return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");

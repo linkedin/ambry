@@ -31,6 +31,8 @@ public class ClusterMapConfig {
   public static final String AMBRY_STATE_MODEL_DEF = "AmbryLeaderStandby";
   public static final String OLD_STATE_MODEL_DEF = "LeaderStandby";
   public static final String DEFAULT_STATE_MODEL_DEF = AMBRY_STATE_MODEL_DEF;
+  public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
+      "clustermap.enable.aggregated.monthly.account.report";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 
   /**
@@ -296,8 +298,6 @@ public class ClusterMapConfig {
   @Config("clustermap.retry.disable.partition.completion.backoff.ms")
   public final int clustermapRetryDisablePartitionCompletionBackoffMs;
 
-  public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
-      "clustermap.enable.aggregated.monthly.account.report";
   /**
    * True to enable aggregation task to generate a base account report for each month.
    */

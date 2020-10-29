@@ -56,7 +56,7 @@ import org.junit.runners.Parameterized;
  */
 @RunWith(Parameterized.class)
 public class HelixHealthReportAggregationTaskTest {
-  private static final String CLUSTER_NAME = "Ambry-prod";
+  private static final String CLUSTER_NAME = "Ambry-test";
   private static final String INSTANCE_NAME = "helix.ambry.com";
   private static final long RELEVANT_PERIOD_IN_MINUTES = 60;
   private static final String HEALTH_REPORT_NAME_ACCOUNT = "AccountReport";
@@ -93,7 +93,7 @@ public class HelixHealthReportAggregationTaskTest {
         zkInfo = new TestUtils.ZkInfo(tempDirPath, "DC1", (byte) 0, zkPort, true);
         break;
       } catch (Exception e) {
-        if (e instanceof BindException || e.getCause() instanceof BindException) {
+        if (e.getCause() instanceof BindException) {
           System.out.println("Port " + zkPort + " already in use, try " + (zkPort + 1) + " instead");
           zkPort++;
           numRetries++;
@@ -102,12 +102,13 @@ public class HelixHealthReportAggregationTaskTest {
         }
       }
     }
-    String zkAddr = "localhost:" + String.valueOf(zkInfo.getPort());
+    String zkAddr = "localhost:" + zkInfo.getPort();
 
     mockHelixAdmin = new MockHelixAdminFactory().getHelixAdmin(zkAddr);
     mockHelixManager =
         new MockHelixManager(INSTANCE_NAME, InstanceType.PARTICIPANT, zkAddr, CLUSTER_NAME, mockHelixAdmin, null, null);
     mockTime = new MockTime(SystemTime.getInstance().milliseconds());
+    clusterMapConfig = makeClusterMapConfig();
   }
 
   @After
@@ -140,7 +141,6 @@ public class HelixHealthReportAggregationTaskTest {
           type == StatsReportType.ACCOUNT_REPORT ? HEALTH_REPORT_NAME_ACCOUNT : HEALTH_REPORT_NAME_PARTITION;
       String statsFieldName =
           type == StatsReportType.ACCOUNT_REPORT ? STATS_FIELD_NAME_ACCOUNT : STATS_FIELD_NAME_PARTITION;
-      clusterMapConfig = makeClusterMapConfig();
       task = new HelixHealthReportAggregatorTask(mockHelixManager, RELEVANT_PERIOD_IN_MINUTES, healthReportName,
           statsFieldName, type, null, clusterMapConfig, mockTime);
       task.run();
@@ -175,7 +175,6 @@ public class HelixHealthReportAggregationTaskTest {
     Assume.assumeTrue(enableAggregatedMonthlyAccountReport);
     initializeNodeReports(StatsReportType.ACCOUNT_REPORT, 3, 1000);
 
-    clusterMapConfig = makeClusterMapConfig();
     task = new HelixHealthReportAggregatorTask(mockHelixManager, RELEVANT_PERIOD_IN_MINUTES, HEALTH_REPORT_NAME_ACCOUNT,
         STATS_FIELD_NAME_ACCOUNT, StatsReportType.ACCOUNT_REPORT, null, clusterMapConfig, mockTime);
     task.run();
