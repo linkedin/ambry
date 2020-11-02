@@ -160,6 +160,14 @@ class BlobStoreCompactor {
   }
 
   /**
+   * Return the {@link #tgtMetrics}. Only used in tests.
+   * @return the {@link #tgtMetrics}.
+   */
+  StoreMetrics getTgtMetrics() {
+    return tgtMetrics;
+  }
+
+  /**
    * Closes the compactor and waits for {@code waitTimeSecs} for the close to complete.
    * @param waitTimeSecs the number of seconds to wait for close to complete.
    * @throws InterruptedException if the wait for close was interrupted.
@@ -631,6 +639,10 @@ class BlobStoreCompactor {
         logger.trace("{} in segment with start offset {} in {} is a duplicate because it has already been copied",
             copyCandidate, indexSegmentStartOffset, storeId);
         isDuplicate = true;
+        if (!(recoveryStartToken != null && recoveryStartToken.getOffset().equals(indexSegmentStartOffset))) {
+          // This is not for recovery purpose, then it must be due to always checking target index duplicate.
+          tgtMetrics.compactionTargetIndexDuplicateOnNonRecoveryCount.inc();
+        }
       } else {
         // not a duplicate
         logger.trace("{} in index segment with start offset {} in {} is not a duplicate", copyCandidate,

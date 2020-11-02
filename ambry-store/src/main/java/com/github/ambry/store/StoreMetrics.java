@@ -85,6 +85,7 @@ public class StoreMetrics {
   public final Counter compactionBundleReadBufferNotFitIn;
   public final Counter compactionBundleReadBufferUsed;
   public final Counter compactionBundleReadBufferIoCount;
+  public final Counter compactionTargetIndexDuplicateOnNonRecoveryCount;
 
   // BlobStoreStats metrics
   public final Counter blobStoreStatsIndexScannerErrorCount;
@@ -115,8 +116,7 @@ public class StoreMetrics {
         registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindEntriesSinceResponse"));
     findMissingKeysResponse =
         registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindMissingKeyResponse"));
-    findKeyResponse =
-        registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindKeyResponse"));
+    findKeyResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindKeyResponse"));
     isKeyDeletedResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "IsKeyDeletedResponse"));
     storeStartTime = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreStartTime"));
     storeShutdownTimeInMs = registry.histogram(MetricRegistry.name(BlobStore.class, name + "StoreShutdownTimeInMs"));
@@ -183,10 +183,12 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferUsed"));
     compactionBundleReadBufferIoCount =
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferIoCount"));
+    compactionTargetIndexDuplicateOnNonRecoveryCount = registry.counter(
+        MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionTargetIndexDuplicateOnNonRecoveryCount"));
     blobStoreStatsIndexScannerErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsIndexScannerErrorCount"));
-    blobStoreRecoverCompactionPolicySwitchInfoErrorCount =
-        registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreRecoverCompactionPolicySwitchInfoErrorCount"));
+    blobStoreRecoverCompactionPolicySwitchInfoErrorCount = registry.counter(
+        MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreRecoverCompactionPolicySwitchInfoErrorCount"));
     blobStoreStatsQueueProcessorErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsQueueProcessorErrorCount"));
     statsOnDemandScanTotalTimeMs =
