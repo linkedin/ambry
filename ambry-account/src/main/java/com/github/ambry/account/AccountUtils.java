@@ -80,16 +80,14 @@ public class AccountUtils {
    * Compares and logs differences (if any) in Accounts.
    * @param accountsInPrimary accounts in primary collection.
    * @param accountsInSecondary accounts in secondary collection.
-   * @return true if accounts and their containers are same in both collections.
+   * @return count of accounts mismatching.
    */
-  public static boolean compareAccounts(Collection<Account> accountsInPrimary,
-      Collection<Account> accountsInSecondary) {
-    boolean isSame = true;
-    Map<Short, Account> secondaryAccountMap = new HashMap<>();
-    accountsInSecondary.forEach(account -> secondaryAccountMap.put(account.getId(), account));
+  public static int compareAccounts(Collection<Account> accountsInPrimary, Collection<Account> accountsInSecondary) {
+    Map<String, Account> secondaryAccountMap = new HashMap<>();
+    accountsInSecondary.forEach(account -> secondaryAccountMap.put(account.getName(), account));
 
     Set<Account> accountsMissingInSecondary = accountsInPrimary.stream()
-        .filter(account -> secondaryAccountMap.get(account.getId()) == null)
+        .filter(account -> !secondaryAccountMap.containsKey(account.getName()))
         .collect(Collectors.toSet());
 
     Set<Account> accountsDifferentInSecondary = new HashSet<>(accountsInPrimary);
@@ -97,7 +95,6 @@ public class AccountUtils {
     accountsDifferentInSecondary.removeAll(accountsMissingInSecondary);
 
     if (!accountsMissingInSecondary.isEmpty() || !accountsDifferentInSecondary.isEmpty()) {
-      isSame = false;
 
       StringBuilder accountsInfo = new StringBuilder();
 
@@ -119,17 +116,17 @@ public class AccountUtils {
               .append(", primary = ")
               .append(AccountCollectionSerde.accountToJsonNoContainers(account).toString())
               .append(", secondary = ")
-              .append(AccountCollectionSerde.accountToJsonNoContainers(secondaryAccountMap.get(account.getId()))
+              .append(AccountCollectionSerde.accountToJsonNoContainers(secondaryAccountMap.get(account.getName()))
                   .toString());
 
           Set<Container> containersMissingInSecondary = account.getAllContainers()
               .stream()
-              .filter(
-                  container -> secondaryAccountMap.get(account.getId()).getContainerByName(container.getName()) == null)
+              .filter(container -> secondaryAccountMap.get(account.getName()).getContainerByName(container.getName())
+                  == null)
               .collect(Collectors.toSet());
 
           Set<Container> containersDifferentInSecondary = new HashSet<>(account.getAllContainers());
-          containersDifferentInSecondary.removeAll(secondaryAccountMap.get(account.getId()).getAllContainers());
+          containersDifferentInSecondary.removeAll(secondaryAccountMap.get(account.getName()).getAllContainers());
           containersDifferentInSecondary.removeAll(containersMissingInSecondary);
 
           if (!containersMissingInSecondary.isEmpty()) {
@@ -148,7 +145,7 @@ public class AccountUtils {
                   .append(", primary = ")
                   .append(container.toJson().toString())
                   .append(", secondary = ")
-                  .append(secondaryAccountMap.get(account.getId())
+                  .append(secondaryAccountMap.get(account.getName())
                       .getContainerByName(container.getName())
                       .toJson()
                       .toString())
@@ -163,7 +160,7 @@ public class AccountUtils {
         logger.warn("Accounts mismatch in primary and secondary = {}", accountsInfo.toString());
       }
     }
-    return isSame;
+    return accountsMissingInSecondary.size() + accountsDifferentInSecondary.size();
   }
 
   /**

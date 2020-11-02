@@ -22,6 +22,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,20 +41,20 @@ public class CompositeAccountService implements AccountService {
   private static final String ACCOUNT_DATA_CONSISTENCY_CHECKER_PREFIX = "account-data-consistency-checker";
   private final AccountService primaryAccountService;
   private final AccountService secondaryAccountService;
-  private final AccountServiceMetrics accountServiceMetrics;
   private final CompositeAccountServiceConfig config;
   private final ScheduledExecutorService scheduler;
   private static final Random random = new Random();
+  private AtomicInteger accountsMismatchCount = new AtomicInteger(0);
 
   public CompositeAccountService(AccountService primaryAccountService, AccountService secondaryAccountService,
       AccountServiceMetrics accountServiceMetrics, CompositeAccountServiceConfig config) {
     this.primaryAccountService = primaryAccountService;
     this.secondaryAccountService = secondaryAccountService;
-    this.accountServiceMetrics = accountServiceMetrics;
     this.config = config;
     scheduler = Utils.newScheduler(1, ACCOUNT_DATA_CONSISTENCY_CHECKER_PREFIX, false);
     scheduler.scheduleAtFixedRate(this::compareAccountMetadata, config.consistencyCheckerIntervalMinutes,
         config.consistencyCheckerIntervalMinutes, TimeUnit.MINUTES);
+    accountServiceMetrics.trackAccountDataInconsistency(accountsMismatchCount);
   }
 
   @Override
@@ -63,7 +64,7 @@ public class CompositeAccountService implements AccountService {
       Account secondaryResult = secondaryAccountService.getAccountById(accountId);
       if (primaryResult != null && !primaryResult.equals(secondaryResult)) {
         logger.warn("Inconsistency detected between primary and secondary for accountId ={}", accountId);
-        accountServiceMetrics.accountDataInconsistencyCount.inc();
+        accountsMismatchCount.getAndIncrement();
       }
     }
     return primaryResult;
@@ -76,7 +77,7 @@ public class CompositeAccountService implements AccountService {
       Account secondaryResult = secondaryAccountService.getAccountByName(accountName);
       if (primaryResult != null && !primaryResult.equals(secondaryResult)) {
         logger.warn("Inconsistency detected between primary and secondary for accountName ={}", accountName);
-        accountServiceMetrics.accountDataInconsistencyCount.inc();
+        accountsMismatchCount.getAndIncrement();
       }
     }
     return primaryResult;
@@ -120,10 +121,10 @@ public class CompositeAccountService implements AccountService {
         if (primaryResult != null && !primaryResult.equals(secondaryResult)) {
           logger.warn("Inconsistency detected between primary and secondary for accountName ={}, containerName = {}",
               accountName, containerName);
-          accountServiceMetrics.accountDataInconsistencyCount.inc();
+          accountsMismatchCount.getAndIncrement();
         }
       } catch (Exception e) {
-        accountServiceMetrics.accountDataInconsistencyCount.inc();
+        accountsMismatchCount.getAndIncrement();
         logger.error("get container failed for secondary for accountName={}, containerName={}", accountName,
             containerName, e);
       }
@@ -140,7 +141,7 @@ public class CompositeAccountService implements AccountService {
         logger.warn(
             "Inconsistency detected between primary and secondary for containers with status ={}, primary ={}, secondary = {}",
             containerStatus, primaryResult, secondaryResult);
-        accountServiceMetrics.accountDataInconsistencyCount.inc();
+        accountsMismatchCount.getAndIncrement();
       }
     }
     return primaryResult;
@@ -171,10 +172,8 @@ public class CompositeAccountService implements AccountService {
    * Compares and logs differences (if any) in Account metadata stored in primary and secondary sources
    */
   void compareAccountMetadata() {
-    if (!AccountUtils.compareAccounts(primaryAccountService.getAllAccounts(),
-        secondaryAccountService.getAllAccounts())) {
-      accountServiceMetrics.accountDataInconsistencyCount.inc();
-    }
+    accountsMismatchCount.set(
+        AccountUtils.compareAccounts(primaryAccountService.getAllAccounts(), secondaryAccountService.getAllAccounts()));
   }
 
   /**

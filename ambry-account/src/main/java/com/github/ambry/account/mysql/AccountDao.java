@@ -61,12 +61,14 @@ public class AccountDao {
    */
   public void addAccount(Account account) throws SQLException {
     try {
+      long startTimeMs = System.currentTimeMillis();
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
       insertStatement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
       insertStatement.setInt(2, account.getSnapshotVersion());
       insertStatement.executeUpdate();
+      dataAccessor.onSuccess(MySqlDataAccessor.OperationType.Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e);
+      dataAccessor.onException(e, MySqlDataAccessor.OperationType.Write);
       throw e;
     }
   }
@@ -78,13 +80,16 @@ public class AccountDao {
    * @throws SQLException
    */
   public List<Account> getNewAccounts(long updatedSince) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
     PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql);
     getSinceStatement.setTimestamp(1, sinceTime);
     try (ResultSet rs = getSinceStatement.executeQuery()) {
-      return convertResultSet(rs);
+      List<Account> accounts = convertResultSet(rs);
+      dataAccessor.onSuccess(MySqlDataAccessor.OperationType.Read, System.currentTimeMillis() - startTimeMs);
+      return accounts;
     } catch (SQLException e) {
-      dataAccessor.onException(e);
+      dataAccessor.onException(e, MySqlDataAccessor.OperationType.Read);
       throw e;
     }
   }
@@ -96,13 +101,15 @@ public class AccountDao {
    */
   public void updateAccount(Account account) throws SQLException {
     try {
+      long startTimeMs = System.currentTimeMillis();
       PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
       updateStatement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
       updateStatement.setInt(2, account.getSnapshotVersion());
       updateStatement.setInt(3, account.getId());
       updateStatement.executeUpdate();
+      dataAccessor.onSuccess(MySqlDataAccessor.OperationType.Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e);
+      dataAccessor.onException(e, MySqlDataAccessor.OperationType.Write);
       throw e;
     }
   }

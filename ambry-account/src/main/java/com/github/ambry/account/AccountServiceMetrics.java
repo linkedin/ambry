@@ -14,8 +14,10 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
@@ -47,10 +49,15 @@ public class AccountServiceMetrics {
   public final Counter accountUpdatesToAmbryServerErrorCount;
   public final Counter accountDeletesToAmbryServerErrorCount;
   public final Counter accountFetchFromAmbryServerErrorCount;
-  public final Counter accountDataInconsistencyCount;
   public final Counter accountUpdatesToStoreErrorCount;
 
+  //Gauge
+  Gauge<Integer> accountDataInconsistencyCount;
+
+  private final MetricRegistry metricRegistry;
+
   public AccountServiceMetrics(MetricRegistry metricRegistry) {
+    this.metricRegistry = metricRegistry;
     // Histogram
     startupTimeInMs = metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "StartupTimeInMs"));
     updateAccountTimeInMs =
@@ -91,7 +98,15 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountDeletesToAmbryServerErrorCount"));
     accountFetchFromAmbryServerErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryServerErrorCount"));
-    accountDataInconsistencyCount =
-        metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, "AccountDataInconsistencyCount"));
+  }
+
+  /**
+   * Tracks the number of accounts different between primary and secondary {@link AccountService}s
+   * @param accountsMismatchCount number of Accounts different between primary and secondary {@link AccountService}s
+   */
+  void trackAccountDataInconsistency(AtomicInteger accountsMismatchCount) {
+    accountDataInconsistencyCount = accountsMismatchCount::get;
+    metricRegistry.register(MetricRegistry.name(CompositeAccountService.class, "AccountDataInconsistencyCount"),
+        accountDataInconsistencyCount);
   }
 }

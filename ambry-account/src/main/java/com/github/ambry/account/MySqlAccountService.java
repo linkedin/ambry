@@ -140,9 +140,11 @@ public class MySqlAccountService extends AbstractAccountService {
       // Find last modified time of Accounts and containers in cache.
       long lastModifiedTime = accountInfoMapRef.get().getLastModifiedTime();
 
+      long startTimeMs = System.currentTimeMillis();
       // Fetch added/modified accounts and containers from MySql database since LMT
       Collection<Account> updatedAccountsInDB = mySqlAccountStore.getNewAccounts(lastModifiedTime);
       Collection<Container> updatedContainersInDB = mySqlAccountStore.getNewContainers(lastModifiedTime);
+      accountServiceMetrics.fetchRemoteAccountTimeInMs.update(System.currentTimeMillis() - startTimeMs);
 
       if (!updatedAccountsInDB.isEmpty() || !updatedContainersInDB.isEmpty()) {
         // Update cache with fetched accounts and containers
@@ -182,6 +184,7 @@ public class MySqlAccountService extends AbstractAccountService {
             SystemTime.getInstance().seconds());
       }
     } catch (SQLException e) {
+      accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
       logger.error("Fetching Accounts from MySql DB failed", e);
     }
   }
@@ -366,7 +369,7 @@ public class MySqlAccountService extends AbstractAccountService {
     }
 
     long timeForUpdate = System.currentTimeMillis() - startTimeMs;
-    logger.trace("Completed updating accounts into MySql DB, took time={} ms", timeForUpdate);
+    logger.trace("Completed updating accounts/containers in MySql DB, took time={} ms", timeForUpdate);
     accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
   }
 
@@ -377,6 +380,9 @@ public class MySqlAccountService extends AbstractAccountService {
    * @throws SQLException
    */
   private void updateContainersWithMySqlStore(short accountId, Collection<Container> containers) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    logger.trace("Start updating containers={} for accountId={} into MySql DB", containers, accountId);
+
     //check for account ID in in-memory cache
     AccountInfoMap accountInfoMap;
     Account accountInCache;
@@ -407,6 +413,10 @@ public class MySqlAccountService extends AbstractAccountService {
         }
       }
     }
+
+    long timeForUpdate = System.currentTimeMillis() - startTimeMs;
+    logger.trace("Completed updating accounts/containers in MySql DB, took time={} ms", timeForUpdate);
+    accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
   }
 
   /**
