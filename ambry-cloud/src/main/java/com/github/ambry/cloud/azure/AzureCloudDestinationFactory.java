@@ -22,7 +22,6 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
-import org.apache.commons.math3.ml.clustering.Cluster;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,7 +45,8 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
    * @param verifiableProperties properties containing configs.
    * @param metricRegistry metric registry.
    */
-  public AzureCloudDestinationFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap) {
+  public AzureCloudDestinationFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
+      ClusterMap clusterMap) {
     this.cloudConfig = new CloudConfig(verifiableProperties);
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
     this.clusterName = new ClusterMapConfig(verifiableProperties).clusterMapClusterName;

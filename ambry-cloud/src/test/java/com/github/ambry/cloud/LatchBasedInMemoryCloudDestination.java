@@ -332,7 +332,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   public CloudContainerCompactor getContainerCompactor() {
     return new CloudContainerCompactor() {
       @Override
-      public void compactAssignedDeprecatedContainers(List<? extends PartitionId> assignedPartitions) {
+      public void compactAssignedDeprecatedContainers(Collection<? extends PartitionId> assignedPartitions) {
       }
 
       @Override

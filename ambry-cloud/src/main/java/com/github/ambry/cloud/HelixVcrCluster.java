@@ -175,18 +175,19 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
    * @param engine the {@link StateMachineEngine} to register the task state model.
    */
   private void registerContainerDeletionSyncTask(StateMachineEngine engine) {
-
-    Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
-    taskFactoryMap.put(DeprecatedContainerCloudSyncTask.class.getSimpleName(), new TaskFactory() {
-      @Override
-      public Task createNewTask(TaskCallbackContext context) {
-        return new DeprecatedContainerCloudSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
-            cloudDestination);
+    if (cloudConfig.cloudContainerCompactionEnabled) {
+      Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
+      taskFactoryMap.put(DeprecatedContainerCloudSyncTask.class.getSimpleName(), new TaskFactory() {
+        @Override
+        public Task createNewTask(TaskCallbackContext context) {
+          return new DeprecatedContainerCloudSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
+              cloudDestination);
+        }
+      });
+      if (!taskFactoryMap.isEmpty()) {
+        engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
+            new TaskStateModelFactory(manager, taskFactoryMap));
       }
-    });
-    if (!taskFactoryMap.isEmpty()) {
-      engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
-          new TaskStateModelFactory(manager, taskFactoryMap));
     }
   }
 
