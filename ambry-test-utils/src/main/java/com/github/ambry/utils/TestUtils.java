@@ -13,8 +13,10 @@
  */
 package com.github.ambry.utils;
 
+import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.StatsWrapper;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -468,5 +470,46 @@ public class TestUtils {
       }
     }
     return new StatsSnapshot(totalSize, subMap);
+  }
+
+  /**
+   * Given a {@link List} of {@link StatsSnapshot}s and a timestamp generate a {@link StatsWrapper} that would have been
+   * produced by a node.
+   * @param storeSnapshots a {@link List} of store level {@link StatsSnapshot}s.
+   * @param timestamp the timestamp to be attached to the generated {@link StatsWrapper}
+   * @param type the type of stats report to generate on this node
+   * @return the generated node level {@link StatsWrapper}
+   */
+  public static StatsWrapper generateNodeStats(List<StatsSnapshot> storeSnapshots, long timestamp,
+      StatsReportType type) {
+    long total = 0;
+    int numbOfPartitions = storeSnapshots.size();
+    Map<String, StatsSnapshot> partitionMap = new HashMap<>();
+    Map<String, StatsSnapshot> partitionClassMap = new HashMap<>();
+    String[] PARTITION_CLASS = new String[]{"PartitionClass1", "PartitionClass2"};
+    for (int i = 0; i < numbOfPartitions; i++) {
+      String partitionIdStr = "Partition[" + i + "]";
+      StatsSnapshot partitionSnapshot = storeSnapshots.get(i);
+      partitionMap.put(partitionIdStr, partitionSnapshot);
+      total += partitionSnapshot.getValue();
+      if (type == StatsReportType.PARTITION_CLASS_REPORT) {
+        String partitionClassStr = PARTITION_CLASS[i % PARTITION_CLASS.length];
+        StatsSnapshot partitionClassSnapshot =
+            partitionClassMap.getOrDefault(partitionClassStr, new StatsSnapshot(0L, new HashMap<>()));
+        partitionClassSnapshot.setValue(partitionClassSnapshot.getValue() + partitionSnapshot.getValue());
+        partitionClassSnapshot.getSubMap().put(partitionIdStr, partitionSnapshot);
+        partitionClassMap.put(partitionClassStr, partitionClassSnapshot);
+      }
+    }
+    StatsSnapshot nodeSnapshot = null;
+    if (type == StatsReportType.ACCOUNT_REPORT) {
+      nodeSnapshot = new StatsSnapshot(total, partitionMap);
+    } else if (type == StatsReportType.PARTITION_CLASS_REPORT) {
+      nodeSnapshot = new StatsSnapshot(total, partitionClassMap);
+    }
+    StatsHeader header =
+        new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, timestamp, numbOfPartitions, numbOfPartitions,
+            Collections.emptyList());
+    return new StatsWrapper(header, nodeSnapshot);
   }
 }

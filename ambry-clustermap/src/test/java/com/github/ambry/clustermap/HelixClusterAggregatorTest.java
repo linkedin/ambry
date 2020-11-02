@@ -14,7 +14,6 @@
 
 package com.github.ambry.clustermap;
 
-import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
@@ -62,9 +61,9 @@ public class HelixClusterAggregatorTest {
       for (int i = 3; i < 6; i++) {
         storeSnapshots.add(TestUtils.generateStoreStats(i, 3, random, type));
       }
-      StatsWrapper nodeStats = generateNodeStats(storeSnapshots, DEFAULT_TIMESTAMP, type);
+      StatsWrapper nodeStats = TestUtils.generateNodeStats(storeSnapshots, DEFAULT_TIMESTAMP, type);
       String nodeStatsJSON = mapper.writeValueAsString(nodeStats);
-      StatsWrapper emptyNodeStats = generateNodeStats(Collections.emptyList(), DEFAULT_TIMESTAMP, type);
+      StatsWrapper emptyNodeStats = TestUtils.generateNodeStats(Collections.emptyList(), DEFAULT_TIMESTAMP, type);
       String emptyStatsJSON = mapper.writeValueAsString(emptyNodeStats);
 
       Map<String, String> instanceToStatsMap = new HashMap<>();
@@ -147,11 +146,11 @@ public class HelixClusterAggregatorTest {
           TestUtils.generateStoreStats(i, 3, new Random(seed), StatsReportType.PARTITION_CLASS_REPORT));
     }
     StatsWrapper nodeStatsWrapper1 =
-        generateNodeStats(storeSnapshots1, DEFAULT_TIMESTAMP, StatsReportType.PARTITION_CLASS_REPORT);
+        TestUtils.generateNodeStats(storeSnapshots1, DEFAULT_TIMESTAMP, StatsReportType.PARTITION_CLASS_REPORT);
     StatsWrapper nodeStatsWrapper2 =
-        generateNodeStats(storeSnapshots2, DEFAULT_TIMESTAMP, StatsReportType.PARTITION_CLASS_REPORT);
+        TestUtils.generateNodeStats(storeSnapshots2, DEFAULT_TIMESTAMP, StatsReportType.PARTITION_CLASS_REPORT);
     StatsWrapper nodeStatsWrapper2Copy =
-        generateNodeStats(storeSnapshots2Copy, DEFAULT_TIMESTAMP, StatsReportType.PARTITION_CLASS_REPORT);
+        TestUtils.generateNodeStats(storeSnapshots2Copy, DEFAULT_TIMESTAMP, StatsReportType.PARTITION_CLASS_REPORT);
     Map<String, String> instanceStatsMap = new LinkedHashMap<>();
     instanceStatsMap.put("Instance_1", mapper.writeValueAsString(nodeStatsWrapper1));
     instanceStatsMap.put("Instance_2", mapper.writeValueAsString(nodeStatsWrapper2));
@@ -189,10 +188,11 @@ public class HelixClusterAggregatorTest {
       upToDateStoreSnapshots.add(TestUtils.generateStoreStats(5, 3, new Random(seed), type));
       outdatedStoreSnapshots.add(TestUtils.generateStoreStats(6, 3, new Random(seed), type));
       StatsWrapper upToDateNodeStats =
-          generateNodeStats(upToDateStoreSnapshots, TimeUnit.MINUTES.toMillis(2 * RELEVANT_PERIOD_IN_MINUTES), type);
-      StatsWrapper outdatedNodeStats = generateNodeStats(outdatedStoreSnapshots, 0, type);
-      StatsWrapper emptyNodeStats =
-          generateNodeStats(Collections.emptyList(), TimeUnit.MINUTES.toMillis(2 * RELEVANT_PERIOD_IN_MINUTES), type);
+          TestUtils.generateNodeStats(upToDateStoreSnapshots, TimeUnit.MINUTES.toMillis(2 * RELEVANT_PERIOD_IN_MINUTES),
+              type);
+      StatsWrapper outdatedNodeStats = TestUtils.generateNodeStats(outdatedStoreSnapshots, 0, type);
+      StatsWrapper emptyNodeStats = TestUtils.generateNodeStats(Collections.emptyList(),
+          TimeUnit.MINUTES.toMillis(2 * RELEVANT_PERIOD_IN_MINUTES), type);
       Map<String, String> instanceToStatsMap = new LinkedHashMap<>();
       instanceToStatsMap.put("Instance_0", mapper.writeValueAsString(outdatedNodeStats));
       instanceToStatsMap.put("Instance_1", mapper.writeValueAsString(upToDateNodeStats));
@@ -246,10 +246,10 @@ public class HelixClusterAggregatorTest {
       greaterStoreSnapshots.add(TestUtils.generateStoreStats(6, 3, new Random(seed), type));
       mediumStoreSnapshots.add(TestUtils.generateStoreStats(5, 3, new Random(seed), type));
       smallerStoreSnapshots.add(TestUtils.generateStoreStats(5, 3, new Random(seed), type));
-      StatsWrapper greaterNodeStats = generateNodeStats(greaterStoreSnapshots, DEFAULT_TIMESTAMP, type);
-      StatsWrapper mediumNodeStats = generateNodeStats(mediumStoreSnapshots, DEFAULT_TIMESTAMP, type);
-      StatsWrapper smallerNodeStats = generateNodeStats(smallerStoreSnapshots, DEFAULT_TIMESTAMP, type);
-      StatsWrapper emptyNodeStats = generateNodeStats(Collections.emptyList(), DEFAULT_TIMESTAMP, type);
+      StatsWrapper greaterNodeStats = TestUtils.generateNodeStats(greaterStoreSnapshots, DEFAULT_TIMESTAMP, type);
+      StatsWrapper mediumNodeStats = TestUtils.generateNodeStats(mediumStoreSnapshots, DEFAULT_TIMESTAMP, type);
+      StatsWrapper smallerNodeStats = TestUtils.generateNodeStats(smallerStoreSnapshots, DEFAULT_TIMESTAMP, type);
+      StatsWrapper emptyNodeStats = TestUtils.generateNodeStats(Collections.emptyList(), DEFAULT_TIMESTAMP, type);
       Map<String, String> instanceToStatsMap = new LinkedHashMap<>();
       instanceToStatsMap.put("Instance_0", mapper.writeValueAsString(smallerNodeStats));
       instanceToStatsMap.put("Instance_1", mapper.writeValueAsString(greaterNodeStats));
@@ -301,7 +301,7 @@ public class HelixClusterAggregatorTest {
   public void testStatsAggregationWithAllEmptyNodes() throws IOException {
     int nodeCount = 3;
     for (StatsReportType type : EnumSet.of(StatsReportType.ACCOUNT_REPORT, StatsReportType.PARTITION_CLASS_REPORT)) {
-      StatsWrapper emptyNodeStats = generateNodeStats(Collections.emptyList(), DEFAULT_TIMESTAMP, type);
+      StatsWrapper emptyNodeStats = TestUtils.generateNodeStats(Collections.emptyList(), DEFAULT_TIMESTAMP, type);
       String emptyStatsJSON = mapper.writeValueAsString(emptyNodeStats);
       Map<String, String> instanceToStatsMap = new HashMap<>();
       for (int i = 0; i < nodeCount; i++) {
@@ -317,46 +317,6 @@ public class HelixClusterAggregatorTest {
       assertTrue("Mismatch in raw snapshot", expectedSnapshot.equals(rawSnapshot));
       assertTrue("Mismatch in valid snapshot", expectedSnapshot.equals(validSnapshot));
     }
-  }
-
-  /**
-   * Given a {@link List} of {@link StatsSnapshot}s and a timestamp generate a {@link StatsWrapper} that would have been
-   * produced by a node.
-   * @param storeSnapshots a {@link List} of store level {@link StatsSnapshot}s.
-   * @param timestamp the timestamp to be attached to the generated {@link StatsWrapper}
-   * @param type the type of stats report to generate on this node
-   * @return the generated node level {@link StatsWrapper}
-   */
-  private StatsWrapper generateNodeStats(List<StatsSnapshot> storeSnapshots, long timestamp, StatsReportType type) {
-    long total = 0;
-    int numbOfPartitions = storeSnapshots.size();
-    Map<String, StatsSnapshot> partitionMap = new HashMap<>();
-    Map<String, StatsSnapshot> partitionClassMap = new HashMap<>();
-    String[] PARTITION_CLASS = new String[]{"PartitionClass1", "PartitionClass2"};
-    for (int i = 0; i < numbOfPartitions; i++) {
-      String partitionIdStr = "Partition[" + i + "]";
-      StatsSnapshot partitionSnapshot = storeSnapshots.get(i);
-      partitionMap.put(partitionIdStr, partitionSnapshot);
-      total += partitionSnapshot.getValue();
-      if (type == StatsReportType.PARTITION_CLASS_REPORT) {
-        String partitionClassStr = PARTITION_CLASS[i % PARTITION_CLASS.length];
-        StatsSnapshot partitionClassSnapshot =
-            partitionClassMap.getOrDefault(partitionClassStr, new StatsSnapshot(0L, new HashMap<>()));
-        partitionClassSnapshot.setValue(partitionClassSnapshot.getValue() + partitionSnapshot.getValue());
-        partitionClassSnapshot.getSubMap().put(partitionIdStr, partitionSnapshot);
-        partitionClassMap.put(partitionClassStr, partitionClassSnapshot);
-      }
-    }
-    StatsSnapshot nodeSnapshot = null;
-    if (type == StatsReportType.ACCOUNT_REPORT) {
-      nodeSnapshot = new StatsSnapshot(total, partitionMap);
-    } else if (type == StatsReportType.PARTITION_CLASS_REPORT) {
-      nodeSnapshot = new StatsSnapshot(total, partitionClassMap);
-    }
-    StatsHeader header =
-        new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, timestamp, numbOfPartitions, numbOfPartitions,
-            Collections.emptyList());
-    return new StatsWrapper(header, nodeSnapshot);
   }
 
   /**
