@@ -67,21 +67,6 @@ public class AzureBlobDataAccessorTest {
   private long deletionTime = creationTime + 10000;
   private long expirationTime = Utils.Infinite_Time;
 
-  @Before
-  public void setup() throws Exception {
-
-    BlobServiceClient mockServiceClient = mock(BlobServiceClient.class);
-    mockBlockBlobClient = setupMockBlobClient(mockServiceClient);
-    mockBatchClient = mock(BlobBatchClient.class);
-
-    mockBlobExistence(false);
-
-    blobId = AzureTestUtils.generateBlobId();
-    AzureTestUtils.setConfigProperties(configProps);
-    azureMetrics = new AzureMetrics(new MetricRegistry());
-    dataAccessor = new AzureBlobDataAccessor(mockServiceClient, mockBatchClient, clusterName, azureMetrics);
-  }
-
   static BlockBlobClient setupMockBlobClient(BlobServiceClient mockServiceClient) {
     BlobContainerClient mockContainerClient = mock(BlobContainerClient.class);
     BlobClient mockBlobClient = mock(BlobClient.class);
@@ -96,8 +81,24 @@ public class AzureBlobDataAccessorTest {
     lenient().when(mockBlobProperties.getMetadata()).thenReturn(metadataMap);
     Response<BlobProperties> mockPropertiesResponse = mock(Response.class);
     lenient().when(mockPropertiesResponse.getValue()).thenReturn(mockBlobProperties);
-    lenient().when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenReturn(mockPropertiesResponse);
+    lenient().when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any()))
+        .thenReturn(mockPropertiesResponse);
     return mockBlockBlobClient;
+  }
+
+  @Before
+  public void setup() throws Exception {
+
+    BlobServiceClient mockServiceClient = mock(BlobServiceClient.class);
+    mockBlockBlobClient = setupMockBlobClient(mockServiceClient);
+    mockBatchClient = mock(BlobBatchClient.class);
+
+    mockBlobExistence(false);
+
+    blobId = AzureTestUtils.generateBlobId();
+    AzureTestUtils.setConfigProperties(configProps);
+    azureMetrics = new AzureMetrics(new MetricRegistry());
+    dataAccessor = new AzureBlobDataAccessor(mockServiceClient, mockBatchClient, clusterName, azureMetrics);
   }
 
   /**
@@ -253,6 +254,38 @@ public class AzureBlobDataAccessorTest {
     assertTrue("Expected delete to return true", dataAccessor.deleteFile("containerName", "fileName"));
     mockBlobExistence(false);
     assertFalse("Expected delete to return false", dataAccessor.deleteFile("containerName", "fileName"));
+  }
+
+  @Test
+  public void testStorageClientFactoriesConfigValidation() throws Exception {
+    Properties properties = new Properties();
+    AzureTestUtils.setConfigProperties(properties);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_FACTORY_CLASS,
+        ConnectionStringBasedStorageClientFactory.class.getCanonicalName());
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, "");
+    try {
+      AzureBlobDataAccessor azureBlobDataAccessor =
+          new AzureBlobDataAccessor(new CloudConfig(verifiableProperties), new AzureCloudConfig(verifiableProperties),
+              new AzureBlobLayoutStrategy("test"), azureMetrics);
+      fail("Creating azure blob data accessor with ConnectionStringBasedStorageClientFactory should throw exception"
+          + "without connection string config");
+    } catch (IllegalArgumentException iaEx) {
+    }
+
+    AzureTestUtils.setConfigProperties(properties);
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_FACTORY_CLASS,
+        ADAuthBasedStorageClientFactory.class.getCanonicalName());
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENTID, "");
+    verifiableProperties = new VerifiableProperties(properties);
+    try {
+      AzureBlobDataAccessor azureBlobDataAccessor =
+          new AzureBlobDataAccessor(new CloudConfig(verifiableProperties), new AzureCloudConfig(verifiableProperties),
+              new AzureBlobLayoutStrategy("test"), azureMetrics);
+      fail("Creating azure blob data accessor with ADAuthBasedStorageClientFactory should throw exception"
+          + "without one of the required configs");
+    } catch (IllegalArgumentException iaEx) {
+    }
   }
 
   private void mockBlobExistence(boolean exists) {

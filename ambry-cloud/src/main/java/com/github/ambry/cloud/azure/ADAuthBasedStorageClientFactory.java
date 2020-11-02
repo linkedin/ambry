@@ -16,12 +16,11 @@ package com.github.ambry.cloud.azure;
 import com.azure.core.credential.AccessToken;
 import com.azure.core.credential.TokenCredential;
 import com.azure.core.credential.TokenRequestContext;
+import com.azure.core.http.HttpClient;
 import com.azure.core.util.Configuration;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.common.policy.RequestRetryOptions;
-import com.azure.storage.common.policy.RetryPolicyType;
-import com.github.ambry.config.CloudConfig;
 import com.microsoft.aad.msal4j.ClientCredentialFactory;
 import com.microsoft.aad.msal4j.ClientCredentialParameters;
 import com.microsoft.aad.msal4j.ConfidentialClientApplication;
@@ -31,26 +30,21 @@ import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 
 /**
  * {@link StorageClientFactory} implementation for AD based authentication.
  */
-public class ADAuthBasedStorageClientFactory implements StorageClientFactory {
-  private static final Logger logger = LoggerFactory.getLogger(ADAuthBasedStorageClientFactory.class);
+public class ADAuthBasedStorageClientFactory extends StorageClientFactory {
+  private static String AZURE_STORAGE_ACCESS_SCOPE = "https://wus2ambryblobstore1.blob.core.windows.net/.default";
 
   @Override
-  public BlobServiceClient createBlobStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig)
+  protected BlobServiceClient buildBlobServiceClient(HttpClient httpClient, Configuration configuration,
+      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
       throws MalformedURLException, InterruptedException, ExecutionException {
-    Configuration storageConfiguration = new Configuration();
-
-    // Note: retry decisions are made at CloudBlobStore level.  Configure storageClient with no retries.
-    RequestRetryOptions noRetries = new RequestRetryOptions(RetryPolicyType.FIXED, 1, null, null, null, null);
     IAuthenticationResult iAuthenticationResult = getAccessTokenByClientCredentialGrant(azureCloudConfig);
-    BlobServiceClient storageClient = new BlobServiceClientBuilder().credential(new TokenCredential() {
+    return new BlobServiceClientBuilder().credential(new TokenCredential() {
       @Override
       public Mono<AccessToken> getToken(TokenRequestContext request) {
         return Mono.just(new AccessToken(iAuthenticationResult.accessToken(),
@@ -58,10 +52,20 @@ public class ADAuthBasedStorageClientFactory implements StorageClientFactory {
       }
     })
         .endpoint(azureCloudConfig.azureStorageEndpoint)
-        .retryOptions(noRetries)
-        .configuration(storageConfiguration)
+        .httpClient(httpClient)
+        .retryOptions(retryOptions)
+        .configuration(configuration)
         .buildClient();
-    return storageClient;
+  }
+
+  @Override
+  protected void validateABSAuthConfigs(AzureCloudConfig azureCloudConfig) {
+    if (azureCloudConfig.azureStorageAuthority.isEmpty() || azureCloudConfig.azureStorageClientId.isEmpty()
+        || azureCloudConfig.azureStorageSecret.isEmpty() || azureCloudConfig.azureStorageEndpoint.isEmpty()) {
+      throw new IllegalArgumentException(String.format("One of the required configs %s, %s, %s, %s is missing",
+          AzureCloudConfig.AZURE_STORAGE_AUTHORITY, AzureCloudConfig.AZURE_STORAGE_CLIENTID,
+          AzureCloudConfig.AZURE_STORAGE_ENDPOINT, AzureCloudConfig.AZURE_STORAGE_SECRET));
+    }
   }
 
   /**
@@ -74,15 +78,12 @@ public class ADAuthBasedStorageClientFactory implements StorageClientFactory {
    */
   private IAuthenticationResult getAccessTokenByClientCredentialGrant(AzureCloudConfig azureCloudConfig)
       throws MalformedURLException, InterruptedException, ExecutionException {
-
     ConfidentialClientApplication app = ConfidentialClientApplication.builder(azureCloudConfig.azureStorageClientId,
         ClientCredentialFactory.createFromSecret(azureCloudConfig.azureStorageSecret))
         .authority(azureCloudConfig.azureStorageAuthority)
         .build();
-
     ClientCredentialParameters clientCredentialParam =
-        ClientCredentialParameters.builder(Collections.singleton(azureCloudConfig.azureStorageScope)).build();
-
+        ClientCredentialParameters.builder(Collections.singleton(AZURE_STORAGE_ACCESS_SCOPE)).build();
     CompletableFuture<IAuthenticationResult> future = app.acquireToken(clientCredentialParam);
     return future.get();
   }

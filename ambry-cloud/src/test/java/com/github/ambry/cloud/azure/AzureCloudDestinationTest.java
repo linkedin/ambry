@@ -150,8 +150,6 @@ public class AzureCloudDestinationTest {
         "https://login.microsoftonline.com/test-account/");
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENTID, "client-id");
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_SECRET, "client-secret");
-    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_SCOPE,
-        "https://azure_storage.blob.core.windows.net/.default");
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ENDPOINT, "https://azure_storage.blob.core.windows.net");
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_FACTORY_CLASS,
         "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClientFactory ");
