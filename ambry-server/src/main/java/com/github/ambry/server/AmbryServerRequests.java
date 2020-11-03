@@ -57,7 +57,6 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -438,9 +437,7 @@ public class AmbryServerRequests extends AmbryRequests {
     boolean isLocalStoreInErrorState =
         partitionId.getReplicaIdsByState(ReplicaState.ERROR, currentNode.getDatacenterName())
             .stream()
-            .map(r -> r.getDataNodeId().getHostname())
-            .collect(Collectors.toSet())
-            .contains(currentNode.getHostname());
+            .anyMatch(r -> r.getDataNodeId().getHostname().equals(currentNode.getHostname()));
     if (isLocalStoreInErrorState && clusterParticipant != null) {
       if (!clusterParticipant.resetPartitionState(partitionId.toPathString())) {
         logger.error("Failed to reset partition {}", partitionId);
