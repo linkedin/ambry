@@ -53,8 +53,8 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnitRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,7 +67,7 @@ import static org.junit.Assert.*;
  * Must supply file azure-test.properties in classpath with valid config property values.
  */
 @Ignore
-@RunWith(MockitoJUnitRunner.class)
+@RunWith(Parameterized.class)
 public class AzureIntegrationTest {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureIntegrationTest.class);
@@ -88,15 +88,25 @@ public class AzureIntegrationTest {
   private String propFileName = "azure-test.properties";
   private String tokenFileName = "replicaTokens";
   private Properties testProperties;
+  private final String azureStorageClientFactoryClass;
 
   /**
-   * Utility method to get blob input stream.
-   * @param blobSize size of blob to consider.
-   * @return the blob input stream.
+   * Run for both {@link ADAuthBasedStorageClientFactory} and {@link ConnectionStringBasedStorageClientFactory} azure
+   * storage client factories.
+   * @return an array with factory class for storage client factory.
    */
-  private static InputStream getBlobInputStream(int blobSize) {
-    byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
-    return new ByteArrayInputStream(randomBytes);
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{ADAuthBasedStorageClientFactory.class.getCanonicalName()},
+        {ConnectionStringBasedStorageClientFactory.class.getCanonicalName()}});
+  }
+
+  /**
+   * Constructor for {@link AzureIntegrationTest}.
+   * @param azureStorageClientFactoryClass azure storage client factory class.
+   */
+  public AzureIntegrationTest(String azureStorageClientFactoryClass) {
+    this.azureStorageClientFactoryClass = azureStorageClientFactoryClass;
   }
 
   @Before
@@ -116,6 +126,7 @@ public class AzureIntegrationTest {
     testProperties.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
     testProperties.setProperty(CloudConfig.CLOUD_COMPACTION_LOOKBACK_DAYS, "7");
     testProperties.setProperty(AzureCloudConfig.AZURE_PURGE_BATCH_SIZE, "10");
+    testProperties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_FACTORY_CLASS, azureStorageClientFactoryClass);
     verifiableProperties = new VerifiableProperties(testProperties);
     clusterMap = Mockito.mock(ClusterMap.class);
     azureDest = getAzureDestination(verifiableProperties);
@@ -685,5 +696,15 @@ public class AzureIntegrationTest {
       return findResult.getMetadataList().isEmpty();
     }
     throw new IllegalArgumentException("Unknown find token type");
+  }
+
+  /**
+   * Utility method to get blob input stream.
+   * @param blobSize size of blob to consider.
+   * @return the blob input stream.
+   */
+  private static InputStream getBlobInputStream(int blobSize) {
+    byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
+    return new ByteArrayInputStream(randomBytes);
   }
 }

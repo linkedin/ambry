@@ -39,7 +39,6 @@ import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
-import java.net.MalformedURLException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,7 +47,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,15 +76,10 @@ public class AzureBlobDataAccessor {
    * @param azureCloudConfig the {@link AzureCloudConfig} to use.
    * @param blobLayoutStrategy the {@link AzureBlobLayoutStrategy} to use.
    * @param azureMetrics the {@link AzureMetrics} to use.
-   * @throws MalformedURLException
-   * @throws InterruptedException
-   * @throws ExecutionException
-   * @throws ReflectiveOperationException
    * @throws ReflectiveOperationException
    */
   public AzureBlobDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
-      AzureBlobLayoutStrategy blobLayoutStrategy, AzureMetrics azureMetrics)
-      throws MalformedURLException, InterruptedException, ExecutionException, ReflectiveOperationException {
+      AzureBlobLayoutStrategy blobLayoutStrategy, AzureMetrics azureMetrics) throws ReflectiveOperationException {
     this.blobLayoutStrategy = blobLayoutStrategy;
     this.azureMetrics = azureMetrics;
     this.purgeBatchSize = azureCloudConfig.azurePurgeBatchSize;

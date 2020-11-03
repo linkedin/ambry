@@ -67,25 +67,6 @@ public class AzureBlobDataAccessorTest {
   private long deletionTime = creationTime + 10000;
   private long expirationTime = Utils.Infinite_Time;
 
-  static BlockBlobClient setupMockBlobClient(BlobServiceClient mockServiceClient) {
-    BlobContainerClient mockContainerClient = mock(BlobContainerClient.class);
-    BlobClient mockBlobClient = mock(BlobClient.class);
-    BlockBlobClient mockBlockBlobClient = mock(BlockBlobClient.class);
-    when(mockServiceClient.getBlobContainerClient(anyString())).thenReturn(mockContainerClient);
-    when(mockContainerClient.getBlobClient(anyString())).thenReturn(mockBlobClient);
-    when(mockContainerClient.exists()).thenReturn(false);
-    when(mockBlobClient.getBlockBlobClient()).thenReturn(mockBlockBlobClient);
-    // Rest is to mock getPropertiesWithResponse and not needed everywhere
-    BlobProperties mockBlobProperties = mock(BlobProperties.class);
-    Map<String, String> metadataMap = new HashMap<>();
-    lenient().when(mockBlobProperties.getMetadata()).thenReturn(metadataMap);
-    Response<BlobProperties> mockPropertiesResponse = mock(Response.class);
-    lenient().when(mockPropertiesResponse.getValue()).thenReturn(mockBlobProperties);
-    lenient().when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any()))
-        .thenReturn(mockPropertiesResponse);
-    return mockBlockBlobClient;
-  }
-
   @Before
   public void setup() throws Exception {
 
@@ -286,6 +267,25 @@ public class AzureBlobDataAccessorTest {
           + "without one of the required configs");
     } catch (IllegalArgumentException iaEx) {
     }
+  }
+
+  static BlockBlobClient setupMockBlobClient(BlobServiceClient mockServiceClient) {
+    BlobContainerClient mockContainerClient = mock(BlobContainerClient.class);
+    BlobClient mockBlobClient = mock(BlobClient.class);
+    BlockBlobClient mockBlockBlobClient = mock(BlockBlobClient.class);
+    when(mockServiceClient.getBlobContainerClient(anyString())).thenReturn(mockContainerClient);
+    when(mockContainerClient.getBlobClient(anyString())).thenReturn(mockBlobClient);
+    when(mockContainerClient.exists()).thenReturn(false);
+    when(mockBlobClient.getBlockBlobClient()).thenReturn(mockBlockBlobClient);
+    // Rest is to mock getPropertiesWithResponse and not needed everywhere
+    BlobProperties mockBlobProperties = mock(BlobProperties.class);
+    Map<String, String> metadataMap = new HashMap<>();
+    lenient().when(mockBlobProperties.getMetadata()).thenReturn(metadataMap);
+    Response<BlobProperties> mockPropertiesResponse = mock(Response.class);
+    lenient().when(mockPropertiesResponse.getValue()).thenReturn(mockBlobProperties);
+    lenient().when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any()))
+        .thenReturn(mockPropertiesResponse);
+    return mockBlockBlobClient;
   }
 
   private void mockBlobExistence(boolean exists) {

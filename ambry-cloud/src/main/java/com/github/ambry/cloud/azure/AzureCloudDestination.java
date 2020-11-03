@@ -44,7 +44,6 @@ import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.MalformedURLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -53,7 +52,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -89,15 +87,11 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureMetrics the {@link AzureMetrics} to use.
    * @param azureReplicationFeedType {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
    * @param clusterMap {@link ClusterMap}.
-   * @throws MalformedURLException
-   * @throws InterruptedException
-   * @throws ExecutionException
    * @throws ReflectiveOperationException
    */
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
       VcrMetrics vcrMetrics, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType,
-      ClusterMap clusterMap)
-      throws MalformedURLException, InterruptedException, ExecutionException, ReflectiveOperationException {
+      ClusterMap clusterMap) throws ReflectiveOperationException {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =

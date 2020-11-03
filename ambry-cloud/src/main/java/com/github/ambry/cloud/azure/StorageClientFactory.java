@@ -40,12 +40,8 @@ public abstract class StorageClientFactory {
    * @param {@link CloudConfig} object.
    * @param {@link AzureCloudConfig} object.
    * @return {@link BlobServiceClient} object.
-   * @throws MalformedURLException
-   * @throws InterruptedException
-   * @throws ExecutionException
    */
-  public BlobServiceClient createBlobStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig)
-      throws MalformedURLException, InterruptedException, ExecutionException {
+  public BlobServiceClient createBlobStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig) {
     validateABSAuthConfigs(azureCloudConfig);
     Configuration storageConfiguration = new Configuration();
     // Check for network proxy
@@ -58,7 +54,12 @@ public abstract class StorageClientFactory {
 
     // Note: retry decisions are made at CloudBlobStore level.  Configure storageClient with no retries.
     RequestRetryOptions noRetries = new RequestRetryOptions(RetryPolicyType.FIXED, 1, null, null, null, null);
-    return buildBlobServiceClient(client, storageConfiguration, noRetries, azureCloudConfig);
+    try {
+      return buildBlobServiceClient(client, storageConfiguration, noRetries, azureCloudConfig);
+    } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
+      logger.error("Error building ABS blob service client: {}", ex.getMessage());
+      throw new IllegalStateException(ex);
+    }
   }
 
   /**

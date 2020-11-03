@@ -32,6 +32,7 @@ public class AzureCloudConfig {
   public static final String AZURE_STORAGE_AUTHORITY = "azure.storage.authority";
   public static final String AZURE_STORAGE_CLIENTID = "azure.storage.clientId";
   public static final String AZURE_STORAGE_SECRET = "azure.storage.secret";
+  public static final String AZURE_STORAGE_SCOPE = "azure.storage.scope";
   public static final String AZURE_STORAGE_ENDPOINT = "azure.storage.endpoint";
   public static final String COSMOS_QUERY_BATCH_SIZE = "cosmos.query.batch.size";
   public static final String COSMOS_REQUEST_CHARGE_THRESHOLD = "cosmos.request.charge.threshold";
@@ -146,6 +147,10 @@ public class AzureCloudConfig {
   @Default("")
   public final String azureStorageSecret;
 
+  @Config(AZURE_STORAGE_SCOPE)
+  @Default("")
+  public final String azureStorageScope;
+
   /**
    * Azure storage endpoint.
    */
@@ -168,6 +173,7 @@ public class AzureCloudConfig {
     azureStorageAuthority = verifiableProperties.getString(AZURE_STORAGE_AUTHORITY, "");
     azureStorageClientId = verifiableProperties.getString(AZURE_STORAGE_CLIENTID, "");
     azureStorageSecret = verifiableProperties.getString(AZURE_STORAGE_SECRET, "");
+    azureStorageScope = verifiableProperties.getString(AZURE_STORAGE_SCOPE, "");
     azureStorageEndpoint = verifiableProperties.getString(AZURE_STORAGE_ENDPOINT, "");
     cosmosQueryBatchSize = verifiableProperties.getInt(COSMOS_QUERY_BATCH_SIZE, DEFAULT_QUERY_BATCH_SIZE);
     cosmosContinuationTokenLimitKb =
