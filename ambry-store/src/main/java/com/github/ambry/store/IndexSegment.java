@@ -1015,21 +1015,13 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @throws StoreException
    */
   private void checkDataIntegrity() throws StoreException {
-    byte[] byteArray;
-    if (serEntries.hasArray()) {
-      // this is for heap buffer only
-      byteArray = serEntries.array();
-    } else {
-      // this is for non-heap (direct) buffer
-      serEntries.position(0);
-      byteArray = new byte[serEntries.capacity()];
-      serEntries.get(byteArray, 0, serEntries.capacity());
-    }
+    serEntries.position(0);
+    serEntries.limit(serEntries.capacity() - CRC_FIELD_LENGTH);
     Crc32 crc = new Crc32();
-    crc.update(byteArray, 0, byteArray.length - CRC_FIELD_LENGTH);
-    ByteBuffer bb =
-        ByteBuffer.wrap(Arrays.copyOfRange(byteArray, byteArray.length - CRC_FIELD_LENGTH, byteArray.length));
-    if (crc.getValue() != bb.getLong()) {
+    crc.update(serEntries.slice());
+    // reset the limit
+    serEntries.limit(serEntries.capacity());
+    if (crc.getValue() != serEntries.getLong(serEntries.capacity() - CRC_FIELD_LENGTH)) {
       throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
           StoreErrorCodes.Index_Creation_Failure);
     }
