@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.FilterFactory;
@@ -75,7 +76,7 @@ class IndexSegment implements Iterable<IndexEntry> {
 
   private final static int ENTRY_SIZE_INVALID_VALUE = -1;
   private final static int VALUE_SIZE_INVALID_VALUE = -1;
-
+  private static final Logger logger = LoggerFactory.getLogger(IndexSegment.class);
   private final int VERSION_FIELD_LENGTH = 2;
   private final int KEY_OR_ENTRY_SIZE_FIELD_LENGTH = 4;
   private final int VALUE_SIZE_FIELD_LENGTH = 4;
@@ -83,9 +84,6 @@ class IndexSegment implements Iterable<IndexEntry> {
   private final int LOG_END_OFFSET_FIELD_LENGTH = 8;
   private final int LAST_MODIFIED_TIME_FIELD_LENGTH = 8;
   private final int RESET_KEY_TYPE_FIELD_LENGTH = 2;
-
-  private int indexSizeExcludingEntries;
-  private int firstKeyRelativeOffset;
   private final StoreConfig config;
   private final String indexSegmentFilenamePrefix;
   private final Offset startOffset;
@@ -93,16 +91,16 @@ class IndexSegment implements Iterable<IndexEntry> {
   private final File indexFile;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final AtomicBoolean sealed = new AtomicBoolean(false);
-  private static final Logger logger = LoggerFactory.getLogger(IndexSegment.class);
   private final AtomicLong sizeWritten = new AtomicLong(0);
   private final StoreKeyFactory factory;
   private final File bloomFile;
   private final StoreMetrics metrics;
   private final AtomicInteger numberOfItems = new AtomicInteger(0);
   private final Time time;
-
   // an approximation of the last modified time.
   private final AtomicLong lastModifiedTimeSec = new AtomicLong(0);
+  private int indexSizeExcludingEntries;
+  private int firstKeyRelativeOffset;
   private ByteBuffer serEntries = null;
   private IFilter bloomFilter = null;
   private int valueSize;
@@ -841,6 +839,7 @@ class IndexSegment implements Iterable<IndexEntry> {
           serEntries = buf;
           break;
       }
+      checkDataIntegrity();
       serEntries.position(0);
       setVersion(serEntries.getShort());
       StoreKey storeKey;
@@ -1011,10 +1010,28 @@ class IndexSegment implements Iterable<IndexEntry> {
   }
 
   /**
+   * Check data integrity of index file (represented by byte buffer). This methods computes crc of byte buffer and
+   * compares it with crc value at the end of file.
+   * @throws StoreException
+   */
+  private void checkDataIntegrity() throws StoreException {
+    serEntries.position(0);
+    serEntries.limit(serEntries.capacity() - CRC_FIELD_LENGTH);
+    Crc32 crc = new Crc32();
+    crc.update(serEntries.slice());
+    // reset the limit
+    serEntries.limit(serEntries.capacity());
+    if (crc.getValue() != serEntries.getLong(serEntries.capacity() - CRC_FIELD_LENGTH)) {
+      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
+          StoreErrorCodes.Index_Creation_Failure);
+    }
+  }
+
+  /**
    * Gets all the entries upto maxEntries from the start of a given key (exclusive) or all entries if key is null,
    * till maxTotalSizeOfEntriesInBytes
    * @param key The key from where to start retrieving entries.
-   *            If the key is null, all entries are retrieved upto maxentries
+   *            If the key is null, all entries are retrieved upto max entries
    * @param findEntriesCondition The condition that determines when to stop fetching entries.
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
    * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
