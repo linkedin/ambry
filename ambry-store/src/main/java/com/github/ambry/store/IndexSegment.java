@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.FilterFactory;
@@ -770,14 +771,10 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @throws StoreException if there are problems with the index
    */
   void seal() throws StoreException {
-    try {
-      sealed.set(true);
-      map();
-      // we should be fine reading bloom filter here without synchronization as the index is read only
-      persistBloomFilter();
-    } catch (FileNotFoundException e) {
-      throw new StoreException("File not found while sealing index segment.", StoreErrorCodes.File_Not_Found);
-    }
+    sealed.set(true);
+    map();
+    // we should be fine reading bloom filter here without synchronization as the index is read only
+    persistBloomFilter();
   }
 
   /**
@@ -824,9 +821,8 @@ class IndexSegment implements Iterable<IndexEntry> {
    * Maps the segment of index either as a memory map or a in memory buffer depending on config.
    * @throws StoreException if there are problems with the index
    */
-  private void map() throws StoreException, FileNotFoundException {
+  private void map() throws StoreException {
     rwLock.writeLock().lock();
-    checkDataIntegrity(indexFile);
     try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
       switch (config.storeIndexMemState) {
         case IN_DIRECT_MEM:
@@ -843,6 +839,7 @@ class IndexSegment implements Iterable<IndexEntry> {
           serEntries = buf;
           break;
       }
+      checkDataIntegrity();
       serEntries.position(0);
       setVersion(serEntries.getShort());
       StoreKey storeKey;
@@ -1013,27 +1010,28 @@ class IndexSegment implements Iterable<IndexEntry> {
   }
 
   /**
-   * Check data integrity of index file. This methods computes crc of whole file content and compares it with crc value
-   * at the end of file.
-   * @param fileToCheck the file to check
+   * Check data integrity of index file (represented by byte buffer). This methods computes crc of byte buffer and
+   * compares it with crc value at the end of file.
    * @throws StoreException
-   * @throws FileNotFoundException
    */
-  private void checkDataIntegrity(File fileToCheck) throws StoreException, FileNotFoundException {
-    CrcInputStream crcStream = new CrcInputStream(new FileInputStream(fileToCheck));
-    try (DataInputStream stream = new DataInputStream(crcStream)) {
-      while (stream.available() > CRC_FIELD_LENGTH) {
-        stream.read();
-      }
-      long crc = crcStream.getValue();
-      if (crc != stream.readLong()) {
-        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
-            StoreErrorCodes.Index_Creation_Failure);
-      }
-    } catch (IOException e) {
-      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
-      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " encountered " + errorCode.toString()
-          + " while checking data integrity ", e, errorCode);
+  private void checkDataIntegrity() throws StoreException {
+    byte[] byteArray;
+    if (serEntries.hasArray()) {
+      // this is for heap buffer only
+      byteArray = serEntries.array();
+    } else {
+      // this is for non-heap (direct) buffer
+      serEntries.position(0);
+      byteArray = new byte[serEntries.capacity()];
+      serEntries.get(byteArray, 0, serEntries.capacity());
+    }
+    Crc32 crc = new Crc32();
+    crc.update(byteArray, 0, byteArray.length - CRC_FIELD_LENGTH);
+    ByteBuffer bb =
+        ByteBuffer.wrap(Arrays.copyOfRange(byteArray, byteArray.length - CRC_FIELD_LENGTH, byteArray.length));
+    if (crc.getValue() != bb.getLong()) {
+      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
+          StoreErrorCodes.Index_Creation_Failure);
     }
   }
 
@@ -1041,7 +1039,7 @@ class IndexSegment implements Iterable<IndexEntry> {
    * Gets all the entries upto maxEntries from the start of a given key (exclusive) or all entries if key is null,
    * till maxTotalSizeOfEntriesInBytes
    * @param key The key from where to start retrieving entries.
-   *            If the key is null, all entries are retrieved upto maxentries
+   *            If the key is null, all entries are retrieved upto max entries
    * @param findEntriesCondition The condition that determines when to stop fetching entries.
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
    * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries

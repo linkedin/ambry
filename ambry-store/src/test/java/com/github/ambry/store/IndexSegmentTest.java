@@ -22,10 +22,11 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -72,20 +73,25 @@ public class IndexSegmentTest {
   private static final long DELETE_FILE_SPAN_SIZE = 10;
   private static final long TTL_UPDATE_FILE_SPAN_SIZE = 7;
   private static final StoreKeyFactory STORE_KEY_FACTORY;
-
-  static {
-    try {
-      STORE_KEY_FACTORY = Utils.getObj("com.github.ambry.store.MockIdFactory");
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
   private final File tempDir;
   private final StoreMetrics metrics;
   private final short formatVersion;
-  private StoreConfig config;
   private final Properties properties = new Properties();
+  private StoreConfig config;
+  /**
+   * Creates a temporary directory and sets up metrics.
+   * @param formatVersion the format version of the index
+   * @param indexMemState the value for {@link StoreConfig#storeIndexMemStateName}
+   * @throws IOException
+   */
+  public IndexSegmentTest(short formatVersion, IndexMemState indexMemState) throws IOException {
+    tempDir = StoreTestUtils.createTempDirectory("indexSegmentDir-" + TestUtils.getRandomString(10));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    metrics = new StoreMetrics(metricRegistry);
+    this.formatVersion = formatVersion;
+    PersistentIndex.CURRENT_VERSION = formatVersion;
+    setIndexMemState(indexMemState);
+  }
 
   /**
    * Running for all versions and {@link IndexMemState} values.
@@ -102,21 +108,6 @@ public class IndexSegmentTest {
       }
     }
     return parametersList;
-  }
-
-  /**
-   * Creates a temporary directory and sets up metrics.
-   * @param formatVersion the format version of the index
-   * @param indexMemState the value for {@link StoreConfig#storeIndexMemStateName}
-   * @throws IOException
-   */
-  public IndexSegmentTest(short formatVersion, IndexMemState indexMemState) throws IOException {
-    tempDir = StoreTestUtils.createTempDirectory("indexSegmentDir-" + TestUtils.getRandomString(10));
-    MetricRegistry metricRegistry = new MetricRegistry();
-    metrics = new StoreMetrics(metricRegistry);
-    this.formatVersion = formatVersion;
-    PersistentIndex.CURRENT_VERSION = formatVersion;
-    setIndexMemState(indexMemState);
   }
 
   /**
@@ -728,12 +719,23 @@ public class IndexSegmentTest {
     IndexSegment fromDisk = createIndexSegmentFromFile(indexSegment.getFile(), true, journal);
     assertEquals("End offset doesn't match", endOffset, fromDisk.getEndOffset().getOffset());
 
-    // randomly write long value to index file to make it corrupted.
+    // read index file to byte buffer and manipulate one of the bytes
     File indexFile = indexSegment.getFile();
-    FileOutputStream fileStream = new FileOutputStream(indexFile);
-    try (DataOutputStream writer = new DataOutputStream(fileStream)) {
-      writer.writeLong(Utils.getRandomLong(TestUtils.RANDOM, 1000));
-      fileStream.getChannel().force(true);
+    ByteBuffer buf = ByteBuffer.allocate((int) indexFile.length());
+    try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
+      raf.getChannel().read(buf);
+    }
+    // we use heap buffer here, so buf.array() should not be null
+    byte[] bytes = buf.array();
+    // make one of the bytes corrupted (avoid last 8 bytes as they are crc value)
+    int corruptIndex = new Random().nextInt(bytes.length - 8);
+    bytes[corruptIndex] ^= 0xff;
+    // write corrupted bytes to file
+    File temp = new File(indexFile.getAbsolutePath() + ".tmp");
+    try (FileOutputStream stream = new FileOutputStream(temp)) {
+      stream.write(bytes);
+      stream.getChannel().force(true);
+      temp.renameTo(indexFile);
     }
     try {
       createIndexSegmentFromFile(indexFile, true, journal);
@@ -742,8 +744,6 @@ public class IndexSegmentTest {
       assertEquals("Mismatch in error code", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
     }
   }
-
-  // helpers
 
   /**
    * @param state the value for {@link StoreConfig#storeIndexMemStateName}
@@ -754,7 +754,7 @@ public class IndexSegmentTest {
     config = new StoreConfig(new VerifiableProperties(properties));
   }
 
-  // comprehensiveTest() helpers
+  // helpers
 
   /**
    * Comprehensive tests for {@link IndexSegment}.
@@ -902,6 +902,8 @@ public class IndexSegmentTest {
       setIndexMemState(saved);
     }
   }
+
+  // comprehensiveTest() helpers
 
   /**
    * @return a random log segment name.
@@ -1471,8 +1473,6 @@ public class IndexSegmentTest {
     }
   }
 
-  // partialWriteTest() helpers
-
   /**
    * Checks that an index segment file is not created
    * @param indexSegment the index segment to write to file
@@ -1485,6 +1485,8 @@ public class IndexSegmentTest {
     indexSegment.writeIndexSegmentToFile(safeEndPoint);
     assertFalse("Index file should not have been created", indexSegment.getFile().exists());
   }
+
+  // partialWriteTest() helpers
 
   /**
    * Verifies that the values obtained for {@code id} from {@code segment} satisfy the count and deleted state as
@@ -1503,6 +1505,14 @@ public class IndexSegmentTest {
     for (IndexValue.Flags flagToCheck : IndexValue.Flags.values()) {
       assertEquals("Flag " + flagToCheck + " status not as expected", flags.contains(flagToCheck),
           values.last().isFlagSet(flagToCheck));
+    }
+  }
+
+  static {
+    try {
+      STORE_KEY_FACTORY = Utils.getObj("com.github.ambry.store.MockIdFactory");
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
     }
   }
 }
