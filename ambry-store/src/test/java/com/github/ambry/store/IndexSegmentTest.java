@@ -22,7 +22,9 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -688,12 +690,57 @@ public class IndexSegmentTest {
 
     ListIterator<IndexEntry> segmentListIter = indexSegment.listIterator(indexSegment.size());
     ListIterator<IndexEntry> listListIter = expectedEntries.listIterator(expectedEntries.size());
-    boolean newEntryAdded = false;
     while (listListIter.hasPrevious()) {
       assertTrue(segmentListIter.hasPrevious());
       IndexEntry expected = listListIter.previous();
       IndexEntry obtained = segmentListIter.previous();
       assertIndexEntryEquals(expected, obtained);
+    }
+  }
+
+  /**
+   * Tests data corruption case when loading index file to memory.
+   * @throws Exception
+   */
+  @Test
+  public void dataIntegrityCheckTest() throws Exception {
+    long writeStartOffset = 0L;
+    String logSegmentName = generateRandomLogSegmentName();
+    Offset startOffset = new Offset(logSegmentName, writeStartOffset);
+    IndexSegment indexSegment = generateIndexSegment(startOffset, STORE_KEY_FACTORY);
+
+    List<Long> offsets = new ArrayList<>();
+    offsets.add(writeStartOffset);
+    for (int i = 0; i < 4; i++) {
+      // size has to be > 0 (no record is 0 sized)
+      long size = Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1;
+      offsets.add(writeStartOffset + size);
+      writeStartOffset += size;
+    }
+    long lastEntrySize = Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1;
+    long endOffset = offsets.get(offsets.size() - 1) + lastEntrySize;
+    NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex = new TreeMap<>();
+    List<IndexEntry> newEntries =
+        addPutEntries(offsets, lastEntrySize, indexSegment, referenceIndex, false, false);
+    // write to file
+    indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
+    // verify read from file
+    Journal journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
+    IndexSegment fromDisk = createIndexSegmentFromFile(indexSegment.getFile(), true, journal);
+    assertEquals("End offset doesn't match", endOffset, fromDisk.getEndOffset().getOffset());
+
+    // randomly write long value to index file to make it corrupted.
+    File indexFile = indexSegment.getFile();
+    FileOutputStream fileStream = new FileOutputStream(indexFile);
+    try (DataOutputStream writer = new DataOutputStream(fileStream)) {
+      writer.writeLong(Utils.getRandomLong(TestUtils.RANDOM, 1000));
+      fileStream.getChannel().force(true);
+    }
+    try {
+      createIndexSegmentFromFile(indexFile, true, journal);
+      fail("Should fail as index file is corrupted");
+    } catch (StoreException e) {
+      //expected
     }
   }
 

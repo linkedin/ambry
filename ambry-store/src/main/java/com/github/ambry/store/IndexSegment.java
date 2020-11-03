@@ -75,7 +75,7 @@ class IndexSegment implements Iterable<IndexEntry> {
 
   private final static int ENTRY_SIZE_INVALID_VALUE = -1;
   private final static int VALUE_SIZE_INVALID_VALUE = -1;
-
+  private static final Logger logger = LoggerFactory.getLogger(IndexSegment.class);
   private final int VERSION_FIELD_LENGTH = 2;
   private final int KEY_OR_ENTRY_SIZE_FIELD_LENGTH = 4;
   private final int VALUE_SIZE_FIELD_LENGTH = 4;
@@ -83,9 +83,6 @@ class IndexSegment implements Iterable<IndexEntry> {
   private final int LOG_END_OFFSET_FIELD_LENGTH = 8;
   private final int LAST_MODIFIED_TIME_FIELD_LENGTH = 8;
   private final int RESET_KEY_TYPE_FIELD_LENGTH = 2;
-
-  private int indexSizeExcludingEntries;
-  private int firstKeyRelativeOffset;
   private final StoreConfig config;
   private final String indexSegmentFilenamePrefix;
   private final Offset startOffset;
@@ -93,16 +90,16 @@ class IndexSegment implements Iterable<IndexEntry> {
   private final File indexFile;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final AtomicBoolean sealed = new AtomicBoolean(false);
-  private static final Logger logger = LoggerFactory.getLogger(IndexSegment.class);
   private final AtomicLong sizeWritten = new AtomicLong(0);
   private final StoreKeyFactory factory;
   private final File bloomFile;
   private final StoreMetrics metrics;
   private final AtomicInteger numberOfItems = new AtomicInteger(0);
   private final Time time;
-
   // an approximation of the last modified time.
   private final AtomicLong lastModifiedTimeSec = new AtomicLong(0);
+  private int indexSizeExcludingEntries;
+  private int firstKeyRelativeOffset;
   private ByteBuffer serEntries = null;
   private IFilter bloomFilter = null;
   private int valueSize;
@@ -773,10 +770,14 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @throws StoreException if there are problems with the index
    */
   void seal() throws StoreException {
-    sealed.set(true);
-    map();
-    // we should be fine reading bloom filter here without synchronization as the index is read only
-    persistBloomFilter();
+    try {
+      sealed.set(true);
+      map();
+      // we should be fine reading bloom filter here without synchronization as the index is read only
+      persistBloomFilter();
+    } catch (FileNotFoundException e) {
+      throw new StoreException("File not found while sealing index segment.", StoreErrorCodes.File_Not_Found);
+    }
   }
 
   /**
@@ -823,8 +824,9 @@ class IndexSegment implements Iterable<IndexEntry> {
    * Maps the segment of index either as a memory map or a in memory buffer depending on config.
    * @throws StoreException if there are problems with the index
    */
-  private void map() throws StoreException {
+  private void map() throws StoreException, FileNotFoundException {
     rwLock.writeLock().lock();
+    checkDataIntegrity(indexFile);
     try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
       switch (config.storeIndexMemState) {
         case IN_DIRECT_MEM:
@@ -1007,6 +1009,31 @@ class IndexSegment implements Iterable<IndexEntry> {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " encountered " + errorCode.toString()
           + " while reading from file ", e, errorCode);
+    }
+  }
+
+  /**
+   * Check data integrity of index file. This methods computes crc of whole file content and compares it with crc value
+   * at the end of file.
+   * @param fileToCheck the file to check
+   * @throws StoreException
+   * @throws FileNotFoundException
+   */
+  private void checkDataIntegrity(File fileToCheck) throws StoreException, FileNotFoundException {
+    CrcInputStream crcStream = new CrcInputStream(new FileInputStream(fileToCheck));
+    try (DataInputStream stream = new DataInputStream(crcStream)) {
+      while (stream.available() > CRC_FIELD_LENGTH) {
+        stream.read();
+      }
+      long crc = crcStream.getValue();
+      if (crc != stream.readLong()) {
+        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
+            StoreErrorCodes.Index_Creation_Failure);
+      }
+    } catch (IOException e) {
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
+      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " encountered " + errorCode.toString()
+          + " while checking data integrity ", e, errorCode);
     }
   }
 
