@@ -720,8 +720,7 @@ public class IndexSegmentTest {
     long lastEntrySize = Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1;
     long endOffset = offsets.get(offsets.size() - 1) + lastEntrySize;
     NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex = new TreeMap<>();
-    List<IndexEntry> newEntries =
-        addPutEntries(offsets, lastEntrySize, indexSegment, referenceIndex, false, false);
+    addPutEntries(offsets, lastEntrySize, indexSegment, referenceIndex, false, false);
     // write to file
     indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
     // verify read from file
@@ -740,7 +739,7 @@ public class IndexSegmentTest {
       createIndexSegmentFromFile(indexFile, true, journal);
       fail("Should fail as index file is corrupted");
     } catch (StoreException e) {
-      //expected
+      assertEquals("Mismatch in error code", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
     }
   }
 
