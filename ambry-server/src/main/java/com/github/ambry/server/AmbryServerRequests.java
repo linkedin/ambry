@@ -66,11 +66,6 @@ import org.slf4j.LoggerFactory;
  * handled by this class
  */
 public class AmbryServerRequests extends AmbryRequests {
-  private final ServerConfig serverConfig;
-  private final StatsManager statsManager;
-  private final ClusterParticipant clusterParticipant;
-  private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
-      new ConcurrentHashMap<>();
   // POST requests are allowed on stores states: { LEADER, STANDBY }
   static final Set<ReplicaState> PUT_ALLOWED_STORE_STATES = EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY);
   // UPDATE requests (including DELETE, TTLUpdate, UNDELETE) are allowed on stores states: { LEADER, STANDBY, INACTIVE, BOOTSTRAP }
@@ -79,8 +74,12 @@ public class AmbryServerRequests extends AmbryRequests {
   static final Set<RequestOrResponseType> UPDATE_REQUEST_TYPES =
       EnumSet.of(RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest,
           RequestOrResponseType.UndeleteRequest);
-
   private static final Logger logger = LoggerFactory.getLogger(AmbryServerRequests.class);
+  private final ServerConfig serverConfig;
+  private final StatsManager statsManager;
+  private final ClusterParticipant clusterParticipant;
+  private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
+      new ConcurrentHashMap<>();
 
   AmbryServerRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
@@ -434,10 +433,12 @@ public class AmbryServerRequests extends AmbryRequests {
       logger.error("Could not enable replication on {}", partitionIds);
       return ServerErrorCode.Unknown_Error;
     }
-    // startBlobStore should guarantee that store is started, so return value shouldn't be null
-    Store store = storeManager.getStore(partitionId);
-    // 4. reset partition state if it's offline (will trigger state transition)
-    if (store.getCurrentState() == ReplicaState.OFFLINE && clusterParticipant != null) {
+    // 4. reset partition state if it's in error state (will trigger state transition)
+    boolean isLocalStoreInErrorState =
+        partitionId.getReplicaIdsByState(ReplicaState.ERROR, currentNode.getDatacenterName())
+            .stream()
+            .anyMatch(r -> r.getDataNodeId().getHostname().equals(currentNode.getHostname()));
+    if (isLocalStoreInErrorState && clusterParticipant != null) {
       if (!clusterParticipant.resetPartitionState(partitionId.toPathString())) {
         logger.error("Failed to reset partition {}", partitionId);
         return ServerErrorCode.Unknown_Error;
@@ -505,6 +506,16 @@ public class AmbryServerRequests extends AmbryRequests {
         logger.error("Fail to add BlobStore(s) {} to stopped list after stop operation completed",
             failToUpdateList.toArray());
         error = ServerErrorCode.Unknown_Error;
+      }
+      // After store is shut down and stopped state is updated, we also need to temporarily disable this replica if Helix
+      // is adopted. The intention here is to make Helix re-elect leader replica if necessary.
+      if (storeManager instanceof StorageManager && clusterParticipant != null) {
+        // Previous operation has guaranteed the store is not null
+        Store store = ((StorageManager) storeManager).getStore(partitionId, true);
+        // Setting disable state will trigger transition error at the very beginning of STANDBY -> INACTIVE transition.
+        // Thus it doesn't go through decommission process.
+        ((BlobStore) store).setDisableState(true);
+        clusterParticipant.setReplicaDisabledState(storeManager.getReplica(partitionId.toPathString()), true);
       }
     } else {
       error = ServerErrorCode.Unknown_Error;

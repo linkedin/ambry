@@ -94,7 +94,7 @@ public class BlobStore implements Store {
   private volatile boolean recoverFromDecommission;
   // TODO remove this once ZK migration is complete
   private AtomicBoolean isSealed = new AtomicBoolean(false);
-  private AtomicBoolean disabledOnError = new AtomicBoolean(false);
+  private AtomicBoolean isDisabled = new AtomicBoolean(false);
   protected PersistentIndex index;
 
   // THIS IS ONLY FOR TEST.
@@ -132,7 +132,7 @@ public class BlobStore implements Store {
    * @param time the {@link Time} instance to use.
    * @param accountService  the {@link AccountService} instance to use.
    */
-  BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
+  public BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
@@ -260,7 +260,7 @@ public class BlobStore implements Store {
         checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
         onSuccess();
-        disabledOnError.set(false);
+        isDisabled.set(false);
         started = true;
         resolveStoreInitialState();
         if (replicaId != null) {
@@ -1029,8 +1029,8 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public boolean disabledOnError() {
-    return disabledOnError.get();
+  public boolean isDisabled() {
+    return isDisabled.get();
   }
 
   /**
@@ -1141,7 +1141,7 @@ public class BlobStore implements Store {
       logger.error("Shutting down BlobStore {} because IO error count exceeds threshold", storeId);
       shutdown(true);
       // Explicitly disable replica to trigger Helix state transition: LEADER -> STANDBY -> INACTIVE -> OFFLINE
-      if (config.storeSetLocalPartitionStateEnabled && !disabledOnError.getAndSet(true)
+      if (config.storeSetLocalPartitionStateEnabled && !isDisabled.getAndSet(true)
           && replicaStatusDelegates != null) {
         try {
           replicaStatusDelegates.forEach(delegate -> delegate.disableReplica(replicaId));
@@ -1168,12 +1168,11 @@ public class BlobStore implements Store {
   }
 
   /**
-   * Exposed for testing.
-   * Set disabledOnError boolean value in this class.
-   * @param disabledOnErrorVal the value set to disabledOnError
+   * Set isDisabled boolean value in this class.
+   * @param disabled whether the store is disabled or not.
    */
-  void setDisabledOnError(boolean disabledOnErrorVal) {
-    disabledOnError.set(disabledOnErrorVal);
+  public void setDisableState(boolean disabled) {
+    isDisabled.set(disabled);
   }
 
   /**

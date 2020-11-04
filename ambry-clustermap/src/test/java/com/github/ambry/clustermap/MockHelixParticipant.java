@@ -19,6 +19,7 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.server.StatsSnapshot;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -145,6 +146,11 @@ public class MockHelixParticipant extends HelixParticipant {
   @Override
   public List<String> getStoppedReplicas() {
     return stoppedReplicas.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList());
+  }
+
+  @Override
+  public List<String> getDisabledReplicas() {
+    return disabledReplicas.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList());
   }
 
   @Override

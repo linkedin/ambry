@@ -20,10 +20,15 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.clustermap.ReplicaType;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -32,11 +37,13 @@ import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.commons.Callback;
+import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
@@ -78,11 +85,14 @@ class MockStorageManager extends StorageManager {
   /**
    * Mocked {@link Store} that is intended to perform predefined behavior.
    */
-  private class TestStore implements Store {
+  private class TestStore extends BlobStore {
     boolean started;
     ReplicaState currentState = ReplicaState.STANDBY;
 
-    TestStore(ClusterParticipant clusterParticipant) {
+    TestStore(ReplicaId replicaId, ClusterParticipant clusterParticipant) {
+      super(replicaId, new StoreConfig(VPROPS), null, null, null, null, null, null, null, null, null,
+          Collections.singletonList(new ReplicaStatusDelegate(clusterParticipant)), new MockTime(),
+          new InMemAccountService(false, false));
       if (clusterParticipant instanceof HelixParticipant) {
         currentState = ReplicaState.OFFLINE;
       }
@@ -275,7 +285,7 @@ class MockStorageManager extends StorageManager {
 
     @Override
     public boolean isDecommissionInProgress() {
-      throw new UnsupportedOperationException();
+      return false;
     }
 
     @Override
@@ -309,7 +319,7 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
-    public boolean disabledOnError() {
+    public boolean isDisabled() {
       throw new UnsupportedOperationException("Method not supported");
     }
 
@@ -381,7 +391,9 @@ class MockStorageManager extends StorageManager {
   /**
    * An empty {@link Store} implementation.
    */
-  private Store store = new TestStore(null);
+  private Store store = new TestStore(new MockReplicaId(127, new MockPartitionId(),
+      new MockDataNodeId(Collections.singletonList(new Port(127, PortType.PLAINTEXT)),
+          Collections.singletonList("/mnt/u001"), "DC1"), 0), null);
 
   private static final VerifiableProperties VPROPS = new VerifiableProperties(new Properties());
   /**
@@ -476,7 +488,7 @@ class MockStorageManager extends StorageManager {
     this.validKeysInStore = validKeysInStore;
     this.findTokenHelper = findTokenHelper;
     for (ReplicaId replica : clusterMap.getReplicaIds(dataNodeId)) {
-      storeMap.put(replica.getPartitionId(), new TestStore(clusterParticipant));
+      storeMap.put(replica.getPartitionId(), new TestStore(replica, clusterParticipant));
     }
   }
 
