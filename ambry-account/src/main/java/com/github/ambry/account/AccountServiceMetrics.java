@@ -51,7 +51,6 @@ public class AccountServiceMetrics {
   public final Counter accountFetchFromAmbryServerErrorCount;
   public final Counter accountUpdatesToStoreErrorCount;
 
-  //Gauge
   Gauge<Integer> accountDataInconsistencyCount;
 
   private final MetricRegistry metricRegistry;

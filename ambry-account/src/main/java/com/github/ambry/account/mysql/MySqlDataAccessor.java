@@ -157,14 +157,12 @@ public class MySqlDataAccessor {
    */
   void onException(SQLException e, OperationType operationType) {
     if (e instanceof SQLTransientConnectionException) {
-      reset();
-    }
-    if (!(e instanceof SQLIntegrityConstraintViolationException || isCredentialError(e))) {
       if (operationType == OperationType.Write) {
         metrics.writeFailureCount.inc();
       } else {
         metrics.readFailureCount.inc();
       }
+      reset();
     }
   }
 

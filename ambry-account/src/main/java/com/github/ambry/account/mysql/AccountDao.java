@@ -24,6 +24,8 @@ import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
 
+import static com.github.ambry.account.mysql.MySqlDataAccessor.OperationType.*;
+
 
 /**
  * Account Data Access Object.
@@ -66,9 +68,9 @@ public class AccountDao {
       insertStatement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
       insertStatement.setInt(2, account.getSnapshotVersion());
       insertStatement.executeUpdate();
-      dataAccessor.onSuccess(MySqlDataAccessor.OperationType.Write, System.currentTimeMillis() - startTimeMs);
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e, MySqlDataAccessor.OperationType.Write);
+      dataAccessor.onException(e, Write);
       throw e;
     }
   }
@@ -86,10 +88,10 @@ public class AccountDao {
     getSinceStatement.setTimestamp(1, sinceTime);
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       List<Account> accounts = convertResultSet(rs);
-      dataAccessor.onSuccess(MySqlDataAccessor.OperationType.Read, System.currentTimeMillis() - startTimeMs);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return accounts;
     } catch (SQLException e) {
-      dataAccessor.onException(e, MySqlDataAccessor.OperationType.Read);
+      dataAccessor.onException(e, Read);
       throw e;
     }
   }
@@ -107,9 +109,9 @@ public class AccountDao {
       updateStatement.setInt(2, account.getSnapshotVersion());
       updateStatement.setInt(3, account.getId());
       updateStatement.executeUpdate();
-      dataAccessor.onSuccess(MySqlDataAccessor.OperationType.Write, System.currentTimeMillis() - startTimeMs);
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e, MySqlDataAccessor.OperationType.Write);
+      dataAccessor.onException(e, Write);
       throw e;
     }
   }

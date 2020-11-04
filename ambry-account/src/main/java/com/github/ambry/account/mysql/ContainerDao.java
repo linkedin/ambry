@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
 
+import static com.github.ambry.account.mysql.MySqlDataAccessor.OperationType.*;
+
 
 /**
  * Container Data Access Object.
@@ -70,9 +72,9 @@ public class ContainerDao {
       insertStatement.setString(2, container.toJson().toString());
       insertStatement.setInt(3, container.getSnapshotVersion());
       insertStatement.executeUpdate();
-      dataAccessor.onSuccess(MySqlDataAccessor.OperationType.Write, System.currentTimeMillis() - startTimeMs);
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e, MySqlDataAccessor.OperationType.Write);
+      dataAccessor.onException(e, Write);
       throw e;
     }
   }
@@ -93,9 +95,9 @@ public class ContainerDao {
       updateStatement.setInt(3, accountId);
       updateStatement.setInt(4, container.getId());
       updateStatement.executeUpdate();
-      dataAccessor.onSuccess(MySqlDataAccessor.OperationType.Write, System.currentTimeMillis() - startTimeMs);
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e, MySqlDataAccessor.OperationType.Write);
+      dataAccessor.onException(e, Write);
       throw e;
     }
   }
@@ -112,10 +114,10 @@ public class ContainerDao {
     getByAccountStatement.setInt(1, accountId);
     try (ResultSet rs = getByAccountStatement.executeQuery()) {
       List<Container> containers = convertResultSet(rs);
-      dataAccessor.onSuccess(MySqlDataAccessor.OperationType.Read, System.currentTimeMillis() - startTimeMs);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return containers;
     } catch (SQLException e) {
-      dataAccessor.onException(e, MySqlDataAccessor.OperationType.Read);
+      dataAccessor.onException(e, Read);
       throw e;
     }
   }
@@ -133,10 +135,10 @@ public class ContainerDao {
     getSinceStatement.setTimestamp(1, sinceTime);
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       List<Container> containers = convertResultSet(rs);
-      dataAccessor.onSuccess(MySqlDataAccessor.OperationType.Read, System.currentTimeMillis() - startTimeMs);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return containers;
     } catch (SQLException e) {
-      dataAccessor.onException(e, MySqlDataAccessor.OperationType.Read);
+      dataAccessor.onException(e, Read);
       throw e;
     }
   }

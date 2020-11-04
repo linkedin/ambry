@@ -83,6 +83,7 @@ public class AccountUtils {
    * @return count of accounts mismatching.
    */
   public static int compareAccounts(Collection<Account> accountsInPrimary, Collection<Account> accountsInSecondary) {
+    int mismatchCount = 0;
     Map<String, Account> secondaryAccountMap = new HashMap<>();
     accountsInSecondary.forEach(account -> secondaryAccountMap.put(account.getName(), account));
 
@@ -105,6 +106,7 @@ public class AccountUtils {
         }
         accountsInfo.append("]");
         logger.warn("Accounts found in primary and absent in secondary = {}", accountsInfo.toString());
+        mismatchCount += accountsMissingInSecondary.size();
       }
 
       if (!accountsDifferentInSecondary.isEmpty()) {
@@ -135,6 +137,7 @@ public class AccountUtils {
               accountsInfo.append(container.toJson().toString()).append(",");
             }
             accountsInfo.append("]");
+            mismatchCount += containersMissingInSecondary.size();
           }
 
           if (!containersDifferentInSecondary.isEmpty()) {
@@ -152,6 +155,7 @@ public class AccountUtils {
                   .append("},");
             }
             accountsInfo.append("]");
+            mismatchCount += containersDifferentInSecondary.size();
           }
           accountsInfo.append("}");
         }
@@ -160,7 +164,7 @@ public class AccountUtils {
         logger.warn("Accounts mismatch in primary and secondary = {}", accountsInfo.toString());
       }
     }
-    return accountsMissingInSecondary.size() + accountsDifferentInSecondary.size();
+    return mismatchCount;
   }
 
   /**
