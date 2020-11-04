@@ -272,7 +272,8 @@ public class CompositeAccountServiceTest {
     ((CompositeAccountService) compositeAccountService).compareAccountMetadata();
     verify(primaryAccountService, atLeastOnce()).getAllAccounts();
     verify(secondaryAccountService, atLeastOnce()).getAllAccounts();
-    assertEquals("Expected 2 inconsistencies between primary and secondary", 2,
+    // Expects 3 inconsistencies: 1. account a2 missing in secondary, 2. container (a1,c3) missing in secondary, 3. container (a1,c2) different in secondary
+    assertEquals("Expected 2 inconsistencies between primary and secondary", 3,
         metrics.accountDataInconsistencyCount.getValue().intValue());
   }
 }

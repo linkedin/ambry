@@ -23,6 +23,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 import java.sql.Timestamp;
 import java.util.List;
 import org.junit.Test;
@@ -96,15 +97,16 @@ public class ContainerDaoTest {
 
   @Test
   public void testAddContainerWithException() throws Exception {
-    when(mockInsertStatement.executeUpdate()).thenThrow(new SQLException());
-    TestUtils.assertException(SQLException.class, () -> containerDao.addContainer(accountId, testContainer), null);
+    when(mockInsertStatement.executeUpdate()).thenThrow(new SQLTransientConnectionException());
+    TestUtils.assertException(SQLTransientConnectionException.class,
+        () -> containerDao.addContainer(accountId, testContainer), null);
     assertEquals("Write failure count should be 1", 1, metrics.writeFailureCount.getCount());
   }
 
   @Test
   public void testGetNewContainersWithException() throws Exception {
-    when(mockQueryStatement.executeQuery()).thenThrow(new SQLException());
-    TestUtils.assertException(SQLException.class, () -> containerDao.getNewContainers(0L), null);
+    when(mockQueryStatement.executeQuery()).thenThrow(new SQLTransientConnectionException());
+    TestUtils.assertException(SQLTransientConnectionException.class, () -> containerDao.getNewContainers(0L), null);
     assertEquals("Read failure count should be 1", 1, metrics.readFailureCount.getCount());
   }
 }

@@ -25,6 +25,7 @@ import java.sql.Driver;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.Properties;
@@ -109,15 +110,15 @@ public class AccountDaoTest {
 
   @Test
   public void testAddAccountWithException() throws Exception {
-    when(mockInsertStatement.executeUpdate()).thenThrow(new SQLException());
-    TestUtils.assertException(SQLException.class, () -> accountDao.addAccount(testAccount), null);
+    when(mockInsertStatement.executeUpdate()).thenThrow(new SQLTransientConnectionException());
+    TestUtils.assertException(SQLTransientConnectionException.class, () -> accountDao.addAccount(testAccount), null);
     assertEquals("Write failure count should be 1", 1, metrics.writeFailureCount.getCount());
   }
 
   @Test
   public void testGetAccountsWithException() throws Exception {
-    when(mockQueryStatement.executeQuery()).thenThrow(new SQLException());
-    TestUtils.assertException(SQLException.class, () -> accountDao.getNewAccounts(0L), null);
+    when(mockQueryStatement.executeQuery()).thenThrow(new SQLTransientConnectionException());
+    TestUtils.assertException(SQLTransientConnectionException.class, () -> accountDao.getNewAccounts(0L), null);
     assertEquals("Read failure count should be 1", 1, metrics.readFailureCount.getCount());
   }
 }
