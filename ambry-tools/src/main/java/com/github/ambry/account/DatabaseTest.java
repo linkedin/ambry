@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.account.mysql.MySqlDataAccessor;
@@ -55,7 +56,8 @@ public class DatabaseTest {
 
   private static void perfTest(VerifiableProperties verifiableProperties) throws Exception {
     MySqlDataAccessor dataAccessor =
-        new MySqlAccountStoreFactory(verifiableProperties).getMySqlAccountStore(true).getMySqlDataAccessor();
+        new MySqlAccountStoreFactory(verifiableProperties, new MetricRegistry()).getMySqlAccountStore(true)
+            .getMySqlDataAccessor();
     ContainerDao containerDao = new ContainerDao(dataAccessor);
     // Use high account id to avoid conflict
     short startAccountId = 30000;
