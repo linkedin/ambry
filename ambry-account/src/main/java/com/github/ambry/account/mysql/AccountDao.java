@@ -61,7 +61,7 @@ public class AccountDao {
    */
   public void addAccount(Account account) throws SQLException {
     try {
-      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
+      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
       insertStatement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
       insertStatement.setInt(2, account.getSnapshotVersion());
       insertStatement.executeUpdate();
@@ -79,7 +79,7 @@ public class AccountDao {
    */
   public List<Account> getNewAccounts(long updatedSince) throws SQLException {
     Timestamp sinceTime = new Timestamp(updatedSince);
-    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql);
+    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql, false);
     getSinceStatement.setTimestamp(1, sinceTime);
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       return convertResultSet(rs);
@@ -96,7 +96,7 @@ public class AccountDao {
    */
   public void updateAccount(Account account) throws SQLException {
     try {
-      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
+      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql, true);
       updateStatement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
       updateStatement.setInt(2, account.getSnapshotVersion());
       updateStatement.setInt(3, account.getId());

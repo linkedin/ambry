@@ -64,7 +64,7 @@ public class ContainerDao {
   public void addContainer(int accountId, Container container) throws SQLException {
     try {
       // Note: assuming autocommit for now
-      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
+      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
       insertStatement.setInt(1, accountId);
       insertStatement.setString(2, container.toJson().toString());
       insertStatement.setInt(3, container.getSnapshotVersion());
@@ -84,7 +84,7 @@ public class ContainerDao {
   public void updateContainer(int accountId, Container container) throws SQLException {
     try {
       // Note: assuming autocommit for now
-      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
+      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql, true);
       updateStatement.setString(1, container.toJson().toString());
       updateStatement.setInt(2, container.getSnapshotVersion());
       updateStatement.setInt(3, accountId);
@@ -103,7 +103,7 @@ public class ContainerDao {
    * @throws SQLException
    */
   public List<Container> getContainers(int accountId) throws SQLException {
-    PreparedStatement getByAccountStatement = dataAccessor.getPreparedStatement(getByAccountSql);
+    PreparedStatement getByAccountStatement = dataAccessor.getPreparedStatement(getByAccountSql, false);
     getByAccountStatement.setInt(1, accountId);
     try (ResultSet rs = getByAccountStatement.executeQuery()) {
       return convertResultSet(rs);
@@ -121,7 +121,7 @@ public class ContainerDao {
    */
   public List<Container> getNewContainers(long updatedSince) throws SQLException {
     Timestamp sinceTime = new Timestamp(updatedSince);
-    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql);
+    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql, false);
     getSinceStatement.setTimestamp(1, sinceTime);
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       return convertResultSet(rs);

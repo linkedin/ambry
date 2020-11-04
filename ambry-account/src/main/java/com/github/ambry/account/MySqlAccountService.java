@@ -64,7 +64,7 @@ public class MySqlAccountService extends AbstractAccountService {
     this.config = config;
     this.mySqlAccountStoreFactory = mySqlAccountStoreFactory;
     try {
-      this.mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore(true);
+      this.mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore();
     } catch (SQLException e) {
       logger.error("MySQL account store creation failed", e);
       // If it is a non-transient error like credential issue, creation should fail.
@@ -130,7 +130,7 @@ public class MySqlAccountService extends AbstractAccountService {
       // Retry connection to mysql if we couldn't set up previously
       if (mySqlAccountStore == null) {
         try {
-          mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore(true);
+          mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore();
         } catch (SQLException e) {
           logger.error("MySQL account store creation failed", e);
           //TODO: Add failover logic to retry connection on mysql read replica for fetch operations

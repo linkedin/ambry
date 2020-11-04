@@ -61,7 +61,7 @@ public class MySqlAccountServiceTest {
     accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
     mockMySqlAccountStore = mock(MySqlAccountStore.class);
-    when(mockMySqlAccountStoreFactory.getMySqlAccountStore(anyBoolean())).thenReturn(mockMySqlAccountStore);
+    when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mockMySqlAccountStore);
     mySqlAccountService = getAccountService();
   }
 

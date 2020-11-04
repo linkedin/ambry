@@ -75,9 +75,7 @@ public class AccountDaoTest {
     when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
     MySqlUtils.DbEndpoint dbEndpoint =
         new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "ambry", "ambry");
-    MySqlDataAccessor dataAccessor = new MySqlDataAccessor(dbEndpoint, mockDriver);
-    when(dataAccessor.getDatabaseConnection()).thenReturn(mockConnection);
-    return dataAccessor;
+    return new MySqlDataAccessor(dbEndpoint, mockDriver);
   }
 
   @Test

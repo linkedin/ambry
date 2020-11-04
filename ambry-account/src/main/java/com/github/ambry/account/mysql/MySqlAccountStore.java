@@ -17,6 +17,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import java.sql.SQLException;
 import java.util.Collection;
+import java.util.List;
 
 
 /**
@@ -28,8 +29,8 @@ public class MySqlAccountStore {
   private final ContainerDao containerDao;
   private final MySqlDataAccessor mySqlDataAccessor;
 
-  public MySqlAccountStore(MySqlUtils.DbEndpoint dbEndpoint) throws SQLException {
-    mySqlDataAccessor = new MySqlDataAccessor(dbEndpoint);
+  public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter) throws SQLException {
+    mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter);
     accountDao = new AccountDao(mySqlDataAccessor);
     containerDao = new ContainerDao(mySqlDataAccessor);
   }

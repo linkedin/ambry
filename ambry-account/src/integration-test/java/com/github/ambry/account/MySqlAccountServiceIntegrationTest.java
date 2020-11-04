@@ -19,6 +19,7 @@ import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.account.mysql.MySqlDataAccessor;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
@@ -37,6 +38,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,14 +69,15 @@ public class MySqlAccountServiceIntegrationTest {
 
   public MySqlAccountServiceIntegrationTest() throws Exception {
     mySqlConfigProps = Utils.loadPropsFromResource("mysql.properties");
+    mySqlConfigProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "dc1");
     mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     mySqlAccountStore =
-        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore(true));
+        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore());
     mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
-    when(mockMySqlAccountStoreFactory.getMySqlAccountStore(anyBoolean())).thenReturn(mySqlAccountStore);
+    when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mySqlAccountStore);
     // Start with empty database
     cleanup();
     mySqlAccountService = getAccountService();
@@ -90,7 +94,7 @@ public class MySqlAccountServiceIntegrationTest {
     DbEndpoint endpoint =
         new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword");
     try {
-      new MySqlAccountStore(endpoint);
+      new MySqlAccountStore(Collections.singletonList(endpoint), endpoint.getDatacenter());
       fail("Store creation should fail with bad credentials");
     } catch (SQLException e) {
       assertTrue(MySqlDataAccessor.isCredentialError(e));
@@ -134,11 +138,8 @@ public class MySqlAccountServiceIntegrationTest {
    */
   @Test
   public void testInitCacheOnStartUp() throws Exception {
-    Container testContainer =
-        new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
-            (short) 1).build();
-    Account testAccount = new AccountBuilder((short) 1, "testAccount", Account.AccountStatus.ACTIVE).containers(
-        Collections.singleton(testContainer)).build();
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = testAccount.getContainerByName("testContainer");
     mySqlAccountStore.addAccounts(Collections.singletonList(testAccount));
     mySqlAccountStore.addContainer(testContainer);
     mySqlAccountService = getAccountService();
@@ -189,6 +190,43 @@ public class MySqlAccountServiceIntegrationTest {
         mySqlAccountService.getAccountById(testAccount.getId()));
   }
 
+  @Test
+  public void testFailover() throws Exception {
+    String dbInfoJsonString = mySqlConfigProps.getProperty(DB_INFO);
+    JSONArray dbInfo = new JSONArray(dbInfoJsonString);
+    JSONObject entry = dbInfo.getJSONObject(0);
+    DbEndpoint origEndpoint = DbEndpoint.fromJson(entry);
+    // Make two endpoints, one with bad url, writeable, remote; second with good url, writeable, local
+    String localDc = "local", remoteDc = "remote";
+    String badUrl = "jdbc:mysql://badhost/AccountMetadata";
+    DbEndpoint localGoodEndpoint =
+        new DbEndpoint(origEndpoint.getUrl(), localDc, false, origEndpoint.getUsername(), origEndpoint.getPassword());
+    DbEndpoint remoteBadEndpoint =
+        new DbEndpoint(badUrl, remoteDc, true, origEndpoint.getUsername(), origEndpoint.getPassword());
+    JSONArray endpointsJson = new JSONArray().put(localGoodEndpoint.toJson()).put(remoteBadEndpoint.toJson());
+    mySqlConfigProps.setProperty(DB_INFO, endpointsJson.toString());
+    mySqlConfigProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, localDc);
+    mySqlAccountStore =
+        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore());
+    when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mySqlAccountStore);
+    // constructor does initial fetch which will fail on first endpoint and succeed on second
+    mySqlAccountService = new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
+
+    // Try to update, should fail to get connection
+    Account account = makeTestAccountWithContainer();
+    try {
+      mySqlAccountService.updateAccounts(Collections.singletonList(account));
+      fail("Expected failure due to no writeable accounts");
+    } catch (AccountServiceException ase) {
+      assertEquals(1, accountServiceMetrics.updateAccountErrorCount.getCount());
+      // TODO: assertEquals(1, mysqlMetrics.connectionErrorCount)
+      assertEquals(AccountServiceErrorCode.InternalError, ase.getErrorCode());
+    }
+    mySqlAccountService.fetchAndUpdateCache();
+    // TODO: after getPreparedStatement tries to upgrade, should fail then succeed
+    // TODO: assertEquals(2, mysqlMetrics.connectionErrorCount)
+  }
+
   /**
    * Tests background updater for updating cache from mysql store periodically.
    */
@@ -235,9 +273,9 @@ public class MySqlAccountServiceIntegrationTest {
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     // TODO: need separate metrics for this service?
     MySqlAccountStore consumerAccountStore =
-        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore(true));
+        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore());
     MySqlAccountStoreFactory mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
-    when(mockMySqlAccountStoreFactory.getMySqlAccountStore(anyBoolean())).thenReturn(consumerAccountStore);
+    when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(consumerAccountStore);
     MySqlAccountService consumerAccountService =
         new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
 
@@ -452,6 +490,16 @@ public class MySqlAccountServiceIntegrationTest {
         accountServiceMetrics.updateAccountErrorCount.getCount());
   }
 
+  private Account makeTestAccountWithContainer() {
+    Container testContainer =
+        new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
+            (short) 1).build();
+    Account testAccount = new AccountBuilder((short) 1, "testAccount", Account.AccountStatus.ACTIVE).containers(
+        Collections.singleton(testContainer)).build();
+    return testAccount;
+  }
+
+
   /**
    * Create a new container to add to an account.
    * @param name container name
@@ -485,7 +533,7 @@ public class MySqlAccountServiceIntegrationTest {
    * @throws SQLException
    */
   private void cleanup() throws SQLException {
-    Connection dbConnection = mySqlAccountStore.getMySqlDataAccessor().getDatabaseConnection();
+    Connection dbConnection = mySqlAccountStore.getMySqlDataAccessor().getDatabaseConnection(true);
     Statement statement = dbConnection.createStatement();
     statement.executeUpdate("DELETE FROM " + AccountDao.ACCOUNT_TABLE);
     statement.executeUpdate("DELETE FROM " + ContainerDao.CONTAINER_TABLE);

@@ -45,13 +45,8 @@ public class MySqlUtils {
     JSONArray dbInfo = new JSONArray(dbInfoJsonString);
     for (int i = 0; i < dbInfo.length(); i++) {
       JSONObject entry = dbInfo.getJSONObject(i);
-      String url = entry.getString(URL_STR);
-      String datacenter = entry.getString(DATACENTER_STR);
-      boolean isWriteable = entry.getBoolean(ISWRITEABLE_STR);
-      String username = entry.getString(USERNAME_STR);
-      String password = entry.getString(PASSWORD_STR);
-      dcToDbEndpoints.computeIfAbsent(datacenter, key -> new ArrayList<>())
-          .add(new DbEndpoint(url, datacenter, isWriteable, username, password));
+      DbEndpoint dbEndpoint = DbEndpoint.fromJson(entry);
+      dcToDbEndpoints.computeIfAbsent(dbEndpoint.datacenter, key -> new ArrayList<>()).add(dbEndpoint);
     }
     return dcToDbEndpoints;
   }
@@ -72,6 +67,25 @@ public class MySqlUtils {
       this.isWriteable = isWriteable;
       this.username = username;
       this.password = password;
+    }
+
+    public static DbEndpoint fromJson(JSONObject entry) throws JSONException {
+      String url = entry.getString(URL_STR);
+      String datacenter = entry.getString(DATACENTER_STR);
+      boolean isWriteable = entry.getBoolean(ISWRITEABLE_STR);
+      String username = entry.getString(USERNAME_STR);
+      String password = entry.getString(PASSWORD_STR);
+      return new DbEndpoint(url, datacenter, isWriteable, username, password);
+    }
+
+    public JSONObject toJson() throws JSONException {
+      JSONObject entry = new JSONObject();
+      entry.put(URL_STR, url);
+      entry.put(DATACENTER_STR, datacenter);
+      entry.put(ISWRITEABLE_STR, isWriteable);
+      entry.put(USERNAME_STR, username);
+      entry.put(PASSWORD_STR, password);
+      return entry;
     }
 
     /**

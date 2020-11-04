@@ -55,14 +55,14 @@ public class DatabaseTest {
 
   private static void perfTest(VerifiableProperties verifiableProperties) throws Exception {
     MySqlDataAccessor dataAccessor =
-        new MySqlAccountStoreFactory(verifiableProperties).getMySqlAccountStore(true).getMySqlDataAccessor();
+        new MySqlAccountStoreFactory(verifiableProperties).getMySqlAccountStore().getMySqlDataAccessor();
     ContainerDao containerDao = new ContainerDao(dataAccessor);
     // Use high account id to avoid conflict
     short startAccountId = 30000;
     int numAccounts = 10;
     int numContainers = 1000;
 
-    cleanup(dataAccessor.getDatabaseConnection(), startAccountId);
+    cleanup(dataAccessor.getDatabaseConnection(true), startAccountId);
 
     ContainerBuilder builder = new ContainerBuilder((short) 0, "", Container.ContainerStatus.ACTIVE, "Test", (short) 0);
     long t0 = System.currentTimeMillis();
