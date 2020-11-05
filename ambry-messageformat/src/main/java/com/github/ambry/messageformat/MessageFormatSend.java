@@ -135,9 +135,17 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
 
             MessageHeader_Format headerFormat = parseHeaderAndVerifyStoreKey(is, i);
 
-            messageMetadataList.add(headerFormat.hasEncryptionKeyRecord() ? new MessageMetadata(
-                extractEncryptionKey(i, headerFormat.getBlobEncryptionKeyRecordRelativeOffset(),
-                    headerFormat.getBlobEncryptionKeyRecordSize())) : null);
+            MessageMetadata messageMetadata = null;
+            if (headerFormat.hasEncryptionKeyRecord()) {
+              // If encryption key exists, MessageMetadata with encryption key is needed.
+              ByteBuf duplicatedByteBuf = blobAll.duplicate();
+              duplicatedByteBuf.readerIndex(headerFormat.getBlobEncryptionKeyRecordRelativeOffset());
+              duplicatedByteBuf.writerIndex(headerFormat.getBlobEncryptionKeyRecordRelativeOffset()
+                  + headerFormat.getBlobEncryptionKeyRecordSize());
+              messageMetadata =
+                  new MessageMetadata(deserializeBlobEncryptionKey(new ByteBufInputStream(duplicatedByteBuf)));
+            }
+            messageMetadataList.add(messageMetadata);
             sendInfoList.add(i,
                 new SendInfo(headerFormat.getBlobRecordRelativeOffset(), headerFormat.getBlobRecordSize()));
             totalSizeToWrite += headerFormat.getBlobRecordSize();
