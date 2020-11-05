@@ -17,7 +17,6 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
-import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
@@ -50,6 +49,7 @@ public class AccountServiceMetrics {
   public final Counter accountDeletesToAmbryServerErrorCount;
   public final Counter accountFetchFromAmbryServerErrorCount;
   public final Counter accountUpdatesToStoreErrorCount;
+  public final Counter getAccountInconsistencyCount;
 
   Gauge<Integer> accountDataInconsistencyCount;
 
@@ -97,14 +97,16 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountDeletesToAmbryServerErrorCount"));
     accountFetchFromAmbryServerErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryServerErrorCount"));
+    getAccountInconsistencyCount =
+        metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, "GetAccountInconsistencyCount"));
   }
 
   /**
    * Tracks the number of accounts different between primary and secondary {@link AccountService}s
-   * @param accountsMismatchCount number of Accounts different between primary and secondary {@link AccountService}s
+   * @param compositeAccountService instance of {@link CompositeAccountService}
    */
-  void trackAccountDataInconsistency(AtomicInteger accountsMismatchCount) {
-    accountDataInconsistencyCount = accountsMismatchCount::get;
+  void trackAccountDataInconsistency(CompositeAccountService compositeAccountService) {
+    accountDataInconsistencyCount = compositeAccountService::getAccountsMismatchCount;
     metricRegistry.register(MetricRegistry.name(CompositeAccountService.class, "AccountDataInconsistencyCount"),
         accountDataInconsistencyCount);
   }
