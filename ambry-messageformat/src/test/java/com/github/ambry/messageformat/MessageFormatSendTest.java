@@ -249,7 +249,7 @@ public class MessageFormatSendTest {
     } else {
       Assert.assertEquals(expectedEncryptionKey, send.getMessageMetadataList().get(0).getEncryptionKey());
     }
-    Assert.assertTrue(readSet.isPrefetchInfoCorrect(header.getBlobRecordRelativeOffset(), blobRecordSize));
+    Assert.assertTrue(readSet.isPrefetchInfoCorrect(0, readSet.sizeInBytes(0)));
 
     // get user metadata
     send = new MessageFormatSend(readSet, MessageFormatFlags.BlobUserMetadata, metrics, new MockIdFactory());
@@ -654,7 +654,7 @@ public class MessageFormatSendTest {
     try {
       // get blob
       MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Blob, metrics, new MockIdFactory());
-      Assert.assertTrue(false);
+      Assert.fail("Exception is expected");
     } catch (MessageFormatException e) {
       Assert.assertTrue(e.getErrorCode() == MessageFormatErrorCodes.Store_Key_Id_MisMatch);
     }
