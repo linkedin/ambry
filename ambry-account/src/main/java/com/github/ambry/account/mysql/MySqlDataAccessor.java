@@ -61,13 +61,15 @@ public class MySqlDataAccessor {
   }
 
   /** Production constructor */
-  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, String localDatacenter, MySqlAccountStoreMetrics metrics) throws SQLException {
+  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, String localDatacenter, MySqlAccountStoreMetrics metrics)
+      throws SQLException {
     this.metrics = metrics;
     setup(inputEndpoints, localDatacenter);
   }
 
   /** Test constructor */
-  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, Driver mysqlDriver, MySqlAccountStoreMetrics metrics) throws SQLException {
+  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, Driver mysqlDriver, MySqlAccountStoreMetrics metrics)
+      throws SQLException {
     this.mysqlDriver = mysqlDriver;
     this.metrics = metrics;
     setup(inputEndpoints, inputEndpoints.get(0).getDatacenter());
@@ -215,9 +217,6 @@ public class MySqlDataAccessor {
   }
 
   /**
-<<<<<<< HEAD
-   * Close the active connection and clear the statement cache.
-=======
    * Handle successful database operation
    * @param operationType type of mysql operation
    * @param operationTimeInMs operation time in milliseconds
@@ -233,8 +232,7 @@ public class MySqlDataAccessor {
   }
 
   /**
-   * Reset to initial state.
->>>>>>> ccb7dc8fad71edc1548c2befe186dce81bdcf749
+   * Close the active connection and clear the statement cache.
    * This should be called after a failed database operation.
    */
   synchronized void reset() {

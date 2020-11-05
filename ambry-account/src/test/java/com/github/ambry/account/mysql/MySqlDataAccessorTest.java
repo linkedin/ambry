@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account.mysql;
 
+import com.codahale.metrics.MetricRegistry;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.SQLException;
@@ -42,6 +43,7 @@ public class MySqlDataAccessorTest {
   private final String writableUrl = "jdbc:mysql://primary/AccountMetadata";
   private final String readonlyUrl = "jdbc:mysql://replica/AccountMetadata";
   private final Driver mockDriver = mock(Driver.class);
+  private final MySqlAccountStoreMetrics metrics = new MySqlAccountStoreMetrics(new MetricRegistry());
   private final SQLException connectionException = new SQLTransientConnectionException("No connection");
 
   public MySqlDataAccessorTest() {
@@ -50,11 +52,11 @@ public class MySqlDataAccessorTest {
   @Test
   public void testInputErrors() throws Exception {
     // Pass no endpoints
-    expectFailure(() -> new MySqlDataAccessor(Collections.emptyList(), localDc), "no endpoints",
+    expectFailure(() -> new MySqlDataAccessor(Collections.emptyList(), localDc, metrics), "no endpoints",
         e -> e instanceof IllegalArgumentException);
     // Pass endpoints with none writable
     DbEndpoint readOnlyEndpoint = new DbEndpoint(localUrl, localDc, false, username, password);
-    expectFailure(() -> new MySqlDataAccessor(Collections.singletonList(readOnlyEndpoint), localDc),
+    expectFailure(() -> new MySqlDataAccessor(Collections.singletonList(readOnlyEndpoint), localDc, metrics),
         "no writable endpoint", e -> e instanceof IllegalArgumentException);
   }
 
@@ -67,7 +69,7 @@ public class MySqlDataAccessorTest {
     Connection remoteConnection = mock(Connection.class);
     bringEndpointUp(localEndpoint, localConnection);
     bringEndpointUp(remoteEndpoint, remoteConnection);
-    dataAccessor = new MySqlDataAccessor(Arrays.asList(localEndpoint, remoteEndpoint), mockDriver);
+    dataAccessor = new MySqlDataAccessor(Arrays.asList(localEndpoint, remoteEndpoint), mockDriver, metrics);
     // If both endpoints are available, expect to connect to local one
     assertEquals(localConnection, dataAccessor.getDatabaseConnection(true));
     // If local endpoint is down, expect to connect to remote one
@@ -81,7 +83,7 @@ public class MySqlDataAccessorTest {
     Connection readonlyConnection = mock(Connection.class);
     bringEndpointUp(writableEndpoint, writableConnection);
     bringEndpointUp(readonlyEndpoint, readonlyConnection);
-    dataAccessor = new MySqlDataAccessor(Arrays.asList(readonlyEndpoint, writableEndpoint), mockDriver);
+    dataAccessor = new MySqlDataAccessor(Arrays.asList(readonlyEndpoint, writableEndpoint), mockDriver, metrics);
     // If both endpoints are available, expect to connect to writable one
     assertEquals(writableConnection, dataAccessor.getDatabaseConnection(true));
     // Bring writable endpoint down
