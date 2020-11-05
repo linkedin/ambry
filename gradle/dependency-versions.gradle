@@ -24,6 +24,8 @@ ext {
     jaydioVersion = "0.1"
     azureStorageVersion = "12.2.0"
     azureCosmosDbVersion = "2.6.3"
+    azureMsal4jVersion="1.7.1"
+    azureMsalClientCredentialVersion="1.0.0"
     conscryptVersion = "2.2.1"
     jimFsVersion = "1.1"
 }

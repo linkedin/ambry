@@ -13,15 +13,11 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.azure.core.http.HttpClient;
 import com.azure.core.http.ProxyOptions;
-import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
 import com.azure.core.http.rest.Response;
-import com.azure.core.util.Configuration;
 import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
-import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.batch.BlobBatch;
 import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.batch.BlobBatchClientBuilder;
@@ -30,8 +26,6 @@ import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.specialized.BlockBlobClient;
-import com.azure.storage.common.policy.RequestRetryOptions;
-import com.azure.storage.common.policy.RetryPolicyType;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudUpdateValidator;
@@ -66,7 +60,6 @@ public class AzureBlobDataAccessor {
   private static final Logger logger = LoggerFactory.getLogger(AzureBlobDataAccessor.class);
   private final BlobServiceClient storageClient;
   private final BlobBatchClient blobBatchClient;
-  private final Configuration storageConfiguration;
   private final AzureMetrics azureMetrics;
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
   // Containers known to exist in the storage account
@@ -83,31 +76,25 @@ public class AzureBlobDataAccessor {
    * @param azureCloudConfig the {@link AzureCloudConfig} to use.
    * @param blobLayoutStrategy the {@link AzureBlobLayoutStrategy} to use.
    * @param azureMetrics the {@link AzureMetrics} to use.
+   * @throws ReflectiveOperationException
    */
   public AzureBlobDataAccessor(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
-      AzureBlobLayoutStrategy blobLayoutStrategy, AzureMetrics azureMetrics) {
+      AzureBlobLayoutStrategy blobLayoutStrategy, AzureMetrics azureMetrics) throws ReflectiveOperationException {
     this.blobLayoutStrategy = blobLayoutStrategy;
     this.azureMetrics = azureMetrics;
     this.purgeBatchSize = azureCloudConfig.azurePurgeBatchSize;
-    this.storageConfiguration = new Configuration();
     // Check for network proxy
     proxyOptions = (cloudConfig.vcrProxyHost == null) ? null : new ProxyOptions(ProxyOptions.Type.HTTP,
         new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
     if (proxyOptions != null) {
       logger.info("Using proxy: {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
     }
-    HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
     requestTimeout = Duration.ofMillis(cloudConfig.cloudRequestTimeout);
     uploadTimeout = Duration.ofMillis(cloudConfig.cloudUploadRequestTimeout);
     batchTimeout = Duration.ofMillis(cloudConfig.cloudBatchRequestTimeout);
 
-    // Note: retry decisions are made at CloudBlobStore level.  Configure storageClient with no retries.
-    RequestRetryOptions noRetries = new RequestRetryOptions(RetryPolicyType.FIXED, 1, null, null, null, null);
-    storageClient = new BlobServiceClientBuilder().connectionString(azureCloudConfig.azureStorageConnectionString)
-        .httpClient(client)
-        .retryOptions(noRetries)
-        .configuration(storageConfiguration)
-        .buildClient();
+    StorageClientFactory storageClientFactory = Utils.getObj(azureCloudConfig.azureStorageClientFactoryClass);
+    storageClient = storageClientFactory.createBlobStorageClient(cloudConfig, azureCloudConfig);
     blobBatchClient = new BlobBatchClientBuilder(storageClient).buildClient();
   }
 
@@ -121,7 +108,6 @@ public class AzureBlobDataAccessor {
   AzureBlobDataAccessor(BlobServiceClient storageClient, BlobBatchClient blobBatchClient, String clusterName,
       AzureMetrics azureMetrics) {
     this.storageClient = storageClient;
-    this.storageConfiguration = new Configuration();
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.azureMetrics = azureMetrics;
     this.blobBatchClient = blobBatchClient;

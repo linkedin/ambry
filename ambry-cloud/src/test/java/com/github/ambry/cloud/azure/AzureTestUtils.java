@@ -16,10 +16,8 @@ package com.github.ambry.cloud.azure;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
-import com.github.ambry.clustermap.Partition;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.TestUtils;
@@ -31,12 +29,10 @@ import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
-import java.util.stream.Collectors;
 import org.apache.commons.codec.binary.Base64;
 import rx.Observable;
 import rx.observables.BlockingObservable;
@@ -89,6 +85,13 @@ class AzureTestUtils {
     configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
     configProps.setProperty(AzureCloudConfig.COSMOS_DELETED_CONTAINER_COLLECTION_LINK, "ambry/deletedContainer");
     configProps.setProperty(AzureCloudConfig.COSMOS_KEY, "cosmos-key");
+    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_AUTHORITY,
+        "https://login.microsoftonline.com/test-account/");
+    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENTID, "client-id");
+    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_SECRET, "client-secret");
+    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ENDPOINT, "https://azure_storage.blob.core.windows.net");
+    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_FACTORY_CLASS,
+        "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClientFactory");
     configProps.setProperty("clustermap.cluster.name", "main");
     configProps.setProperty("clustermap.datacenter.name", "uswest");
     configProps.setProperty("clustermap.host.name", "localhost");

@@ -425,6 +425,7 @@ project(':ambry-cloud') {
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
         compile "com.microsoft.azure:azure-cosmosdb:$azureCosmosDbVersion"
+        compile "com.microsoft.azure:msal4j:$azureMsal4jVersion"
         testCompile project(':ambry-router')
         testCompile project(':ambry-store')
         testCompile project(':ambry-test-utils')
