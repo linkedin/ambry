@@ -17,13 +17,37 @@ import com.azure.core.http.HttpClient;
 import com.azure.core.util.Configuration;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
+import com.azure.storage.blob.batch.BlobBatchClient;
+import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.common.policy.RequestRetryOptions;
+import com.github.ambry.config.CloudConfig;
 
 
 /**
- * {@link StorageClientFactory} implementation based on connection string authentication.
+ * {@link StorageClient} implementation based on connection string authentication.
  */
-public class ConnectionStringBasedStorageClientFactory extends StorageClientFactory {
+public class ConnectionStringBasedStorageClient extends StorageClient {
+
+  /**
+   * Constructor for {@link ConnectionStringBasedStorageClient}.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @param cloudConfig {@link CloudConfig} object.
+   */
+  public ConnectionStringBasedStorageClient(AzureCloudConfig azureCloudConfig, CloudConfig cloudConfig,
+      AzureBlobLayoutStrategy blobLayoutStrategy) {
+    super(azureCloudConfig, cloudConfig, blobLayoutStrategy);
+  }
+
+  /**
+   * Constructor for {@link ConnectionStringBasedStorageClient} object for testing.
+   * @param blobServiceClient {@link BlobServiceClient} object.
+   * @param blobBatchClient {@link BlobBatchClient} object.
+   * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
+   */
+  public ConnectionStringBasedStorageClient(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient,
+      AzureBlobLayoutStrategy blobLayoutStrategy) {
+    super(blobServiceClient, blobBatchClient, blobLayoutStrategy);
+  }
 
   @Override
   protected BlobServiceClient buildBlobServiceClient(HttpClient httpClient, Configuration configuration,
@@ -44,5 +68,10 @@ public class ConnectionStringBasedStorageClientFactory extends StorageClientFact
       throw new IllegalArgumentException(
           "Missing connection string config " + AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING);
     }
+  }
+
+  @Override
+  protected boolean tryHandleExceptionAndHintRetry(BlobStorageException blobStorageException) {
+    return false;
   }
 }

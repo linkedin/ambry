@@ -151,8 +151,8 @@ public class AzureCloudDestinationTest {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENTID, "client-id");
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_SECRET, "client-secret");
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ENDPOINT, "https://azure_storage.blob.core.windows.net");
-    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_FACTORY_CLASS,
-        "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClientFactory ");
+    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_CLASS,
+        "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient");
     vcrMetrics = new VcrMetrics(new MetricRegistry());
     azureMetrics = new AzureMetrics(new MetricRegistry());
     clusterMap = mock(ClusterMap.class);

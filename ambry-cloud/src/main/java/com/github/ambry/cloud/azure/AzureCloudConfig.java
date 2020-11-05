@@ -41,7 +41,7 @@ public class AzureCloudConfig {
   public static final String COSMOS_PURGE_BATCH_SIZE = "cosmos.purge.batch.size";
   public static final String AZURE_NAME_SCHEME_VERSION = "azure.name.scheme.version";
   public static final String AZURE_BLOB_CONTAINER_STRATEGY = "azure.blob.container.strategy";
-  public static final String AZURE_STORAGE_CLIENT_FACTORY_CLASS = "azure.storage.client.factory.class";
+  public static final String AZURE_STORAGE_CLIENT_CLASS = "azure.storage.client.class";
   // Per docs.microsoft.com/en-us/rest/api/storageservices/blob-batch
   public static final int MAX_PURGE_BATCH_SIZE = 256;
   public static final int DEFAULT_PURGE_BATCH_SIZE = 100;
@@ -51,8 +51,8 @@ public class AzureCloudConfig {
 
   public static final int DEFAULT_NAME_SCHEME_VERSION = 0;
   public static final String DEFAULT_CONTAINER_STRATEGY = "Partition";
-  public static final String DEFAULT_AZURE_STORAGE_CLIENT_FACTORY_CLASS =
-      "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClientFactory";
+  public static final String DEFAULT_AZURE_STORAGE_CLIENT_CLASS =
+      "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient";
 
   /**
    * The Azure Blob Storage connection string.
@@ -161,8 +161,8 @@ public class AzureCloudConfig {
   /**
    * Factory class to instantiate azure storage client.
    */
-  @Config(AZURE_STORAGE_CLIENT_FACTORY_CLASS)
-  public final String azureStorageClientFactoryClass;
+  @Config(AZURE_STORAGE_CLIENT_CLASS)
+  public final String azureStorageClientClass;
 
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
@@ -187,7 +187,7 @@ public class AzureCloudConfig {
     azureBlobContainerStrategy =
         verifiableProperties.getString(AZURE_BLOB_CONTAINER_STRATEGY, DEFAULT_CONTAINER_STRATEGY);
     azureNameSchemeVersion = verifiableProperties.getInt(AZURE_NAME_SCHEME_VERSION, DEFAULT_NAME_SCHEME_VERSION);
-    azureStorageClientFactoryClass =
-        verifiableProperties.getString(AZURE_STORAGE_CLIENT_FACTORY_CLASS, DEFAULT_AZURE_STORAGE_CLIENT_FACTORY_CLASS);
+    azureStorageClientClass =
+        verifiableProperties.getString(AZURE_STORAGE_CLIENT_CLASS, DEFAULT_AZURE_STORAGE_CLIENT_CLASS);
   }
 }
