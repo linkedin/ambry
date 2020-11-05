@@ -77,7 +77,11 @@ public class ADAuthBasedStorageClient extends StorageClient {
         return Mono.just(accessToken);
       }
     };
-    accessTokenRef = new AtomicReference<>(accessToken);
+    if (accessTokenRef == null) {
+      accessTokenRef = new AtomicReference<>(accessToken);
+    } else {
+      accessTokenRef.set(accessToken);
+    }
     return new BlobServiceClientBuilder().credential(tokenCredential)
         .endpoint(azureCloudConfig.azureStorageEndpoint)
         .httpClient(httpClient)
