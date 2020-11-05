@@ -23,6 +23,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import org.junit.Test;
@@ -75,7 +76,7 @@ public class AccountDaoTest {
     when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
     MySqlUtils.DbEndpoint dbEndpoint =
         new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "ambry", "ambry");
-    return new MySqlDataAccessor(dbEndpoint, mockDriver);
+    return new MySqlDataAccessor(Collections.singletonList(dbEndpoint), mockDriver);
   }
 
   @Test

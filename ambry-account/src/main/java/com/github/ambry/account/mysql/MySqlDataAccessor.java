@@ -45,28 +45,44 @@ public class MySqlDataAccessor {
   private static final String INDEX_ACCOUNT_CONTAINER = "containers.accountContainer";
   private static final String INDEX_CONTAINER_NAME = "containers.uniqueName";
   /** List of {@link DbEndpoint} sorted from best to worst */
-  private final List<DbEndpoint> sortedDbEndpoints;
-  private final Driver mysqlDriver;
   private final Map<String, PreparedStatement> statementCache = new HashMap<>();
+  private Driver mysqlDriver;
   private Connection activeConnection;
   private DbEndpoint connectedEndpoint;
-  private final EndpointComparator endpointComparator;
+  private List<DbEndpoint> sortedDbEndpoints;
+  private EndpointComparator endpointComparator;
 
   /** Production constructor */
   public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, String localDatacenter) throws SQLException {
+    setup(inputEndpoints, localDatacenter);
+  }
+
+  /** Test constructor */
+  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, Driver mysqlDriver) throws SQLException {
+    this.mysqlDriver = mysqlDriver;
+    setup(inputEndpoints, inputEndpoints.get(0).getDatacenter());
+  }
+
+  /**
+   * Setup for data access.
+   * @param inputEndpoints the {@link DbEndpoint}s to use.
+   * @param localDatacenter the name of the local datacenter.
+   * @throws SQLException if setup fails.
+   */
+  private void setup(List<DbEndpoint> inputEndpoints, String localDatacenter) throws SQLException {
     if (inputEndpoints == null || inputEndpoints.isEmpty()) {
       throw new IllegalArgumentException("No endpoints supplied");
     }
     // Sort from best to worst
     endpointComparator = new EndpointComparator(localDatacenter);
     Collections.sort(inputEndpoints, endpointComparator);
-    this.sortedDbEndpoints = inputEndpoints;
+    sortedDbEndpoints = inputEndpoints;
     if (!sortedDbEndpoints.get(0).isWriteable()) {
       throw new IllegalArgumentException("No endpoints are writable");
     }
 
-    // Initialize driver
-    mysqlDriver = DriverManager.getDriver(sortedDbEndpoints.get(0).getUrl());
+    initializeDriver(sortedDbEndpoints.get(0).getUrl());
+
     // AccountService needs to work if mysql is down.  Mysql can also reboot.
     try {
       getDatabaseConnection(true);
@@ -79,11 +95,10 @@ public class MySqlDataAccessor {
     }
   }
 
-  /** Test constructor */
-  public MySqlDataAccessor(DbEndpoint dbEndpoint, Driver mysqlDriver) {
-    this.sortedDbEndpoints = Collections.singletonList(dbEndpoint);
-    endpointComparator = new EndpointComparator(dbEndpoint.getDatacenter());
-    this.mysqlDriver = mysqlDriver;
+  private void initializeDriver(String url) throws SQLException {
+    if (mysqlDriver == null) {
+      mysqlDriver = DriverManager.getDriver(url);
+    }
   }
 
   /**
@@ -96,7 +111,7 @@ public class MySqlDataAccessor {
 
     // Close active connection if no longer valid
     if (activeConnection != null && !activeConnection.isValid(5)) {
-      closeQuietly(activeConnection);
+      reset();
       activeConnection = null;
       connectedEndpoint = null;
     }
@@ -116,7 +131,7 @@ public class MySqlDataAccessor {
       connectedEndpoint = endpointConnectionPair.getFirst();
       String qualifier = connectedEndpoint.isWriteable() ? "writable" : "read-only";
       logger.info("Connected to {} enpoint: {}", qualifier, connectedEndpoint.getUrl());
-      closeQuietly(activeConnection);
+      closeQuietly(activeConnection); // TODO: reset?
       activeConnection = endpointConnectionPair.getSecond();
     }
     return activeConnection;
@@ -184,7 +199,7 @@ public class MySqlDataAccessor {
   }
 
   /**
-   * Reset to initial state.
+   * Close the active connection and clear the statement cache.
    * This should be called after a failed database operation.
    */
   synchronized void reset() {
