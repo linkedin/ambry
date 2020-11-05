@@ -40,7 +40,7 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
   public MySqlAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this.accountServiceConfig = new MySqlAccountServiceConfig(verifiableProperties);
     this.accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
-    this.mySqlAccountStoreFactory = new MySqlAccountStoreFactory(verifiableProperties);
+    this.mySqlAccountStoreFactory = new MySqlAccountStoreFactory(verifiableProperties, metricRegistry);
   }
 
   @Override

@@ -18,6 +18,7 @@ import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
+import com.github.ambry.account.mysql.MySqlAccountStoreMetrics;
 import com.github.ambry.account.mysql.MySqlDataAccessor;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -60,6 +61,7 @@ public class MySqlAccountServiceIntegrationTest {
   private final MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
   private MySqlAccountStore mySqlAccountStore;
   private final AccountServiceMetrics accountServiceMetrics;
+  private final MySqlAccountStoreMetrics accountStoreMetrics;
   private final Properties mySqlConfigProps;
   private MySqlAccountServiceConfig accountServiceConfig;
   private MySqlAccountService mySqlAccountService;
@@ -70,8 +72,9 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
-    mySqlAccountStore =
-        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore(true));
+    accountStoreMetrics = new MySqlAccountStoreMetrics(new MetricRegistry());
+    mySqlAccountStore = spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
+        new MetricRegistry()).getMySqlAccountStore(true));
     mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore(anyBoolean())).thenReturn(mySqlAccountStore);
     // Start with empty database
@@ -90,7 +93,7 @@ public class MySqlAccountServiceIntegrationTest {
     DbEndpoint endpoint =
         new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword");
     try {
-      new MySqlAccountStore(endpoint);
+      new MySqlAccountStore(endpoint, accountStoreMetrics);
       fail("Store creation should fail with bad credentials");
     } catch (SQLException e) {
       assertTrue(MySqlDataAccessor.isCredentialError(e));
@@ -235,7 +238,8 @@ public class MySqlAccountServiceIntegrationTest {
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     // TODO: need separate metrics for this service?
     MySqlAccountStore consumerAccountStore =
-        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore(true));
+        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
+            new MetricRegistry()).getMySqlAccountStore(true));
     MySqlAccountStoreFactory mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore(anyBoolean())).thenReturn(consumerAccountStore);
     MySqlAccountService consumerAccountService =

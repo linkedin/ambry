@@ -44,9 +44,18 @@ public class MySqlDataAccessor {
   private final Driver mysqlDriver;
   private Connection activeConnection;
   private final Map<String, PreparedStatement> statementCache = new HashMap<>();
+  private final MySqlAccountStoreMetrics metrics;
+
+  /**
+   * List of operation types on the mysql store.
+   */
+  public enum OperationType {
+    Write, Read
+  }
 
   /** Production constructor */
-  public MySqlDataAccessor(MySqlUtils.DbEndpoint dbEndpoint) throws SQLException {
+  public MySqlDataAccessor(MySqlUtils.DbEndpoint dbEndpoint, MySqlAccountStoreMetrics metrics) throws SQLException {
+    this.metrics = metrics;
     mysqlUrl = dbEndpoint.getUrl();
     mysqlUser = dbEndpoint.getUsername();
     mysqlPassword = dbEndpoint.getPassword();
@@ -65,11 +74,12 @@ public class MySqlDataAccessor {
   }
 
   /** Test constructor */
-  public MySqlDataAccessor(MySqlUtils.DbEndpoint dbEndpoint, Driver mysqlDriver) {
+  public MySqlDataAccessor(MySqlUtils.DbEndpoint dbEndpoint, Driver mysqlDriver, MySqlAccountStoreMetrics metrics) {
     mysqlUrl = dbEndpoint.getUrl();
     mysqlUser = dbEndpoint.getUsername();
     mysqlPassword = dbEndpoint.getPassword();
     this.mysqlDriver = mysqlDriver;
+    this.metrics = metrics;
   }
 
   /**
@@ -143,10 +153,31 @@ public class MySqlDataAccessor {
   /**
    * Handle a SQL exception on a database operation.
    * @param e the {@link SQLException} encountered.
+   * @param operationType type of mysql operation
    */
-  void onException(SQLException e) {
+  void onException(SQLException e, OperationType operationType) {
     if (e instanceof SQLTransientConnectionException) {
+      if (operationType == OperationType.Write) {
+        metrics.writeFailureCount.inc();
+      } else {
+        metrics.readFailureCount.inc();
+      }
       reset();
+    }
+  }
+
+  /**
+   * Handle successful database operation
+   * @param operationType type of mysql operation
+   * @param operationTimeInMs operation time in milliseconds
+   */
+  void onSuccess(OperationType operationType, long operationTimeInMs) {
+    if (operationType == OperationType.Write) {
+      metrics.writeSuccessCount.inc();
+      metrics.writeTimeInMs.update(operationTimeInMs);
+    } else {
+      metrics.readSuccessCount.inc();
+      metrics.readTimeInMs.update(operationTimeInMs);
     }
   }
 

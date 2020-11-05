@@ -13,14 +13,17 @@
  */
 package com.github.ambry.account.mysql;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 import java.sql.Timestamp;
 import java.util.List;
 import org.junit.Test;
@@ -44,16 +47,20 @@ public class ContainerDaoTest {
   private final MySqlDataAccessor dataAccessor;
   private final Connection mockConnection;
   private final ContainerDao containerDao;
+  private final MySqlAccountStoreMetrics metrics;
+  private final PreparedStatement mockInsertStatement;
+  private final PreparedStatement mockQueryStatement;
 
   public ContainerDaoTest() throws SQLException {
+    metrics = new MySqlAccountStoreMetrics(new MetricRegistry());
     testContainer =
         new ContainerBuilder(containerId, containerName, Container.ContainerStatus.ACTIVE, "", accountId).build();
     containerJson = testContainer.toJson().toString();
     mockConnection = mock(Connection.class);
-    PreparedStatement mockInsertStatement = mock(PreparedStatement.class);
+    mockInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into"))).thenReturn(mockInsertStatement);
     when(mockInsertStatement.executeUpdate()).thenReturn(1);
-    PreparedStatement mockQueryStatement = mock(PreparedStatement.class);
+    mockQueryStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(startsWith("select"))).thenReturn(mockQueryStatement);
     ResultSet mockResultSet = mock(ResultSet.class);
     when(mockQueryStatement.executeQuery()).thenReturn(mockResultSet);
@@ -62,13 +69,14 @@ public class ContainerDaoTest {
     when(mockResultSet.getString(eq(ContainerDao.CONTAINER_INFO))).thenReturn(containerJson);
     when(mockResultSet.getTimestamp(eq(ContainerDao.LAST_MODIFIED_TIME))).thenReturn(
         new Timestamp(SystemTime.getInstance().milliseconds()));
-    dataAccessor = AccountDaoTest.getDataAccessor(mockConnection);
+    dataAccessor = AccountDaoTest.getDataAccessor(mockConnection, metrics);
     containerDao = new ContainerDao(dataAccessor);
   }
 
   @Test
   public void testAddContainer() throws Exception {
     containerDao.addContainer(accountId, testContainer);
+    assertEquals("Write success count should be 1", 1, metrics.writeSuccessCount.getCount());
   }
 
   @Test
@@ -76,6 +84,7 @@ public class ContainerDaoTest {
     List<Container> containerList = containerDao.getContainers(accountId);
     assertEquals(1, containerList.size());
     assertEquals(testContainer, containerList.get(0));
+    assertEquals("Read success count should be 1", 1, metrics.readSuccessCount.getCount());
   }
 
   @Test
@@ -83,5 +92,21 @@ public class ContainerDaoTest {
     List<Container> containerList = containerDao.getNewContainers(0);
     assertEquals(1, containerList.size());
     assertEquals(testContainer, containerList.get(0));
+    assertEquals("Read success count should be 1", 1, metrics.readSuccessCount.getCount());
+  }
+
+  @Test
+  public void testAddContainerWithException() throws Exception {
+    when(mockInsertStatement.executeUpdate()).thenThrow(new SQLTransientConnectionException());
+    TestUtils.assertException(SQLTransientConnectionException.class,
+        () -> containerDao.addContainer(accountId, testContainer), null);
+    assertEquals("Write failure count should be 1", 1, metrics.writeFailureCount.getCount());
+  }
+
+  @Test
+  public void testGetNewContainersWithException() throws Exception {
+    when(mockQueryStatement.executeQuery()).thenThrow(new SQLTransientConnectionException());
+    TestUtils.assertException(SQLTransientConnectionException.class, () -> containerDao.getNewContainers(0L), null);
+    assertEquals("Read failure count should be 1", 1, metrics.readFailureCount.getCount());
   }
 }

@@ -13,15 +13,19 @@
  */
 package com.github.ambry.account.mysql;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
+import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.Properties;
@@ -44,15 +48,19 @@ public class AccountDaoTest {
   private final MySqlDataAccessor dataAccessor;
   private final Connection mockConnection;
   private final AccountDao accountDao;
+  private final MySqlAccountStoreMetrics metrics;
+  private final PreparedStatement mockInsertStatement;
+  private final PreparedStatement mockQueryStatement;
 
   public AccountDaoTest() throws SQLException {
+    metrics = new MySqlAccountStoreMetrics(new MetricRegistry());
     testAccount = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).build();
     accountJson = AccountCollectionSerde.accountToJsonNoContainers(testAccount).toString();
     mockConnection = mock(Connection.class);
-    PreparedStatement mockInsertStatement = mock(PreparedStatement.class);
+    mockInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into"))).thenReturn(mockInsertStatement);
     when(mockInsertStatement.executeUpdate()).thenReturn(1);
-    PreparedStatement mockQueryStatement = mock(PreparedStatement.class);
+    mockQueryStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(startsWith("select"))).thenReturn(mockQueryStatement);
     ResultSet mockResultSet = mock(ResultSet.class);
     when(mockResultSet.next()).thenReturn(true).thenReturn(false);
@@ -60,7 +68,7 @@ public class AccountDaoTest {
     when(mockResultSet.getTimestamp(eq(AccountDao.LAST_MODIFIED_TIME))).thenReturn(
         new Timestamp(SystemTime.getInstance().milliseconds()));
     when(mockQueryStatement.executeQuery()).thenReturn(mockResultSet);
-    dataAccessor = getDataAccessor(mockConnection);
+    dataAccessor = getDataAccessor(mockConnection, metrics);
     accountDao = new AccountDao(dataAccessor);
   }
 
@@ -70,12 +78,13 @@ public class AccountDaoTest {
    * @return the {@link MySqlDataAccessor}.
    * @throws SQLException
    */
-  static MySqlDataAccessor getDataAccessor(Connection mockConnection) throws SQLException {
+  static MySqlDataAccessor getDataAccessor(Connection mockConnection, MySqlAccountStoreMetrics metrics)
+      throws SQLException {
     Driver mockDriver = mock(Driver.class);
     when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
     MySqlUtils.DbEndpoint dbEndpoint =
         new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "ambry", "ambry");
-    MySqlDataAccessor dataAccessor = new MySqlDataAccessor(dbEndpoint, mockDriver);
+    MySqlDataAccessor dataAccessor = new MySqlDataAccessor(dbEndpoint, mockDriver, metrics);
     when(dataAccessor.getDatabaseConnection()).thenReturn(mockConnection);
     return dataAccessor;
   }
@@ -84,9 +93,11 @@ public class AccountDaoTest {
   public void testAddAccount() throws Exception {
     accountDao.addAccount(testAccount);
     verify(mockConnection).prepareStatement(anyString());
+    assertEquals("Write success count should be 1", 1, metrics.writeSuccessCount.getCount());
     // Run second time to reuse statement
     accountDao.addAccount(testAccount);
     verify(mockConnection).prepareStatement(anyString());
+    assertEquals("Write success count should be 2", 2, metrics.writeSuccessCount.getCount());
   }
 
   @Test
@@ -94,5 +105,20 @@ public class AccountDaoTest {
     List<Account> accountList = accountDao.getNewAccounts(0L);
     assertEquals(1, accountList.size());
     assertEquals(testAccount, accountList.get(0));
+    assertEquals("Read success count should be 1", 1, metrics.readSuccessCount.getCount());
+  }
+
+  @Test
+  public void testAddAccountWithException() throws Exception {
+    when(mockInsertStatement.executeUpdate()).thenThrow(new SQLTransientConnectionException());
+    TestUtils.assertException(SQLTransientConnectionException.class, () -> accountDao.addAccount(testAccount), null);
+    assertEquals("Write failure count should be 1", 1, metrics.writeFailureCount.getCount());
+  }
+
+  @Test
+  public void testGetAccountsWithException() throws Exception {
+    when(mockQueryStatement.executeQuery()).thenThrow(new SQLTransientConnectionException());
+    TestUtils.assertException(SQLTransientConnectionException.class, () -> accountDao.getNewAccounts(0L), null);
+    assertEquals("Read failure count should be 1", 1, metrics.readFailureCount.getCount());
   }
 }

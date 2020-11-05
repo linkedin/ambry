@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 
@@ -47,10 +48,15 @@ public class AccountServiceMetrics {
   public final Counter accountUpdatesToAmbryServerErrorCount;
   public final Counter accountDeletesToAmbryServerErrorCount;
   public final Counter accountFetchFromAmbryServerErrorCount;
-  public final Counter accountDataInconsistencyCount;
   public final Counter accountUpdatesToStoreErrorCount;
+  public final Counter getAccountInconsistencyCount;
+
+  Gauge<Integer> accountDataInconsistencyCount;
+
+  private final MetricRegistry metricRegistry;
 
   public AccountServiceMetrics(MetricRegistry metricRegistry) {
+    this.metricRegistry = metricRegistry;
     // Histogram
     startupTimeInMs = metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "StartupTimeInMs"));
     updateAccountTimeInMs =
@@ -91,7 +97,17 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountDeletesToAmbryServerErrorCount"));
     accountFetchFromAmbryServerErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryServerErrorCount"));
-    accountDataInconsistencyCount =
-        metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, "AccountDataInconsistencyCount"));
+    getAccountInconsistencyCount =
+        metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, "GetAccountInconsistencyCount"));
+  }
+
+  /**
+   * Tracks the number of accounts different between primary and secondary {@link AccountService}s
+   * @param compositeAccountService instance of {@link CompositeAccountService}
+   */
+  void trackAccountDataInconsistency(CompositeAccountService compositeAccountService) {
+    accountDataInconsistencyCount = compositeAccountService::getAccountsMismatchCount;
+    metricRegistry.register(MetricRegistry.name(CompositeAccountService.class, "AccountDataInconsistencyCount"),
+        accountDataInconsistencyCount);
   }
 }

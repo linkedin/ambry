@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account.mysql;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.sql.SQLException;
@@ -31,13 +32,15 @@ public class MySqlAccountStoreFactory {
 
   private static final Logger logger = LoggerFactory.getLogger(MySqlAccountStoreFactory.class);
   protected final MySqlAccountServiceConfig accountServiceConfig;
+  protected final MySqlAccountStoreMetrics metrics;
 
   /**
    * Constructor.
    * @param  verifiableProperties The properties to get a {@link MySqlAccountStore} instance. Cannot be {@code null}.
    */
-  public MySqlAccountStoreFactory(VerifiableProperties verifiableProperties) {
+  public MySqlAccountStoreFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this.accountServiceConfig = new MySqlAccountServiceConfig(verifiableProperties);
+    this.metrics = new MySqlAccountStoreMetrics(metricRegistry);
   }
 
   /**
@@ -53,7 +56,7 @@ public class MySqlAccountStoreFactory {
       for (MySqlUtils.DbEndpoint dbEndpoint : dbEndpoints) {
         if ((dbEndpoint.isWriteable() && writeable) || (!dbEndpoint.isWriteable() && !writeable)) {
           try {
-            return new MySqlAccountStore(dbEndpoint);
+            return new MySqlAccountStore(dbEndpoint, metrics);
           } catch (SQLException e) {
             logger.error("MySQL account store creation failed", e);
             // TODO: Add logic to retry on different db end point based on type of exception.

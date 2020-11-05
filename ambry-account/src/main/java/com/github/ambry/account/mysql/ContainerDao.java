@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
 
+import static com.github.ambry.account.mysql.MySqlDataAccessor.OperationType.*;
+
 
 /**
  * Container Data Access Object.
@@ -64,13 +66,15 @@ public class ContainerDao {
   public void addContainer(int accountId, Container container) throws SQLException {
     try {
       // Note: assuming autocommit for now
+      long startTimeMs = System.currentTimeMillis();
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
       insertStatement.setInt(1, accountId);
       insertStatement.setString(2, container.toJson().toString());
       insertStatement.setInt(3, container.getSnapshotVersion());
       insertStatement.executeUpdate();
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e);
+      dataAccessor.onException(e, Write);
       throw e;
     }
   }
@@ -84,14 +88,16 @@ public class ContainerDao {
   public void updateContainer(int accountId, Container container) throws SQLException {
     try {
       // Note: assuming autocommit for now
+      long startTimeMs = System.currentTimeMillis();
       PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
       updateStatement.setString(1, container.toJson().toString());
       updateStatement.setInt(2, container.getSnapshotVersion());
       updateStatement.setInt(3, accountId);
       updateStatement.setInt(4, container.getId());
       updateStatement.executeUpdate();
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e);
+      dataAccessor.onException(e, Write);
       throw e;
     }
   }
@@ -103,12 +109,15 @@ public class ContainerDao {
    * @throws SQLException
    */
   public List<Container> getContainers(int accountId) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
     PreparedStatement getByAccountStatement = dataAccessor.getPreparedStatement(getByAccountSql);
     getByAccountStatement.setInt(1, accountId);
     try (ResultSet rs = getByAccountStatement.executeQuery()) {
-      return convertResultSet(rs);
+      List<Container> containers = convertResultSet(rs);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+      return containers;
     } catch (SQLException e) {
-      dataAccessor.onException(e);
+      dataAccessor.onException(e, Read);
       throw e;
     }
   }
@@ -120,13 +129,16 @@ public class ContainerDao {
    * @throws SQLException
    */
   public List<Container> getNewContainers(long updatedSince) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
     PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql);
     getSinceStatement.setTimestamp(1, sinceTime);
     try (ResultSet rs = getSinceStatement.executeQuery()) {
-      return convertResultSet(rs);
+      List<Container> containers = convertResultSet(rs);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+      return containers;
     } catch (SQLException e) {
-      dataAccessor.onException(e);
+      dataAccessor.onException(e, Read);
       throw e;
     }
   }

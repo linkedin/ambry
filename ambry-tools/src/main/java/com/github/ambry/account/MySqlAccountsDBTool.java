@@ -184,7 +184,8 @@ public class MySqlAccountsDBTool {
 
   public MySqlAccountsDBTool(VerifiableProperties verifiableProperties, String zkServer) throws SQLException {
 
-    this.mySqlAccountStore = new MySqlAccountStoreFactory(verifiableProperties).getMySqlAccountStore(true);
+    this.mySqlAccountStore =
+        new MySqlAccountStoreFactory(verifiableProperties, new MetricRegistry()).getMySqlAccountStore(true);
     //Create helix property store
     HelixPropertyStoreConfig helixPropertyStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
     this.helixPropertyStore = CommonUtils.createHelixPropertyStore(zkServer, helixPropertyStoreConfig, null);
