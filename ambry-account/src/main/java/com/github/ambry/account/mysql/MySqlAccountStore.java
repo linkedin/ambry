@@ -29,12 +29,22 @@ public class MySqlAccountStore {
   private final ContainerDao containerDao;
   private final MySqlDataAccessor mySqlDataAccessor;
 
-  public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter) throws SQLException {
-    mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter);
+  /**
+   * Constructor.
+   * @param dbEndpoints MySql DB end points
+   * @param metrics metrics to track mysql operations
+   * @throws SQLException
+   */
+  public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, MySqlAccountStoreMetrics metrics) throws SQLException {
+    mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter, metrics);
     accountDao = new AccountDao(mySqlDataAccessor);
     containerDao = new ContainerDao(mySqlDataAccessor);
   }
 
+  /**
+   * Used for tests.
+   * @return {@link MySqlDataAccessor}
+   */
   public MySqlDataAccessor getMySqlDataAccessor() {
     return mySqlDataAccessor;
   }
@@ -56,7 +66,7 @@ public class MySqlAccountStore {
    * @throws SQLException
    */
   public void addAccount(Account account) throws SQLException {
-      accountDao.addAccount(account);
+    accountDao.addAccount(account);
   }
 
   /**

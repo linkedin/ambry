@@ -87,10 +87,11 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureMetrics the {@link AzureMetrics} to use.
    * @param azureReplicationFeedType {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
    * @param clusterMap {@link ClusterMap}.
+   * @throws ReflectiveOperationException
    */
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
       VcrMetrics vcrMetrics, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType,
-      ClusterMap clusterMap) {
+      ClusterMap clusterMap) throws ReflectiveOperationException {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =

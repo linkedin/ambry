@@ -82,24 +82,6 @@ public class AzureBlobDataAccessorTest {
     dataAccessor = new AzureBlobDataAccessor(mockServiceClient, mockBatchClient, clusterName, azureMetrics);
   }
 
-  static BlockBlobClient setupMockBlobClient(BlobServiceClient mockServiceClient) {
-    BlobContainerClient mockContainerClient = mock(BlobContainerClient.class);
-    BlobClient mockBlobClient = mock(BlobClient.class);
-    BlockBlobClient mockBlockBlobClient = mock(BlockBlobClient.class);
-    when(mockServiceClient.getBlobContainerClient(anyString())).thenReturn(mockContainerClient);
-    when(mockContainerClient.getBlobClient(anyString())).thenReturn(mockBlobClient);
-    when(mockContainerClient.exists()).thenReturn(false);
-    when(mockBlobClient.getBlockBlobClient()).thenReturn(mockBlockBlobClient);
-    // Rest is to mock getPropertiesWithResponse and not needed everywhere
-    BlobProperties mockBlobProperties = mock(BlobProperties.class);
-    Map<String, String> metadataMap = new HashMap<>();
-    lenient().when(mockBlobProperties.getMetadata()).thenReturn(metadataMap);
-    Response<BlobProperties> mockPropertiesResponse = mock(Response.class);
-    lenient().when(mockPropertiesResponse.getValue()).thenReturn(mockBlobProperties);
-    lenient().when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any())).thenReturn(mockPropertiesResponse);
-    return mockBlockBlobClient;
-  }
-
   /**
    * Test normal upload.
    * @throws Exception
@@ -253,6 +235,57 @@ public class AzureBlobDataAccessorTest {
     assertTrue("Expected delete to return true", dataAccessor.deleteFile("containerName", "fileName"));
     mockBlobExistence(false);
     assertFalse("Expected delete to return false", dataAccessor.deleteFile("containerName", "fileName"));
+  }
+
+  @Test
+  public void testStorageClientFactoriesConfigValidation() throws Exception {
+    Properties properties = new Properties();
+    AzureTestUtils.setConfigProperties(properties);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_FACTORY_CLASS,
+        ConnectionStringBasedStorageClientFactory.class.getCanonicalName());
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, "");
+    try {
+      AzureBlobDataAccessor azureBlobDataAccessor =
+          new AzureBlobDataAccessor(new CloudConfig(verifiableProperties), new AzureCloudConfig(verifiableProperties),
+              new AzureBlobLayoutStrategy("test"), azureMetrics);
+      fail("Creating azure blob data accessor with ConnectionStringBasedStorageClientFactory should throw exception"
+          + "without connection string config");
+    } catch (IllegalArgumentException iaEx) {
+    }
+
+    AzureTestUtils.setConfigProperties(properties);
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_FACTORY_CLASS,
+        ADAuthBasedStorageClientFactory.class.getCanonicalName());
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENTID, "");
+    verifiableProperties = new VerifiableProperties(properties);
+    try {
+      AzureBlobDataAccessor azureBlobDataAccessor =
+          new AzureBlobDataAccessor(new CloudConfig(verifiableProperties), new AzureCloudConfig(verifiableProperties),
+              new AzureBlobLayoutStrategy("test"), azureMetrics);
+      fail("Creating azure blob data accessor with ADAuthBasedStorageClientFactory should throw exception"
+          + "without one of the required configs");
+    } catch (IllegalArgumentException iaEx) {
+    }
+  }
+
+  static BlockBlobClient setupMockBlobClient(BlobServiceClient mockServiceClient) {
+    BlobContainerClient mockContainerClient = mock(BlobContainerClient.class);
+    BlobClient mockBlobClient = mock(BlobClient.class);
+    BlockBlobClient mockBlockBlobClient = mock(BlockBlobClient.class);
+    when(mockServiceClient.getBlobContainerClient(anyString())).thenReturn(mockContainerClient);
+    when(mockContainerClient.getBlobClient(anyString())).thenReturn(mockBlobClient);
+    when(mockContainerClient.exists()).thenReturn(false);
+    when(mockBlobClient.getBlockBlobClient()).thenReturn(mockBlockBlobClient);
+    // Rest is to mock getPropertiesWithResponse and not needed everywhere
+    BlobProperties mockBlobProperties = mock(BlobProperties.class);
+    Map<String, String> metadataMap = new HashMap<>();
+    lenient().when(mockBlobProperties.getMetadata()).thenReturn(metadataMap);
+    Response<BlobProperties> mockPropertiesResponse = mock(Response.class);
+    lenient().when(mockPropertiesResponse.getValue()).thenReturn(mockBlobProperties);
+    lenient().when(mockBlockBlobClient.getPropertiesWithResponse(any(), any(), any()))
+        .thenReturn(mockPropertiesResponse);
+    return mockBlockBlobClient;
   }
 
   private void mockBlobExistence(boolean exists) {

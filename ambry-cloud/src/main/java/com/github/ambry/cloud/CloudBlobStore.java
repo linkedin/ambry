@@ -900,7 +900,7 @@ class CloudBlobStore implements Store {
   }
 
   @Override
-  public boolean disabledOnError() {
+  public boolean isDisabled() {
     throw new UnsupportedOperationException("Method not supported");
   }
 

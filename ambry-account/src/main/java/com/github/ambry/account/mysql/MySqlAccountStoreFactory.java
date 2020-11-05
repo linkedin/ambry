@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account.mysql;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -36,16 +37,18 @@ public class MySqlAccountStoreFactory {
 
   protected final MySqlAccountServiceConfig accountServiceConfig;
   protected final String localDatacenter;
+  protected final MySqlAccountStoreMetrics metrics;
 
   /**
    * Constructor.
    * @param verifiableProperties The properties to get a {@link MySqlAccountStore} instance. Cannot be {@code null}.
    */
-  public MySqlAccountStoreFactory(VerifiableProperties verifiableProperties) {
+  public MySqlAccountStoreFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this.accountServiceConfig = new MySqlAccountServiceConfig(verifiableProperties);
     // If datacenter is unknown, all endpoints will be considered remote
     this.localDatacenter =
         verifiableProperties.getString(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, UNKNOWN_DATACENTER);
+    this.metrics = new MySqlAccountStoreMetrics(metricRegistry);
   }
 
   /**
@@ -59,7 +62,7 @@ public class MySqlAccountStoreFactory {
     List<MySqlUtils.DbEndpoint> dbEndpoints = new ArrayList<>();
     dcToMySqlDBEndpoints.values().forEach(endpointList -> dbEndpoints.addAll(endpointList));
     try {
-      return new MySqlAccountStore(dbEndpoints, localDatacenter);
+      return new MySqlAccountStore(dbEndpoints, localDatacenter, metrics);
     } catch (SQLException e) {
       logger.error("MySQL account store creation failed", e);
       throw e;

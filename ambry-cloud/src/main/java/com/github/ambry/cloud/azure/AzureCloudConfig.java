@@ -29,6 +29,11 @@ public class AzureCloudConfig {
   public static final String COSMOS_DELETED_CONTAINER_COLLECTION_LINK = "cosmos.deleted.container.collection.link";
   public static final String COSMOS_KEY = "cosmos.key";
   public static final String COSMOS_DIRECT_HTTPS = "cosmos.direct.https";
+  public static final String AZURE_STORAGE_AUTHORITY = "azure.storage.authority";
+  public static final String AZURE_STORAGE_CLIENTID = "azure.storage.clientId";
+  public static final String AZURE_STORAGE_SECRET = "azure.storage.secret";
+  public static final String AZURE_STORAGE_SCOPE = "azure.storage.scope";
+  public static final String AZURE_STORAGE_ENDPOINT = "azure.storage.endpoint";
   public static final String COSMOS_QUERY_BATCH_SIZE = "cosmos.query.batch.size";
   public static final String COSMOS_REQUEST_CHARGE_THRESHOLD = "cosmos.request.charge.threshold";
   public static final String COSMOS_CONTINUATION_TOKEN_LIMIT_KB = "cosmos.continuation.token.limit.kb";
@@ -36,6 +41,7 @@ public class AzureCloudConfig {
   public static final String COSMOS_PURGE_BATCH_SIZE = "cosmos.purge.batch.size";
   public static final String AZURE_NAME_SCHEME_VERSION = "azure.name.scheme.version";
   public static final String AZURE_BLOB_CONTAINER_STRATEGY = "azure.blob.container.strategy";
+  public static final String AZURE_STORAGE_CLIENT_FACTORY_CLASS = "azure.storage.client.factory.class";
   // Per docs.microsoft.com/en-us/rest/api/storageservices/blob-batch
   public static final int MAX_PURGE_BATCH_SIZE = 256;
   public static final int DEFAULT_PURGE_BATCH_SIZE = 100;
@@ -45,11 +51,14 @@ public class AzureCloudConfig {
 
   public static final int DEFAULT_NAME_SCHEME_VERSION = 0;
   public static final String DEFAULT_CONTAINER_STRATEGY = "Partition";
+  public static final String DEFAULT_AZURE_STORAGE_CLIENT_FACTORY_CLASS =
+      "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClientFactory";
 
   /**
    * The Azure Blob Storage connection string.
    */
   @Config(AZURE_STORAGE_CONNECTION_STRING)
+  @Default("")
   public final String azureStorageConnectionString;
 
   /**
@@ -117,12 +126,55 @@ public class AzureCloudConfig {
   @Default("false")
   public final boolean cosmosDirectHttps;
 
+  /**
+   * Azure storage authority.
+   */
+  @Config(AZURE_STORAGE_AUTHORITY)
+  @Default("")
+  public final String azureStorageAuthority;
+
+  /**
+   * Azure storage client id.
+   */
+  @Config(AZURE_STORAGE_CLIENTID)
+  @Default("")
+  public final String azureStorageClientId;
+
+  /**
+   * Azure storage client secret.
+   */
+  @Config(AZURE_STORAGE_SECRET)
+  @Default("")
+  public final String azureStorageSecret;
+
+  @Config(AZURE_STORAGE_SCOPE)
+  @Default("")
+  public final String azureStorageScope;
+
+  /**
+   * Azure storage endpoint.
+   */
+  @Config(AZURE_STORAGE_ENDPOINT)
+  @Default("")
+  public final String azureStorageEndpoint;
+
+  /**
+   * Factory class to instantiate azure storage client.
+   */
+  @Config(AZURE_STORAGE_CLIENT_FACTORY_CLASS)
+  public final String azureStorageClientFactoryClass;
+
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
-    azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING);
+    azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
     cosmosCollectionLink = verifiableProperties.getString(COSMOS_COLLECTION_LINK);
     cosmosDeletedContainerCollectionLink = verifiableProperties.getString(COSMOS_DELETED_CONTAINER_COLLECTION_LINK);
     cosmosKey = verifiableProperties.getString(COSMOS_KEY);
+    azureStorageAuthority = verifiableProperties.getString(AZURE_STORAGE_AUTHORITY, "");
+    azureStorageClientId = verifiableProperties.getString(AZURE_STORAGE_CLIENTID, "");
+    azureStorageSecret = verifiableProperties.getString(AZURE_STORAGE_SECRET, "");
+    azureStorageScope = verifiableProperties.getString(AZURE_STORAGE_SCOPE, "");
+    azureStorageEndpoint = verifiableProperties.getString(AZURE_STORAGE_ENDPOINT, "");
     cosmosQueryBatchSize = verifiableProperties.getInt(COSMOS_QUERY_BATCH_SIZE, DEFAULT_QUERY_BATCH_SIZE);
     cosmosContinuationTokenLimitKb =
         verifiableProperties.getInt(COSMOS_CONTINUATION_TOKEN_LIMIT_KB, DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT);
@@ -135,5 +187,7 @@ public class AzureCloudConfig {
     azureBlobContainerStrategy =
         verifiableProperties.getString(AZURE_BLOB_CONTAINER_STRATEGY, DEFAULT_CONTAINER_STRATEGY);
     azureNameSchemeVersion = verifiableProperties.getInt(AZURE_NAME_SCHEME_VERSION, DEFAULT_NAME_SCHEME_VERSION);
+    azureStorageClientFactoryClass =
+        verifiableProperties.getString(AZURE_STORAGE_CLIENT_FACTORY_CLASS, DEFAULT_AZURE_STORAGE_CLIENT_FACTORY_CLASS);
   }
 }

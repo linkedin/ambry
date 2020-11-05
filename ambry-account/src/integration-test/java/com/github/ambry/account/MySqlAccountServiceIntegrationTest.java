@@ -18,6 +18,7 @@ import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
+import com.github.ambry.account.mysql.MySqlAccountStoreMetrics;
 import com.github.ambry.account.mysql.MySqlDataAccessor;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlAccountServiceConfig;
@@ -63,6 +64,7 @@ public class MySqlAccountServiceIntegrationTest {
   private final MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
   private MySqlAccountStore mySqlAccountStore;
   private final AccountServiceMetrics accountServiceMetrics;
+  private final MySqlAccountStoreMetrics accountStoreMetrics;
   private final Properties mySqlConfigProps;
   private MySqlAccountServiceConfig accountServiceConfig;
   private MySqlAccountService mySqlAccountService;
@@ -74,8 +76,9 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
-    mySqlAccountStore =
-        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore());
+    accountStoreMetrics = new MySqlAccountStoreMetrics(new MetricRegistry());
+    mySqlAccountStore = spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
+        new MetricRegistry()).getMySqlAccountStore());
     mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mySqlAccountStore);
     // Start with empty database
@@ -94,7 +97,7 @@ public class MySqlAccountServiceIntegrationTest {
     DbEndpoint endpoint =
         new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword");
     try {
-      new MySqlAccountStore(Collections.singletonList(endpoint), endpoint.getDatacenter());
+      new MySqlAccountStore(Collections.singletonList(endpoint), endpoint.getDatacenter(), accountStoreMetrics);
       fail("Store creation should fail with bad credentials");
     } catch (SQLException e) {
       assertTrue(MySqlDataAccessor.isCredentialError(e));
@@ -206,11 +209,12 @@ public class MySqlAccountServiceIntegrationTest {
     JSONArray endpointsJson = new JSONArray().put(localGoodEndpoint.toJson()).put(remoteBadEndpoint.toJson());
     mySqlConfigProps.setProperty(DB_INFO, endpointsJson.toString());
     mySqlConfigProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, localDc);
-    mySqlAccountStore =
-        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore());
+    mySqlAccountStore = spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
+        new MetricRegistry()).getMySqlAccountStore());
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mySqlAccountStore);
     // constructor does initial fetch which will fail on first endpoint and succeed on second
-    mySqlAccountService = new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
+    mySqlAccountService =
+        new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
 
     // Try to update, should fail to get connection
     Account account = makeTestAccountWithContainer();
@@ -273,7 +277,8 @@ public class MySqlAccountServiceIntegrationTest {
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     // TODO: need separate metrics for this service?
     MySqlAccountStore consumerAccountStore =
-        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps)).getMySqlAccountStore());
+        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
+            new MetricRegistry()).getMySqlAccountStore());
     MySqlAccountStoreFactory mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(consumerAccountStore);
     MySqlAccountService consumerAccountService =
@@ -498,7 +503,6 @@ public class MySqlAccountServiceIntegrationTest {
         Collections.singleton(testContainer)).build();
     return testAccount;
   }
-
 
   /**
    * Create a new container to add to an account.

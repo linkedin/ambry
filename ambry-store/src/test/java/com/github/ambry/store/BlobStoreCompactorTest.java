@@ -409,8 +409,13 @@ public class BlobStoreCompactorTest {
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction);
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
+
+    long duplicateCount = compactor.getTgtMetrics().compactionTargetIndexDuplicateOnNonRecoveryCount.getCount();
     if (alwaysEnableTargetIndexDuplicateChecking) {
       compactor.compact(details, bundleReadBuffer);
+      long duplicateCountAfterCompaction =
+          compactor.getTgtMetrics().compactionTargetIndexDuplicateOnNonRecoveryCount.getCount();
+      assertEquals(duplicateCountAfterCompaction - duplicateCount, 1);
     } else {
       try {
         compactor.compact(details, bundleReadBuffer);

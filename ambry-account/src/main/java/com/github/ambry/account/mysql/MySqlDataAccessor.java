@@ -46,20 +46,30 @@ public class MySqlDataAccessor {
   private static final String INDEX_CONTAINER_NAME = "containers.uniqueName";
   /** List of {@link DbEndpoint} sorted from best to worst */
   private final Map<String, PreparedStatement> statementCache = new HashMap<>();
+  private final MySqlAccountStoreMetrics metrics;
   private Driver mysqlDriver;
   private Connection activeConnection;
   private DbEndpoint connectedEndpoint;
   private List<DbEndpoint> sortedDbEndpoints;
   private EndpointComparator endpointComparator;
 
+  /**
+   * List of operation types on the mysql store.
+   */
+  public enum OperationType {
+    Write, Read
+  }
+
   /** Production constructor */
-  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, String localDatacenter) throws SQLException {
+  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, String localDatacenter, MySqlAccountStoreMetrics metrics) throws SQLException {
+    this.metrics = metrics;
     setup(inputEndpoints, localDatacenter);
   }
 
   /** Test constructor */
-  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, Driver mysqlDriver) throws SQLException {
+  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, Driver mysqlDriver, MySqlAccountStoreMetrics metrics) throws SQLException {
     this.mysqlDriver = mysqlDriver;
+    this.metrics = metrics;
     setup(inputEndpoints, inputEndpoints.get(0).getDatacenter());
   }
 
@@ -191,15 +201,40 @@ public class MySqlDataAccessor {
   /**
    * Handle a SQL exception on a database operation.
    * @param e the {@link SQLException} encountered.
+   * @param operationType type of mysql operation
    */
-  void onException(SQLException e) {
+  void onException(SQLException e, OperationType operationType) {
     if (e instanceof SQLTransientConnectionException) {
+      if (operationType == OperationType.Write) {
+        metrics.writeFailureCount.inc();
+      } else {
+        metrics.readFailureCount.inc();
+      }
       reset();
     }
   }
 
   /**
+<<<<<<< HEAD
    * Close the active connection and clear the statement cache.
+=======
+   * Handle successful database operation
+   * @param operationType type of mysql operation
+   * @param operationTimeInMs operation time in milliseconds
+   */
+  void onSuccess(OperationType operationType, long operationTimeInMs) {
+    if (operationType == OperationType.Write) {
+      metrics.writeSuccessCount.inc();
+      metrics.writeTimeInMs.update(operationTimeInMs);
+    } else {
+      metrics.readSuccessCount.inc();
+      metrics.readTimeInMs.update(operationTimeInMs);
+    }
+  }
+
+  /**
+   * Reset to initial state.
+>>>>>>> ccb7dc8fad71edc1548c2befe186dce81bdcf749
    * This should be called after a failed database operation.
    */
   synchronized void reset() {

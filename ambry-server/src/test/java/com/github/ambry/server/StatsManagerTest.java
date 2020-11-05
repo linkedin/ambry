@@ -787,7 +787,7 @@ public class StatsManagerTest {
     }
 
     @Override
-    public boolean disabledOnError() {
+    public boolean isDisabled() {
       throw new IllegalStateException("Not implemented");
     }
 

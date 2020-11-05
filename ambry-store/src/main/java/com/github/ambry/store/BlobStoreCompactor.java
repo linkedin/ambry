@@ -160,6 +160,14 @@ class BlobStoreCompactor {
   }
 
   /**
+   * Return the {@link #tgtMetrics}. Only used in tests.
+   * @return the {@link #tgtMetrics}.
+   */
+  StoreMetrics getTgtMetrics() {
+    return tgtMetrics;
+  }
+
+  /**
    * Closes the compactor and waits for {@code waitTimeSecs} for the close to complete.
    * @param waitTimeSecs the number of seconds to wait for close to complete.
    * @throws InterruptedException if the wait for close was interrupted.
@@ -523,6 +531,15 @@ class BlobStoreCompactor {
   }
 
   /**
+   * Return true if the index segment is under copy to target persistent index before crashing.
+   * @param indexSegmentStartOffset The start {@link Offset} of the {@link IndexSegment}.
+   * @return {@code True} if the index segment is under copy to the target persistent index.
+   */
+  private boolean isIndexSegmentUnderCopy(Offset indexSegmentStartOffset) {
+    return recoveryStartToken != null && recoveryStartToken.getOffset().equals(indexSegmentStartOffset);
+  }
+
+  /**
    * Copies data from the provided log segment into the target log (swap spaces).
    * @param logSegmentToCopy the {@link LogSegment} to copy from.
    * @param duplicateSearchSpan the {@link FileSpan} in which to search for duplicates.
@@ -563,8 +580,8 @@ class BlobStoreCompactor {
     logger.debug("Copying data from {}", indexSegmentToCopy.getFile());
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
-    boolean checkAlreadyCopied = config.storeAlwaysEnableTargetIndexDuplicateChecking || (recoveryStartToken != null
-        && recoveryStartToken.getOffset().equals(indexSegmentToCopy.getStartOffset()));
+    boolean checkAlreadyCopied = config.storeAlwaysEnableTargetIndexDuplicateChecking || isIndexSegmentUnderCopy(
+        indexSegmentToCopy.getStartOffset());
     logger.trace("Should check already copied for {}: {} ", indexSegmentToCopy.getFile(), checkAlreadyCopied);
 
     List<IndexEntry> indexEntriesToCopy =
@@ -631,6 +648,10 @@ class BlobStoreCompactor {
         logger.trace("{} in segment with start offset {} in {} is a duplicate because it has already been copied",
             copyCandidate, indexSegmentStartOffset, storeId);
         isDuplicate = true;
+        if (!isIndexSegmentUnderCopy(indexSegmentStartOffset)) {
+          // This is not for recovery purpose, then it must be due to always checking target index duplicate.
+          tgtMetrics.compactionTargetIndexDuplicateOnNonRecoveryCount.inc();
+        }
       } else {
         // not a duplicate
         logger.trace("{} in index segment with start offset {} in {} is not a duplicate", copyCandidate,

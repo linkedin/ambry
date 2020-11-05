@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.BaseDataAccessor;
 import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixProperty;
@@ -45,6 +46,7 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
   private final String clusterName;
   private final PropertyKey.Builder propertyKeyBuilder;
   private final MockHelixAdmin mockHelixAdmin;
+  private Map<PropertyKey, HelixProperty> properties = new ConcurrentHashMap<>();
 
   MockHelixDataAccessor(String clusterName, MockHelixAdmin mockHelixAdmin) {
     this.clusterName = clusterName;
@@ -81,7 +83,8 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
 
   @Override
   public <T extends HelixProperty> boolean setProperty(PropertyKey key, T value) {
-    throw new UnsupportedOperationException("Unsupported in MockHelixDataAccessor");
+    properties.put(key, value);
+    return true;
   }
 
   @Override
@@ -96,8 +99,7 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
 
   @Override
   public <T extends HelixProperty> T getProperty(PropertyKey key) {
-    //return (T) (new HelixProperty("id"));
-    throw new UnsupportedOperationException("Unsupported in MockHelixDataAccessor");
+    return (T) getProperty(Collections.singletonList(key), false).get(0);
   }
 
   @Override
@@ -134,6 +136,8 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
             .findFirst()
             .get();
         result.add((T) instanceConfig);
+      } else {
+        result.add((T) properties.get(key));
       }
     }
     return result;
