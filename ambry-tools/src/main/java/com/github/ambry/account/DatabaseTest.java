@@ -56,12 +56,8 @@ public class DatabaseTest {
 
   private static void perfTest(VerifiableProperties verifiableProperties) throws Exception {
     MySqlDataAccessor dataAccessor =
-<<<<<<< HEAD
-        new MySqlAccountStoreFactory(verifiableProperties).getMySqlAccountStore().getMySqlDataAccessor();
-=======
-        new MySqlAccountStoreFactory(verifiableProperties, new MetricRegistry()).getMySqlAccountStore(true)
+        new MySqlAccountStoreFactory(verifiableProperties, new MetricRegistry()).getMySqlAccountStore()
             .getMySqlDataAccessor();
->>>>>>> ccb7dc8fad71edc1548c2befe186dce81bdcf749
     ContainerDao containerDao = new ContainerDao(dataAccessor);
     // Use high account id to avoid conflict
     short startAccountId = 30000;
