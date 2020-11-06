@@ -67,7 +67,7 @@ public class ContainerDao {
     try {
       // Note: assuming autocommit for now
       long startTimeMs = System.currentTimeMillis();
-      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
+      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
       insertStatement.setInt(1, accountId);
       insertStatement.setString(2, container.toJson().toString());
       insertStatement.setInt(3, container.getSnapshotVersion());
@@ -89,7 +89,7 @@ public class ContainerDao {
     try {
       // Note: assuming autocommit for now
       long startTimeMs = System.currentTimeMillis();
-      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
+      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql, true);
       updateStatement.setString(1, container.toJson().toString());
       updateStatement.setInt(2, container.getSnapshotVersion());
       updateStatement.setInt(3, accountId);
@@ -110,7 +110,7 @@ public class ContainerDao {
    */
   public List<Container> getContainers(int accountId) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
-    PreparedStatement getByAccountStatement = dataAccessor.getPreparedStatement(getByAccountSql);
+    PreparedStatement getByAccountStatement = dataAccessor.getPreparedStatement(getByAccountSql, false);
     getByAccountStatement.setInt(1, accountId);
     try (ResultSet rs = getByAccountStatement.executeQuery()) {
       List<Container> containers = convertResultSet(rs);
@@ -131,7 +131,7 @@ public class ContainerDao {
   public List<Container> getNewContainers(long updatedSince) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
-    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql);
+    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql, false);
     getSinceStatement.setTimestamp(1, sinceTime);
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       List<Container> containers = convertResultSet(rs);

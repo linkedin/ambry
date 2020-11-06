@@ -23,19 +23,32 @@ import com.codahale.metrics.MetricRegistry;
  */
 public class MySqlAccountStoreMetrics {
 
-  public final Histogram writeTimeInMs;
-  public final Histogram readTimeInMs;
+  public static final String WRITE_TIME_MSEC = "WriteTimeInMs";
+  public static final String READ_TIME_MSEC = "ReadTimeInMs";
+  public static final String WRITE_SUCCESS_COUNT = "WriteSuccessCount";
+  public static final String WRITE_FAILURE_COUNT = "WriteFailureCount";
+  public static final String READ_SUCCESS_COUNT = "ReadSuccessCount";
+  public static final String READ_FAILURE_COUNT = "ReadFailureCount";
+  public static final String CONNECTION_SUCCESS_COUNT = "ConnectionSuccessCount";
+  public static final String CONNECTION_FAILURE_COUNT = "ConnectionFailureCount";
+
+  public final Histogram writeTimeMs;
+  public final Histogram readTimeMs;
   public final Counter writeSuccessCount;
   public final Counter writeFailureCount;
   public final Counter readSuccessCount;
   public final Counter readFailureCount;
+  public final Counter connectionSuccessCount;
+  public final Counter connectionFailureCount;
 
   public MySqlAccountStoreMetrics(MetricRegistry metricRegistry) {
-    writeTimeInMs = metricRegistry.histogram(MetricRegistry.name(MySqlAccountStore.class, "WriteTimeInMs"));
-    readTimeInMs = metricRegistry.histogram(MetricRegistry.name(MySqlAccountStore.class, "ReadTimeInMs"));
-    writeSuccessCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, "WriteSuccessCount"));
-    writeFailureCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, "WriteFailureCount"));
-    readSuccessCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, "ReadSuccessCount"));
-    readFailureCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, "ReadFailureCount"));
+    writeTimeMs = metricRegistry.histogram(MetricRegistry.name(MySqlAccountStore.class, WRITE_TIME_MSEC));
+    readTimeMs = metricRegistry.histogram(MetricRegistry.name(MySqlAccountStore.class, READ_TIME_MSEC));
+    writeSuccessCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, WRITE_SUCCESS_COUNT));
+    writeFailureCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, WRITE_FAILURE_COUNT));
+    readSuccessCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, READ_SUCCESS_COUNT));
+    readFailureCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, READ_FAILURE_COUNT));
+    connectionSuccessCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, CONNECTION_SUCCESS_COUNT));
+    connectionFailureCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, CONNECTION_FAILURE_COUNT));
   }
 }

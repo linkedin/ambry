@@ -185,7 +185,7 @@ public class MySqlAccountsDBTool {
   public MySqlAccountsDBTool(VerifiableProperties verifiableProperties, String zkServer) throws SQLException {
 
     this.mySqlAccountStore =
-        new MySqlAccountStoreFactory(verifiableProperties, new MetricRegistry()).getMySqlAccountStore(true);
+        new MySqlAccountStoreFactory(verifiableProperties, new MetricRegistry()).getMySqlAccountStore();
     //Create helix property store
     HelixPropertyStoreConfig helixPropertyStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
     this.helixPropertyStore = CommonUtils.createHelixPropertyStore(zkServer, helixPropertyStoreConfig, null);
@@ -195,7 +195,7 @@ public class MySqlAccountsDBTool {
   }
 
   private void cleanup() throws SQLException {
-    Statement statement = mySqlAccountStore.getMySqlDataAccessor().getDatabaseConnection().createStatement();
+    Statement statement = mySqlAccountStore.getMySqlDataAccessor().getDatabaseConnection(true).createStatement();
     int numDeleted = statement.executeUpdate("delete from " + ContainerDao.CONTAINER_TABLE);
     logger.info("Deleted {} containers", numDeleted);
     int numDeletedAccounts = statement.executeUpdate("delete from " + AccountDao.ACCOUNT_TABLE);

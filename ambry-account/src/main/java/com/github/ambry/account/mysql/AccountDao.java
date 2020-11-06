@@ -64,7 +64,7 @@ public class AccountDao {
   public void addAccount(Account account) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
-      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql);
+      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
       insertStatement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
       insertStatement.setInt(2, account.getSnapshotVersion());
       insertStatement.executeUpdate();
@@ -84,7 +84,7 @@ public class AccountDao {
   public List<Account> getNewAccounts(long updatedSince) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
-    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql);
+    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql, false);
     getSinceStatement.setTimestamp(1, sinceTime);
     try (ResultSet rs = getSinceStatement.executeQuery()) {
       List<Account> accounts = convertResultSet(rs);
@@ -104,7 +104,7 @@ public class AccountDao {
   public void updateAccount(Account account) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
-      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql);
+      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql, true);
       updateStatement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
       updateStatement.setInt(2, account.getSnapshotVersion());
       updateStatement.setInt(3, account.getId());

@@ -53,7 +53,6 @@ public class MySqlAccountService extends AbstractAccountService {
   private final ReadWriteLock infoMapLock = new ReentrantReadWriteLock();
   private final ScheduledExecutorService scheduler;
   private final BackupFileManager backupFileManager;
-  // TODO: we could have two stores (master for writes/reads and replica for reads during failover)
   private volatile MySqlAccountStore mySqlAccountStore;
   private final MySqlAccountStoreFactory mySqlAccountStoreFactory;
   private boolean needRefresh = false;
@@ -64,7 +63,7 @@ public class MySqlAccountService extends AbstractAccountService {
     this.config = config;
     this.mySqlAccountStoreFactory = mySqlAccountStoreFactory;
     try {
-      this.mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore(true);
+      this.mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore();
     } catch (SQLException e) {
       logger.error("MySQL account store creation failed", e);
       // If it is a non-transient error like credential issue, creation should fail.
@@ -112,9 +111,9 @@ public class MySqlAccountService extends AbstractAccountService {
    * Fetches added or modified accounts and containers from mysql database and schedules to execute periodically.
    */
   private void initialFetchAndSchedule() {
-    fetchAndUpdateCache();
+    fetchAndUpdateCacheNoThrow();
     if (scheduler != null) {
-      scheduler.scheduleAtFixedRate(this::fetchAndUpdateCache, config.updaterPollingIntervalSeconds,
+      scheduler.scheduleAtFixedRate(this::fetchAndUpdateCacheNoThrow, config.updaterPollingIntervalSeconds,
           config.updaterPollingIntervalSeconds, TimeUnit.SECONDS);
       logger.info("Background account updater will fetch accounts from mysql db at intervals of {} seconds",
           config.updaterPollingIntervalSeconds);
@@ -125,18 +124,30 @@ public class MySqlAccountService extends AbstractAccountService {
    * Fetches all the accounts and containers that have been created or modified in the mysql database since the
    * last modified/sync time and loads into in-memory {@link AccountInfoMap}.
    */
-  synchronized void fetchAndUpdateCache() {
+  void fetchAndUpdateCacheNoThrow() {
     try {
-      // Retry connection to mysql if we couldn't set up previously
-      if (mySqlAccountStore == null) {
-        try {
-          mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore(true);
-        } catch (SQLException e) {
-          logger.error("MySQL account store creation failed", e);
-          //TODO: Add failover logic to retry connection on mysql read replica for fetch operations
-        }
-      }
+      fetchAndUpdateCache();
+    } catch (Exception e) {
+      logger.error("fetchAndUpdateCache failed", e);
+    }
+  }
 
+  /**
+   * Fetches all the accounts and containers that have been created or modified in the mysql database since the
+   * last modified/sync time and loads into in-memory {@link AccountInfoMap}.
+   */
+  synchronized void fetchAndUpdateCache() throws SQLException {
+    // Retry connection to mysql if we couldn't set up previously
+    if (mySqlAccountStore == null) {
+      try {
+        mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore();
+      } catch (SQLException e) {
+        logger.error("MySQL account store creation failed: {}", e.getMessage());
+        throw e;
+      }
+    }
+
+    try {
       // Find last modified time of Accounts and containers in cache.
       long lastModifiedTime = accountInfoMapRef.get().getLastModifiedTime();
 
@@ -185,7 +196,8 @@ public class MySqlAccountService extends AbstractAccountService {
       }
     } catch (SQLException e) {
       accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
-      logger.error("Fetching Accounts from MySql DB failed", e);
+      logger.error("Fetching accounts from MySql DB failed: {}", e.getMessage());
+      throw e;
     }
   }
 
@@ -310,8 +322,12 @@ public class MySqlAccountService extends AbstractAccountService {
     } catch (AccountServiceException ase) {
       if (needRefresh) {
         // refresh and retry (with regenerated containerIds)
+        try {
+          fetchAndUpdateCache();
+        } catch (SQLException e) {
+          throw MySqlDataAccessor.translateSQLException(e);
+        }
         accountServiceMetrics.conflictRetryCount.inc();
-        this.fetchAndUpdateCache();
         return super.updateContainers(accountName, containers);
       } else {
         throw ase;
