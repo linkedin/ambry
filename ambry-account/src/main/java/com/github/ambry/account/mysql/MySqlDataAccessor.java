@@ -177,13 +177,13 @@ public class MySqlDataAccessor {
       if (!isBetterEndpoint(candidateEndpoint, connectedEndpoint)) {
         // What we have is the best we can do.  Is it good enough?
         if (needWritable && !connectedEndpoint.isWriteable()) {
-          throw Optional.of(lastException).orElse(noWritableEndpointException);
+          throw Optional.ofNullable(lastException).orElse(noWritableEndpointException);
         } else {
           return new Pair<>(connectedEndpoint, activeConnection);
         }
       }
       if (needWritable && !candidateEndpoint.isWriteable()) {
-        throw Optional.of(lastException).orElse(noWritableEndpointException);
+        throw Optional.ofNullable(lastException).orElse(noWritableEndpointException);
       }
 
       // Attempt to connect to candidate endpoint
@@ -206,7 +206,7 @@ public class MySqlDataAccessor {
       }
     }
 
-    throw Optional.of(lastException).orElse(noEndpointException);
+    throw Optional.ofNullable(lastException).orElse(noEndpointException);
   }
 
   /**
