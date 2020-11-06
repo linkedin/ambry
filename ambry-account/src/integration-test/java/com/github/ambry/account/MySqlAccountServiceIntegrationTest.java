@@ -64,7 +64,6 @@ public class MySqlAccountServiceIntegrationTest {
   private final MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
   private MySqlAccountStore mySqlAccountStore;
   private final AccountServiceMetrics accountServiceMetrics;
-  private final MySqlAccountStoreMetrics accountStoreMetrics;
   private final Properties mySqlConfigProps;
   private MySqlAccountServiceConfig accountServiceConfig;
   private MySqlAccountService mySqlAccountService;
@@ -76,7 +75,6 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
-    accountStoreMetrics = new MySqlAccountStoreMetrics(new MetricRegistry());
     mySqlAccountStore = spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
         new MetricRegistry()).getMySqlAccountStore());
     mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
@@ -97,7 +95,8 @@ public class MySqlAccountServiceIntegrationTest {
     DbEndpoint endpoint =
         new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword");
     try {
-      new MySqlAccountStore(Collections.singletonList(endpoint), endpoint.getDatacenter(), accountStoreMetrics);
+      new MySqlAccountStore(Collections.singletonList(endpoint), endpoint.getDatacenter(),
+          new MySqlAccountStoreMetrics(new MetricRegistry()));
       fail("Store creation should fail with bad credentials");
     } catch (SQLException e) {
       assertTrue(MySqlDataAccessor.isCredentialError(e));
@@ -215,20 +214,28 @@ public class MySqlAccountServiceIntegrationTest {
     // constructor does initial fetch which will fail on first endpoint and succeed on second
     mySqlAccountService =
         new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
-
+    MySqlAccountStoreMetrics storeMetrics = mySqlAccountStore.getMySqlDataAccessor().getMetrics();
+    // At this point, should have at least one connection failure (bad endpoint) and one success
+    long expectedConnectionFail = storeMetrics.connectionFailureCount.getCount();
+    long expectedConnectionSuccess = storeMetrics.connectionSuccessCount.getCount();
+    assertTrue(expectedConnectionFail > 0);
+    assertTrue(expectedConnectionSuccess > 0);
     // Try to update, should fail to get connection
     Account account = makeTestAccountWithContainer();
     try {
       mySqlAccountService.updateAccounts(Collections.singletonList(account));
       fail("Expected failure due to no writeable accounts");
     } catch (AccountServiceException ase) {
-      assertEquals(1, accountServiceMetrics.updateAccountErrorCount.getCount());
-      // TODO: assertEquals(1, mysqlMetrics.connectionErrorCount)
       assertEquals(AccountServiceErrorCode.InternalError, ase.getErrorCode());
     }
+    expectedConnectionFail++;
+    assertEquals(1, accountServiceMetrics.updateAccountErrorCount.getCount());
+    assertEquals(expectedConnectionFail, storeMetrics.connectionFailureCount.getCount());
+    assertEquals(expectedConnectionSuccess, storeMetrics.connectionSuccessCount.getCount());
     mySqlAccountService.fetchAndUpdateCache();
     // TODO: after getPreparedStatement tries to upgrade, should fail then succeed
-    // TODO: assertEquals(2, mysqlMetrics.connectionErrorCount)
+    assertEquals(expectedConnectionFail, storeMetrics.connectionFailureCount.getCount());
+    assertEquals(expectedConnectionSuccess, storeMetrics.connectionSuccessCount.getCount());
   }
 
   /**
@@ -275,7 +282,6 @@ public class MySqlAccountServiceIntegrationTest {
     // Create second account service with scheduled polling disabled
     mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
-    // TODO: need separate metrics for this service?
     MySqlAccountStore consumerAccountStore =
         spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
             new MetricRegistry()).getMySqlAccountStore());

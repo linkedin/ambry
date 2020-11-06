@@ -29,6 +29,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +48,8 @@ public class MySqlDataAccessor {
   /** List of {@link DbEndpoint} sorted from best to worst */
   private final Map<String, PreparedStatement> statementCache = new HashMap<>();
   private final MySqlAccountStoreMetrics metrics;
+  private final SQLException noWritableEndpointException = new SQLException("Could not connect to a writable database");
+  private final SQLException noEndpointException = new SQLException("Could not connect to any database");
   private Driver mysqlDriver;
   private Connection activeConnection;
   private DbEndpoint connectedEndpoint;
@@ -73,6 +76,13 @@ public class MySqlDataAccessor {
     this.mysqlDriver = mysqlDriver;
     this.metrics = metrics;
     setup(inputEndpoints, inputEndpoints.get(0).getDatacenter());
+  }
+
+  /**
+   * @return the {@link MySqlAccountStoreMetrics} being used.
+   */
+  public MySqlAccountStoreMetrics getMetrics() {
+    return metrics;
   }
 
   /**
@@ -123,7 +133,7 @@ public class MySqlDataAccessor {
 
     // Close active connection if no longer valid
     if (activeConnection != null && !activeConnection.isValid(5)) {
-      reset();
+      closeActiveConnection();
       activeConnection = null;
       connectedEndpoint = null;
     }
@@ -138,15 +148,65 @@ public class MySqlDataAccessor {
       // No better endpoint  was available.
       logger.debug("Still connected to {}", connectedEndpoint.getUrl());
     } else {
-      // New connection established!
-      // TODO: mysqlMetrics.connectionFixedCount.inc();
+      // New connection established
       connectedEndpoint = endpointConnectionPair.getFirst();
       String qualifier = connectedEndpoint.isWriteable() ? "writable" : "read-only";
       logger.info("Connected to {} enpoint: {}", qualifier, connectedEndpoint.getUrl());
-      closeQuietly(activeConnection); // TODO: reset?
+      closeActiveConnection();
       activeConnection = endpointConnectionPair.getSecond();
     }
     return activeConnection;
+  }
+
+  /**
+   * Connect to the best available database instance that matches the specified criteria.<br/>
+   * Order of preference for instances to connect to:
+   * <OL>
+   *    <LI/> Writeable instance in local colo
+   *    <LI/> Writable instance in any colo
+   *    <LI/> Read-only instance in local colo (if needWritable is false)
+   *    <LI/> Read-only instance in any colo (if needWritable is false)
+   *  </OL>
+   * @param needWritable whether the endpoint needs to be writable
+   * @return a pair of {@link DbEndpoint} and corresponding {@link Connection}.
+   * @throws SQLException if connection could not be made to a suitable endpoint.
+   */
+  private Pair<DbEndpoint, Connection> connectToBestAvailableEndpoint(boolean needWritable) throws SQLException {
+    SQLException lastException = null;
+    for (DbEndpoint candidateEndpoint : sortedDbEndpoints) {
+      if (!isBetterEndpoint(candidateEndpoint, connectedEndpoint)) {
+        // What we have is the best we can do.  Is it good enough?
+        if (needWritable && !connectedEndpoint.isWriteable()) {
+          throw Optional.of(lastException).orElse(noWritableEndpointException);
+        } else {
+          return new Pair<>(connectedEndpoint, activeConnection);
+        }
+      }
+      if (needWritable && !candidateEndpoint.isWriteable()) {
+        throw Optional.of(lastException).orElse(noWritableEndpointException);
+      }
+
+      // Attempt to connect to candidate endpoint
+      Properties credentials = new Properties();
+      credentials.setProperty("user", candidateEndpoint.getUsername());
+      credentials.setProperty("password", candidateEndpoint.getPassword());
+      try {
+        Connection connection = mysqlDriver.connect(candidateEndpoint.getUrl(), credentials);
+        metrics.connectionSuccessCount.inc();
+        return new Pair<>(candidateEndpoint, connection);
+      } catch (SQLException e) {
+        logger.warn("Unable to connect to endpoint {} due to {}", candidateEndpoint.getUrl(), e.getMessage());
+        metrics.connectionFailureCount.inc();
+        if (isCredentialError(e)) {
+          // fail fast
+          throw e;
+        } else {
+          lastException = e;
+        }
+      }
+    }
+
+    throw Optional.of(lastException).orElse(noEndpointException);
   }
 
   /**
@@ -212,7 +272,7 @@ public class MySqlDataAccessor {
       } else {
         metrics.readFailureCount.inc();
       }
-      reset();
+      closeActiveConnection();
     }
   }
 
@@ -224,10 +284,10 @@ public class MySqlDataAccessor {
   void onSuccess(OperationType operationType, long operationTimeInMs) {
     if (operationType == OperationType.Write) {
       metrics.writeSuccessCount.inc();
-      metrics.writeTimeInMs.update(operationTimeInMs);
+      metrics.writeTimeMs.update(operationTimeInMs);
     } else {
       metrics.readSuccessCount.inc();
-      metrics.readTimeInMs.update(operationTimeInMs);
+      metrics.readTimeMs.update(operationTimeInMs);
     }
   }
 
@@ -235,66 +295,12 @@ public class MySqlDataAccessor {
    * Close the active connection and clear the statement cache.
    * This should be called after a failed database operation.
    */
-  synchronized void reset() {
+  synchronized void closeActiveConnection() {
     for (PreparedStatement statement : statementCache.values()) {
       closeQuietly(statement);
     }
     statementCache.clear();
     closeQuietly(activeConnection);
-  }
-
-  /**
-   * Connect to the best available database instance that matches the specified criteria.
-   * Order of preference for instances to connect to:
-   *   1) writeable instance in local colo
-   *   2) writable instance in any colo
-   *   3) readonly instance in local colo (if needWritable is false)
-   *   4) readonly instance in any colo (if needWritable is false)
-   * @param needWritable whether the endpoint needs to be writable
-   * @return a pair of {@link DbEndpoint} and corresponding {@link Connection}.
-   * @throws SQLException if connection could not be made to a suitable endpoint.
-   */
-  private Pair<DbEndpoint, Connection> connectToBestAvailableEndpoint(boolean needWritable) throws SQLException {
-    SQLException lastException = null;
-    for (DbEndpoint dbEndpoint : sortedDbEndpoints) {
-      if (!isBetterEndpoint(dbEndpoint, connectedEndpoint)) {
-        // This is the best we can do
-        if (needWritable && !connectedEndpoint.isWriteable()) {
-          // TODO: throw lastException if any
-          throw new SQLException("Could not connect to any writable database");
-        } else {
-          return new Pair<>(connectedEndpoint, activeConnection);
-        }
-      }
-      if (needWritable && !dbEndpoint.isWriteable()) {
-        continue;
-      }
-
-      // Try to connect to candidate endpoint
-      Properties credentials = new Properties();
-      credentials.setProperty("user", dbEndpoint.getUsername());
-      credentials.setProperty("password", dbEndpoint.getPassword());
-      try {
-        Connection connection = mysqlDriver.connect(dbEndpoint.getUrl(), credentials);
-        return new Pair<>(dbEndpoint, connection);
-      } catch (SQLException e) {
-        logger.warn("Unable to connect to endpoint {} due to {}", dbEndpoint.getUrl(), e.getMessage());
-        // TODO: mysqlMetrics.connectionErrorCount.inc();
-        if (isCredentialError(e)) {
-          // fail fast
-          throw e;
-        } else {
-          lastException = e;
-        }
-      }
-    }
-
-    if (lastException != null) {
-      throw lastException;
-    } else {
-      // Should never get here.
-      throw new IllegalStateException("No suitable connection found");
-    }
   }
 
   private boolean isBetterEndpoint(DbEndpoint first, DbEndpoint second) {
