@@ -131,17 +131,17 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
             totalSizeToWrite += readSet.sizeInBytes(i);
           } else if (flag == MessageFormatFlags.Blob) {
             ByteBuf blobAll = readSet.getPrefetchedData(i);
-            InputStream is = new ByteBufInputStream(blobAll);
+            InputStream blobInputStream = new ByteBufInputStream(blobAll);
 
-            MessageHeader_Format headerFormat = parseHeaderAndVerifyStoreKey(is, i);
+            MessageHeader_Format headerFormat = parseHeaderAndVerifyStoreKey(blobInputStream, i);
 
             MessageMetadata messageMetadata = null;
             if (headerFormat.hasEncryptionKeyRecord()) {
               // If encryption key exists, MessageMetadata with encryption key is needed.
               ByteBuf duplicatedByteBuf = blobAll.duplicate();
-              duplicatedByteBuf.readerIndex(headerFormat.getBlobEncryptionKeyRecordRelativeOffset());
-              duplicatedByteBuf.writerIndex(headerFormat.getBlobEncryptionKeyRecordRelativeOffset()
-                  + headerFormat.getBlobEncryptionKeyRecordSize());
+              duplicatedByteBuf.setIndex(headerFormat.getBlobEncryptionKeyRecordRelativeOffset(),
+                  headerFormat.getBlobEncryptionKeyRecordRelativeOffset()
+                      + headerFormat.getBlobEncryptionKeyRecordSize());
               messageMetadata =
                   new MessageMetadata(deserializeBlobEncryptionKey(new ByteBufInputStream(duplicatedByteBuf)));
             }
@@ -151,8 +151,8 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
             totalSizeToWrite += headerFormat.getBlobRecordSize();
 
             // Adjust underlying ByteBuf reader and writer index.
-            blobAll.readerIndex(headerFormat.getBlobRecordRelativeOffset());
-            blobAll.writerIndex((int) (headerFormat.getBlobRecordRelativeOffset() + headerFormat.getBlobRecordSize()));
+            blobAll.setIndex(headerFormat.getBlobRecordRelativeOffset(),
+                (int) (headerFormat.getBlobRecordRelativeOffset() + headerFormat.getBlobRecordSize()));
           }
         } else {
           BufferedInputStream bufferedInputStream =
