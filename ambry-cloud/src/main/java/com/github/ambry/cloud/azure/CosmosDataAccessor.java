@@ -72,15 +72,15 @@ public class CosmosDataAccessor {
   private static final String LIMIT_PARAM = "@limit";
   private static final String ACCOUNT_ID_PARAM = "@accountId";
   private static final String CONTAINER_ID_PARAM = "@containerId";
+  private static final String MAX_ENTRIES_PARAM = "@maxEntries";
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
   private static final String CONTAINER_BLOBS_QUERY =
-      "SELECT TOP %d " + LIMIT_PARAM + " FROM c WHERE c.accountId=" + ACCOUNT_ID_PARAM + " and c.containerId="
+      "SELECT TOP " + LIMIT_PARAM + " FROM c WHERE c.accountId=" + ACCOUNT_ID_PARAM + " and c.containerId="
           + CONTAINER_ID_PARAM;
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
   private static final String DEPRECATED_CONTAINERS_QUERY =
-      "SELECT TOP %d * from c WHERE c.deleted=false order by c.deleteTriggerTimestamp";
-  private static final String CONTAINER_DELETION_TABLE = "DeletedContainer";
+      "SELECT TOP " + MAX_ENTRIES_PARAM + " * from c WHERE c.deleted=false order by c.deleteTriggerTimestamp";
   static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
   static final String PROPERTY_CONTINUATION = "continuation";
   static final String PROPERTY_DELETED = "deleted";
@@ -442,8 +442,7 @@ public class CosmosDataAccessor {
    */
   List<CloudBlobMetadata> getContainerBlobs(String partitionPath, short accountId, short containerId, int queryLimit)
       throws DocumentClientException {
-    String query = String.format(CONTAINER_BLOBS_QUERY, accountId, containerId);
-    SqlQuerySpec querySpec = new SqlQuerySpec(query,
+    SqlQuerySpec querySpec = new SqlQuerySpec(CONTAINER_BLOBS_QUERY,
         new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, queryLimit),
             new SqlParameter(CONTAINER_ID_PARAM, containerId), new SqlParameter(ACCOUNT_ID_PARAM, accountId)));
     FeedOptions feedOptions = new FeedOptions();
@@ -470,7 +469,7 @@ public class CosmosDataAccessor {
       return containerBlobsList;
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
-        logger.warn("Dead blobs query {} partition {} got {}", query, partitionPath,
+        logger.warn("Dead blobs query {} partition {} got {}", querySpec.getQueryText(), partitionPath,
             ((DocumentClientException) rex.getCause()).getStatusCode());
         throw (DocumentClientException) rex.getCause();
       }
@@ -619,12 +618,13 @@ public class CosmosDataAccessor {
    * @throws DocumentClientException in case of any error.
    */
   public Set<CosmosContainerDeletionEntry> getDeprecatedContainers(int maxEntries) throws DocumentClientException {
-    String query = String.format(DEPRECATED_CONTAINERS_QUERY, maxEntries);
+    SqlQuerySpec querySpec = new SqlQuerySpec(DEPRECATED_CONTAINERS_QUERY,
+        new SqlParameterCollection(new SqlParameter(MAX_ENTRIES_PARAM, maxEntries)));
     Timer timer = new Timer();
     Set<CosmosContainerDeletionEntry> containerDeletionEntries = new HashSet<>();
     try {
       Iterator<FeedResponse<Document>> iterator =
-          executeCosmosQuery(cosmosDeletedContainerCollectionLink, null, new SqlQuerySpec(query), new FeedOptions(),
+          executeCosmosQuery(cosmosDeletedContainerCollectionLink, null, querySpec, new FeedOptions(),
               timer).getIterator();
       while (iterator.hasNext()) {
         FeedResponse<Document> response = iterator.next();
@@ -635,7 +635,7 @@ public class CosmosDataAccessor {
       }
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
-        logger.warn("Get deprecated containers query {} got {}", query,
+        logger.warn("Get deprecated containers query {} got {}", querySpec.getQueryText(),
             ((DocumentClientException) rex.getCause()).getStatusCode());
         throw (DocumentClientException) rex.getCause();
       }
