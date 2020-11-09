@@ -124,6 +124,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
           // We do not have to check any version in this case as we dont
           // have to read any data to deserialize anything.
           readSet.doPrefetch(i, 0, readSet.sizeInBytes(i));
+          dataFromReadSet.add(readSet.getPrefetchedData(i));
 
           if (flag == MessageFormatFlags.All) {
             sendInfoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
@@ -203,8 +204,8 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
           } else {
             throw new MessageFormatException("Unknown flag in request " + flag, MessageFormatErrorCodes.IO_Error);
           }
+          dataFromReadSet.add(readSet.getPrefetchedData(i));
         }
-        dataFromReadSet.add(readSet.getPrefetchedData(i));
       }
       if (messageCount == 0) {
         messageContent = Unpooled.EMPTY_BUFFER;
