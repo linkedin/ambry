@@ -2066,7 +2066,6 @@ final class ServerTestUtil {
       channel3.disconnect();
     } catch (Exception e) {
       e.printStackTrace();
-      System.out.println(e);
       fail();
     }
   }

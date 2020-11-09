@@ -200,18 +200,6 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
             logger.trace(
                 "Sending blob info (blob properties + user metadata) for message relativeOffset : {} " + "size : {}",
                 sendInfoList.get(i).relativeOffset(), sendInfoList.get(i).sizetoSend());
-          } else if (flag == MessageFormatFlags.Blob) {
-            messageMetadataList.add(headerFormat.hasEncryptionKeyRecord() ? new MessageMetadata(
-                extractEncryptionKey(i, headerFormat.getBlobEncryptionKeyRecordRelativeOffset(),
-                    headerFormat.getBlobEncryptionKeyRecordSize())) : null);
-            sendInfoList.add(i,
-                new SendInfo(headerFormat.getBlobRecordRelativeOffset(), headerFormat.getBlobRecordSize()));
-            readSet.doPrefetch(i, headerFormat.getBlobRecordRelativeOffset(), headerFormat.getBlobRecordSize());
-            totalSizeToWrite += headerFormat.getBlobRecordSize();
-            logger.trace("Calculate offsets, get total size of blob time: {}",
-                SystemTime.getInstance().milliseconds() - startTime);
-            logger.trace("Sending data for message relativeOffset : {} size : {}", sendInfoList.get(i).relativeOffset(),
-                sendInfoList.get(i).sizetoSend());
           } else {
             throw new MessageFormatException("Unknown flag in request " + flag, MessageFormatErrorCodes.IO_Error);
           }
