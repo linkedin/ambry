@@ -366,7 +366,7 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
       outputBuffer.putShort(KEY_RECORD_VERSION_V_1);
       outputBuffer.putInt(key.length);
       outputBuffer.put(key);
-      Utils.serializeString(outputBuffer, keyGenAlgo, StandardCharsets.US_ASCII);
+      Utils.serializeString(outputBuffer, keyGenAlgo, StandardCharsets.UTF_8);
     }
 
     /**
@@ -374,10 +374,9 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
      * @param dataStream the {@link DataInputStream} from which key needs to be deserialized
      * @return the deserialized key in the form of {@link DeserializedKey}
      * @throws IOException
-     * @throws MessageFormatException
      */
     private static DeserializedKey deserializeKeyRecord(DataInputStream dataStream)
-        throws IOException, MessageFormatException {
+        throws IOException {
       int keySize = dataStream.readInt();
       byte[] encodedKey = new byte[keySize];
       dataStream.read(encodedKey);

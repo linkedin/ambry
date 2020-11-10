@@ -443,12 +443,12 @@ public class RestUtils {
           // key size
           sizeToAllocate += 4;
           String keyToStore = key.substring(Headers.USER_META_DATA_HEADER_PREFIX.length());
-          sizeToAllocate += keyToStore.getBytes(StandardCharsets.US_ASCII).length;
+          sizeToAllocate += keyToStore.getBytes(StandardCharsets.UTF_8).length;
           String value = getHeader(args, key, true);
           userMetadataMap.put(keyToStore, value);
           // value size
           sizeToAllocate += 4;
-          sizeToAllocate += value.getBytes(StandardCharsets.US_ASCII).length;
+          sizeToAllocate += value.getBytes(StandardCharsets.UTF_8).length;
         }
       }
       if (sizeToAllocate == 0) {
@@ -469,8 +469,8 @@ public class RestUtils {
         userMetadata.putInt(userMetadataMap.size());
         for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
           String key = entry.getKey();
-          Utils.serializeString(userMetadata, key, StandardCharsets.US_ASCII);
-          Utils.serializeString(userMetadata, entry.getValue(), StandardCharsets.US_ASCII);
+          Utils.serializeString(userMetadata, key, StandardCharsets.UTF_8);
+          Utils.serializeString(userMetadata, entry.getValue(), StandardCharsets.UTF_8);
         }
         Crc32 crc = new Crc32();
         crc.update(userMetadata.array(), 0, sizeToAllocate - CRC_SIZE);
@@ -506,8 +506,8 @@ public class RestUtils {
               toReturn = new HashMap<>();
             }
             while (counter++ < entryCount) {
-              String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
-              String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
+              String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.UTF_8);
+              String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.UTF_8);
               toReturn.put(Headers.USER_META_DATA_HEADER_PREFIX + key, value);
             }
             long actualCRC = userMetadataBuffer.getLong();
@@ -880,7 +880,7 @@ public class RestUtils {
             // will need to check these headers and perform the decode.
             headerName = headerName.replaceFirst(Headers.USER_META_DATA_HEADER_PREFIX,
                 Headers.USER_META_DATA_ENCODED_HEADER_PREFIX);
-            headerValue = URLEncoder.encode(headerValue, StandardCharsets.US_ASCII.name());
+            headerValue = URLEncoder.encode(headerValue, StandardCharsets.UTF_8.name());
             restResponseChannel.setHeader(headerName, headerValue);
             logger.debug("Set encoded value in response header {}", headerName);
           } catch (Exception e) {

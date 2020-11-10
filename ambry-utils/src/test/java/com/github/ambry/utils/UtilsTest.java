@@ -386,6 +386,7 @@ public class UtilsTest {
     String outputString = new String(output);
     assertEquals("Input and output strings don't match", randomString, outputString);
 
+    // serialize with ASCII
     randomString = TestUtils.getRandomString(10) + "Ò";
     outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
@@ -398,6 +399,20 @@ public class UtilsTest {
         outputBuffer.hasRemaining());
     outputString = new String(output);
     randomString = randomString.substring(0, randomString.length() - 1) + "?";
+    assertEquals("Input and output strings don't match", randomString, outputString);
+
+    // serialize with UTF-8
+    randomString = TestUtils.getRandomString(10) + "Ò";
+    outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.UTF_8);
+    outputBuffer.flip();
+    length = outputBuffer.getInt();
+    assertEquals("Input and output string lengths don't match ", randomString.getBytes().length, length);
+    output = new byte[length];
+    outputBuffer.get(output);
+    assertFalse("Output buffer shouldn't have any remaining, but has " + outputBuffer.remaining() + " bytes",
+        outputBuffer.hasRemaining());
+    outputString = new String(output);
     assertEquals("Input and output strings don't match", randomString, outputString);
 
     randomString = "";
@@ -431,12 +446,21 @@ public class UtilsTest {
     String outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
     assertEquals("Input and output strings don't match", randomString, outputString);
 
+    // serde with ASCII
     randomString = TestUtils.getRandomString(10) + "Ò";
     outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
     outputBuffer.flip();
     outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
     randomString = randomString.substring(0, randomString.length() - 1) + "?";
+    assertEquals("Input and output strings don't match", randomString, outputString);
+
+    // serde with UTF-8
+    randomString = TestUtils.getRandomString(10) + "Ò";
+    outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.UTF_8);
+    outputBuffer.flip();
+    outputString = Utils.deserializeString(outputBuffer, StandardCharsets.UTF_8);
     assertEquals("Input and output strings don't match", randomString, outputString);
 
     randomString = "";
