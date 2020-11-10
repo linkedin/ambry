@@ -57,6 +57,8 @@ class AmbrySecurityService implements SecurityService {
   private final UrlSigningService urlSigningService;
   private final QuotaManager quotaManager;
   private boolean isOpen;
+  private static final String NAMED_BLOB_PREFIX = "/named";
+
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       UrlSigningService urlSigningService, QuotaManager quotaManager) {
@@ -219,6 +221,12 @@ class AmbrySecurityService implements SecurityService {
             break;
           case OPTIONS:
           case PUT:
+            if (requestPath.getOperationOrBlobId(false).startsWith(NAMED_BLOB_PREFIX)) {
+              responseChannel.setStatus(ResponseStatus.Created);
+              responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+              responseChannel.setHeader(RestUtils.Headers.CREATION_TIME,
+                  new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
+            }
             break;
           default:
             exception = new RestServiceException("Cannot process response for request with method " + restMethod,

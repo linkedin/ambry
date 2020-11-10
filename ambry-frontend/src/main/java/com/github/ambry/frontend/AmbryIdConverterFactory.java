@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -21,9 +22,11 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.commons.Callback;
-import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.Pair;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Future;
 
 
@@ -49,6 +52,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     private boolean isOpen = true;
     private final IdSigningService idSigningService;
     private final FrontendMetrics frontendMetrics;
+    private static final String NAMED_BLOB_PREFIX = "/named";
 
     AmbryIdConverter(IdSigningService idSigningService, FrontendMetrics frontendMetrics) {
       this.idSigningService = idSigningService;
@@ -73,30 +77,115 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
      */
     @Override
     public Future<String> convert(RestRequest restRequest, String input, Callback<String> callback) {
-      FutureResult<String> futureResult = new FutureResult<String>();
+      final CompletableFuture<String> future = new CompletableFuture<>();
       String convertedId = null;
       Exception exception = null;
       frontendMetrics.idConverterRequestRate.mark();
       long startTimeInMs = System.currentTimeMillis();
-      if (!isOpen) {
+      try {
+        if (!isOpen) {
+        frontendMetrics.idConverterProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
         exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
-      } else {
-        try {
-          if (restRequest.getRestMethod().equals(RestMethod.POST)) {
+        } else if (restRequest.getRestMethod().equals(RestMethod.POST)) {
             convertedId = "/" + signIdIfRequired(restRequest, input);
-          } else {
-            convertedId = parseSignedIdIfRequired(restRequest, input.startsWith("/") ? input.substring(1) : input);
-          }
-        } catch (Exception e) {
+        } else {
+            frontendMetrics.idConverterProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
+            convertId(input, restRequest).whenComplete(
+                (id, throwable) -> completeConversion(id, extractCompletionExceptionCause(throwable), future, callback));
+        }
+      } catch (Exception e) {
           exception = e;
+      } finally {
+        frontendMetrics.idConverterProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
+        if (convertedId != null || exception != null) {
+          completeConversion(convertedId, exception, future, callback);
         }
       }
-      futureResult.done(convertedId, exception);
-      if (callback != null) {
-        callback.onCompletion(convertedId, exception);
+      return future;
+    }
+
+    /**
+     * @param throwable a throwable to possibly wrap in an exception.
+     * @return if the {@link Throwable} is an instance of {@link Exception}, return the throwable, otherwise return the
+     *         throwable wrapped in an exception.
+     */
+    private static Exception extractCompletionExceptionCause(Throwable throwable) {
+      if (throwable == null) {
+        return null;
       }
-      frontendMetrics.idConverterProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
-      return futureResult;
+      if (throwable instanceof CompletionException) {
+        throwable = throwable.getCause();
+      }
+      return throwable instanceof Exception ? (Exception) throwable : new Exception("Encountered throwable", throwable);
+    }
+
+    /**
+     * Completes the conversion by setting the future and invoking the callback.
+     * @param conversionResult the conversion result.
+     * @param exception any exception that occurred as a part of the conversion.
+     * @param completableFuture the {@link CompletableFuture} that must be set.
+     * @param callback the {@link Callback} that needs to be invoked. Can be null.
+     */
+    private <T> void completeConversion(T conversionResult, Exception exception, CompletableFuture<T> completableFuture,
+        Callback<T> callback) {
+      if (exception == null) {
+        completableFuture.complete(conversionResult);
+      } else {
+        completableFuture.completeExceptionally(exception);
+      }
+      if (callback != null) {
+        long startTime = System.currentTimeMillis();
+        callback.onCompletion(conversionResult, exception);
+        frontendMetrics.idConversionDownstreamCallbackTimeInMs.update(System.currentTimeMillis() - startTime);
+      }
+    }
+
+    /**
+     * Convert the input ID to the requested output. If it's the named blob request, return the blobId from NameBlobDb,
+     * otherwise return the input with leading slash and extension be stripped.
+     * @param input the input blob ID.
+     * @param restRequest the {@link RestRequest} to set arguments in.
+     * @return the {@link CompletionStage} that will be completed with the converted ID
+     * @throws RestServiceException
+     */
+    private CompletionStage<String> convertId(String input, RestRequest restRequest) throws RestServiceException {
+      CompletionStage<String> conversionFuture;
+      if (input.startsWith(NAMED_BLOB_PREFIX)) {
+        NamedBlobPath namedBlobPath = RestUtils.parseInput(input);
+        //will update this hack version once NamedBlobDb is in.
+        conversionFuture =
+            get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName());
+      } else if (restRequest.getRestMethod().equals(RestMethod.PUT) && restRequest.getUri()
+          .startsWith(NAMED_BLOB_PREFIX)) {
+        NamedBlobPath namedBlobPath =
+            RestUtils.parseInput(RestUtils.getRequestPath(restRequest).getOperationOrBlobId(false));
+        String blobId = RestUtils.stripSlashAndExtensionFromId(input);
+        conversionFuture =
+            put(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName(), blobId);
+      } else {
+        String decryptedInput =
+            parseSignedIdIfRequired(restRequest, input.startsWith("/") ? input.substring(1) : input);
+        conversionFuture = CompletableFuture.completedFuture(RestUtils.stripSlashAndExtensionFromId(decryptedInput));
+      }
+      return conversionFuture;
+    }
+
+    /*
+     * will update this hack version once NamedBlobDb is in.
+     */
+    private CompletableFuture<String> get(String accountName, String containerName, String blobName) {
+      CompletableFuture<String> completableFuture = new CompletableFuture<>();
+      completableFuture.complete(accountName + containerName + blobName);
+      return completableFuture;
+    }
+
+    /*
+     * will update this hack version once NamedBlobDb is in.
+     */
+    private CompletableFuture<String> put(String accountName, String containerName, String blobName, String blobId) {
+      CompletableFuture<String> completableFuture = new CompletableFuture<>();
+      completableFuture.complete(blobId);
+      return completableFuture;
     }
 
     /**

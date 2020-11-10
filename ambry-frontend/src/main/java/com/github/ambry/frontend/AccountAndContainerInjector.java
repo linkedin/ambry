@@ -42,6 +42,7 @@ public class AccountAndContainerInjector {
   private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName = Collections.unmodifiableSet(
       new HashSet<>(Arrays.asList(Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
   private static final Logger logger = LoggerFactory.getLogger(AccountAndContainerInjector.class);
+  private static final String NAMED_BLOB_PREFIX = "/named";
 
   private final AccountService accountService;
   private final FrontendMetrics frontendMetrics;
@@ -77,6 +78,27 @@ public class AccountAndContainerInjector {
       String serviceId = getHeader(restRequest.getArgs(), Headers.SERVICE_ID, true);
       boolean isPrivate = isPrivate(restRequest.getArgs());
       injectAccountAndContainerUsingServiceId(restRequest, serviceId, isPrivate, metricsGroup);
+    } else {
+      throw new RestServiceException(
+          "Missing either " + Headers.TARGET_ACCOUNT_NAME + " or " + Headers.TARGET_CONTAINER_NAME + " header",
+          RestServiceErrorCode.BadRequest);
+    }
+  }
+
+  /**
+   * Injects target {@link Account} and {@link Container} for PUT requests. This method also ensures required uri
+   * is present for the PUT requests that account name/container name can be parsed from.
+   * @param restRequest The Put {@link RestRequest}.
+   * @param metricsGroup The {@link RestRequestMetricsGroup} to use to set up {@link ContainerMetrics}, or {@code null}
+   *                     if {@link ContainerMetrics} instantiation is not needed.
+   * @throws RestServiceException
+   */
+  public void injectAccountAndContainerForPutRequest(RestRequest restRequest, RestRequestMetricsGroup metricsGroup)
+      throws RestServiceException {
+    accountAndContainerSanityCheck(restRequest);
+    if (restRequest.getUri() != null) {
+      frontendMetrics.putWithAccountAndContainerHeaderRate.mark();
+      injectAccountAndContainerUsingAccountAndContainerUri(restRequest, metricsGroup);
     } else {
       throw new RestServiceException(
           "Missing either " + Headers.TARGET_ACCOUNT_NAME + " or " + Headers.TARGET_CONTAINER_NAME + " header",
@@ -210,18 +232,53 @@ public class AccountAndContainerInjector {
   }
 
   /**
+   * Injects {@link Account} and {@link Container} for the PUT requests that carry the target account and container headers.
+   * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
+   * @param metricsGroup The {@link RestRequestMetricsGroup} to use to set up {@link ContainerMetrics}, or {@code null}
+   *                     if {@link ContainerMetrics} instantiation is not needed.
+   * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be found.
+   */
+  private void injectAccountAndContainerUsingAccountAndContainerUri(RestRequest restRequest,
+      RestRequestMetricsGroup metricsGroup) throws RestServiceException {
+    NamedBlobPath namedBlobPath = RestUtils.parseInput(RestUtils.getRequestPath(restRequest).getOperationOrBlobId(false));
+    String accountName = namedBlobPath.getAccountName();
+    Account targetAccount = accountService.getAccountByName(accountName);
+    if (targetAccount == null) {
+      frontendMetrics.unrecognizedAccountNameCount.inc();
+      throw new RestServiceException("Account cannot be found for accountName=" + accountName
+          + " in put request with account and container headers.", RestServiceErrorCode.InvalidAccount);
+    }
+    ensureAccountNameMatch(targetAccount, restRequest);
+    String containerName = namedBlobPath.getContainerName();
+    Container targetContainer = targetAccount.getContainerByName(containerName);
+    if (targetContainer == null) {
+      frontendMetrics.unrecognizedContainerNameCount.inc();
+      throw new RestServiceException(
+          "Container cannot be found for accountName=" + accountName + " and containerName=" + containerName
+              + " in put request with account and container headers.", RestServiceErrorCode.InvalidContainer);
+    }
+    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, metricsGroup);
+  }
+
+  /**
    * Sanity check for {@link RestRequest}. This check ensures that the specified service id, account and container name,
    * if they exist, should not be the same as the not-allowed values. It also makes sure certain headers must not be present.
    * @param restRequest The {@link RestRequest} to check.
    * @throws RestServiceException if the specified service id, account or container name is set as system reserved value.
    */
   private void accountAndContainerSanityCheck(RestRequest restRequest) throws RestServiceException {
+    NamedBlobPath namedBlobPath = null;
+    if (restRequest.getUri().startsWith(NAMED_BLOB_PREFIX)) {
+      namedBlobPath = RestUtils.parseInput(RestUtils.getRequestPath(restRequest).getOperationOrBlobId(false));
+    }
     if (Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false))
-        || Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false))) {
+        || Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false)) || (
+        namedBlobPath != null && Account.UNKNOWN_ACCOUNT_NAME.equals(namedBlobPath.getAccountName()))) {
       throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
     }
     String targetContainerName = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
-    if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName)) {
+    if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName) || (namedBlobPath != null
+        && Container.UNKNOWN_CONTAINER_NAME.equals(namedBlobPath.getContainerName()))) {
       throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
     }
     List<String> prohibitedHeaders = Arrays.asList(InternalKeys.TARGET_ACCOUNT_KEY, InternalKeys.TARGET_CONTAINER_KEY);

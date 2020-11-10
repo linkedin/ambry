@@ -979,7 +979,7 @@ public class FrontendRestRequestServiceTest {
     JSONObject headers = new JSONObject();
     headers.put(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
     setAmbryHeadersForPut(headers, blobTtl, !refContainer.isCacheable(), serviceId, contentType, ownerId,
-        refAccount.getName(), refContainer.getName());
+        refAccount.getName(), refContainer.getName(), null);
     Map<String, String> userMetadata = new HashMap<>();
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
@@ -1160,7 +1160,7 @@ public class FrontendRestRequestServiceTest {
     String ownerId = "SecurePathValidationTest";
     JSONObject headers = new JSONObject();
     setAmbryHeadersForPut(headers, TTL_SECS, false, refAccountName, contentType, ownerId, refAccountName,
-        refContainerNames[0]);
+        refContainerNames[0], null);
     Map<String, String> userMetadata = new HashMap<>();
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
@@ -1192,7 +1192,7 @@ public class FrontendRestRequestServiceTest {
     }
     // test container with no validation
     setAmbryHeadersForPut(headers, TTL_SECS, false, refAccountName, contentType, ownerId, refAccountName,
-        refContainerNames[1]);
+        refContainerNames[1], null);
     content = ByteBuffer.wrap(TestUtils.getRandomBytes(CONTENT_LENGTH));
     blobId = postBlobAndVerify(headers, content, account, noValidationContainer);
     // test container with no validation should fail if there is invalid path in URI
@@ -1244,12 +1244,13 @@ public class FrontendRestRequestServiceTest {
    * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
    * @param targetAccountName sets the {@link RestUtils.Headers#TARGET_ACCOUNT_NAME} header. Can be {@code null}.
    * @param targetContainerName sets the {@link RestUtils.Headers#TARGET_CONTAINER_NAME} header. Can be {@code null}.
+   * @param uploadNamedBlobMode
    * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if
    *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
    * @throws JSONException
    */
   static void setAmbryHeadersForPut(JSONObject headers, long ttlInSecs, boolean isPrivate, String serviceId,
-      String contentType, String ownerId, String targetAccountName, String targetContainerName) throws JSONException {
+      String contentType, String ownerId, String targetAccountName, String targetContainerName, String uploadNamedBlobMode) throws JSONException {
     if (headers != null && serviceId != null && contentType != null) {
       if (ttlInSecs != Utils.Infinite_Time) {
         headers.put(RestUtils.Headers.TTL, Long.toString(ttlInSecs));
@@ -1266,6 +1267,9 @@ public class FrontendRestRequestServiceTest {
       }
       if (ownerId != null) {
         headers.put(RestUtils.Headers.OWNER_ID, ownerId);
+      }
+      if (uploadNamedBlobMode != null) {
+        headers.put(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, uploadNamedBlobMode);
       }
     } else {
       throw new IllegalArgumentException("Some required arguments are null. Cannot set ambry headers");
@@ -1371,7 +1375,7 @@ public class FrontendRestRequestServiceTest {
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentLength));
     JSONObject headers = new JSONObject();
     setAmbryHeadersForPut(headers, ttl, !container.isCacheable(), serviceId, contentType, ownerId, account.getName(),
-        container.getName());
+        container.getName(), null);
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
     String blobId = postBlobAndVerify(headers, content, account, container);
     headers.put(RestUtils.Headers.BLOB_SIZE, (long) contentLength);
@@ -1445,7 +1449,7 @@ public class FrontendRestRequestServiceTest {
         case POST:
           JSONObject headers = new JSONObject();
           setAmbryHeadersForPut(headers, Utils.Infinite_Time, !refContainer.isCacheable(), "test-serviceID",
-              "text/plain", "test-ownerId", refAccount.getName(), refContainer.getName());
+              "text/plain", "test-ownerId", refAccount.getName(), refContainer.getName(), null);
           restRequest = createRestRequest(restMethod, "/", headers, null);
           doOperation(restRequest, restResponseChannel);
           fail("POST should have detected a RestServiceException because of a bad router");
@@ -1479,7 +1483,7 @@ public class FrontendRestRequestServiceTest {
     String accountNameInPost = toPostAccount != null ? toPostAccount.getName() : null;
     String containerNameInPost = toPostContainer != null ? toPostContainer.getName() : null;
     setAmbryHeadersForPut(headers, TTL_SECS, isPrivate, serviceId, contentType, ownerId, accountNameInPost,
-        containerNameInPost);
+        containerNameInPost, null);
     Map<String, String> userMetadata = new HashMap<>();
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
@@ -2144,7 +2148,8 @@ public class FrontendRestRequestServiceTest {
       List<ByteBuffer> contents = null;
       if (restMethod.equals(RestMethod.POST)) {
         setAmbryHeadersForPut(headers, 7200, !refContainer.isCacheable(), "doExternalServicesBadInputTest",
-            "application/octet-stream", "doExternalServicesBadInputTest", refAccount.getName(), refContainer.getName());
+            "application/octet-stream", "doExternalServicesBadInputTest", refAccount.getName(), refContainer.getName(),
+            null);
         contents = new ArrayList<>(1);
         contents.add(null);
       }
@@ -2194,7 +2199,8 @@ public class FrontendRestRequestServiceTest {
           testRouter.exceptionOpType = FrontendTestRouter.OpType.PutBlob;
           JSONObject headers = new JSONObject();
           setAmbryHeadersForPut(headers, 7200, !refContainer.isCacheable(), "routerExceptionPipelineTest",
-              "application/octet-stream", "routerExceptionPipelineTest", refAccount.getName(), refContainer.getName());
+              "application/octet-stream", "routerExceptionPipelineTest", refAccount.getName(), refContainer.getName(),
+              null);
           checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", headers, null));
           break;
         case DELETE:
@@ -2330,7 +2336,7 @@ public class FrontendRestRequestServiceTest {
     String contentType = "application/octet-stream";
     String ownerId = "postGetHeadDeleteOwnerID";
     JSONObject headers = new JSONObject();
-    setAmbryHeadersForPut(headers, 7200, isPrivate, serviceId, contentType, ownerId, accountName, containerName);
+    setAmbryHeadersForPut(headers, 7200, isPrivate, serviceId, contentType, ownerId, accountName, containerName, null);
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers, contents);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     try {
@@ -2364,7 +2370,7 @@ public class FrontendRestRequestServiceTest {
   private void putRequestWithProhibitedHeader(String header) throws Exception {
     JSONObject headers = new JSONObject();
     setAmbryHeadersForPut(headers, 7200, true, "someServiceId", "application/octet-stream", "someOwnerId",
-        "someAccountName", "someContainerName");
+        "someAccountName", "someContainerName", null);
     headers.put(header, "adsfksakdfsdfkdaklf");
     verifyOperationFailure(createRestRequest(RestMethod.POST, "/", headers, null), RestServiceErrorCode.BadRequest);
   }

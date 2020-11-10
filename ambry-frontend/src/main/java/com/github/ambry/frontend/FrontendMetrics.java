@@ -49,6 +49,8 @@ public class FrontendMetrics {
   // PUT
   public final RestRequestMetricsGroup updateBlobTtlMetricsGroup;
   public final RestRequestMetricsGroup undeleteBlobMetricsGroup;
+  public final RestRequestMetricsGroup putBlobMetricsGroup;
+
 
   // AsyncOperationTracker.Metrics instances
   public final AsyncOperationTracker.Metrics postSecurityProcessRequestMetrics;
@@ -70,6 +72,16 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics undeleteBlobRouterMetrics;
   public final AsyncOperationTracker.Metrics undeleteBlobIdConversionMetrics;
   public final AsyncOperationTracker.Metrics undeleteBlobSecurityProcessResponseMetrics;
+
+  public final AsyncOperationTracker.Metrics putSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics putSecurityPostProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics putReadStitchRequestMetrics;
+  public final AsyncOperationTracker.Metrics putRouterStitchBlobMetrics;
+  public final AsyncOperationTracker.Metrics putRouterPutBlobMetrics;
+  public final AsyncOperationTracker.Metrics putIdConversionMetrics;
+  public final AsyncOperationTracker.Metrics putBlobRouterMetrics;
+  public final AsyncOperationTracker.Metrics putBlobSecurityProcessResponseMetrics;
+
 
   public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityPostProcessRequestMetrics;
@@ -99,11 +111,13 @@ public class FrontendMetrics {
   public final Meter securityServiceProcessResponseRate;
   // AmbryIdConverter
   public final Meter idConverterRequestRate;
-
   // Latencies
   // FrontendRestRequestService
   // POST
   public final Histogram blobPropsBuildTimeInMs;
+  // NAMED BLOB PUT
+  public final Histogram blobPropsBuildForNameBlobPutTimeInMs;
+
   // OPTIONS
   public final Histogram optionsPreProcessingTimeInMs;
   public final Histogram optionsSecurityRequestTimeInMs;
@@ -148,6 +162,8 @@ public class FrontendMetrics {
   public final Counter securePathValidationFailedCount;
   // AmbryIdConverter
   public final Histogram idConverterProcessingTimeInMs;
+  public final Histogram idConversionDownstreamCallbackTimeInMs;
+
   // GetPeersHandler
   public final Histogram getPeersProcessingTimeInMs;
   // GetReplicasHandler
@@ -189,6 +205,7 @@ public class FrontendMetrics {
   public final Counter getHeadDeleteUnrecognizedContainerCount;
   public final Meter putWithServiceIdForAccountNameRate;
   public final Meter putWithAccountAndContainerHeaderRate;
+  public final Meter putWithAccountAndContainerUriRate;
 
   /**
    * Creates an instance of FrontendMetrics using the given {@code metricRegistry}.
@@ -232,7 +249,8 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(TtlUpdateHandler.class, "UpdateBlobTtl", false, true, metricRegistry);
     undeleteBlobMetricsGroup =
         new RestRequestMetricsGroup(UndeleteHandler.class, "UndeleteBlob", false, true, metricRegistry);
-
+    putBlobMetricsGroup =
+        new RestRequestMetricsGroup(NamedBlobPutHandler.class, "PutBlob", false, true, metricRegistry);
     // AsyncOperationTracker.Metrics instances
     postSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityProcessRequest", metricRegistry);
@@ -268,6 +286,23 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(UndeleteHandler.class, "idConversion", metricRegistry);
     undeleteBlobSecurityProcessResponseMetrics =
         new AsyncOperationTracker.Metrics(UndeleteHandler.class, "securityProcessResponse", metricRegistry);
+
+    putSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putSecurityProcessRequest", metricRegistry);
+    putSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putSecurityPostProcessRequest", metricRegistry);
+    putReadStitchRequestMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putReadStitchRequest", metricRegistry);
+    putRouterStitchBlobMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putRouterStitchBlob", metricRegistry);
+    putRouterPutBlobMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putRouterPutBlob", metricRegistry);
+    putIdConversionMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putIdConversion", metricRegistry);
+    putBlobRouterMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "router", metricRegistry);
+    putBlobSecurityProcessResponseMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "securityProcessResponse", metricRegistry);
 
     getClusterMapSnapshotSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityProcessRequest", metricRegistry);
@@ -326,6 +361,9 @@ public class FrontendMetrics {
     // POST
     blobPropsBuildTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "BlobPropsBuildTimeInMs"));
+    // NAMEDBLOBPUT
+    blobPropsBuildForNameBlobPutTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "blobPropsBuildForNameBlobPutTimeInMs"));
     // OPTIONS
     optionsPreProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "OptionsPreProcessingTimeInMs"));
@@ -404,6 +442,8 @@ public class FrontendMetrics {
     // AmbryIdConverter
     idConverterProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "ProcessingTimeInMs"));
+    idConversionDownstreamCallbackTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "DownstreamCallbackTimeInMs"));
     // GetPeersHandler
     getPeersProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "ProcessingTimeInMs"));
@@ -468,5 +508,7 @@ public class FrontendMetrics {
         metricRegistry.meter(MetricRegistry.name(FrontendRestRequestService.class, "PutWithServiceIdForAccountNameRate"));
     putWithAccountAndContainerHeaderRate = metricRegistry.meter(
         MetricRegistry.name(FrontendRestRequestService.class, "PutWithAccountAndContainerHeaderRate"));
+    putWithAccountAndContainerUriRate = metricRegistry.meter(
+        MetricRegistry.name(FrontendRestRequestService.class, "PutWithAccountAndContainerUriRate"));
   }
 }
