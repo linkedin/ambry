@@ -281,7 +281,7 @@ public class AzureBlobDataAccessorTest {
     BlobStorageException mockBlobStorageException = mock(BlobStorageException.class);
     when(mockBlockBlobClient.downloadWithResponse(null, null, null, null, false, null, Context.NONE)).thenThrow(
         mockBlobStorageException).thenReturn(null);
-    doReturn(true).when(adAuthBasedStorageClient).tryHandleExceptionAndHintRetry(mockBlobStorageException);
+    doReturn(true).when(adAuthBasedStorageClient).handleExceptionAndHintRetry(mockBlobStorageException);
     doReturn(mockBlockBlobClient).when(adAuthBasedStorageClient).getBlockBlobClient(null, null, false);
     adAuthBasedStorageClient.downloadWithResponse(null, null, false, null, null, null, null, false, null);
     verify(mockBlockBlobClient, times(2)).downloadWithResponse(null, null, null, null, false, null, Context.NONE);
@@ -293,7 +293,7 @@ public class AzureBlobDataAccessorTest {
 
     // verify that BlockBlobClient.downloadWithResponse is called only once when throwing exception but tryHandleExceptionAndHintRetry returns false.
     BlobStorageException blobStorageException = new BlobStorageException("test failure", null, null);
-    doReturn(false).when(adAuthBasedStorageClient).tryHandleExceptionAndHintRetry(blobStorageException);
+    doReturn(false).when(adAuthBasedStorageClient).handleExceptionAndHintRetry(blobStorageException);
     when(mockBlockBlobClient.downloadWithResponse(null, null, null, null, false, null, Context.NONE)).thenThrow(
         blobStorageException).thenReturn(null);
     try {

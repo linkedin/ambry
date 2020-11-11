@@ -85,7 +85,7 @@ public class AzureBlobDataAccessor {
     batchTimeout = Duration.ofMillis(cloudConfig.cloudBatchRequestTimeout);
 
     storageClient =
-        Utils.getObj(azureCloudConfig.azureStorageClientClass, azureCloudConfig, cloudConfig, blobLayoutStrategy);
+        Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, blobLayoutStrategy);
   }
 
   /**

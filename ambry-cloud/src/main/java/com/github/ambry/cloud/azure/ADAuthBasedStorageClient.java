@@ -45,12 +45,12 @@ public class ADAuthBasedStorageClient extends StorageClient {
 
   /**
    * Constructor for {@link ADAuthBasedStorageClient} object.
-   * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @param cloudConfig {@link CloudConfig} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
-  public ADAuthBasedStorageClient(AzureCloudConfig azureCloudConfig, CloudConfig cloudConfig,
+  public ADAuthBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
       AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(azureCloudConfig, cloudConfig, blobLayoutStrategy);
+    super(cloudConfig, azureCloudConfig, blobLayoutStrategy);
   }
 
   /**
@@ -123,7 +123,7 @@ public class ADAuthBasedStorageClient extends StorageClient {
   }
 
   @Override
-  protected boolean tryHandleExceptionAndHintRetry(BlobStorageException blobStorageException) {
+  protected boolean handleExceptionAndHintRetry(BlobStorageException blobStorageException) {
     // If the exception has status code 403, refresh the token and create a new storage client with the new token.
     if (blobStorageException.getStatusCode() == HttpStatus.SC_FORBIDDEN) {
       synchronized (this) {

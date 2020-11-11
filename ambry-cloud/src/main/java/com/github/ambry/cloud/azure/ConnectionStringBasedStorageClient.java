@@ -30,12 +30,12 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
 
   /**
    * Constructor for {@link ConnectionStringBasedStorageClient}.
-   * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @param cloudConfig {@link CloudConfig} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
-  public ConnectionStringBasedStorageClient(AzureCloudConfig azureCloudConfig, CloudConfig cloudConfig,
+  public ConnectionStringBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
       AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(azureCloudConfig, cloudConfig, blobLayoutStrategy);
+    super(cloudConfig, azureCloudConfig, blobLayoutStrategy);
   }
 
   /**
@@ -71,7 +71,7 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
   }
 
   @Override
-  protected boolean tryHandleExceptionAndHintRetry(BlobStorageException blobStorageException) {
+  protected boolean handleExceptionAndHintRetry(BlobStorageException blobStorageException) {
     return false;
   }
 }

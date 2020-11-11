@@ -76,10 +76,10 @@ public abstract class StorageClient {
 
   /**
    * Constructor for {@link StorageClient}.
-   * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @param cloudConfig {@link CloudConfig} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
-  public StorageClient(AzureCloudConfig azureCloudConfig, CloudConfig cloudConfig,
+  public StorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
       AzureBlobLayoutStrategy blobLayoutStrategy) {
     this.azureCloudConfig = azureCloudConfig;
     this.cloudConfig = cloudConfig;
@@ -372,8 +372,8 @@ public abstract class StorageClient {
         result = operation.call();
         break;
       } catch (BlobStorageException bsEx) {
-        if (attempts == 1 && tryHandleExceptionAndHintRetry(bsEx)) {
-          logger.info("Retrying blob store operation due to expired token");
+        if (attempts == 1 && handleExceptionAndHintRetry(bsEx)) {
+          logger.info("Retrying blob store operation due to exception", bsEx);
           continue;
         }
         throw bsEx;
@@ -409,5 +409,5 @@ public abstract class StorageClient {
    * @param blobStorageException {@link BlobStorageException} object.
    * @return true if the operation can be retried. false otherwise.
    */
-  protected abstract boolean tryHandleExceptionAndHintRetry(BlobStorageException blobStorageException);
+  protected abstract boolean handleExceptionAndHintRetry(BlobStorageException blobStorageException);
 }
