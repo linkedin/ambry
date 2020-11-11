@@ -27,6 +27,7 @@ import com.github.ambry.utils.Utils;
 import java.lang.reflect.Field;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -355,6 +356,7 @@ public class RestUtils {
   public static final String BYTE_RANGE_UNITS = "bytes";
   public static final String SIGNED_ID_PREFIX = "signedId/";
   public static final String JSON_CONTENT_TYPE = "application/json";
+  static final Charset CHARSET = StandardCharsets.UTF_8;
   private static final String BYTE_RANGE_PREFIX = BYTE_RANGE_UNITS + "=";
 
   private static final int CRC_SIZE = 8;
@@ -443,12 +445,12 @@ public class RestUtils {
           // key size
           sizeToAllocate += 4;
           String keyToStore = key.substring(Headers.USER_META_DATA_HEADER_PREFIX.length());
-          sizeToAllocate += keyToStore.getBytes(StandardCharsets.US_ASCII).length;
+          sizeToAllocate += keyToStore.getBytes(CHARSET).length;
           String value = getHeader(args, key, true);
           userMetadataMap.put(keyToStore, value);
           // value size
           sizeToAllocate += 4;
-          sizeToAllocate += value.getBytes(StandardCharsets.US_ASCII).length;
+          sizeToAllocate += value.getBytes(CHARSET).length;
         }
       }
       if (sizeToAllocate == 0) {
@@ -469,8 +471,8 @@ public class RestUtils {
         userMetadata.putInt(userMetadataMap.size());
         for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
           String key = entry.getKey();
-          Utils.serializeString(userMetadata, key, StandardCharsets.US_ASCII);
-          Utils.serializeString(userMetadata, entry.getValue(), StandardCharsets.US_ASCII);
+          Utils.serializeString(userMetadata, key, CHARSET);
+          Utils.serializeString(userMetadata, entry.getValue(), CHARSET);
         }
         Crc32 crc = new Crc32();
         crc.update(userMetadata.array(), 0, sizeToAllocate - CRC_SIZE);
@@ -506,8 +508,8 @@ public class RestUtils {
               toReturn = new HashMap<>();
             }
             while (counter++ < entryCount) {
-              String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
-              String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
+              String key = Utils.deserializeString(userMetadataBuffer, CHARSET);
+              String value = Utils.deserializeString(userMetadataBuffer, CHARSET);
               toReturn.put(Headers.USER_META_DATA_HEADER_PREFIX + key, value);
             }
             long actualCRC = userMetadataBuffer.getLong();
@@ -880,7 +882,7 @@ public class RestUtils {
             // will need to check these headers and perform the decode.
             headerName = headerName.replaceFirst(Headers.USER_META_DATA_HEADER_PREFIX,
                 Headers.USER_META_DATA_ENCODED_HEADER_PREFIX);
-            headerValue = URLEncoder.encode(headerValue, StandardCharsets.US_ASCII.name());
+            headerValue = URLEncoder.encode(headerValue, CHARSET.name());
             restResponseChannel.setHeader(headerName, headerValue);
             logger.debug("Set encoded value in response header {}", headerName);
           } catch (Exception e) {

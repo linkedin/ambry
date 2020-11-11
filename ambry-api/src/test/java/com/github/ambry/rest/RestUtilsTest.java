@@ -28,7 +28,6 @@ import com.github.ambry.utils.Utils;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Collections;
@@ -322,9 +321,10 @@ public class RestUtilsTest {
     expectedUserMetadata.put(key, value);
     // Unicode with multiple code point characters (i.e. emoji)
     key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.toLowerCase() + "kEy7";
-    userMetadataArgs.put(key, "å∫ \uD83D\uDE1D\uD83D\uDE31abcd");
-    // Non ascii characters should be replaced with question marks
-    expectedUserMetadata.put(key, "?? ??abcd");
+    String nonASCIIStr = "å∫ \uD83D\uDE1D\uD83D\uDE31abcd";
+    userMetadataArgs.put(key, nonASCIIStr);
+    // Since UTF-8 is adopted, non ascii characters should be recognized in the metadata
+    expectedUserMetadata.put(key, nonASCIIStr);
     setUserMetadataHeaders(headers, userMetadataArgs);
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
@@ -400,14 +400,14 @@ public class RestUtilsTest {
     byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
     byteBuffer.putShort((short) 1);
     String key = "key1";
-    byte[] keyInBytes = key.getBytes(StandardCharsets.US_ASCII);
+    byte[] keyInBytes = key.getBytes(RestUtils.CHARSET);
     int keyLength = keyInBytes.length;
     byteBuffer.putInt(21);
     byteBuffer.putInt(1);
     byteBuffer.putInt(keyLength);
     byteBuffer.put(keyInBytes);
     String value = "value1";
-    byte[] valueInBytes = value.getBytes(StandardCharsets.US_ASCII);
+    byte[] valueInBytes = value.getBytes(RestUtils.CHARSET);
     int valueLength = valueInBytes.length;
     byteBuffer.putInt(valueLength);
     byteBuffer.put(valueInBytes);
