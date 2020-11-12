@@ -286,7 +286,7 @@ public class MySqlDataAccessor {
    * Close a resource without throwing exception.
    * @param resource the resource to close.
    */
-  private void closeQuietly(AutoCloseable resource) {
+  private static void closeQuietly(AutoCloseable resource) {
     try {
       if (resource != null) {
         resource.close();
