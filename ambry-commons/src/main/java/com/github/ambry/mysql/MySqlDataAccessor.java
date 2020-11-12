@@ -11,10 +11,8 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.account.mysql;
+package com.github.ambry.mysql;
 
-import com.github.ambry.account.AccountServiceErrorCode;
-import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.utils.Pair;
 import com.mysql.cj.exceptions.MysqlErrorNumbers;
 import java.sql.Connection;
@@ -22,7 +20,6 @@ import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.SQLTransientConnectionException;
 import java.util.Collections;
 import java.util.Comparator;
@@ -34,7 +31,7 @@ import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.account.mysql.MySqlUtils.*;
+import static com.github.ambry.mysql.MySqlUtils.*;
 
 
 /**
@@ -43,11 +40,9 @@ import static com.github.ambry.account.mysql.MySqlUtils.*;
 public class MySqlDataAccessor {
 
   private static final Logger logger = LoggerFactory.getLogger(MySqlDataAccessor.class);
-  private static final String INDEX_ACCOUNT_CONTAINER = "containers.accountContainer";
-  private static final String INDEX_CONTAINER_NAME = "containers.uniqueName";
   /** List of {@link DbEndpoint} sorted from best to worst */
   private final Map<String, PreparedStatement> statementCache = new HashMap<>();
-  private final MySqlAccountStoreMetrics metrics;
+  private final MySqlMetrics metrics;
   private final SQLException noWritableEndpointException = new SQLException("Could not connect to a writable database");
   private final SQLException noEndpointException = new SQLException("Could not connect to any database");
   private Driver mysqlDriver;
@@ -64,14 +59,14 @@ public class MySqlDataAccessor {
   }
 
   /** Production constructor */
-  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, String localDatacenter, MySqlAccountStoreMetrics metrics)
+  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, String localDatacenter, MySqlMetrics metrics)
       throws SQLException {
     this.metrics = metrics;
     setup(inputEndpoints, localDatacenter);
   }
 
   /** Test constructor */
-  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, Driver mysqlDriver, MySqlAccountStoreMetrics metrics)
+  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, Driver mysqlDriver, MySqlMetrics metrics)
       throws SQLException {
     this.mysqlDriver = mysqlDriver;
     this.metrics = metrics;
@@ -79,9 +74,9 @@ public class MySqlDataAccessor {
   }
 
   /**
-   * @return the {@link MySqlAccountStoreMetrics} being used.
+   * @return the {@link MySqlMetrics} being used.
    */
-  public MySqlAccountStoreMetrics getMetrics() {
+  public MySqlMetrics getMetrics() {
     return metrics;
   }
 
@@ -227,32 +222,6 @@ public class MySqlDataAccessor {
   }
 
   /**
-   * Translate a {@link SQLException} to a {@link AccountServiceException}.
-   * @param e the input exception.
-   * @return the corresponding {@link AccountServiceException}.
-   */
-  public static AccountServiceException translateSQLException(SQLException e) {
-    if (e instanceof SQLIntegrityConstraintViolationException) {
-      SQLIntegrityConstraintViolationException icve = (SQLIntegrityConstraintViolationException) e;
-      String message;
-      if (icve.getMessage().contains(INDEX_ACCOUNT_CONTAINER)) {
-        // Example: Duplicate entry '101-5' for key 'containers.accountContainer'
-        message = "Duplicate containerId";
-      } else if (icve.getMessage().contains(INDEX_CONTAINER_NAME)) {
-        // duplicate container name: need to update cache but retry may fail
-        message = "Duplicate container name";
-      } else {
-        message = "Constraint violation";
-      }
-      return new AccountServiceException(message, AccountServiceErrorCode.ResourceConflict);
-    } else if (MySqlDataAccessor.isCredentialError(e)) {
-      return new AccountServiceException("Invalid database credentials", AccountServiceErrorCode.InternalError);
-    } else {
-      return new AccountServiceException(e.getMessage(), AccountServiceErrorCode.InternalError);
-    }
-  }
-
-  /**
    * @return true if the exception indicates invalid database credentials.
    * @param e the {@link SQLException}
    */
@@ -265,7 +234,7 @@ public class MySqlDataAccessor {
    * @param e the {@link SQLException} encountered.
    * @param operationType type of mysql operation
    */
-  void onException(SQLException e, OperationType operationType) {
+  public void onException(SQLException e, OperationType operationType) {
     if (e instanceof SQLTransientConnectionException) {
       if (operationType == OperationType.Write) {
         metrics.writeFailureCount.inc();
@@ -281,7 +250,7 @@ public class MySqlDataAccessor {
    * @param operationType type of mysql operation
    * @param operationTimeInMs operation time in milliseconds
    */
-  void onSuccess(OperationType operationType, long operationTimeInMs) {
+  public void onSuccess(OperationType operationType, long operationTimeInMs) {
     if (operationType == OperationType.Write) {
       metrics.writeSuccessCount.inc();
       metrics.writeTimeMs.update(operationTimeInMs);

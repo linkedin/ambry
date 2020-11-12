@@ -17,9 +17,11 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
+import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
-import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.PreparedStatement;
@@ -49,12 +51,12 @@ public class AccountDaoTest {
   private final MySqlDataAccessor dataAccessor;
   private final Connection mockConnection;
   private final AccountDao accountDao;
-  private final MySqlAccountStoreMetrics metrics;
+  private final MySqlMetrics metrics;
   private final PreparedStatement mockInsertStatement;
   private final PreparedStatement mockQueryStatement;
 
   public AccountDaoTest() throws SQLException {
-    metrics = new MySqlAccountStoreMetrics(new MetricRegistry());
+    metrics = new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry());
     testAccount = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).build();
     accountJson = AccountCollectionSerde.accountToJsonNoContainers(testAccount).toString();
     mockConnection = mock(Connection.class);
@@ -79,8 +81,7 @@ public class AccountDaoTest {
    * @return the {@link MySqlDataAccessor}.
    * @throws SQLException
    */
-  static MySqlDataAccessor getDataAccessor(Connection mockConnection, MySqlAccountStoreMetrics metrics)
-      throws SQLException {
+  static MySqlDataAccessor getDataAccessor(Connection mockConnection, MySqlMetrics metrics) throws SQLException {
     Driver mockDriver = mock(Driver.class);
     when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
     MySqlUtils.DbEndpoint dbEndpoint =

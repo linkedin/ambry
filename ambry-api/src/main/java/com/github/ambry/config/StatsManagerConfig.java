@@ -18,18 +18,22 @@ package com.github.ambry.config;
  * The configs for stats.
  */
 public class StatsManagerConfig {
+  public static final String STATS_OUTPUT_FILE_PATH = "stats.output.file.path";
+  public static final String STATS_PUBLISH_PERIOD_IN_SECS = "stats.publish.period.in.secs";
+  public static final String STATS_INITIAL_DELAY_UPPER_BOUND_IN_SECS = "stats.initial.delay.upper.bound.in.secs";
+  public static final String STATS_ENABLE_MYSQL_REPORT = "stats.enable.mysql.report";
 
   /**
    * The file path (including filename) to be used for publishing the stats.
    */
-  @Config("stats.output.file.path")
+  @Config(STATS_OUTPUT_FILE_PATH)
   @Default("/tmp/stats_output.json")
   public final String outputFilePath;
 
   /**
    * The time period in seconds that configures how often stats are published.
    */
-  @Config("stats.publish.period.in.secs")
+  @Config(STATS_PUBLISH_PERIOD_IN_SECS)
   @Default("7200")
   public final long publishPeriodInSecs;
 
@@ -37,14 +41,19 @@ public class StatsManagerConfig {
    * The upper bound for the initial delay in seconds before the first stats collection is triggered. The delay is a
    * random number b/w 0 (inclusive) and this number (exclusive). If no initial delay is desired, this can be set to 0.
    */
-  @Config("stats.initial.delay.upper.bound.in.secs")
+  @Config(STATS_INITIAL_DELAY_UPPER_BOUND_IN_SECS)
   @Default("600")
   public final int initialDelayUpperBoundInSecs;
 
+  @Config(STATS_ENABLE_MYSQL_REPORT)
+  @Default("false")
+  public final boolean enableMysqlReport;
+
   public StatsManagerConfig(VerifiableProperties verifiableProperties) {
-    outputFilePath = verifiableProperties.getString("stats.output.file.path", "/tmp/stats_output.json");
-    publishPeriodInSecs = verifiableProperties.getLongInRange("stats.publish.period.in.secs", 7200, 0, Long.MAX_VALUE);
+    outputFilePath = verifiableProperties.getString(STATS_OUTPUT_FILE_PATH, "/tmp/stats_output.json");
+    publishPeriodInSecs = verifiableProperties.getLongInRange(STATS_PUBLISH_PERIOD_IN_SECS, 7200, 0, Long.MAX_VALUE);
     initialDelayUpperBoundInSecs =
-        verifiableProperties.getIntInRange("stats.initial.delay.upper.bound.in.secs", 600, 0, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange(STATS_INITIAL_DELAY_UPPER_BOUND_IN_SECS, 600, 0, Integer.MAX_VALUE);
+    enableMysqlReport = verifiableProperties.getBoolean(STATS_ENABLE_MYSQL_REPORT, false);
   }
 }

@@ -13,14 +13,16 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
-import com.github.ambry.account.mysql.MySqlDataAccessor;
+import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -325,7 +327,7 @@ public class MySqlAccountService extends AbstractAccountService {
         try {
           fetchAndUpdateCache();
         } catch (SQLException e) {
-          throw MySqlDataAccessor.translateSQLException(e);
+          throw translateSQLException(e);
         }
         accountServiceMetrics.conflictRetryCount.inc();
         return super.updateContainers(accountName, containers);
@@ -444,10 +446,36 @@ public class MySqlAccountService extends AbstractAccountService {
     // record failure, parse exception to figure out what we did wrong (eg. id or name collision). If it is id collision,
     // retry with incrementing ID (Account ID generation logic is currently in nuage-ambry, we might need to move it here)
     accountServiceMetrics.updateAccountErrorCount.inc();
-    AccountServiceException ase = MySqlDataAccessor.translateSQLException(e);
+    AccountServiceException ase = translateSQLException(e);
     if (ase.getErrorCode() == AccountServiceErrorCode.ResourceConflict) {
       needRefresh = true;
     }
     throw ase;
+  }
+
+  /**
+   * Translate a {@link SQLException} to a {@link AccountServiceException}.
+   * @param e the input exception.
+   * @return the corresponding {@link AccountServiceException}.
+   */
+  public static AccountServiceException translateSQLException(SQLException e) {
+    if (e instanceof SQLIntegrityConstraintViolationException) {
+      SQLIntegrityConstraintViolationException icve = (SQLIntegrityConstraintViolationException) e;
+      String message;
+      if (icve.getMessage().contains(ContainerDao.INDEX_ACCOUNT_CONTAINER)) {
+        // Example: Duplicate entry '101-5' for key 'containers.accountContainer'
+        message = "Duplicate containerId";
+      } else if (icve.getMessage().contains(ContainerDao.INDEX_CONTAINER_NAME)) {
+        // duplicate container name: need to update cache but retry may fail
+        message = "Duplicate container name";
+      } else {
+        message = "Constraint violation";
+      }
+      return new AccountServiceException(message, AccountServiceErrorCode.ResourceConflict);
+    } else if (MySqlDataAccessor.isCredentialError(e)) {
+      return new AccountServiceException("Invalid database credentials", AccountServiceErrorCode.InternalError);
+    } else {
+      return new AccountServiceException(e.getMessage(), AccountServiceErrorCode.InternalError);
+    }
   }
 }

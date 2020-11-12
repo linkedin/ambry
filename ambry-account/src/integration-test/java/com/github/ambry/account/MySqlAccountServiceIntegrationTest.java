@@ -18,8 +18,8 @@ import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
-import com.github.ambry.account.mysql.MySqlAccountStoreMetrics;
-import com.github.ambry.account.mysql.MySqlDataAccessor;
+import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -46,7 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Container.*;
-import static com.github.ambry.account.mysql.MySqlUtils.*;
+import static com.github.ambry.mysql.MySqlUtils.*;
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
 import static com.github.ambry.utils.AccountTestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
@@ -96,7 +96,7 @@ public class MySqlAccountServiceIntegrationTest {
         new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword");
     try {
       new MySqlAccountStore(Collections.singletonList(endpoint), endpoint.getDatacenter(),
-          new MySqlAccountStoreMetrics(new MetricRegistry()));
+          new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry()));
       fail("Store creation should fail with bad credentials");
     } catch (SQLException e) {
       assertTrue(MySqlDataAccessor.isCredentialError(e));
@@ -214,7 +214,7 @@ public class MySqlAccountServiceIntegrationTest {
     // constructor does initial fetch which will fail on first endpoint and succeed on second
     mySqlAccountService =
         new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
-    MySqlAccountStoreMetrics storeMetrics = mySqlAccountStore.getMySqlDataAccessor().getMetrics();
+    MySqlMetrics storeMetrics = mySqlAccountStore.getMySqlDataAccessor().getMetrics();
     // At this point, should have at least one connection failure (bad endpoint) and one success
     long expectedConnectionFail = storeMetrics.connectionFailureCount.getCount();
     long expectedConnectionSuccess = storeMetrics.connectionSuccessCount.getCount();

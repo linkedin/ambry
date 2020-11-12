@@ -197,7 +197,6 @@ project(':ambry-account') {
         }
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
-        compile "mysql:mysql-connector-java:8.0.21"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
         testCompile "com.google.jimfs:jimfs:$jimFsVersion"
@@ -230,6 +229,7 @@ project(':ambry-commons') {
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
         }
+        compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }

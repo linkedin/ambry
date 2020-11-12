@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.account.mysql;
+package com.github.ambry.mysql;
 
 import com.codahale.metrics.MetricRegistry;
 import java.sql.Connection;
@@ -27,7 +27,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 
-import static com.github.ambry.account.mysql.MySqlUtils.*;
+import static com.github.ambry.mysql.MySqlUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -43,7 +43,7 @@ public class MySqlDataAccessorTest {
   private final String writableUrl = "jdbc:mysql://primary/AccountMetadata";
   private final String readonlyUrl = "jdbc:mysql://replica/AccountMetadata";
   private final Driver mockDriver = mock(Driver.class);
-  private final MySqlAccountStoreMetrics metrics = new MySqlAccountStoreMetrics(new MetricRegistry());
+  private final MySqlMetrics metrics = new MySqlMetrics(MySqlDataAccessor.class, new MetricRegistry());
   private final SQLException connectionException = new SQLTransientConnectionException("No connection");
 
   public MySqlDataAccessorTest() {
