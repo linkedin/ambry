@@ -101,7 +101,7 @@ public class AzureBlobDataAccessor {
     try {
       this.storageClient =
           Utils.getObj(AzureCloudConfig.DEFAULT_AZURE_STORAGE_CLIENT_CLASS, blobServiceClient, blobBatchClient,
-              blobLayoutStrategy);
+              azureMetrics, blobLayoutStrategy);
     } catch (ReflectiveOperationException roEx) {
       throw new IllegalArgumentException("Unable to instantiate storage client: " + roEx.getMessage(), roEx);
     }
