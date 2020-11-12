@@ -24,6 +24,10 @@ public class CompositeAccountServiceConfig {
       COMPOSITE_ACCOUNT_SERVICE_PREFIX + "consistency.checker.shutdown.timeout.minutes";
   public static final String SAMPLING_PERCENTAGE_FOR_GET_CONSISTENCY_CHECK =
       COMPOSITE_ACCOUNT_SERVICE_PREFIX + "sampling.percentage.for.get.consistency.check";
+  public static final String PRIMARY_ACCOUNT_SERVICE_FACTORY =
+      COMPOSITE_ACCOUNT_SERVICE_PREFIX + "primary.account.service.factory";
+  public static final String SECONDARY_ACCOUNT_SERVICE_FACTORY =
+      COMPOSITE_ACCOUNT_SERVICE_PREFIX + "secondary.account.service.factory";
 
   /**
    * The time interval in minutes for checking consistency in account data between primary and secondary sources.
@@ -48,6 +52,20 @@ public class CompositeAccountServiceConfig {
   @Default("50")
   public final int samplingPercentageForGetConsistencyCheck;
 
+  /**
+   * The AccountServiceFactory that is used in {@code CompositeAccountService} as primary source of account-related information.
+   */
+  @Config(PRIMARY_ACCOUNT_SERVICE_FACTORY)
+  @Default("com.github.ambry.account.HelixAccountServiceFactory")
+  public final String primaryAccountServiceFactory;
+
+  /**
+   * The AccountServiceFactory that is used in {@code CompositeAccountService} as secondary source of account-related information.
+   */
+  @Config(SECONDARY_ACCOUNT_SERVICE_FACTORY)
+  @Default("com.github.ambry.account.MySqlAccountServiceFactory")
+  public final String secondaryAccountServiceFactory;
+
   public CompositeAccountServiceConfig(VerifiableProperties verifiableProperties) {
     consistencyCheckerIntervalMinutes =
         verifiableProperties.getIntInRange(CONSISTENCY_CHECKER_INTERVAL_MINUTES, 5, 0, Integer.MAX_VALUE);
@@ -55,5 +73,7 @@ public class CompositeAccountServiceConfig {
         verifiableProperties.getIntInRange(CONSISTENCY_CHECKER_SHUTDOWN_TIMEOUT_MINUTES, 1, 0, Integer.MAX_VALUE);
     samplingPercentageForGetConsistencyCheck =
         verifiableProperties.getIntInRange(SAMPLING_PERCENTAGE_FOR_GET_CONSISTENCY_CHECK, 50, 0, 100);
+    primaryAccountServiceFactory = verifiableProperties.getString(PRIMARY_ACCOUNT_SERVICE_FACTORY);
+    secondaryAccountServiceFactory = verifiableProperties.getString(SECONDARY_ACCOUNT_SERVICE_FACTORY);
   }
 }

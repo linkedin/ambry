@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.CompositeAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,8 +29,8 @@ import org.slf4j.LoggerFactory;
 public class CompositeAccountServiceFactory implements AccountServiceFactory {
   private static final Logger logger = LoggerFactory.getLogger(CompositeAccountServiceFactory.class);
   protected final AccountServiceMetrics accountServiceMetrics;
-  protected final HelixAccountServiceFactory helixAccountServiceFactory;
-  protected final MySqlAccountServiceFactory mySqlAccountServiceFactory;
+  protected final AccountServiceFactory primaryAccountServiceFactory;
+  protected final AccountServiceFactory secondaryAccountServiceFactory;
   protected final CompositeAccountServiceConfig compositeAccountServiceConfig;
 
   /**
@@ -37,11 +38,15 @@ public class CompositeAccountServiceFactory implements AccountServiceFactory {
    * @param verifiableProperties The properties to get a {@link CompositeAccountService} instance. Cannot be {@code null}.
    * @param metricRegistry The {@link MetricRegistry} for metrics tracking. Cannot be {@code null}.
    */
-  public CompositeAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+  public CompositeAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry)
+      throws ReflectiveOperationException {
     this.accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
-    this.helixAccountServiceFactory = new HelixAccountServiceFactory(verifiableProperties, metricRegistry);
-    this.mySqlAccountServiceFactory = new MySqlAccountServiceFactory(verifiableProperties, metricRegistry);
     this.compositeAccountServiceConfig = new CompositeAccountServiceConfig(verifiableProperties);
+    this.primaryAccountServiceFactory =
+        Utils.getObj(compositeAccountServiceConfig.primaryAccountServiceFactory, verifiableProperties, metricRegistry);
+    this.secondaryAccountServiceFactory =
+        Utils.getObj(compositeAccountServiceConfig.secondaryAccountServiceFactory, verifiableProperties,
+            metricRegistry);
   }
 
   @Override
@@ -50,8 +55,8 @@ public class CompositeAccountServiceFactory implements AccountServiceFactory {
       long startTimeMs = System.currentTimeMillis();
       logger.info("Starting a CompositeAccountService");
       CompositeAccountService compositeAccountService =
-          new CompositeAccountService(helixAccountServiceFactory.getAccountService(),
-              mySqlAccountServiceFactory.getAccountService(), accountServiceMetrics, compositeAccountServiceConfig);
+          new CompositeAccountService(primaryAccountServiceFactory.getAccountService(),
+              secondaryAccountServiceFactory.getAccountService(), accountServiceMetrics, compositeAccountServiceConfig);
       long spentTimeMs = System.currentTimeMillis() - startTimeMs;
       logger.info("CompositeAccountService started, took {} ms", spentTimeMs);
       accountServiceMetrics.startupTimeInMs.update(spentTimeMs);
