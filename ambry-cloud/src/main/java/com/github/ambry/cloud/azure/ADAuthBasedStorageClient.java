@@ -47,21 +47,24 @@ public class ADAuthBasedStorageClient extends StorageClient {
    * Constructor for {@link ADAuthBasedStorageClient} object.
    * @param cloudConfig {@link CloudConfig} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @param azureMetrics {@link AzureMetrics} object.
+   * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
-  public ADAuthBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
+  public ADAuthBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics,
       AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(cloudConfig, azureCloudConfig, blobLayoutStrategy);
+    super(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy);
   }
 
   /**
    * Constructor for {@link ADAuthBasedStorageClient} object for testing.
    * @param blobServiceClient {@link BlobServiceClient} object.
    * @param blobBatchClient {@link BlobBatchClient} object.
+   * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
   public ADAuthBasedStorageClient(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient,
-      AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(blobServiceClient, blobBatchClient, blobLayoutStrategy);
+      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy) {
+    super(blobServiceClient, blobBatchClient, azureMetrics, blobLayoutStrategy);
   }
 
   @Override
@@ -126,13 +129,16 @@ public class ADAuthBasedStorageClient extends StorageClient {
   protected boolean handleExceptionAndHintRetry(BlobStorageException blobStorageException) {
     // If the exception has status code 403, refresh the token and create a new storage client with the new token.
     if (blobStorageException.getStatusCode() == HttpStatus.SC_FORBIDDEN) {
+      azureMetrics.absForbiddenExceptionCount.inc();
       synchronized (this) {
         // check if the access token has expired before refreshing the token. This is done to prevent multiple threads
         // to attempt token refresh at the same time. It is expected that as a result of token refresh, accessTokenRef
         // will updated with the new token.
         if (accessTokenRef.get().isExpired()) {
+          azureMetrics.absTokenRefreshAttemptCount.inc();
           BlobServiceClient blobServiceClient = createBlobStorageClient();
           setClientReferences(blobServiceClient);
+          logger.info("Token refresh done.");
         }
       }
       return true;

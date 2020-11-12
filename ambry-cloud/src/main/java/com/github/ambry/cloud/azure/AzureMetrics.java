@@ -62,6 +62,11 @@ public class AzureMetrics {
   public static final String BACKUP_ERROR_COUNT = "BackupErrorCount";
   public static final String COMPACTION_PROGRESS_READ_ERROR_COUNT = "CompactionProgressReadErrorCount";
   public static final String COMPACTION_PROGRESS_WRITE_ERROR_COUNT = "CompactionProgressWriteErrorCount";
+  public static final String ABS_TOKEN_REFRESH_ATTEMPT_COUNT = "ABSTokenRefreshAttemptCount";
+  public static final String ABS_FORBIDDEN_EXCEPTION_COUNT = "ABSForbiddenExceptionCount";
+  public static final String STORAGE_CLIENT_OPERATION_RETRY_COUNT = "StorageClientOperationRetryCount";
+  public static final String STORAGE_CLIENT_OPERATION_EXCEPTION_COUNT = "StorageClientOperationExceptionCount";
+  public static final String STORAGE_CLIENT_FAILURE_AFTER_RETRY_COUNT = "StorageClientOperationFailureAfterRetryCount";
 
   // Metrics
   public final Counter blobUploadRequestCount;
@@ -106,6 +111,11 @@ public class AzureMetrics {
   public final Counter backupErrorCount;
   public final Counter compactionProgressReadErrorCount;
   public final Counter compactionProgressWriteErrorCount;
+  public final Counter absTokenRefreshAttemptCount;
+  public final Counter absForbiddenExceptionCount;
+  public final Counter storageClientOperationRetryCount;
+  public final Counter storageClientOperationExceptionCount;
+  public final Counter storageClientFailureAfterRetryCount;
 
   public AzureMetrics(MetricRegistry registry) {
     blobUploadRequestCount =
@@ -164,5 +174,15 @@ public class AzureMetrics {
         registry.counter(MetricRegistry.name(AzureStorageCompactor.class, COMPACTION_PROGRESS_READ_ERROR_COUNT));
     compactionProgressWriteErrorCount =
         registry.counter(MetricRegistry.name(AzureStorageCompactor.class, COMPACTION_PROGRESS_WRITE_ERROR_COUNT));
+    absTokenRefreshAttemptCount =
+        registry.counter(MetricRegistry.name(StorageClient.class, ABS_TOKEN_REFRESH_ATTEMPT_COUNT));
+    absForbiddenExceptionCount =
+        registry.counter(MetricRegistry.name(StorageClient.class, ABS_FORBIDDEN_EXCEPTION_COUNT));
+    storageClientOperationRetryCount =
+        registry.counter(MetricRegistry.name(StorageClient.class, STORAGE_CLIENT_OPERATION_RETRY_COUNT));
+    storageClientOperationExceptionCount =
+        registry.counter(MetricRegistry.name(StorageClient.class, STORAGE_CLIENT_OPERATION_EXCEPTION_COUNT));
+    storageClientFailureAfterRetryCount =
+        registry.counter(MetricRegistry.name(StorageClient.class, STORAGE_CLIENT_FAILURE_AFTER_RETRY_COUNT));
   }
 }

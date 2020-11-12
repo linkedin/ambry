@@ -71,6 +71,7 @@ public abstract class StorageClient {
   private final CloudConfig cloudConfig;
   private final AzureCloudConfig azureCloudConfig;
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
+  protected final AzureMetrics azureMetrics;
   // Containers known to exist in the storage account
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
 
@@ -78,12 +79,15 @@ public abstract class StorageClient {
    * Constructor for {@link StorageClient}.
    * @param cloudConfig {@link CloudConfig} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @param azureMetrics {@link AzureMetrics} object.
+   * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
-  public StorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
+  public StorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics,
       AzureBlobLayoutStrategy blobLayoutStrategy) {
     this.azureCloudConfig = azureCloudConfig;
     this.cloudConfig = cloudConfig;
     this.blobLayoutStrategy = blobLayoutStrategy;
+    this.azureMetrics = azureMetrics;
     storageClientRef = new AtomicReference<>(createBlobStorageClient());
     blobBatchClientRef = new AtomicReference<>(new BlobBatchClientBuilder(storageClientRef.get()).buildClient());
   }
@@ -92,12 +96,15 @@ public abstract class StorageClient {
    * Constructor for {@link StorageClient}.
    * @param blobServiceClient {@link BlobServiceClient} object.
    * @param blobBatchClient {@link BlobBatchClient} object.
+   * @param azureMetrics {@link AzureMetrics} object.
+   * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
-  public StorageClient(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient,
+  public StorageClient(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient, AzureMetrics azureMetrics,
       AzureBlobLayoutStrategy blobLayoutStrategy) {
     this.storageClientRef = new AtomicReference<>(blobServiceClient);
     this.blobBatchClientRef = new AtomicReference<>(blobBatchClient);
     this.blobLayoutStrategy = blobLayoutStrategy;
+    this.azureMetrics = azureMetrics;
     this.cloudConfig = null;
     this.azureCloudConfig = null;
   }
@@ -210,9 +217,9 @@ public abstract class StorageClient {
    * Perform basic connectivity test.
    */
   void testConnectivity() {
-    storageClientRef.get()
+    doStorageClientOperation(() -> storageClientRef.get()
         .getBlobContainerClient("partition-0")
-        .existsWithResponse(Duration.ofSeconds(5), Context.NONE);
+        .existsWithResponse(Duration.ofSeconds(5), Context.NONE));
   }
 
   /**
@@ -373,12 +380,17 @@ public abstract class StorageClient {
         break;
       } catch (BlobStorageException bsEx) {
         if (attempts == 1 && handleExceptionAndHintRetry(bsEx)) {
-          logger.info("Retrying blob store operation due to exception", bsEx);
+          logger.info("Retrying blob store operation due to exception: " + bsEx.toString());
+          azureMetrics.storageClientOperationRetryCount.inc();
           continue;
         }
         throw bsEx;
       } catch (Exception ex) {
         // this should never happen.
+        azureMetrics.storageClientOperationExceptionCount.inc();
+        if (attempts == 1) {
+          azureMetrics.storageClientFailureAfterRetryCount.inc();
+        }
         throw new IllegalStateException("Unknown blob storage exception", ex);
       }
     }

@@ -32,21 +32,24 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
    * Constructor for {@link ConnectionStringBasedStorageClient}.
    * @param cloudConfig {@link CloudConfig} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @param azureMetrics {@link AzureMetrics} object.
+   * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
   public ConnectionStringBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
-      AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(cloudConfig, azureCloudConfig, blobLayoutStrategy);
+      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy) {
+    super(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy);
   }
 
   /**
    * Constructor for {@link ConnectionStringBasedStorageClient} object for testing.
    * @param blobServiceClient {@link BlobServiceClient} object.
    * @param blobBatchClient {@link BlobBatchClient} object.
+   * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
   public ConnectionStringBasedStorageClient(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient,
-      AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(blobServiceClient, blobBatchClient, blobLayoutStrategy);
+      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy) {
+    super(blobServiceClient, blobBatchClient, azureMetrics, blobLayoutStrategy);
   }
 
   @Override
