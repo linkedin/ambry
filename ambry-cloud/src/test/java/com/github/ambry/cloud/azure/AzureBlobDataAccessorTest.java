@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.rest.Response;
+import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
@@ -59,6 +60,7 @@ public class AzureBlobDataAccessorTest {
   private AzureBlobDataAccessor dataAccessor;
   private BlockBlobClient mockBlockBlobClient;
   private BlobBatchClient mockBatchClient;
+  private BlobServiceClient mockServiceClient;
   private AzureMetrics azureMetrics;
   private DummyCloudUpdateValidator dummyCloudUpdateValidator = new DummyCloudUpdateValidator();
   private int blobSize = 1024;
@@ -70,7 +72,7 @@ public class AzureBlobDataAccessorTest {
   @Before
   public void setup() throws Exception {
 
-    BlobServiceClient mockServiceClient = mock(BlobServiceClient.class);
+    mockServiceClient = mock(BlobServiceClient.class);
     mockBlockBlobClient = setupMockBlobClient(mockServiceClient);
     mockBatchClient = mock(BlobBatchClient.class);
 
@@ -242,8 +244,8 @@ public class AzureBlobDataAccessorTest {
     Properties properties = new Properties();
     AzureTestUtils.setConfigProperties(properties);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_FACTORY_CLASS,
-        ConnectionStringBasedStorageClientFactory.class.getCanonicalName());
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_CLASS,
+        ConnectionStringBasedStorageClient.class.getCanonicalName());
     properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, "");
     try {
       AzureBlobDataAccessor azureBlobDataAccessor =
@@ -251,12 +253,12 @@ public class AzureBlobDataAccessorTest {
               new AzureBlobLayoutStrategy("test"), azureMetrics);
       fail("Creating azure blob data accessor with ConnectionStringBasedStorageClientFactory should throw exception"
           + "without connection string config");
-    } catch (IllegalArgumentException iaEx) {
+    } catch (ReflectiveOperationException roEx) {
     }
 
     AzureTestUtils.setConfigProperties(properties);
-    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_FACTORY_CLASS,
-        ADAuthBasedStorageClientFactory.class.getCanonicalName());
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_CLASS,
+        ADAuthBasedStorageClient.class.getCanonicalName());
     properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENTID, "");
     verifiableProperties = new VerifiableProperties(properties);
     try {
@@ -265,8 +267,40 @@ public class AzureBlobDataAccessorTest {
               new AzureBlobLayoutStrategy("test"), azureMetrics);
       fail("Creating azure blob data accessor with ADAuthBasedStorageClientFactory should throw exception"
           + "without one of the required configs");
-    } catch (IllegalArgumentException iaEx) {
+    } catch (ReflectiveOperationException roEx) {
     }
+  }
+
+  @Test
+  public void testRetryIfAuthTokenExpired() {
+    // verify that BlockBlobClient.downloadWithResponse is called 2 times when throwing exception but tryHandleExceptionAndHintRetry returns true.
+    AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
+    AzureBlobLayoutStrategy blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureConfig);
+    ADAuthBasedStorageClient adAuthBasedStorageClient =
+        spy(new ADAuthBasedStorageClient(mockServiceClient, mockBatchClient, azureMetrics, blobLayoutStrategy));
+    BlobStorageException mockBlobStorageException = mock(BlobStorageException.class);
+    when(mockBlockBlobClient.downloadWithResponse(null, null, null, null, false, null, Context.NONE)).thenThrow(
+        mockBlobStorageException).thenReturn(null);
+    doReturn(true).when(adAuthBasedStorageClient).handleExceptionAndHintRetry(mockBlobStorageException);
+    doReturn(mockBlockBlobClient).when(adAuthBasedStorageClient).getBlockBlobClient(null, null, false);
+    adAuthBasedStorageClient.downloadWithResponse(null, null, false, null, null, null, null, false, null);
+    verify(mockBlockBlobClient, times(2)).downloadWithResponse(null, null, null, null, false, null, Context.NONE);
+
+    // verify that BlockBlobClient.downloadWithResponse is called only once when not throwing any exception.
+    when(mockBlockBlobClient.downloadWithResponse(null, null, null, null, false, null, Context.NONE)).thenReturn(null);
+    adAuthBasedStorageClient.downloadWithResponse(null, null, false, null, null, null, null, false, null);
+    verify(mockBlockBlobClient, times(3)).downloadWithResponse(null, null, null, null, false, null, Context.NONE);
+
+    // verify that BlockBlobClient.downloadWithResponse is called only once when throwing exception but tryHandleExceptionAndHintRetry returns false.
+    BlobStorageException blobStorageException = new BlobStorageException("test failure", null, null);
+    doReturn(false).when(adAuthBasedStorageClient).handleExceptionAndHintRetry(blobStorageException);
+    when(mockBlockBlobClient.downloadWithResponse(null, null, null, null, false, null, Context.NONE)).thenThrow(
+        blobStorageException).thenReturn(null);
+    try {
+      adAuthBasedStorageClient.downloadWithResponse(null, null, false, null, null, null, null, false, null);
+    } catch (BlobStorageException bsEx) {
+    }
+    verify(mockBlockBlobClient, times(4)).downloadWithResponse(null, null, null, null, false, null, Context.NONE);
   }
 
   static BlockBlobClient setupMockBlobClient(BlobServiceClient mockServiceClient) {

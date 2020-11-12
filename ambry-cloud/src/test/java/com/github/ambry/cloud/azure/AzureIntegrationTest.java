@@ -88,17 +88,16 @@ public class AzureIntegrationTest {
   private String propFileName = "azure-test.properties";
   private String tokenFileName = "replicaTokens";
   private Properties testProperties;
-  private final String azureStorageClientFactoryClass;
+  private final String azureStorageClientClass;
 
   /**
-   * Run for both {@link ADAuthBasedStorageClientFactory} and {@link ConnectionStringBasedStorageClientFactory} azure
-   * storage client factories.
+   * Run for both {@link ADAuthBasedStorageClient} and {@link ConnectionStringBasedStorageClient} azure storage clients.
    * @return an array with factory class for storage client factory.
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{ADAuthBasedStorageClientFactory.class.getCanonicalName()},
-        {ConnectionStringBasedStorageClientFactory.class.getCanonicalName()}});
+    return Arrays.asList(new Object[][]{{ADAuthBasedStorageClient.class.getCanonicalName()},
+        {ConnectionStringBasedStorageClient.class.getCanonicalName()}});
   }
 
   /**
@@ -106,7 +105,7 @@ public class AzureIntegrationTest {
    * @param azureStorageClientFactoryClass azure storage client factory class.
    */
   public AzureIntegrationTest(String azureStorageClientFactoryClass) {
-    this.azureStorageClientFactoryClass = azureStorageClientFactoryClass;
+    this.azureStorageClientClass = azureStorageClientFactoryClass;
   }
 
   @Before
@@ -126,7 +125,7 @@ public class AzureIntegrationTest {
     testProperties.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
     testProperties.setProperty(CloudConfig.CLOUD_COMPACTION_LOOKBACK_DAYS, "7");
     testProperties.setProperty(AzureCloudConfig.AZURE_PURGE_BATCH_SIZE, "10");
-    testProperties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_FACTORY_CLASS, azureStorageClientFactoryClass);
+    testProperties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_CLASS, azureStorageClientClass);
     verifiableProperties = new VerifiableProperties(testProperties);
     clusterMap = Mockito.mock(ClusterMap.class);
     azureDest = getAzureDestination(verifiableProperties);
