@@ -524,7 +524,7 @@ public class StatsManagerTest {
    */
   @Test
   public void testStatsManagerStartAndShutdown() {
-    statsManager.start();
+    statsManager.start(null);
     statsManager.shutdown();
   }
 

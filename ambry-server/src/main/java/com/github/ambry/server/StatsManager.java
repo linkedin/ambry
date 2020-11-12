@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.StatsManagerConfig;
+import com.github.ambry.server.mysql.AccountStatsMySqlStore;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
@@ -98,9 +99,9 @@ class StatsManager {
   /**
    * Start the stats manager by scheduling the periodic task that collect, aggregate and publish stats.
    */
-  void start() {
+  void start(AccountStatsMySqlStore accountStatsMySqlStore) {
     scheduler = Utils.newScheduler(1, false);
-    statsAggregator = new StatsAggregator();
+    statsAggregator = new StatsAggregator(accountStatsMySqlStore);
     int actualDelay = initialDelayInSecs > 0 ? ThreadLocalRandom.current().nextInt(initialDelayInSecs) : 0;
     logger.info("Scheduling stats aggregation job with an initial delay of {} secs", actualDelay);
     scheduler.scheduleAtFixedRate(statsAggregator, actualDelay, publishPeriodInSecs, TimeUnit.SECONDS);
@@ -315,6 +316,11 @@ class StatsManager {
    */
   private class StatsAggregator implements Runnable {
     private volatile boolean cancelled = false;
+    private final AccountStatsMySqlStore accountStatsMySqlStore;
+
+    StatsAggregator(AccountStatsMySqlStore accountStatsMySqlStore) {
+      this.accountStatsMySqlStore = accountStatsMySqlStore;
+    }
 
     @Override
     public void run() {
@@ -335,6 +341,11 @@ class StatsManager {
           StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(),
               partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
               unreachableStores);
+          // First write to account stats
+          StatsWrapper statsWrapper = new StatsWrapper(statsHeader, aggregatedSnapshot);
+          if (accountStatsMySqlStore != null) {
+            accountStatsMySqlStore.publish(statsWrapper);
+          }
           publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
           logger.info("Local stats snapshot published to {}", statsOutputFile.getAbsolutePath());
         }
