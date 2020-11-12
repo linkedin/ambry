@@ -28,4 +28,5 @@ ext {
     azureMsalClientCredentialVersion="1.0.0"
     conscryptVersion = "2.2.1"
     jimFsVersion = "1.1"
+    mysqlConnectorVersion = "8.0.21"
 }
