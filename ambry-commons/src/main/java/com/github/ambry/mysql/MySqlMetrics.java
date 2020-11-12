@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.account.mysql;
+package com.github.ambry.mysql;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
@@ -19,9 +19,9 @@ import com.codahale.metrics.MetricRegistry;
 
 
 /**
- * Expose metrics related to writes and reads to/from MySql DB used in {@link com.github.ambry.account.MySqlAccountService}
+ * Expose metrics related to writes and reads to/from MySql DB.
  */
-public class MySqlAccountStoreMetrics {
+public class MySqlMetrics {
 
   public static final String WRITE_TIME_MSEC = "WriteTimeInMs";
   public static final String READ_TIME_MSEC = "ReadTimeInMs";
@@ -41,14 +41,14 @@ public class MySqlAccountStoreMetrics {
   public final Counter connectionSuccessCount;
   public final Counter connectionFailureCount;
 
-  public MySqlAccountStoreMetrics(MetricRegistry metricRegistry) {
-    writeTimeMs = metricRegistry.histogram(MetricRegistry.name(MySqlAccountStore.class, WRITE_TIME_MSEC));
-    readTimeMs = metricRegistry.histogram(MetricRegistry.name(MySqlAccountStore.class, READ_TIME_MSEC));
-    writeSuccessCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, WRITE_SUCCESS_COUNT));
-    writeFailureCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, WRITE_FAILURE_COUNT));
-    readSuccessCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, READ_SUCCESS_COUNT));
-    readFailureCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, READ_FAILURE_COUNT));
-    connectionSuccessCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, CONNECTION_SUCCESS_COUNT));
-    connectionFailureCount = metricRegistry.counter(MetricRegistry.name(MySqlAccountStore.class, CONNECTION_FAILURE_COUNT));
+  public MySqlMetrics(Class<?> clazz, MetricRegistry metricRegistry) {
+    writeTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, WRITE_TIME_MSEC));
+    readTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, READ_TIME_MSEC));
+    writeSuccessCount = metricRegistry.counter(MetricRegistry.name(clazz, WRITE_SUCCESS_COUNT));
+    writeFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, WRITE_FAILURE_COUNT));
+    readSuccessCount = metricRegistry.counter(MetricRegistry.name(clazz, READ_SUCCESS_COUNT));
+    readFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, READ_FAILURE_COUNT));
+    connectionSuccessCount = metricRegistry.counter(MetricRegistry.name(clazz, CONNECTION_SUCCESS_COUNT));
+    connectionFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, CONNECTION_FAILURE_COUNT));
   }
 }

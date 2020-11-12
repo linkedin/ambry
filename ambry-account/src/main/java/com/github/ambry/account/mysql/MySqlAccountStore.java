@@ -15,6 +15,9 @@ package com.github.ambry.account.mysql;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.mysql.MySqlUtils;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
@@ -35,7 +38,7 @@ public class MySqlAccountStore {
    * @param metrics metrics to track mysql operations
    * @throws SQLException
    */
-  public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, MySqlAccountStoreMetrics metrics) throws SQLException {
+  public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, MySqlMetrics metrics) throws SQLException {
     mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter, metrics);
     accountDao = new AccountDao(mySqlDataAccessor);
     containerDao = new ContainerDao(mySqlDataAccessor);

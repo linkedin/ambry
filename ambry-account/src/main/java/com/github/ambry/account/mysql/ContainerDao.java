@@ -15,6 +15,7 @@ package com.github.ambry.account.mysql;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.mysql.MySqlDataAccessor;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -23,7 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
 
-import static com.github.ambry.account.mysql.MySqlDataAccessor.OperationType.*;
+import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 
 
 /**
@@ -38,6 +39,9 @@ public class ContainerDao {
   public static final String VERSION = "version";
   public static final String CREATION_TIME = "creationTime";
   public static final String LAST_MODIFIED_TIME = "lastModifiedTime";
+
+  public static final String INDEX_ACCOUNT_CONTAINER = "containers.accountContainer";
+  public static final String INDEX_CONTAINER_NAME = "containers.uniqueName";
 
   private final MySqlDataAccessor dataAccessor;
   private final String insertSql;

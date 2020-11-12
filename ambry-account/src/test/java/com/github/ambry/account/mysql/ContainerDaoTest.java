@@ -14,7 +14,6 @@
 package com.github.ambry.account.mysql;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.utils.SystemTime;
@@ -47,12 +46,12 @@ public class ContainerDaoTest {
   private final MySqlDataAccessor dataAccessor;
   private final Connection mockConnection;
   private final ContainerDao containerDao;
-  private final MySqlAccountStoreMetrics metrics;
+  private final MySqlMetrics metrics;
   private final PreparedStatement mockInsertStatement;
   private final PreparedStatement mockQueryStatement;
 
   public ContainerDaoTest() throws SQLException {
-    metrics = new MySqlAccountStoreMetrics(new MetricRegistry());
+    metrics = new MySqlMetrics(new MetricRegistry());
     testContainer =
         new ContainerBuilder(containerId, containerName, Container.ContainerStatus.ACTIVE, "", accountId).build();
     containerJson = testContainer.toJson().toString();

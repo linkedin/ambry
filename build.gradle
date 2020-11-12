@@ -230,6 +230,7 @@ project(':ambry-commons') {
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
         }
+        compile "mysql:mysql-connector-java:8.0.21"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }

@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.mysql.MySqlMetrics;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +25,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.account.mysql.MySqlUtils.*;
+import static com.github.ambry.mysql.MySqlUtils.*;
 
 
 /**
@@ -37,7 +38,7 @@ public class MySqlAccountStoreFactory {
 
   protected final MySqlAccountServiceConfig accountServiceConfig;
   protected final String localDatacenter;
-  protected final MySqlAccountStoreMetrics metrics;
+  protected final MySqlMetrics metrics;
 
   /**
    * Constructor.
@@ -48,7 +49,7 @@ public class MySqlAccountStoreFactory {
     // If datacenter is unknown, all endpoints will be considered remote
     this.localDatacenter =
         verifiableProperties.getString(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, UNKNOWN_DATACENTER);
-    this.metrics = new MySqlAccountStoreMetrics(metricRegistry);
+    this.metrics = new MySqlMetrics(MySqlAccountStore.class, metricRegistry);
   }
 
   /**
@@ -57,9 +58,9 @@ public class MySqlAccountStoreFactory {
    * @throws SQLException
    */
   public MySqlAccountStore getMySqlAccountStore() throws SQLException {
-    Map<String, List<MySqlUtils.DbEndpoint>> dcToMySqlDBEndpoints = getDbEndpointsPerDC(accountServiceConfig.dbInfo);
+    Map<String, List<DbEndpoint>> dcToMySqlDBEndpoints = getDbEndpointsPerDC(accountServiceConfig.dbInfo);
     // Flatten to List (TODO: does utility method need to return map?)
-    List<MySqlUtils.DbEndpoint> dbEndpoints = new ArrayList<>();
+    List<DbEndpoint> dbEndpoints = new ArrayList<>();
     dcToMySqlDBEndpoints.values().forEach(endpointList -> dbEndpoints.addAll(endpointList));
     try {
       return new MySqlAccountStore(dbEndpoints, localDatacenter, metrics);

@@ -16,7 +16,7 @@ package com.github.ambry.account;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
-import com.github.ambry.account.mysql.MySqlDataAccessor;
+import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;

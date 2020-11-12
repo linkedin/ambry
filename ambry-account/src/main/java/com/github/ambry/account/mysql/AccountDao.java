@@ -16,6 +16,7 @@ package com.github.ambry.account.mysql;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
+import com.github.ambry.mysql.MySqlDataAccessor;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -24,7 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
 
-import static com.github.ambry.account.mysql.MySqlDataAccessor.OperationType.*;
+import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 
 
 /**
