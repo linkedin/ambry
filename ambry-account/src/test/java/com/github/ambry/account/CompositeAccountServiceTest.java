@@ -47,6 +47,10 @@ public class CompositeAccountServiceTest {
 
   public CompositeAccountServiceTest() {
     props.setProperty(CompositeAccountServiceConfig.SAMPLING_PERCENTAGE_FOR_GET_CONSISTENCY_CHECK, "100");
+    props.setProperty(CompositeAccountServiceConfig.PRIMARY_ACCOUNT_SERVICE_FACTORY,
+        "com.github.ambry.account.HelixAccountServiceFactory");
+    props.setProperty(CompositeAccountServiceConfig.SECONDARY_ACCOUNT_SERVICE_FACTORY,
+        "com.github.ambry.account.MySqlAccountServiceFactory");
     compositeAccountService = new CompositeAccountService(primaryAccountService, secondaryAccountService, metrics,
         new CompositeAccountServiceConfig(new VerifiableProperties(props)));
   }
