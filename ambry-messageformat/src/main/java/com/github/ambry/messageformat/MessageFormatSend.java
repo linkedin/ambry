@@ -24,6 +24,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.BufferedInputStream;
@@ -118,57 +119,50 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
       logger.trace("Calculate offsets of messages for one partition, MessageFormatFlag : {} number of messages : {}",
           flag, messageCount);
       for (int i = 0; i < messageCount; i++) {
-        if (flag == MessageFormatFlags.All) {
+        if (flag == MessageFormatFlags.All || flag == MessageFormatFlags.Blob) {
           // just copy over the total size and use relative offset to be 0
           // We do not have to check any version in this case as we dont
           // have to read any data to deserialize anything.
-          sendInfoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
-          messageMetadataList.add(i, null);
-          totalSizeToWrite += readSet.sizeInBytes(i);
           readSet.doPrefetch(i, 0, readSet.sizeInBytes(i));
+          dataFromReadSet.add(readSet.getPrefetchedData(i));
+
+          if (flag == MessageFormatFlags.All) {
+            sendInfoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
+            messageMetadataList.add(i, null);
+            totalSizeToWrite += readSet.sizeInBytes(i);
+          } else if (flag == MessageFormatFlags.Blob) {
+            ByteBuf blobAll = readSet.getPrefetchedData(i);
+            InputStream blobInputStream = new ByteBufInputStream(blobAll);
+
+            MessageHeader_Format headerFormat = parseHeaderAndVerifyStoreKey(blobInputStream, i);
+
+            MessageMetadata messageMetadata = null;
+            if (headerFormat.hasEncryptionKeyRecord()) {
+              // If encryption key exists, MessageMetadata with encryption key is needed.
+              ByteBuf duplicatedByteBuf = blobAll.duplicate();
+              duplicatedByteBuf.setIndex(headerFormat.getBlobEncryptionKeyRecordRelativeOffset(),
+                  headerFormat.getBlobEncryptionKeyRecordRelativeOffset()
+                      + headerFormat.getBlobEncryptionKeyRecordSize());
+              messageMetadata =
+                  new MessageMetadata(deserializeBlobEncryptionKey(new ByteBufInputStream(duplicatedByteBuf)));
+            }
+            messageMetadataList.add(messageMetadata);
+            sendInfoList.add(i,
+                new SendInfo(headerFormat.getBlobRecordRelativeOffset(), headerFormat.getBlobRecordSize()));
+            totalSizeToWrite += headerFormat.getBlobRecordSize();
+
+            // Adjust underlying ByteBuf reader and writer index.
+            blobAll.setIndex(headerFormat.getBlobRecordRelativeOffset(),
+                (int) (headerFormat.getBlobRecordRelativeOffset() + headerFormat.getBlobRecordSize()));
+          }
         } else {
-          long startTime = SystemTime.getInstance().milliseconds();
           BufferedInputStream bufferedInputStream =
               new BufferedInputStream(new MessageReadSetIndexInputStream(readSet, i, 0),
                   BUFFERED_INPUT_STREAM_BUFFER_SIZE);
-          // read and verify header version
-          byte[] headerVersionBytes = new byte[Version_Field_Size_In_Bytes];
-          bufferedInputStream.read(headerVersionBytes, 0, Version_Field_Size_In_Bytes);
-          short version = ByteBuffer.wrap(headerVersionBytes).getShort();
-          if (!isValidHeaderVersion(version)) {
-            throw new MessageFormatException(
-                "Version not known while reading message - version " + version + ", StoreKey " + readSet.getKeyAt(i),
-                MessageFormatErrorCodes.Unknown_Format_Version);
-          }
-          logger.trace("Calculate offsets, read and verify header version time: {}",
-              SystemTime.getInstance().milliseconds() - startTime);
 
-          // read and verify header
-          startTime = SystemTime.getInstance().milliseconds();
-          byte[] headerBytes = new byte[getHeaderSizeForVersion(version)];
-          bufferedInputStream.read(headerBytes, Version_Field_Size_In_Bytes,
-              headerBytes.length - Version_Field_Size_In_Bytes);
+          MessageHeader_Format headerFormat = parseHeaderAndVerifyStoreKey(bufferedInputStream, i);
 
-          ByteBuffer header = ByteBuffer.wrap(headerBytes);
-          header.putShort(version);
-          header.rewind();
-          MessageHeader_Format headerFormat = getMessageHeader(version, header);
-          headerFormat.verifyHeader();
-          logger.trace("Calculate offsets, read and verify header time: {}",
-              SystemTime.getInstance().milliseconds() - startTime);
-
-          // read and verify storeKey
-          startTime = SystemTime.getInstance().milliseconds();
-          StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(bufferedInputStream));
-          if (storeKey.compareTo(readSet.getKeyAt(i)) != 0) {
-            throw new MessageFormatException(
-                "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId " + storeKey,
-                MessageFormatErrorCodes.Store_Key_Id_MisMatch);
-          }
-          logger.trace("Calculate offsets, read and verify storeKey time: {}",
-              SystemTime.getInstance().milliseconds() - startTime);
-
-          startTime = SystemTime.getInstance().milliseconds();
+          long startTime = SystemTime.getInstance().milliseconds();
           if (flag == MessageFormatFlags.BlobProperties) {
             sendInfoList.add(i, new SendInfo(headerFormat.getBlobPropertiesRecordRelativeOffset(),
                 headerFormat.getBlobPropertiesRecordSize()));
@@ -207,23 +201,11 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
             logger.trace(
                 "Sending blob info (blob properties + user metadata) for message relativeOffset : {} " + "size : {}",
                 sendInfoList.get(i).relativeOffset(), sendInfoList.get(i).sizetoSend());
-          } else if (flag == MessageFormatFlags.Blob) {
-            messageMetadataList.add(headerFormat.hasEncryptionKeyRecord() ? new MessageMetadata(
-                extractEncryptionKey(i, headerFormat.getBlobEncryptionKeyRecordRelativeOffset(),
-                    headerFormat.getBlobEncryptionKeyRecordSize())) : null);
-            sendInfoList.add(i,
-                new SendInfo(headerFormat.getBlobRecordRelativeOffset(), headerFormat.getBlobRecordSize()));
-            readSet.doPrefetch(i, headerFormat.getBlobRecordRelativeOffset(), headerFormat.getBlobRecordSize());
-            totalSizeToWrite += headerFormat.getBlobRecordSize();
-            logger.trace("Calculate offsets, get total size of blob time: {}",
-                SystemTime.getInstance().milliseconds() - startTime);
-            logger.trace("Sending data for message relativeOffset : {} size : {}", sendInfoList.get(i).relativeOffset(),
-                sendInfoList.get(i).sizetoSend());
           } else {
             throw new MessageFormatException("Unknown flag in request " + flag, MessageFormatErrorCodes.IO_Error);
           }
+          dataFromReadSet.add(readSet.getPrefetchedData(i));
         }
-        dataFromReadSet.add(readSet.getPrefetchedData(i));
       }
       if (messageCount == 0) {
         messageContent = Unpooled.EMPTY_BUFFER;
@@ -243,6 +225,41 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
       logger.trace("IOError when calculating offsets");
       throw new MessageFormatException("IOError when calculating offsets ", e, MessageFormatErrorCodes.IO_Error);
     }
+  }
+
+  /**
+   * Parse and verify header + storeKey from given inputStream.
+   */
+  private MessageHeader_Format parseHeaderAndVerifyStoreKey(InputStream is, int indexInReadSet)
+      throws MessageFormatException, IOException {
+    // read and verify header version
+    byte[] headerVersionBytes = new byte[Version_Field_Size_In_Bytes];
+    is.read(headerVersionBytes, 0, Version_Field_Size_In_Bytes);
+    short version = ByteBuffer.wrap(headerVersionBytes).getShort();
+    if (!isValidHeaderVersion(version)) {
+      throw new MessageFormatException(
+          "Version not known while reading message - version " + version + ", StoreKey " + readSet.getKeyAt(
+              indexInReadSet), MessageFormatErrorCodes.Unknown_Format_Version);
+    }
+
+    // read and verify header
+    byte[] headerBytes = new byte[getHeaderSizeForVersion(version)];
+    is.read(headerBytes, Version_Field_Size_In_Bytes, headerBytes.length - Version_Field_Size_In_Bytes);
+
+    ByteBuffer header = ByteBuffer.wrap(headerBytes);
+    header.putShort(version);
+    header.rewind();
+    MessageHeader_Format headerFormat = getMessageHeader(version, header);
+    headerFormat.verifyHeader();
+
+    // read and verify storeKey
+    StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(is));
+    if (storeKey.compareTo(readSet.getKeyAt(indexInReadSet)) != 0) {
+      throw new MessageFormatException(
+          "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(indexInReadSet) + " storeId "
+              + storeKey, MessageFormatErrorCodes.Store_Key_Id_MisMatch);
+    }
+    return headerFormat;
   }
 
   /**

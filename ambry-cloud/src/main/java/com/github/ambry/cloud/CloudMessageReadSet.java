@@ -19,15 +19,13 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.utils.ByteBufferOutputStream;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
+import io.netty.buffer.ByteBufOutputStream;
+import io.netty.buffer.PooledByteBufAllocator;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
-import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,14 +54,13 @@ class CloudMessageReadSet implements MessageReadSet {
     try {
       // TODO: Need to refactor the code to avoid prefetching blobs for BlobInfo request,
       // or at least to prefetch only the header (requires CloudDestination enhancement)
-      if (!blobReadInfo.isPrefetched()) {
-        blobReadInfo.prefetchBlob(blobStore);
+      if (!blobReadInfo.isBlobDownloaded()) {
+        blobReadInfo.downloadBlob(blobStore);
       }
-      ByteBuffer outputBuffer = blobReadInfo.getPrefetchedBuffer();
+      ByteBuf outputBuf = blobReadInfo.getBlobContent().duplicate();
       long sizeToRead = Math.min(maxSize, blobReadInfo.getBlobSize() - relativeOffset);
-      outputBuffer.limit((int) (relativeOffset + sizeToRead));
-      outputBuffer.position((int) (relativeOffset));
-      written = channel.write(outputBuffer);
+      outputBuf.setIndex((int) (relativeOffset), (int) (relativeOffset + sizeToRead));
+      written = channel.write(outputBuf.nioBuffer());
     } catch (StoreException ex) {
       throw new IOException("Write of cloud blob " + blobIdStr + " failed", ex);
     }
@@ -98,10 +95,11 @@ class CloudMessageReadSet implements MessageReadSet {
   public void doPrefetch(int index, long relativeOffset, long size) throws IOException {
     BlobReadInfo blobReadInfo = blobReadInfoList.get(index);
     try {
-      if (!blobReadInfo.isPrefetched()) {
-        blobReadInfo.prefetchBlob(blobStore);
+      if (!blobReadInfo.isBlobDownloaded()) {
+        blobReadInfo.downloadBlob(blobStore);
       }
-      blobReadInfo.setPositionAndSize(relativeOffset, size);
+      ByteBuf byteBuf = blobReadInfoList.get(index).getBlobContent();
+      byteBuf.setIndex((int) (relativeOffset), (int) (relativeOffset + size));
     } catch (StoreException ex) {
       throw new IOException("Prefetch of cloud blob " + blobReadInfo.getBlobId().getID() + " failed", ex);
     }
@@ -110,17 +108,7 @@ class CloudMessageReadSet implements MessageReadSet {
   @Override
   public ByteBuf getPrefetchedData(int index) {
     validateIndex(index);
-    BlobReadInfo blobReadInfo = blobReadInfoList.get(index);
-    if (blobReadInfo.position() == -1) {
-      return Unpooled.wrappedBuffer(blobReadInfo.getPrefetchedBuffer());
-    } else {
-      int position = blobReadInfo.position();
-      int size = blobReadInfo.size();
-      ByteBuffer dup = blobReadInfo.getPrefetchedBuffer().duplicate();
-      dup.limit(size + position);
-      dup.position(position);
-      return Unpooled.wrappedBuffer(dup);
-    }
+    return blobReadInfoList.get(index).getBlobContent();
   }
 
   /**
@@ -140,81 +128,38 @@ class CloudMessageReadSet implements MessageReadSet {
   static class BlobReadInfo {
     private final CloudBlobMetadata blobMetadata;
     private final BlobId blobId;
-    private ByteBuffer prefetchedBuffer;
-    private int position = -1;
-    private int size = -1;
-    private boolean isPrefetched;
+    private ByteBuf blobContent = null;
 
     public BlobReadInfo(CloudBlobMetadata blobMetadata, BlobId blobId) {
       this.blobMetadata = blobMetadata;
       this.blobId = blobId;
-      this.isPrefetched = false;
     }
 
     /**
-     * Prefetch the {@code blob} from {@code CloudDestination} and put it in {@code prefetchedBuffer}
+     * Download the {@code blob} from {@code CloudDestination} and put it in {@code blobContent}
      * @param blobStore {@code CloudBlobStore} implementation representing the cloud from which download will happen.
      * @throws StoreException if blob cloud not be downloaded
      */
-    public void prefetchBlob(CloudBlobStore blobStore) throws StoreException {
+    public void downloadBlob(CloudBlobStore blobStore) throws StoreException {
       // Casting blobsize to int, as blobs are chunked in Ambry, and chunk size is 4/8MB.
       // However, if in future, if very large size of blobs are allowed, then prefetching logic should be changed.
-      prefetchedBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
-      ByteBufferOutputStream outputStream = new ByteBufferOutputStream(prefetchedBuffer);
-      blobStore.downloadBlob(blobMetadata, blobId, outputStream);
-      prefetchedBuffer.flip();
-      isPrefetched = true;
-    }
-
-    /**
-     * Donwload the blob from the {@code CloudDestination} to the {@code OutputStream}
-     * @param blobStore {@code CloudBlobStore} implementation representing the cloud from which download will happen.
-     * @param outputStream OutputStream to download the blob to
-     * @throws StoreException if blob download fails.
-     */
-    public void downloadBlob(CloudBlobStore blobStore, OutputStream outputStream) throws StoreException {
+      blobContent = PooledByteBufAllocator.DEFAULT.ioBuffer((int) blobMetadata.getSize());
+      ByteBufOutputStream outputStream = new ByteBufOutputStream(blobContent);
       blobStore.downloadBlob(blobMetadata, blobId, outputStream);
     }
 
     /**
-     * Getter for {@code prefetchedBuffer}
-     * @return {@code ByteBuffer}
+     * @return the blob content.
      */
-    public ByteBuffer getPrefetchedBuffer() {
-      return prefetchedBuffer;
+    public ByteBuf getBlobContent() {
+      return blobContent;
     }
 
     /**
-     * Set new position and size for prefetched buffer.
-     * @param position The new position
-     * @param size The new size
+     * @return true if the blob has been downloaded.
      */
-    public void setPositionAndSize(long position, long size) {
-      Objects.requireNonNull(prefetchedBuffer);
-      this.position = (int) position;
-      this.size = (int) size;
-    }
-
-    /**
-     * Getter for {@code isPrefetched}
-     * @return prefetch status
-     */
-    public boolean isPrefetched() {
-      return isPrefetched;
-    }
-
-    /**
-     * @return Position of prefetched buffer.
-     */
-    public int position() {
-      return position;
-    }
-
-    /**
-     * @return Size of prefetched buffer.
-     */
-    public int size() {
-      return size;
+    public boolean isBlobDownloaded() {
+      return blobContent != null;
     }
 
     /**
