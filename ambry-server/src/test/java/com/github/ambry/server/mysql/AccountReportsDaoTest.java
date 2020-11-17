@@ -90,8 +90,7 @@ public class AccountReportsDaoTest {
   @Test
   public void testUpdateStorageUsageWithException() throws Exception {
     when(mockInsertStatement.executeUpdate()).thenThrow(new SQLTransientConnectionException());
-    TestUtils.assertException(SQLTransientConnectionException.class,
-        () -> accountReportsDao.updateStorageUsage((short) 1, (short) 1000, (short) 8, 100000), null);
+    accountReportsDao.updateStorageUsage((short) 1, (short) 1000, (short) 8, 100000);
     assertEquals("Write failure count should be 1", 1, metrics.writeFailureCount.getCount());
   }
 }

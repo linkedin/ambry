@@ -81,7 +81,7 @@ public class AccountReportsDao {
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);
       logger.error(
-          String.format("Failed to execute updated on %s, with parameter %d %d %d %d %d", ACCOUNT_REPORTS_TABLE,
+          String.format("Failed to execute updated on %s, with parameter %d %d %d %d", ACCOUNT_REPORTS_TABLE,
               partitionId, accountId, containerId, storageUsage), e);
     }
   }
