@@ -28,6 +28,9 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.mysql.MySqlUtils.*;
 
 
+/**
+ * Factory to create a {@link AccountStatsMySqlStore}.
+ */
 public class AccountStatsMySqlStoreFactory {
   private static final Logger logger = LoggerFactory.getLogger(AccountStatsMySqlStoreFactory.class);
 
@@ -38,6 +41,13 @@ public class AccountStatsMySqlStoreFactory {
   private final MetricRegistry registry;
   private final String localBackupFilePath;
 
+  /**
+   * Constructor to create a {@link AccountStatsMySqlStoreFactory}.
+   * @param verifiableProperties
+   * @param clusterMapConfig
+   * @param statsManagerConfig
+   * @param registry
+   */
   public AccountStatsMySqlStoreFactory(VerifiableProperties verifiableProperties, ClusterMapConfig clusterMapConfig,
       StatsManagerConfig statsManagerConfig, MetricRegistry registry) {
     accountStatsMySqlConfig = new AccountStatsMySqlConfig(verifiableProperties);
@@ -58,6 +68,11 @@ public class AccountStatsMySqlStoreFactory {
     this.registry = registry;
   }
 
+  /**
+   * Return {@link AccountStatsMySqlStore}.
+   * @return
+   * @throws SQLException
+   */
   public AccountStatsMySqlStore getAccountStatsMySqlStore() throws SQLException {
     Map<String, List<DbEndpoint>> dcToMySqlDBEndpoints = getDbEndpointsPerDC(accountStatsMySqlConfig.dbInfo);
     // Flatten to List (TODO: does utility method need to return map?)

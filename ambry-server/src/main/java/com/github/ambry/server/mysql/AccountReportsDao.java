@@ -45,18 +45,33 @@ public class AccountReportsDao {
   private final String clustername;
   private final String hostname;
 
+  /**
+   * Constructor to create a {@link AccountReportsDao}.
+   * @param dataAccessor The underlying {@link MySqlDataAccessor}.
+   * @param clustername The name of the cluster this host is belonging to, like Ambry-prod, Ambry-video.
+   * @param hostname The name of the host. It should include the hostname and the port.
+   */
   public AccountReportsDao(MySqlDataAccessor dataAccessor, String clustername, String hostname) {
     this.dataAccessor = Objects.requireNonNull(dataAccessor, "MySqlDataAccessor is empty");
     this.clustername = Objects.requireNonNull(clustername, "clustername is empty");
     this.hostname = Objects.requireNonNull(hostname, "hostname is empty");
   }
 
+  /**
+   * Update the storage usage for the given account/container.
+   * @param partitionId The partition id of this account/container usage.
+   * @param accountId The account id.
+   * @param containerId The container id.
+   * @param storageUsage The storage usage in bytes.
+   */
   public void updateStorageUsage(short partitionId, short accountId, short containerId, long storageUsage) {
     try {
       long startTimeMs = System.currentTimeMillis();
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
       insertStatement.setString(1, clustername);
       insertStatement.setString(2, hostname);
+      // The data type of partition id, account id and container id are not SMALLINT, but INT in MySQL, for
+      // future extension
       insertStatement.setInt(3, partitionId);
       insertStatement.setInt(4, accountId);
       insertStatement.setInt(5, containerId);

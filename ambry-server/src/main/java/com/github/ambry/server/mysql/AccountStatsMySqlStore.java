@@ -13,11 +13,11 @@
  */
 package com.github.ambry.server.mysql;
 
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
-import com.github.ambry.server.StatsReporter;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
 import java.io.File;
@@ -29,15 +29,63 @@ import joptsimple.internal.Strings;
 import org.codehaus.jackson.map.ObjectMapper;
 
 
-public class AccountStatsMySqlStore implements StatsReporter {
+/**
+ * This class publishes container storage usage to mysql. It saves previous copy of {@link StatsWrapper} and compare
+ * the current {@link StatsWrapper} with the previous and only update the containers that have different storage usage.
+ * It also assumes a local copy of {@link StatsWrapper} will be saved after publishing to mysql database, so it can recover
+ * the previous {@link StatsWrapper} from crashing or restarting.
+ */
+public class AccountStatsMySqlStore {
+
   private final AccountReportsDao accountReportsDao;
   private StatsWrapper previousStats;
+  private final Metrics storeMetrics;
 
+  /**
+   * Metrics for {@link AccountStatsMySqlStore}.
+   */
+  private static class Metrics {
+    public final Histogram batchSize;
+    public final Histogram publishTimeMs;
+
+    /**
+     * Constructor to create the Metrics.
+     * @param registry The {@link MetricRegistry}.
+     */
+    public Metrics(MetricRegistry registry) {
+      batchSize = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "BatchSize"));
+      publishTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "PublishTimeMs"));
+    }
+  }
+
+  /**
+   * Constructor to create {@link AccountStatsMySqlStore}.
+   * @param dbEndpoints MySql DB end points.
+   * @param localDatacenter The local datacenter name. Endpoints from local datacenter are preferred when creating connection to MySql DB.
+   * @param clustername  The name of the cluster, like Ambry-prod.
+   * @param hostname The name of the host.
+   * @param localBackupFilePath The filepath to local backup file.
+   * @param registry The {@link MetricRegistry}.
+   * @throws SQLException
+   */
   public AccountStatsMySqlStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, String clustername,
       String hostname, String localBackupFilePath, MetricRegistry registry) throws SQLException {
-    MySqlMetrics metrics = new MySqlMetrics(AccountStatsMySqlStore.class, registry);
-    MySqlDataAccessor mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter, metrics);
-    accountReportsDao = new AccountReportsDao(mySqlDataAccessor, clustername, hostname);
+    this(new MySqlDataAccessor(dbEndpoints, localDatacenter, new MySqlMetrics(AccountStatsMySqlStore.class, registry)),
+        clustername, hostname, localBackupFilePath, registry);
+  }
+
+  /**
+   * Constructor to create link {@link AccountStatsMySqlStore}. It's only used in tests.
+   * @param dataAccessor The {@link MySqlDataAccessor}.
+   * @param clustername  The name of the cluster, like Ambry-prod.
+   * @param hostname The name of the host.
+   * @param localBackupFilePath The filepath to local backup file.
+   * @param registry The {@link MetricRegistry}.
+   */
+  AccountStatsMySqlStore(MySqlDataAccessor dataAccessor, String clustername, String hostname,
+      String localBackupFilePath, MetricRegistry registry) {
+    accountReportsDao = new AccountReportsDao(dataAccessor, clustername, hostname);
+    storeMetrics = new AccountStatsMySqlStore.Metrics(registry);
     if (!Strings.isNullOrEmpty(localBackupFilePath)) {
       // load backup file and this backup is the previous stats
       ObjectMapper objectMapper = new ObjectMapper();
@@ -49,6 +97,11 @@ public class AccountStatsMySqlStore implements StatsReporter {
     }
   }
 
+  /**
+   * Publish the {@link StatsWrapper} to mysql database. This method ignores the error information from {@link StatsWrapper}
+   * and only publish the container storage usages that are different from the previous one.
+   * @param statsWrapper The {@link StatsWrapper} to publish.
+   */
   public void publish(StatsWrapper statsWrapper) {
     if (previousStats == null) {
       applyFunctionToContainerUsageInStatsSnapshot(statsWrapper.getSnapshot(), accountReportsDao::updateStorageUsage);
@@ -59,7 +112,13 @@ public class AccountStatsMySqlStore implements StatsReporter {
     previousStats = statsWrapper;
   }
 
+  StatsWrapper getPreviousStats() {
+    return previousStats;
+  }
+
   private void applyFunctionToContainerUsageInStatsSnapshot(StatsSnapshot statsSnapshot, ContainerUsageFunction func) {
+    int batchSize = 0;
+    long startTimeMs = System.currentTimeMillis();
     // StatsSnapshot has three levels, Parition -> Account -> Container
     Map<String, StatsSnapshot> partitionMap = statsSnapshot.getSubMap();
     for (Map.Entry<String, StatsSnapshot> partitionMapEntry : partitionMap.entrySet()) {
@@ -77,13 +136,18 @@ public class AccountStatsMySqlStore implements StatsReporter {
           short containerId = Short.valueOf(containerIdKey.substring(2, containerIdKey.length() - 1));
           long storageUsage = containerMapEntry.getValue().getValue();
           func.apply(partitionId, accountId, containerId, storageUsage);
+          batchSize++;
         }
       }
     }
+    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    storeMetrics.batchSize.update(batchSize);
   }
 
   private void applyFunctionToContainerUsageInDifferentStatsSnapshots(StatsSnapshot currentStats,
       StatsSnapshot previousStats, ContainerUsageFunction func) {
+    int batchSize = 0;
+    long startTimeMs = System.currentTimeMillis();
     Map<String, StatsSnapshot> currPartitionMap = currentStats.getSubMap();
     Map<String, StatsSnapshot> prevPartitionMap = previousStats.getSubMap();
     for (Map.Entry<String, StatsSnapshot> currPartitionMapEntry : currPartitionMap.entrySet()) {
@@ -93,7 +157,7 @@ public class AccountStatsMySqlStore implements StatsReporter {
           prevPartitionMap.getOrDefault(partitionIdKey, new StatsSnapshot((long) 0, new HashMap<>()));
       short partitionId = Short.valueOf(partitionIdKey.substring("Partition[".length(), partitionIdKey.length() - 1));
       Map<String, StatsSnapshot> currAccountMap = currAccountStatsSnapshot.getSubMap();
-      Map<String, StatsSnapshot> prevAccountMap = currAccountStatsSnapshot.getSubMap();
+      Map<String, StatsSnapshot> prevAccountMap = prevAccountStatsSnapshot.getSubMap();
       for (Map.Entry<String, StatsSnapshot> currAccountMapEntry : currAccountMap.entrySet()) {
         String accountIdKey = currAccountMapEntry.getKey();
         StatsSnapshot currContainerStatsSnapshot = currAccountMapEntry.getValue();
@@ -110,10 +174,13 @@ public class AccountStatsMySqlStore implements StatsReporter {
               prevContainerMap.getOrDefault(containerIdKey, new StatsSnapshot((long) -1, null)).getValue();
           if (currStorageUsage != prevStorageUsage) {
             func.apply(partitionId, accountId, containerId, currStorageUsage);
+            batchSize++;
           }
         }
       }
     }
+    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    storeMetrics.batchSize.update(batchSize);
   }
 
   @FunctionalInterface
