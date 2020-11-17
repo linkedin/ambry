@@ -59,10 +59,8 @@ class CloudMessageReadSet implements MessageReadSet {
       }
       ByteBuf outputBuf = blobReadInfo.getBlobContent().duplicate();
       long sizeToRead = Math.min(maxSize, blobReadInfo.getBlobSize() - relativeOffset);
-      byte[] array = new byte[(int) sizeToRead];
-      outputBuf.readerIndex((int) (relativeOffset));
-      outputBuf.readBytes(array);
-      written = channel.write(ByteBuffer.wrap(array));
+      outputBuf.setIndex((int) (relativeOffset), (int) (relativeOffset + sizeToRead));
+      written = channel.write(outputBuf.nioBuffer());
     } catch (StoreException ex) {
       throw new IOException("Write of cloud blob " + blobIdStr + " failed", ex);
     }
@@ -101,8 +99,7 @@ class CloudMessageReadSet implements MessageReadSet {
         blobReadInfo.downloadBlob(blobStore);
       }
       ByteBuf byteBuf = blobReadInfoList.get(index).getBlobContent();
-      byteBuf.readerIndex((int) (relativeOffset));
-      byteBuf.writerIndex((int) (relativeOffset + size));
+      byteBuf.setIndex((int) (relativeOffset), (int) (relativeOffset + size));
     } catch (StoreException ex) {
       throw new IOException("Prefetch of cloud blob " + blobReadInfo.getBlobId().getID() + " failed", ex);
     }
