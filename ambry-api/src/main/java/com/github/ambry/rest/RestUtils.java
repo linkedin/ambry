@@ -860,38 +860,50 @@ public class RestUtils {
 
   /**
    * Sets the user metadata in the headers of the response.
-   * @param userMetadata the user metadata that needs to be sent.
+   * @param userMetadata byte array containing user metadata that needs to be sent.
    * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
    * @return {@code true} if the user metadata was successfully deserialized into headers, {@code false} if not.
    * @throws RestServiceException if there are any problems setting the header.
    */
-  public static boolean setUserMetadataHeaders(byte[] userMetadata, RestResponseChannel restResponseChannel)
-      throws RestServiceException {
+  public static boolean setUserMetadataHeaders(byte[] userMetadata, RestResponseChannel restResponseChannel) {
     Map<String, String> userMetadataMap = buildUserMetadata(userMetadata);
-    boolean setHeaders = userMetadataMap != null;
-    if (setHeaders) {
-      for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
-        String headerName = entry.getKey();
-        String headerValue = entry.getValue();
+    if (userMetadata != null) {
+      setUserMetadataHeaders(userMetadataMap, restResponseChannel);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /**
+   * Sets the user metadata in the headers of the response.
+   * @param userMetadataMap map of user metadata that needs to be sent.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   * @throws RestServiceException if there are any problems setting the header.
+   */
+  public static void setUserMetadataHeaders(Map<String, String> userMetadataMap,
+      RestResponseChannel restResponseChannel) {
+    Objects.requireNonNull(userMetadataMap, "user metadata must be supplied");
+    for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
+      String headerName = entry.getKey();
+      String headerValue = entry.getValue();
+      try {
+        restResponseChannel.setHeader(headerName, headerValue);
+      } catch (IllegalArgumentException iae) {
         try {
+          // Value may require encoding to set in response header.
+          // Set in special header designated for encoded values.  The client receiving the response
+          // will need to check these headers and perform the decode.
+          headerName = headerName.replaceFirst(Headers.USER_META_DATA_HEADER_PREFIX,
+              Headers.USER_META_DATA_ENCODED_HEADER_PREFIX);
+          headerValue = URLEncoder.encode(headerValue, CHARSET.name());
           restResponseChannel.setHeader(headerName, headerValue);
-        } catch (IllegalArgumentException iae) {
-          try {
-            // Value may require encoding to set in response header.
-            // Set in special header designated for encoded values.  The client receiving the response
-            // will need to check these headers and perform the decode.
-            headerName = headerName.replaceFirst(Headers.USER_META_DATA_HEADER_PREFIX,
-                Headers.USER_META_DATA_ENCODED_HEADER_PREFIX);
-            headerValue = URLEncoder.encode(headerValue, CHARSET.name());
-            restResponseChannel.setHeader(headerName, headerValue);
-            logger.debug("Set encoded value in response header {}", headerName);
-          } catch (Exception e) {
-            logger.error("Unable to set response header {} to value {}", headerName, headerValue, e);
-          }
+          logger.debug("Set encoded value in response header {}", headerName);
+        } catch (Exception e) {
+          logger.error("Unable to set response header {} to value {}", headerName, headerValue, e);
         }
       }
     }
-    return setHeaders;
   }
 
   /**
