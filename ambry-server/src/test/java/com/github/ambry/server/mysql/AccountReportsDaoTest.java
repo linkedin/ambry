@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
-import com.github.ambry.utils.TestUtils;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.PreparedStatement;

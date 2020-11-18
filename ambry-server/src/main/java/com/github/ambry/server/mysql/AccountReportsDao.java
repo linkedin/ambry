@@ -15,6 +15,7 @@ package com.github.ambry.server.mysql;
 
 import com.github.ambry.mysql.MySqlDataAccessor;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -28,7 +29,7 @@ import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
  */
 public class AccountReportsDao {
   public static final String ACCOUNT_REPORTS_TABLE = "AccountReports";
-  public static final String CLUSTERNAME_COLUMN = "clustername";
+  public static final String CLUSTERNAME_COLUMN = "clusterName";
   public static final String HOSTNAME_COLUMN = "hostname";
   public static final String PARTITION_ID_COLUMN = "partitionId";
   public static final String ACCOUNT_ID_COLUMN = "accountId";
@@ -41,6 +42,9 @@ public class AccountReportsDao {
       String.format("INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, ?, ?, NOW())",
           ACCOUNT_REPORTS_TABLE, CLUSTERNAME_COLUMN, HOSTNAME_COLUMN, PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
           CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
+  private static final String querySqlForClusterAndHost =
+      String.format("SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
+          CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTERNAME_COLUMN, HOSTNAME_COLUMN);
   private final MySqlDataAccessor dataAccessor;
   private final String clustername;
   private final String hostname;
@@ -80,9 +84,34 @@ public class AccountReportsDao {
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);
+      logger.error(String.format("Failed to execute updated on %s, with parameter %d %d %d %d", ACCOUNT_REPORTS_TABLE,
+          partitionId, accountId, containerId, storageUsage), e);
+    }
+  }
+
+  public void queryForClusterAndHost(String clustername, String hostname, ContainerUsageFunction func)
+      throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement queryStatement = dataAccessor.getPreparedStatement(querySqlForClusterAndHost, false);
+      queryStatement.setString(1, clustername);
+      queryStatement.setString(2, hostname);
+      ResultSet resultSet = queryStatement.executeQuery();
+      if (resultSet != null) {
+        while (resultSet.next()) {
+          int partitionId = resultSet.getInt(PARTITION_ID_COLUMN);
+          int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
+          int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
+          long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
+          func.apply((short) partitionId, (short) accountId, (short) containerId, storageUsage);
+        }
+      }
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Read);
       logger.error(
-          String.format("Failed to execute updated on %s, with parameter %d %d %d %d", ACCOUNT_REPORTS_TABLE,
-              partitionId, accountId, containerId, storageUsage), e);
+          String.format("Failed to execute query on %s, with parameter %s %s", ACCOUNT_REPORTS_TABLE, clustername,
+              hostname), e);
+      throw e;
     }
   }
 }

@@ -35,6 +35,7 @@ public class AccountStatsMySqlStoreFactory {
   private static final Logger logger = LoggerFactory.getLogger(AccountStatsMySqlStoreFactory.class);
 
   private final AccountStatsMySqlConfig accountStatsMySqlConfig;
+  private final HostnameHelper hostnameHelper;
   private final String localDC;
   private final String clustername;
   private final String hostname;
@@ -52,17 +53,8 @@ public class AccountStatsMySqlStoreFactory {
       StatsManagerConfig statsManagerConfig, MetricRegistry registry) {
     accountStatsMySqlConfig = new AccountStatsMySqlConfig(verifiableProperties);
     clustername = clusterMapConfig.clusterMapClusterName;
-    String[] domainNamesToRemove = accountStatsMySqlConfig.domainNamesToRemove.split(",");
-
-    String fullyQualifiedDomainName = clusterMapConfig.clusterMapHostName;
-    int port = clusterMapConfig.clusterMapPort;
-    for (String domainName : domainNamesToRemove) {
-      if (domainName.charAt(0) != '.') {
-        domainName = "." + domainName;
-      }
-      fullyQualifiedDomainName = fullyQualifiedDomainName.replace(domainName, "");
-    }
-    hostname = String.format("%s_%d", fullyQualifiedDomainName, port);
+    hostnameHelper = new HostnameHelper(accountStatsMySqlConfig, clusterMapConfig.clusterMapPort);
+    hostname = hostnameHelper.simplifyHostname(clusterMapConfig.clusterMapHostName);
     localDC = clusterMapConfig.clusterMapDatacenterName;
     localBackupFilePath = statsManagerConfig.outputFilePath;
     this.registry = registry;
@@ -79,7 +71,8 @@ public class AccountStatsMySqlStoreFactory {
     List<DbEndpoint> dbEndpoints = new ArrayList<>();
     dcToMySqlDBEndpoints.values().forEach(endpointList -> dbEndpoints.addAll(endpointList));
     try {
-      return new AccountStatsMySqlStore(dbEndpoints, localDC, clustername, hostname, localBackupFilePath, registry);
+      return new AccountStatsMySqlStore(dbEndpoints, localDC, clustername, hostname, localBackupFilePath,
+          hostnameHelper, registry);
     } catch (SQLException e) {
       logger.error("Account Stats MySQL store creation failed", e);
       throw e;

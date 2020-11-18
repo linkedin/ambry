@@ -28,6 +28,8 @@ before_install:
   - mysql --version
   - mysql -e 'CREATE DATABASE AccountMetadata;'
   - mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;'
+  - mysql -e 'CREATE DATABASE ambry_container_storage_stats;'
+  - mysql -e 'USE ambry_container_storage_stats; SOURCE ./ambry-server/src/main/resources/AmbryContainerStorageStats.ddl;'
 branches:
   except: # don't build tags
     - /^v\d/

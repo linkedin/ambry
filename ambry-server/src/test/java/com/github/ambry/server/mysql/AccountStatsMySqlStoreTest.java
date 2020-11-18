@@ -83,7 +83,7 @@ public class AccountStatsMySqlStoreTest {
     Path tempDir = Files.createTempDirectory("AccountStatsMySqlStoreTest");
     Path localBackupFilePath = tempDir.resolve("localbackup");
     AccountStatsMySqlStore store =
-        new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(),
+        new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
     assertNull(store.getPreviousStats());
     // Second, save a backup file.
@@ -93,7 +93,7 @@ public class AccountStatsMySqlStoreTest {
     StatsWrapper statsWrapper = new StatsWrapper(header, snapshot);
     ObjectMapper objectMapper = new ObjectMapper();
     objectMapper.writeValue(localBackupFilePath.toFile(), statsWrapper);
-    store = new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(),
+    store = new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(), null,
         new MetricRegistry());
 
     StatsWrapper backupWrapper = store.getPreviousStats();
@@ -107,7 +107,7 @@ public class AccountStatsMySqlStoreTest {
     Path tempDir = Files.createTempDirectory("AccountStatsMySqlStoreTest");
     Path localBackupFilePath = tempDir.resolve("localbackup");
     AccountStatsMySqlStore store =
-        new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(),
+        new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
     StatsSnapshot snapshot = createStatsSnapshot(10, 10, 1, false);
     StatsHeader header =
@@ -119,7 +119,7 @@ public class AccountStatsMySqlStoreTest {
     ObjectMapper objectMapper = new ObjectMapper();
     objectMapper.writeValue(localBackupFilePath.toFile(), statsWrapper);
 
-    store = new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(),
+    store = new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(), null,
         new MetricRegistry());
 
     // We have a local backup to start with.
@@ -142,7 +142,7 @@ public class AccountStatsMySqlStoreTest {
 
     // create a store with a local backup file and try to publish it again.
     AccountStatsMySqlStore store =
-        new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(),
+        new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
     store.publish(statsWrapper);
     assertEquals("Write success count should be 0", 0, metrics.writeSuccessCount.getCount());

@@ -37,7 +37,9 @@ import org.codehaus.jackson.map.ObjectMapper;
  */
 public class AccountStatsMySqlStore {
 
+  private final MySqlDataAccessor mySqlDataAccessor;
   private final AccountReportsDao accountReportsDao;
+  private final HostnameHelper hostnameHelper;
   private StatsWrapper previousStats;
   private final Metrics storeMetrics;
 
@@ -65,13 +67,15 @@ public class AccountStatsMySqlStore {
    * @param clustername  The name of the cluster, like Ambry-prod.
    * @param hostname The name of the host.
    * @param localBackupFilePath The filepath to local backup file.
+   * @param hostnameHelper The {@link HostnameHelper} to simplify the hostname.
    * @param registry The {@link MetricRegistry}.
    * @throws SQLException
    */
   public AccountStatsMySqlStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, String clustername,
-      String hostname, String localBackupFilePath, MetricRegistry registry) throws SQLException {
+      String hostname, String localBackupFilePath, HostnameHelper hostnameHelper, MetricRegistry registry)
+      throws SQLException {
     this(new MySqlDataAccessor(dbEndpoints, localDatacenter, new MySqlMetrics(AccountStatsMySqlStore.class, registry)),
-        clustername, hostname, localBackupFilePath, registry);
+        clustername, hostname, localBackupFilePath, hostnameHelper, registry);
   }
 
   /**
@@ -80,11 +84,14 @@ public class AccountStatsMySqlStore {
    * @param clustername  The name of the cluster, like Ambry-prod.
    * @param hostname The name of the host.
    * @param localBackupFilePath The filepath to local backup file.
+   * @param hostnameHelper The {@link HostnameHelper} to simplify the hostname.
    * @param registry The {@link MetricRegistry}.
    */
   AccountStatsMySqlStore(MySqlDataAccessor dataAccessor, String clustername, String hostname,
-      String localBackupFilePath, MetricRegistry registry) {
+      String localBackupFilePath, HostnameHelper hostnameHelper, MetricRegistry registry) {
+    mySqlDataAccessor = dataAccessor;
     accountReportsDao = new AccountReportsDao(dataAccessor, clustername, hostname);
+    this.hostnameHelper = hostnameHelper;
     storeMetrics = new AccountStatsMySqlStore.Metrics(registry);
     if (!Strings.isNullOrEmpty(localBackupFilePath)) {
       // load backup file and this backup is the previous stats
@@ -112,8 +119,46 @@ public class AccountStatsMySqlStore {
     previousStats = statsWrapper;
   }
 
+  public StatsSnapshot queryStatsSnapshotOf(String clustername, String hostname) throws SQLException {
+    hostname = hostnameHelper.simplifyHostname(hostname);
+    Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
+    StatsSnapshot hostSnapshot = new StatsSnapshot((long) 0, partitionSubMap);
+    accountReportsDao.queryForClusterAndHost(clustername, hostname,
+        (partitionId, accountId, containerId, storageUsage) -> {
+          StatsSnapshot partitionSnapshot = hostSnapshot.getSubMap()
+              .computeIfAbsent("Partition[" + partitionId + "]", k -> new StatsSnapshot((long) 0, new HashMap<>()));
+          StatsSnapshot accountSnapshot = partitionSnapshot.getSubMap()
+              .computeIfAbsent("A[" + accountId + "]", k -> new StatsSnapshot((long) 0, new HashMap<>()));
+          accountSnapshot.getSubMap().put("C[" + containerId + "]", new StatsSnapshot(storageUsage, null));
+        });
+
+    // fill up with value for partitions and accounts
+    long allPartitionValue = 0;
+    for (Map.Entry<String, StatsSnapshot> partitionMapEntry : hostSnapshot.getSubMap().entrySet()) {
+      StatsSnapshot accountStatsSnapshot = partitionMapEntry.getValue();
+      long allAccountValue = 0;
+      for (Map.Entry<String, StatsSnapshot> accountMapEntry : accountStatsSnapshot.getSubMap().entrySet()) {
+        StatsSnapshot containerStatsSnapshot = accountMapEntry.getValue();
+        long allContainerValue = 0;
+        for (Map.Entry<String, StatsSnapshot> containerMapEntry : containerStatsSnapshot.getSubMap().entrySet()) {
+          allContainerValue += containerMapEntry.getValue().getValue();
+        }
+        containerStatsSnapshot.setValue(allContainerValue);
+        allAccountValue += allContainerValue;
+      }
+      accountStatsSnapshot.setValue(allAccountValue);
+      allPartitionValue += allAccountValue;
+    }
+    hostSnapshot.setValue(allPartitionValue);
+    return hostSnapshot;
+  }
+
   StatsWrapper getPreviousStats() {
     return previousStats;
+  }
+
+  public MySqlDataAccessor getMySqlDataAccessor() {
+    return mySqlDataAccessor;
   }
 
   private void applyFunctionToContainerUsageInStatsSnapshot(StatsSnapshot statsSnapshot, ContainerUsageFunction func) {
@@ -181,10 +226,5 @@ public class AccountStatsMySqlStore {
     }
     storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     storeMetrics.batchSize.update(batchSize);
-  }
-
-  @FunctionalInterface
-  private interface ContainerUsageFunction {
-    void apply(short partitionID, short accountId, short containerId, long storageUsage);
   }
 }
