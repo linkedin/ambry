@@ -289,7 +289,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
     // update operation for all the accounts if any conflict exists. There is a slight chance that the account to update
     // conflicts with the accounts in the local cache, but does not conflict with those in the helixPropertyStore. This
     // will happen if some accounts are updated but the local cache is not refreshed.
-    if (accountInfoMapRef.get().hasConflictingAccount(accounts)) {
+    if (accountInfoMapRef.get().hasConflictingAccount(accounts, false)) {
       logger.debug("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
       accountServiceMetrics.updateAccountErrorCount.inc();
       throw new AccountServiceException("Input accounts conflict with the accounts in local cache",

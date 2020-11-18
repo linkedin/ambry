@@ -166,11 +166,11 @@ class AccountInfoMap {
    * @return {@code true} if there is at least one {@link Account} in {@code accountPairs} conflicts with the existing
    *                      {@link Account}s in {@link AccountInfoMap}, {@code false} otherwise.
    */
-  boolean hasConflictingAccount(Collection<Account> accountsToSet) {
+  boolean hasConflictingAccount(Collection<Account> accountsToSet, boolean ignoreVersion) {
     for (Account account : accountsToSet) {
       // if the account already exists, check that the snapshot version matches the expected value.
       Account accountInMap = getAccountById(account.getId());
-      if (accountInMap != null && account.getSnapshotVersion() != accountInMap.getSnapshotVersion()) {
+      if (!ignoreVersion && accountInMap != null && account.getSnapshotVersion() != accountInMap.getSnapshotVersion()) {
         logger.error(
             "Account to update (accountId={} accountName={}) has an unexpected snapshot version in store (expected={}, encountered={})",
             account.getId(), account.getName(), account.getSnapshotVersion(), accountInMap.getSnapshotVersion());
@@ -197,11 +197,12 @@ class AccountInfoMap {
    * @param parentAccountId parent {@link Account} id of the {@link Container}.
    * @return true if there is any container under given parent account with same name but different id.
    */
-  boolean hasConflictingContainer(Collection<Container> containersToSet, short parentAccountId) {
+  boolean hasConflictingContainer(Collection<Container> containersToSet, short parentAccountId, boolean ignoreVersion) {
     for (Container container : containersToSet) {
       // if the container already exists, check that the snapshot version matches the expected value.
       Container containerInMap = getContainerByNameForAccount(container.getParentAccountId(), container.getName());
-      if (containerInMap != null && container.getSnapshotVersion() != containerInMap.getSnapshotVersion()) {
+      if (!ignoreVersion && containerInMap != null
+          && container.getSnapshotVersion() != containerInMap.getSnapshotVersion()) {
         logger.error(
             "Container to update in AccountId {} (containerId={} containerName={}) has an unexpected snapshot version in store (expected={}, encountered={})",
             parentAccountId, container.getId(), container.getName(), container.getSnapshotVersion(),

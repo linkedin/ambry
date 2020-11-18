@@ -468,7 +468,7 @@ public class HelixAccountServiceTest {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
     }
 
-    // 2. Update container with valid name and wrong id
+    // 3. Update container with valid name and wrong id
     badContainer = new ContainerBuilder(refContainer).setId((short) (refContainerId + 7)).build();
     try {
       accountService.updateContainers(refAccountName, Collections.singleton(badContainer));
@@ -476,6 +476,17 @@ public class HelixAccountServiceTest {
     } catch (AccountServiceException e) {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
     }
+
+    // 4. Update container with valid name and id but with invalid version.
+    //TODO: Temporarily tolerating version mismatch with CompositeAccountService enabled due to difference in versioning
+    // between HelixAccountService and MySqlAccountService. Update expectation to throw conflict due to version check later
+    // after moving to MySql only.
+    modifiedContainer = new ContainerBuilder(modifiedContainer).setStatus(ContainerStatus.INACTIVE)
+        .setSnapshotVersion(modifiedContainer.getSnapshotVersion() + 1)
+        .build();
+    updatedContainers = accountService.updateContainers(refAccountName, Collections.singleton(modifiedContainer));
+    assertEquals("Mismatch in return count", 1, updatedContainers.size());
+    assertEquals("Mismatch in container data", modifiedContainer, updatedContainers.iterator().next());
   }
 
   /**

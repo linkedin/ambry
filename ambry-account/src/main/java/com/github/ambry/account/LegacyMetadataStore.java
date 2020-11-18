@@ -110,7 +110,7 @@ class LegacyMetadataStore extends AccountMetadataStore {
 
       // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
       // be caught by Helix and helixStore#update will return false.
-      if (remoteAccountInfoMap.hasConflictingAccount(accountsToUpdate)) {
+      if (remoteAccountInfoMap.hasConflictingAccount(accountsToUpdate, false)) {
         // Throw exception, so that helixStore can capture and terminate the update operation
         errorMessage = "Updating accounts failed because one account to update conflicts with existing accounts";
         logger.error(errorMessage);

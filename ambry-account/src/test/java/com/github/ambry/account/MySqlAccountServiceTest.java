@@ -321,15 +321,16 @@ public class MySqlAccountServiceTest {
     assertEquals("UpdateAccountErrorCount in metrics should be 2", 2,
         accountServiceMetrics.updateAccountErrorCount.getCount());
 
-    // case F: verify updating account (1, "c") with incorrect version throws resource conflict
+    // case F: verify updating account (1, "c") with incorrect version is successful and throws no resource conflict
+    //TODO: Temporarily tolerating version mismatch with CompositeAccountService enabled due to difference in versioning
+    // between HelixAccountService and MySqlAccountService. Update expectation to throw conflict due to version check later
+    // after moving to MySql only.
     accountToUpdate =
         new AccountBuilder(mySqlAccountService.getAccountById((short) 1)).status(Account.AccountStatus.INACTIVE)
             .snapshotVersion(mySqlAccountService.getAccountById((short) 1).getSnapshotVersion() + 1)
             .build();
-    assertUpdateAccountsFails(Collections.singletonList(accountToUpdate), AccountServiceErrorCode.ResourceConflict,
-        mySqlAccountService);
-    assertEquals("UpdateAccountErrorCount in metrics should be 3", 3,
-        accountServiceMetrics.updateAccountErrorCount.getCount());
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate));
+    assertEquals("Mismatch in account information", accountToUpdate, mySqlAccountService.getAccountById((short) 1));
 
     // verify there should be 3 accounts (1, "c), (2, "b) and (3, "d) at the end of operation
     assertEquals("Mismatch in number of accounts", 3, mySqlAccountService.getAllAccounts().size());
@@ -393,16 +394,18 @@ public class MySqlAccountServiceTest {
     assertEquals("UpdateAccountErrorCount in metrics should be 2", 2,
         accountServiceMetrics.updateAccountErrorCount.getCount());
 
-    // case E: Verify updating container (3,c4) with incorrect version throws resource conflict
+    // case E: Verify updating container (3,c4) with incorrect version throws no resource conflict
+    //TODO: Temporarily tolerating version mismatch with CompositeAccountService enabled due to difference in versioning
+    // between HelixAccountService and MySqlAccountService. Update expectation to throw conflict due to version check later
+    // after moving to MySql only.
     containerToUpdate = mySqlAccountService.getAccountById((short) 1).getContainerById((short) 3);
     containerToUpdate = new ContainerBuilder(containerToUpdate).setStatus(Container.ContainerStatus.INACTIVE)
         .setSnapshotVersion(containerToUpdate.getSnapshotVersion() + 1)
         .build();
     accountToUpdate = new AccountBuilder(accountToUpdate).addOrUpdateContainer(containerToUpdate).build();
-    assertUpdateAccountsFails(Collections.singletonList(accountToUpdate), AccountServiceErrorCode.ResourceConflict,
-        mySqlAccountService);
-    assertEquals("UpdateAccountErrorCount in metrics should be 3", 3,
-        accountServiceMetrics.updateAccountErrorCount.getCount());
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate));
+    assertEquals("Mismatch in container information", containerToUpdate,
+        mySqlAccountService.getAccountById((short) 1).getContainerById((short) 3));
   }
 
   /**

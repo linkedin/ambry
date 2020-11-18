@@ -329,7 +329,7 @@ class RouterStore extends AccountMetadataStore {
 
         // If there is any conflict with the existing record, fail the update. Exception thrown in this updater will
         // be caught by Helix and helixStore#update will return false.
-        if (localAccountInfoMap.hasConflictingAccount(this.accounts)) {
+        if (localAccountInfoMap.hasConflictingAccount(this.accounts, false)) {
           // Throw exception, so that helixStore can capture and terminate the update operation
           logAndThrowIllegalStateException(
               "Updating accounts failed because one account to update conflicts with existing accounts", null);
