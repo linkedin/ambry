@@ -108,4 +108,15 @@ public class StatsSnapshot {
     result = 31 * result + (subMap != null ? subMap.hashCode() : 0);
     return result;
   }
+
+  /**
+   * Update the value in this snapshot by summing up all the subMap's StatsSnapshot's values.
+   */
+  public void updateValue() {
+    if (subMap == null) {
+      return;
+    }
+    subMap.values().forEach(StatsSnapshot::updateValue);
+    value = subMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
+  }
 }

@@ -67,9 +67,10 @@ public class AccountStatsMySqlStoreFactory {
    */
   public AccountStatsMySqlStore getAccountStatsMySqlStore() throws SQLException {
     Map<String, List<DbEndpoint>> dcToMySqlDBEndpoints = getDbEndpointsPerDC(accountStatsMySqlConfig.dbInfo);
-    // Flatten to List (TODO: does utility method need to return map?)
-    List<DbEndpoint> dbEndpoints = new ArrayList<>();
-    dcToMySqlDBEndpoints.values().forEach(endpointList -> dbEndpoints.addAll(endpointList));
+    List<DbEndpoint> dbEndpoints = dcToMySqlDBEndpoints.get(localDC);
+    if (dbEndpoints == null || dbEndpoints.size() == 0) {
+      throw new IllegalArgumentException("Empty db endpoints for datacenter: " + localDC);
+    }
     try {
       return new AccountStatsMySqlStore(dbEndpoints, localDC, clustername, hostname, localBackupFilePath,
           hostnameHelper, registry);

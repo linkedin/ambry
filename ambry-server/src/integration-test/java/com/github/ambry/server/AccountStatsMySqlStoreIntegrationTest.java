@@ -52,6 +52,38 @@ public class AccountStatsMySqlStoreIntegrationTest {
   private static final String hostname3 = "ambry3.test.github.com";
   private static final int port = 12345;
 
+  public AccountStatsMySqlStoreIntegrationTest() throws Exception {
+    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clustername1, hostname1, false);
+    cleanup(mySqlStore.getMySqlDataAccessor());
+  }
+
+  /**
+   * Tests to publish multiple stats and recover stats from database.
+   * @throws Exception
+   */
+  @Test
+  public void testMultiStorePublish() throws Exception {
+    AccountStatsMySqlStore mySqlStore1 = createAccountStatsMySqlStore(clustername1, hostname1, false);
+    AccountStatsMySqlStore mySqlStore2 = createAccountStatsMySqlStore(clustername1, hostname2, false);
+    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clustername2, hostname3, false);
+
+    StatsWrapper stats1 = generateStatsWrapper(10, 10, 1);
+    StatsWrapper stats2 = generateStatsWrapper(10, 10, 1);
+    StatsWrapper stats3 = generateStatsWrapper(10, 10, 1);
+    mySqlStore1.publish(stats1);
+    mySqlStore2.publish(stats2);
+    mySqlStore3.publish(stats3);
+
+    assertTableSize(mySqlStore1.getMySqlDataAccessor(), 3 * 10 * 10);
+
+    StatsSnapshot obtainedStats1 = mySqlStore1.queryStatsSnapshotOf(clustername1, hostname1);
+    StatsSnapshot obtainedStats2 = mySqlStore2.queryStatsSnapshotOf(clustername1, hostname2);
+    StatsSnapshot obtainedStats3 = mySqlStore3.queryStatsSnapshotOf(clustername2, hostname3);
+    assertTwoStatsSnapshots(obtainedStats1, stats1.getSnapshot());
+    assertTwoStatsSnapshots(obtainedStats2, stats2.getSnapshot());
+    assertTwoStatsSnapshots(obtainedStats3, stats3.getSnapshot());
+  }
+
   private AccountStatsMySqlStore createAccountStatsMySqlStore(String clustername, String hostname,
       boolean withLocalbackup) throws Exception {
     Path localBackupFilePath = withLocalbackup ? createLocalBackup(10, 10, 1) : createTemporaryFile();
@@ -88,31 +120,6 @@ public class AccountStatsMySqlStoreIntegrationTest {
           TestUtils.generateStoreStats(numAccounts, numContainers, random, StatsReportType.ACCOUNT_REPORT));
     }
     return TestUtils.generateNodeStats(storeSnapshots, 1000, StatsReportType.ACCOUNT_REPORT);
-  }
-
-  @Test
-  public void testMultiStorePublish() throws Exception {
-    AccountStatsMySqlStore mySqlStore1 = createAccountStatsMySqlStore(clustername1, hostname1, false);
-    AccountStatsMySqlStore mySqlStore2 = createAccountStatsMySqlStore(clustername1, hostname2, false);
-    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clustername2, hostname3, false);
-    // First clean up the table
-    cleanup(mySqlStore1.getMySqlDataAccessor());
-
-    StatsWrapper stats1 = generateStatsWrapper(10, 10, 1);
-    StatsWrapper stats2 = generateStatsWrapper(10, 10, 1);
-    StatsWrapper stats3 = generateStatsWrapper(10, 10, 1);
-    mySqlStore1.publish(stats1);
-    mySqlStore2.publish(stats2);
-    mySqlStore3.publish(stats3);
-
-    assertTableSize(mySqlStore1.getMySqlDataAccessor(), 3 * 10 * 10);
-
-    StatsSnapshot obtainedStats1 = mySqlStore1.queryStatsSnapshotOf(clustername1, hostname1);
-    StatsSnapshot obtainedStats2 = mySqlStore2.queryStatsSnapshotOf(clustername1, hostname2);
-    StatsSnapshot obtainedStats3 = mySqlStore3.queryStatsSnapshotOf(clustername2, hostname3);
-    assertTwoStatsSnapshots(obtainedStats1, stats1.getSnapshot());
-    assertTwoStatsSnapshots(obtainedStats2, stats2.getSnapshot());
-    assertTwoStatsSnapshots(obtainedStats3, stats3.getSnapshot());
   }
 
   private void cleanup(MySqlDataAccessor dataAccessor) throws SQLException {

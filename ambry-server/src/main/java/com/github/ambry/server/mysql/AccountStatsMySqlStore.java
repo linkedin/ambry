@@ -110,15 +110,21 @@ public class AccountStatsMySqlStore {
    * @param statsWrapper The {@link StatsWrapper} to publish.
    */
   public void publish(StatsWrapper statsWrapper) {
-    if (previousStats == null) {
-      applyFunctionToContainerUsageInStatsSnapshot(statsWrapper.getSnapshot(), accountReportsDao::updateStorageUsage);
-    } else {
-      applyFunctionToContainerUsageInDifferentStatsSnapshots(statsWrapper.getSnapshot(), previousStats.getSnapshot(),
-          accountReportsDao::updateStorageUsage);
-    }
+    StatsSnapshot prevSnapshot =
+        previousStats == null ? new StatsSnapshot((long) -1, new HashMap<>()) : previousStats.getSnapshot();
+    applyFunctionToContainerUsageInDifferentStatsSnapshots(statsWrapper.getSnapshot(), prevSnapshot,
+        accountReportsDao::updateStorageUsage);
     previousStats = statsWrapper;
   }
 
+  /**
+   * Query mysql database to get all the container storage usage for given {@code clustername} and {@code hostname} and
+   * construct a {@link StatsSnapshot} from them.
+   * @param clustername the clustername.
+   * @param hostname the hostname
+   * @return {@link StatsSnapshot} published by the given host.
+   * @throws SQLException
+   */
   public StatsSnapshot queryStatsSnapshotOf(String clustername, String hostname) throws SQLException {
     hostname = hostnameHelper.simplifyHostname(hostname);
     Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
@@ -132,63 +138,36 @@ public class AccountStatsMySqlStore {
           accountSnapshot.getSubMap().put("C[" + containerId + "]", new StatsSnapshot(storageUsage, null));
         });
 
-    // fill up with value for partitions and accounts
-    long allPartitionValue = 0;
-    for (Map.Entry<String, StatsSnapshot> partitionMapEntry : hostSnapshot.getSubMap().entrySet()) {
-      StatsSnapshot accountStatsSnapshot = partitionMapEntry.getValue();
-      long allAccountValue = 0;
-      for (Map.Entry<String, StatsSnapshot> accountMapEntry : accountStatsSnapshot.getSubMap().entrySet()) {
-        StatsSnapshot containerStatsSnapshot = accountMapEntry.getValue();
-        long allContainerValue = 0;
-        for (Map.Entry<String, StatsSnapshot> containerMapEntry : containerStatsSnapshot.getSubMap().entrySet()) {
-          allContainerValue += containerMapEntry.getValue().getValue();
-        }
-        containerStatsSnapshot.setValue(allContainerValue);
-        allAccountValue += allContainerValue;
-      }
-      accountStatsSnapshot.setValue(allAccountValue);
-      allPartitionValue += allAccountValue;
-    }
-    hostSnapshot.setValue(allPartitionValue);
+    hostSnapshot.updateValue();
     return hostSnapshot;
   }
 
+  /**
+   * Return {@link #previousStats}. Only used in test.
+   * @return
+   */
   StatsWrapper getPreviousStats() {
     return previousStats;
   }
 
+  /**
+   * Return {@link #mySqlDataAccessor}. Only used in test.
+   * @return
+   */
   public MySqlDataAccessor getMySqlDataAccessor() {
     return mySqlDataAccessor;
   }
 
-  private void applyFunctionToContainerUsageInStatsSnapshot(StatsSnapshot statsSnapshot, ContainerUsageFunction func) {
-    int batchSize = 0;
-    long startTimeMs = System.currentTimeMillis();
-    // StatsSnapshot has three levels, Parition -> Account -> Container
-    Map<String, StatsSnapshot> partitionMap = statsSnapshot.getSubMap();
-    for (Map.Entry<String, StatsSnapshot> partitionMapEntry : partitionMap.entrySet()) {
-      String partitionIdKey = partitionMapEntry.getKey();
-      StatsSnapshot accountStatsSnapshot = partitionMapEntry.getValue();
-      short partitionId = Short.valueOf(partitionIdKey.substring("Partition[".length(), partitionIdKey.length() - 1));
-      Map<String, StatsSnapshot> accountMap = accountStatsSnapshot.getSubMap();
-      for (Map.Entry<String, StatsSnapshot> accountMapEntry : accountMap.entrySet()) {
-        String accountIdKey = accountMapEntry.getKey();
-        StatsSnapshot containerStatsSnapshot = accountMapEntry.getValue();
-        short accountId = Short.valueOf(accountIdKey.substring(2, accountIdKey.length() - 1));
-        Map<String, StatsSnapshot> containerMap = containerStatsSnapshot.getSubMap();
-        for (Map.Entry<String, StatsSnapshot> containerMapEntry : containerMap.entrySet()) {
-          String containerIdKey = containerMapEntry.getKey();
-          short containerId = Short.valueOf(containerIdKey.substring(2, containerIdKey.length() - 1));
-          long storageUsage = containerMapEntry.getValue().getValue();
-          func.apply(partitionId, accountId, containerId, storageUsage);
-          batchSize++;
-        }
-      }
-    }
-    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
-    storeMetrics.batchSize.update(batchSize);
-  }
-
+  /**
+   * Find the differences between two {@link StatsSnapshot} and apply them to the given {@link ContainerUsageFunction}.
+   * The difference is defined as
+   * 1. If a container storage usage exists in both StatsSnapshot, and the values are different.
+   * 2. If a container storage usage only exists in first StatsSnapshot.
+   * If a container storage usage only exists in the second StatsSnapshot, then it will not be applied to the given function.
+   * @param currentStats The current StatsSnapshot.
+   * @param previousStats The previous StatsSnapshot.
+   * @param func The function to apply the differences to.
+   */
   private void applyFunctionToContainerUsageInDifferentStatsSnapshots(StatsSnapshot currentStats,
       StatsSnapshot previousStats, ContainerUsageFunction func) {
     int batchSize = 0;

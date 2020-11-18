@@ -39,6 +39,9 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
+/**
+ * Unit test for {@link AccountStatsMySqlStore}.
+ */
 public class AccountStatsMySqlStoreTest {
   private final Connection mockConnection;
   private final MySqlDataAccessor dataAccessor;
