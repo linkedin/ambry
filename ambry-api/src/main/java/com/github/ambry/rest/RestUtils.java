@@ -867,7 +867,7 @@ public class RestUtils {
    */
   public static boolean setUserMetadataHeaders(byte[] userMetadata, RestResponseChannel restResponseChannel) {
     Map<String, String> userMetadataMap = buildUserMetadata(userMetadata);
-    if (userMetadata != null) {
+    if (userMetadataMap != null) {
       setUserMetadataHeaders(userMetadataMap, restResponseChannel);
       return true;
     } else {
