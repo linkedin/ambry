@@ -163,6 +163,7 @@ class AccountInfoMap {
    * conflicting with each other if they have different account Ids but the same account name.
    *
    * @param accountsToSet The collection of {@link Account}s to check conflict.
+   * @param ignoreVersion {@code true} if mismatch in account version can be ignored.
    * @return {@code true} if there is at least one {@link Account} in {@code accountPairs} conflicts with the existing
    *                      {@link Account}s in {@link AccountInfoMap}, {@code false} otherwise.
    */
@@ -195,6 +196,7 @@ class AccountInfoMap {
    * different {@link Container} Ids but the same {@link Container} name.
    * @param containersToSet {@link Container}s to check for conflict
    * @param parentAccountId parent {@link Account} id of the {@link Container}.
+   * @param ignoreVersion {@code true} if mismatch in account version can be ignored.
    * @return true if there is any container under given parent account with same name but different id.
    */
   boolean hasConflictingContainer(Collection<Container> containersToSet, short parentAccountId, boolean ignoreVersion) {

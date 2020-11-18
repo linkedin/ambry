@@ -249,16 +249,15 @@ public class MySqlAccountService extends AbstractAccountService {
     infoMapLock.readLock().lock();
     try {
       AccountInfoMap accountInfoMap = accountInfoMapRef.get();
-      //TODO: Temporarily disabling version check with CompositeAccountService enabled. Remove it after moving to MySql only.
-      if (accountInfoMap.hasConflictingAccount(accounts, true)) {
+      if (accountInfoMap.hasConflictingAccount(accounts, config.ignoreVersionMismatch)) {
         logger.error("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
         accountServiceMetrics.updateAccountErrorCount.inc();
         throw new AccountServiceException("Input accounts conflict with the accounts in local cache",
             AccountServiceErrorCode.ResourceConflict);
       }
       for (Account account : accounts) {
-        //TODO: Temporarily disabling version check with CompositeAccountService enabled. Remove it after moving to MySql only.
-        if (accountInfoMap.hasConflictingContainer(account.getAllContainers(), account.getId(), true)) {
+        if (accountInfoMap.hasConflictingContainer(account.getAllContainers(), account.getId(),
+            config.ignoreVersionMismatch)) {
           logger.error(
               "Containers={} under Account={} conflict with the containers in local cache. Cancel the update operation.",
               account.getAllContainers(), account.getId());
@@ -342,6 +341,23 @@ public class MySqlAccountService extends AbstractAccountService {
   @Override
   protected void updateResolvedContainers(Account account, Collection<Container> resolvedContainers)
       throws AccountServiceException {
+
+    // Check for name/id/version conflicts for containers being updated with those in local cache.
+    infoMapLock.readLock().lock();
+    try {
+      if (accountInfoMapRef.get()
+          .hasConflictingContainer(resolvedContainers, account.getId(), config.ignoreVersionMismatch)) {
+        logger.error(
+            "Containers={} under Account={} conflict with the containers in local cache. Cancel the update operation.",
+            account.getAllContainers(), account.getId());
+        accountServiceMetrics.updateAccountErrorCount.inc();
+        throw new AccountServiceException("Containers in account " + account.getId() + " conflict with local cache",
+            AccountServiceErrorCode.ResourceConflict);
+      }
+    } finally {
+      infoMapLock.readLock().unlock();
+    }
+
     try {
       updateContainersWithMySqlStore(account.getId(), resolvedContainers);
     } catch (SQLException e) {
