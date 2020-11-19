@@ -38,6 +38,7 @@ import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.server.AccountStatsStore;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
@@ -1354,7 +1355,8 @@ public class StorageManagerTest {
     }
 
     @Override
-    public void participate(List<AmbryHealthReport> ambryHealthReports, Callback<StatsSnapshot> callback) throws IOException {
+    public void participate(List<AmbryHealthReport> ambryHealthReports, AccountStatsStore accountStatsStore,
+        Callback<StatsSnapshot> callback) throws IOException {
       // no op
     }
 

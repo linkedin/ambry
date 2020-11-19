@@ -53,33 +53,47 @@ public class HelixClusterAggregator {
    * for each partition.
    * @throws IOException
    */
-  Pair<StatsSnapshot, StatsSnapshot> doWork(Map<String, String> statsWrappersJSON, StatsReportType type) throws IOException {
+  Pair<StatsSnapshot, StatsSnapshot> doWork(Map<String, String> statsWrappersJSON, StatsReportType type)
+      throws IOException {
+    Map<String, StatsWrapper> statsWrappers = new HashMap<>();
+    for (Map.Entry<String, String> statsWrapperJSON : statsWrappersJSON.entrySet()) {
+      if (statsWrapperJSON != null && statsWrapperJSON.getValue() != null) {
+        StatsWrapper snapshotWrapper = mapper.readValue(statsWrapperJSON.getValue(), StatsWrapper.class);
+        statsWrappers.put(statsWrapperJSON.getKey(), snapshotWrapper);
+      }
+    }
+    return doWorkOnStatsWrapperMap(statsWrappers, type);
+  }
+
+  Pair<StatsSnapshot, StatsSnapshot> doWorkOnStatsWrapperMap(Map<String, StatsWrapper> statsWrappers,
+      StatsReportType type) throws IOException {
     StatsSnapshot partitionSnapshot = new StatsSnapshot(0L, new HashMap<>());
     Map<String, Long> partitionTimestampMap = new HashMap<>();
     StatsSnapshot rawPartitionSnapshot = new StatsSnapshot(0L, new HashMap<>());
     exceptionOccurredInstances.remove(type);
-    for (Map.Entry<String, String> statsWrapperJSON : statsWrappersJSON.entrySet()) {
-      if (statsWrapperJSON != null && statsWrapperJSON.getValue() != null) {
+    for (Map.Entry<String, StatsWrapper> statsWrapperEntry : statsWrappers.entrySet()) {
+      if (statsWrapperEntry != null && statsWrapperEntry.getValue() != null) {
         try {
-          StatsWrapper snapshotWrapper = mapper.readValue(statsWrapperJSON.getValue(), StatsWrapper.class);
-          StatsWrapper snapshotWrapperCopy = mapper.readValue(statsWrapperJSON.getValue(), StatsWrapper.class);
+          StatsWrapper snapshotWrapper = statsWrapperEntry.getValue();
+          StatsWrapper snapshotWrapperCopy =
+              new StatsWrapper(snapshotWrapper.getHeader(), snapshotWrapper.getSnapshot());
 
           combineRawStats(rawPartitionSnapshot, snapshotWrapper);
           switch (type) {
             case ACCOUNT_REPORT:
-              combineValidStatsByAccount(partitionSnapshot, snapshotWrapperCopy, statsWrapperJSON.getKey(),
+              combineValidStatsByAccount(partitionSnapshot, snapshotWrapperCopy, statsWrapperEntry.getKey(),
                   partitionTimestampMap);
               break;
             case PARTITION_CLASS_REPORT:
-              combineValidStatsByPartitionClass(partitionSnapshot, snapshotWrapperCopy, statsWrapperJSON.getKey(),
+              combineValidStatsByPartitionClass(partitionSnapshot, snapshotWrapperCopy, statsWrapperEntry.getKey(),
                   partitionTimestampMap);
               break;
             default:
               throw new IllegalArgumentException("Unrecognized stats report type: " + type);
           }
         } catch (Exception e) {
-          logger.error("Exception occurred while processing stats from {}", statsWrapperJSON.getKey(), e);
-          exceptionOccurredInstances.computeIfAbsent(type, key -> new ArrayList<>()).add(statsWrapperJSON.getKey());
+          logger.error("Exception occurred while processing stats from {}", statsWrapperEntry.getKey(), e);
+          exceptionOccurredInstances.computeIfAbsent(type, key -> new ArrayList<>()).add(statsWrapperEntry.getKey());
         }
       }
     }

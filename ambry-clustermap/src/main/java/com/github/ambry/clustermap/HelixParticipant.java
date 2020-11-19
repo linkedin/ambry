@@ -19,7 +19,9 @@ import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.AccountStatsStore;
 import com.github.ambry.server.AmbryHealthReport;
+import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -123,14 +125,14 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void participate(List<AmbryHealthReport> ambryHealthReports, Callback<StatsSnapshot> callback)
-      throws IOException {
+  public void participate(List<AmbryHealthReport> ambryHealthReports, AccountStatsStore accountStatsStore,
+      Callback<StatsSnapshot> callback) throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
         new AmbryStateModelFactory(clusterMapConfig, this));
-    registerHealthReportTasks(stateMachineEngine, ambryHealthReports, callback);
+    registerHealthReportTasks(stateMachineEngine, ambryHealthReports, accountStatsStore, callback);
     try {
       // register server as a participant
       manager.connect();
@@ -439,7 +441,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
   private void registerHealthReportTasks(StateMachineEngine engine, List<AmbryHealthReport> healthReports,
-      Callback<StatsSnapshot> callback) {
+      AccountStatsStore accountStatsStore, Callback<StatsSnapshot> callback) {
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
     for (final AmbryHealthReport healthReport : healthReports) {
       if (healthReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {
@@ -454,6 +456,19 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
                     callback, clusterMapConfig);
               }
             });
+        if (healthReport.getStatsReportType() == StatsReportType.ACCOUNT_REPORT
+            && clusterMapConfig.clustermapEnableMySqlAggregationTask && accountStatsStore != null) {
+          taskFactoryMap.put(
+              String.format("%s_%s", MySqlReportAggregatorTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
+              new TaskFactory() {
+                @Override
+                public Task createNewTask(TaskCallbackContext context) {
+                  return new MySqlReportAggregatorTask(context.getManager(),
+                      healthReport.getAggregateIntervalInMinutes(), healthReport.getStatsReportType(),
+                      accountStatsStore, callback, clusterMapConfig);
+                }
+              });
+        }
       }
     }
     if (!taskFactoryMap.isEmpty()) {

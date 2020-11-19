@@ -29,7 +29,7 @@ import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
  */
 public class AccountReportsDao {
   public static final String ACCOUNT_REPORTS_TABLE = "AccountReports";
-  public static final String CLUSTERNAME_COLUMN = "clusterName";
+  public static final String CLUSTER_NAME_COLUMN = "clusterName";
   public static final String HOSTNAME_COLUMN = "hostname";
   public static final String PARTITION_ID_COLUMN = "partitionId";
   public static final String ACCOUNT_ID_COLUMN = "accountId";
@@ -40,11 +40,12 @@ public class AccountReportsDao {
   private static final Logger logger = LoggerFactory.getLogger(AccountReportsDao.class);
   private static final String insertSql =
       String.format("INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, ?, ?, NOW())",
-          ACCOUNT_REPORTS_TABLE, CLUSTERNAME_COLUMN, HOSTNAME_COLUMN, PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
+          ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN, PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
           CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
   private static final String querySqlForClusterAndHost =
-      String.format("SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
-          CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTERNAME_COLUMN, HOSTNAME_COLUMN);
+      String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
+          CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
+          HOSTNAME_COLUMN);
   private final MySqlDataAccessor dataAccessor;
   private final String clusterName;
   private final String hostname;
@@ -55,7 +56,7 @@ public class AccountReportsDao {
    * @param clusterName The name of the cluster this host is belonging to, like Ambry-test.
    * @param hostname The name of the host. It should include the hostname and the port.
    */
-  public AccountReportsDao(MySqlDataAccessor dataAccessor, String clusterName, String hostname) {
+  AccountReportsDao(MySqlDataAccessor dataAccessor, String clusterName, String hostname) {
     this.dataAccessor = Objects.requireNonNull(dataAccessor, "MySqlDataAccessor is empty");
     this.clusterName = Objects.requireNonNull(clusterName, "clusterName is empty");
     this.hostname = Objects.requireNonNull(hostname, "hostname is empty");
@@ -68,7 +69,7 @@ public class AccountReportsDao {
    * @param containerId The container id.
    * @param storageUsage The storage usage in bytes.
    */
-  public void updateStorageUsage(short partitionId, short accountId, short containerId, long storageUsage)
+  void updateStorageUsage(short partitionId, short accountId, short containerId, long storageUsage)
       throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -99,8 +100,7 @@ public class AccountReportsDao {
    * @param func The {@link ContainerUsageFunction} to call to process each container storage usage.
    * @throws SQLException
    */
-  public void queryStorageUsageForHost(String clusterName, String hostname, ContainerUsageFunction func)
-      throws SQLException {
+  void queryStorageUsageForHost(String clusterName, String hostname, ContainerUsageFunction func) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
       PreparedStatement queryStatement = dataAccessor.getPreparedStatement(querySqlForClusterAndHost, false);
@@ -113,7 +113,8 @@ public class AccountReportsDao {
           int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
           int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
           long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
-          func.apply((short) partitionId, (short) accountId, (short) containerId, storageUsage);
+          long updatedAtMs = resultSet.getTimestamp(UPDATED_AT_COLUMN).getTime();
+          func.apply((short) partitionId, (short) accountId, (short) containerId, storageUsage, updatedAtMs);
         }
       }
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
