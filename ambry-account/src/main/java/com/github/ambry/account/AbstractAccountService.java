@@ -131,7 +131,6 @@ abstract class AbstractAccountService implements AccountService {
         }
       } else {
         // existing container
-        //TODO: Include condition to check version as well after moving to MySql only.
         Container existingContainer = existingContainersInAccount.get(container.getName());
         if (existingContainer == null) {
           throw new AccountServiceException(
@@ -141,6 +140,12 @@ abstract class AbstractAccountService implements AccountService {
           throw new AccountServiceException(
               "In account " + accountName + ", container " + container.getName() + " has containerId "
                   + existingContainer.getId() + " (" + container.getId() + " was supplied)",
+              AccountServiceErrorCode.ResourceConflict);
+        } else if (!config.ignoreVersionMismatch
+            && existingContainer.getSnapshotVersion() != container.getSnapshotVersion()) {
+          throw new AccountServiceException(
+              "In account " + accountName + ", container " + container.getName() + " has version "
+                  + existingContainer.getSnapshotVersion() + " (" + container.getSnapshotVersion() + " was supplied)",
               AccountServiceErrorCode.ResourceConflict);
         } else {
           resolvedContainers.add(container);

@@ -26,7 +26,6 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String BACKUP_DIRECTORY_KEY = MYSQL_ACCOUNT_SERVICE_PREFIX + "backup.dir";
   public static final String UPDATE_DISABLED = MYSQL_ACCOUNT_SERVICE_PREFIX + "update.disabled";
   private static final String MAX_BACKUP_FILE_COUNT = MYSQL_ACCOUNT_SERVICE_PREFIX + "max.backup.file.count";
-  public static final String IGNORE_VERSION_MISMATCH = MYSQL_ACCOUNT_SERVICE_PREFIX + "ignore.version.mismatch";
 
   /**
    * Serialized json containing the information about all mysql end points. This information should be of the following form:
@@ -98,13 +97,6 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Default("false")
   public final boolean updateDisabled;
 
-  /**
-   * If true, MySqlAccountService would ignore version mismatch while updating Accounts and Containers.
-   */
-  @Config(IGNORE_VERSION_MISMATCH)
-  @Default("false")
-  public final boolean ignoreVersionMismatch;
-
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
@@ -115,6 +107,5 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
     maxBackupFileCount = verifiableProperties.getIntInRange(MAX_BACKUP_FILE_COUNT, 10, 1, Integer.MAX_VALUE);
-    ignoreVersionMismatch = verifiableProperties.getBoolean(IGNORE_VERSION_MISMATCH, false);
   }
 }

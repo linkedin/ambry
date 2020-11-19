@@ -341,23 +341,6 @@ public class MySqlAccountService extends AbstractAccountService {
   @Override
   protected void updateResolvedContainers(Account account, Collection<Container> resolvedContainers)
       throws AccountServiceException {
-
-    // Check for name/id/version conflicts for containers being updated with those in local cache.
-    infoMapLock.readLock().lock();
-    try {
-      if (accountInfoMapRef.get()
-          .hasConflictingContainer(resolvedContainers, account.getId(), config.ignoreVersionMismatch)) {
-        logger.error(
-            "Containers={} under Account={} conflict with the containers in local cache. Cancel the update operation.",
-            account.getAllContainers(), account.getId());
-        accountServiceMetrics.updateAccountErrorCount.inc();
-        throw new AccountServiceException("Containers in account " + account.getId() + " conflict with local cache",
-            AccountServiceErrorCode.ResourceConflict);
-      }
-    } finally {
-      infoMapLock.readLock().unlock();
-    }
-
     try {
       updateContainersWithMySqlStore(account.getId(), resolvedContainers);
     } catch (SQLException e) {
