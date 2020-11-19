@@ -68,7 +68,8 @@ public class AccountReportsDao {
    * @param containerId The container id.
    * @param storageUsage The storage usage in bytes.
    */
-  public void updateStorageUsage(short partitionId, short accountId, short containerId, long storageUsage) {
+  public void updateStorageUsage(short partitionId, short accountId, short containerId, long storageUsage)
+      throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
@@ -86,6 +87,7 @@ public class AccountReportsDao {
       dataAccessor.onException(e, Write);
       logger.error(String.format("Failed to execute updated on %s, with parameter %d %d %d %d", ACCOUNT_REPORTS_TABLE,
           partitionId, accountId, containerId, storageUsage), e);
+      throw e;
     }
   }
 

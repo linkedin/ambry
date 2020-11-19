@@ -113,7 +113,7 @@ public class AccountStatsMySqlStore {
     StatsSnapshot prevSnapshot =
         previousStats == null ? new StatsSnapshot((long) -1, new HashMap<>()) : previousStats.getSnapshot();
     applyFunctionToContainerUsageInDifferentStatsSnapshots(statsWrapper.getSnapshot(), prevSnapshot,
-        accountReportsDao::updateStorageUsage);
+        this::tryUpdateStorageUsage);
     previousStats = statsWrapper;
   }
 
@@ -205,5 +205,19 @@ public class AccountStatsMySqlStore {
     }
     storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     storeMetrics.batchSize.update(batchSize);
+  }
+
+  /**
+   * Update storage usage with {@link AccountReportsDao} but ignore the exception.
+   * @param partitionId The partition id of this account/container usage.
+   * @param accountId The account id.
+   * @param containerId The container id.
+   * @param storageUsage The storage usage in bytes.
+   */
+  private void tryUpdateStorageUsage(short partitionId, short accountId, short containerId, long storageUsage) {
+    try {
+      accountReportsDao.updateStorageUsage(partitionId, accountId, containerId, storageUsage);
+    } catch (Exception e) {
+    }
   }
 }
