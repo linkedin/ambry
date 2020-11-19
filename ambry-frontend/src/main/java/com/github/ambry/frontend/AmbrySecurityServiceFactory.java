@@ -15,7 +15,9 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.HostThrottleConfig;
 import com.github.ambry.config.VerifiableProperties;
 
 
@@ -27,6 +29,7 @@ import com.github.ambry.config.VerifiableProperties;
 public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
 
   private final FrontendConfig frontendConfig;
+  private final HostThrottleConfig hostThrottleConfig;
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
 
@@ -34,6 +37,7 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
       AccountService accountService, UrlSigningService urlSigningService, IdSigningService idSigningService,
       AccountAndContainerInjector accountAndContainerInjector) {
     frontendConfig = new FrontendConfig(verifiableProperties);
+    hostThrottleConfig = new HostThrottleConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
     this.urlSigningService = urlSigningService;
   }
@@ -41,6 +45,6 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
   @Override
   public SecurityService getSecurityService() throws InstantiationException {
     return new AmbrySecurityService(frontendConfig, frontendMetrics, urlSigningService,
-        new QuotaManager(frontendConfig));
+        new HostLevelThrottler(hostThrottleConfig));
   }
 }

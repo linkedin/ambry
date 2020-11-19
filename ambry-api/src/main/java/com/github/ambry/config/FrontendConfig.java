@@ -47,10 +47,6 @@ public class FrontendConfig {
   private static final String DEFAULT_ENDPOINTS_STRING =
       "{\"POST\": \"" + DEFAULT_ENDPOINT + "\", \"GET\": \"" + DEFAULT_ENDPOINT + "\"}";
 
-  public static final String REST_REQUEST_QUOTA_STRING = PREFIX + "rest.request.quota";
-
-  private static final String DEFAULT_REST_REQUEST_QUOTA_STRING =
-      "{\"PUT\": \"-1\",\"GET\": \"-1\",\"POST\": \"-1\",\"HEAD\": \"-1\",\"OPTIONS\": \"-1\",\"UNKNOWN\": \"-1\",\"DELETE\": \"-1\"}";
 
   private static final String DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY =
       "com.github.ambry.quota.AmbryStorageQuotaServiceFactory";
@@ -148,12 +144,7 @@ public class FrontendConfig {
   @Default(DEFAULT_ENDPOINTS_STRING)
   public final String urlSignerEndpoints;
 
-  /**
-   * Quotas for rest requests, in JSON string.
-   */
-  @Config(REST_REQUEST_QUOTA_STRING)
-  @Default(DEFAULT_REST_REQUEST_QUOTA_STRING)
-  public final String restRequestQuota;
+
 
   /**
    * The default maximum size (in bytes) that can be uploaded using a signed POST URL unless otherwise specified at
@@ -264,7 +255,7 @@ public class FrontendConfig {
     allowServiceIdBasedPostRequest =
         verifiableProperties.getBoolean("frontend.allow.service.id.based.post.request", true);
     attachTrackingInfo = verifiableProperties.getBoolean("frontend.attach.tracking.info", true);
-    restRequestQuota = verifiableProperties.getString(REST_REQUEST_QUOTA_STRING, DEFAULT_REST_REQUEST_QUOTA_STRING);
+
     urlSignerEndpoints = verifiableProperties.getString(URL_SIGNER_ENDPOINTS, DEFAULT_ENDPOINTS_STRING);
     urlSignerDefaultMaxUploadSizeBytes =
         verifiableProperties.getLongInRange("frontend.url.signer.default.max.upload.size.bytes", 100 * 1024 * 1024, 0,
