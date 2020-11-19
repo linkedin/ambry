@@ -579,7 +579,7 @@ public class AccountTool {
    */
   private RouterStore getRouterStore() throws Exception {
     return new RouterStore(new AccountServiceMetrics(registry), backupFileManager, helixStore,
-        new AtomicReference<>(getRouter()), true, 100);
+        new AtomicReference<>(getRouter()), true, 100, accountServiceConfig);
   }
 
   /**
