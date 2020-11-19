@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
+import com.github.ambry.utils.TestUtils;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.PreparedStatement;
@@ -89,7 +90,8 @@ public class AccountReportsDaoTest {
   @Test
   public void testUpdateStorageUsageWithException() throws Exception {
     when(mockInsertStatement.executeUpdate()).thenThrow(new SQLTransientConnectionException());
-    accountReportsDao.updateStorageUsage((short) 1, (short) 1000, (short) 8, 100000);
+    TestUtils.assertException(SQLTransientConnectionException.class,
+        () -> accountReportsDao.updateStorageUsage((short) 1, (short) 1000, (short) 8, 100000), null);
     assertEquals("Write failure count should be 1", 1, metrics.writeFailureCount.getCount());
   }
 }
