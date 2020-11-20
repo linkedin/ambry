@@ -137,8 +137,8 @@ public class AccountStatsMySqlStoreIntegrationTest {
       while (resultSet.next()) {
         numRows++;
       }
+      resultSet.close();
     }
-    resultSet.close();
     assertEquals(expectedNumRows, numRows);
   }
 
