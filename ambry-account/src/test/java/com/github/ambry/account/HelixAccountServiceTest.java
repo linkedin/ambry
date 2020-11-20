@@ -468,7 +468,7 @@ public class HelixAccountServiceTest {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
     }
 
-    // 2. Update container with valid name and wrong id
+    // 3. Update container with valid name and wrong id
     badContainer = new ContainerBuilder(refContainer).setId((short) (refContainerId + 7)).build();
     try {
       accountService.updateContainers(refAccountName, Collections.singleton(badContainer));

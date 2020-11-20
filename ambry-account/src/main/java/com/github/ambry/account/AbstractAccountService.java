@@ -141,7 +141,8 @@ abstract class AbstractAccountService implements AccountService {
               "In account " + accountName + ", container " + container.getName() + " has containerId "
                   + existingContainer.getId() + " (" + container.getId() + " was supplied)",
               AccountServiceErrorCode.ResourceConflict);
-        } else if (existingContainer.getSnapshotVersion() != container.getSnapshotVersion()) {
+        } else if (!config.ignoreVersionMismatch
+            && existingContainer.getSnapshotVersion() != container.getSnapshotVersion()) {
           throw new AccountServiceException(
               "In account " + accountName + ", container " + container.getName() + " has version "
                   + existingContainer.getSnapshotVersion() + " (" + container.getSnapshotVersion() + " was supplied)",

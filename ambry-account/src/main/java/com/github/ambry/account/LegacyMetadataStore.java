@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.config.HelixAccountServiceConfig;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -38,6 +39,7 @@ class LegacyMetadataStore extends AccountMetadataStore {
   static final String FULL_ACCOUNT_METADATA_PATH = "/account_metadata/full_data";
   private static final String ZN_RECORD_ID = "full_account_metadata";
   private static final Logger logger = LoggerFactory.getLogger(LegacyMetadataStore.class);
+  private final HelixAccountServiceConfig config;
 
   /**
    * Constructor to create a {@link LegacyMetadataStore}.
@@ -46,8 +48,9 @@ class LegacyMetadataStore extends AccountMetadataStore {
    * @param helixStore The {@link HelixPropertyStore} to fetch and update data.
    */
   LegacyMetadataStore(AccountServiceMetrics accountServiceMetrics, BackupFileManager backupFileManager,
-      HelixPropertyStore<ZNRecord> helixStore) {
+      HelixPropertyStore<ZNRecord> helixStore, HelixAccountServiceConfig config) {
     super(accountServiceMetrics, backupFileManager, helixStore, FULL_ACCOUNT_METADATA_PATH);
+    this.config = config;
   }
 
   @Override
@@ -110,7 +113,7 @@ class LegacyMetadataStore extends AccountMetadataStore {
 
       // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
       // be caught by Helix and helixStore#update will return false.
-      if (remoteAccountInfoMap.hasConflictingAccount(accountsToUpdate)) {
+      if (remoteAccountInfoMap.hasConflictingAccount(accountsToUpdate, config.ignoreVersionMismatch)) {
         // Throw exception, so that helixStore can capture and terminate the update operation
         errorMessage = "Updating accounts failed because one account to update conflicts with existing accounts";
         logger.error(errorMessage);

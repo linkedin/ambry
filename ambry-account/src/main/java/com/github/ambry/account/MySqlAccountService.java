@@ -249,14 +249,15 @@ public class MySqlAccountService extends AbstractAccountService {
     infoMapLock.readLock().lock();
     try {
       AccountInfoMap accountInfoMap = accountInfoMapRef.get();
-      if (accountInfoMap.hasConflictingAccount(accounts)) {
+      if (accountInfoMap.hasConflictingAccount(accounts, config.ignoreVersionMismatch)) {
         logger.error("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
         accountServiceMetrics.updateAccountErrorCount.inc();
         throw new AccountServiceException("Input accounts conflict with the accounts in local cache",
             AccountServiceErrorCode.ResourceConflict);
       }
       for (Account account : accounts) {
-        if (accountInfoMap.hasConflictingContainer(account.getAllContainers(), account.getId())) {
+        if (accountInfoMap.hasConflictingContainer(account.getAllContainers(), account.getId(),
+            config.ignoreVersionMismatch)) {
           logger.error(
               "Containers={} under Account={} conflict with the containers in local cache. Cancel the update operation.",
               account.getAllContainers(), account.getId());
