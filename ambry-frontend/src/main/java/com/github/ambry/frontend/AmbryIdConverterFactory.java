@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -38,7 +39,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
   private final FrontendMetrics frontendMetrics;
 
   public AmbryIdConverterFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      IdSigningService idSigningService) {
+      IdSigningService idSigningService, NamedBlobDb namedBlobDb) {
     this.idSigningService = idSigningService;
     frontendMetrics = new FrontendMetrics(metricRegistry);
   }

@@ -69,7 +69,7 @@ public class AmbryIdConverterFactoryTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     IdSigningService idSigningService = mock(IdSigningService.class);
     AmbryIdConverterFactory ambryIdConverterFactory =
-        new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService);
+        new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, null);
     IdConverter idConverter = ambryIdConverterFactory.getIdConverter();
     assertNotNull("No IdConverter returned", idConverter);
 
