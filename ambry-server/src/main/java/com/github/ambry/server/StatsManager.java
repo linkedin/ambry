@@ -15,13 +15,16 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
+import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.StatsManagerConfig;
+import com.github.ambry.server.mysql.AccountStatsMySqlStore;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
@@ -65,6 +68,7 @@ class StatsManager {
   private final StatsManagerMetrics metrics;
   private final Time time;
   private final ObjectMapper mapper = new ObjectMapper();
+  private final AccountStatsMySqlStore accountStatsMySqlStore;
   private ScheduledExecutorService scheduler = null;
   private StatsAggregator statsAggregator = null;
   final ConcurrentMap<PartitionId, ReplicaId> partitionToReplicaMap;
@@ -77,9 +81,11 @@ class StatsManager {
    * @param config the {@link StatsManagerConfig} to be used to configure the output file path and publish period
    * @param time the {@link Time} instance to be used for reporting
    * @param clusterParticipant the {@link ClusterParticipant} to register state change listener.
+   * @param accountStatsMySqlStore the {@link AccountStatsMySqlStore} to publish stats to mysql database.
    */
   StatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry registry,
-      StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant) {
+      StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant,
+      AccountStatsMySqlStore accountStatsMySqlStore) {
     this.storageManager = storageManager;
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
@@ -93,6 +99,7 @@ class StatsManager {
           new PartitionStateChangeListenerImpl());
       logger.info("Stats Manager's state change listener registered!");
     }
+    this.accountStatsMySqlStore = accountStatsMySqlStore;
   }
 
   /**
@@ -100,7 +107,7 @@ class StatsManager {
    */
   void start() {
     scheduler = Utils.newScheduler(1, false);
-    statsAggregator = new StatsAggregator();
+    statsAggregator = new StatsAggregator(accountStatsMySqlStore);
     int actualDelay = initialDelayInSecs > 0 ? ThreadLocalRandom.current().nextInt(initialDelayInSecs) : 0;
     logger.info("Scheduling stats aggregation job with an initial delay of {} secs", actualDelay);
     scheduler.scheduleAtFixedRate(statsAggregator, actualDelay, publishPeriodInSecs, TimeUnit.SECONDS);
@@ -315,6 +322,11 @@ class StatsManager {
    */
   private class StatsAggregator implements Runnable {
     private volatile boolean cancelled = false;
+    private final AccountStatsMySqlStore accountStatsMySqlStore;
+
+    StatsAggregator(AccountStatsMySqlStore accountStatsMySqlStore) {
+      this.accountStatsMySqlStore = accountStatsMySqlStore;
+    }
 
     @Override
     public void run() {
@@ -335,7 +347,12 @@ class StatsManager {
           StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(),
               partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
               unreachableStores);
-          publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
+          // First write to account stats
+          StatsWrapper statsWrapper = new StatsWrapper(statsHeader, aggregatedSnapshot);
+          if (accountStatsMySqlStore != null) {
+            accountStatsMySqlStore.publish(statsWrapper);
+          }
+          publish(statsWrapper);
           logger.info("Local stats snapshot published to {}", statsOutputFile.getAbsolutePath());
         }
       } catch (Exception | Error e) {

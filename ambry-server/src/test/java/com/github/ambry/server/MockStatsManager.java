@@ -30,7 +30,7 @@ class MockStatsManager extends StatsManager {
 
   MockStatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry metricRegistry,
       StatsManagerConfig statsManagerConfig, ClusterParticipant clusterParticipant) {
-    super(storageManager, replicaIds, metricRegistry, statsManagerConfig, new MockTime(), clusterParticipant);
+    super(storageManager, replicaIds, metricRegistry, statsManagerConfig, new MockTime(), clusterParticipant, null);
   }
 
   @Override

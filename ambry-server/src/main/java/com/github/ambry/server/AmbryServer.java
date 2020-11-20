@@ -69,6 +69,8 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.server.mysql.AccountStatsMySqlStore;
+import com.github.ambry.server.mysql.AccountStatsMySqlStoreFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -258,8 +260,12 @@ public class AmbryServer {
       }
 
       logger.info("Creating StatsManager to publish stats");
+
+      AccountStatsMySqlStore mysqlStore =
+          statsConfig.enableMysqlReport ? new AccountStatsMySqlStoreFactory(properties, clusterMapConfig, statsConfig,
+              registry).getAccountStatsMySqlStore() : null;
       statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
-          clusterParticipants.get(0));
+          clusterParticipants.get(0), mysqlStore);
       if (serverConfig.serverStatsPublishLocalEnabled) {
         statsManager.start();
       }

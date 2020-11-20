@@ -62,4 +62,18 @@ public class StatsHeader {
   public List<String> getUnreachableStores() {
     return unreachableStores;
   }
+
+  /**
+   * @return the storesContactedCount.
+   */
+  public int getStoresContactedCount() {
+    return storesContactedCount;
+  }
+
+  /**
+   * @return the storesRespondedCount.
+   */
+  public int getStoresRespondedCount() {
+    return storesRespondedCount;
+  }
 }
