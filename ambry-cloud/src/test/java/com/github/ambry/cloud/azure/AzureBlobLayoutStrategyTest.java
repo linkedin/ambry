@@ -71,7 +71,7 @@ public class AzureBlobLayoutStrategyTest {
     BlobLayout layout = strategy.getDataBlobLayout(blobId);
     // Container name should be main-101-5
     String expectedContainerName =
-        String.format("%s_%d_%d", clusterName, AzureTestUtils.accountId, AzureTestUtils.containerId);
+        String.format("%s-%d-%d", clusterName, AzureTestUtils.accountId, AzureTestUtils.containerId);
     String blobIdStr = blobId.getID();
     String expectedBlobName = blobIdStr.substring(blobIdStr.length() - 4) + "-" + blobIdStr;
     checkLayout(layout, expectedContainerName, expectedBlobName);
@@ -81,7 +81,7 @@ public class AzureBlobLayoutStrategyTest {
 
     // Tokens should go in their own container: main_replicaTokens
     layout = strategy.getTokenBlobLayout(partitionPath, tokenFileName);
-    expectedContainerName = clusterName + "_" + tokenFileName.toLowerCase();
+    expectedContainerName = clusterName + "-" + tokenFileName.toLowerCase();
     expectedBlobName = partitionPath + "/" + tokenFileName;
     checkLayout(layout, expectedContainerName, expectedBlobName);
   }
