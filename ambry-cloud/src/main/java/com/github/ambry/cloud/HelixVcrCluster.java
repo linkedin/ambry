@@ -162,7 +162,9 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
         cloudConfig.vcrClusterZkConnectString);
     VcrStateModelFactory stateModelFactory = Utils.getObj(cloudConfig.vcrHelixStateModelFactoryClass, this);
     manager.getStateMachineEngine().registerStateModelFactory(stateModelFactory.getStateModelName(), stateModelFactory);
-    registerContainerDeletionSyncTask(manager.getStateMachineEngine());
+    if (cloudConfig.cloudContainerCompactionEnabled) {
+      registerContainerDeletionSyncTask(manager.getStateMachineEngine());
+    }
     manager.connect();
     helixAdmin = manager.getClusterManagmentTool();
     logger.info("Participated in HelixVcrCluster successfully.");
@@ -173,6 +175,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
    * @param engine the {@link StateMachineEngine} to register the task state model.
    */
   private void registerContainerDeletionSyncTask(StateMachineEngine engine) {
+
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
     taskFactoryMap.put(DeprecatedContainerCloudSyncTask.class.getSimpleName(), new TaskFactory() {
       @Override

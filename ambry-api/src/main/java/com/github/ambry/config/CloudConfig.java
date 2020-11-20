@@ -60,6 +60,7 @@ public class CloudConfig {
   public static final String VCR_SOURCE_DATACENTERS = "vcr.source.datacenters";
   public static final String CLOUD_COMPACTION_NUM_THREADS = "cloud.compaction.num.threads";
   public static final String VCR_HELIX_STATE_MODEL_FACTORY_CLASS = "vcr.helix.state.model.factory.class";
+  public static final String CLOUD_CONTAINER_COMPACTION_ENABLED = "cloud.container.compaction.enabled";
 
   public static final String DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS =
       "com.github.ambry.cloud.StaticVcrClusterFactory";
@@ -336,6 +337,13 @@ public class CloudConfig {
   @Default(DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS)
   public final String vcrHelixStateModelFactoryClass;
 
+  /**
+   * Whether deprecated container compaction is enabled.
+   */
+  @Config(CLOUD_CONTAINER_COMPACTION_ENABLED)
+  @Default("false")
+  public final boolean cloudContainerCompactionEnabled;
+
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
     cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
@@ -392,5 +400,6 @@ public class CloudConfig {
         Utils.splitString(verifiableProperties.getString(VCR_SOURCE_DATACENTERS, ""), ",", HashSet::new);
     vcrHelixStateModelFactoryClass = verifiableProperties.getString(VCR_HELIX_STATE_MODEL_FACTORY_CLASS,
         DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS);
+    cloudContainerCompactionEnabled = verifiableProperties.getBoolean(CLOUD_CONTAINER_COMPACTION_ENABLED, false);
   }
 }
