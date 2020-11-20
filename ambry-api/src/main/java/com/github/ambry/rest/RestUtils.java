@@ -912,6 +912,24 @@ public class RestUtils {
   }
 
   /**
+   * Verify that the session ID in the chunk metadata matches the expected session.
+   * @param chunkMetadata the metadata map parsed from a signed chunk ID.
+   * @param expectedSession the session that the chunk should match. This can be null for the first chunk (where any
+   *                        session ID is valid).
+   * @return this chunk's session ID
+   * @throws RestServiceException if the chunk has a null session ID or it does not match the expected value.
+   */
+  public static String verifyChunkUploadSession(Map<String, String> chunkMetadata, String expectedSession)
+      throws RestServiceException {
+    String chunkSession = RestUtils.getHeader(chunkMetadata, RestUtils.Headers.SESSION, true);
+    if (expectedSession != null && !expectedSession.equals(chunkSession)) {
+      throw new RestServiceException("Session IDs differ for chunks in a stitch request",
+          RestServiceErrorCode.BadRequest);
+    }
+    return chunkSession;
+  }
+
+  /**
    * Build a {@link ByteRange} given a Range header value. This method can parse the following Range
    * header syntax:
    * {@code Range:bytes=byte_range} where {@code bytes=byte_range} supports the following range syntax:

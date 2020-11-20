@@ -160,7 +160,7 @@ public class NamedBlobPutHandler {
       Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
           blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
-        LOGGER.debug("TTL set to very large value in POST request with BlobProperties {}", blobProperties);
+        LOGGER.debug("TTL set to very large value in PUT request with BlobProperties {}", blobProperties);
         frontendMetrics.ttlTooLargeError.inc();
       } else if (container.isTtlRequired() && (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time
           || blobProperties.getTimeToLiveInSeconds() > frontendConfig.maxAcceptableTtlSecsIfTtlRequired)) {
@@ -180,11 +180,11 @@ public class NamedBlobPutHandler {
       // inject encryption frontendMetrics if applicable
       if (blobProperties.isEncrypted()) {
         restRequest.getMetricsTracker()
-            .injectMetrics(frontendMetrics.postBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
+            .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
       }
       byte[] userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
       frontendMetrics.blobPropsBuildForNameBlobPutTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
-      LOGGER.trace("Blob properties of blob being POSTed - {}", blobProperties);
+      LOGGER.trace("Blob properties of blob being PUT - {}", blobProperties);
       return new BlobInfo(blobProperties, userMetadata);
     }
 
@@ -207,7 +207,7 @@ public class NamedBlobPutHandler {
      * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
      */
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postSecurityPostProcessRequestMetrics, securityCheckResult -> {
+      return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
         if (STITCH.equals(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, false))) {
           RetainingAsyncWritableChannel channel =
               new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
@@ -225,7 +225,7 @@ public class NamedBlobPutHandler {
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
     private Callback<String> routerPutBlobCallback() {
-      return buildCallback(frontendMetrics.postRouterPutBlobMetrics, blobId -> {
+      return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         idConverter.convert(restRequest, blobId, idConverterCallback());
       }, uri, LOGGER, finalCallback);
@@ -251,7 +251,7 @@ public class NamedBlobPutHandler {
      * @return
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postReadStitchRequestMetrics,
+      return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback()), uri, LOGGER, finalCallback);
@@ -263,7 +263,7 @@ public class NamedBlobPutHandler {
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
     private Callback<String> routerStitchBlobCallback() {
-      return buildCallback(frontendMetrics.postRouterStitchBlobMetrics,
+      return buildCallback(frontendMetrics.putRouterStitchBlobMetrics,
           blobId -> idConverter.convert(restRequest, blobId, idConverterCallback()), uri, LOGGER, finalCallback);
     }
 
@@ -296,7 +296,7 @@ public class NamedBlobPutHandler {
         String blobId = idAndMetadata.getFirst();
         Map<String, String> metadata = idAndMetadata.getSecond();
 
-        expectedSession = verifyChunkUploadSession(metadata, expectedSession);
+        expectedSession = RestUtils.verifyChunkUploadSession(metadata, expectedSession);
         @SuppressWarnings("ConstantConditions")
         long chunkSizeBytes = RestUtils.getLongHeader(metadata, RestUtils.Headers.BLOB_SIZE, true);
 
@@ -340,30 +340,12 @@ public class NamedBlobPutHandler {
     }
 
     /**
-     * Verify that the session ID in the chunk metadata matches the expected session.
-     * @param chunkMetadata the metadata map parsed from a signed chunk ID.
-     * @param expectedSession the session that the chunk should match. This can be null for the first chunk (where any
-     *                        session ID is valid).
-     * @return this chunk's session ID
-     * @throws RestServiceException if the chunk has a null session ID or it does not match the expected value.
-     */
-    private String verifyChunkUploadSession(Map<String, String> chunkMetadata, String expectedSession)
-        throws RestServiceException {
-      String chunkSession = RestUtils.getHeader(chunkMetadata, RestUtils.Headers.SESSION, true);
-      if (expectedSession != null && !expectedSession.equals(chunkSession)) {
-        throw new RestServiceException("Session IDs differ for chunks in a stitch request",
-            RestServiceErrorCode.BadRequest);
-      }
-      return chunkSession;
-    }
-
-    /**
      * After {@link IdConverter#convert} finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
     private Callback<String> idConverterCallback() {
-      return buildCallback(frontendMetrics.postIdConversionMetrics, blobId -> {
+      return buildCallback(frontendMetrics.putIdConversionMetrics, blobId -> {
         securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);
     }
