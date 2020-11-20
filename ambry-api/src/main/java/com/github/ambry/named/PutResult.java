@@ -19,7 +19,7 @@ package com.github.ambry.named;
  * Class to convey information about a successful put in {@link NamedBlobDb}.
  */
 public class PutResult {
-  NamedBlobRecord insertedRecord;
+  private final NamedBlobRecord insertedRecord;
 
   /**
    * @param insertedRecord the new record stored in the DB.

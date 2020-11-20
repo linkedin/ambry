@@ -439,8 +439,8 @@ project(':ambry-named-mysql') {
     dependencies {
         compile project(':ambry-api')
         compile project(':ambry-commons')
-        compile 'mysql:mysql-connector-java:8.0.21'
-        compile 'com.zaxxer:HikariCP:3.4.5'
+        compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
+        compile "com.zaxxer:HikariCP:$hikariVersion"
         testCompile project(':ambry-test-utils')
     }
 }
