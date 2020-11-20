@@ -15,12 +15,14 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
+import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.server.mysql.AccountStatsMySqlStore;
 import com.github.ambry.store.StorageManager;
@@ -66,6 +68,7 @@ class StatsManager {
   private final StatsManagerMetrics metrics;
   private final Time time;
   private final ObjectMapper mapper = new ObjectMapper();
+  private final AccountStatsMySqlStore accountStatsMySqlStore;
   private ScheduledExecutorService scheduler = null;
   private StatsAggregator statsAggregator = null;
   final ConcurrentMap<PartitionId, ReplicaId> partitionToReplicaMap;
@@ -78,9 +81,11 @@ class StatsManager {
    * @param config the {@link StatsManagerConfig} to be used to configure the output file path and publish period
    * @param time the {@link Time} instance to be used for reporting
    * @param clusterParticipant the {@link ClusterParticipant} to register state change listener.
+   * @param accountStatsMySqlStore the {@link AccountStatsMySqlStore} to publish stats to mysql database.
    */
   StatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry registry,
-      StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant) {
+      StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant,
+      AccountStatsMySqlStore accountStatsMySqlStore) {
     this.storageManager = storageManager;
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
@@ -94,12 +99,13 @@ class StatsManager {
           new PartitionStateChangeListenerImpl());
       logger.info("Stats Manager's state change listener registered!");
     }
+    this.accountStatsMySqlStore = accountStatsMySqlStore;
   }
 
   /**
    * Start the stats manager by scheduling the periodic task that collect, aggregate and publish stats.
    */
-  void start(AccountStatsMySqlStore accountStatsMySqlStore) {
+  void start() {
     scheduler = Utils.newScheduler(1, false);
     statsAggregator = new StatsAggregator(accountStatsMySqlStore);
     int actualDelay = initialDelayInSecs > 0 ? ThreadLocalRandom.current().nextInt(initialDelayInSecs) : 0;
@@ -346,7 +352,7 @@ class StatsManager {
           if (accountStatsMySqlStore != null) {
             accountStatsMySqlStore.publish(statsWrapper);
           }
-          publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
+          publish(statsWrapper);
           logger.info("Local stats snapshot published to {}", statsOutputFile.getAbsolutePath());
         }
       } catch (Exception | Error e) {

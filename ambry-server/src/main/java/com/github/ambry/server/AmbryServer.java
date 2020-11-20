@@ -260,13 +260,14 @@ public class AmbryServer {
       }
 
       logger.info("Creating StatsManager to publish stats");
+
+      AccountStatsMySqlStore mysqlStore =
+          statsConfig.enableMysqlReport ? new AccountStatsMySqlStoreFactory(properties, clusterMapConfig, statsConfig,
+              registry).getAccountStatsMySqlStore() : null;
       statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
-          clusterParticipants.get(0));
+          clusterParticipants.get(0), mysqlStore);
       if (serverConfig.serverStatsPublishLocalEnabled) {
-        AccountStatsMySqlStore mysqlStore =
-            statsConfig.enableMysqlReport ? new AccountStatsMySqlStoreFactory(properties, clusterMapConfig, statsConfig,
-                registry).getAccountStatsMySqlStore() : null;
-        statsManager.start(mysqlStore);
+        statsManager.start();
       }
 
       ArrayList<Port> ports = new ArrayList<Port>();

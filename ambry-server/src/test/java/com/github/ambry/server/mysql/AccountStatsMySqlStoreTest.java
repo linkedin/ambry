@@ -46,7 +46,7 @@ public class AccountStatsMySqlStoreTest {
   private final Connection mockConnection;
   private final MySqlDataAccessor dataAccessor;
   private final MySqlMetrics metrics;
-  private static final String clustername = "Ambry-test";
+  private static final String clusterName = "Ambry-test";
   private static final String hostname = "test1.ambry_1300";
   private static final long MAX_CONTAINER_USAGE = 100000;
   private static final long MIN_CONTAINER_USAGE = 1000;
@@ -86,7 +86,7 @@ public class AccountStatsMySqlStoreTest {
     Path tempDir = Files.createTempDirectory("AccountStatsMySqlStoreTest");
     Path localBackupFilePath = tempDir.resolve("localbackup");
     AccountStatsMySqlStore store =
-        new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(), null,
+        new AccountStatsMySqlStore(dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
     assertNull(store.getPreviousStats());
     // Second, save a backup file.
@@ -96,7 +96,7 @@ public class AccountStatsMySqlStoreTest {
     StatsWrapper statsWrapper = new StatsWrapper(header, snapshot);
     ObjectMapper objectMapper = new ObjectMapper();
     objectMapper.writeValue(localBackupFilePath.toFile(), statsWrapper);
-    store = new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(), null,
+    store = new AccountStatsMySqlStore(dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
         new MetricRegistry());
 
     StatsWrapper backupWrapper = store.getPreviousStats();
@@ -110,7 +110,7 @@ public class AccountStatsMySqlStoreTest {
     Path tempDir = Files.createTempDirectory("AccountStatsMySqlStoreTest");
     Path localBackupFilePath = tempDir.resolve("localbackup");
     AccountStatsMySqlStore store =
-        new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(), null,
+        new AccountStatsMySqlStore(dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
     StatsSnapshot snapshot = createStatsSnapshot(10, 10, 1, false);
     StatsHeader header =
@@ -122,7 +122,7 @@ public class AccountStatsMySqlStoreTest {
     ObjectMapper objectMapper = new ObjectMapper();
     objectMapper.writeValue(localBackupFilePath.toFile(), statsWrapper);
 
-    store = new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(), null,
+    store = new AccountStatsMySqlStore(dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
         new MetricRegistry());
 
     // We have a local backup to start with.
@@ -145,7 +145,7 @@ public class AccountStatsMySqlStoreTest {
 
     // create a store with a local backup file and try to publish it again.
     AccountStatsMySqlStore store =
-        new AccountStatsMySqlStore(dataAccessor, clustername, hostname, localBackupFilePath.toString(), null,
+        new AccountStatsMySqlStore(dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
     store.publish(statsWrapper);
     assertEquals("Write success count should be 0", 0, metrics.writeSuccessCount.getCount());
@@ -161,14 +161,13 @@ public class AccountStatsMySqlStoreTest {
     // Change one of the value in statsWrapper
     int partitionId = BASE_PARTITION_ID + 1;
     int accountId = BASE_ACCOUNT_ID + 1;
-    int containerId = BASE_CONTAINER_ID;
     statsWrapper.getSnapshot()
         .getSubMap()
         .get("Partition[" + partitionId + "]")
         .getSubMap()
         .get("A[" + accountId + "]")
         .getSubMap()
-        .put("C[" + containerId + "]", new StatsSnapshot((long) (DEFAULT_CONTAINER_USAGE + 1), null));
+        .put("C[" + BASE_CONTAINER_ID + "]", new StatsSnapshot((long) (DEFAULT_CONTAINER_USAGE + 1), null));
     store.publish(statsWrapper);
     assertEquals("Write success count should be 1", 1, metrics.writeSuccessCount.getCount());
     assertTrue(statsWrapper == store.getPreviousStats());

@@ -46,18 +46,18 @@ public class AccountReportsDao {
       String.format("SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
           CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTERNAME_COLUMN, HOSTNAME_COLUMN);
   private final MySqlDataAccessor dataAccessor;
-  private final String clustername;
+  private final String clusterName;
   private final String hostname;
 
   /**
    * Constructor to create a {@link AccountReportsDao}.
    * @param dataAccessor The underlying {@link MySqlDataAccessor}.
-   * @param clustername The name of the cluster this host is belonging to, like Ambry-prod, Ambry-video.
+   * @param clusterName The name of the cluster this host is belonging to, like Ambry-test.
    * @param hostname The name of the host. It should include the hostname and the port.
    */
-  public AccountReportsDao(MySqlDataAccessor dataAccessor, String clustername, String hostname) {
+  public AccountReportsDao(MySqlDataAccessor dataAccessor, String clusterName, String hostname) {
     this.dataAccessor = Objects.requireNonNull(dataAccessor, "MySqlDataAccessor is empty");
-    this.clustername = Objects.requireNonNull(clustername, "clustername is empty");
+    this.clusterName = Objects.requireNonNull(clusterName, "clusterName is empty");
     this.hostname = Objects.requireNonNull(hostname, "hostname is empty");
   }
 
@@ -73,7 +73,7 @@ public class AccountReportsDao {
     try {
       long startTimeMs = System.currentTimeMillis();
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
-      insertStatement.setString(1, clustername);
+      insertStatement.setString(1, clusterName);
       insertStatement.setString(2, hostname);
       // The data type of partition id, account id and container id are not SMALLINT, but INT in MySQL, for
       // future extension
@@ -91,12 +91,20 @@ public class AccountReportsDao {
     }
   }
 
-  public void queryForClusterAndHost(String clustername, String hostname, ContainerUsageFunction func)
+  /**
+   * Query container storage usage for given {@code clusterName} and {@code hostname}. The result will be applied to the
+   * {@link ContainerUsageFunction}.
+   * @param clusterName The clusterName.
+   * @param hostname The hostname.
+   * @param func The {@link ContainerUsageFunction} to call to process each container storage usage.
+   * @throws SQLException
+   */
+  public void queryStorageUsageForHost(String clusterName, String hostname, ContainerUsageFunction func)
       throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
       PreparedStatement queryStatement = dataAccessor.getPreparedStatement(querySqlForClusterAndHost, false);
-      queryStatement.setString(1, clustername);
+      queryStatement.setString(1, clusterName);
       queryStatement.setString(2, hostname);
       ResultSet resultSet = queryStatement.executeQuery();
       if (resultSet != null) {
@@ -108,10 +116,11 @@ public class AccountReportsDao {
           func.apply((short) partitionId, (short) accountId, (short) containerId, storageUsage);
         }
       }
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
       dataAccessor.onException(e, Read);
       logger.error(
-          String.format("Failed to execute query on %s, with parameter %s %s", ACCOUNT_REPORTS_TABLE, clustername,
+          String.format("Failed to execute query on %s, with parameter %s %s", ACCOUNT_REPORTS_TABLE, clusterName,
               hostname), e);
       throw e;
     }

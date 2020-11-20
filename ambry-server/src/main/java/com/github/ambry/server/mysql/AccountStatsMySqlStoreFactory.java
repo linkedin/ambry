@@ -19,7 +19,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -37,7 +36,7 @@ public class AccountStatsMySqlStoreFactory {
   private final AccountStatsMySqlConfig accountStatsMySqlConfig;
   private final HostnameHelper hostnameHelper;
   private final String localDC;
-  private final String clustername;
+  private final String clusterName;
   private final String hostname;
   private final MetricRegistry registry;
   private final String localBackupFilePath;
@@ -52,7 +51,7 @@ public class AccountStatsMySqlStoreFactory {
   public AccountStatsMySqlStoreFactory(VerifiableProperties verifiableProperties, ClusterMapConfig clusterMapConfig,
       StatsManagerConfig statsManagerConfig, MetricRegistry registry) {
     accountStatsMySqlConfig = new AccountStatsMySqlConfig(verifiableProperties);
-    clustername = clusterMapConfig.clusterMapClusterName;
+    clusterName = clusterMapConfig.clusterMapClusterName;
     hostnameHelper = new HostnameHelper(accountStatsMySqlConfig, clusterMapConfig.clusterMapPort);
     hostname = hostnameHelper.simplifyHostname(clusterMapConfig.clusterMapHostName);
     localDC = clusterMapConfig.clusterMapDatacenterName;
@@ -72,7 +71,7 @@ public class AccountStatsMySqlStoreFactory {
       throw new IllegalArgumentException("Empty db endpoints for datacenter: " + localDC);
     }
     try {
-      return new AccountStatsMySqlStore(dbEndpoints, localDC, clustername, hostname, localBackupFilePath,
+      return new AccountStatsMySqlStore(dbEndpoints, localDC, clusterName, hostname, localBackupFilePath,
           hostnameHelper, registry);
     } catch (SQLException e) {
       logger.error("Account Stats MySQL store creation failed", e);

@@ -64,33 +64,33 @@ public class AccountStatsMySqlStore {
    * Constructor to create {@link AccountStatsMySqlStore}.
    * @param dbEndpoints MySql DB end points.
    * @param localDatacenter The local datacenter name. Endpoints from local datacenter are preferred when creating connection to MySql DB.
-   * @param clustername  The name of the cluster, like Ambry-prod.
+   * @param clusterName  The name of the cluster, like Ambry-test.
    * @param hostname The name of the host.
    * @param localBackupFilePath The filepath to local backup file.
    * @param hostnameHelper The {@link HostnameHelper} to simplify the hostname.
    * @param registry The {@link MetricRegistry}.
    * @throws SQLException
    */
-  public AccountStatsMySqlStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, String clustername,
+  public AccountStatsMySqlStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, String clusterName,
       String hostname, String localBackupFilePath, HostnameHelper hostnameHelper, MetricRegistry registry)
       throws SQLException {
     this(new MySqlDataAccessor(dbEndpoints, localDatacenter, new MySqlMetrics(AccountStatsMySqlStore.class, registry)),
-        clustername, hostname, localBackupFilePath, hostnameHelper, registry);
+        clusterName, hostname, localBackupFilePath, hostnameHelper, registry);
   }
 
   /**
    * Constructor to create link {@link AccountStatsMySqlStore}. It's only used in tests.
    * @param dataAccessor The {@link MySqlDataAccessor}.
-   * @param clustername  The name of the cluster, like Ambry-prod.
+   * @param clusterName  The name of the cluster, like Ambry-test.
    * @param hostname The name of the host.
    * @param localBackupFilePath The filepath to local backup file.
    * @param hostnameHelper The {@link HostnameHelper} to simplify the hostname.
    * @param registry The {@link MetricRegistry}.
    */
-  AccountStatsMySqlStore(MySqlDataAccessor dataAccessor, String clustername, String hostname,
+  AccountStatsMySqlStore(MySqlDataAccessor dataAccessor, String clusterName, String hostname,
       String localBackupFilePath, HostnameHelper hostnameHelper, MetricRegistry registry) {
     mySqlDataAccessor = dataAccessor;
-    accountReportsDao = new AccountReportsDao(dataAccessor, clustername, hostname);
+    accountReportsDao = new AccountReportsDao(dataAccessor, clusterName, hostname);
     this.hostnameHelper = hostnameHelper;
     storeMetrics = new AccountStatsMySqlStore.Metrics(registry);
     if (!Strings.isNullOrEmpty(localBackupFilePath)) {
@@ -118,18 +118,18 @@ public class AccountStatsMySqlStore {
   }
 
   /**
-   * Query mysql database to get all the container storage usage for given {@code clustername} and {@code hostname} and
+   * Query mysql database to get all the container storage usage for given {@code clusterName} and {@code hostname} and
    * construct a {@link StatsSnapshot} from them.
-   * @param clustername the clustername.
+   * @param clusterName the clusterName.
    * @param hostname the hostname
    * @return {@link StatsSnapshot} published by the given host.
    * @throws SQLException
    */
-  public StatsSnapshot queryStatsSnapshotOf(String clustername, String hostname) throws SQLException {
+  public StatsSnapshot queryStatsSnapshotOf(String clusterName, String hostname) throws SQLException {
     hostname = hostnameHelper.simplifyHostname(hostname);
     Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
     StatsSnapshot hostSnapshot = new StatsSnapshot((long) 0, partitionSubMap);
-    accountReportsDao.queryForClusterAndHost(clustername, hostname,
+    accountReportsDao.queryStorageUsageForHost(clusterName, hostname,
         (partitionId, accountId, containerId, storageUsage) -> {
           StatsSnapshot partitionSnapshot = hostSnapshot.getSubMap()
               .computeIfAbsent("Partition[" + partitionId + "]", k -> new StatsSnapshot((long) 0, new HashMap<>()));

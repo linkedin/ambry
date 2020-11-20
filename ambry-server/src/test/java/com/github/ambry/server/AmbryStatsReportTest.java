@@ -42,7 +42,7 @@ public class AmbryStatsReportTest {
     StatsManager testStatsManager = new StatsManager(new MockStorageManager(Collections.emptyMap(),
         new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
             Collections.singletonList("/tmp"), "DC1")), Collections.emptyList(), new MetricRegistry(), config,
-        new MockTime(), null);
+        new MockTime(), null, null);
     // test account stats report
     AmbryStatsReport ambryStatsReport =
         new AmbryStatsReport(testStatsManager, AGGREGATE_INTERVAL_MINS, StatsReportType.ACCOUNT_REPORT);

@@ -45,15 +45,15 @@ import static org.junit.Assert.*;
  * Integration tests for {@link AccountStatsMySqlStore}.
  */
 public class AccountStatsMySqlStoreIntegrationTest {
-  private static final String clustername1 = "Ambry-test";
-  private static final String clustername2 = "Ambry-random";
+  private static final String clusterName1 = "Ambry-test";
+  private static final String clusterName2 = "Ambry-random";
   private static final String hostname1 = "ambry1.test.github.com";
   private static final String hostname2 = "ambry2.test.github.com";
   private static final String hostname3 = "ambry3.test.github.com";
   private static final int port = 12345;
 
   public AccountStatsMySqlStoreIntegrationTest() throws Exception {
-    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clustername1, hostname1, false);
+    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, false);
     cleanup(mySqlStore.getMySqlDataAccessor());
   }
 
@@ -63,9 +63,9 @@ public class AccountStatsMySqlStoreIntegrationTest {
    */
   @Test
   public void testMultiStorePublish() throws Exception {
-    AccountStatsMySqlStore mySqlStore1 = createAccountStatsMySqlStore(clustername1, hostname1, false);
-    AccountStatsMySqlStore mySqlStore2 = createAccountStatsMySqlStore(clustername1, hostname2, false);
-    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clustername2, hostname3, false);
+    AccountStatsMySqlStore mySqlStore1 = createAccountStatsMySqlStore(clusterName1, hostname1, false);
+    AccountStatsMySqlStore mySqlStore2 = createAccountStatsMySqlStore(clusterName1, hostname2, false);
+    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, false);
 
     StatsWrapper stats1 = generateStatsWrapper(10, 10, 1);
     StatsWrapper stats2 = generateStatsWrapper(10, 10, 1);
@@ -76,9 +76,9 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
     assertTableSize(mySqlStore1.getMySqlDataAccessor(), 3 * 10 * 10);
 
-    StatsSnapshot obtainedStats1 = mySqlStore1.queryStatsSnapshotOf(clustername1, hostname1);
-    StatsSnapshot obtainedStats2 = mySqlStore2.queryStatsSnapshotOf(clustername1, hostname2);
-    StatsSnapshot obtainedStats3 = mySqlStore3.queryStatsSnapshotOf(clustername2, hostname3);
+    StatsSnapshot obtainedStats1 = mySqlStore1.queryStatsSnapshotOf(clusterName1, hostname1);
+    StatsSnapshot obtainedStats2 = mySqlStore2.queryStatsSnapshotOf(clusterName1, hostname2);
+    StatsSnapshot obtainedStats3 = mySqlStore3.queryStatsSnapshotOf(clusterName2, hostname3);
     assertTwoStatsSnapshots(obtainedStats1, stats1.getSnapshot());
     assertTwoStatsSnapshots(obtainedStats2, stats2.getSnapshot());
     assertTwoStatsSnapshots(obtainedStats3, stats3.getSnapshot());
