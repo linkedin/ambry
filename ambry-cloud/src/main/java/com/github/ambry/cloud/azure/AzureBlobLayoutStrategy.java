@@ -29,7 +29,6 @@ import com.github.ambry.utils.Utils;
 public class AzureBlobLayoutStrategy {
 
   private static final String DASH = "-";
-  private static final String UNDERSCORE = "_";
   private static final String BLOB_NAME_SEPARATOR = DASH;
   // Note: Azure container name needs to be lower case
   private static final String TOKEN_CONTAINER_NAME = "replicatokens";
@@ -84,9 +83,11 @@ public class AzureBlobLayoutStrategy {
     this.clusterName = clusterName;
     currentVersion = azureCloudConfig.azureNameSchemeVersion;
     blobContainerStrategy = BlobContainerStrategy.get(azureCloudConfig.azureBlobContainerStrategy);
-    // Since account and container Ids can technically be negative numbers, use underscore instead of dash
-    // to avoid confusion.
-    containerNameSeparator = (blobContainerStrategy == BlobContainerStrategy.CONTAINER) ? UNDERSCORE : DASH;
+    // Note: for ancient blobs (pre-container), account and container ids can be -1.  For that reason,
+    // when using container layout, we would prefer to use a different separator like underscore instead of dash,
+    // but Azure container names allow only alphanumerics and single dashes.
+    // TODO: translate ids of -1 to special string like "unknown"
+    containerNameSeparator = DASH;
   }
 
   /** Test constructor */
