@@ -14,8 +14,14 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -24,13 +30,18 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import static com.github.ambry.commons.BlobId.*;
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -39,6 +50,12 @@ import static org.mockito.Mockito.*;
  * Unit tests for {@link AmbryIdConverterFactory}.
  */
 public class AmbryIdConverterFactoryTest {
+  private static final String OPERATION_BASE = "/named/account_name/container_name/blobName";
+  private static final byte dataCenterId = 66;
+  private static final short accountId = 101;
+  private static final short containerId = 5;
+  private static final long partition = 2;
+  private BlobId blobId;
 
   /**
    * Tests the instantiation and use of the {@link IdConverter} instance returned through the
@@ -82,6 +99,19 @@ public class AmbryIdConverterFactoryTest {
     testConversionFailure(idConverter, new MockRestRequest(MockRestRequest.DUMMY_DATA, null), input,
         RestServiceErrorCode.InternalServerError);
     verify(idSigningService).parseSignedId(input);
+    //with named blob
+    ClusterMap clusterMap = new MockClusterMap();
+    ambryIdConverterFactory =
+        new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService);
+    idConverter = ambryIdConverterFactory.getIdConverter();
+    assertNotNull("No IdConverter returned", idConverter);
+    List<String> operations = generateOperations(OPERATION_BASE);
+    for (String operation : operations) {
+      reset(idSigningService);
+      String[] slashFields = operation.split("/");
+      String operationsOutput = (slashFields[2] + slashFields[3] + slashFields[4]);
+      testConversion(idConverter, RestMethod.GET, null, operationsOutput, operation);
+    }
 
     // POST
     // without leading slash (there will be no leading slashes returned from the Router)
@@ -145,6 +175,72 @@ public class AmbryIdConverterFactoryTest {
       re = (RestServiceException) callback.exception;
       assertEquals("Unexpected RestServerErrorCode (Callback)", expectedErrorCode, re.getErrorCode());
     }
+  }
+
+  @Test
+  public void ambryIdConverterNamedBlobTest() throws Exception {
+    Properties properties = new Properties();
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    IdSigningService idSigningService = mock(IdSigningService.class);
+    AmbryIdConverterFactory ambryIdConverterFactory =
+        new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService);
+    IdConverter idConverter = ambryIdConverterFactory.getIdConverter();
+    assertNotNull("No IdConverter returned", idConverter);
+    PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+        BlobDataType.DATACHUNK);
+
+    List<String> idList = new ArrayList<>();
+    idList.add(blobId.getID());
+
+    for (String id : idList) {
+      reset(idSigningService);
+      testConversionForNamedBlob(idConverter, RestMethod.PUT, null, id, id);
+      verify(idSigningService, never()).getSignedId(any(), any());
+    }
+  }
+
+  /**
+   * Tests the conversion by the {@code idConverter}.
+   * @param idConverter the {@link IdConverter} instance to use.
+   * @param restMethod the {@link RestMethod} of the {@link RestRequest} that will be created.
+   * @param signedIdMetadata the headers of the {@link RestRequest}.
+   * @param expectedOutput the expected output from the {@code idConverter}.
+   * @param input the input string
+   * @throws Exception
+   */
+  private void testConversionForNamedBlob(IdConverter idConverter, RestMethod restMethod, Map<String, String> signedIdMetadata,
+      String expectedOutput, String input) throws Exception {
+    JSONObject requestData = new JSONObject();
+    JSONObject headers = new JSONObject();
+    String contentType = "application/octet-stream";
+    headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
+    requestData.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
+    requestData.put(MockRestRequest.URI_KEY, OPERATION_BASE);
+    requestData.put(MockRestRequest.HEADERS_KEY, headers);
+    RestRequest restRequest = new MockRestRequest(requestData, null);
+    if (signedIdMetadata != null) {
+      restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, signedIdMetadata);
+    }
+    if (restMethod.equals(RestMethod.PUT)) {
+      restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, RequestPath.parse(OPERATION_BASE, Collections.emptyMap(), Collections.emptyList(), "Ambry-test"));
+    }
+    IdConversionCallback callback = new IdConversionCallback();
+    assertEquals("Converted ID does not match expected (Future)", expectedOutput,
+        idConverter.convert(restRequest, input, callback).get(5, TimeUnit.SECONDS));
+    assertEquals("Converted ID does not match expected (Callback)", expectedOutput, callback.result);
+  }
+
+  /**
+   * Gets multiple test Operations. The bases will be randomly generated but will be
+   * prefixed with {@code prefix}
+   * @param prefix the  prefix to use.
+   * @return containing multiple test Operations based on {@code base}
+   */
+  private List<String> generateOperations(String prefix) {
+    List<String> inputs = new ArrayList<String>();
+    inputs.add(prefix + getRandomString(8));
+    return inputs;
   }
 
   /**

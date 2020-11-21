@@ -62,6 +62,7 @@ class FrontendRestRequestService implements RestRequestService {
   static final String TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE = "GET,HEAD,DELETE";
 
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
+  private static final String NAMED_BLOB_PREFIX = "/named";
 
   private static final String OPERATION_TYPE_INBOUND_ID_CONVERSION = "Inbound Id Conversion";
   private static final String OPERATION_TYPE_GET_RESPONSE_SECURITY = "GET Response Security";
@@ -90,6 +91,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetPeersHandler getPeersHandler;
   private GetSignedUrlHandler getSignedUrlHandler;
   private PostBlobHandler postBlobHandler;
+  private NamedBlobPutHandler namedBlobPutHandler;
   private TtlUpdateHandler ttlUpdateHandler;
   private UndeleteHandler undeleteHandler;
   private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
@@ -160,6 +162,9 @@ class FrontendRestRequestService implements RestRequestService {
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
             SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName);
+    namedBlobPutHandler =
+        new NamedBlobPutHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
+            frontendConfig, frontendMetrics, clusterName);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap);
@@ -263,6 +268,10 @@ class FrontendRestRequestService implements RestRequestService {
         undeleteHandler.handle(restRequest, restResponseChannel, (r, e) -> {
           submitResponse(restRequest, restResponseChannel, null, e);
         });
+      } else if (requestPath.getOperationOrBlobId(false).startsWith(NAMED_BLOB_PREFIX)) {
+        restRequest.setArg(SEND_FAILURE_REASON, Boolean.TRUE);
+        namedBlobPutHandler.handle(restRequest, restResponseChannel,
+            (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
       } else {
         throw new RestServiceException("Unrecognized operation: " + requestPath.getOperationOrBlobId(false),
             RestServiceErrorCode.BadRequest);

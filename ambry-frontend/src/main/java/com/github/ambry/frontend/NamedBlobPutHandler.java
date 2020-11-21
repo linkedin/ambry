@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 LinkedIn Corp. All rights reserved.
+ * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
@@ -25,17 +26,14 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -47,32 +45,31 @@ import static com.github.ambry.frontend.FrontendUtils.*;
 
 
 /**
- * Handler for post blob requests. The following request types are handled by {@link PostBlobHandler}:
+ * Handler for put named blob requests. The following request types are handled by {@link NamedBlobPutHandler}:
  * <h2>Direct uploads</h2>
  * Direct upload requests treat the body of the request as the content to upload to Ambry. The request path should be
- * "/". In these requests, the blob properties and user metadata are supplied as headers. See
+ * "/named/account_name/container_name/blob_name". In these requests, the blob properties and user metadata are supplied as headers. See
  * {@link RestUtils#buildBlobProperties(Map)} and {@link RestUtils#buildBlobProperties(Map)} for more details.
  * <h2>Stitched uploads</h2>
  * Stitched upload requests allow clients to stitch together previously uploaded data chunks into a single logical blob.
- * The request path should be "/stitch" ({@link Operations#STITCH}). This request accepts the same headers as direct
+ * The request path should be "/named/account_name/container_name/blob_name", This request accepts the same headers as direct
  * upload requests for supplying the blob properties and user metadata of the stitched blob, but, instead of the actual
- * blob content, accepts a UTF-8 JSON object that includes the signed IDs for the chunks to stitch.
+ * blob content, accepts a UTF-8 JSON object that includes the signed IDs for the chunks to stitch, and header x-ambry-put-mode should set as "STITCH".
  * <h3>Request body format</h3>
  * The body of the request should be a JSON object that conforms to the format described in {@link StitchRequestSerDe}.
  */
-class PostBlobHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(PostBlobHandler.class);
+public class NamedBlobPutHandler {
+  private static final Logger LOGGER = LoggerFactory.getLogger(NamedBlobPutHandler.class);
   /**
    * Key to represent the time at which a blob will expire in ms. Used within the metadata map in signed IDs.
    */
   static final String EXPIRATION_TIME_MS_KEY = "et";
-
+  private static final String STITCH = "STITCH";
   private final SecurityService securityService;
   private final IdConverter idConverter;
   private final IdSigningService idSigningService;
   private final Router router;
   private final AccountAndContainerInjector accountAndContainerInjector;
-  private final Time time;
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final String clusterName;
@@ -84,33 +81,31 @@ class PostBlobHandler {
    * @param idSigningService the {@link IdSigningService} to use.
    * @param router the {@link Router} to use.
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
-   * @param time the {@link Time} instance to use.
    * @param frontendConfig the {@link FrontendConfig} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param clusterName the name of the storage cluster that the router communicates with
    */
-  PostBlobHandler(SecurityService securityService, IdConverter idConverter, IdSigningService idSigningService,
-      Router router, AccountAndContainerInjector accountAndContainerInjector, Time time, FrontendConfig frontendConfig,
+  NamedBlobPutHandler(SecurityService securityService, IdConverter idConverter, IdSigningService idSigningService,
+      Router router, AccountAndContainerInjector accountAndContainerInjector, FrontendConfig frontendConfig,
       FrontendMetrics frontendMetrics, String clusterName) {
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.idSigningService = idSigningService;
     this.router = router;
     this.accountAndContainerInjector = accountAndContainerInjector;
-    this.time = time;
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.clusterName = clusterName;
   }
 
   /**
-   * Asynchronously post a blob.
-   * @param restRequest the {@link RestRequest} that contains the request parameters and body.
+   * Handles a request for put a blob
+   * @param restRequest the {@link RestRequest} that contains the request parameters.
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
-    new CallbackChain(restRequest, restResponseChannel, callback).start();
+    new NamedBlobPutHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
   /**
@@ -118,9 +113,9 @@ class PostBlobHandler {
    */
   private class CallbackChain {
     private final RestRequest restRequest;
-    private final String uri;
     private final RestResponseChannel restResponseChannel;
     private final Callback<Void> finalCallback;
+    private final String uri;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -136,113 +131,19 @@ class PostBlobHandler {
     }
 
     /**
-     * Start the chain by parsing the blob info headers in the request and calling
-     * {@link SecurityService#processRequest} to perform additional request time security checks.
+     * Start the chain by calling {@link SecurityService#processRequest}.
      */
     private void start() {
-      // Metrics initialization. Can potentially be updated after parsing blob properties.
       restRequest.getMetricsTracker()
-          .injectMetrics(frontendMetrics.postBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
+          .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
+      //?restRequest.setArg(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT, true);
       try {
         // Start the callback chain by parsing blob info headers and performing request security processing.
         BlobInfo blobInfo = getBlobInfoFromRequest();
-        checkUploadRequirements(blobInfo.getBlobProperties());
         securityService.processRequest(restRequest, securityProcessRequestCallback(blobInfo));
       } catch (Exception e) {
         finalCallback.onCompletion(null, e);
       }
-    }
-
-    /**
-     * After {@link SecurityService#processRequest} finishes, call {@link SecurityService#postProcessRequest} to perform
-     * request time security checks that rely on the request being fully parsed and any additional arguments set.
-     * @param blobInfo the {@link BlobInfo} to carry to future stages.
-     * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
-     */
-    private Callback<Void> securityProcessRequestCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postSecurityProcessRequestMetrics,
-          securityCheckResult -> securityService.postProcessRequest(restRequest,
-              securityPostProcessRequestCallback(blobInfo)), uri, LOGGER, finalCallback);
-    }
-
-    /**
-     * After {@link SecurityService#postProcessRequest} finishes, call {@link Router#putBlob} to persist the blob in the
-     * storage layer.
-     * @param blobInfo the {@link BlobInfo} to make the router call with.
-     * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
-     */
-    private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        if (RestUtils.getRequestPath(restRequest).matchesOperation(Operations.STITCH)) {
-          RetainingAsyncWritableChannel channel =
-              new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
-          restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
-        } else {
-          PutBlobOptions options = getPutBlobOptionsFromRequest();
-          router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo));
-        }
-      }, uri, LOGGER, finalCallback);
-    }
-
-    /**
-     * After reading the body of the stitch request
-     * @param channel
-     * @param blobInfo
-     * @return
-     */
-    private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postReadStitchRequestMetrics,
-          bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
-              getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
-              routerStitchBlobCallback(blobInfo)), uri, LOGGER, finalCallback);
-    }
-
-    /**
-     * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
-     * that will be returned in the "Location" header.
-     * @param blobInfo the {@link BlobInfo} to make the router call with.
-     * @return a {@link Callback} to be used with {@link Router#putBlob}.
-     */
-    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo)), uri, LOGGER,
-          finalCallback);
-    }
-
-    /**
-     * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
-     * that will be returned in the "Location" header.
-     * @param blobInfo the {@link BlobInfo} to make the router call with.
-     * @return a {@link Callback} to be used with {@link Router#putBlob}.
-     */
-    private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postRouterPutBlobMetrics, blobId -> {
-        setSignedIdMetadataAndBlobSize(blobInfo.getBlobProperties());
-        idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo));
-      }, uri, LOGGER, finalCallback);
-    }
-
-    /**
-     * After {@link IdConverter#convert} finishes, set the "Location" header and call
-     * {@link SecurityService#processResponse}.
-     * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @return a {@link Callback} to be used with {@link IdConverter#convert}.
-     */
-    private Callback<String> idConverterCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postIdConversionMetrics, convertedBlobId -> {
-        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
-        securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
-      }, uri, LOGGER, finalCallback);
-    }
-
-    /**
-     * After {@link SecurityService#processResponse}, call {@code finalCallback}.
-     * @return a {@link Callback} to be used with {@link SecurityService#processResponse}.
-     */
-    private Callback<Void> securityProcessResponseCallback() {
-      return buildCallback(frontendMetrics.postSecurityProcessResponseMetrics,
-          securityCheckResult -> finalCallback.onCompletion(null, null), uri, LOGGER, finalCallback);
     }
 
     /**
@@ -253,13 +154,13 @@ class PostBlobHandler {
      */
     private BlobInfo getBlobInfoFromRequest() throws RestServiceException {
       long propsBuildStartTime = System.currentTimeMillis();
-      accountAndContainerInjector.injectAccountAndContainerForPostRequest(restRequest,
-          frontendMetrics.postBlobMetricsGroup);
+      accountAndContainerInjector.injectAccountAndContainerForPutRequest(restRequest,
+          frontendMetrics.putBlobMetricsGroup);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
           blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
-        LOGGER.debug("TTL set to very large value in POST request with BlobProperties {}", blobProperties);
+        LOGGER.debug("TTL set to very large value in PUT request with BlobProperties {}", blobProperties);
         frontendMetrics.ttlTooLargeError.inc();
       } else if (container.isTtlRequired() && (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time
           || blobProperties.getTimeToLiveInSeconds() > frontendConfig.maxAcceptableTtlSecsIfTtlRequired)) {
@@ -279,12 +180,55 @@ class PostBlobHandler {
       // inject encryption frontendMetrics if applicable
       if (blobProperties.isEncrypted()) {
         restRequest.getMetricsTracker()
-            .injectMetrics(frontendMetrics.postBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
+            .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
       }
       byte[] userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
-      frontendMetrics.blobPropsBuildTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
-      LOGGER.trace("Blob properties of blob being POSTed - {}", blobProperties);
+      frontendMetrics.blobPropsBuildForNameBlobPutTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
+      LOGGER.trace("Blob properties of blob being PUT - {}", blobProperties);
       return new BlobInfo(blobProperties, userMetadata);
+    }
+
+    /**
+     * After {@link SecurityService#processRequest} finishes, call {@link SecurityService#postProcessRequest} to perform
+     * request time security checks that rely on the request being fully parsed and any additional arguments set.
+     * @param blobInfo the {@link BlobInfo} to carry to future stages.
+     * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
+     */
+    private Callback<Void> securityProcessRequestCallback(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.putSecurityProcessRequestMetrics,
+          securityCheckResult -> securityService.postProcessRequest(restRequest,
+              securityPostProcessRequestCallback(blobInfo)), uri, LOGGER, finalCallback);
+    }
+
+    /**
+     * After {@link SecurityService#postProcessRequest} finishes, call {@link Router#putBlob} to persist the blob in the
+     * storage layer.
+     * @param blobInfo the {@link BlobInfo} to make the router call with.
+     * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
+     */
+    private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
+        if (STITCH.equals(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, false))) {
+          RetainingAsyncWritableChannel channel =
+              new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
+          restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
+        } else {
+          PutBlobOptions options = getPutBlobOptionsFromRequest();
+          router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
+              routerPutBlobCallback());
+        }
+      }, uri, LOGGER, finalCallback);
+    }
+
+    /**
+     * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to store the mapping between blobName and blobId.
+     * @return a {@link Callback} to be used with {@link Router#putBlob}.
+     */
+    private Callback<String> routerPutBlobCallback() {
+      return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
+        restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
+        idConverter.convert(restRequest, blobId, idConverterCallback());
+      }, uri, LOGGER, finalCallback);
     }
 
     /**
@@ -292,7 +236,7 @@ class PostBlobHandler {
      */
     private PutBlobOptions getPutBlobOptionsFromRequest() throws RestServiceException {
       PutBlobOptionsBuilder builder =
-          new PutBlobOptionsBuilder().chunkUpload(RestUtils.isChunkUpload(restRequest.getArgs()));
+          new PutBlobOptionsBuilder().chunkUpload(false);
       Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
       if (maxUploadSize != null) {
         builder.maxUploadSize(maxUploadSize);
@@ -301,42 +245,26 @@ class PostBlobHandler {
     }
 
     /**
-     * Attach the metadata to include in a signed ID to the {@link RestRequest} if the request is for a chunk upload.
-     * This will tell the ID converter that it needs to produce a signed ID to give back to the client.
-     * @param blobProperties the {@link BlobProperties} from the request.
-     * @throws RestServiceException
+     * After reading the body of the stitch request
+     * @param channel
+     * @param blobInfo
+     * @return
      */
-    private void setSignedIdMetadataAndBlobSize(BlobProperties blobProperties) throws RestServiceException {
-      if (RestUtils.isChunkUpload(restRequest.getArgs())) {
-        Map<String, String> metadata = new HashMap<>(2);
-        metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBlobBytesReceived()));
-        metadata.put(RestUtils.Headers.SESSION,
-            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true));
-        metadata.put(EXPIRATION_TIME_MS_KEY,
-            Long.toString(Utils.addSecondsToEpochTime(time.milliseconds(), blobProperties.getTimeToLiveInSeconds())));
-        restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
-      }
-      //the actual blob size is the number of bytes read
-      restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
+    private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
+          bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
+              getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
+              routerStitchBlobCallback()), uri, LOGGER, finalCallback);
     }
 
     /**
-     * Enforce any additional requirements for certain types of uploads like data chunk uploads.
-     * @param blobProperties the {@link BlobProperties} parsed from the request.
-     * @throws RestServiceException
+     * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
+     * that will be returned in the "Location" header.
+     * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
-    private void checkUploadRequirements(BlobProperties blobProperties) throws RestServiceException {
-      if (RestUtils.isChunkUpload(restRequest.getArgs())) {
-        // ensure that the x-ambry-session header is present.
-        RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true);
-        // validate that a max chunk size is set.
-        RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, true);
-        // validate that the TTL for the chunk is set correctly.
-        long chunkTtl = blobProperties.getTimeToLiveInSeconds();
-        if (chunkTtl <= 0 || chunkTtl > frontendConfig.chunkUploadInitialChunkTtlSecs) {
-          throw new RestServiceException("Invalid chunk upload TTL: " + chunkTtl, RestServiceErrorCode.InvalidArgs);
-        }
-      }
+    private Callback<String> routerStitchBlobCallback() {
+      return buildCallback(frontendMetrics.putRouterStitchBlobMetrics,
+          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback()), uri, LOGGER, finalCallback);
     }
 
     /**
@@ -409,6 +337,26 @@ class PostBlobHandler {
             + stitchedBlobProperties.getAccountId() + ", " + stitchedBlobProperties.getContainerId() + ")",
             RestServiceErrorCode.BadRequest);
       }
+    }
+
+    /**
+     * After {@link IdConverter#convert} finishes, call {@link SecurityService#postProcessRequest} to perform
+     * request time security checks that rely on the request being fully parsed and any additional arguments set.
+     * @return a {@link Callback} to be used with {@link IdConverter#convert}.
+     */
+    private Callback<String> idConverterCallback() {
+      return buildCallback(frontendMetrics.putIdConversionMetrics, blobId -> {
+        securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
+      }, uri, LOGGER, finalCallback);
+    }
+
+    /**
+     * After {@link SecurityService#processResponse}, call {@code finalCallback}.
+     * @return a {@link Callback} to be used with {@link SecurityService#processResponse}.
+     */
+    private Callback<Void> securityProcessResponseCallback() {
+      return buildCallback(frontendMetrics.putBlobSecurityProcessResponseMetrics,
+          securityCheckResult -> finalCallback.onCompletion(null, null), restRequest.getUri(), LOGGER, finalCallback);
     }
   }
 }

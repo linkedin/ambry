@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
@@ -202,7 +203,10 @@ public class RestUtils {
      * stitched together.
      */
     public static final String CHUNK_UPLOAD = "x-ambry-chunk-upload";
-
+    /**
+     * It is set to a string that differentiate STITCH vs regular upload named blob. If it set to "STITCH", it indicate that this is the a stitch upload.
+     */
+    public static final String UPLOAD_NAMED_BLOB_MODE = "x-ambry-upload-named-blob-mode";
     /**
      * This header will carry a UUID that represents a "session." For example, when performing a stitched upload, each
      * chunk upload should be a part of the same session.
@@ -895,6 +899,39 @@ public class RestUtils {
   }
 
   /**
+   * Parse the input if it's the named blob request.
+   * @param input the url that needs to be parsed.
+   * @return the {@link NamedBlobPath} indicates the parsing result from blobUrl.
+   */
+  public static NamedBlobPath parseInput(String input) {
+    Objects.requireNonNull(input, "input should not be null");
+    String[] slashFields = input.split("/");
+    if (slashFields.length < 4) {
+      throw new IllegalArgumentException(
+          "File must have name format '/named/<account_name>/<container_name>/<blob_name>'.  Received: '" + input + "'");
+    }
+    return new NamedBlobPath(slashFields[2], slashFields[3], slashFields[4]);
+  }
+
+  /**
+   * Verify that the session ID in the chunk metadata matches the expected session.
+   * @param chunkMetadata the metadata map parsed from a signed chunk ID.
+   * @param expectedSession the session that the chunk should match. This can be null for the first chunk (where any
+   *                        session ID is valid).
+   * @return this chunk's session ID
+   * @throws RestServiceException if the chunk has a null session ID or it does not match the expected value.
+   */
+  public static String verifyChunkUploadSession(Map<String, String> chunkMetadata, String expectedSession)
+      throws RestServiceException {
+    String chunkSession = RestUtils.getHeader(chunkMetadata, RestUtils.Headers.SESSION, true);
+    if (expectedSession != null && !expectedSession.equals(chunkSession)) {
+      throw new RestServiceException("Session IDs differ for chunks in a stitch request",
+          RestServiceErrorCode.BadRequest);
+    }
+    return chunkSession;
+  }
+
+  /**
    * Build a {@link ByteRange} given a Range header value. This method can parse the following Range
    * header syntax:
    * {@code Range:bytes=byte_range} where {@code bytes=byte_range} supports the following range syntax:
@@ -931,5 +968,17 @@ public class RestUtils {
           RestServiceErrorCode.InvalidArgs);
     }
     return range;
+  }
+
+  /**
+   * Drops the leading slash and extension (if any) in the blob ID.
+   * @param blobIdWithExtension the blob ID possibly with an extension.
+   * @return {@code blobIdWithExtension} without an extension if there was one.
+   */
+  public static String stripSlashAndExtensionFromId(String blobIdWithExtension) {
+    int extensionIndex = blobIdWithExtension.indexOf(".");
+    int startIndex = blobIdWithExtension.startsWith("/") ? 1 : 0;
+    int endIndex = extensionIndex != -1 ? extensionIndex : blobIdWithExtension.length();
+    return blobIdWithExtension.substring(startIndex, endIndex);
   }
 }
