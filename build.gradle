@@ -435,6 +435,16 @@ project(':ambry-cloud') {
     }
 }
 
+project(':ambry-named-mysql') {
+    dependencies {
+        compile project(':ambry-api')
+        compile project(':ambry-commons')
+        compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
+        compile "com.zaxxer:HikariCP:$hikariVersion"
+        testCompile project(':ambry-test-utils')
+    }
+}
+
 project(':ambry-quota') {
     dependencies {
         compile project(':ambry-api'),
@@ -455,6 +465,7 @@ project(':ambry-all') {
         compile project(':ambry-server')
         compile project(':ambry-tools')
         compile project(':ambry-cloud')
+        compile project(':ambry-named-mysql')
         compile project(':ambry-test-utils')
     }
 }

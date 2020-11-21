@@ -19,6 +19,8 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.named.NamedBlobDb;
+import com.github.ambry.named.NamedBlobDbFactory;
 import com.github.ambry.quota.StorageQuotaService;
 import com.github.ambry.quota.StorageQuotaServiceFactory;
 import com.github.ambry.rest.RestRequestService;
@@ -76,9 +78,12 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       IdSigningService idSigningService =
           Utils.<IdSigningServiceFactory>getObj(frontendConfig.idSigningServiceFactory, verifiableProperties,
               clusterMap.getMetricRegistry()).getIdSigningService();
+      NamedBlobDb namedBlobDb = Utils.isNullOrEmpty(frontendConfig.namedBlobDbFactory) ? null :
+          Utils.<NamedBlobDbFactory>getObj(frontendConfig.namedBlobDbFactory, verifiableProperties,
+              clusterMap.getMetricRegistry(), accountService).getNamedBlobDb();
       IdConverterFactory idConverterFactory =
           Utils.getObj(frontendConfig.idConverterFactory, verifiableProperties, clusterMap.getMetricRegistry(),
-              idSigningService);
+              idSigningService, namedBlobDb);
       UrlSigningService urlSigningService =
           Utils.<UrlSigningServiceFactory>getObj(frontendConfig.urlSigningServiceFactory, verifiableProperties,
               clusterMap.getMetricRegistry()).getUrlSigningService();

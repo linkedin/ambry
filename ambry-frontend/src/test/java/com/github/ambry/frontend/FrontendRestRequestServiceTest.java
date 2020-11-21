@@ -162,7 +162,7 @@ public class FrontendRestRequestServiceTest {
         frontendConfig.urlSignerDefaultMaxUploadSizeBytes, frontendConfig.urlSignerMaxUrlTtlSecs,
         frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance());
     idSigningService = new AmbryIdSigningService();
-    idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry, idSigningService);
+    idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry, idSigningService, null);
     securityServiceFactory =
         new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService, idSigningService,
             accountAndContainerInjector);
