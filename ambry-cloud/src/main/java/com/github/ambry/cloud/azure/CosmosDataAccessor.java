@@ -76,7 +76,7 @@ public class CosmosDataAccessor {
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
   private static final String CONTAINER_BLOBS_QUERY =
-      "SELECT TOP " + LIMIT_PARAM + " FROM c WHERE c.accountId=" + ACCOUNT_ID_PARAM + " and c.containerId="
+      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c.accountId=" + ACCOUNT_ID_PARAM + " and c.containerId="
           + CONTAINER_ID_PARAM;
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
   private static final String DEPRECATED_CONTAINERS_QUERY =
@@ -593,9 +593,11 @@ public class CosmosDataAccessor {
     long latestContainerDeletionTimestamp = -1;
     for (CosmosContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
       try {
+
         executeCosmosAction(
             () -> asyncDocumentClient.createDocument(cosmosDeletedContainerCollectionLink, containerDeletionEntry,
-                new RequestOptions(), true).toBlocking().single(), azureMetrics.documentCreateTime);
+                getRequestOptions(containerDeletionEntry.getId()), true).toBlocking().single(),
+            azureMetrics.documentCreateTime);
         if (containerDeletionEntry.getDeleteTriggerTimestamp() > latestContainerDeletionTimestamp) {
           latestContainerDeletionTimestamp = containerDeletionEntry.getDeleteTriggerTimestamp();
         }

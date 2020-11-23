@@ -15,6 +15,8 @@ package com.github.ambry.cloud.azure;
 
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudContainerCompactor;
@@ -31,6 +33,7 @@ import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
@@ -237,10 +240,15 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
   private void updateCompactionProgress(short containerId, short accountId, String partitionPath)
       throws CloudStorageException {
     // TODO: update the cache and cosmos container deletion entry table to remove the partitionId from deletePendingPartitions list
+
     ResourceResponse<Document> updatedDocument = requestAgent.doWithRetries(
         () -> cosmosDataAccessor.updateContainerDeletionEntry(containerId, accountId, (document, fieldsChanged) -> {
-          Set<String> deletePendingPartitions =
-              (Set<String>) document.get(CosmosContainerDeletionEntry.DELETE_PENDING_PARTITIONS_KEY);
+          Set<String> deletePendingPartitions = new HashSet<>();
+          Iterator<JsonNode> iterator =
+              ((ArrayNode) document.get(CosmosContainerDeletionEntry.DELETE_PENDING_PARTITIONS_KEY)).iterator();
+          while (iterator.hasNext()) {
+            deletePendingPartitions.add(iterator.next().textValue());
+          }
           fieldsChanged.set(deletePendingPartitions.remove(partitionPath));
           document.set(CosmosContainerDeletionEntry.DELETE_PENDING_PARTITIONS_KEY, deletePendingPartitions);
           if (deletePendingPartitions.isEmpty()) {

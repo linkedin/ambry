@@ -16,12 +16,16 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
+import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.AccountTestUtils;
@@ -36,13 +40,17 @@ import com.microsoft.azure.cosmosdb.RetryOptions;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.junit.After;
@@ -54,6 +62,8 @@ import org.mockito.junit.MockitoJUnitRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.cloud.azure.AzureTestUtils.*;
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
@@ -72,7 +82,10 @@ public class AzureContainerCompactorIntegrationTest {
   private final ClusterMap clusterMap;
   private final AzureCloudConfig azureCloudConfig;
   private final CloudConfig cloudConfig;
+  private final CloudRequestAgent cloudRequestAgent;
   private final long testPartitionId = 666;
+  private final int blobSize = 1024;
+  private final byte dataCenterId = 66;
   private final List<String> assignedPartitions = Arrays.asList(String.valueOf(testPartitionId));
   private final List<? extends PartitionId> allPartitions = Arrays.asList(new MockPartitionId(testPartitionId, null));
 
@@ -110,10 +123,13 @@ public class AzureContainerCompactorIntegrationTest {
     azureContainerCompactor = new AzureContainerCompactor(cloudDestination.getAzureBlobDataAccessor(),
         cloudDestination.getCosmosDataAccessor(), cloudConfig, azureCloudConfig, new VcrMetrics(metricRegistry),
         new AzureMetrics(metricRegistry));
+    cloudRequestAgent =
+        new CloudRequestAgent(new CloudConfig(verifiableProperties), new VcrMetrics(new MetricRegistry()));
   }
 
   @After
-  public void destroy() throws IOException {
+  public void destroy() throws IOException, DocumentClientException {
+    cleanup();
     // TODO destroy the abs blob and cosmos db
     if (cloudDestination != null) {
       cloudDestination.close();
@@ -134,17 +150,39 @@ public class AzureContainerCompactorIntegrationTest {
     cloudDestination.deprecateContainers(containers);
     verifyCosmosData(containers);
     verifyCheckpoint(containers);
-    cleanup();
   }
 
   @Test
   public void testCompactAssignedDeprecatedContainers() throws CloudStorageException, DocumentClientException {
-    Set<Container> containers = generateContainers(5);
+    // Create a deprecated container.
+    Set<Container> containers = generateContainers(1);
     cloudDestination.deprecateContainers(containers);
     verifyCosmosData(containers);
     verifyCheckpoint(containers);
+    Container testContainer = containers.iterator().next();
 
-    // TODO Create blobs in test container and then call compact container
+    // Create blobs in the deprecated container and test partition.
+    int numBlobs = 100;
+    PartitionId partitionId = new MockPartitionId(testPartitionId, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    long creationTime = System.currentTimeMillis();
+    Map<BlobId, byte[]> blobIdtoDataMap =
+        createUnencryptedPermanentBlobs(numBlobs, dataCenterId, testContainer.getParentAccountId(),
+            testContainer.getId(), partitionId, blobSize, cloudRequestAgent, cloudDestination, creationTime);
+
+    // Assert that blobs exist.
+    Map<String, CloudBlobMetadata> metadataMap =
+        getBlobMetadataWithRetry(new ArrayList<>(blobIdtoDataMap.keySet()), partitionId.toPathString(),
+            cloudRequestAgent, cloudDestination);
+    assertEquals("Unexpected size of returned metadata map", numBlobs, metadataMap.size());
+
+    // compact the deprecated container.
+    cloudDestination.getContainerCompactor()
+        .compactAssignedDeprecatedContainers(Collections.singletonList(partitionId));
+
+    // Assert that deprecated container's blobs don't exist anymore.
+    assertTrue("Expected empty set after container compaction",
+        getBlobMetadataWithRetry(new ArrayList<>(blobIdtoDataMap.keySet()), partitionId.toPathString(),
+            cloudRequestAgent, cloudDestination).isEmpty());
     cleanup();
   }
 
@@ -214,17 +252,20 @@ public class AzureContainerCompactorIntegrationTest {
             .withConsistencyLevel(ConsistencyLevel.Session)
             .build();
     Set<CosmosContainerDeletionEntry> entries = cloudDestination.getCosmosDataAccessor().getDeprecatedContainers(100);
-    while (!entries.isEmpty()) {
+    AtomicBoolean error = new AtomicBoolean(false);
+    while (!entries.isEmpty() && !error.get()) {
       entries.stream().forEach(entry -> {
         try {
           RequestOptions requestOptions = new RequestOptions();
           requestOptions.setPartitionKey(new PartitionKey(entry.getId()));
-          CosmosDataAccessor.executeCosmosAction(() -> asyncDocumentClient.deleteDocument(
-              azureCloudConfig.cosmosDeletedContainerCollectionLink + "/docs/" + entry.getId(), requestOptions)
-              .toBlocking()
-              .single(), null);
-        } catch (DocumentClientException dex) {
-          logger.warn("Failed to delete container deprecation entry {}", entry);
+          cloudRequestAgent.doWithRetries(() -> CosmosDataAccessor.executeCosmosAction(
+              () -> asyncDocumentClient.deleteDocument(
+                  azureCloudConfig.cosmosDeletedContainerCollectionLink + "/docs/" + entry.getId(), requestOptions)
+                  .toBlocking()
+                  .single(), null), "Test Cleanup", entry.getId());
+        } catch (CloudStorageException ex) {
+          logger.warn("Failed to delete container deprecation entry {}. Unable to cleanup", entry);
+          error.set(true);
         }
       });
       entries = cloudDestination.getCosmosDataAccessor().getDeprecatedContainers(100);
