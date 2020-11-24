@@ -15,6 +15,7 @@ package com.github.ambry.account.mysql;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
@@ -31,6 +32,7 @@ public class MySqlAccountStore {
   private final AccountDao accountDao;
   private final ContainerDao containerDao;
   private final MySqlDataAccessor mySqlDataAccessor;
+  private final MySqlAccountServiceConfig config;
 
   /**
    * Constructor.
@@ -38,10 +40,12 @@ public class MySqlAccountStore {
    * @param metrics metrics to track mysql operations
    * @throws SQLException
    */
-  public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, MySqlMetrics metrics) throws SQLException {
+  public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, MySqlMetrics metrics,
+      MySqlAccountServiceConfig config) throws SQLException {
     mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter, metrics);
     accountDao = new AccountDao(mySqlDataAccessor);
     containerDao = new ContainerDao(mySqlDataAccessor);
+    this.config = config;
   }
 
   /**
@@ -58,9 +62,7 @@ public class MySqlAccountStore {
    * @throws SQLException
    */
   public void addAccounts(Collection<Account> accounts) throws SQLException {
-    for (Account account : accounts) {
-      addAccount(account);
-    }
+    accountDao.addAccounts(accounts, config.dbExecuteBatchSize);
   }
 
   /**
@@ -73,14 +75,13 @@ public class MySqlAccountStore {
   }
 
   /**
-   * Adds new {@link Container}s to Container table in MySql DB
+   * Adds new {@link Container}s of a given {@link Account} to Container table in MySql DB
+   * @param accountId id of {@link Account}
    * @param containers collection of {@link Container}s to be inserted
    * @throws SQLException
    */
-  public void addContainers(Collection<Container> containers) throws SQLException {
-    for (Container container : containers) {
-      addContainer(container);
-    }
+  public void addContainers(int accountId, Collection<Container> containers) throws SQLException {
+    containerDao.addContainers(accountId, containers, config.dbExecuteBatchSize);
   }
 
   /**
@@ -98,9 +99,7 @@ public class MySqlAccountStore {
    * @throws SQLException
    */
   public void updateAccounts(Collection<Account> accounts) throws SQLException {
-    for (Account account : accounts) {
-      accountDao.updateAccount(account);
-    }
+    accountDao.updateAccounts(accounts, config.dbExecuteBatchSize);
   }
 
   /**
@@ -113,14 +112,13 @@ public class MySqlAccountStore {
   }
 
   /**
-   * Updates existing {@link Container}s in Container table in MySql DB
+   * Updates existing {@link Container}s of a given {@link Account} in Container table in MySql DB
+   * @param accountId id of {@link Account}
    * @param containers collection of {@link Container}s to be updated
    * @throws SQLException
    */
-  public void updateContainers(Collection<Container> containers) throws SQLException {
-    for (Container container : containers) {
-      containerDao.updateContainer(container.getParentAccountId(), container);
-    }
+  public void updateContainers(int accountId, Collection<Container> containers) throws SQLException {
+    containerDao.updateContainers(accountId, containers, config.dbExecuteBatchSize);
   }
 
   /**

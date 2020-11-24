@@ -96,7 +96,7 @@ public class MySqlAccountServiceIntegrationTest {
         new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword");
     try {
       new MySqlAccountStore(Collections.singletonList(endpoint), endpoint.getDatacenter(),
-          new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry()));
+          new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry()), accountServiceConfig);
       fail("Store creation should fail with bad credentials");
     } catch (SQLException e) {
       assertTrue(MySqlDataAccessor.isCredentialError(e));

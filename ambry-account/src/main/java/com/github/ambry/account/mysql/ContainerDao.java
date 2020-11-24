@@ -21,6 +21,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import org.json.JSONObject;
 
@@ -84,6 +85,36 @@ public class ContainerDao {
   }
 
   /**
+   * Add a containers to the database.
+   * @param accountId the containers's parent account id.
+   * @param containers the containers to insert.
+   * @param batchSize number of statements to be executed in one batch
+   * @throws SQLException
+   */
+  public void addContainers(int accountId, Collection<Container> containers, int batchSize) throws SQLException {
+    try {
+      // Note: assuming autocommit for now
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
+      int count = 0;
+      for (Container container : containers) {
+        insertStatement.setInt(1, accountId);
+        insertStatement.setString(2, container.toJson().toString());
+        insertStatement.setInt(3, container.getSnapshotVersion());
+        insertStatement.addBatch();
+        if (++count % batchSize == 0) {
+          insertStatement.executeBatch();
+        }
+      }
+      insertStatement.executeBatch();
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      throw e;
+    }
+  }
+
+  /**
    * Updates a container in the database.
    * @param accountId the container's parent account id.
    * @param container the container to update.
@@ -99,6 +130,37 @@ public class ContainerDao {
       updateStatement.setInt(3, accountId);
       updateStatement.setInt(4, container.getId());
       updateStatement.executeUpdate();
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      throw e;
+    }
+  }
+
+  /**
+   * Updates a container in the database.
+   * @param accountId the container's parent account id.
+   * @param containers the container to update.
+   * @param batchSize number of statements to be executed in one batch
+   * @throws SQLException
+   */
+  public void updateContainers(int accountId, Collection<Container> containers, int batchSize) throws SQLException {
+    try {
+      // Note: assuming autocommit for now
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql, true);
+      int count = 0;
+      for (Container container : containers) {
+        updateStatement.setString(1, container.toJson().toString());
+        updateStatement.setInt(2, container.getSnapshotVersion());
+        updateStatement.setInt(3, accountId);
+        updateStatement.setInt(4, container.getId());
+        updateStatement.addBatch();
+        if (++count % batchSize == 0) {
+          updateStatement.executeBatch();
+        }
+      }
+      updateStatement.executeBatch();
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);

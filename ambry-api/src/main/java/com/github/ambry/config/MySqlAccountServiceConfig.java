@@ -26,6 +26,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String BACKUP_DIRECTORY_KEY = MYSQL_ACCOUNT_SERVICE_PREFIX + "backup.dir";
   public static final String UPDATE_DISABLED = MYSQL_ACCOUNT_SERVICE_PREFIX + "update.disabled";
   private static final String MAX_BACKUP_FILE_COUNT = MYSQL_ACCOUNT_SERVICE_PREFIX + "max.backup.file.count";
+  public static final String DB_EXECUTE_BATCH_SIZE = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.execute.batch.size";
 
   /**
    * Serialized json containing the information about all mysql end points. This information should be of the following form:
@@ -97,6 +98,13 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Default("false")
   public final boolean updateDisabled;
 
+  /**
+   * The number of mysql insert/update statements that can be batched together for execution.
+   */
+  @Config(DB_EXECUTE_BATCH_SIZE)
+  @Default("10")
+  public final int dbExecuteBatchSize;
+
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
@@ -107,5 +115,6 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
     maxBackupFileCount = verifiableProperties.getIntInRange(MAX_BACKUP_FILE_COUNT, 10, 1, Integer.MAX_VALUE);
+    dbExecuteBatchSize = verifiableProperties.getIntInRange(DB_EXECUTE_BATCH_SIZE, 10, 1, Integer.MAX_VALUE);
   }
 }

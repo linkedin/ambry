@@ -36,7 +36,7 @@ public class MySqlAccountStoreFactory {
   private static final Logger logger = LoggerFactory.getLogger(MySqlAccountStoreFactory.class);
   private static final String UNKNOWN_DATACENTER = "Unknown";
 
-  protected final MySqlAccountServiceConfig accountServiceConfig;
+  protected final MySqlAccountServiceConfig config;
   protected final String localDatacenter;
   protected final MySqlMetrics metrics;
 
@@ -45,7 +45,7 @@ public class MySqlAccountStoreFactory {
    * @param verifiableProperties The properties to get a {@link MySqlAccountStore} instance. Cannot be {@code null}.
    */
   public MySqlAccountStoreFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
-    this.accountServiceConfig = new MySqlAccountServiceConfig(verifiableProperties);
+    this.config = new MySqlAccountServiceConfig(verifiableProperties);
     // If datacenter is unknown, all endpoints will be considered remote
     this.localDatacenter =
         verifiableProperties.getString(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, UNKNOWN_DATACENTER);
@@ -58,12 +58,12 @@ public class MySqlAccountStoreFactory {
    * @throws SQLException
    */
   public MySqlAccountStore getMySqlAccountStore() throws SQLException {
-    Map<String, List<DbEndpoint>> dcToMySqlDBEndpoints = getDbEndpointsPerDC(accountServiceConfig.dbInfo);
+    Map<String, List<DbEndpoint>> dcToMySqlDBEndpoints = getDbEndpointsPerDC(config.dbInfo);
     // Flatten to List (TODO: does utility method need to return map?)
     List<DbEndpoint> dbEndpoints = new ArrayList<>();
-    dcToMySqlDBEndpoints.values().forEach(endpointList -> dbEndpoints.addAll(endpointList));
+    dcToMySqlDBEndpoints.values().forEach(dbEndpoints::addAll);
     try {
-      return new MySqlAccountStore(dbEndpoints, localDatacenter, metrics);
+      return new MySqlAccountStore(dbEndpoints, localDatacenter, metrics, config);
     } catch (SQLException e) {
       logger.error("MySQL account store creation failed", e);
       throw e;
