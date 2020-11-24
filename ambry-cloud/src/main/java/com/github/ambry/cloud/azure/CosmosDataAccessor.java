@@ -54,6 +54,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -68,13 +70,16 @@ public class CosmosDataAccessor {
   private static final String START_TIME_PARAM = "@startTime";
   private static final String END_TIME_PARAM = "@endTime";
   private static final String LIMIT_PARAM = "@limit";
+  private static final String ACCOUNT_ID_PARAM = "@accountId";
+  private static final String CONTAINER_ID_PARAM = "@containerId";
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
+  private static final String CONTAINER_BLOBS_QUERY =
+      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c.accountId=" + ACCOUNT_ID_PARAM + " and c.containerId="
+          + CONTAINER_ID_PARAM;
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
-  private static final String DEPRECATED_CONTAINERS_QUERY = "SELECT TOP %d from c order by c.deleteTriggerTime";
-  private static final String CONTAINER_DELETION_TABLE = "DeletedContainer";
-  private static final String DELETED_CONTAINER_ID_COLUMN = "id";
-  private static final String CONTAINER_ID_ACCOUNT_ID_DELIM = "_";
+  private static final String DEPRECATED_CONTAINERS_QUERY =
+      "SELECT TOP " + LIMIT_PARAM + " * from c WHERE c.deleted=false order by c.deleteTriggerTimestamp";
   static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
   static final String PROPERTY_CONTINUATION = "continuation";
   static final String PROPERTY_DELETED = "deleted";
@@ -426,6 +431,52 @@ public class CosmosDataAccessor {
   }
 
   /**
+   * Get the list of blobs in the specified partition that belong to the specified container.
+   * @param partitionPath the partition to query.
+   * @param accountId account id of the container.
+   * @param containerId container id of the container.
+   * @param queryLimit max number of blobs to return.
+   * @return a List of {@link CloudBlobMetadata} referencing the blobs belonging to the deprecated containers.
+   * @throws DocumentClientException in case of any error.
+   */
+  List<CloudBlobMetadata> getContainerBlobs(String partitionPath, short accountId, short containerId, int queryLimit)
+      throws DocumentClientException {
+    SqlQuerySpec querySpec = new SqlQuerySpec(CONTAINER_BLOBS_QUERY,
+        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, queryLimit),
+            new SqlParameter(CONTAINER_ID_PARAM, containerId), new SqlParameter(ACCOUNT_ID_PARAM, accountId)));
+    FeedOptions feedOptions = new FeedOptions();
+    feedOptions.setMaxItemCount(queryLimit);
+    feedOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);
+    feedOptions.setPartitionKey(new PartitionKey(partitionPath));
+    try {
+      Iterator<FeedResponse<Document>> iterator = executeCosmosQuery(partitionPath, querySpec, feedOptions,
+          azureMetrics.deletedContainerBlobsQueryTime).getIterator();
+      List<CloudBlobMetadata> containerBlobsList = new ArrayList<>();
+      double requestCharge = 0.0;
+      while (iterator.hasNext()) {
+        FeedResponse<Document> response = iterator.next();
+        requestCharge += response.getRequestCharge();
+        response.getResults()
+            .iterator()
+            .forEachRemaining(doc -> containerBlobsList.add(createMetadataFromDocument(doc)));
+      }
+      if (requestCharge >= requestChargeThreshold) {
+        logger.info(
+            "Deleted container blobs query partition {} containerId {} accountId {} request charge {} for {} records",
+            partitionPath, containerId, accountId, requestCharge, containerBlobsList.size());
+      }
+      return containerBlobsList;
+    } catch (RuntimeException rex) {
+      if (rex.getCause() instanceof DocumentClientException) {
+        logger.warn("Dead blobs query {} partition {} got {}", querySpec.getQueryText(), partitionPath,
+            ((DocumentClientException) rex.getCause()).getStatusCode());
+        throw (DocumentClientException) rex.getCause();
+      }
+      throw rex;
+    }
+  }
+
+  /**
    * Returns a query like:
    * SELECT TOP 500 * FROM c WHERE c.deletionTime BETWEEN 1 AND <7 days ago> ORDER BY c.deletionTime ASC
    * @param fieldName the field to use in the filter condition.  Must be deletionTime or expirationTime.
@@ -531,17 +582,20 @@ public class CosmosDataAccessor {
   }
 
   /**
-   * Add the {@link ContainerDeletionEntry} for newly deprecated {@link Container}s to cosmos table.
-   * @param deprecatedContainers {@link Set} of deleted {@link ContainerDeletionEntry}s.
+   * Add the {@link CosmosContainerDeletionEntry} for newly deprecated {@link Container}s to cosmos table.
+   * @param deprecatedContainers {@link Set} of deleted {@link CosmosContainerDeletionEntry}s.
    * @return the max deletion trigger time of all the added containers to serve as checkpoint for future update.
    * @throws {@link DocumentClientException} in case of any error.
    */
-  public long deprecateContainers(Set<ContainerDeletionEntry> deprecatedContainers) throws DocumentClientException {
+  public long deprecateContainers(Set<CosmosContainerDeletionEntry> deprecatedContainers)
+      throws DocumentClientException {
     long latestContainerDeletionTimestamp = -1;
-    for (ContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
+    for (CosmosContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
       try {
-        executeCosmosAction(() -> asyncDocumentClient.createDocument(cosmosDeletedContainerCollectionLink,
-            containerDeletionEntry.toJson(), new RequestOptions(), true).toBlocking().single(),
+
+        executeCosmosAction(
+            () -> asyncDocumentClient.createDocument(cosmosDeletedContainerCollectionLink, containerDeletionEntry,
+                getRequestOptions(containerDeletionEntry.getId()), true).toBlocking().single(),
             azureMetrics.documentCreateTime);
         if (containerDeletionEntry.getDeleteTriggerTimestamp() > latestContainerDeletionTimestamp) {
           latestContainerDeletionTimestamp = containerDeletionEntry.getDeleteTriggerTimestamp();
@@ -559,23 +613,88 @@ public class CosmosDataAccessor {
   }
 
   /**
-   * @return a {@link Set} of {@link ContainerDeletionEntry} objects from cosmosdb that are not marked as deleted.
+   * Fetch a {@link Set} of {@link CosmosContainerDeletionEntry} objects from cosmos db that are not marked as deleted.
+   * @param maxEntries Max number of entries to fetch on one query.
+   * @return {@link Set} of {@link CosmosContainerDeletionEntry} objects.
+   * @throws DocumentClientException in case of any error.
    */
-  public Set<ContainerDeletionEntry> getDeprecatedContainers(int maxEntries) {
-    String query = String.format(DEPRECATED_CONTAINERS_QUERY, maxEntries);
+  public Set<CosmosContainerDeletionEntry> getDeprecatedContainers(int maxEntries) throws DocumentClientException {
+    SqlQuerySpec querySpec = new SqlQuerySpec(DEPRECATED_CONTAINERS_QUERY,
+        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, maxEntries)));
     Timer timer = new Timer();
-    Iterator<FeedResponse<Document>> iterator =
-        executeCosmosQuery(cosmosDeletedContainerCollectionLink, null, new SqlQuerySpec(query), new FeedOptions(),
-            timer).getIterator();
-    Set<ContainerDeletionEntry> containerDeletionEntries = new HashSet<>();
-    while (iterator.hasNext()) {
-      FeedResponse<Document> response = iterator.next();
-      response.getResults()
-          .iterator()
-          .forEachRemaining(
-              doc -> containerDeletionEntries.add(ContainerDeletionEntry.fromJson(new JSONObject(doc.toJson()))));
+    Set<CosmosContainerDeletionEntry> containerDeletionEntries = new HashSet<>();
+    try {
+      Iterator<FeedResponse<Document>> iterator =
+          executeCosmosQuery(cosmosDeletedContainerCollectionLink, null, querySpec, new FeedOptions(),
+              timer).getIterator();
+      while (iterator.hasNext()) {
+        FeedResponse<Document> response = iterator.next();
+        response.getResults()
+            .iterator()
+            .forEachRemaining(doc -> containerDeletionEntries.add(
+                CosmosContainerDeletionEntry.fromJson(new JSONObject(doc.toJson()))));
+      }
+    } catch (RuntimeException rex) {
+      if (rex.getCause() instanceof DocumentClientException) {
+        logger.warn("Get deprecated containers query {} got {}", querySpec.getQueryText(),
+            ((DocumentClientException) rex.getCause()).getStatusCode());
+        throw (DocumentClientException) rex.getCause();
+      }
+      throw rex;
     }
     return containerDeletionEntries;
+  }
+
+  /**
+   * Update the container deletion entry document in the CosmosDB collection.
+   * @param containerId the container id for which document is replaced.
+   * @param accountId the account id for which document is replaced.
+   * @param updateFields {@link BiConsumer} object to use as callback to update the required fields.
+   * @return the {@link ResourceResponse} returned by the operation, if successful.
+   * Returns {@Null} if the field already has the specified value.
+   * @throws DocumentClientException if the record was not found or if the operation failed.
+   */
+  ResourceResponse<Document> updateContainerDeletionEntry(short containerId, short accountId,
+      BiConsumer<Document, AtomicBoolean> updateFields) throws DocumentClientException {
+
+    // Read the existing record
+    String id = CosmosContainerDeletionEntry.generateContainerDeletionEntryId(accountId, containerId);
+    String docLink = getContainerDeletionEntryDocumentLink(id);
+    RequestOptions options = getRequestOptions(id);
+    ResourceResponse<Document> readResponse =
+        executeCosmosAction(() -> asyncDocumentClient.readDocument(docLink, options).toBlocking().single(),
+            azureMetrics.continerDeletionEntryReadTime);
+    Document doc = readResponse.getResource();
+
+    AtomicBoolean fieldsChanged = new AtomicBoolean(false);
+    updateFields.accept(doc, fieldsChanged);
+    if (!fieldsChanged.get()) {
+      logger.debug("No change in value for container deletion entry {}", doc.toJson());
+      return null;
+    }
+
+    // For testing conflict handling
+    if (updateCallback != null) {
+      try {
+        updateCallback.call();
+      } catch (Exception ex) {
+        logger.error("Error in update callback", ex);
+      }
+    }
+
+    // Set condition to ensure we don't clobber a concurrent update
+    AccessCondition accessCondition = new AccessCondition();
+    accessCondition.setCondition(doc.getETag());
+    options.setAccessCondition(accessCondition);
+    try {
+      return executeCosmosAction(() -> asyncDocumentClient.replaceDocument(doc, options).toBlocking().single(),
+          azureMetrics.documentUpdateTime);
+    } catch (DocumentClientException e) {
+      if (e.getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
+        azureMetrics.blobUpdateConflictCount.inc();
+      }
+      throw e;
+    }
   }
 
   /**
@@ -596,7 +715,7 @@ public class CosmosDataAccessor {
    * @return the result of the action.
    * @throws DocumentClientException
    */
-  private ResourceResponse<Document> executeCosmosAction(Callable<? extends ResourceResponse<Document>> action,
+  static ResourceResponse<Document> executeCosmosAction(Callable<? extends ResourceResponse<Document>> action,
       Timer timer) throws DocumentClientException {
     ResourceResponse<Document> resourceResponse;
     Timer.Context operationTimer = null;
@@ -688,6 +807,10 @@ public class CosmosDataAccessor {
 
   private String getDocumentLink(String documentId) {
     return cosmosCollectionLink + DOCS + documentId;
+  }
+
+  private String getContainerDeletionEntryDocumentLink(String documentId) {
+    return cosmosDeletedContainerCollectionLink + DOCS + documentId;
   }
 
   private RequestOptions getRequestOptions(String partitionPath) {

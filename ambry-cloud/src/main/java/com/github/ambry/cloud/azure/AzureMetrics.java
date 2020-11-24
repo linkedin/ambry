@@ -35,6 +35,7 @@ public class AzureMetrics {
   public static final String BLOB_UPDATE_CONFLICT_COUNT = "BlobUpdateConflictCount";
   public static final String DOCUMENT_CREATE_TIME = "DocumentCreateTime";
   public static final String DOCUMENT_READ_TIME = "DocumentReadTime";
+  public static final String CONTAINER_DELETION_ENTRY_READ_TIME = "ContainerDeletionEntryReadTime";
   public static final String DOCUMENT_UPDATE_TIME = "DocumentUpdateTime";
   public static final String DOCUMENT_DELETE_TIME = "DocumentDeleteTime";
   public static final String DOCUMENT_QUERY_COUNT = "DocumentQueryCount";
@@ -47,6 +48,7 @@ public class AzureMetrics {
   public static final String CHANGE_FEED_CACHE_MISS_RATE = "ChangeFeedCacheMissRate";
   public static final String CHANGE_FEED_CACHE_REFRESH_RATE = "ChangeFeedCacheRefreshRate";
   public static final String DEAD_BLOBS_QUERY_TIME = "DeadBlobsQueryTime";
+  public static final String DELETED_CONTAINER_BLOBS_QUERY_TIME = "DeletedContainerBlobsQueryTime";
   public static final String FIND_SINCE_QUERY_TIME = "FindSinceQueryTime";
   public static final String BLOB_UPDATE_ERROR_COUNT = "BlobUpdateErrorCount";
   public static final String BLOB_UPDATE_RECOVER_COUNT = "BlobUpdateRecoverCount";
@@ -83,6 +85,7 @@ public class AzureMetrics {
   public final Timer blobUpdateTime;
   public final Timer documentCreateTime;
   public final Timer documentReadTime;
+  public final Timer continerDeletionEntryReadTime;
   public final Timer documentUpdateTime;
   public final Timer documentDeleteTime;
   public final Timer missingKeysQueryTime;
@@ -95,6 +98,7 @@ public class AzureMetrics {
   public final Counter changeFeedQueryCount;
   public final Counter changeFeedQueryFailureCount;
   public final Timer deadBlobsQueryTime;
+  public final Timer deletedContainerBlobsQueryTime;
   public final Timer findSinceQueryTime;
   public final Counter blobUpdateErrorCount;
   /* Tracks updates that recovered a missing Cosmos record */
@@ -138,6 +142,8 @@ public class AzureMetrics {
     blobUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TIME));
     documentCreateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_CREATE_TIME));
     documentReadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_READ_TIME));
+    continerDeletionEntryReadTime =
+        registry.timer(MetricRegistry.name(AzureContainerCompactor.class, CONTAINER_DELETION_ENTRY_READ_TIME));
     documentUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_UPDATE_TIME));
     documentDeleteTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_DELETE_TIME));
     documentQueryCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_QUERY_COUNT));
@@ -155,6 +161,8 @@ public class AzureMetrics {
     changeFeedCacheRefreshRate =
         registry.meter(MetricRegistry.name(AzureCloudDestination.class, CHANGE_FEED_CACHE_REFRESH_RATE));
     deadBlobsQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DEAD_BLOBS_QUERY_TIME));
+    deletedContainerBlobsQueryTime =
+        registry.timer(MetricRegistry.name(AzureCloudDestination.class, DELETED_CONTAINER_BLOBS_QUERY_TIME));
     findSinceQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, FIND_SINCE_QUERY_TIME));
     blobUpdateErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_ERROR_COUNT));
     blobUpdateRecoverCount =

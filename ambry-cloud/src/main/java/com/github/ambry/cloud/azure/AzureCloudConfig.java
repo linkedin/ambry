@@ -35,6 +35,7 @@ public class AzureCloudConfig {
   public static final String AZURE_STORAGE_SCOPE = "azure.storage.scope";
   public static final String AZURE_STORAGE_ENDPOINT = "azure.storage.endpoint";
   public static final String COSMOS_QUERY_BATCH_SIZE = "cosmos.query.batch.size";
+  public static final String COSMOS_CONTAINER_DELETION_BATCH_SIZE = "cosmos.container.deletion.batch.size";
   public static final String COSMOS_REQUEST_CHARGE_THRESHOLD = "cosmos.request.charge.threshold";
   public static final String COSMOS_CONTINUATION_TOKEN_LIMIT_KB = "cosmos.continuation.token.limit.kb";
   public static final String AZURE_PURGE_BATCH_SIZE = "azure.purge.batch.size";
@@ -42,12 +43,17 @@ public class AzureCloudConfig {
   public static final String AZURE_NAME_SCHEME_VERSION = "azure.name.scheme.version";
   public static final String AZURE_BLOB_CONTAINER_STRATEGY = "azure.blob.container.strategy";
   public static final String AZURE_STORAGE_CLIENT_CLASS = "azure.storage.client.class";
+  public static final String CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT = "container.compaction.cosmos.query.limit";
+  public static final String CONTAINER_COMPACTION_ABS_PURGE_LIMIT = "container.compaction.abs.purge.limit";
   // Per docs.microsoft.com/en-us/rest/api/storageservices/blob-batch
   public static final int MAX_PURGE_BATCH_SIZE = 256;
   public static final int DEFAULT_PURGE_BATCH_SIZE = 100;
   public static final int DEFAULT_QUERY_BATCH_SIZE = 100;
   public static final int DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT = 4;
   public static final int DEFAULT_COSMOS_REQUEST_CHARGE_THRESHOLD = 100;
+  public static final int DEFAULT_COSMOS_CONTAINER_DELETION_BATCH_SIZE = 100;
+  public static final int DEFAULT_CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT = 100;
+  public static final int DEFAULT_CONTAINER_COMPACTION_ABS_PURGE_LIMIT = 100;
 
   public static final int DEFAULT_NAME_SCHEME_VERSION = 0;
   public static final String DEFAULT_CONTAINER_STRATEGY = "Partition";
@@ -105,6 +111,9 @@ public class AzureCloudConfig {
    */
   @Config(COSMOS_QUERY_BATCH_SIZE)
   public final int cosmosQueryBatchSize;
+
+  @Config(COSMOS_CONTAINER_DELETION_BATCH_SIZE)
+  public final int cosmosContainerDeletionBatchSize;
 
   /**
    * The size limit in KB on Cosmos continuation token.
@@ -164,6 +173,18 @@ public class AzureCloudConfig {
   @Config(AZURE_STORAGE_CLIENT_CLASS)
   public final String azureStorageClientClass;
 
+  /*
+   *  Number of blobs to fetch from Cosmos db for each container compaction query.
+   */
+  @Config(CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT)
+  public int containerCompactionCosmosQueryLimit;
+
+  /**
+   * Number of blobs to purge from ABS in each container compaction purge request.
+   */
+  @Config(CONTAINER_COMPACTION_ABS_PURGE_LIMIT)
+  public int containerCompactionAbsPurgeLimit;
+
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
@@ -189,5 +210,11 @@ public class AzureCloudConfig {
     azureNameSchemeVersion = verifiableProperties.getInt(AZURE_NAME_SCHEME_VERSION, DEFAULT_NAME_SCHEME_VERSION);
     azureStorageClientClass =
         verifiableProperties.getString(AZURE_STORAGE_CLIENT_CLASS, DEFAULT_AZURE_STORAGE_CLIENT_CLASS);
+    cosmosContainerDeletionBatchSize =
+        verifiableProperties.getInt(COSMOS_CONTAINER_DELETION_BATCH_SIZE, DEFAULT_COSMOS_CONTAINER_DELETION_BATCH_SIZE);
+    containerCompactionAbsPurgeLimit =
+        verifiableProperties.getInt(CONTAINER_COMPACTION_ABS_PURGE_LIMIT, DEFAULT_CONTAINER_COMPACTION_ABS_PURGE_LIMIT);
+    containerCompactionCosmosQueryLimit = verifiableProperties.getIntInRange(CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT,
+        DEFAULT_CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT, 1, Integer.MAX_VALUE);
   }
 }

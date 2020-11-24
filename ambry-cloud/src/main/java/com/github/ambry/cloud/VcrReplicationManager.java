@@ -54,6 +54,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final VcrMetrics vcrMetrics;
   private final VirtualReplicatorCluster virtualReplicatorCluster;
   private final CloudStorageCompactor cloudStorageCompactor;
+  private final CloudContainerCompactor cloudContainerCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
   private final boolean trackPerDatacenterLagInMetric;
 
@@ -77,6 +78,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudStorageCompactor =
         cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
             partitionToPartitionInfo.keySet(), vcrMetrics) : null;
+    this.cloudContainerCompactor = cloudDestination.getContainerCompactor();
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     // We need a datacenter to replicate from, which should be specified in the cloud config.
     if (cloudConfig.vcrSourceDatacenters.isEmpty()) {
@@ -123,19 +125,37 @@ public class VcrReplicationManager extends ReplicationEngine {
 
     // start background persistent thread
     // start scheduler thread to persist index in the background
-    scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
-        replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
+    scheduleTask(persistor, true, replicationConfig.replicationTokenFlushDelaySeconds,
+        replicationConfig.replicationTokenFlushIntervalSeconds, "replica token persistor");
 
-    if (cloudConfig.cloudBlobCompactionEnabled) {
-      // Schedule thread to purge dead blobs for this VCR's partitions
-      // after delay to allow startup to finish.
-      long delaySec = cloudConfig.cloudBlobCompactionStartupDelaySecs;
-      long intervalSec = TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours);
-      scheduler.scheduleAtFixedRate(cloudStorageCompactor, delaySec, intervalSec, TimeUnit.SECONDS);
-      logger.info("Scheduled compaction task to run every {} hours starting in {} seconds.",
-          cloudConfig.cloudBlobCompactionIntervalHours, delaySec);
+    // Schedule thread to purge dead blobs for this VCR's partitions
+    // after delay to allow startup to finish.
+    scheduleTask(cloudStorageCompactor, cloudConfig.cloudBlobCompactionEnabled,
+        cloudConfig.cloudBlobCompactionStartupDelaySecs,
+        TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), "cloud blob compaction");
+
+    // Schedule thread to purge blobs belonging to deprecated containers for this VCR's partitions
+    // after delay to allow startup to finish.
+    scheduleTask(() -> cloudContainerCompactor.compactAssignedDeprecatedContainers(
+        virtualReplicatorCluster.getAssignedPartitionIds()), cloudConfig.cloudContainerCompactionEnabled,
+        cloudConfig.cloudContainerCompactionStartupDelaySecs,
+        TimeUnit.HOURS.toSeconds(cloudConfig.cloudContainerCompactionIntervalHours), "cloud container compaction");
+  }
+
+  /**
+   * Schedule the specified task if enabled with the specified delay and interval.
+   * @param task {@link Runnable} task to be scheduled.
+   * @param isEnabled flag indicating if the task is enabled. If false the task is not scheduled.
+   * @param delaySec initial delay to allow startup to finish before starting task.
+   * @param intervalSec period between successive executions.
+   * @param taskName name of the task being scheduled.
+   */
+  private void scheduleTask(Runnable task, boolean isEnabled, long delaySec, long intervalSec, String taskName) {
+    if (isEnabled) {
+      scheduler.scheduleAtFixedRate(task, delaySec, intervalSec, TimeUnit.SECONDS);
+      logger.info("Scheduled {} task to run every {} seconds starting in {} seconds.", taskName, intervalSec, delaySec);
     } else {
-      logger.warn("Running with compaction turned off!");
+      logger.warn("Running with {} turned off!", taskName);
     }
   }
 
@@ -222,6 +242,9 @@ public class VcrReplicationManager extends ReplicationEngine {
     // TODO: can do these in parallel
     if (cloudStorageCompactor != null) {
       cloudStorageCompactor.shutdown();
+    }
+    if (cloudContainerCompactor != null) {
+      cloudContainerCompactor.shutdown();
     }
     super.shutdown();
   }

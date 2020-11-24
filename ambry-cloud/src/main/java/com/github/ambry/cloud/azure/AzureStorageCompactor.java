@@ -218,7 +218,9 @@ public class AzureStorageCompactor {
       if (isShuttingDown()) {
         break;
       }
-      totalPurged += requestAgent.doWithRetries(() -> purgeBlobs(deadBlobs), "PurgeBlobs", partitionPath);
+      totalPurged += requestAgent.doWithRetries(
+          () -> AzureCompactionUtil.purgeBlobs(deadBlobs, azureBlobDataAccessor, azureMetrics, cosmosDataAccessor),
+          "PurgeBlobs", partitionPath);
       vcrMetrics.blobCompactionRate.mark(deadBlobs.size());
 
       // Adjust startTime for next query
@@ -261,44 +263,6 @@ public class AzureStorageCompactor {
     } catch (DocumentClientException dex) {
       throw AzureCloudDestination.toCloudStorageException(
           "Failed to query deleted blobs for partition " + partitionPath, dex, azureMetrics);
-    }
-  }
-
-  /**
-   * Permanently delete the specified blobs in Azure storage.
-   * @param blobMetadataList the list of {@link CloudBlobMetadata} referencing the blobs to purge.
-   * @return the number of blobs successfully purged.
-   * @throws CloudStorageException if the purge operation fails for any blob.
-   */
-  int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws CloudStorageException {
-    if (blobMetadataList.isEmpty()) {
-      return 0;
-    }
-    azureMetrics.blobDeleteRequestCount.inc(blobMetadataList.size());
-    long t0 = System.currentTimeMillis();
-    try {
-      List<CloudBlobMetadata> deletedBlobs = azureBlobDataAccessor.purgeBlobs(blobMetadataList);
-      long t1 = System.currentTimeMillis();
-      int deletedCount = deletedBlobs.size();
-      azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size() - deletedCount);
-      if (deletedCount > 0) {
-        // Record as time per single blob deletion
-        azureMetrics.blobDeletionTime.update((t1 - t0) / deletedCount, TimeUnit.MILLISECONDS);
-      } else {
-        // Note: should not get here since purgeBlobs throws exception if any blob exists and could not be deleted.
-        return 0;
-      }
-
-      // Remove them from Cosmos too
-      cosmosDataAccessor.deleteMetadata(deletedBlobs);
-      long t2 = System.currentTimeMillis();
-      // Record as time per single record deletion
-      azureMetrics.documentDeleteTime.update((t2 - t1) / deletedCount, TimeUnit.MILLISECONDS);
-      azureMetrics.blobDeletedCount.inc(deletedCount);
-      return deletedCount;
-    } catch (Exception ex) {
-      azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size());
-      throw AzureCloudDestination.toCloudStorageException("Failed to purge all blobs", ex, azureMetrics);
     }
   }
 

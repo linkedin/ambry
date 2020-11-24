@@ -128,7 +128,7 @@ public class CloudBlobStoreIntegrationTest {
     vcrMetrics = new VcrMetrics(registry);
     azureMetrics = new AzureMetrics(registry);
     CloudDestinationFactory cloudDestinationFactory =
-        Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties, registry);
+        Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties, registry, clusterMap);
     cloudDestination = cloudDestinationFactory.getCloudDestination();
     cloudBlobStore = new CloudBlobStore(verifiableProperties, partitionId, cloudDestination, clusterMap, vcrMetrics);
     cloudBlobStore.start();

@@ -24,6 +24,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -39,7 +40,8 @@ import java.util.stream.Collectors;
 public class StaticVcrCluster implements VirtualReplicatorCluster {
 
   private final DataNodeId currentDataNode;
-  private final List<PartitionId> assignedPartitionIds;
+  private final Map<String, PartitionId> partitionIdMap;
+  private final Set<PartitionId> assignedPartitionIds;
   private final List<VirtualReplicatorClusterListener> listeners = new ArrayList<>();
 
   /**
@@ -57,10 +59,9 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
         Collections.unmodifiableSet(new HashSet<>(Arrays.asList(cloudConfig.vcrAssignedPartitions.split(","))));
     List<? extends PartitionId> allPartitions = clusterMap.getAllPartitionIds(null);
     // map partitions by path
-    Map<String, PartitionId> partitionIdMap =
-        allPartitions.stream().collect(Collectors.toMap(PartitionId::toPathString, Function.identity()));
+    partitionIdMap = allPartitions.stream().collect(Collectors.toMap(PartitionId::toPathString, Function.identity()));
 
-    assignedPartitionIds = new ArrayList<>();
+    assignedPartitionIds = new HashSet<>();
     for (String id : assignedPartitionSet) {
       if (!partitionIdMap.containsKey(id)) {
         throw new IllegalArgumentException("Invalid partition specified: " + id);
@@ -90,8 +91,14 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
   }
 
   @Override
-  public List<? extends PartitionId> getAssignedPartitionIds() {
-    return assignedPartitionIds;
+  public Collection<? extends PartitionId> getAssignedPartitionIds() {
+    return Collections.unmodifiableCollection(assignedPartitionIds);
+  }
+
+  @Override
+  public boolean isPartitionAssigned(String partitionPath) {
+    return (partitionIdMap.get(partitionPath) != null) && assignedPartitionIds.contains(
+        partitionIdMap.get(partitionPath));
   }
 
   @Override
