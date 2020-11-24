@@ -68,10 +68,12 @@ public class StatsSnapshot {
    */
   public StatsSnapshot(StatsSnapshot original) {
     this.value = original.value;
-    this.subMap = new HashMap<>(original.subMap.size());
-    original.subMap.forEach((k, v) -> {
-      this.subMap.put(k, new StatsSnapshot(v));
-    });
+    if (original.subMap != null) {
+      this.subMap = new HashMap<>(original.subMap.size());
+      original.subMap.forEach((k, v) -> {
+        this.subMap.put(k, new StatsSnapshot(v));
+      });
+    }
   }
 
   public long getValue() {

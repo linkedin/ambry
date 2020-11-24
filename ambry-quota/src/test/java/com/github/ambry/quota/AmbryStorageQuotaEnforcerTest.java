@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.utils.TestUtils;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
