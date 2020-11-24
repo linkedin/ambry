@@ -290,7 +290,8 @@ public class HelixClusterManagerTest {
     partitionToTest.addReplica(new Replica(partitionToTest, diskOnNewNode, testHardwareLayout1.clusterMapConfig));
     Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
     testCluster.upgradeWithNewHardwareLayout(testHardwareLayoutPath);
-    testCluster.upgradeWithNewPartitionLayout(testPartitionLayoutPath);
+    testCluster.upgradeWithNewPartitionLayout(testPartitionLayoutPath,
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster);
 
     // reset hardware/partition layout, this also resets replica capacity of partitionToTest. However, it won't touch
     // instanceConfig of new added node because it is not in hardware layout. So, replica on new added node still has
@@ -302,7 +303,8 @@ public class HelixClusterManagerTest {
     Utils.writeJsonObjectToFile(testHardwareLayout1.getHardwareLayout().toJSONObject(), testHardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
     testCluster.upgradeWithNewHardwareLayout(testHardwareLayoutPath);
-    testCluster.upgradeWithNewPartitionLayout(testPartitionLayoutPath);
+    testCluster.upgradeWithNewPartitionLayout(testPartitionLayoutPath,
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster);
 
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);
@@ -941,7 +943,8 @@ public class HelixClusterManagerTest {
       // Following test re-initializes clusterManager with new partitionLayout and then triggers instanceConfig change on new added partition
       testPartitionLayout.addNewPartitions(1, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, helixDcs[0]);
       Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-      helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+      helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath,
+          HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster);
       clusterManager.close();
       Map<String, ZNRecord> znRecordMap = new HashMap<>();
       znRecordMap.put(PARTITION_OVERRIDE_ZNODE_PATH, znRecord);

@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -75,11 +76,6 @@ public class ClusterChangeHandlerTest {
   private final HelixClusterManagerTest.MockHelixManagerFactory helixManagerFactory;
   private final Properties props = new Properties();
 
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
-  }
-
   // set up a mock helix cluster, create separate HelixClusterManager with both Simple and Dynamic cluster change handler
   public ClusterChangeHandlerTest(boolean overrideEnabled) throws Exception {
     this.overrideEnabled = overrideEnabled;
@@ -128,6 +124,11 @@ public class ClusterChangeHandlerTest {
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath);
     helixManagerFactory = new HelixClusterManagerTest.MockHelixManagerFactory(helixCluster, znRecordMap, null);
+  }
+
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
   }
 
   /**
@@ -491,7 +492,8 @@ public class ClusterChangeHandlerTest {
     testPartitionLayout.addReplicaToPartition(nodeToAddPartition2, (Partition) partition2);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
 
-    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath,
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster);
 
     List<PartitionId> partitionsInManager = helixClusterManager.getAllPartitionIds(null);
     PartitionId ambryPartition1 =
@@ -546,7 +548,8 @@ public class ClusterChangeHandlerTest {
     // 3. We upgrade helix by adding new replica to the chosen node in local dc. This is to mock "replica addition" on
     //    chosen node and chosen node updates its instanceConfig in Helix. There should be 7 (= 6+1) replicas in the
     //    intermediate state.
-    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath,
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster);
     PartitionId partitionInManager = helixClusterManager.getAllPartitionIds(null)
         .stream()
         .filter(p -> p.toPathString().equals(testPartition.toPathString()))
@@ -562,9 +565,20 @@ public class ClusterChangeHandlerTest {
         .get();
     testPartitionLayout.removeReplicaFromPartition(oldReplica);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-    // 5. upgrade Helix again to mock one of the old replicas is removed and the node (where replica previously resides)
-    //    updates the InstanceConfig in Helix. The number of replicas should become 6 again.
-    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+    // 5. disable the replica in Helix to mock replica decommission which will remove it from InstanceConfig but keep it
+    //    in IdealState temporarily.
+    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath,
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.DisablePartition);
+    Set<ReplicaId> replicasInDifferentStates = new HashSet<>();
+    for (ReplicaState state : EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.OFFLINE,
+        ReplicaState.INACTIVE, ReplicaState.BOOTSTRAP)) {
+      replicasInDifferentStates.addAll(partitionInManager.getReplicaIdsByState(state, null));
+    }
+    // verify there is no null replica
+    replicasInDifferentStates.forEach(r -> assertNotNull("found null replica", r));
+    // 6. updates the IdealState in Helix. The number of replicas should become 6 again.
+    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath,
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.UpdateIdealState);
     assertEquals("Replica count of testing partition is not correct", previousReplicaCnt,
         partitionInManager.getReplicaIds().size());
 
@@ -622,7 +636,8 @@ public class ClusterChangeHandlerTest {
     // test case 1: without populating bootstrap replica, new replica in InstanceConfig will trigger exception on current
     // node (this shouldn't happen in practice but we still mock this situation to perform exhaustive testing)
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath,
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster);
     assertEquals("Replica count of testing partition shouldn't change", previousReplicaCnt,
         partitionInManager.getReplicaIds().size());
     // verify there is an exception when handling instance config change due to replica not found in bootstrap replica map
@@ -650,7 +665,8 @@ public class ClusterChangeHandlerTest {
     // add replica of new partition2 to currentNode
     testPartitionLayout.addReplicaToPartition(currentNode, addedPartition2);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath,
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster);
 
     partitionInManager = helixClusterManager.getAllPartitionIds(null)
         .stream()

@@ -35,18 +35,20 @@ import org.apache.helix.model.MaintenanceSignal;
 import org.apache.helix.model.ResourceConfig;
 import org.apache.helix.model.StateModelDefinition;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
+
 
 /**
  * Mock implementation of {@link HelixAdmin} which stores all information internally.
  */
 public class MockHelixAdmin implements HelixAdmin {
-  private String clusterName;
   private final Map<String, InstanceConfig> instanceNameToinstanceConfigs = new HashMap<>();
   private final Map<String, IdealState> resourcesToIdealStates = new HashMap<>();
   private final Set<String> upInstances = new HashSet<>();
   private final Set<String> downInstances = new HashSet<>();
-  private long totalDiskCount = 0;
   private final List<MockHelixManager> helixManagersForThisAdmin = new ArrayList<>();
+  private String clusterName;
+  private long totalDiskCount = 0;
   private Map<String, Set<String>> partitionToInstances = new HashMap<>();
   private Map<String, PartitionState> partitionToPartitionStates = new HashMap<>();
   // A map of instanceName to state infos of all replicas on this instance
@@ -148,8 +150,42 @@ public class MockHelixAdmin implements HelixAdmin {
   @Override
   public boolean setInstanceConfig(String clusterName, String instanceName, InstanceConfig instanceConfig) {
     setInstanceConfigCallCount++;
+    removeDisabledReplicasIfNeeded(instanceConfig);
     instanceNameToinstanceConfigs.put(instanceName, instanceConfig);
     return true;
+  }
+
+  /**
+   * Remove disabled replicas from InstanceConfig if needed. This is to mock last step of disabling replica, which will
+   * remove the replica entry from InstanceConfig.
+   * @param instanceConfig the instanceConfig to check.
+   */
+  private void removeDisabledReplicasIfNeeded(InstanceConfig instanceConfig) {
+    Map<String, List<String>> disabledReplicasByResource = instanceConfig.getDisabledPartitionsMap();
+    if (!disabledReplicasByResource.isEmpty()) {
+      // if disabled replica map is not empty, we remove those replicas from InstanceConfig to mock replica decommission
+      Set<String> replicasToRemove = new HashSet<>();
+      disabledReplicasByResource.values().forEach(replicasToRemove::addAll);
+      Map<String, Map<String, String>> newMapFields = new HashMap<>();
+      Map<String, Map<String, String>> mapFields = instanceConfig.getRecord().getMapFields();
+      for (Map.Entry<String, Map<String, String>> entry : mapFields.entrySet()) {
+        if (entry.getKey().startsWith("/mnt")) {
+          String replicasStr = entry.getValue().get(REPLICAS_STR);
+          if (!replicasStr.isEmpty()) {
+            String[] replicaArray = replicasStr.split(REPLICAS_DELIM_STR);
+            StringBuilder sb = new StringBuilder();
+            for (String replicaStr : replicaArray) {
+              if (!replicasToRemove.contains(replicaStr.split(REPLICAS_STR_SEPARATOR)[0])) {
+                sb.append(replicaStr).append(REPLICAS_DELIM_STR);
+              }
+            }
+            entry.getValue().put(REPLICAS_STR, sb.toString());
+          }
+          newMapFields.put(entry.getKey(), entry.getValue());
+        }
+      }
+      instanceConfig.getRecord().setMapFields(newMapFields);
+    }
   }
 
   /**
@@ -407,35 +443,14 @@ public class MockHelixAdmin implements HelixAdmin {
     return setInstanceConfigCallCount;
   }
 
-  /**
-   * Private class that holds partition state infos from one data node.
-   */
-  class ReplicaStateInfos {
-    Map<String, Map<String, String>> replicaStateMap;
-
-    ReplicaStateInfos() {
-      replicaStateMap = new HashMap<>();
-    }
-
-    void setReplicaState(String partition, String state) {
-      Map<String, String> stateMap = new HashMap<>();
-      stateMap.put(CurrentState.CurrentStateProperty.CURRENT_STATE.name(), state);
-      replicaStateMap.put(partition, stateMap);
-    }
-
-    Map<String, Map<String, String>> getReplicaStateMap() {
-      return replicaStateMap;
-    }
+  @Override
+  public List<String> getResourcesInClusterWithTag(String clusterName, String tag) {
+    throw new IllegalStateException("Not implemented");
   }
 
   // ***************************************
   // Not implemented. Implement as required.
   // ***************************************
-
-  @Override
-  public List<String> getResourcesInClusterWithTag(String clusterName, String tag) {
-    throw new IllegalStateException("Not implemented");
-  }
 
   @Override
   public boolean addCluster(String clusterName, boolean recreateIfExists) {
@@ -768,5 +783,26 @@ public class MockHelixAdmin implements HelixAdmin {
   @Override
   public Map<String, Boolean> validateInstancesForWagedRebalance(String clusterName, List<String> instancesNames) {
     return null;
+  }
+
+  /**
+   * Private class that holds partition state infos from one data node.
+   */
+  class ReplicaStateInfos {
+    Map<String, Map<String, String>> replicaStateMap;
+
+    ReplicaStateInfos() {
+      replicaStateMap = new HashMap<>();
+    }
+
+    void setReplicaState(String partition, String state) {
+      Map<String, String> stateMap = new HashMap<>();
+      stateMap.put(CurrentState.CurrentStateProperty.CURRENT_STATE.name(), state);
+      replicaStateMap.put(partition, stateMap);
+    }
+
+    Map<String, Map<String, String>> getReplicaStateMap() {
+      return replicaStateMap;
+    }
   }
 }
