@@ -72,7 +72,6 @@ public class CosmosDataAccessor {
   private static final String LIMIT_PARAM = "@limit";
   private static final String ACCOUNT_ID_PARAM = "@accountId";
   private static final String CONTAINER_ID_PARAM = "@containerId";
-  private static final String MAX_ENTRIES_PARAM = "@maxEntries";
   private static final String EXPIRED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
   private static final String DELETED_BLOBS_QUERY = constructDeadBlobsQuery(CloudBlobMetadata.FIELD_DELETION_TIME);
   private static final String CONTAINER_BLOBS_QUERY =
@@ -80,7 +79,7 @@ public class CosmosDataAccessor {
           + CONTAINER_ID_PARAM;
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
   private static final String DEPRECATED_CONTAINERS_QUERY =
-      "SELECT TOP " + MAX_ENTRIES_PARAM + " * from c WHERE c.deleted=false order by c.deleteTriggerTimestamp";
+      "SELECT TOP " + LIMIT_PARAM + " * from c WHERE c.deleted=false order by c.deleteTriggerTimestamp";
   static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
   static final String PROPERTY_CONTINUATION = "continuation";
   static final String PROPERTY_DELETED = "deleted";
@@ -621,7 +620,7 @@ public class CosmosDataAccessor {
    */
   public Set<CosmosContainerDeletionEntry> getDeprecatedContainers(int maxEntries) throws DocumentClientException {
     SqlQuerySpec querySpec = new SqlQuerySpec(DEPRECATED_CONTAINERS_QUERY,
-        new SqlParameterCollection(new SqlParameter(MAX_ENTRIES_PARAM, maxEntries)));
+        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, maxEntries)));
     Timer timer = new Timer();
     Set<CosmosContainerDeletionEntry> containerDeletionEntries = new HashSet<>();
     try {
