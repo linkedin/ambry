@@ -29,6 +29,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLTransientConnectionException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -53,6 +54,7 @@ public class AccountDaoTest {
   private final AccountDao accountDao;
   private final MySqlMetrics metrics;
   private final PreparedStatement mockInsertStatement;
+  private final PreparedStatement mockUpdateStatement;
   private final PreparedStatement mockQueryStatement;
 
   public AccountDaoTest() throws SQLException {
@@ -63,8 +65,13 @@ public class AccountDaoTest {
     mockInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into"))).thenReturn(mockInsertStatement);
     when(mockInsertStatement.executeUpdate()).thenReturn(1);
+    when(mockInsertStatement.executeBatch()).thenReturn(new int[]{1});
     mockQueryStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(startsWith("select"))).thenReturn(mockQueryStatement);
+    mockUpdateStatement = mock(PreparedStatement.class);
+    when(mockConnection.prepareStatement(contains("update"))).thenReturn(mockUpdateStatement);
+    when(mockUpdateStatement.executeUpdate()).thenReturn(1);
+    when(mockUpdateStatement.executeBatch()).thenReturn(new int[]{1});
     ResultSet mockResultSet = mock(ResultSet.class);
     when(mockResultSet.next()).thenReturn(true).thenReturn(false);
     when(mockResultSet.getString(eq(AccountDao.ACCOUNT_INFO))).thenReturn(accountJson);
@@ -120,5 +127,25 @@ public class AccountDaoTest {
     when(mockQueryStatement.executeQuery()).thenThrow(new SQLTransientConnectionException());
     TestUtils.assertException(SQLTransientConnectionException.class, () -> accountDao.getNewAccounts(0L), null);
     assertEquals("Read failure count should be 1", 1, metrics.readFailureCount.getCount());
+  }
+
+  @Test
+  public void testBatchOperations() throws SQLException {
+    List<Account> accounts = new ArrayList<>();
+    int size = 11;
+    int batchSize = 5;
+    for (int i = 1; i <= size; i++) {
+      accounts.add(new AccountBuilder((short) i, "test account " + i, Account.AccountStatus.ACTIVE).build());
+    }
+
+    // test batch inserts
+    accountDao.addAccounts(accounts, batchSize);
+    verify(mockInsertStatement, times(size)).addBatch();
+    verify(mockInsertStatement, times(size / batchSize + 1)).executeBatch();
+
+    // test batch updates
+    accountDao.updateAccounts(accounts, batchSize);
+    verify(mockUpdateStatement, times(size)).addBatch();
+    verify(mockUpdateStatement, times(size / batchSize + 1)).executeBatch();
   }
 }
