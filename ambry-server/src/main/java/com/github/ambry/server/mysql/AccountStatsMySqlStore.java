@@ -226,7 +226,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @throws Exception
    */
   @Override
-  public void takeSnapshotOfAggregatedStatsSetMonth(String clusterName, String monthValue) throws Exception {
+  public void takeSnapshotOfAggregatedStatsAndUpdateMonth(String clusterName, String monthValue) throws Exception {
     aggregatedaccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
     aggregatedaccountReportsDao.updateMonth(clusterName, monthValue);
   }

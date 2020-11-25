@@ -70,9 +70,7 @@ public class StatsSnapshot {
     this.value = original.value;
     if (original.subMap != null) {
       this.subMap = new HashMap<>(original.subMap.size());
-      original.subMap.forEach((k, v) -> {
-        this.subMap.put(k, new StatsSnapshot(v));
-      });
+      original.subMap.forEach((k, v) -> this.subMap.put(k, new StatsSnapshot(v)));
     }
   }
 

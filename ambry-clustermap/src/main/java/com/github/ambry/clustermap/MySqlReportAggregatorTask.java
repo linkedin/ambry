@@ -65,20 +65,13 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
    */
   MySqlReportAggregatorTask(HelixManager manager, long relevantTimePeriodInMs, StatsReportType statsReportType,
       AccountStatsStore accountStatsStore, Callback<StatsSnapshot> callback, ClusterMapConfig clusterMapConfig) {
-    this(manager, relevantTimePeriodInMs, statsReportType, accountStatsStore, callback, clusterMapConfig,
-        SystemTime.getInstance());
-  }
-
-  MySqlReportAggregatorTask(HelixManager manager, long relevantTimePeriodInMs, StatsReportType statsReportType,
-      AccountStatsStore accountStatsStore, Callback<StatsSnapshot> callback, ClusterMapConfig clusterMapConfig,
-      Time time) {
     this.manager = manager;
     clusterAggregator = new HelixClusterAggregator(relevantTimePeriodInMs);
     this.statsReportType = statsReportType;
     this.accountStatsStore = accountStatsStore;
     this.callback = callback;
     this.clusterMapConfig = clusterMapConfig;
-    this.time = time;
+    this.time = SystemTime.getInstance();
   }
 
   @Override
@@ -106,13 +99,13 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
         String recordedMonthValue = accountStatsStore.queryRecordedMonth(clusterMapConfig.clusterMapClusterName);
         if (recordedMonthValue == null || recordedMonthValue.isEmpty() || !currentMonthValue.equals(
             recordedMonthValue)) {
-          accountStatsStore.takeSnapshotOfAggregatedStatsSetMonth(clusterMapConfig.clusterMapClusterName,
+          accountStatsStore.takeSnapshotOfAggregatedStatsAndUpdateMonth(clusterMapConfig.clusterMapClusterName,
               currentMonthValue);
         }
       }
       return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
     } catch (Exception e) {
-      logger.error("Exception thrown while aggregating stats from health reports across all nodes ", e);
+      logger.error("Exception thrown while aggregating stats from container stats reports across all nodes ", e);
       exception = e;
       return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
     } finally {

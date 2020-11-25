@@ -121,6 +121,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * Initiate the participation by registering via the {@link HelixManager} as a participant to the associated
    * Helix cluster.
    * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
+   * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
@@ -438,6 +439,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param engine the {@link StateMachineEngine} to register the task state model.
    * @param healthReports the {@link List} of {@link AmbryHealthReport}s that may require the registration of
    * corresponding {@link HelixHealthReportAggregatorTask}s.
+   * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
   private void registerHealthReportTasks(StateMachineEngine engine, List<AmbryHealthReport> healthReports,

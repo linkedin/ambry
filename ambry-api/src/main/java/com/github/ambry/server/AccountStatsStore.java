@@ -18,6 +18,7 @@ import java.util.Map;
 
 /**
  * The interface that stores and fetches account stats, aggregated account stats.
+ * TODO: Add methods to support partition class stats.
  */
 public interface AccountStatsStore {
   /**
@@ -82,7 +83,7 @@ public interface AccountStatsStore {
   /**
    * Return the month value of the current container storage snapshot.
    * @param clusterName The clusterName.
-   * @return The month value for current snapshot.
+   * @return The month value for current snapshot, like "2020-01"
    * @throws Exception
    */
   String queryRecordedMonth(String clusterName) throws Exception;
@@ -93,5 +94,5 @@ public interface AccountStatsStore {
    * @param monthValue The month in string format, like "2020-01".
    * @throws Exception
    */
-  void takeSnapshotOfAggregatedStatsSetMonth(String clusterName, String monthValue) throws Exception;
+  void takeSnapshotOfAggregatedStatsAndUpdateMonth(String clusterName, String monthValue) throws Exception;
 }

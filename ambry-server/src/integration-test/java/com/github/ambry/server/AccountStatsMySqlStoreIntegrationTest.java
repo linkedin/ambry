@@ -106,7 +106,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
       mySqlStore.storeAggregatedStats(snapshot);
       currentContainerStorageUsages = mySqlStore.queryAggregatedStats(clusterName1);
     }
-    mySqlStore.takeSnapshotOfAggregatedStatsSetMonth(clusterName1, monthValue);
+    mySqlStore.takeSnapshotOfAggregatedStatsAndUpdateMonth(clusterName1, monthValue);
     Map<String, Map<String, Long>> monthlyContainerStorageUsages = mySqlStore.queryMonthlyAggregatedStats(clusterName1);
     TestUtils.assertContainerMap(currentContainerStorageUsages, monthlyContainerStorageUsages);
     String obtainedMonthValue = mySqlStore.queryRecordedMonth(clusterName1);
