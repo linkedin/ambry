@@ -42,9 +42,9 @@ import org.slf4j.LoggerFactory;
  */
 public class MySqlReportAggregatorTask extends UserContentStore implements Task {
   public static final String TASK_COMMAND_PREFIX = "mysql_aggregate";
+  public static final ZoneOffset ZONE_OFFSET = ZoneId.systemDefault().getRules().getOffset(LocalDateTime.now());
+  public static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
   private static final Logger logger = LoggerFactory.getLogger(MySqlReportAggregatorTask.class);
-  private static final ZoneOffset zoneOffset = ZoneId.systemDefault().getRules().getOffset(LocalDateTime.now());
-  static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
   private final HelixClusterAggregator clusterAggregator;
   private final HelixManager manager;
   private final StatsReportType statsReportType;
@@ -95,7 +95,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
           && statsReportType == StatsReportType.ACCOUNT_REPORT) {
         // Get the month, if not the same month, then copy the aggregated stats and update the month
         String currentMonthValue =
-            LocalDateTime.ofEpochSecond(time.seconds(), 0, zoneOffset).format(TIMESTAMP_FORMATTER);
+            LocalDateTime.ofEpochSecond(time.seconds(), 0, ZONE_OFFSET).format(TIMESTAMP_FORMATTER);
         String recordedMonthValue = accountStatsStore.queryRecordedMonth(clusterMapConfig.clusterMapClusterName);
         if (recordedMonthValue == null || recordedMonthValue.isEmpty() || !currentMonthValue.equals(
             recordedMonthValue)) {

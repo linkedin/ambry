@@ -107,7 +107,7 @@ public class MySqlDataAccessor {
       if (isCredentialError(e)) {
         throw e;
       } else {
-        logger.error("No writable database available, will retry later.");
+        logger.error("No writable database available, will retry later.", e);
       }
     }
   }

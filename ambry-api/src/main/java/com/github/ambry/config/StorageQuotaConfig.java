@@ -23,6 +23,11 @@ public class StorageQuotaConfig {
   public static final String REFRESHER_POLLING_INTERVAL_MS = STORAGE_QUOTA_PREFIX + "refresher.polling.interval.ms";
   public static final String CONTAINER_STORAGE_QUOTA_IN_JSON = STORAGE_QUOTA_PREFIX + "container.storage.quota.in.json";
   public static final String SOURCE_POLLING_INTERVAL_MS = STORAGE_QUOTA_PREFIX + "source.polling.interval.ms";
+  public static final String BACKUP_FILE_DIR = STORAGE_QUOTA_PREFIX + "backup.file.dir";
+  public static final String MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC =
+      STORAGE_QUOTA_PREFIX + "mysql.monthly.base.fetch.offset.sec";
+  public static final String MYSQL_STORE_RETRY_BACKOFF_MS = STORAGE_QUOTA_PREFIX + "mysql.store.retry.backoff.ms";
+  public static final String MYSQL_STORE_RETRY_MAX = STORAGE_QUOTA_PREFIX + "mysql.store.retry.max";
 
   //////////////// Config for HelixStorageUsageRefresher ///////////////
 
@@ -77,6 +82,34 @@ public class StorageQuotaConfig {
   public final int sourcePollingIntervalMs;
 
   /**
+   * The directory to store quota related backup files. If empty, then backup files will be disabled.
+   */
+  @Config(BACKUP_FILE_DIR)
+  @Default("")
+  public final String backupFileDir;
+
+  /**
+   * Duration in milliseconds to backoff if the mysql database query failed.
+   */
+  @Config(MYSQL_STORE_RETRY_BACKOFF_MS)
+  @Default("10*60*1000")
+  public final long mysqlStoreRetryBackoffMs;
+
+  /**
+   * Maximum retry times to execute a mysql database query.
+   */
+  @Config(MYSQL_STORE_RETRY_MAX)
+  @Default("1")
+  public final int mysqlStoreRetryMax;
+
+  /**
+   * Offset in seconds to fetch container usage monthly base.
+   */
+  @Config(MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC)
+  @Default("60 * 60")
+  public final long mysqlMonthlyBaseFetchOffsetSec;
+
+  /**
    * Constructor to create a {@link StorageQuotaConfig}.
    * @param verifiableProperties The {@link VerifiableProperties} that contains all the properties.
    */
@@ -88,5 +121,9 @@ public class StorageQuotaConfig {
     containerStorageQuotaInJson = verifiableProperties.getString(CONTAINER_STORAGE_QUOTA_IN_JSON, "");
     sourcePollingIntervalMs =
         verifiableProperties.getIntInRange(SOURCE_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);
+    backupFileDir = verifiableProperties.getString(BACKUP_FILE_DIR, "");
+    mysqlStoreRetryBackoffMs = verifiableProperties.getLong(MYSQL_STORE_RETRY_BACKOFF_MS, 10 * 60 * 1000);
+    mysqlStoreRetryMax = verifiableProperties.getInt(MYSQL_STORE_RETRY_MAX, 1);
+    mysqlMonthlyBaseFetchOffsetSec = verifiableProperties.getLong(MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC, 60 * 60);
   }
 }
