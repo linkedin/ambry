@@ -161,6 +161,9 @@ public class MockHelixAdmin implements HelixAdmin {
    * @param instanceConfig the instanceConfig to check.
    */
   private void removeDisabledReplicasIfNeeded(InstanceConfig instanceConfig) {
+    if (instanceConfig == null) {
+      return;
+    }
     Map<String, List<String>> disabledReplicasByResource = instanceConfig.getDisabledPartitionsMap();
     if (!disabledReplicasByResource.isEmpty()) {
       // if disabled replica map is not empty, we remove those replicas from InstanceConfig to mock replica decommission

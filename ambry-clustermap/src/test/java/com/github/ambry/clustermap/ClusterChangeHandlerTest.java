@@ -76,6 +76,11 @@ public class ClusterChangeHandlerTest {
   private final HelixClusterManagerTest.MockHelixManagerFactory helixManagerFactory;
   private final Properties props = new Properties();
 
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
   // set up a mock helix cluster, create separate HelixClusterManager with both Simple and Dynamic cluster change handler
   public ClusterChangeHandlerTest(boolean overrideEnabled) throws Exception {
     this.overrideEnabled = overrideEnabled;
@@ -124,11 +129,6 @@ public class ClusterChangeHandlerTest {
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath);
     helixManagerFactory = new HelixClusterManagerTest.MockHelixManagerFactory(helixCluster, znRecordMap, null);
-  }
-
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
   }
 
   /**

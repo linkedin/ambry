@@ -250,11 +250,12 @@ public class RouterConfig {
   public final boolean routerGetCrossDcEnabled;
 
   /**
-   * Whether to
+   * Whether to include down(offline) replicas in replicas pool within operation tracker.
    */
   @Config(ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS)
   @Default("true")
   public final boolean routerOperationTrackerIncludeDownReplicas;
+
   /**
    * The OperationTracker to use for GET operations.
    */
