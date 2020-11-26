@@ -117,7 +117,18 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
   }
 
   private String stripPortNumber(String instanceName) {
-    return instanceName.replace("_" + clusterMapConfig.clusterMapPort, "");
+    int ind = instanceName.lastIndexOf("_");
+    if (ind == -1) {
+      return instanceName;
+    } else {
+      try {
+        Short.valueOf(instanceName.substring(ind + 1));
+      } catch (NumberFormatException e) {
+        // string after "_" is not a port number, then return instance name.
+        return instanceName;
+      }
+      return instanceName.substring(0, ind);
+    }
   }
 
   @Override

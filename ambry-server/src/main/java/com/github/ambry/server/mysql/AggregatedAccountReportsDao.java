@@ -57,7 +57,7 @@ public class AggregatedAccountReportsDao {
   private static final String queryUsageSqlForCluster =
       String.format("SELECT %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
           STORAGE_USAGE_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
-  private static final String queryMontlyUsageSqlForCluster =
+  private static final String queryMonthlyUsageSqlForCluster =
       String.format("SELECT %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
           STORAGE_USAGE_COLUMN, MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
   private static final String copySqlForCluster =
@@ -143,7 +143,7 @@ public class AggregatedAccountReportsDao {
       AggregatedContainerUsageFunction func) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
-      String sqlStatement = forMonthly ? queryMontlyUsageSqlForCluster : queryUsageSqlForCluster;
+      String sqlStatement = forMonthly ? queryMonthlyUsageSqlForCluster : queryUsageSqlForCluster;
       PreparedStatement queryStatement = dataAccessor.getPreparedStatement(sqlStatement, false);
       queryStatement.setString(1, clusterName);
       ResultSet resultSet = queryStatement.executeQuery();
