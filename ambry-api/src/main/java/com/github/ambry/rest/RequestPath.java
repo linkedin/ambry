@@ -216,7 +216,7 @@ public class RequestPath {
    * @return {@code true} if this request path matches the specified operation.
    */
   public boolean matchesOperation(String operation) {
-    return matchPathSegments(operationOrBlobId, 0, operation, true) >= 0;
+    return matchesOperation(operationOrBlobId, operation);
   }
 
   @Override
@@ -237,6 +237,18 @@ public class RequestPath {
     return "RequestPath{" + "prefix='" + prefix + '\'' + ", clusterName='" + clusterName + '\''
         + ", operationOrBlobId='" + operationOrBlobId + '\'' + ", subResource=" + subResource + ", blobSegmentIdx="
         + blobSegmentIdx + '}';
+  }
+
+  /**
+   * This will check if the request path matches the specified operation. This will check that that the first one or
+   * more path segments in the supplied path match the path segments in {@code operation}. For example,
+   * {@code /op} or {@code /op/sub} will match the operation {@code op}.
+   * @param path the path to check.
+   * @param operation the operation name to check the path against.
+   * @return {@code true} if this request path matches the specified operation.
+   */
+  public static boolean matchesOperation(String path, String operation) {
+    return matchPathSegments(path, 0, operation, true) >= 0;
   }
 
   /**

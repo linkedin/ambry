@@ -18,21 +18,22 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.StorageQuotaService;
-import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
+import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.commons.Callback;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
@@ -62,7 +63,6 @@ class FrontendRestRequestService implements RestRequestService {
   static final String TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE = "GET,HEAD,DELETE";
 
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
-  private static final String NAMED_BLOB_PREFIX = "/named";
 
   private static final String OPERATION_TYPE_INBOUND_ID_CONVERSION = "Inbound Id Conversion";
   private static final String OPERATION_TYPE_GET_RESPONSE_SECURITY = "GET Response Security";
@@ -225,9 +225,13 @@ class FrontendRestRequestService implements RestRequestService {
         if (subResource == SubResource.Replicas) {
           securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
         }
-        RestRequestMetrics restRequestMetrics =
-            getMetricsGroupForGet(frontendMetrics, subResource).getRestRequestMetrics(restRequest.isSslUsed(), false);
+        RestRequestMetricsGroup metricsGroup = getMetricsGroupForGet(frontendMetrics, subResource);
+        RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
         restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
+        // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
+        if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
+          accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metricsGroup);
+        }
         securityService.processRequest(restRequest, securityCallback);
       }
     };
@@ -268,7 +272,7 @@ class FrontendRestRequestService implements RestRequestService {
         undeleteHandler.handle(restRequest, restResponseChannel, (r, e) -> {
           submitResponse(restRequest, restResponseChannel, null, e);
         });
-      } else if (requestPath.getOperationOrBlobId(false).startsWith(NAMED_BLOB_PREFIX)) {
+      } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
         restRequest.setArg(SEND_FAILURE_REASON, Boolean.TRUE);
         namedBlobPutHandler.handle(restRequest, restResponseChannel,
             (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
@@ -286,6 +290,11 @@ class FrontendRestRequestService implements RestRequestService {
       RestRequestMetrics requestMetrics =
           frontendMetrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+      // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
+      if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
+        accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
+            frontendMetrics.deleteBlobMetricsGroup);
+      }
       DeleteCallback routerCallback = new DeleteCallback(restRequest, restResponseChannel);
       SecurityProcessRequestCallback securityCallback =
           new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
@@ -301,6 +310,11 @@ class FrontendRestRequestService implements RestRequestService {
       RestRequestMetrics requestMetrics =
           frontendMetrics.headBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+      // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
+      if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
+        accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
+            frontendMetrics.headBlobMetricsGroup);
+      }
       HeadCallback routerCallback = new HeadCallback(restRequest, restResponseChannel);
       SecurityProcessRequestCallback securityCallback =
           new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
@@ -533,7 +547,10 @@ class FrontendRestRequestService implements RestRequestService {
           } else if (deleteCallback != null) {
             metricsGroup = frontendMetrics.deleteBlobMetricsGroup;
           }
-          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest, metricsGroup);
+          // named blobs already have their account/container arguments set by handleGet/handleHead/handleDelete
+          if (!RestUtils.getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
+            accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest, metricsGroup);
+          }
           securityService.postProcessRequest(restRequest,
               securityPostProcessRequestCallback(result, restRequest, restResponseChannel, getCallback, headCallback,
                   deleteCallback));

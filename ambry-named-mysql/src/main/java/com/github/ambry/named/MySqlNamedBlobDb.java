@@ -32,7 +32,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Delayed;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
@@ -60,8 +59,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String BLOB_ID = "blob_id";
   private static final String DELETED_TS = "deleted_ts";
   private static final String EXPIRES_TS = "expires_ts";
+  // variables
+  private static final String FOUND_ID = "@found_id";
   // query building blocks
-  private static final String CURRENT_TIME_COMPARISON = "(%1$s IS NOT NULL AND %1$s <= CURRENT_TIMESTAMP(6))";
+  private static final String CURRENT_TIME = "CURRENT_TIMESTAMP(6)";
+  private static final String CURRENT_TIME_COMPARISON = "(%1$s IS NOT NULL AND %1$s <= " + CURRENT_TIME + ")";
   private static final String IS_DELETED = String.format(CURRENT_TIME_COMPARISON, DELETED_TS);
   private static final String IS_EXPIRED = String.format(CURRENT_TIME_COMPARISON, EXPIRES_TS);
   private static final String IS_DELETED_OR_EXPIRED = IS_DELETED + " OR " + IS_EXPIRED;
@@ -95,12 +97,15 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           + "%5$s = IF(%8$s, VALUES(%5$s), %5$s), %6$s = IF(%8$s, VALUES(%6$s), %6$s), %7$s = IF(%8$s, null, %7$s)",
       NAMED_BLOBS, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, EXPIRES_TS, DELETED_TS, IS_DELETED_OR_EXPIRED);
 
+  private static final String SELECT_FOR_DELETE_QUERY =
+      String.format("SELECT %s, %s, %s FROM %s WHERE %s FOR UPDATE", BLOB_ID, DELETED_TS, CURRENT_TIME, NAMED_BLOBS,
+          PK_MATCH);
+
   /**
    * Soft delete a blob by setting the delete timestamp to the current time if the blob is not already deleted.
    */
   private static final String DELETE_QUERY =
-      String.format("UPDATE %1$s SET %2$s = IF(%3$s, %2$s, CURRENT_TIMESTAMP(6)) WHERE %4$s", NAMED_BLOBS, DELETED_TS,
-          IS_DELETED, PK_MATCH);
+      String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS, DELETED_TS, PK_MATCH);
 
   private final AccountService accountService;
   private final Map<String, DataSource> dcToDataSource;
@@ -125,7 +130,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName) {
-    return executeTransactionAsync(accountName, containerName, (accountId, containerId, connection) -> {
+    return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       try (PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
         statement.setInt(1, accountId);
         statement.setInt(2, containerId);
@@ -156,7 +161,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   @Override
   public CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
       String continuationToken) {
-    return executeTransactionAsync(accountName, containerName, (accountId, containerId, connection) -> {
+    return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       try (PreparedStatement statement = connection.prepareStatement(LIST_QUERY)) {
         statement.setInt(1, accountId);
         statement.setInt(2, containerId);
@@ -197,7 +202,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<PutResult> put(NamedBlobRecord record) {
-    return executeTransactionAsync(record.getAccountName(), record.getContainerName(),
+    return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           try (PreparedStatement statement = connection.prepareStatement(PUT_QUERY)) {
             statement.setInt(1, accountId);
@@ -224,36 +229,52 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
-    return executeTransactionAsync(accountName, containerName, (accountId, containerId, connection) -> {
-      boolean notFoundOrAlreadyDeleted;
-      try (PreparedStatement statement = connection.prepareStatement(DELETE_QUERY)) {
+    return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
+      String blobId;
+      Timestamp currentTime;
+      boolean alreadyDeleted;
+      try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_DELETE_QUERY)) {
         statement.setInt(1, accountId);
         statement.setInt(2, containerId);
         statement.setString(3, blobName);
-        // affectedRows will be 0 if an entry for this blob name is not found or if there is an entry, but it was
-        // already marked deleted. Unfortunately, we cannot tell between these 2 cases with the useAffectedRows option,
-        // but since delete is an idempotent operation and recreation of named blobs after deletes is allowed, returning
-        // success in the not found case is probably okay.
-        notFoundOrAlreadyDeleted = statement.executeUpdate() == 0;
-        if (notFoundOrAlreadyDeleted) {
-          logger.trace("DELETE: Blob does not exist or is already deleted; account='{}', container='{}', name='{}'",
-              accountName, containerName, blobName);
+        try (ResultSet resultSet = statement.executeQuery()) {
+          if (!resultSet.next()) {
+            throw buildException("DELETE: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
+                blobName);
+          }
+          blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+          Timestamp deletionTime = resultSet.getTimestamp(2);
+          currentTime = resultSet.getTimestamp(3);
+          alreadyDeleted = (deletionTime != null && currentTime.after(deletionTime));
         }
       }
-      return new DeleteResult(notFoundOrAlreadyDeleted);
+      // only need to issue an update statement if the row was not already marked as deleted.
+      if (!alreadyDeleted) {
+        try (PreparedStatement statement = connection.prepareStatement(DELETE_QUERY)) {
+          // use the current tim
+          statement.setTimestamp(1, currentTime);
+          statement.setInt(2, accountId);
+          statement.setInt(3, containerId);
+          statement.setString(4, blobName);
+          statement.executeUpdate();
+        }
+      }
+      return new DeleteResult(blobId, alreadyDeleted);
     });
   }
 
   /**
    * Run a transaction on a thread pool and handle common logic surrounding looking up account metadata and error
    * handling. Eventually this will handle retries.
+   * @param <T> the return type of the {@link Transaction}.
    * @param accountName the account name for the transaction.
    * @param containerName the container name for the transaction.
+   * @param autoCommit true if each statement execution should be its own transaction. If set to false, this helper will
+   *                   handle calling commit/rollback.
    * @param transaction the {@link Transaction} to run. This can either be a read only query or include DML.
-   * @param <T> the return type of the {@link Transaction}.
    * @return a {@link CompletableFuture} that will eventually contain the result of the transaction or an exception.
    */
-  private <T> CompletableFuture<T> executeTransactionAsync(String accountName, String containerName,
+  private <T> CompletableFuture<T> executeTransactionAsync(String accountName, String containerName, boolean autoCommit,
       Transaction<T> transaction) {
     CompletableFuture<T> future = new CompletableFuture<>();
 
@@ -274,7 +295,23 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     executorService.submit(() -> {
       // TODO introduce failover handling (retry on remote datacenters, handle SQL exceptions)
       try (Connection connection = dcToDataSource.get(localDatacenter).getConnection()) {
-        future.complete(transaction.run(account.getId(), container.getId(), connection));
+        T result;
+        if (autoCommit) {
+          result = transaction.run(account.getId(), container.getId(), connection);
+        } else {
+          // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
+          connection.setAutoCommit(false);
+          try {
+            result = transaction.run(account.getId(), container.getId(), connection);
+            connection.commit();
+          } catch (Exception e) {
+            connection.rollback();
+            throw e;
+          } finally {
+            connection.setAutoCommit(true);
+          }
+        }
+        future.complete(result);
       } catch (Exception e) {
         future.completeExceptionally(e);
       }

@@ -19,21 +19,29 @@ package com.github.ambry.named;
  * Class to convey information about a successful deletion from {@link NamedBlobDb}.
  */
 public class DeleteResult {
-  private final boolean notFoundOrAlreadyDeleted;
+  private final String blobId;
+  private final boolean alreadyDeleted;
 
   /**
-   * @param notFoundOrAlreadyDeleted {@code true} if a record for the blob was not found in the DB or if the record
-   *                                 indicated that the blob was already deleted.
+   * @param blobId the blob ID from the deleted record.
+   * @param alreadyDeleted {@code true} if the record indicated that the blob was already deleted before this call.
    */
-  public DeleteResult(boolean notFoundOrAlreadyDeleted) {
-    this.notFoundOrAlreadyDeleted = notFoundOrAlreadyDeleted;
+  public DeleteResult(String blobId, boolean alreadyDeleted) {
+    this.blobId = blobId;
+    this.alreadyDeleted = alreadyDeleted;
   }
 
   /**
-   * @return {@code true} if a record for the blob was not found in the DB or if the record indicated that the blob was
-   *         already deleted.
+   * @return the blob ID from the deleted record.
    */
-  public boolean isNotFoundOrAlreadyDeleted() {
-    return notFoundOrAlreadyDeleted;
+  public String getBlobId() {
+    return blobId;
+  }
+
+  /**
+   * @return {@code true} if the record indicated that the blob was already deleted before this call.
+   */
+  public boolean isAlreadyDeleted() {
+    return alreadyDeleted;
   }
 }

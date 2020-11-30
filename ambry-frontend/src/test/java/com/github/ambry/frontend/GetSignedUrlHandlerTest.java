@@ -26,6 +26,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -34,6 +35,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.TestUtils;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -93,6 +95,8 @@ public class GetSignedUrlHandlerTest {
     urlSigningServiceFactory.signedUrlToReturn = TestUtils.getRandomString(10);
     // POST
     RestRequest restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
+    restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse("/signedUrl", Collections.emptyMap(), Collections.emptyList(), "Ambry-test"));
     restRequest.setArg(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
     restRequest.setArg(RestUtils.Headers.TARGET_ACCOUNT_NAME, REF_ACCOUNT.getName());
     restRequest.setArg(RestUtils.Headers.TARGET_CONTAINER_NAME, REF_CONTAINER.getName());
@@ -101,6 +105,8 @@ public class GetSignedUrlHandlerTest {
     idConverterFactory.translation = testBlobId.getID();
     // GET (also makes sure that the IDConverter is used)
     restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
+    restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse("/signedUrl", Collections.emptyMap(), Collections.emptyList(), "Ambry-test"));
     restRequest.setArg(RestUtils.Headers.URL_TYPE, RestMethod.GET.name());
     // add a random string. IDConverter will convert it
     restRequest.setArg(RestUtils.Headers.BLOB_ID, TestUtils.getRandomString(10));
@@ -173,6 +179,8 @@ public class GetSignedUrlHandlerTest {
    */
   private void verifyFailureWithMsg(String msg) throws Exception {
     RestRequest restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
+    restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse("/signedUrl", Collections.emptyMap(), Collections.emptyList(), "Ambry-test"));
     restRequest.setArg(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
     restRequest.setArg(RestUtils.Headers.TARGET_ACCOUNT_NAME, REF_ACCOUNT.getName());
     restRequest.setArg(RestUtils.Headers.TARGET_CONTAINER_NAME, REF_CONTAINER.getName());

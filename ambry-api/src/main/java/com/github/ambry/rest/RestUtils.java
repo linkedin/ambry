@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.frontend.NamedBlobPath;
+import com.github.ambry.frontend.Operations;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
@@ -910,22 +911,6 @@ public class RestUtils {
       }
     }
     return setHeaders;
-  }
-
-  /**
-   * Parse the input if it's the named blob request.
-   * @param input the url that needs to be parsed.
-   * @return the {@link NamedBlobPath} indicates the parsing result from blobUrl.
-   */
-  public static NamedBlobPath parseInput(String input) {
-    Objects.requireNonNull(input, "input should not be null");
-    String[] slashFields = input.split("/");
-    if (slashFields.length < 4) {
-      throw new IllegalArgumentException(
-          "File must have name format '/named/<account_name>/<container_name>/<blob_name>'.  Received: '" + input
-              + "'");
-    }
-    return new NamedBlobPath(slashFields[2], slashFields[3], slashFields[4]);
   }
 
   /**
