@@ -22,6 +22,7 @@ import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.server.mysql.AccountReportsDao;
 import com.github.ambry.server.mysql.AccountStatsMySqlStore;
 import com.github.ambry.server.mysql.AccountStatsMySqlStoreFactory;
+import com.github.ambry.server.mysql.AggregatedAccountReportsDao;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -33,6 +34,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -51,18 +53,19 @@ public class AccountStatsMySqlStoreIntegrationTest {
   private static final String hostname2 = "ambry2.test.github.com";
   private static final String hostname3 = "ambry3.test.github.com";
   private static final int port = 12345;
+  private final AccountStatsMySqlStore mySqlStore;
 
   public AccountStatsMySqlStoreIntegrationTest() throws Exception {
-    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, false);
+    mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, false);
     cleanup(mySqlStore.getMySqlDataAccessor());
   }
 
   /**
-   * Tests to publish multiple stats and recover stats from database.
+   * Tests to stores multiple stats and recover stats from database.
    * @throws Exception
    */
   @Test
-  public void testMultiStorePublish() throws Exception {
+  public void testMultiStoreStats() throws Exception {
     AccountStatsMySqlStore mySqlStore1 = createAccountStatsMySqlStore(clusterName1, hostname1, false);
     AccountStatsMySqlStore mySqlStore2 = createAccountStatsMySqlStore(clusterName1, hostname2, false);
     AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, false);
@@ -70,25 +73,51 @@ public class AccountStatsMySqlStoreIntegrationTest {
     StatsWrapper stats1 = generateStatsWrapper(10, 10, 1);
     StatsWrapper stats2 = generateStatsWrapper(10, 10, 1);
     StatsWrapper stats3 = generateStatsWrapper(10, 10, 1);
-    mySqlStore1.publish(stats1);
-    mySqlStore2.publish(stats2);
-    mySqlStore3.publish(stats3);
+    mySqlStore1.storeStats(stats1);
+    mySqlStore2.storeStats(stats2);
+    mySqlStore3.storeStats(stats3);
 
     assertTableSize(mySqlStore1.getMySqlDataAccessor(), 3 * 10 * 10);
 
-    StatsSnapshot obtainedStats1 = mySqlStore1.queryStatsSnapshotOf(clusterName1, hostname1);
-    StatsSnapshot obtainedStats2 = mySqlStore2.queryStatsSnapshotOf(clusterName1, hostname2);
-    StatsSnapshot obtainedStats3 = mySqlStore3.queryStatsSnapshotOf(clusterName2, hostname3);
-    assertTwoStatsSnapshots(obtainedStats1, stats1.getSnapshot());
-    assertTwoStatsSnapshots(obtainedStats2, stats2.getSnapshot());
-    assertTwoStatsSnapshots(obtainedStats3, stats3.getSnapshot());
+    StatsWrapper obtainedStats1 = mySqlStore1.queryStatsOf(clusterName1, hostname1);
+    StatsWrapper obtainedStats2 = mySqlStore2.queryStatsOf(clusterName1, hostname2);
+    StatsWrapper obtainedStats3 = mySqlStore3.queryStatsOf(clusterName2, hostname3);
+    assertTwoStatsSnapshots(obtainedStats1.getSnapshot(), stats1.getSnapshot());
+    assertTwoStatsSnapshots(obtainedStats2.getSnapshot(), stats2.getSnapshot());
+    assertTwoStatsSnapshots(obtainedStats3.getSnapshot(), stats3.getSnapshot());
   }
 
-  private AccountStatsMySqlStore createAccountStatsMySqlStore(String clustername, String hostname,
+  @Test
+  public void testAggregatedStats() throws Exception {
+    Map<String, Map<String, Long>> containerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
+    StatsSnapshot snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages);
+    mySqlStore.storeAggregatedStats(snapshot);
+    Map<String, Map<String, Long>> obtainedContainerStorageUsages = mySqlStore.queryAggregatedStats(clusterName1);
+    TestUtils.assertContainerMap(containerStorageUsages, obtainedContainerStorageUsages);
+  }
+
+  @Test
+  public void testMonthlyAggregatedStats() throws Exception {
+    String monthValue = "2020-01";
+    Map<String, Map<String, Long>> currentContainerStorageUsages = mySqlStore.queryAggregatedStats(clusterName1);
+    if (currentContainerStorageUsages.size() == 0) {
+      Map<String, Map<String, Long>> containerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
+      StatsSnapshot snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages);
+      mySqlStore.storeAggregatedStats(snapshot);
+      currentContainerStorageUsages = mySqlStore.queryAggregatedStats(clusterName1);
+    }
+    mySqlStore.takeSnapshotOfAggregatedStatsAndUpdateMonth(clusterName1, monthValue);
+    Map<String, Map<String, Long>> monthlyContainerStorageUsages = mySqlStore.queryMonthlyAggregatedStats(clusterName1);
+    TestUtils.assertContainerMap(currentContainerStorageUsages, monthlyContainerStorageUsages);
+    String obtainedMonthValue = mySqlStore.queryRecordedMonth(clusterName1);
+    assertTrue(obtainedMonthValue.equals(monthValue));
+  }
+
+  private AccountStatsMySqlStore createAccountStatsMySqlStore(String clusterName, String hostname,
       boolean withLocalbackup) throws Exception {
     Path localBackupFilePath = withLocalbackup ? createLocalBackup(10, 10, 1) : createTemporaryFile();
     Properties configProps = Utils.loadPropsFromResource("mysql.properties");
-    configProps.setProperty(ClusterMapConfig.CLUSTERMAP_CLUSTER_NAME, clustername);
+    configProps.setProperty(ClusterMapConfig.CLUSTERMAP_CLUSTER_NAME, clusterName);
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_HOST_NAME, hostname);
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "dc1");
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_PORT, String.valueOf(port));
@@ -126,6 +155,9 @@ public class AccountStatsMySqlStoreIntegrationTest {
     Connection dbConnection = dataAccessor.getDatabaseConnection(true);
     Statement statement = dbConnection.createStatement();
     statement.executeUpdate("DELETE FROM " + AccountReportsDao.ACCOUNT_REPORTS_TABLE);
+    statement.executeUpdate("DELETE FROM " + AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_TABLE);
+    statement.executeUpdate("DELETE FROM " + AggregatedAccountReportsDao.MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE);
+    statement.executeUpdate("DELETE FROM " + AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE);
   }
 
   private void assertTableSize(MySqlDataAccessor dataAccessor, int expectedNumRows) throws SQLException {

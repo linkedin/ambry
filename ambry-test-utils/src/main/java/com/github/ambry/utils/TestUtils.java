@@ -512,4 +512,70 @@ public class TestUtils {
             Collections.emptyList());
     return new StatsWrapper(header, nodeSnapshot);
   }
+
+  public static Map<String, Map<String, Long>> makeStorageMap(int numAccounts, int numContainerPerAccount,
+      long maxValue, long minValue) {
+    Random random = new Random();
+    Map<String, Map<String, Long>> accountMap = new HashMap<>();
+
+    short accountId = 1;
+    for (int i = 0; i < numAccounts; i++) {
+      Map<String, Long> containerMap = new HashMap<>();
+      accountMap.put(String.valueOf(accountId), containerMap);
+
+      short containerId = 1;
+      for (int j = 0; j < numContainerPerAccount; j++) {
+        long usage = Math.abs(random.nextLong()) % (maxValue - minValue) + minValue;
+        containerMap.put(String.valueOf(containerId), usage);
+        containerId++;
+      }
+      accountId++;
+    }
+    return accountMap;
+  }
+
+  /**
+   * Compare two storage maps and fail the test when they are not equal.
+   * @param expected The expected storage map.
+   * @param obtained The obtained storage map.
+   */
+  public static void assertContainerMap(Map<String, Map<String, Long>> expected,
+      Map<String, Map<String, Long>> obtained) {
+    assertEquals(expected.size(), obtained.size());
+    for (Map.Entry<String, Map<String, Long>> expectedEntry : expected.entrySet()) {
+      String accountId = expectedEntry.getKey();
+      Map<String, Long> expectedContainer = expectedEntry.getValue();
+      assertTrue("Obtained map does contain account id " + accountId, obtained.containsKey(accountId));
+      Map<String, Long> obtainedContainer = obtained.get(accountId);
+      assertEquals("Size doesn't match for account id " + accountId, expectedContainer.size(),
+          obtainedContainer.size());
+      for (Map.Entry<String, Long> expectedContainerEntry : expectedContainer.entrySet()) {
+        String containerId = expectedContainerEntry.getKey();
+        assertTrue("Obtained map doesn't contain container id " + containerId + " in account id " + accountId,
+            obtainedContainer.containsKey(containerId));
+        assertEquals("Usage doesn't match for account id " + accountId + " container id " + containerId,
+            expectedContainerEntry.getValue().longValue(), obtainedContainer.get(containerId).longValue());
+      }
+    }
+  }
+
+  public static StatsSnapshot makeStatsSnapshotFromContainerStorageMap(
+      Map<String, Map<String, Long>> containerStorageMap) {
+    Map<String, StatsSnapshot> accountSnapshots = new HashMap<>();
+    long sumOfAccountUsage = 0;
+    for (Map.Entry<String, Map<String, Long>> accountStorageUsageEntry : containerStorageMap.entrySet()) {
+      String accountId = accountStorageUsageEntry.getKey();
+      Map<String, StatsSnapshot> containerSnapshots = new HashMap<>();
+      long sumOfContainerUsage = 0;
+      for (Map.Entry<String, Long> containerStorageUsageEntry : accountStorageUsageEntry.getValue().entrySet()) {
+        String containerId = containerStorageUsageEntry.getKey();
+        long usage = containerStorageUsageEntry.getValue();
+        sumOfContainerUsage += usage;
+        containerSnapshots.put("C[" + containerId + "]", new StatsSnapshot(usage, null));
+      }
+      accountSnapshots.put("A[" + accountId + "]", new StatsSnapshot(sumOfContainerUsage, containerSnapshots));
+      sumOfAccountUsage += sumOfContainerUsage;
+    }
+    return new StatsSnapshot(sumOfAccountUsage, accountSnapshots);
+  }
 }

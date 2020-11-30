@@ -18,6 +18,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
+import com.github.ambry.server.AccountStatsStore;
+import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
 import java.io.File;
@@ -25,6 +27,7 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.internal.Strings;
 import org.codehaus.jackson.map.ObjectMapper;
 
@@ -35,10 +38,11 @@ import org.codehaus.jackson.map.ObjectMapper;
  * It also assumes a local copy of {@link StatsWrapper} will be saved after publishing to mysql database, so it can recover
  * the previous {@link StatsWrapper} from crashing or restarting.
  */
-public class AccountStatsMySqlStore {
+public class AccountStatsMySqlStore implements AccountStatsStore {
 
   private final MySqlDataAccessor mySqlDataAccessor;
   private final AccountReportsDao accountReportsDao;
+  private final AggregatedAccountReportsDao aggregatedaccountReportsDao;
   private final HostnameHelper hostnameHelper;
   private StatsWrapper previousStats;
   private final Metrics storeMetrics;
@@ -49,6 +53,8 @@ public class AccountStatsMySqlStore {
   private static class Metrics {
     public final Histogram batchSize;
     public final Histogram publishTimeMs;
+    public final Histogram aggregatedBatchSize;
+    public final Histogram aggregatedPublishTimeMs;
 
     /**
      * Constructor to create the Metrics.
@@ -57,6 +63,10 @@ public class AccountStatsMySqlStore {
     public Metrics(MetricRegistry registry) {
       batchSize = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "BatchSize"));
       publishTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "PublishTimeMs"));
+      aggregatedBatchSize =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "AggregatedBatchSize"));
+      aggregatedPublishTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "AggregatedPublishTimeMs"));
     }
   }
 
@@ -91,6 +101,7 @@ public class AccountStatsMySqlStore {
       String localBackupFilePath, HostnameHelper hostnameHelper, MetricRegistry registry) {
     mySqlDataAccessor = dataAccessor;
     accountReportsDao = new AccountReportsDao(dataAccessor, clusterName, hostname);
+    aggregatedaccountReportsDao = new AggregatedAccountReportsDao(dataAccessor, clusterName);
     this.hostnameHelper = hostnameHelper;
     storeMetrics = new AccountStatsMySqlStore.Metrics(registry);
     if (!Strings.isNullOrEmpty(localBackupFilePath)) {
@@ -105,11 +116,12 @@ public class AccountStatsMySqlStore {
   }
 
   /**
-   * Publish the {@link StatsWrapper} to mysql database. This method ignores the error information from {@link StatsWrapper}
+   * Store the {@link StatsWrapper} to mysql database. This method ignores the error information from {@link StatsWrapper}
    * and only publish the container storage usages that are different from the previous one.
    * @param statsWrapper The {@link StatsWrapper} to publish.
    */
-  public void publish(StatsWrapper statsWrapper) {
+  @Override
+  public void storeStats(StatsWrapper statsWrapper) {
     StatsSnapshot prevSnapshot =
         previousStats == null ? new StatsSnapshot((long) -1, new HashMap<>()) : previousStats.getSnapshot();
     applyFunctionToContainerUsageInDifferentStatsSnapshots(statsWrapper.getSnapshot(), prevSnapshot,
@@ -125,21 +137,98 @@ public class AccountStatsMySqlStore {
    * @return {@link StatsSnapshot} published by the given host.
    * @throws SQLException
    */
-  public StatsSnapshot queryStatsSnapshotOf(String clusterName, String hostname) throws SQLException {
+  @Override
+  public StatsWrapper queryStatsOf(String clusterName, String hostname) throws SQLException {
     hostname = hostnameHelper.simplifyHostname(hostname);
     Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
     StatsSnapshot hostSnapshot = new StatsSnapshot((long) 0, partitionSubMap);
+    AtomicLong timestamp = new AtomicLong(0);
     accountReportsDao.queryStorageUsageForHost(clusterName, hostname,
-        (partitionId, accountId, containerId, storageUsage) -> {
+        (partitionId, accountId, containerId, storageUsage, updatedAtMs) -> {
           StatsSnapshot partitionSnapshot = hostSnapshot.getSubMap()
               .computeIfAbsent("Partition[" + partitionId + "]", k -> new StatsSnapshot((long) 0, new HashMap<>()));
           StatsSnapshot accountSnapshot = partitionSnapshot.getSubMap()
               .computeIfAbsent("A[" + accountId + "]", k -> new StatsSnapshot((long) 0, new HashMap<>()));
           accountSnapshot.getSubMap().put("C[" + containerId + "]", new StatsSnapshot(storageUsage, null));
+          timestamp.set(Math.max(timestamp.get(), updatedAtMs));
         });
 
     hostSnapshot.updateValue();
-    return hostSnapshot;
+    return new StatsWrapper(
+        new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, timestamp.get(), partitionSubMap.size(),
+            partitionSubMap.size(), null), hostSnapshot);
+  }
+
+  /**
+   * Store the aggregated account stats in {@link StatsSnapshot} to mysql database.
+   * @param snapshot The aggregated account stats snapshot.
+   */
+  @Override
+  public void storeAggregatedStats(StatsSnapshot snapshot) throws SQLException {
+    int batchSize = 0;
+    long startTimeMs = System.currentTimeMillis();
+    for (Map.Entry<String, StatsSnapshot> accountMapEntry : snapshot.getSubMap().entrySet()) {
+      String accountIdKey = accountMapEntry.getKey();
+      short accountId = Short.valueOf(accountIdKey.substring(2, accountIdKey.length() - 1));
+      StatsSnapshot containerStatsSnapshot = accountMapEntry.getValue();
+      for (Map.Entry<String, StatsSnapshot> currContainerMapEntry : containerStatsSnapshot.getSubMap().entrySet()) {
+        String containerIdKey = currContainerMapEntry.getKey();
+        short containerId = Short.valueOf(containerIdKey.substring(2, containerIdKey.length() - 1));
+        long currStorageUsage = currContainerMapEntry.getValue().getValue();
+        aggregatedaccountReportsDao.updateStorageUsage(accountId, containerId, currStorageUsage);
+        batchSize++;
+      }
+    }
+    storeMetrics.aggregatedPublishTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    storeMetrics.aggregatedBatchSize.update(batchSize);
+  }
+
+  /**
+   * Query mysql database to get all the aggregated container storage usage for given {@code clusterName} and construct
+   * a map from those data. The map is structured as such:
+   * <p>Outer map's key is the string format of account id, inner map's key is the string format of container id and the
+   * value of the inner map is the storage usage of the container.</p>
+   * @param clusterName the clusterName.
+   * @return A map that represents container storage usage.
+   * @throws Exception
+   */
+  @Override
+  public Map<String, Map<String, Long>> queryAggregatedStats(String clusterName) throws Exception {
+    Map<String, Map<String, Long>> result = new HashMap<>();
+    aggregatedaccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerId, storageUsage) -> {
+      result.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
+          .put(String.valueOf(containerId), storageUsage);
+    });
+    return result;
+  }
+
+  @Override
+  public Map<String, Map<String, Long>> queryMonthlyAggregatedStats(String clusterName) throws Exception {
+    Map<String, Map<String, Long>> result = new HashMap<>();
+    aggregatedaccountReportsDao.queryMonthlyContainerUsageForCluster(clusterName,
+        (accountId, containerId, storageUsage) -> {
+          result.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
+              .put(String.valueOf(containerId), storageUsage);
+        });
+    return result;
+  }
+
+  @Override
+  public String queryRecordedMonth(String clusterName) throws SQLException {
+    return aggregatedaccountReportsDao.queryMonthForCluster(clusterName);
+  }
+
+  /**
+   * Copy the row of table {@link AggregatedAccountReportsDao#AGGREGATED_ACCOUNT_REPORTS_TABLE} to {@link AggregatedAccountReportsDao#MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE}
+   * and update the {@code monthValue} in table {@link AggregatedAccountReportsDao#AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE}.
+   * @param clusterName The clusterName
+   * @param monthValue The month value.
+   * @throws Exception
+   */
+  @Override
+  public void takeSnapshotOfAggregatedStatsAndUpdateMonth(String clusterName, String monthValue) throws Exception {
+    aggregatedaccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
+    aggregatedaccountReportsDao.updateMonth(clusterName, monthValue);
   }
 
   /**
@@ -197,7 +286,7 @@ public class AccountStatsMySqlStore {
           long prevStorageUsage =
               prevContainerMap.getOrDefault(containerIdKey, new StatsSnapshot((long) -1, null)).getValue();
           if (currStorageUsage != prevStorageUsage) {
-            func.apply(partitionId, accountId, containerId, currStorageUsage);
+            func.apply(partitionId, accountId, containerId, currStorageUsage, System.currentTimeMillis());
             batchSize++;
           }
         }
@@ -213,8 +302,10 @@ public class AccountStatsMySqlStore {
    * @param accountId The account id.
    * @param containerId The container id.
    * @param storageUsage The storage usage in bytes.
+   * @param updatedAtMs The time in ms, will be ignored by {@link AccountReportsDao}.
    */
-  private void tryUpdateStorageUsage(short partitionId, short accountId, short containerId, long storageUsage) {
+  private void tryUpdateStorageUsage(short partitionId, short accountId, short containerId, long storageUsage,
+      long updatedAtMs) {
     try {
       accountReportsDao.updateStorageUsage(partitionId, accountId, containerId, storageUsage);
     } catch (Exception e) {

@@ -62,6 +62,18 @@ public class StatsSnapshot {
     // empty constructor for Jackson deserialization
   }
 
+  /**
+   * A copy constructor.
+   * @param original The original copy.
+   */
+  public StatsSnapshot(StatsSnapshot original) {
+    this.value = original.value;
+    if (original.subMap != null) {
+      this.subMap = new HashMap<>(original.subMap.size());
+      original.subMap.forEach((k, v) -> this.subMap.put(k, new StatsSnapshot(v)));
+    }
+  }
+
   public long getValue() {
     return value;
   }

@@ -126,6 +126,7 @@ public class AmbryServer {
   private ScheduledExecutorService consistencyCheckerScheduler = null;
   private ServerSecurityService serverSecurityService;
   private final NettyInternalMetrics nettyInternalMetrics;
+  private AccountStatsMySqlStore accountStatsMySqlStore = null;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       ClusterSpectatorFactory clusterSpectatorFactory, Time time) throws InstantiationException {
@@ -261,11 +262,11 @@ public class AmbryServer {
 
       logger.info("Creating StatsManager to publish stats");
 
-      AccountStatsMySqlStore mysqlStore =
+      accountStatsMySqlStore =
           statsConfig.enableMysqlReport ? new AccountStatsMySqlStoreFactory(properties, clusterMapConfig, statsConfig,
               registry).getAccountStatsMySqlStore() : null;
       statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
-          clusterParticipants.get(0), mysqlStore);
+          clusterParticipants.get(0), accountStatsMySqlStore);
       if (serverConfig.serverStatsPublishLocalEnabled) {
         statsManager.start();
       }
@@ -331,7 +332,7 @@ public class AmbryServer {
       }
       Callback<StatsSnapshot> accountServiceCallback = new AccountServiceCallback(accountService);
       for (ClusterParticipant clusterParticipant : clusterParticipants) {
-        clusterParticipant.participate(ambryHealthReports, accountServiceCallback);
+        clusterParticipant.participate(ambryHealthReports, accountStatsMySqlStore, accountServiceCallback);
       }
 
       if (nettyInternalMetrics != null) {

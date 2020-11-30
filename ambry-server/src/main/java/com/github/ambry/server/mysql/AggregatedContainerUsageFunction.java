@@ -13,18 +13,7 @@
  */
 package com.github.ambry.server.mysql;
 
-/**
- * A callback function to call when processing container storage usage.
- */
 @FunctionalInterface
-public interface ContainerUsageFunction {
-
-  /**
-   * Process container storage usage.
-   * @param partitionId
-   * @param accountId
-   * @param containerId
-   * @param storageUsage
-   */
-  void apply(short partitionId, short accountId, short containerId, long storageUsage, long updatedAtMs);
+public interface AggregatedContainerUsageFunction {
+  void apply(short accountId, short containerId, long storageUsage);
 }

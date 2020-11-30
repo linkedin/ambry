@@ -15,14 +15,12 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.Account;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
-import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.server.mysql.AccountStatsMySqlStore;
 import com.github.ambry.store.StorageManager;
@@ -350,7 +348,7 @@ class StatsManager {
           // First write to account stats
           StatsWrapper statsWrapper = new StatsWrapper(statsHeader, aggregatedSnapshot);
           if (accountStatsMySqlStore != null) {
-            accountStatsMySqlStore.publish(statsWrapper);
+            accountStatsMySqlStore.storeStats(statsWrapper);
           }
           publish(statsWrapper);
           logger.info("Local stats snapshot published to {}", statsOutputFile.getAbsolutePath());

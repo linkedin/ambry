@@ -14,6 +14,7 @@
 
 package com.github.ambry.server;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.codehaus.jackson.annotate.JsonAutoDetect;
 import org.codehaus.jackson.annotate.JsonPropertyOrder;
@@ -47,6 +48,18 @@ public class StatsHeader {
 
   public StatsHeader() {
     // empty constructor for Jackson deserialization
+  }
+
+  /**
+   * A copy constructor.
+   * @param original The original copy.
+   */
+  public StatsHeader(StatsHeader original) {
+    this.description = original.description;
+    this.timestamp = original.timestamp;
+    this.storesContactedCount = original.storesContactedCount;
+    this.storesRespondedCount = original.storesRespondedCount;
+    this.unreachableStores = new ArrayList<>(original.unreachableStores);
   }
 
   /**

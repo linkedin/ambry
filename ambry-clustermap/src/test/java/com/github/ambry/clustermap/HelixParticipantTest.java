@@ -104,7 +104,7 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipant =
         new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
             getDefaultZkConnectStr(clusterMapConfig), true);
-    helixParticipant.participate(Collections.emptyList(), null);
+    helixParticipant.participate(Collections.emptyList(), null, null);
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     DataNodeConfig dataNodeConfig =
@@ -202,8 +202,8 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipantDummy =
         new HelixParticipant(clusterMapConfigDummy, helixManagerFactory, new MetricRegistry(),
             getDefaultZkConnectStr(clusterMapConfigDummy), true);
-    helixParticipant.participate(Collections.emptyList(), null);
-    helixParticipantDummy.participate(Collections.emptyList(), null);
+    helixParticipant.participate(Collections.emptyList(), null, null);
+    helixParticipantDummy.participate(Collections.emptyList(), null, null);
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     DataNodeConfig dataNodeConfig =
@@ -301,7 +301,7 @@ public class HelixParticipantTest {
         new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
             getDefaultZkConnectStr(clusterMapConfig), true);
     try {
-      helixParticipant.participate(Collections.emptyList(), null);
+      helixParticipant.participate(Collections.emptyList(), null, null);
       fail("Participation should have failed");
     } catch (IOException e) {
       // OK
@@ -369,7 +369,7 @@ public class HelixParticipantTest {
     assertTrue(helixManagerFactory.getHelixManager(InstanceType.SPECTATOR).isConnected());
     assertFalse(helixManagerFactory.getHelixManager(InstanceType.PARTICIPANT).isConnected());
 
-    participant.participate(Collections.emptyList(), null);
+    participant.participate(Collections.emptyList(), null, null);
     MockHelixManagerFactory.MockHelixManager helixManager =
         helixManagerFactory.getHelixManager(InstanceType.PARTICIPANT);
     assertTrue(helixManager.isConnected());
