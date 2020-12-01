@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -57,11 +58,15 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
   public AccountStatsMySqlStoreIntegrationTest() throws Exception {
     mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, false);
+  }
+
+  @Before
+  public void before() throws Exception {
     cleanup(mySqlStore.getMySqlDataAccessor());
   }
 
   /**
-   * Tests to stores multiple stats and recover stats from database.
+   * Tests to store multiple stats for multiple hosts and recover stats from database.
    * @throws Exception
    */
   @Test
@@ -87,12 +92,40 @@ public class AccountStatsMySqlStoreIntegrationTest {
     assertTwoStatsSnapshots(obtainedStats3.getSnapshot(), stats3.getSnapshot());
   }
 
+  /**
+   * Tests to store multiple stats for one hosts and recover stats from database.
+   * @throws Exception
+   */
+  @Test
+  public void testStoreMulitpleWrites() throws Exception {
+    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, false);
+    StatsWrapper stats1 = generateStatsWrapper(10, 10, 1);
+    mySqlStore.storeStats(stats1);
+    StatsWrapper stats2 =
+        new StatsWrapper(new StatsHeader(stats1.getHeader()), new StatsSnapshot(stats1.getSnapshot()));
+    // change one value, and store it to mysql database again
+    stats2.getSnapshot().getSubMap().get("Partition[0]").getSubMap().get("A[0]").getSubMap().get("C[0]").setValue(1);
+    stats2.getSnapshot().updateValue();
+    mySqlStore.storeStats(stats2);
+    StatsWrapper obtainedStats = mySqlStore.queryStatsOf(clusterName1, hostname1);
+    assertTwoStatsSnapshots(obtainedStats.getSnapshot(), stats2.getSnapshot());
+  }
+
   @Test
   public void testAggregatedStats() throws Exception {
     Map<String, Map<String, Long>> containerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
     StatsSnapshot snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages);
     mySqlStore.storeAggregatedStats(snapshot);
     Map<String, Map<String, Long>> obtainedContainerStorageUsages = mySqlStore.queryAggregatedStats(clusterName1);
+    TestUtils.assertContainerMap(containerStorageUsages, obtainedContainerStorageUsages);
+
+    // Change one value and store it to mysql database again
+    StatsSnapshot newSnapshot = new StatsSnapshot(snapshot);
+    newSnapshot.getSubMap().get("A[1]").getSubMap().get("C[1]").setValue(1);
+    newSnapshot.updateValue();
+    containerStorageUsages.get("1").put("1", 1L);
+    mySqlStore.storeAggregatedStats(newSnapshot);
+    obtainedContainerStorageUsages = mySqlStore.queryAggregatedStats(clusterName1);
     TestUtils.assertContainerMap(containerStorageUsages, obtainedContainerStorageUsages);
   }
 
@@ -110,6 +143,17 @@ public class AccountStatsMySqlStoreIntegrationTest {
     Map<String, Map<String, Long>> monthlyContainerStorageUsages = mySqlStore.queryMonthlyAggregatedStats(clusterName1);
     TestUtils.assertContainerMap(currentContainerStorageUsages, monthlyContainerStorageUsages);
     String obtainedMonthValue = mySqlStore.queryRecordedMonth(clusterName1);
+    assertTrue(obtainedMonthValue.equals(monthValue));
+
+    // Change the value and store it back to mysql database
+    monthValue = "2020-02";
+    currentContainerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
+    StatsSnapshot snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(currentContainerStorageUsages);
+    mySqlStore.storeAggregatedStats(snapshot);
+    mySqlStore.takeSnapshotOfAggregatedStatsAndUpdateMonth(clusterName1, monthValue);
+    monthlyContainerStorageUsages = mySqlStore.queryMonthlyAggregatedStats(clusterName1);
+    TestUtils.assertContainerMap(currentContainerStorageUsages, monthlyContainerStorageUsages);
+    obtainedMonthValue = mySqlStore.queryRecordedMonth(clusterName1);
     assertTrue(obtainedMonthValue.equals(monthValue));
   }
 
