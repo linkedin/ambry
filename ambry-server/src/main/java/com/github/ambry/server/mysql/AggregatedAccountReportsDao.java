@@ -51,9 +51,10 @@ public class AggregatedAccountReportsDao {
   public static final String MONTH_COLUMN = "month";
 
   private static final Logger logger = LoggerFactory.getLogger(AccountReportsDao.class);
-  private static final String insertSql =
-      String.format("INSERT INTO %s (%s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, NOW())", AGGREGATED_ACCOUNT_REPORTS_TABLE,
-          CLUSTER_NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
+  private static final String insertSql = String.format(
+      "INSERT INTO %s (%s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE %s=?, %s=NOW()",
+      AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
+      STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
   private static final String queryUsageSqlForCluster =
       String.format("SELECT %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
           STORAGE_USAGE_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
@@ -61,14 +62,16 @@ public class AggregatedAccountReportsDao {
       String.format("SELECT %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
           STORAGE_USAGE_COLUMN, MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
   private static final String copySqlForCluster =
-      String.format("INSERT %s SELECT * FROM %s WHERE %s = ?", MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE,
-          AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
+      String.format("INSERT %s SELECT * FROM %s WHERE %s = ? ON DUPLICATE KEY UPDATE %s=%s.%s, %s=%s.%s",
+          MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
+          STORAGE_USAGE_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN,
+          AGGREGATED_ACCOUNT_REPORTS_TABLE, UPDATED_AT_COLUMN);
   private static final String queryMonthSqlForCluster =
       String.format("SELECT %s FROM %s WHERE %s = ?", MONTH_COLUMN, AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE,
           CLUSTER_NAME_COLUMN);
   private static final String insertMonthSql =
-      String.format("INSERT INTO %s (%s, %s) VALUES (?, ?)", AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE,
-          CLUSTER_NAME_COLUMN, MONTH_COLUMN);
+      String.format("INSERT INTO %s (%s, %s) VALUES (?, ?) ON DUPLICATE KEY UPDATE %s=?",
+          AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE, CLUSTER_NAME_COLUMN, MONTH_COLUMN, MONTH_COLUMN);
 
   private final MySqlDataAccessor dataAccessor;
   private final String clusterName;
@@ -100,6 +103,7 @@ public class AggregatedAccountReportsDao {
       insertStatement.setInt(2, accountId);
       insertStatement.setInt(3, containerId);
       insertStatement.setLong(4, storageUsage);
+      insertStatement.setLong(5, storageUsage);
       insertStatement.executeUpdate();
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
@@ -224,6 +228,7 @@ public class AggregatedAccountReportsDao {
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertMonthSql, true);
       insertStatement.setString(1, clusterName);
       insertStatement.setString(2, monthValue);
+      insertStatement.setString(3, monthValue);
       insertStatement.executeUpdate();
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {

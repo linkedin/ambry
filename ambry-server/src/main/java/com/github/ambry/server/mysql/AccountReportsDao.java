@@ -38,10 +38,10 @@ public class AccountReportsDao {
   public static final String UPDATED_AT_COLUMN = "updatedAt";
 
   private static final Logger logger = LoggerFactory.getLogger(AccountReportsDao.class);
-  private static final String insertSql =
-      String.format("INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, ?, ?, NOW())",
-          ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN, PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
-          CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
+  private static final String insertSql = String.format(
+      "INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE %s=?, %s=NOW()",
+      ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN, PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
+      CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
   private static final String querySqlForClusterAndHost =
       String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
           CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
@@ -82,6 +82,7 @@ public class AccountReportsDao {
       insertStatement.setInt(4, accountId);
       insertStatement.setInt(5, containerId);
       insertStatement.setLong(6, storageUsage);
+      insertStatement.setLong(7, storageUsage);
       insertStatement.executeUpdate();
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
