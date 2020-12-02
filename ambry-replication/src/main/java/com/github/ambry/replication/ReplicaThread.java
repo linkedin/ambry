@@ -51,6 +51,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -706,6 +707,7 @@ public class ReplicaThread implements Runnable {
       List<ExchangeMetadataResponse> exchangeMetadataResponseList, boolean remoteColoGetRequestForStandby)
       throws IOException, ReplicationException {
     long fixMissingStoreKeysStartTimeInMs = time.milliseconds();
+    GetResponse getResponse = null;
     try {
       if (exchangeMetadataResponseList.size() != replicasToReplicatePerNode.size()
           || replicasToReplicatePerNode.size() == 0) {
@@ -714,12 +716,16 @@ public class ReplicaThread implements Runnable {
             + " should be the same and greater than zero");
       }
       DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
-      GetResponse getResponse =
+      getResponse =
           getMessagesForMissingKeys(connectedChannel, exchangeMetadataResponseList, replicasToReplicatePerNode,
               remoteNode, remoteColoGetRequestForStandby);
       writeMessagesToLocalStoreAndAdvanceTokens(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode,
           remoteNode, remoteColoGetRequestForStandby);
     } finally {
+      if (getResponse != null && getResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
+        // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
+        ((NettyByteBufDataInputStream) (getResponse.getInputStream())).getBuffer().release();
+      }
       long fixMissingStoreKeysTime = time.milliseconds() - fixMissingStoreKeysStartTimeInMs;
       replicationMetrics.updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, replicatingFromRemoteColo,
           replicatingOverSsl, datacenterName);
@@ -750,13 +756,14 @@ public class ReplicaThread implements Runnable {
           remoteNode, threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
     }
 
+    ChannelOutput channelOutput = null;
     try {
       ReplicaMetadataRequest request = new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
           "replication-metadata-" + dataNodeId.getHostname() + "[" + dataNodeId.getDatacenterName() + "]",
           replicaMetadataRequestInfoList, replicationConfig.replicationFetchSizeInBytes,
           replicationConfig.replicaMetadataRequestVersion);
       connectedChannel.send(request);
-      ChannelOutput channelOutput = connectedChannel.receive();
+      channelOutput = connectedChannel.receive();
       ByteBufferInputStream byteBufferInputStream =
           new ByteBufferInputStream(channelOutput.getInputStream(), (int) channelOutput.getStreamSize());
       logger.trace("Remote node: {} Thread name: {} Remote replicas: {} ByteBuffer size after deserialization: {} ",
@@ -782,6 +789,11 @@ public class ReplicaThread implements Runnable {
     } catch (IOException e) {
       responseHandler.onEvent(replicasToReplicatePerNode.get(0).getReplicaId(), e);
       throw e;
+    } finally {
+      if (channelOutput != null && (channelOutput.getInputStream() instanceof NettyByteBufDataInputStream)) {
+        // Release buffer if and only if the inputStream is NettyByteBuf based.
+        ((NettyByteBufDataInputStream) channelOutput.getInputStream()).getBuffer().release();
+      }
     }
   }
 

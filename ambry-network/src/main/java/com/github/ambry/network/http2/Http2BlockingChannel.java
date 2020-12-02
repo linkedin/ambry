@@ -112,7 +112,9 @@ public class Http2BlockingChannel implements ConnectedChannel {
       throw new IOException("Failed to receive response from " + getRemoteHost() + ":" + getRemotePort(), e);
     }
     DataInputStream dataInputStream = new NettyByteBufDataInputStream(responseByteBuf);
-    return new ChannelOutput(dataInputStream, dataInputStream.readLong());
+    // Because readLong() is called to get entire stream size(long),
+    // the size of remaining data should be dataInputStream.readLong() - 8
+    return new ChannelOutput(dataInputStream, dataInputStream.readLong() - 8);
   }
 
   @Override

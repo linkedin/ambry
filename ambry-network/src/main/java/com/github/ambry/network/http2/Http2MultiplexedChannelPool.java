@@ -469,7 +469,7 @@ public class Http2MultiplexedChannelPool implements ChannelPool {
      */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
-      log.info("Connection {} become inactive.", ctx.channel());
+      log.trace("Connection {} become inactive.", ctx.channel());
       closeAndReleaseParent(ctx, new ClosedChannelException());
     }
 

@@ -765,7 +765,6 @@ final class ServerTestUtil {
       threadToRun.start();
     }
     assertTrue("Did not put all blobs in 2 minutes", latch.await(2, TimeUnit.MINUTES));
-
     // wait till replication can complete
     List<BlobId> blobIds = new ArrayList<BlobId>();
     for (int i = 0; i < runnables.size(); i++) {

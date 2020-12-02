@@ -116,7 +116,7 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
      */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
-      logger.info("Parent channel {} become inactive.", ctx.channel());
+      logger.trace("Parent channel {} become inactive.", ctx.channel());
     }
 
     @Override

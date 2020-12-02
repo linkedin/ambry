@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
  *
  */
 public class NettySslHttp2Factory implements SSLFactory {
-  private static final Logger logger = LoggerFactory.getLogger(NettySslFactory.class);
+  private static final Logger logger = LoggerFactory.getLogger(NettySslHttp2Factory.class);
   private final SslContext nettyServerSslContext;
   private final SslContext nettyClientSslContext;
   private final String endpointIdentification;
@@ -89,9 +89,11 @@ public class NettySslHttp2Factory implements SSLFactory {
     logger.info("Using {} provider for server SslContext", SslContext.defaultServerProvider());
     SslContextBuilder sslContextBuilder;
     if (config.sslHttp2SelfSign) {
+      // Both server and client should use InsecureTrustManage for self-sign case.
       SelfSignedCertificate ssc = new SelfSignedCertificate();
-      sslContextBuilder = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey());
-      logger.info("Using Self Signed Certificate.");
+      sslContextBuilder = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey())
+          .trustManager(InsecureTrustManagerFactory.INSTANCE);
+      logger.info("Server Uses Self Signed Certificate.");
     } else {
       sslContextBuilder = SslContextBuilder.forServer(NettySslFactory.getKeyManagerFactory(config))
           .trustManager(NettySslFactory.getTrustManagerFactory(config));
@@ -119,8 +121,12 @@ public class NettySslHttp2Factory implements SSLFactory {
     logger.info("Using {} provider for client ", SslContext.defaultClientProvider());
     SslContextBuilder sslContextBuilder;
     if (config.sslHttp2SelfSign) {
-      sslContextBuilder = SslContextBuilder.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE);
-      logger.info("Using Self Signed Certificate.");
+      // Both server and client should use InsecureTrustManage for self-sign case.
+      SelfSignedCertificate ssc = new SelfSignedCertificate();
+      sslContextBuilder = SslContextBuilder.forClient()
+          .keyManager(ssc.certificate(), ssc.privateKey())
+          .trustManager(InsecureTrustManagerFactory.INSTANCE);
+      logger.info("Client Uses Self Signed Certificate.");
     } else {
       sslContextBuilder = SslContextBuilder.forClient()
           .keyManager(NettySslFactory.getKeyManagerFactory(config))
