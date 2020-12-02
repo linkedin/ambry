@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS Accounts
     accountId INT GENERATED ALWAYS AS (accountInfo->>"$.accountId") STORED NOT NULL,
     accountName VARCHAR(255) GENERATED ALWAYS AS (accountInfo->>"$.accountName") NOT NULL,
     status VARCHAR(50) GENERATED ALWAYS AS (accountInfo->>"$.status") STORED NOT NULL,
-    UNIQUE KEY account (accountId),
+    PRIMARY KEY (accountId),
     UNIQUE INDEX uniqueName (accountName),
     INDEX lmtIndex (lastModifiedTime),
     INDEX statusIndex (status)
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS Containers
     containerId INT GENERATED ALWAYS AS (containerInfo->>"$.containerId") STORED NOT NULL,
     containerName VARCHAR(255) GENERATED ALWAYS AS (containerInfo->>"$.containerName") NOT NULL,
     status VARCHAR(50) GENERATED ALWAYS AS (containerInfo->>"$.status") STORED NOT NULL,
-    UNIQUE KEY accountContainer (accountId, containerId),
+    PRIMARY KEY (accountId, containerId),
     UNIQUE INDEX uniqueName (accountId, containerName),
     INDEX lmtIndex (lastModifiedTime),
     INDEX statusIndex (status)
