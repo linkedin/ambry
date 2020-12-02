@@ -37,7 +37,9 @@ public class MySqlAccountStore {
   /**
    * Constructor.
    * @param dbEndpoints MySql DB end points
+   * @param localDatacenter name of the local data center
    * @param metrics metrics to track mysql operations
+   * @param config configuration associated with {@link com.github.ambry.account.MySqlAccountService}
    * @throws SQLException
    */
   public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, MySqlMetrics metrics,

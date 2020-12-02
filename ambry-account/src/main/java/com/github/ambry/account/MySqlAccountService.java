@@ -21,6 +21,7 @@ import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.sql.BatchUpdateException;
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
@@ -467,13 +468,13 @@ public class MySqlAccountService extends AbstractAccountService {
    * @return the corresponding {@link AccountServiceException}.
    */
   public static AccountServiceException translateSQLException(SQLException e) {
-    if (e instanceof SQLIntegrityConstraintViolationException) {
-      SQLIntegrityConstraintViolationException icve = (SQLIntegrityConstraintViolationException) e;
+    if (e instanceof SQLIntegrityConstraintViolationException || (e instanceof BatchUpdateException
+        && e.getCause() instanceof SQLIntegrityConstraintViolationException)) {
       String message;
-      if (icve.getMessage().contains(ContainerDao.INDEX_ACCOUNT_CONTAINER)) {
+      if (e.getMessage().contains(ContainerDao.INDEX_ACCOUNT_CONTAINER)) {
         // Example: Duplicate entry '101-5' for key 'containers.accountContainer'
         message = "Duplicate containerId";
-      } else if (icve.getMessage().contains(ContainerDao.INDEX_CONTAINER_NAME)) {
+      } else if (e.getMessage().contains(ContainerDao.INDEX_CONTAINER_NAME)) {
         // duplicate container name: need to update cache but retry may fail
         message = "Duplicate container name";
       } else {

@@ -85,8 +85,8 @@ public class ContainerDao {
   }
 
   /**
-   * Add a containers to the database.
-   * @param accountId the containers's parent account id.
+   * Add containers from a given account to the database in batches.
+   * @param accountId the containers' parent account id.
    * @param containers the containers to insert.
    * @param batchSize number of statements to be executed in one batch
    * @throws SQLException
@@ -106,7 +106,9 @@ public class ContainerDao {
           insertStatement.executeBatch();
         }
       }
-      insertStatement.executeBatch();
+      if (containers.size() % batchSize != 0) {
+        insertStatement.executeBatch();
+      }
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);
@@ -115,7 +117,7 @@ public class ContainerDao {
   }
 
   /**
-   * Updates a container in the database.
+   * Updates container from a given account in the database.
    * @param accountId the container's parent account id.
    * @param container the container to update.
    * @throws SQLException
@@ -138,7 +140,7 @@ public class ContainerDao {
   }
 
   /**
-   * Updates a container in the database.
+   * Updates containers from a given account in the database in batches.
    * @param accountId the container's parent account id.
    * @param containers the container to update.
    * @param batchSize number of statements to be executed in one batch
@@ -160,7 +162,9 @@ public class ContainerDao {
           updateStatement.executeBatch();
         }
       }
-      updateStatement.executeBatch();
+      if (containers.size() % batchSize != 0) {
+        updateStatement.executeBatch();
+      }
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);

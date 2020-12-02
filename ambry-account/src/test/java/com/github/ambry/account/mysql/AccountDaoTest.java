@@ -70,7 +70,6 @@ public class AccountDaoTest {
     when(mockConnection.prepareStatement(startsWith("select"))).thenReturn(mockQueryStatement);
     mockUpdateStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("update"))).thenReturn(mockUpdateStatement);
-    when(mockUpdateStatement.executeUpdate()).thenReturn(1);
     when(mockUpdateStatement.executeBatch()).thenReturn(new int[]{1});
     ResultSet mockResultSet = mock(ResultSet.class);
     when(mockResultSet.next()).thenReturn(true).thenReturn(false);

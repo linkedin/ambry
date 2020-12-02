@@ -78,7 +78,7 @@ public class AccountDao {
   }
 
   /**
-   * Add an account to the database.
+   * Add accounts to the database in batches.
    * @param accounts the account to insert.
    * @param batchSize number of statements to be executed in one batch
    * @throws SQLException
@@ -96,7 +96,9 @@ public class AccountDao {
           insertStatement.executeBatch();
         }
       }
-      insertStatement.executeBatch();
+      if (accounts.size() % batchSize != 0) {
+        insertStatement.executeBatch();
+      }
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);
@@ -125,7 +127,7 @@ public class AccountDao {
   }
 
   /**
-   * Updates an existing account in the database.
+   * Updates a collection of accounts in the database.
    * @param accounts the account to update.
    * @param batchSize number of statements to be executed in one batch
    * @throws SQLException
@@ -144,7 +146,9 @@ public class AccountDao {
           updateStatement.executeBatch();
         }
       }
-      updateStatement.executeBatch();
+      if (accounts.size() % batchSize != 0) {
+        updateStatement.executeBatch();
+      }
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);
