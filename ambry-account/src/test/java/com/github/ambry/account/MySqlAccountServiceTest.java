@@ -488,4 +488,48 @@ public class MySqlAccountServiceTest {
     assertEquals("Mismatch in container information", containerToUpdate,
         mySqlAccountService.getContainer(accountToUpdate.getName(), containerToUpdate.getName()));
   }
+
+  /**
+   * Tests creating existing containers with different states. This is to mock edge case where user attempts to create
+   * same container which has been deprecated already.
+   * @throws Exception
+   */
+  @Test
+  public void testCreateExistingContainerInDifferentStates() throws Exception {
+    AccountService mySqlAccountService = getAccountService();
+    String accountName = "test-account";
+    String inactiveContainer = "inactive-container";
+    String deleteInProgressContainer = "delete-in-progress-container";
+    // create a testing account with inactive and delete-in-progress container.
+    Account accountToUpdate =
+        new AccountBuilder((short) 1, accountName, Account.AccountStatus.ACTIVE).addOrUpdateContainer(
+            new ContainerBuilder((short) 1, inactiveContainer, Container.ContainerStatus.INACTIVE, "",
+                (short) 1).build())
+            .addOrUpdateContainer(
+                new ContainerBuilder((short) 2, deleteInProgressContainer, Container.ContainerStatus.DELETE_IN_PROGRESS,
+                    "", (short) 1).build())
+            .build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate));
+
+    // Attempting to create an existing container with INACTIVE state should fail
+    Container containerToCreate =
+        new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, inactiveContainer, Container.ContainerStatus.ACTIVE, "",
+            (short) 1).build();
+    try {
+      mySqlAccountService.updateContainers(accountName, Collections.singletonList(containerToCreate));
+      fail("should fail because container to create is already marked as inactive");
+    } catch (AccountServiceException ase) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceHasGone, ase.getErrorCode());
+    }
+
+    // Attempting to create an existing container with DELETE_IN_PROGRESS state should fail
+    containerToCreate = new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, deleteInProgressContainer,
+        Container.ContainerStatus.ACTIVE, "", (short) 1).build();
+    try {
+      mySqlAccountService.updateContainers(accountName, Collections.singletonList(containerToCreate));
+      fail("should fail because container to create is in DELETE_IN_PROGRESS state");
+    } catch (AccountServiceException ase) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.MethodNotAllowed, ase.getErrorCode());
+    }
+  }
 }

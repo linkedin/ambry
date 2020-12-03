@@ -373,10 +373,20 @@ public class HelixAccountServiceTest {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     assertEquals("The number of account in HelixAccountService is incorrect", 0,
         accountService.getAllAccounts().size());
+    // create three containers for testing
+    Container activeContainer =
+        new ContainerBuilder((short) (refContainer.getId() + 1), "active", Container.ContainerStatus.ACTIVE, "",
+            refAccount.getId()).build();
+    Container inactiveContainer =
+        new ContainerBuilder((short) (refContainer.getId() + 2), "inactive", Container.ContainerStatus.INACTIVE, "",
+            refAccount.getId()).build();
+    Container deleteInProgressContainer = new ContainerBuilder((short) (refContainer.getId() + 3), "delete-in-progress",
+        ContainerStatus.DELETE_IN_PROGRESS, "", refAccount.getId()).build();
+    refAccount.updateContainerMap(Arrays.asList(activeContainer, inactiveContainer, deleteInProgressContainer));
     // add an account with single container
     accountService.updateAccounts(Collections.singletonList(refAccount));
 
-    Container brandNewContainer = new ContainerBuilder(refContainer).setId(UNKNOWN_CONTAINER_ID).build();
+    Container brandNewContainer = new ContainerBuilder(activeContainer).setId(UNKNOWN_CONTAINER_ID).build();
 
     // 1. test invalid input
     try {
@@ -398,7 +408,23 @@ public class HelixAccountServiceTest {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
     }
 
-    // 3. test conflict container (new container with existing name but different attributes)
+    // 3. test containers already exist with INACTIVE and DELETE_IN_PROGRESS state
+    Container duplicateInactiveContainer = new ContainerBuilder(inactiveContainer).setId(UNKNOWN_CONTAINER_ID).build();
+    Container duplicateDeleteInProgressContainer =
+        new ContainerBuilder(deleteInProgressContainer).setId(UNKNOWN_CONTAINER_ID).build();
+    try {
+      accountService.updateContainers(refAccountName, Collections.singleton(duplicateInactiveContainer));
+      fail("Should fail because the existing container has been marked INACTIVE.");
+    } catch (AccountServiceException ase) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceHasGone, ase.getErrorCode());
+    }
+    try {
+      accountService.updateContainers(refAccountName, Collections.singleton(duplicateDeleteInProgressContainer));
+      fail("Should fail because the existing container has been marked DELETE_IN_PROGRESS.");
+    } catch (AccountServiceException ase) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.MethodNotAllowed, ase.getErrorCode());
+    }
+    // 4. test conflict container (new container with existing name but different attributes)
     Container conflictContainer = new ContainerBuilder(brandNewContainer).setBackupEnabled(true).build();
     try {
       accountService.updateContainers(refAccountName, Collections.singleton(conflictContainer));
@@ -413,8 +439,8 @@ public class HelixAccountServiceTest {
     assertEquals("Mismatch in return count", 1, addedContainers.size());
     for (Container container : addedContainers) {
       assertEquals("Mismatch in account id", refAccountId, container.getParentAccountId());
-      assertEquals("Mismatch in container id", refContainerId, container.getId());
-      assertEquals("Mismatch in container name", refContainerName, container.getName());
+      assertEquals("Mismatch in container id", activeContainer.getId(), container.getId());
+      assertEquals("Mismatch in container name", activeContainer.getName(), container.getName());
     }
 
     // 5. test adding a different container (failure case due to ZK update failure)

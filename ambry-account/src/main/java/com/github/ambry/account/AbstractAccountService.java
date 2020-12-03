@@ -111,18 +111,28 @@ abstract class AbstractAccountService implements AccountService {
     for (Container container : containers) {
       if (container.getId() == Container.UNKNOWN_CONTAINER_ID) {
         // new container
-        // make sure there is no conflicting container (conflicting means a container with same name but different attributes already exists).
         Container existingContainer = existingContainersInAccount.get(container.getName());
         if (existingContainer != null) {
-          if (existingContainer.isSameContainer(container)) {
-            // If an exactly same container already exists, treat as no-op (may be retry after partial failure).
-            // But include it in the list returned to caller to provide the containerId.
-            logger.info("Request to create container with existing name and properties: {}",
-                existingContainer.toJson().toString());
-            existingUnchangedContainers.add(existingContainer);
-          } else {
-            throw new AccountServiceException("There is a conflicting container in account " + accountName,
-                AccountServiceErrorCode.ResourceConflict);
+          switch (existingContainer.getStatus()) {
+            case INACTIVE:
+              throw new AccountServiceException("The container has gone and cannot be restored",
+                  AccountServiceErrorCode.ResourceHasGone);
+            case DELETE_IN_PROGRESS:
+              throw new AccountServiceException(
+                  "Create method is not allowed on container with Delete_In_Progress state",
+                  AccountServiceErrorCode.MethodNotAllowed);
+            case ACTIVE:
+              // make sure there is no conflicting container (conflicting means a container with same name but different attributes already exists).
+              if (existingContainer.isSameContainer(container)) {
+                // If an exactly same container already exists, treat as no-op (may be retry after partial failure).
+                // But include it in the list returned to caller to provide the containerId.
+                logger.info("Request to create container with existing name and properties: {}",
+                    existingContainer.toJson().toString());
+                existingUnchangedContainers.add(existingContainer);
+              } else {
+                throw new AccountServiceException("There is a conflicting container in account " + accountName,
+                    AccountServiceErrorCode.ResourceConflict);
+              }
           }
         } else {
           resolvedContainers.add(
