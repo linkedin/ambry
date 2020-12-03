@@ -446,14 +446,14 @@ public class MockHelixAdmin implements HelixAdmin {
     return setInstanceConfigCallCount;
   }
 
+  // ***************************************
+  // Not implemented. Implement as required.
+  // ***************************************
+
   @Override
   public List<String> getResourcesInClusterWithTag(String clusterName, String tag) {
     throw new IllegalStateException("Not implemented");
   }
-
-  // ***************************************
-  // Not implemented. Implement as required.
-  // ***************************************
 
   @Override
   public boolean addCluster(String clusterName, boolean recreateIfExists) {

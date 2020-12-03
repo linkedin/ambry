@@ -272,15 +272,18 @@ class SimpleOperationTracker implements OperationTracker {
           || routerOperation == RouterOperation.GetBlobInfoOperation) {
         Set<ReplicaId> offlineReplicas =
             new HashSet<>(getEligibleReplicas(partitionId, null, EnumSet.of(ReplicaState.OFFLINE)));
-        Set<ReplicaId> originatingReplicas = offlineReplicas.stream().filter(r -> r.getDataNodeId().getDatacenterName().equals(this.originatingDcName)).collect(
-            Collectors.toSet());
-        numReplicasInOriginatingDc += originatingReplicas.size();
-        Set<ReplicaId> localOfflineReplicas = offlineReplicas.stream()
-            .filter(r -> r.getDataNodeId().getDatacenterName().equals(datacenterName))
-            .collect(Collectors.toSet());
-        offlineReplicas.removeAll(localOfflineReplicas);
-        localOfflineReplicas.forEach(this::addToEndOfPool);
-        offlineReplicas.forEach(this::addToEndOfPool);
+        List<ReplicaId> remoteOfflineReplicas = new ArrayList<>();
+        for (ReplicaId replica : offlineReplicas) {
+          if (replica.getDataNodeId().getDatacenterName().equals(this.originatingDcName)) {
+            numReplicasInOriginatingDc++;
+          }
+          if (replica.getDataNodeId().getDatacenterName().equals(datacenterName)) {
+            addToEndOfPool(replica);
+          } else {
+            remoteOfflineReplicas.add(replica);
+          }
+        }
+        remoteOfflineReplicas.forEach(this::addToEndOfPool);
       }
     }
     totalReplicaCount = replicaPool.size();
