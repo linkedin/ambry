@@ -956,7 +956,7 @@ public class ReplicationTestHelper {
     blobIdRandom.nextBytes(usermetadata);
     BlobProperties blobProperties =
         new BlobProperties(blobSize, "test", null, null, false, EXPIRY_TIME_MS - CONSTANT_TIME_MS, CONSTANT_TIME_MS,
-            accountId, containerId, encryptionKey != null, null);
+            accountId, containerId, encryptionKey != null, null, null, null);
     MessageFormatInputStream stream =
         new PutMessageFormatInputStream(id, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey),
             blobProperties, ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize,

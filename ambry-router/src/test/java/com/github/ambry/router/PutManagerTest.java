@@ -749,7 +749,7 @@ public class PutManagerTest {
         requestAndResult.putBlobProperties =
             new BlobProperties(sizeInProperties, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
                 Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false,
-                EXTERNAL_ASSET_TAG);
+                EXTERNAL_ASSET_TAG, null, null);
         random.nextBytes(requestAndResult.putContent);
         requestAndResultsList.add(requestAndResult);
         submitPutsAndAssertSuccess(true);
@@ -1316,7 +1316,7 @@ public class PutManagerTest {
       putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
           container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getParentAccountId(),
           container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getId(), testEncryption,
-          EXTERNAL_ASSET_TAG);
+          EXTERNAL_ASSET_TAG, null, null);
       putUserMetadata = new byte[10];
       random.nextBytes(putUserMetadata);
       putContent = new byte[blobSize];

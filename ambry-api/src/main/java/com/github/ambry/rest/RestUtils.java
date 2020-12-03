@@ -155,6 +155,14 @@ public class RestUtils {
      */
     public final static String AMBRY_CONTENT_TYPE = "x-ambry-content-type";
     /**
+     * optional in request; 'gzip' indicate the blob is pre-compressed.
+     */
+    public final static String AMBRY_CONTENT_ENCODING = "x-ambry-content-encoding";
+    /**
+     * optional in request; the name of the file.
+     */
+    public final static String AMBRY_FILENAME = "x-ambry-filename";
+    /**
      * optional in request; string; default unset; member id.
      * <p/>
      * Expected usage is to set to member id of content owner.
@@ -382,6 +390,8 @@ public class RestUtils {
     String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
     String ownerId = getHeader(args, Headers.OWNER_ID, false);
     String externalAssetTag = getHeader(args, Headers.EXTERNAL_ASSET_TAG, false);
+    String contentEncoding = getHeader(args, Headers.AMBRY_CONTENT_ENCODING, false);
+    String filename = getHeader(args, Headers.AMBRY_FILENAME, false);
 
     long ttl = Utils.Infinite_Time;
     Long ttlFromHeader = getLongHeader(args, Headers.TTL, false);
@@ -397,7 +407,7 @@ public class RestUtils {
     // based on the container properties and ACLs. For now, BlobProperties still includes this field, though.
     boolean isPrivate = !container.isCacheable();
     return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl, account.getId(), container.getId(),
-        container.isEncrypted(), externalAssetTag);
+        container.isEncrypted(), externalAssetTag, contentEncoding, filename);
   }
 
   /**
@@ -908,7 +918,8 @@ public class RestUtils {
     String[] slashFields = input.split("/");
     if (slashFields.length < 4) {
       throw new IllegalArgumentException(
-          "File must have name format '/named/<account_name>/<container_name>/<blob_name>'.  Received: '" + input + "'");
+          "File must have name format '/named/<account_name>/<container_name>/<blob_name>'.  Received: '" + input
+              + "'");
     }
     return new NamedBlobPath(slashFields[2], slashFields[3], slashFields[4]);
   }

@@ -64,7 +64,7 @@ public class TtlUpdateHandlerTest {
 
   private static final BlobProperties BLOB_PROPERTIES =
       new BlobProperties(100, SERVICE_ID, null, null, false, TTL_SECS, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),
-          false, null);
+          false, null, null, null);
   private static final byte[] BLOB_DATA = TestUtils.getRandomBytes(100);
 
   static {

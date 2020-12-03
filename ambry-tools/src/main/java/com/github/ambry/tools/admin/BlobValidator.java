@@ -537,6 +537,14 @@ public class BlobValidator implements Closeable {
       } else if (blobProperties.getContentType() == null || that.blobProperties.getContentType() == null) {
         mismatchDetails = "Content type mismatch: " + blobProperties.getContentType() + " v/s "
             + that.blobProperties.getContentType();
+      } else if (blobProperties.getFilename() != null && that.blobProperties.getFilename() != null
+          && (!blobProperties.getFilename().equals(that.blobProperties.getFilename()))) {
+        mismatchDetails =
+            "Content type mismatch: " + blobProperties.getFilename() + " v/s " + that.blobProperties.getFilename();
+      } else if (blobProperties.getContentEncoding() != null && that.blobProperties.getContentEncoding() != null
+          && (!blobProperties.getContentEncoding().equals(that.blobProperties.getContentEncoding()))) {
+        mismatchDetails =
+            "Content type mismatch: " + blobProperties.getContentEncoding() + " v/s " + that.blobProperties.getContentEncoding();
       } else if (blobProperties.getOwnerId() != null && that.blobProperties.getOwnerId() != null
           && (!blobProperties.getOwnerId().equals(that.blobProperties.getOwnerId()))) {
         mismatchDetails =

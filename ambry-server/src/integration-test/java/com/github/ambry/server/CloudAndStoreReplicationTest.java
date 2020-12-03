@@ -337,7 +337,8 @@ public class CloudAndStoreReplicationTest {
     byte[] userMetadata = new byte[userMetaDataSize];
     byte[] data = new byte[blobSize];
     BlobProperties properties =
-        new BlobProperties(blobSize, "serviceid1", null, null, false, -1, accountId, containerId, false, null);
+        new BlobProperties(blobSize, "serviceid1", null, null, false, -1, accountId, containerId, false, null, null,
+            null);
     TestUtils.RANDOM.nextBytes(userMetadata);
     TestUtils.RANDOM.nextBytes(data);
 

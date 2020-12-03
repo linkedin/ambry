@@ -1124,7 +1124,8 @@ class PutOperation {
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
-            passedInBlobProperties.getExternalAssetTag());
+            passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
+            passedInBlobProperties.getFilename());
         operationTracker =
             new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, null, true);
         correlationIdToChunkPutRequestInfo.clear();
@@ -1660,7 +1661,8 @@ class PutOperation {
               passedInBlobProperties.getContentType(), passedInBlobProperties.isPrivate(),
               passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs(),
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
-              passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag());
+              passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag(),
+              passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename());
       if (isStitchOperation() || getNumDataChunks() > 1) {
         ByteBuffer serialized = null;
         // values returned are in the right order as TreeMap returns them in key-order.

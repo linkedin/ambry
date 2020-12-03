@@ -271,6 +271,12 @@ class AmbrySecurityService implements SecurityService {
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
     }
+    if (blobProperties.getContentEncoding() != null) {
+      restResponseChannel.setHeader(Headers.AMBRY_CONTENT_ENCODING, blobProperties.getContentEncoding());
+    }
+    if (blobProperties.getFilename() != null) {
+      restResponseChannel.setHeader(Headers.AMBRY_FILENAME, blobProperties.getFilename());
+    }
     restResponseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, RestUtils.BYTE_RANGE_UNITS);
     long contentLength = blobProperties.getBlobSize();
     if (options.getRange() != null) {
@@ -314,6 +320,12 @@ class AmbrySecurityService implements SecurityService {
         restResponseChannel.setHeader("Content-Disposition", "attachment");
       }
     }
+    if (blobProperties.getContentEncoding() != null) {
+      restResponseChannel.setHeader(Headers.AMBRY_CONTENT_ENCODING, blobProperties.getContentEncoding());
+    }
+    if (blobProperties.getFilename() != null) {
+      restResponseChannel.setHeader(Headers.AMBRY_FILENAME, blobProperties.getFilename());
+    }
   }
 
   /**
@@ -353,6 +365,12 @@ class AmbrySecurityService implements SecurityService {
     }
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE, blobProperties.getContentType());
+    }
+    if (blobProperties.getContentEncoding() != null) {
+      restResponseChannel.setHeader(Headers.AMBRY_CONTENT_ENCODING, blobProperties.getContentEncoding());
+    }
+    if (blobProperties.getFilename() != null) {
+      restResponseChannel.setHeader(Headers.AMBRY_FILENAME, blobProperties.getFilename());
     }
     if (blobProperties.getOwnerId() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());

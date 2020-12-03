@@ -239,7 +239,7 @@ public class GetBlobOperationTest {
    */
   private void doPut() throws Exception {
     blobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null);
+        Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null, null, null);
     userMetadata = new byte[10];
     random.nextBytes(userMetadata);
     putContent = new byte[blobSize];
@@ -1024,7 +1024,7 @@ public class GetBlobOperationTest {
     random.nextBytes(putContent);
     blobProperties =
         new BlobProperties(blobSize + 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null);
+            Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null, null, null);
     ByteBuf putContentBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(blobSize);
     putContentBuf.writeBytes(putContent);
     doDirectPut(BlobType.DataBlob, putContentBuf.retainedDuplicate());
@@ -1049,7 +1049,7 @@ public class GetBlobOperationTest {
     metadataContent.flip();
     blobProperties =
         new BlobProperties(blobSize - 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null);
+            Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null, null, null);
     ByteBuf metadataContentBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(metadataContent.remaining());
     metadataContentBuf.writeBytes(metadataContent.duplicate());
     doDirectPut(BlobType.MetadataBlob, metadataContentBuf.retainedDuplicate());

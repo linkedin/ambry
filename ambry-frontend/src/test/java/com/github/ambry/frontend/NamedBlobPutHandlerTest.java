@@ -381,7 +381,8 @@ public class NamedBlobPutHandlerTest {
       byte[] content = TestUtils.getRandomBytes(chunkSize);
       BlobProperties blobProperties =
           new BlobProperties(-1, SERVICE_ID, OWNER_ID, CONTENT_TYPE, !container.isCacheable(), blobTtlSecs,
-              creationTimeMs, container.getParentAccountId(), container.getId(), container.isEncrypted(), null);
+              creationTimeMs, container.getParentAccountId(), container.getId(), container.isEncrypted(), null, null,
+              null);
       String blobId =
           router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
               new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);

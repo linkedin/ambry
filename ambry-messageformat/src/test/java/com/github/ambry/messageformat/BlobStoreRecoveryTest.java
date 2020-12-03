@@ -83,7 +83,7 @@ public class BlobStoreRecoveryTest {
       // 1st message
       BlobProperties blobProperties =
           new BlobProperties(4000, "test", "mem1", "img", false, 9999, keys[0].getAccountId(), keys[0].getContainerId(),
-              true, null);
+              true, null, null, null);
       expectedExpirationTimeMs =
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
       PutMessageFormatInputStream msg1 =

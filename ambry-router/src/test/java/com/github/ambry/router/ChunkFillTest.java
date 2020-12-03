@@ -141,7 +141,7 @@ public class ChunkFillTest {
     short containerId = Utils.getRandomShort(random);
     BlobProperties putBlobProperties =
         new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, accountId,
-            containerId, false, null);
+            containerId, false, null, null, null);
     Random random = new Random();
     byte[] putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
@@ -242,7 +242,7 @@ public class ChunkFillTest {
     short containerId = Utils.getRandomShort(random);
     BlobProperties putBlobProperties =
         new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, accountId,
-            containerId, testEncryption, null);
+            containerId, testEncryption, null, null, null);
     Random random = new Random();
     byte[] putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
