@@ -45,6 +45,10 @@ public class VcrMetrics {
   public final Counter addPartitionErrorCount;
   public final Counter removePartitionErrorCount;
   public final Counter tokenReloadWarnCount;
+  // Container deprecation metrics
+  public final Timer accountServiceFetchTime;
+  public final Timer deprecationTaskRunTime;
+  public final Counter deprecatedContainerCount;
 
   // Retry metrics
   /** Number of times operation was retried */
@@ -78,6 +82,12 @@ public class VcrMetrics {
     removePartitionErrorCount =
         registry.counter(MetricRegistry.name(VcrReplicationManager.class, "RemovePartitionErrorCount"));
     tokenReloadWarnCount = registry.counter(MetricRegistry.name(VcrReplicationManager.class, "TokenReloadWarnCount"));
+    deprecationTaskRunTime =
+        registry.timer(MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "DeprecationTaskRunTime"));
+    accountServiceFetchTime =
+        registry.timer(MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "AccountServiceFetchTime"));
+    deprecatedContainerCount =
+        registry.counter(MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "DeprecatedContainerCount"));
   }
 
   /**

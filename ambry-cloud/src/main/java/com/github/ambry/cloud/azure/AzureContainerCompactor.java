@@ -59,6 +59,7 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
   private final int queryLimit;
   private final int containerDeletionQueryBatchSize;
+  private long latestContainerDeletionTimestamp;
 
   /**
    * Constructor for {@link AzureContainerCompactor}.
@@ -67,9 +68,11 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
    * @param cloudConfig {@link CloudConfig} object.
    * @param vcrMetrics {@link VcrMetrics} object.
    * @param azureMetrics {@link AzureMetrics} object.
+   * @throws CloudStorageException if case of any error.
    */
   public AzureContainerCompactor(AzureBlobDataAccessor azureBlobDataAccessor, CosmosDataAccessor cosmosDataAccessor,
-      CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, VcrMetrics vcrMetrics, AzureMetrics azureMetrics) {
+      CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, VcrMetrics vcrMetrics, AzureMetrics azureMetrics)
+      throws CloudStorageException {
     this.azureBlobDataAccessor = azureBlobDataAccessor;
     this.cosmosDataAccessor = cosmosDataAccessor;
     this.vcrMetrics = vcrMetrics;
@@ -77,6 +80,8 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
     this.queryLimit = azureCloudConfig.containerCompactionCosmosQueryLimit;
     this.containerDeletionQueryBatchSize = azureCloudConfig.cosmosContainerDeletionBatchSize;
+    this.latestContainerDeletionTimestamp = getLatestContainerDeletionTime();
+    azureMetrics.trackLatestContainerDeletionTimestamp(this);
   }
 
   /**
@@ -94,15 +99,20 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
           "Got either empty container set or empty partition list. Skipping update deprecated containers to cloud.");
       return;
     }
-    long lastUpdatedContainerTimestamp = getLatestContainerDeletionTime();
-    long newLastUpdateContainerTimestamp = requestAgent.doWithRetries(() -> cosmosDataAccessor.deprecateContainers(
-        deprecatedContainers.stream()
-            .filter(container -> container.getDeleteTriggerTime() >= lastUpdatedContainerTimestamp)
-            .map(container -> CosmosContainerDeletionEntry.fromContainer(container, partitionIds))
-            .collect(Collectors.toSet())), "updateDeprecatedContainers", null);
-
+    latestContainerDeletionTimestamp = getLatestContainerDeletionTime();
+    Set<CosmosContainerDeletionEntry> cosmosContainerDeletionEntries = deprecatedContainers.stream()
+        .filter(container -> container.getDeleteTriggerTime() >= latestContainerDeletionTimestamp)
+        .map(container -> CosmosContainerDeletionEntry.fromContainer(container, partitionIds))
+        .collect(Collectors.toSet());
+    long newLastUpdateContainerTimestamp =
+        requestAgent.doWithRetries(() -> cosmosDataAccessor.deprecateContainers(cosmosContainerDeletionEntries),
+            "updateDeprecatedContainers", null);
+    logger.info(String.format("Deprecated %d new containers from %l timestamp", cosmosContainerDeletionEntries.size(),
+        latestContainerDeletionTimestamp));
+    vcrMetrics.deprecatedContainerCount.inc(cosmosContainerDeletionEntries.size());
     if (newLastUpdateContainerTimestamp != -1) {
       saveLatestContainerDeletionTime(newLastUpdateContainerTimestamp);
+      latestContainerDeletionTimestamp = newLastUpdateContainerTimestamp;
     }
   }
 
@@ -122,9 +132,14 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
         containerDeletionEntrySet.remove(containerDeletionEntry);
         for (String partitionId : containerDeletionEntry.getDeletePendingPartitions()) {
           try {
+            logger.info(String.format("Starting compaction of container %d, account %d in partition %s",
+                containerDeletionEntry.getContainerId(), containerDeletionEntry.getAccountId(), partitionId));
             int blobCompactedCount =
                 compactContainer(containerDeletionEntry.getContainerId(), containerDeletionEntry.getAccountId(),
                     partitionId);
+            logger.info(String.format("Compacted %d blobs of deprecated container %d account %d in partition %s",
+                blobCompactedCount, containerDeletionEntry.getContainerId(), containerDeletionEntry.getAccountId(),
+                partitionId));
           } catch (CloudStorageException csEx) {
             logger.error("Container compaction failed for account {} container {} in partition {}",
                 containerDeletionEntry.getAccountId(), containerDeletionEntry.getContainerId(), partitionId);
@@ -137,6 +152,13 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
     } catch (CloudStorageException csEx) {
       logger.error("Container compaction failed due to {}", csEx.toString(), csEx);
     }
+  }
+
+  /**
+   * @return the latest container deletion timestamp.
+   */
+  public long getLatestContainerDeletionTimestamp() {
+    return latestContainerDeletionTimestamp;
   }
 
   /**
@@ -256,6 +278,9 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
             fieldsChanged.set(true);
           }
         }), "UpdateContainerDeletionProgress", partitionPath);
+    logger.info(
+        String.format("Compacted all blobs of deprecated container %d account %d from partition %s", containerId,
+            accountId, partitionPath));
   }
 
   /**

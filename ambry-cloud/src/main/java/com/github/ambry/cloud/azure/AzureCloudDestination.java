@@ -89,10 +89,11 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureReplicationFeedType {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
    * @param clusterMap {@link ClusterMap}.
    * @throws ReflectiveOperationException
+   * @throws CloudStorageException
    */
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
       VcrMetrics vcrMetrics, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType,
-      ClusterMap clusterMap) throws ReflectiveOperationException {
+      ClusterMap clusterMap) throws ReflectiveOperationException, CloudStorageException {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =
@@ -127,7 +128,7 @@ class AzureCloudDestination implements CloudDestination {
   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
       AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String cosmosDeletedContainerCollectionLink,
       String clusterName, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType,
-      ClusterMap clusterMap, boolean isVcr, Properties configProps) {
+      ClusterMap clusterMap, boolean isVcr, Properties configProps) throws CloudStorageException {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);

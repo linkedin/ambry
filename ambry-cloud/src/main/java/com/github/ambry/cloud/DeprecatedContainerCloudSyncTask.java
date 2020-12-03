@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountUtils;
 import com.github.ambry.account.Container;
@@ -32,6 +33,7 @@ public class DeprecatedContainerCloudSyncTask implements Task {
   private final AccountService accountService;
   private final long containerDeletionRetentionDays;
   private final CloudDestination cloudDestination;
+  private final VcrMetrics vcrMetrics;
 
   /**
    * Constructor for {@link DeprecatedContainerCloudSyncTask}.
@@ -40,20 +42,29 @@ public class DeprecatedContainerCloudSyncTask implements Task {
    * @param cloudDestination the {@link CloudDestination} object where deprecated container information will be updated.
    */
   public DeprecatedContainerCloudSyncTask(AccountService accountService, long containerDeletionRetentionDays,
-      CloudDestination cloudDestination) {
+      CloudDestination cloudDestination, VcrMetrics vcrMetrics) {
     this.accountService = accountService;
     this.containerDeletionRetentionDays = containerDeletionRetentionDays;
     this.cloudDestination = cloudDestination;
+    this.vcrMetrics = vcrMetrics;
   }
 
   @Override
   public TaskResult run() {
+    Timer.Context deprecationTaskRunTimer = vcrMetrics.deprecationTaskRunTime.time();
     try {
+      logger.info("DeprecatedContainerCloudSyncTask run started.");
+      Timer.Context accountServiceFetchTimer = vcrMetrics.accountServiceFetchTime.time();
       Set<Container> deprecatedContainers =
           AccountUtils.getDeprecatedContainers(accountService, containerDeletionRetentionDays);
+      accountServiceFetchTimer.stop();
+      logger.info(String.format("Attempting deprecation of %d containers.", deprecatedContainers.size()));
       cloudDestination.deprecateContainers(deprecatedContainers);
     } catch (CloudStorageException cloudStorageException) {
       logger.error("Error in updating deprecated containers from account service to cloud: ", cloudStorageException);
+    } finally {
+      logger.info("DeprecatedContainerCloudSyncTask done.");
+      deprecationTaskRunTimer.stop();
     }
     return null;
   }

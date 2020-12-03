@@ -592,11 +592,10 @@ public class CosmosDataAccessor {
     long latestContainerDeletionTimestamp = -1;
     for (CosmosContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
       try {
-
         executeCosmosAction(
             () -> asyncDocumentClient.createDocument(cosmosDeletedContainerCollectionLink, containerDeletionEntry,
                 getRequestOptions(containerDeletionEntry.getId()), true).toBlocking().single(),
-            azureMetrics.documentCreateTime);
+            azureMetrics.containerDeprecationDocumentCreateTime);
         if (containerDeletionEntry.getDeleteTriggerTimestamp() > latestContainerDeletionTimestamp) {
           latestContainerDeletionTimestamp = containerDeletionEntry.getDeleteTriggerTimestamp();
         }

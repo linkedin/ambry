@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
@@ -34,22 +35,36 @@ public class HelixVcrClusterFactory implements VirtualReplicatorClusterFactory {
   private final AccountService accountService;
   private final StoreConfig storeConfig;
   private final CloudDestination cloudDestination;
+  private final VcrMetrics vcrMetrics;
 
+  /**
+   * Constructor for {@link HelixVcrClusterFactory}
+   * @param cloudConfig {@link CloudConfig} object.
+   * @param clusterMapConfig {@link ClusterMapConfig} object.
+   * @param clusterMap {@link ClusterMap} object.
+   * @param accountService {@link AccountService} object.
+   * @param storeConfig {@link StoreConfig} object.
+   * @param cloudDestination {@link CloudDestination} object.
+   * @param metricRegistry  {@link MetricRegistry} object.
+   */
   public HelixVcrClusterFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
-      AccountService accountService, StoreConfig storeConfig, CloudDestination cloudDestination) {
+      AccountService accountService, StoreConfig storeConfig, CloudDestination cloudDestination,
+      MetricRegistry metricRegistry) {
     this.cloudConfig = cloudConfig;
     this.clusterMapConfig = clusterMapConfig;
     this.clusterMap = clusterMap;
     this.accountService = accountService;
     this.storeConfig = storeConfig;
     this.cloudDestination = cloudDestination;
+    this.vcrMetrics = new VcrMetrics(metricRegistry);
   }
 
   @Override
   synchronized public VirtualReplicatorCluster getVirtualReplicatorCluster() throws Exception {
     if (virtualReplicatorCluster == null) {
       virtualReplicatorCluster =
-          new HelixVcrCluster(cloudConfig, clusterMapConfig, storeConfig, clusterMap, accountService, cloudDestination);
+          new HelixVcrCluster(cloudConfig, clusterMapConfig, storeConfig, clusterMap, accountService, cloudDestination,
+              vcrMetrics);
     }
     return virtualReplicatorCluster;
   }

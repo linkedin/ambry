@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
@@ -34,6 +35,7 @@ public class AzureMetrics {
   public static final String BLOB_UPDATED_COUNT = "BlobUpdatedCount";
   public static final String BLOB_UPDATE_CONFLICT_COUNT = "BlobUpdateConflictCount";
   public static final String DOCUMENT_CREATE_TIME = "DocumentCreateTime";
+  public static final String CONTAINER_DELETION_DOCUMENT_CREATE_TIME = "ContainerDeletionDocumentCreateTime";
   public static final String DOCUMENT_READ_TIME = "DocumentReadTime";
   public static final String CONTAINER_DELETION_ENTRY_READ_TIME = "ContainerDeletionEntryReadTime";
   public static final String DOCUMENT_UPDATE_TIME = "DocumentUpdateTime";
@@ -69,6 +71,7 @@ public class AzureMetrics {
   public static final String STORAGE_CLIENT_OPERATION_RETRY_COUNT = "StorageClientOperationRetryCount";
   public static final String STORAGE_CLIENT_OPERATION_EXCEPTION_COUNT = "StorageClientOperationExceptionCount";
   public static final String STORAGE_CLIENT_FAILURE_AFTER_RETRY_COUNT = "StorageClientOperationFailureAfterRetryCount";
+  public static final String LAST_CONTAINER_DELETION_TIMESTAMP = "LastContainerDeletionTimestamp";
 
   // Metrics
   public final Counter blobUploadRequestCount;
@@ -84,6 +87,7 @@ public class AzureMetrics {
   public final Timer blobDownloadTime;
   public final Timer blobUpdateTime;
   public final Timer documentCreateTime;
+  public final Timer containerDeprecationDocumentCreateTime;
   public final Timer documentReadTime;
   public final Timer continerDeletionEntryReadTime;
   public final Timer documentUpdateTime;
@@ -121,7 +125,13 @@ public class AzureMetrics {
   public final Counter storageClientOperationExceptionCount;
   public final Counter storageClientFailureAfterRetryCount;
 
+  Gauge<Long> lastContainerDeletionTimestamp;
+
+  private final MetricRegistry metricRegistry;
+
   public AzureMetrics(MetricRegistry registry) {
+    this.metricRegistry = registry;
+
     blobUploadRequestCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_REQUEST_COUNT));
     blobUploadSuccessCount =
@@ -141,6 +151,8 @@ public class AzureMetrics {
     blobDownloadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_TIME));
     blobUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TIME));
     documentCreateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_CREATE_TIME));
+    containerDeprecationDocumentCreateTime =
+        registry.timer(MetricRegistry.name(AzureCloudDestination.class, CONTAINER_DELETION_DOCUMENT_CREATE_TIME));
     documentReadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_READ_TIME));
     continerDeletionEntryReadTime =
         registry.timer(MetricRegistry.name(AzureContainerCompactor.class, CONTAINER_DELETION_ENTRY_READ_TIME));
@@ -192,5 +204,14 @@ public class AzureMetrics {
         registry.counter(MetricRegistry.name(StorageClient.class, STORAGE_CLIENT_OPERATION_EXCEPTION_COUNT));
     storageClientFailureAfterRetryCount =
         registry.counter(MetricRegistry.name(StorageClient.class, STORAGE_CLIENT_FAILURE_AFTER_RETRY_COUNT));
+  }
+
+  /**
+   * Tracks the timestamp upto which the cloud container compaction has caught up with the account service.
+   * @param azureContainerCompactor {@link AzureContainerCompactor} object.
+   */
+  public void trackLatestContainerDeletionTimestamp(AzureContainerCompactor azureContainerCompactor) {
+    metricRegistry.gauge(MetricRegistry.name(AzureContainerCompactor.class, LAST_CONTAINER_DELETION_TIMESTAMP),
+        () -> azureContainerCompactor::getLatestContainerDeletionTimestamp);
   }
 }

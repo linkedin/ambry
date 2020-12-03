@@ -89,7 +89,7 @@ public class AzureContainerCompactorIntegrationTest {
   private final List<String> assignedPartitions = Arrays.asList(String.valueOf(testPartitionId));
   private final List<? extends PartitionId> allPartitions = Arrays.asList(new MockPartitionId(testPartitionId, null));
 
-  public AzureContainerCompactorIntegrationTest() throws ReflectiveOperationException {
+  public AzureContainerCompactorIntegrationTest() throws ReflectiveOperationException, CloudStorageException {
     // TODO Create the required cosmos table as well as the required azure blob.
     String PROPS_FILE_NAME = "azure-test.properties";
     Properties testProperties = new Properties();
