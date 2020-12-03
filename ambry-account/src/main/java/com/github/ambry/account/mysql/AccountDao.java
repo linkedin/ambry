@@ -22,6 +22,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import org.json.JSONObject;
 
@@ -77,22 +78,30 @@ public class AccountDao {
   }
 
   /**
-   * Gets all accounts that have been created or modified since the specified time.
-   * @param updatedSince the last modified time used to filter.
-   * @return a list of {@link Account}s.
+   * Add accounts to the database in batches.
+   * @param accounts the account to insert.
+   * @param batchSize number of statements to be executed in one batch
    * @throws SQLException
    */
-  public List<Account> getNewAccounts(long updatedSince) throws SQLException {
-    long startTimeMs = System.currentTimeMillis();
-    Timestamp sinceTime = new Timestamp(updatedSince);
-    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql, false);
-    getSinceStatement.setTimestamp(1, sinceTime);
-    try (ResultSet rs = getSinceStatement.executeQuery()) {
-      List<Account> accounts = convertResultSet(rs);
-      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
-      return accounts;
+  public void addAccounts(Collection<Account> accounts, int batchSize) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
+      int count = 0;
+      for (Account account : accounts) {
+        insertStatement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
+        insertStatement.setInt(2, account.getSnapshotVersion());
+        insertStatement.addBatch();
+        if (++count % batchSize == 0) {
+          insertStatement.executeBatch();
+        }
+      }
+      if (accounts.size() % batchSize != 0) {
+        insertStatement.executeBatch();
+      }
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e, Read);
+      dataAccessor.onException(e, Write);
       throw e;
     }
   }
@@ -113,6 +122,57 @@ public class AccountDao {
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);
+      throw e;
+    }
+  }
+
+  /**
+   * Updates a collection of accounts in the database.
+   * @param accounts the account to update.
+   * @param batchSize number of statements to be executed in one batch
+   * @throws SQLException
+   */
+  public void updateAccounts(Collection<Account> accounts, int batchSize) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement updateStatement = dataAccessor.getPreparedStatement(updateSql, true);
+      int count = 0;
+      for (Account account : accounts) {
+        updateStatement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
+        updateStatement.setInt(2, account.getSnapshotVersion());
+        updateStatement.setInt(3, account.getId());
+        updateStatement.addBatch();
+        if (++count % batchSize == 0) {
+          updateStatement.executeBatch();
+        }
+      }
+      if (accounts.size() % batchSize != 0) {
+        updateStatement.executeBatch();
+      }
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      throw e;
+    }
+  }
+
+  /**
+   * Gets all accounts that have been created or modified since the specified time.
+   * @param updatedSince the last modified time used to filter.
+   * @return a list of {@link Account}s.
+   * @throws SQLException
+   */
+  public List<Account> getNewAccounts(long updatedSince) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    Timestamp sinceTime = new Timestamp(updatedSince);
+    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getSinceSql, false);
+    getSinceStatement.setTimestamp(1, sinceTime);
+    try (ResultSet rs = getSinceStatement.executeQuery()) {
+      List<Account> accounts = convertResultSet(rs);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+      return accounts;
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Read);
       throw e;
     }
   }

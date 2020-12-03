@@ -21,11 +21,14 @@ import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.sql.BatchUpdateException;
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -373,7 +376,7 @@ public class MySqlAccountService extends AbstractAccountService {
       if (existingAccount == null) {
         // new account (insert the containers and account into db tables)
         mySqlAccountStore.addAccount(account);
-        mySqlAccountStore.addContainers(account.getAllContainers());
+        mySqlAccountStore.addContainers(account.getId(), account.getAllContainers());
       } else {
         // existing account (update account table)
         // Avoid updating account records if only container information changed.
@@ -416,22 +419,27 @@ public class MySqlAccountService extends AbstractAccountService {
       throw new IllegalArgumentException("Account with ID " + accountId + "doesn't exist");
     }
 
+    List<Container> addedContainers = new ArrayList<>();
+    List<Container> updatedContainers = new ArrayList<>();
     for (Container containerToUpdate : containers) {
       Container containerInCache =
           accountInfoMap.getContainerByIdForAccount(containerToUpdate.getParentAccountId(), containerToUpdate.getId());
       if (containerInCache == null) {
         // new container added. Insert record into container table.
-        mySqlAccountStore.addContainer(containerToUpdate);
+        addedContainers.add(containerToUpdate);
       } else {
         if (!containerInCache.equals(containerToUpdate)) {
           // Existing container modified. Increase the version of container and update container record
           containerToUpdate =
               new ContainerBuilder(containerToUpdate).setSnapshotVersion(containerToUpdate.getSnapshotVersion() + 1)
                   .build();
-          mySqlAccountStore.updateContainer(containerToUpdate);
+          updatedContainers.add(containerToUpdate);
         }
       }
     }
+
+    mySqlAccountStore.addContainers(accountId, addedContainers);
+    mySqlAccountStore.updateContainers(accountId, updatedContainers);
 
     long timeForUpdate = System.currentTimeMillis() - startTimeMs;
     logger.trace("Completed updating accounts/containers in MySql DB, took time={} ms", timeForUpdate);
@@ -460,13 +468,13 @@ public class MySqlAccountService extends AbstractAccountService {
    * @return the corresponding {@link AccountServiceException}.
    */
   public static AccountServiceException translateSQLException(SQLException e) {
-    if (e instanceof SQLIntegrityConstraintViolationException) {
-      SQLIntegrityConstraintViolationException icve = (SQLIntegrityConstraintViolationException) e;
+    if (e instanceof SQLIntegrityConstraintViolationException || (e instanceof BatchUpdateException
+        && e.getCause() instanceof SQLIntegrityConstraintViolationException)) {
       String message;
-      if (icve.getMessage().contains(ContainerDao.INDEX_ACCOUNT_CONTAINER)) {
+      if (e.getMessage().contains(ContainerDao.INDEX_ACCOUNT_CONTAINER)) {
         // Example: Duplicate entry '101-5' for key 'containers.accountContainer'
         message = "Duplicate containerId";
-      } else if (icve.getMessage().contains(ContainerDao.INDEX_CONTAINER_NAME)) {
+      } else if (e.getMessage().contains(ContainerDao.INDEX_CONTAINER_NAME)) {
         // duplicate container name: need to update cache but retry may fail
         message = "Duplicate container name";
       } else {
