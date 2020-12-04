@@ -347,7 +347,7 @@ public class MySqlStorageUsageRefresherTest {
     configProps.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
     configProps.setProperty(StorageQuotaConfig.BACKUP_FILE_DIR, localBackupFilePath.toString());
     configProps.setProperty(StorageQuotaConfig.MYSQL_STORE_RETRY_BACKOFF_MS, String.valueOf(MYSQL_RETRY_BACKOFF_MS));
-    configProps.setProperty(StorageQuotaConfig.MYSQL_STORE_RETRY_MAX, "1");
+    configProps.setProperty(StorageQuotaConfig.MYSQL_STORE_RETRY_MAX_COUNT, "1");
     return configProps;
   }
 
