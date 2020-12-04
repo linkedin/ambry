@@ -155,8 +155,8 @@ public class VcrServer {
 
       virtualReplicatorCluster =
           ((VirtualReplicatorClusterFactory) Utils.getObj(cloudConfig.virtualReplicatorClusterFactoryClass, cloudConfig,
-              clusterMapConfig, clusterMap, accountService, storeConfig,
-              cloudDestination)).getVirtualReplicatorCluster();
+              clusterMapConfig, clusterMap, accountService, storeConfig, cloudDestination,
+              registry)).getVirtualReplicatorCluster();
 
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);

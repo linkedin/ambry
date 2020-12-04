@@ -67,15 +67,17 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   private final CloudDestination cloudDestination;
   private HelixManager manager;
   private HelixAdmin helixAdmin;
+  private VcrMetrics vcrMetrics;
 
   /**
    * Construct the helix VCR cluster.
    * @param cloudConfig The cloud configuration to use.
    * @param clusterMapConfig The clusterMap configuration to use.
    * @param clusterMap The clusterMap to use.
+   * @param vcrMetrics {@link VcrMetrics} object.
    */
   public HelixVcrCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, StoreConfig storeConfig,
-      ClusterMap clusterMap, AccountService accountService, CloudDestination cloudDestination) {
+      ClusterMap clusterMap, AccountService accountService, CloudDestination cloudDestination, VcrMetrics vcrMetrics) {
     if (Utils.isNullOrEmpty(cloudConfig.vcrClusterZkConnectString)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING);
     } else if (Utils.isNullOrEmpty(cloudConfig.vcrClusterName)) {
@@ -93,6 +95,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
     metrics = new HelixVcrClusterMetrics(clusterMap.getMetricRegistry(), assignedPartitionIds);
     this.accountService = accountService;
     this.cloudDestination = cloudDestination;
+    this.vcrMetrics = vcrMetrics;
   }
 
   /**
@@ -181,12 +184,17 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
         @Override
         public Task createNewTask(TaskCallbackContext context) {
           return new DeprecatedContainerCloudSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
-              cloudDestination);
+              cloudDestination, vcrMetrics);
         }
       });
       if (!taskFactoryMap.isEmpty()) {
-        engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
-            new TaskStateModelFactory(manager, taskFactoryMap));
+        if (engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
+            new TaskStateModelFactory(manager, taskFactoryMap))) {
+          logger.info("Container deletion sync task registered with helix.");
+        } else {
+          vcrMetrics.deprecationSyncTaskRegistrationFailureCount.inc();
+          logger.error("Container deletion sync task registration with helix failed.");
+        }
       }
     }
   }

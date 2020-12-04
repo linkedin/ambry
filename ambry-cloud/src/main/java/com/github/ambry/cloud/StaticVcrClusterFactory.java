@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
@@ -33,7 +34,8 @@ public class StaticVcrClusterFactory implements VirtualReplicatorClusterFactory 
   private VirtualReplicatorCluster virtualReplicatorCluster;
 
   public StaticVcrClusterFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
-      AccountService accountService, StoreConfig storeConfig, CloudDestination cloudDestination) {
+      AccountService accountService, StoreConfig storeConfig, CloudDestination cloudDestination,
+      MetricRegistry metricRegistry) {
     this.cloudConfig = cloudConfig;
     this.clusterMapConfig = clusterMapConfig;
     this.clusterMap = clusterMap;

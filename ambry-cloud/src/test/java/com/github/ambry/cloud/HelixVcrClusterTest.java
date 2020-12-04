@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -131,7 +132,7 @@ public class HelixVcrClusterTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
     return new HelixVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap, Mockito.mock(AccountService.class),
-        new StoreConfig(verifiableProperties), null).getVirtualReplicatorCluster();
+        new StoreConfig(verifiableProperties), null, new MetricRegistry()).getVirtualReplicatorCluster();
   }
 
   /**
