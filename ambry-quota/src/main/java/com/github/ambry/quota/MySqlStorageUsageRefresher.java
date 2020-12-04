@@ -167,9 +167,8 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     try {
       String monthValue = accountStatsMySqlStore.queryRecordedMonth(clusterMapConfig.clusterMapClusterName);
       if (monthValue.equals(currentMonth)) {
-        Map<String, Map<String, Long>> base =
+        containerStorageUsageMonthlyBase =
             accountStatsMySqlStore.queryMonthlyAggregatedStats(clusterMapConfig.clusterMapClusterName);
-        containerStorageUsageMonthlyBase = base;
       } else {
         shouldRetry = true;
       }
@@ -179,17 +178,18 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     }
 
     if (shouldRetry) {
-      if (retries >= config.mysqlStoreRetryMax) {
+      if (retries >= config.mysqlStoreRetryMaxCount) {
         logger.error("Failed to refresh monthly storage usage after " + retries + " retries, will skip for month: "
             + currentMonth);
         retries = 0;
+        scheduleStorageUsageMonthlyBaseFetcher();
+        return;
       }
       retries++;
       if (config.mysqlStoreRetryBackoffMs != 0) {
         scheduler.schedule(this::fetchMonthlyStorageUsageAndMaybeRetry, config.mysqlStoreRetryBackoffMs,
             TimeUnit.MILLISECONDS);
       }
-      return;
     } else {
       retries = 0;
       tryPersistMonthlyUsage();

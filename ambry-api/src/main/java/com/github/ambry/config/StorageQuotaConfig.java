@@ -27,7 +27,7 @@ public class StorageQuotaConfig {
   public static final String MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC =
       STORAGE_QUOTA_PREFIX + "mysql.monthly.base.fetch.offset.sec";
   public static final String MYSQL_STORE_RETRY_BACKOFF_MS = STORAGE_QUOTA_PREFIX + "mysql.store.retry.backoff.ms";
-  public static final String MYSQL_STORE_RETRY_MAX = STORAGE_QUOTA_PREFIX + "mysql.store.retry.max";
+  public static final String MYSQL_STORE_RETRY_MAX_COUNT = STORAGE_QUOTA_PREFIX + "mysql.store.retry.max.count";
 
   //////////////// Config for HelixStorageUsageRefresher ///////////////
 
@@ -98,9 +98,9 @@ public class StorageQuotaConfig {
   /**
    * Maximum retry times to execute a mysql database query.
    */
-  @Config(MYSQL_STORE_RETRY_MAX)
+  @Config(MYSQL_STORE_RETRY_MAX_COUNT)
   @Default("1")
-  public final int mysqlStoreRetryMax;
+  public final int mysqlStoreRetryMaxCount;
 
   /**
    * Offset in seconds to fetch container usage monthly base.
@@ -123,7 +123,7 @@ public class StorageQuotaConfig {
         verifiableProperties.getIntInRange(SOURCE_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);
     backupFileDir = verifiableProperties.getString(BACKUP_FILE_DIR, "");
     mysqlStoreRetryBackoffMs = verifiableProperties.getLong(MYSQL_STORE_RETRY_BACKOFF_MS, 10 * 60 * 1000);
-    mysqlStoreRetryMax = verifiableProperties.getInt(MYSQL_STORE_RETRY_MAX, 1);
+    mysqlStoreRetryMaxCount = verifiableProperties.getInt(MYSQL_STORE_RETRY_MAX_COUNT, 1);
     mysqlMonthlyBaseFetchOffsetSec = verifiableProperties.getLong(MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC, 60 * 60);
   }
 }
