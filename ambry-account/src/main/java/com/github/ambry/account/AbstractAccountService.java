@@ -115,12 +115,12 @@ abstract class AbstractAccountService implements AccountService {
         if (existingContainer != null) {
           switch (existingContainer.getStatus()) {
             case INACTIVE:
-              throw new AccountServiceException("The container has gone and cannot be restored",
+              throw new AccountServiceException(
+                  "The container " + container.getName() + " has gone and cannot be restored",
                   AccountServiceErrorCode.ResourceHasGone);
             case DELETE_IN_PROGRESS:
-              throw new AccountServiceException(
-                  "Create method is not allowed on container with Delete_In_Progress state",
-                  AccountServiceErrorCode.MethodNotAllowed);
+              throw new AccountServiceException("Create method is not allowed on container " + container.getName()
+                  + " as it's in Delete_In_Progress state", AccountServiceErrorCode.MethodNotAllowed);
             case ACTIVE:
               // make sure there is no conflicting container (conflicting means a container with same name but different attributes already exists).
               if (existingContainer.isSameContainer(container)) {
