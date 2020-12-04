@@ -272,10 +272,7 @@ class AmbrySecurityService implements SecurityService {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
     }
     if (blobProperties.getContentEncoding() != null) {
-      restResponseChannel.setHeader(Headers.AMBRY_CONTENT_ENCODING, blobProperties.getContentEncoding());
-    }
-    if (blobProperties.getFilename() != null) {
-      restResponseChannel.setHeader(Headers.AMBRY_FILENAME, blobProperties.getFilename());
+      restResponseChannel.setHeader(Headers.CONTENT_ENCODING, blobProperties.getContentEncoding());
     }
     restResponseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, RestUtils.BYTE_RANGE_UNITS);
     long contentLength = blobProperties.getBlobSize();
@@ -321,10 +318,7 @@ class AmbrySecurityService implements SecurityService {
       }
     }
     if (blobProperties.getContentEncoding() != null) {
-      restResponseChannel.setHeader(Headers.AMBRY_CONTENT_ENCODING, blobProperties.getContentEncoding());
-    }
-    if (blobProperties.getFilename() != null) {
-      restResponseChannel.setHeader(Headers.AMBRY_FILENAME, blobProperties.getFilename());
+      restResponseChannel.setHeader(Headers.CONTENT_ENCODING, blobProperties.getContentEncoding());
     }
   }
 
@@ -367,10 +361,7 @@ class AmbrySecurityService implements SecurityService {
       restResponseChannel.setHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE, blobProperties.getContentType());
     }
     if (blobProperties.getContentEncoding() != null) {
-      restResponseChannel.setHeader(Headers.AMBRY_CONTENT_ENCODING, blobProperties.getContentEncoding());
-    }
-    if (blobProperties.getFilename() != null) {
-      restResponseChannel.setHeader(Headers.AMBRY_FILENAME, blobProperties.getFilename());
+      restResponseChannel.setHeader(Headers.CONTENT_ENCODING, blobProperties.getContentEncoding());
     }
     if (blobProperties.getOwnerId() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());

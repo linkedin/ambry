@@ -201,21 +201,9 @@ public class BlobProperties {
     StringBuilder sb = new StringBuilder();
     sb.append("BlobProperties[");
     sb.append("BlobSize=").append(getBlobSize());
-    if (getContentType() != null) {
-      sb.append(", ").append("ContentType=").append(getContentType());
-    } else {
-      sb.append(", ").append("ContentType=Null");
-    }
-    if (getOwnerId() != null) {
-      sb.append(", ").append("OwnerId=").append(getOwnerId());
-    } else {
-      sb.append(", ").append("OwnerId=Null");
-    }
-    if (getServiceId() != null) {
-      sb.append(", ").append("ServiceId=").append(getServiceId());
-    } else {
-      sb.append(", ").append("ServiceId=Null");
-    }
+    sb.append(", ").append("ContentType=").append(getContentType());
+    sb.append(", ").append("OwnerId=").append(getOwnerId());
+    sb.append(", ").append("ServiceId=").append(getServiceId());
     sb.append(", ").append("IsPrivate=").append(isPrivate());
     sb.append(", ").append("CreationTimeInMs=").append(getCreationTimeInMs());
     if (getTimeToLiveInSeconds() != Utils.Infinite_Time) {
@@ -227,16 +215,8 @@ public class BlobProperties {
     sb.append(", ").append("ContainerId=").append(getContainerId());
     sb.append(", ").append("IsEncrypted=").append(isEncrypted());
     sb.append(", ").append("externalAssetTag=").append(getExternalAssetTag());
-    if (getContentEncoding() != null) {
-      sb.append(", ").append("ContentEncoding=").append(getContentEncoding());
-    } else {
-      sb.append(", ").append("ContentEncoding=Null");
-    }
-    if (getFilename() != null) {
-      sb.append(", ").append("Filename=").append(getFilename());
-    } else {
-      sb.append(", ").append("Filename=Null");
-    }
+    sb.append(", ").append("ContentEncoding=").append(getContentEncoding());
+    sb.append(", ").append("Filename=").append(getFilename());
     sb.append("]");
     return sb.toString();
   }

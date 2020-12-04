@@ -68,6 +68,10 @@ public class RestUtils {
      */
     public static final String CONTENT_TYPE = "Content-Type";
     /**
+     * {@code "Content-Encoding}
+     */
+    public static final String CONTENT_ENCODING = "Content-Encoding";
+    /**
      * {@code "Date"}
      */
     public static final String DATE = "Date";
