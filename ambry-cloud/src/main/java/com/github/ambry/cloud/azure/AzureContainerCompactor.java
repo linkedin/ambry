@@ -132,15 +132,16 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
         containerDeletionEntrySet.remove(containerDeletionEntry);
         for (String partitionId : containerDeletionEntry.getDeletePendingPartitions()) {
           try {
-            logger.info(String.format("Starting compaction of container %d, account %d in partition %s",
-                containerDeletionEntry.getContainerId(), containerDeletionEntry.getAccountId(), partitionId));
+            logger.info("Starting compaction of container {}, account {} in partition {}",
+                containerDeletionEntry.getContainerId(), containerDeletionEntry.getAccountId(), partitionId);
             int blobCompactedCount =
                 compactContainer(containerDeletionEntry.getContainerId(), containerDeletionEntry.getAccountId(),
                     partitionId);
-            logger.info(String.format("Compacted %d blobs of deprecated container %d account %d in partition %s",
-                blobCompactedCount, containerDeletionEntry.getContainerId(), containerDeletionEntry.getAccountId(),
-                partitionId));
+            logger.info("Compacted {} blobs of deprecated container {} account {} in partition {}", blobCompactedCount,
+                containerDeletionEntry.getContainerId(), containerDeletionEntry.getAccountId(), partitionId);
+            azureMetrics.deprecatedContainerCompactionSuccessCount.inc();
           } catch (CloudStorageException csEx) {
+            azureMetrics.deprecatedContainerCompactionFailureCount.inc();
             logger.error("Container compaction failed for account {} container {} in partition {}",
                 containerDeletionEntry.getAccountId(), containerDeletionEntry.getContainerId(), partitionId);
           }

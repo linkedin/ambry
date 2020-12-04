@@ -21,8 +21,6 @@ import com.codahale.metrics.Timer;
 
 public class VcrMetrics {
 
-  private final MetricRegistry registry;
-
   // Encryption metrics
   public final Counter blobEncryptionCount;
   public final Counter blobDecryptionCount;
@@ -49,12 +47,14 @@ public class VcrMetrics {
   public final Timer accountServiceFetchTime;
   public final Timer deprecationTaskRunTime;
   public final Counter deprecatedContainerCount;
+  public final Counter deprecationSyncTaskRegistrationFailureCount;
 
   // Retry metrics
-  /** Number of times operation was retried */
-  public final Counter retryCount;
   /** Number of msec spent waiting between retries */
   public final Counter retryWaitTimeMsec;
+  /** Number of times operation was retried */
+  public final Counter retryCount;
+  private final MetricRegistry registry;
 
   public VcrMetrics(MetricRegistry registry) {
     this.registry = registry;
@@ -88,6 +88,8 @@ public class VcrMetrics {
         registry.timer(MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "AccountServiceFetchTime"));
     deprecatedContainerCount =
         registry.counter(MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "DeprecatedContainerCount"));
+    deprecationSyncTaskRegistrationFailureCount = registry.counter(
+        MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "DeprecationSyncTaskRegistrationFailureCount"));
   }
 
   /**

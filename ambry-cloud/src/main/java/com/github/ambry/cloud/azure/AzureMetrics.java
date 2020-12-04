@@ -72,6 +72,10 @@ public class AzureMetrics {
   public static final String STORAGE_CLIENT_OPERATION_EXCEPTION_COUNT = "StorageClientOperationExceptionCount";
   public static final String STORAGE_CLIENT_FAILURE_AFTER_RETRY_COUNT = "StorageClientOperationFailureAfterRetryCount";
   public static final String LAST_CONTAINER_DELETION_TIMESTAMP = "LastContainerDeletionTimestamp";
+  public static final String DEPRECATED_CONTAINER_COMPACTION_FAILURE_COUNT =
+      "DeprecatedContainerCompactionFailureCount";
+  public static final String DEPRECATED_CONTAINER_COMPACTION_SUCCESS_COUNT =
+      "DeprecatedContainerCompactionSuccessCount";
 
   // Metrics
   public final Counter blobUploadRequestCount;
@@ -124,10 +128,10 @@ public class AzureMetrics {
   public final Counter storageClientOperationRetryCount;
   public final Counter storageClientOperationExceptionCount;
   public final Counter storageClientFailureAfterRetryCount;
-
-  Gauge<Long> lastContainerDeletionTimestamp;
-
+  public final Counter deprecatedContainerCompactionFailureCount;
+  public final Counter deprecatedContainerCompactionSuccessCount;
   private final MetricRegistry metricRegistry;
+  Gauge<Long> lastContainerDeletionTimestamp;
 
   public AzureMetrics(MetricRegistry registry) {
     this.metricRegistry = registry;
@@ -204,6 +208,10 @@ public class AzureMetrics {
         registry.counter(MetricRegistry.name(StorageClient.class, STORAGE_CLIENT_OPERATION_EXCEPTION_COUNT));
     storageClientFailureAfterRetryCount =
         registry.counter(MetricRegistry.name(StorageClient.class, STORAGE_CLIENT_FAILURE_AFTER_RETRY_COUNT));
+    deprecatedContainerCompactionFailureCount = registry.counter(
+        MetricRegistry.name(AzureContainerCompactor.class, DEPRECATED_CONTAINER_COMPACTION_FAILURE_COUNT));
+    deprecatedContainerCompactionSuccessCount = registry.counter(
+        MetricRegistry.name(AzureContainerCompactor.class, DEPRECATED_CONTAINER_COMPACTION_SUCCESS_COUNT));
   }
 
   /**

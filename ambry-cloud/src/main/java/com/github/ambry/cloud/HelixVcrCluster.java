@@ -192,6 +192,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
             new TaskStateModelFactory(manager, taskFactoryMap))) {
           logger.info("Container deletion sync task registered with helix.");
         } else {
+          vcrMetrics.deprecationSyncTaskRegistrationFailureCount.inc();
           logger.error("Container deletion sync task registration with helix failed.");
         }
       }

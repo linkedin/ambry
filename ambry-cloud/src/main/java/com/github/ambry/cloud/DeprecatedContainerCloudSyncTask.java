@@ -58,7 +58,7 @@ public class DeprecatedContainerCloudSyncTask implements Task {
       Set<Container> deprecatedContainers =
           AccountUtils.getDeprecatedContainers(accountService, containerDeletionRetentionDays);
       accountServiceFetchTimer.stop();
-      logger.info(String.format("Attempting deprecation of %d containers.", deprecatedContainers.size()));
+      logger.info("Attempting deprecation of {} containers.", deprecatedContainers.size());
       cloudDestination.deprecateContainers(deprecatedContainers);
     } catch (CloudStorageException cloudStorageException) {
       logger.error("Error in updating deprecated containers from account service to cloud: ", cloudStorageException);
