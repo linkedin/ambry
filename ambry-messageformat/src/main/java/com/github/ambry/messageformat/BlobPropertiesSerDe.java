@@ -30,6 +30,7 @@ public class BlobPropertiesSerDe {
   static final short VERSION_1 = 1;
   static final short VERSION_2 = 2;
   static final short VERSION_3 = 3;
+  static final short VERSION_4 = 4;
   private static final int VERSION_FIELD_SIZE_IN_BYTES = Short.BYTES;
   private static final int TTL_FIELD_SIZE_IN_BYTES = Long.BYTES;
   private static final int PRIVATE_FIELD_SIZE_IN_BYTES = Byte.BYTES;
@@ -46,7 +47,7 @@ public class BlobPropertiesSerDe {
 
   public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream) throws IOException {
     short version = stream.readShort();
-    if (version < VERSION_1 || version > VERSION_3) {
+    if (version < VERSION_1 || version > VERSION_4) {
       throw new IllegalArgumentException("stream has unknown blob property version " + version);
     }
     long ttl = stream.readLong();
@@ -59,8 +60,10 @@ public class BlobPropertiesSerDe {
     short accountId = version > VERSION_1 ? stream.readShort() : Account.UNKNOWN_ACCOUNT_ID;
     short containerId = version > VERSION_1 ? stream.readShort() : Container.UNKNOWN_CONTAINER_ID;
     boolean isEncrypted = version > VERSION_2 && stream.readByte() == (byte) 1;
+    String contentEncoding = version > VERSION_3 ? Utils.readIntString(stream) : null;
+    String filename = version > VERSION_3 ? Utils.readIntString(stream) : null;
     return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
-        containerId, isEncrypted, null);
+        containerId, isEncrypted, null, contentEncoding, filename);
   }
 
   /**

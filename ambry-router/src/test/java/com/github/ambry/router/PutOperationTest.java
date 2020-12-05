@@ -96,7 +96,7 @@ public class PutOperationTest {
     int numChunks = routerConfig.routerMaxInMemPutChunks + 1;
     BlobProperties blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null);
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
     byte[] userMetadata = new byte[10];
     byte[] content = new byte[chunkSize * numChunks];
     random.nextBytes(content);
@@ -215,7 +215,7 @@ public class PutOperationTest {
   public void testEmptyByteBufInReadableStreamChannel() throws Exception {
     BlobProperties blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null);
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
     byte[] userMetadata = new byte[10];
     byte[] content = new byte[chunkSize];
     random.nextBytes(content);
@@ -248,7 +248,7 @@ public class PutOperationTest {
     int numChunks = routerConfig.routerMaxInMemPutChunks + 1;
     BlobProperties blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null);
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
     byte[] userMetadata = new byte[10];
     byte[] content = new byte[chunkSize * numChunks];
     random.nextBytes(content);
@@ -303,7 +303,7 @@ public class PutOperationTest {
     int numChunks = routerConfig.routerMaxInMemPutChunks + 1;
     BlobProperties blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null);
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
     byte[] userMetadata = new byte[10];
     byte[] content = new byte[chunkSize * numChunks];
     random.nextBytes(content);
@@ -350,7 +350,7 @@ public class PutOperationTest {
   public void testStitchErrorDataChunkHandling() throws Exception {
     BlobProperties blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null);
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
     byte[] userMetadata = new byte[10];
     FutureResult<String> future = new FutureResult<>();
     MockNetworkClient mockNetworkClient = new MockNetworkClient();

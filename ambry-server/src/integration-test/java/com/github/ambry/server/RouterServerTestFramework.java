@@ -159,7 +159,7 @@ class RouterServerTestFramework {
     short containerId = container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getId();
     BlobProperties properties =
         new BlobProperties(blobSize, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId,
-            testEncryption, null);
+            testEncryption, null, null, null);
     OperationChain opChain = new OperationChain(chainId, properties, userMetadata, data, operations);
     continueChain(opChain);
     return opChain;

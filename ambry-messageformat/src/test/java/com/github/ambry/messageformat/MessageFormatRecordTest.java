@@ -219,12 +219,13 @@ public class MessageFormatRecordTest {
       boolean isEncrypted = TestUtils.RANDOM.nextBoolean();
       if (version == VERSION_1) {
         properties = new BlobProperties(blobSize, "id", "member", "test", true, ttl, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID, isEncrypted, null);
+            Container.UNKNOWN_CONTAINER_ID, isEncrypted, null, null, null);
       } else {
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
         properties =
-            new BlobProperties(blobSize, "id", "member", "test", true, ttl, accountId, containerId, isEncrypted, null);
+            new BlobProperties(blobSize, "id", "member", "test", true, ttl, accountId, containerId, isEncrypted, null,
+                null, null);
       }
       ByteBuffer stream;
       if (version == VERSION_1) {
@@ -264,7 +265,7 @@ public class MessageFormatRecordTest {
     // failure case
     BlobProperties properties =
         new BlobProperties(1000, "id", "member", "test", true, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID, false, null);
+            Container.UNKNOWN_CONTAINER_ID, false, null, null, null);
     ByteBuffer stream = ByteBuffer.allocate(getBlobPropertiesRecordSize(properties) - 10);
     try {
       MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);

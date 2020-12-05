@@ -154,7 +154,7 @@ public class GetBlobInfoOperationTest {
     short containerId = Utils.getRandomShort(random);
     blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, accountId,
-            containerId, testEncryption, null);
+            containerId, testEncryption, null, null, null);
     userMetadata = new byte[BLOB_USER_METADATA_SIZE];
     random.nextBytes(userMetadata);
     putContent = new byte[BLOB_SIZE];

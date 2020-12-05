@@ -1250,7 +1250,8 @@ public class FrontendRestRequestServiceTest {
    * @throws JSONException
    */
   static void setAmbryHeadersForPut(JSONObject headers, long ttlInSecs, boolean isPrivate, String serviceId,
-      String contentType, String ownerId, String targetAccountName, String targetContainerName, String uploadNamedBlobMode) throws JSONException {
+      String contentType, String ownerId, String targetAccountName, String targetContainerName,
+      String uploadNamedBlobMode) throws JSONException {
     if (headers != null && serviceId != null && contentType != null) {
       if (ttlInSecs != Utils.Infinite_Time) {
         headers.put(RestUtils.Headers.TTL, Long.toString(ttlInSecs));
@@ -2308,7 +2309,7 @@ public class FrontendRestRequestServiceTest {
       Account expectedAccount, Container expectedContainer) throws Exception {
     BlobProperties blobProperties =
         new BlobProperties(0, serviceId, "owner", "image/gif", isPrivate, Utils.Infinite_Time,
-            Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null);
+            Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null, null, null);
     ReadableStreamChannel content = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
     String blobId = router.putBlobWithIdVersion(blobProperties, new byte[0], content, BlobId.BLOB_ID_V1).get();
     verifyAccountAndContainerFromBlobId(blobId, expectedAccount, expectedContainer, null);

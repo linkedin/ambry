@@ -186,7 +186,7 @@ public class MessageFormatSendTest {
     StoreKey storeKey = new MockId("012345678910123456789012");
     BlobProperties properties =
         new BlobProperties(blob.length, serviceId, ownerId, contentType, false, 100, accountId, containerId,
-            encryptionKey != null, null);
+            encryptionKey != null, null, null, null);
     MessageFormatInputStream putStream;
     MessageFormatRecord.MessageHeader_Format header;
     if (putFormat.equals(PutMessageFormatInputStream.class.getSimpleName())) {
@@ -411,7 +411,7 @@ public class MessageFormatSendTest {
     for (int i = 0; i < 5; i++) {
       properties[i] =
           new BlobProperties(blob[i].length, serviceIdPrefix + i, ownerIdPrefix + i, contentTypePrefix + i, false, 100,
-              (short) (accountIdBase + i), (short) (containerIdBase + i), encryptionKeys[i] != null, null);
+              (short) (accountIdBase + i), (short) (containerIdBase + i), encryptionKeys[i] != null, null, null, null);
     }
 
     MessageFormatInputStream[] putStreams = new MessageFormatInputStream[5];
