@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +39,7 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
  * proceed with subsequent actions.
  */
 public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
+  private static final Logger logger = LoggerFactory.getLogger(AmbryReplicaSyncUpManager.class);
   private final ConcurrentHashMap<String, CountDownLatch> partitionToBootstrapLatch = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, CountDownLatch> partitionToDeactivationLatch = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, CountDownLatch> partitionToDisconnectionLatch = new ConcurrentHashMap<>();
@@ -46,8 +48,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   private final ConcurrentHashMap<String, Boolean> partitionToDisconnectionSuccess = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<ReplicaId, LocalReplicaLagInfos> replicaToLagInfos = new ConcurrentHashMap<>();
   private final ClusterMapConfig clusterMapConfig;
-
-  private static final Logger logger = LoggerFactory.getLogger(AmbryReplicaSyncUpManager.class);
+  private final ReentrantLock updateLock = new ReentrantLock();
 
   public AmbryReplicaSyncUpManager(ClusterMapConfig clusterMapConfig) {
     this.clusterMapConfig = clusterMapConfig;
@@ -69,6 +70,15 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     // once deactivation is initiated, local replica won't receive new PUTs. All remote replicas should be able to
     // eventually catch with last PUT in local store. Hence, we set acceptable lag threshold to 0.
     replicaToLagInfos.put(replicaId, new LocalReplicaLagInfos(replicaId, 0, ReplicaState.INACTIVE));
+  }
+
+  @Override
+  public void initiateDisconnection(ReplicaId replicaId) {
+    partitionToDisconnectionLatch.put(replicaId.getPartitionId().toPathString(), new CountDownLatch(1));
+    partitionToDisconnectionSuccess.put(replicaId.getPartitionId().toPathString(), false);
+    // once disconnection is initiated, local replica won't receive any PUT/DELETE/TTLUpdate. All remote replicas should
+    // be able to eventually catch with local replica. Hence, we set acceptable lag threshold to 0.
+    replicaToLagInfos.put(replicaId, new LocalReplicaLagInfos(replicaId, 0, ReplicaState.OFFLINE));
   }
 
   /**
@@ -111,17 +121,57 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   }
 
   @Override
-  public boolean updateLagBetweenReplicas(ReplicaId localReplica, ReplicaId peerReplica, long lagInBytes) {
-    boolean updated = false;
-    LocalReplicaLagInfos lagInfos = replicaToLagInfos.get(localReplica);
-    if (lagInfos != null) {
-      lagInfos.updateLagInfo(peerReplica, lagInBytes);
-      if (logger.isDebugEnabled()) {
-        logger.debug(lagInfos.toString());
+  public void waitDisconnectionCompleted(String partitionName) throws InterruptedException {
+    CountDownLatch latch = partitionToDisconnectionLatch.get(partitionName);
+    if (latch == null) {
+      logger.error("Partition {} is not found for disconnection", partitionName);
+      throw new StateTransitionException("No disconnection latch is found for partition " + partitionName,
+          ReplicaNotFound);
+    } else {
+      logger.info("Waiting for partition {} to be disconnected", partitionName);
+      latch.await();
+      partitionToDisconnectionLatch.remove(partitionName);
+      // throw exception to put replica into ERROR state， this happens when disk crashes during disconnection
+      if (!partitionToDisconnectionSuccess.remove(partitionName)) {
+        throw new StateTransitionException("Disconnection failed on partition " + partitionName, DisconnectionFailure);
       }
-      updated = true;
+      logger.info("Disconnection is complete on partition {}", partitionName);
     }
-    return updated;
+  }
+
+  @Override
+  public boolean updateReplicaLagAndCheckSyncStatus(ReplicaId localReplica, ReplicaId peerReplica, long lagInBytes,
+      ReplicaState targetState) {
+    updateLock.lock();
+    try {
+      boolean syncUpCompleted = false;
+      LocalReplicaLagInfos lagInfos = replicaToLagInfos.get(localReplica);
+      if (lagInfos != null) {
+        lagInfos.updateLagInfo(peerReplica, lagInBytes);
+        if (logger.isDebugEnabled()) {
+          logger.debug(lagInfos.toString());
+        }
+        if (isSyncUpComplete(localReplica)) {
+          switch (targetState) {
+            case STANDBY:
+              onBootstrapComplete(localReplica);
+              break;
+            case INACTIVE:
+              onDeactivationComplete(localReplica);
+              break;
+            case OFFLINE:
+              onDisconnectionComplete(localReplica);
+              break;
+            default:
+              throw new IllegalArgumentException("Invalid target replica state for SyncUpManager: " + targetState);
+          }
+          syncUpCompleted = true;
+        }
+      }
+      return syncUpCompleted;
+    } finally {
+      updateLock.unlock();
+    }
   }
 
   @Override
@@ -153,6 +203,13 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     countDownLatch(partitionToDeactivationLatch, replicaId.getPartitionId().toPathString());
   }
 
+  @Override
+  public void onDisconnectionComplete(ReplicaId replicaId) {
+    partitionToDisconnectionSuccess.put(replicaId.getPartitionId().toPathString(), true);
+    replicaToLagInfos.remove(replicaId);
+    countDownLatch(partitionToDisconnectionLatch, replicaId.getPartitionId().toPathString());
+  }
+
   /**
    * {@inheritDoc}
    * This method will count down latch and terminates bootstrap.
@@ -167,41 +224,6 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   public void onDeactivationError(ReplicaId replicaId) {
     replicaToLagInfos.remove(replicaId);
     countDownLatch(partitionToDeactivationLatch, replicaId.getPartitionId().toPathString());
-  }
-
-  @Override
-  public void initiateDisconnection(ReplicaId replicaId) {
-    partitionToDisconnectionLatch.put(replicaId.getPartitionId().toPathString(), new CountDownLatch(1));
-    partitionToDisconnectionSuccess.put(replicaId.getPartitionId().toPathString(), false);
-    // once disconnection is initiated, local replica won't receive any PUT/DELETE/TTLUpdate. All remote replicas should
-    // be able to eventually catch with local replica. Hence, we set acceptable lag threshold to 0.
-    replicaToLagInfos.put(replicaId, new LocalReplicaLagInfos(replicaId, 0, ReplicaState.OFFLINE));
-  }
-
-  @Override
-  public void waitDisconnectionCompleted(String partitionName) throws InterruptedException {
-    CountDownLatch latch = partitionToDisconnectionLatch.get(partitionName);
-    if (latch == null) {
-      logger.error("Partition {} is not found for disconnection", partitionName);
-      throw new StateTransitionException("No disconnection latch is found for partition " + partitionName,
-          ReplicaNotFound);
-    } else {
-      logger.info("Waiting for partition {} to be disconnected", partitionName);
-      latch.await();
-      partitionToDisconnectionLatch.remove(partitionName);
-      // throw exception to put replica into ERROR state， this happens when disk crashes during disconnection
-      if (!partitionToDisconnectionSuccess.remove(partitionName)) {
-        throw new StateTransitionException("Disconnection failed on partition " + partitionName, DisconnectionFailure);
-      }
-      logger.info("Disconnection is complete on partition {}", partitionName);
-    }
-  }
-
-  @Override
-  public void onDisconnectionComplete(ReplicaId replicaId) {
-    partitionToDisconnectionSuccess.put(replicaId.getPartitionId().toPathString(), true);
-    replicaToLagInfos.remove(replicaId);
-    countDownLatch(partitionToDisconnectionLatch, replicaId.getPartitionId().toPathString());
   }
 
   @Override

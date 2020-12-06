@@ -50,9 +50,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Predicate;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -186,30 +186,17 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         if (localStore.getCurrentState() == ReplicaState.INACTIVE) {
           // if local store is in INACTIVE state, that means deactivation process is initiated and in progress on this
           // replica. We update SyncUpManager by peer's lag from last PUT offset in local store.
-          // it's ok if deactivation has completed and subsequent metadata request attempts to update lag of same replica
-          // again. The reason is, in previous request, onDeactivationComplete method should have removed local replica
-          // from SyncUpManager and it should be no-op and "updated" should be false when calling updateLagBetweenReplicas()
-          // for subsequent request. Hence, it won't call onDeactivationComplete() twice.
-          boolean updated =
-              replicaSyncUpManager.updateLagBetweenReplicas(localReplica, remoteReplicaInfo.getReplicaId(),
-                  localStore.getEndPositionOfLastPut() - totalBytesRead);
-          // if updated = false, it means the replica is not present in SyncUpManager and therefore doesn't need to
-          // complete transition. We don't throw exception here because Standby-To-Inactive transition may already be
-          // complete but local store's state is still INACTIVE since it will be updated at the beginning of
-          // Inactive-To-Offline transition.
-          if (updated && replicaSyncUpManager.isSyncUpComplete(localReplica)) {
-            replicaSyncUpManager.onDeactivationComplete(localReplica);
-          }
+          // it's ok if deactivation has completed and concurrent metadata request attempts to update lag of same replica
+          // again. The reason is, SyncUpManager has a lock to ensure only one request will call onDeactivationComplete()
+          // method. The local replica should have been removed when another request acquires the lock.
+          replicaSyncUpManager.updateReplicaLagAndCheckSyncStatus(localReplica, remoteReplicaInfo.getReplicaId(),
+              localStore.getEndPositionOfLastPut() - totalBytesRead, ReplicaState.INACTIVE);
         } else if (localStore.getCurrentState() == ReplicaState.OFFLINE && localStore.isDecommissionInProgress()) {
           // if local store is in OFFLINE state, we need more info to determine if replica is really in Inactive-To-Offline
           // transition. So we check if decommission file is present. If present, we update SyncUpManager by peer's lag
           // from end offset in local store.
-          boolean updated =
-              replicaSyncUpManager.updateLagBetweenReplicas(localReplica, remoteReplicaInfo.getReplicaId(),
-                  localStore.getSizeInBytes() - totalBytesRead);
-          if (updated && replicaSyncUpManager.isSyncUpComplete(localReplica)) {
-            replicaSyncUpManager.onDisconnectionComplete(localReplica);
-          }
+          replicaSyncUpManager.updateReplicaLagAndCheckSyncStatus(localReplica, remoteReplicaInfo.getReplicaId(),
+              localStore.getSizeInBytes() - totalBytesRead, ReplicaState.OFFLINE);
         }
       }
     }

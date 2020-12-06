@@ -43,14 +43,14 @@ import static org.mockito.Mockito.*;
  */
 public class AmbryReplicaSyncUpManagerTest {
   private static final String RESOURCE_NAME = "0";
+  private final List<ReplicaId> localDcPeerReplicas;
+  private final List<ReplicaId> remoteDcPeerReplicas;
+  private final MockClusterMap clusterMap;
   private AmbryPartitionStateModel stateModel;
   private AmbryReplicaSyncUpManager replicaSyncUpService;
   private ReplicaId currentReplica;
   private MockHelixParticipant mockHelixParticipant;
   private Message mockMessage;
-  private final List<ReplicaId> localDcPeerReplicas;
-  private final List<ReplicaId> remoteDcPeerReplicas;
-  private final MockClusterMap clusterMap;
 
   public AmbryReplicaSyncUpManagerTest() throws IOException {
     clusterMap = new MockClusterMap();
@@ -119,22 +119,22 @@ public class AmbryReplicaSyncUpManagerTest {
     ReplicaId remotePeer1 = remoteDcPeerReplicas.get(0);
     ReplicaId remotePeer2 = remoteDcPeerReplicas.get(1);
     // make current replica catch up with one peer replica in local DC
-    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer1, 50L);
     assertFalse("Catchup shouldn't complete on current replica because only one peer replica is caught up",
-        replicaSyncUpService.isSyncUpComplete(currentReplica));
+        replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(currentReplica, localPeer1, 50L, ReplicaState.STANDBY));
     // update lag between current replica and one remote DC peer replica but lag is still > acceptable threshold (100L)
-    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, remotePeer1, 110L);
     assertFalse("Catchup shouldn't complete on current replica because only one peer replica is caught up",
-        replicaSyncUpService.isSyncUpComplete(currentReplica));
+        replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(currentReplica, remotePeer1, 110L,
+            ReplicaState.STANDBY));
     // make current replica catch up with second peer replica in local DC and one more remote DC replica
-    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer2, 10L);
-    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, remotePeer2, 10L);
-    // make current replica fall behind first peer replica in local DC again (update lag to 150 > 100)
-    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer1, 150L);
-    // at this time, current replica has caught up with two replicas in local DC, so SyncUp is complete
     assertTrue("Catch up should be complete on current replica because it has caught up at least 2 peer replicas",
-        replicaSyncUpService.isSyncUpComplete(currentReplica));
-    replicaSyncUpService.onBootstrapComplete(currentReplica);
+        replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(currentReplica, localPeer2, 10L, ReplicaState.STANDBY));
+    assertFalse("Catchup is completed by previous update not this one",
+        replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(currentReplica, remotePeer2, 10L,
+            ReplicaState.STANDBY));
+    // make current replica fall behind first peer replica in local DC again (update lag to 150 > 100)
+    assertFalse("Catchup is completed by previous update. Current update should return false.",
+        replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(currentReplica, localPeer1, 150L,
+            ReplicaState.STANDBY));
     assertTrue("Bootstrap-To-Standby transition didn't complete within 1 sec.",
         stateModelLatch.await(1, TimeUnit.SECONDS));
     // reset ReplicaSyncUpManager
@@ -165,15 +165,13 @@ public class AmbryReplicaSyncUpManagerTest {
     ReplicaId localPeer1 = localDcPeerReplicas.get(0);
     ReplicaId localPeer2 = localDcPeerReplicas.get(1);
     // make localPeer1 catch up with current replica but localPeer2 still falls behind.
-    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer1, 0L);
-    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer2, 5L);
     assertFalse("Catchup shouldn't complete on current replica because only one peer replica has caught up",
-        replicaSyncUpService.isSyncUpComplete(currentReplica));
+        replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(currentReplica, localPeer1, 0L, ReplicaState.INACTIVE));
+    assertFalse("Catchup shouldn't complete on current replica because only one peer replica has caught up",
+        replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(currentReplica, localPeer2, 5L, ReplicaState.INACTIVE));
     // make localPeer2 catch up with current replica.
-    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer2, 0L);
     assertTrue("Sync up should be complete on current replica because 2 peer replicas have caught up with it",
-        replicaSyncUpService.isSyncUpComplete(currentReplica));
-    replicaSyncUpService.onDeactivationComplete(currentReplica);
+        replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(currentReplica, localPeer2, 0L, ReplicaState.INACTIVE));
     assertTrue("Standby-To-Inactive transition didn't complete within 1 sec.",
         stateModelLatch.await(1, TimeUnit.SECONDS));
     // reset ReplicaSyncUpManager
@@ -197,7 +195,8 @@ public class AmbryReplicaSyncUpManagerTest {
       // expected
     }
     assertFalse("Updating lag should return false because replica is not present",
-        replicaSyncUpService.updateLagBetweenReplicas(replicaToTest, peerReplica, 100L));
+        replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(replicaToTest, peerReplica, 100L,
+            ReplicaState.STANDBY));
     try {
       replicaSyncUpService.onBootstrapError(replicaToTest);
       fail("should fail because replica is not present");
