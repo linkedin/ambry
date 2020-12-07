@@ -360,7 +360,7 @@ public class ServerWritePerformance {
             channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
             long startTime = SystemTime.getInstance().nanoseconds();
             channel.send(putRequest);
-            PutResponse putResponse = PutResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
+            PutResponse putResponse = PutResponse.readFrom(channel.receive().getInputStream());
             if (putResponse.getError() != ServerErrorCode.No_Error) {
               throw new UnexpectedException("error " + putResponse.getError());
             }

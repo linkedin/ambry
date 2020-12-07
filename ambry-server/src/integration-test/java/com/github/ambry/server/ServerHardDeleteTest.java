@@ -389,8 +389,8 @@ public class ServerHardDeleteTest {
         new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
             properties.getBlobSize(), BlobType.DataBlob, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey));
     channel.send(putRequest0);
-    InputStream putResponseStream = channel.receive().getInputStream();
-    PutResponse response0 = PutResponse.readFrom(new DataInputStream(putResponseStream));
+    DataInputStream putResponseStream = channel.receive().getInputStream();
+    PutResponse response0 = PutResponse.readFrom(putResponseStream);
     Assert.assertEquals(ServerErrorCode.No_Error, response0.getError());
   }
 
@@ -403,8 +403,8 @@ public class ServerHardDeleteTest {
   void deleteBlob(BlobId blobId, ConnectedChannel channel) throws IOException {
     DeleteRequest deleteRequest = new DeleteRequest(1, "client1", blobId, time.milliseconds());
     channel.send(deleteRequest);
-    InputStream deleteResponseStream = channel.receive().getInputStream();
-    DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
+    DataInputStream deleteResponseStream = channel.receive().getInputStream();
+    DeleteResponse deleteResponse = DeleteResponse.readFrom(deleteResponseStream);
     Assert.assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
   }
 
@@ -417,8 +417,8 @@ public class ServerHardDeleteTest {
   void undeleteBlob(BlobId blobId, ConnectedChannel channel) throws IOException {
     UndeleteRequest deleteRequest = new UndeleteRequest(1, "client1", blobId, time.milliseconds());
     channel.send(deleteRequest);
-    InputStream undeleteResponseStream = channel.receive().getInputStream();
-    UndeleteResponse undeleteResponse = UndeleteResponse.readFrom(new DataInputStream(undeleteResponseStream));
+    DataInputStream undeleteResponseStream = channel.receive().getInputStream();
+    UndeleteResponse undeleteResponse = UndeleteResponse.readFrom(undeleteResponseStream);
     Assert.assertEquals("BlobId " + blobId + " undelete failed", ServerErrorCode.No_Error, undeleteResponse.getError());
   }
 
@@ -456,8 +456,8 @@ public class ServerHardDeleteTest {
     for (MessageFormatFlags flag : flags) {
       GetRequest getRequest = new GetRequest(1, "clientid2", flag, partitionRequestInfoList, GetOption.Include_All);
       channel.send(getRequest);
-      InputStream stream = channel.receive().getInputStream();
-      GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
+      DataInputStream stream = channel.receive().getInputStream();
+      GetResponse resp = GetResponse.readFrom(stream, mockClusterMap);
       if (flag == MessageFormatFlags.BlobProperties) {
         for (int i = 0; i < blobsCount; i++) {
           BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());

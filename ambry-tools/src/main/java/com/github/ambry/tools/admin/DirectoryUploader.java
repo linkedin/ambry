@@ -279,8 +279,8 @@ public class DirectoryUploader {
     PutResponse putResponse = null;
     try {
       blockingChannel.send(putRequest);
-      InputStream stream = blockingChannel.receive().getInputStream();
-      putResponse = PutResponse.readFrom(new DataInputStream(stream));
+      DataInputStream stream = blockingChannel.receive().getInputStream();
+      putResponse = PutResponse.readFrom(stream);
     } catch (Exception exception) {
       connectionPool.destroyConnection(blockingChannel);
       System.out.println("Unknown Exception Error" + exception);

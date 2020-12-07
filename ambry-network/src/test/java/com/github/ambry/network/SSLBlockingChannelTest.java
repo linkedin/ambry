@@ -25,6 +25,7 @@ import java.nio.ByteBuffer;
 import java.util.Random;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
+import javax.xml.crypto.Data;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -126,10 +127,9 @@ public class SSLBlockingChannelTest {
     channel.connect();
     channel.send(bufferToSend);
     // receive response
-    InputStream streamResponse = channel.receive().getInputStream();
-    DataInputStream input = new DataInputStream(streamResponse);
+    DataInputStream streamResponse = channel.receive().getInputStream();
     byte[] bytesReceived = new byte[(int) blobSize - 8];
-    input.readFully(bytesReceived);
+    streamResponse.readFully(bytesReceived);
     for (int i = 0; i < blobSize - 8; i++) {
       Assert.assertEquals(bytesToSend[8 + i], bytesReceived[i]);
     }

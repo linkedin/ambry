@@ -116,7 +116,7 @@ public class SocketServerTest {
     byteBufferToSendResponse.putLong(0, 2048);
     BoundedByteBufferSend responseToSend = new BoundedByteBufferSend(byteBufferToSendResponse);
     requestResponseChannel.sendResponse(responseToSend, request, null);
-    InputStream streamResponse = channel.receive().getInputStream();
+    DataInputStream streamResponse = channel.receive().getInputStream();
     byte[] responseBytesReceived = new byte[2040];
     streamResponse.read(responseBytesReceived);
     for (int i = 0; i < 2040; i++) {

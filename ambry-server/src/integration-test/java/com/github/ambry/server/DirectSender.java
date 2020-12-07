@@ -110,8 +110,8 @@ class DirectSender implements Runnable {
                 encryptionKey != null ? ByteBuffer.wrap(encryptionKey) : null);
 
         channel.send(putRequest);
-        InputStream putResponseStream = channel.receive().getInputStream();
-        PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
+        DataInputStream putResponseStream = channel.receive().getInputStream();
+        PutResponse response = PutResponse.readFrom(putResponseStream);
         if (putResponseStream instanceof NettyByteBufDataInputStream) {
           // Release the underlying netty buf if the stream is NettyByteBuf based.
           // The ByteBuf should also be released if exception happens, but we ignore it since this is test and exception is not expected.
