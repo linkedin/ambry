@@ -45,6 +45,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -380,9 +381,16 @@ public class HelixAccountServiceTest {
     Container inactiveContainer =
         new ContainerBuilder((short) (refContainer.getId() + 2), "inactive", Container.ContainerStatus.INACTIVE, "",
             refAccount.getId()).build();
-    Container deleteInProgressContainer = new ContainerBuilder((short) (refContainer.getId() + 3), "delete-in-progress",
-        ContainerStatus.DELETE_IN_PROGRESS, "", refAccount.getId()).build();
-    refAccount.updateContainerMap(Arrays.asList(activeContainer, inactiveContainer, deleteInProgressContainer));
+    Container deleteInProgressContainer1 =
+        new ContainerBuilder((short) (refContainer.getId() + 3), "within-retention-period",
+            ContainerStatus.DELETE_IN_PROGRESS, "", refAccount.getId()).setDeleteTriggerTime(System.currentTimeMillis())
+            .build();
+    Container deleteInProgressContainer2 =
+        new ContainerBuilder((short) (refContainer.getId() + 4), "past-retention-period",
+            ContainerStatus.DELETE_IN_PROGRESS, "", refAccount.getId()).setDeleteTriggerTime(
+            System.currentTimeMillis() - TimeUnit.DAYS.toMillis(15)).build();
+    refAccount.updateContainerMap(
+        Arrays.asList(activeContainer, inactiveContainer, deleteInProgressContainer1, deleteInProgressContainer2));
     // add an account with single container
     accountService.updateAccounts(Collections.singletonList(refAccount));
 
@@ -410,8 +418,10 @@ public class HelixAccountServiceTest {
 
     // 3. test containers already exist with INACTIVE and DELETE_IN_PROGRESS state
     Container duplicateInactiveContainer = new ContainerBuilder(inactiveContainer).setId(UNKNOWN_CONTAINER_ID).build();
-    Container duplicateDeleteInProgressContainer =
-        new ContainerBuilder(deleteInProgressContainer).setId(UNKNOWN_CONTAINER_ID).build();
+    Container duplicateDeleteInProgressContainer1 =
+        new ContainerBuilder(deleteInProgressContainer1).setId(UNKNOWN_CONTAINER_ID).build();
+    Container duplicateDeleteInProgressContainer2 =
+        new ContainerBuilder(deleteInProgressContainer2).setId(UNKNOWN_CONTAINER_ID).build();
     try {
       accountService.updateContainers(refAccountName, Collections.singleton(duplicateInactiveContainer));
       fail("Should fail because the existing container has been marked INACTIVE.");
@@ -419,10 +429,16 @@ public class HelixAccountServiceTest {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceHasGone, ase.getErrorCode());
     }
     try {
-      accountService.updateContainers(refAccountName, Collections.singleton(duplicateDeleteInProgressContainer));
+      accountService.updateContainers(refAccountName, Collections.singleton(duplicateDeleteInProgressContainer1));
       fail("Should fail because the existing container has been marked DELETE_IN_PROGRESS.");
     } catch (AccountServiceException ase) {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.MethodNotAllowed, ase.getErrorCode());
+    }
+    try {
+      accountService.updateContainers(refAccountName, Collections.singleton(duplicateDeleteInProgressContainer2));
+      fail("Should fail because the existing container has been marked DELETE_IN_PROGRESS and past retention time");
+    } catch (AccountServiceException ase) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceHasGone, ase.getErrorCode());
     }
     // 4. test conflict container (new container with existing name but different attributes)
     Container conflictContainer = new ContainerBuilder(brandNewContainer).setBackupEnabled(true).build();
@@ -433,7 +449,7 @@ public class HelixAccountServiceTest {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
     }
 
-    // 4. test adding same container twice, should be no-op and return result should include container with id
+    // 5. test adding same container twice, should be no-op and return result should include container with id
     Collection<Container> addedContainers =
         accountService.updateContainers(refAccountName, Collections.singleton(brandNewContainer));
     assertEquals("Mismatch in return count", 1, addedContainers.size());
@@ -443,7 +459,7 @@ public class HelixAccountServiceTest {
       assertEquals("Mismatch in container name", activeContainer.getName(), container.getName());
     }
 
-    // 5. test adding a different container (failure case due to ZK update failure)
+    // 6. test adding a different container (failure case due to ZK update failure)
     MockHelixPropertyStore<ZNRecord> mockHelixStore =
         mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig);
     mockHelixStore.setExceptionDuringUpdater(true);
@@ -455,7 +471,7 @@ public class HelixAccountServiceTest {
     }
     mockHelixStore.setExceptionDuringUpdater(false);
 
-    // 6. test adding 2 different containers (success case)
+    // 7. test adding 2 different containers (success case)
     Container containerToAdd2 =
         new ContainerBuilder(UNKNOWN_CONTAINER_ID, "newContainer2", ContainerStatus.ACTIVE, "description",
             refParentAccountId).build();

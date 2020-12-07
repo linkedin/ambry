@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -119,8 +120,15 @@ abstract class AbstractAccountService implements AccountService {
                   "The container " + container.getName() + " has gone and cannot be restored",
                   AccountServiceErrorCode.ResourceHasGone);
             case DELETE_IN_PROGRESS:
-              throw new AccountServiceException("Create method is not allowed on container " + container.getName()
-                  + " as it's in Delete_In_Progress state", AccountServiceErrorCode.MethodNotAllowed);
+              if (existingContainer.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(
+                  config.containerDeprecationRetentionDays) > System.currentTimeMillis()) {
+                throw new AccountServiceException("Create method is not allowed on container " + container.getName()
+                    + " as it's in Delete_In_Progress state", AccountServiceErrorCode.MethodNotAllowed);
+              } else {
+                throw new AccountServiceException(
+                    "The container " + container.getName() + " has gone and cannot be restored",
+                    AccountServiceErrorCode.ResourceHasGone);
+              }
             case ACTIVE:
               // make sure there is no conflicting container (conflicting means a container with same name but different attributes already exists).
               if (existingContainer.isSameContainer(container)) {

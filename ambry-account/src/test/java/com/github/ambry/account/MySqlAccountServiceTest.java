@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import org.junit.Test;
 
@@ -499,15 +500,19 @@ public class MySqlAccountServiceTest {
     AccountService mySqlAccountService = getAccountService();
     String accountName = "test-account";
     String inactiveContainer = "inactive-container";
-    String deleteInProgressContainer = "delete-in-progress-container";
+    String deleteInProgressContainer1 = "delete-in-progress-container1";
+    String deleteInProgressContainer2 = "delete-in-progress-container2";
     // create a testing account with inactive and delete-in-progress container.
     Account accountToUpdate =
         new AccountBuilder((short) 1, accountName, Account.AccountStatus.ACTIVE).addOrUpdateContainer(
             new ContainerBuilder((short) 1, inactiveContainer, Container.ContainerStatus.INACTIVE, "",
                 (short) 1).build())
-            .addOrUpdateContainer(
-                new ContainerBuilder((short) 2, deleteInProgressContainer, Container.ContainerStatus.DELETE_IN_PROGRESS,
-                    "", (short) 1).build())
+            .addOrUpdateContainer(new ContainerBuilder((short) 2, deleteInProgressContainer1,
+                Container.ContainerStatus.DELETE_IN_PROGRESS, "", (short) 1).setDeleteTriggerTime(
+                System.currentTimeMillis()).build())
+            .addOrUpdateContainer(new ContainerBuilder((short) 3, deleteInProgressContainer2,
+                Container.ContainerStatus.DELETE_IN_PROGRESS, "", (short) 1).setDeleteTriggerTime(
+                System.currentTimeMillis() - TimeUnit.DAYS.toMillis(15)).build())
             .build();
     mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate));
 
@@ -522,14 +527,24 @@ public class MySqlAccountServiceTest {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceHasGone, ase.getErrorCode());
     }
 
-    // Attempting to create an existing container with DELETE_IN_PROGRESS state should fail
-    containerToCreate = new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, deleteInProgressContainer,
+    // Attempting to create an existing container with DELETE_IN_PROGRESS state (within retention time) should fail
+    containerToCreate = new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, deleteInProgressContainer1,
         Container.ContainerStatus.ACTIVE, "", (short) 1).build();
     try {
       mySqlAccountService.updateContainers(accountName, Collections.singletonList(containerToCreate));
       fail("should fail because container to create is in DELETE_IN_PROGRESS state");
     } catch (AccountServiceException ase) {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.MethodNotAllowed, ase.getErrorCode());
+    }
+
+    // Attempting to create an existing container with DELETE_IN_PROGRESS state (past retention time) should fail
+    containerToCreate = new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, deleteInProgressContainer2,
+        Container.ContainerStatus.ACTIVE, "", (short) 1).build();
+    try {
+      mySqlAccountService.updateContainers(accountName, Collections.singletonList(containerToCreate));
+      fail("should fail because container to create is in DELETE_IN_PROGRESS state and past retention time");
+    } catch (AccountServiceException ase) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceHasGone, ase.getErrorCode());
     }
   }
 }

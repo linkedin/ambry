@@ -535,7 +535,9 @@ public class Container {
         && Objects.equals(this.isTtlRequired(), containerToCompare.isTtlRequired())
         && Objects.equals(this.getReplicationPolicy(), containerToCompare.getReplicationPolicy())
         && Objects.equals(this.isSecurePathRequired(), containerToCompare.isSecurePathRequired())
-        && Objects.equals(this.isBackupEnabled(), containerToCompare.isBackupEnabled());
+        && Objects.equals(this.isBackupEnabled(), containerToCompare.isBackupEnabled())
+        && Objects.equals(this.getContentTypeWhitelistForFilenamesOnDownload(),
+                          containerToCompare.getContentTypeWhitelistForFilenamesOnDownload());
     //@formatter:on
   }
 
