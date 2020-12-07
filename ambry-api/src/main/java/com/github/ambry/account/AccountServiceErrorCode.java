@@ -30,6 +30,14 @@ public enum AccountServiceErrorCode {
    */
   ResourceConflict,
   /**
+   * The account or container has gone and cannot be restored.
+   */
+  ResourceHasGone,
+  /**
+   * Method in request is not allowed on account or container.
+   */
+  MethodNotAllowed,
+  /**
    * Account service experienced an internal error.
    */
   InternalError,

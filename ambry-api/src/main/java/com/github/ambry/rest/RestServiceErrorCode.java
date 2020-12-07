@@ -232,6 +232,10 @@ public enum RestServiceErrorCode {
         return BadRequest;
       case UpdateDisabled:
         return ServiceUnavailable;
+      case ResourceHasGone:
+        return Deleted;
+      case MethodNotAllowed:
+        return NotAllowed;
       default:
         return InternalServerError;
     }
