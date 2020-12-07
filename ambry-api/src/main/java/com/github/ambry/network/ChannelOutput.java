@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import java.io.DataInputStream;
 import java.io.InputStream;
 
 
@@ -22,18 +23,22 @@ import java.io.InputStream;
  */
 public class ChannelOutput {
 
-  private InputStream inputStream;
+  private DataInputStream inputStream;
 
   private long streamSize;
 
-  public ChannelOutput(InputStream inputStream, long streamSize) {
+  public ChannelOutput(DataInputStream inputStream, long streamSize) {
     this.inputStream = inputStream;
     this.streamSize = streamSize;
   }
 
-  public InputStream getInputStream() {
+  public DataInputStream getInputStream() {
     return inputStream;
   }
+
+//  public DataInputStream getDataInputStream() {
+//
+//  }
 
   public long getStreamSize() {
     return streamSize;

@@ -98,12 +98,10 @@ public class NonBlockingRouterFactory implements RouterFactory {
     time = SystemTime.getInstance();
     if (new RouterConfig(verifiableProperties).routerEnableHttp2NetworkClient) {
       networkClientFactory = new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslFactory, time);
-      System.out.println("enable routerEnableHttp2NetworkClient");
     } else {
       networkClientFactory = new SocketNetworkClientFactory(networkMetrics, networkConfig, sslFactory,
           routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
           routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);
-      System.out.println("not enable routerEnableHttp2NetworkClient");
     }
     KeyManagementServiceFactory kmsFactory =
         Utils.getObj(routerConfig.routerKeyManagementServiceFactory, verifiableProperties,

@@ -39,6 +39,7 @@ import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import io.netty.buffer.ByteBuf;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
@@ -292,7 +293,7 @@ public class MockConnectionPool implements ConnectionPool {
       }
       buffer.flip();
       buffer.getLong();
-      return new ChannelOutput(new ByteBufferInputStream(buffer), buffer.remaining());
+      return new ChannelOutput(new DataInputStream(new ByteBufferInputStream(buffer)), buffer.remaining());
     }
 
     @Override

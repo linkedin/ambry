@@ -764,12 +764,10 @@ public class ReplicaThread implements Runnable {
           replicationConfig.replicaMetadataRequestVersion);
       connectedChannel.send(request);
       channelOutput = connectedChannel.receive();
-      ByteBufferInputStream byteBufferInputStream =
-          new ByteBufferInputStream(channelOutput.getInputStream(), (int) channelOutput.getStreamSize());
-      logger.trace("Remote node: {} Thread name: {} Remote replicas: {} ByteBuffer size after deserialization: {} ",
-          remoteNode, threadName, replicasToReplicatePerNode, byteBufferInputStream.available());
+      logger.trace("Remote node: {} Thread name: {} Remote replicas: {} Stream size after deserialization: {} ",
+          remoteNode, threadName, replicasToReplicatePerNode, channelOutput.getInputStream().available());
       ReplicaMetadataResponse response =
-          ReplicaMetadataResponse.readFrom(new DataInputStream(byteBufferInputStream), findTokenHelper, clusterMap);
+          ReplicaMetadataResponse.readFrom(channelOutput.getInputStream(), findTokenHelper, clusterMap);
 
       long metadataRequestTime = time.milliseconds() - replicaMetadataRequestStartTime;
       replicationMetrics.updateMetadataRequestTime(metadataRequestTime, replicatingFromRemoteColo, replicatingOverSsl,
@@ -1068,7 +1066,7 @@ public class ReplicaThread implements Runnable {
       try {
         connectedChannel.send(getRequest);
         ChannelOutput channelOutput = connectedChannel.receive();
-        getResponse = GetResponse.readFrom(new DataInputStream(channelOutput.getInputStream()), clusterMap);
+        getResponse = GetResponse.readFrom(channelOutput.getInputStream(), clusterMap);
         long getRequestTime = time.milliseconds() - startTime;
         replicationMetrics.updateGetRequestTime(getRequestTime, replicatingFromRemoteColo, replicatingOverSsl,
             datacenterName, remoteColoGetRequestForStandby);
