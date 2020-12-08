@@ -219,7 +219,7 @@ public class AzureMetrics {
    * @param azureContainerCompactor {@link AzureContainerCompactor} object.
    */
   public void trackLatestContainerDeletionTimestamp(AzureContainerCompactor azureContainerCompactor) {
-    metricRegistry.gauge(MetricRegistry.name(AzureContainerCompactor.class, LAST_CONTAINER_DELETION_TIMESTAMP),
+    lastContainerDeletionTimestamp = metricRegistry.gauge(MetricRegistry.name(AzureContainerCompactor.class, LAST_CONTAINER_DELETION_TIMESTAMP),
         () -> azureContainerCompactor::getLatestContainerDeletionTimestamp);
   }
 }
