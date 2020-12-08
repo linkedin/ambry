@@ -217,20 +217,13 @@ public class BlobPropertiesTest {
         outputBuffer.flip();
         break;
       case BlobPropertiesSerDe.VERSION_3:
-        outputBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
-        BlobPropertiesSerDe.serializeBlobProperties(outputBuffer, blobProperties);
-        outputBuffer.flip();
-        break;
-      case BlobPropertiesSerDe.VERSION_4:
-        //will update this part once serialize logic is in.
         size = VERSION_FIELD_SIZE_IN_BYTES + TTL_FIELD_SIZE_IN_BYTES + PRIVATE_FIELD_SIZE_IN_BYTES
             + CREATION_TIME_FIELD_SIZE_IN_BYTES + BLOB_SIZE_FIELD_SIZE_IN_BYTES + Utils.getIntStringLength(
             blobProperties.getContentType()) + Utils.getIntStringLength(blobProperties.getOwnerId())
             + Utils.getIntStringLength(blobProperties.getServiceId()) + Short.BYTES + Short.BYTES
-            + ENCRYPTED_FIELD_SIZE_IN_BYTES + Utils.getIntStringLength(blobProperties.getContentEncoding())
-            + Utils.getIntStringLength(blobProperties.getFilename());
+            + ENCRYPTED_FIELD_SIZE_IN_BYTES;
         outputBuffer = ByteBuffer.allocate(size);
-        outputBuffer.putShort(VERSION_4);
+        outputBuffer.putShort(VERSION_3);
         outputBuffer.putLong(blobProperties.getTimeToLiveInSeconds());
         outputBuffer.put(blobProperties.isPrivate() ? (byte) 1 : (byte) 0);
         outputBuffer.putLong(blobProperties.getCreationTimeInMs());
@@ -241,8 +234,11 @@ public class BlobPropertiesTest {
         outputBuffer.putShort(blobProperties.getAccountId());
         outputBuffer.putShort(blobProperties.getContainerId());
         outputBuffer.put(blobProperties.isEncrypted() ? (byte) 1 : (byte) 0);
-        Utils.serializeNullableString(outputBuffer, blobProperties.getContentEncoding());
-        Utils.serializeNullableString(outputBuffer, blobProperties.getFilename());
+        outputBuffer.flip();
+        break;
+      case BlobPropertiesSerDe.VERSION_4:
+        outputBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
+        BlobPropertiesSerDe.serializeBlobProperties(outputBuffer, blobProperties);
         outputBuffer.flip();
         break;
     }

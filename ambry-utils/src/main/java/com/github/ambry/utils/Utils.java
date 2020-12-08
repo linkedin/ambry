@@ -149,6 +149,15 @@ public class Utils {
     return readIntString(input, StandardCharsets.UTF_8);
   }
 
+  public static String readNullableIntString(DataInputStream input) throws IOException {
+    String tmp = readIntString(input, StandardCharsets.UTF_8);
+    if (tmp.length() == 0) {
+      return null;
+    } else {
+      return tmp;
+    }
+  }
+
   /**
    * Reads a String whose length is an int from the given input stream
    * @param input The input stream from which to read the String from
