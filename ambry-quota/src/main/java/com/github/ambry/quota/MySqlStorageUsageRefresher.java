@@ -55,7 +55,7 @@ import org.slf4j.LoggerFactory;
  *
  * At the beginning of each month, aggregation task will take a snapshot of container storage usage and save this snapshot
  * on a mysql table. Aggregation task will not change this table until next month. The container storage usage in this
- * table becomes a monthly base for this month's container usage. And storage usage exposed by this refresher *represents
+ * table becomes a monthly base for this month's container usage. And storage usage exposed by this refresher represents
  * how many bytes containers used in this month. So it's monthly usage, not total usage.
  *
  * For example, in the beginning of Dec 2020, container A[100]_C[1]'s total container usage is 100GB, then this usage will
