@@ -445,9 +445,11 @@ project(':ambry-named-mysql') {
     }
 }
 
+// TODO move mysql implementation to a common package and drop ambry-server dependency from ambry-quota
 project(':ambry-quota') {
     dependencies {
         compile project(':ambry-api'),
+            project(':ambry-server'),
             project(':ambry-commons')
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
