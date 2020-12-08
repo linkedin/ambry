@@ -120,7 +120,7 @@ public class HardDeleter implements Runnable {
     this.time = time;
     // Times 10 is an optimization for findDeletedEntriesSince, which keeps delete entries only in the end.
     scanSizeInBytes = config.storeHardDeleteOperationsBytesPerSec * 10;
-    messageRetentionSeconds = (int) TimeUnit.DAYS.toSeconds(config.storeDeletedMessageRetentionDays);
+    messageRetentionSeconds = (int) TimeUnit.HOURS.toSeconds(config.storeDeletedMessageRetentionHours);
   }
 
   @Override

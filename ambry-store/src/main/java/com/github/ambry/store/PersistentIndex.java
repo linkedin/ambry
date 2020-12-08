@@ -838,7 +838,7 @@ class PersistentIndex {
           "Id " + key + " requires first value to be a put and last value to be a delete in index " + dataDir,
           StoreErrorCodes.ID_Not_Deleted);
     }
-    if (latestValue.getOperationTimeInMs() + TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays)
+    if (latestValue.getOperationTimeInMs() + TimeUnit.HOURS.toMillis(config.storeDeletedMessageRetentionHours)
         < time.milliseconds()) {
       throw new StoreException("Id " + key + " already permanently deleted in index " + dataDir,
           StoreErrorCodes.ID_Deleted_Permanently);

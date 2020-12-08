@@ -79,7 +79,7 @@ class CuratedLogIndexState {
   static final long TTL_UPDATE_RECORD_SIZE = 37;
   static final long UNDELETE_RECORD_SIZE = 29;
 
-  static final int deleteRetentionDay = 1;
+  static final int deleteRetentionHour = 1;
 
   static {
     try {
@@ -181,7 +181,7 @@ class CuratedLogIndexState {
       boolean addTtlUpdates, boolean addUndeletes) throws IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
     // advance time here so when we set delete's operation time to 0, it will fall within retention day.
-    advanceTime(TimeUnit.DAYS.toMillis(CuratedLogIndexState.deleteRetentionDay));
+    advanceTime(TimeUnit.HOURS.toMillis(CuratedLogIndexState.deleteRetentionHour));
     beginningTime = time.milliseconds();
     this.tempDir = tempDir;
     tempDirStr = tempDir.getAbsolutePath();
@@ -195,7 +195,7 @@ class CuratedLogIndexState {
     // not used but set anyway since this is a package private variable.
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
     // set the delete retention day
-    properties.put("store.deleted.message.retention.days", Integer.toString(CuratedLogIndexState.deleteRetentionDay));
+    properties.put("store.deleted.message.retention.hours", Integer.toString(CuratedLogIndexState.deleteRetentionHour));
     // switch off time movement for the hard delete thread. Otherwise blobs expire too quickly
     time.suspend(Collections.singleton(HardDeleter.getThreadName(tempDirStr)));
     initIndex(null);
