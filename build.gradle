@@ -469,6 +469,7 @@ project(':ambry-all') {
         compile project(':ambry-cloud')
         compile project(':ambry-named-mysql')
         compile project(':ambry-test-utils')
+        compile project(':ambry-quota')
     }
 }
 
