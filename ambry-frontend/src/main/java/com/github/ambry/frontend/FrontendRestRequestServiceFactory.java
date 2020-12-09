@@ -78,8 +78,8 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       IdSigningService idSigningService =
           Utils.<IdSigningServiceFactory>getObj(frontendConfig.idSigningServiceFactory, verifiableProperties,
               clusterMap.getMetricRegistry()).getIdSigningService();
-      NamedBlobDb namedBlobDb = Utils.isNullOrEmpty(frontendConfig.namedBlobDbFactory) ? null :
-          Utils.<NamedBlobDbFactory>getObj(frontendConfig.namedBlobDbFactory, verifiableProperties,
+      NamedBlobDb namedBlobDb = Utils.isNullOrEmpty(frontendConfig.namedBlobDbFactory) ? null
+          : Utils.<NamedBlobDbFactory>getObj(frontendConfig.namedBlobDbFactory, verifiableProperties,
               clusterMap.getMetricRegistry(), accountService).getNamedBlobDb();
       IdConverterFactory idConverterFactory =
           Utils.getObj(frontendConfig.idConverterFactory, verifiableProperties, clusterMap.getMetricRegistry(),
@@ -94,9 +94,8 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
               urlSigningService, idSigningService, accountAndContainerInjector);
       StorageQuotaService storageQuotaService = null;
       if (frontendConfig.enableStorageQuotaService) {
-        StorageQuotaConfig storageQuotaConfig = new StorageQuotaConfig(verifiableProperties);
         storageQuotaService =
-            Utils.<StorageQuotaServiceFactory>getObj(frontendConfig.storageQuotaServiceFactory, storageQuotaConfig,
+            Utils.<StorageQuotaServiceFactory>getObj(frontendConfig.storageQuotaServiceFactory, verifiableProperties,
                 clusterMap.getMetricRegistry()).getStorageQuotaService();
       }
       return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
