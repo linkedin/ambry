@@ -14,12 +14,16 @@
 package com.github.ambry.server.mysql;
 
 import com.github.ambry.config.AccountStatsMySqlConfig;
+import java.util.Arrays;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * A helper class to preprocess hostname before writing to or querying from database.
  */
 public class HostnameHelper {
+  private static final Logger logger = LoggerFactory.getLogger(HostnameHelper.class);
   private final String[] domainNamesToRemove;
   private final int port;
 
@@ -31,6 +35,8 @@ public class HostnameHelper {
   public HostnameHelper(AccountStatsMySqlConfig config, int port) {
     domainNamesToRemove = config.domainNamesToRemove.split(",");
     this.port = port;
+    logger.info("Domain names to remove from configuration: " + config.domainNamesToRemove);
+    logger.info("Will remove these domain names from host: " + Arrays.toString(domainNamesToRemove));
   }
 
   /**
@@ -42,10 +48,12 @@ public class HostnameHelper {
    */
   public String simplifyHostname(String hostname) {
     for (String domainName : domainNamesToRemove) {
-      if (domainName.charAt(0) != '.') {
-        domainName = "." + domainName;
+      if (domainName != null && !domainName.isEmpty()) {
+        if (domainName.charAt(0) != '.') {
+          domainName = "." + domainName;
+        }
+        hostname = hostname.replace(domainName, "");
       }
-      hostname = hostname.replace(domainName, "");
     }
     return String.format("%s_%d", hostname, port);
   }
