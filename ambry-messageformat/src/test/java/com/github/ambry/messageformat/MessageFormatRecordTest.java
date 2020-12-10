@@ -49,6 +49,7 @@ import static org.junit.Assert.*;
 public class MessageFormatRecordTest {
 
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+  private static final int ENCRYPTED_FIELD_SIZE_IN_BYTES = Byte.BYTES;
 
   @Before
   public void before() {
@@ -211,7 +212,7 @@ public class MessageFormatRecordTest {
   @Test
   public void testBlobPropertyV1() throws IOException, MessageFormatException {
     // Test Blob property Format V1 for all versions of BlobPropertiesSerDe
-    short[] versions = new short[]{VERSION_1, VERSION_2, VERSION_3};
+    short[] versions = new short[]{VERSION_1, VERSION_2, VERSION_3, VERSION_4};
     for (short version : versions) {
       BlobProperties properties;
       long blobSize = TestUtils.RANDOM.nextLong();
@@ -225,7 +226,7 @@ public class MessageFormatRecordTest {
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
         properties =
             new BlobProperties(blobSize, "id", "member", "test", true, ttl, accountId, containerId, isEncrypted, null,
-                null, null);
+                "gzip", "filename");
       }
       ByteBuffer stream;
       if (version == VERSION_1) {
@@ -234,6 +235,9 @@ public class MessageFormatRecordTest {
       } else if (version == VERSION_2) {
         stream = ByteBuffer.allocate(getBlobPropertiesV2RecordSize(properties));
         serializeBlobPropertiesV2Record(stream, properties);
+      } else if (version == VERSION_3) {
+        stream = ByteBuffer.allocate(getBlobPropertiesV3RecordSize(properties));
+        serializeBlobPropertiesV3Record(stream, properties);
       } else {
         stream = ByteBuffer.allocate(getBlobPropertiesRecordSize(properties));
         MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
@@ -250,6 +254,10 @@ public class MessageFormatRecordTest {
       if (version > VERSION_2) {
         Assert.assertEquals(properties.isEncrypted(), result.isEncrypted());
       }
+      if (version > VERSION_3) {
+        Assert.assertEquals(properties.getContentEncoding(), result.getContentEncoding());
+        Assert.assertEquals(properties.getFilename(), result.getFilename());
+      }
 
       // corrupt blob property V1 record
       stream.flip();
@@ -265,7 +273,7 @@ public class MessageFormatRecordTest {
     // failure case
     BlobProperties properties =
         new BlobProperties(1000, "id", "member", "test", true, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID, false, null, null, null);
+            Container.UNKNOWN_CONTAINER_ID, false, null, "gzip", "filename");
     ByteBuffer stream = ByteBuffer.allocate(getBlobPropertiesRecordSize(properties) - 10);
     try {
       MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
@@ -359,6 +367,52 @@ public class MessageFormatRecordTest {
     Utils.serializeNullableString(outputBuffer, properties.getServiceId());
     outputBuffer.putShort(properties.getAccountId());
     outputBuffer.putShort(properties.getContainerId());
+  }
+
+  /**
+   * Serialize {@link BlobProperties} in version {@link BlobPropertiesSerDe#VERSION_3}
+   * @param outputBuffer {@link ByteBuffer} to serialize the {@link BlobProperties}
+   * @param properties {@link BlobProperties} to be serialized
+   */
+  private void serializeBlobPropertiesV3Record(ByteBuffer outputBuffer, BlobProperties properties) {
+    int startOffset = outputBuffer.position();
+    outputBuffer.putShort(BlobProperties_Version_V1);
+    putBlobPropertiesToBufferV3(outputBuffer, properties);
+    Crc32 crc = new Crc32();
+    crc.update(outputBuffer.array(), startOffset, getBlobPropertiesV3RecordSize(properties) - Crc_Size);
+    outputBuffer.putLong(crc.getValue());
+  }
+
+  /**
+   * Returns {@link BlobProperties} record size in version {@link BlobPropertiesSerDe#VERSION_2}
+   * @param properties {@link BlobProperties} for which size is requested
+   * @return the size of the {@link BlobPropertiesSerDe} in version {@link BlobPropertiesSerDe#VERSION_2}
+   */
+  private int getBlobPropertiesV3RecordSize(BlobProperties properties) {
+    int size = Version_Field_Size_In_Bytes + Long.BYTES + Byte.BYTES + Long.BYTES + Long.BYTES + Integer.BYTES
+        + Utils.getNullableStringLength(properties.getContentType()) + Integer.BYTES + Utils.getNullableStringLength(
+        properties.getOwnerId()) + Integer.BYTES + Utils.getNullableStringLength(properties.getServiceId())
+        + Short.BYTES + Short.BYTES + ENCRYPTED_FIELD_SIZE_IN_BYTES;
+    return Version_Field_Size_In_Bytes + size + Crc_Size;
+  }
+
+  /**
+   * Serialize {@link BlobProperties} to buffer in the {@link BlobPropertiesSerDe#VERSION_2}
+   * @param outputBuffer the {@link ByteBuffer} to which {@link BlobProperties} needs to be serialized
+   * @param properties the {@link BlobProperties} that needs to be serialized
+   */
+  private static void putBlobPropertiesToBufferV3(ByteBuffer outputBuffer, BlobProperties properties) {
+    outputBuffer.putShort(VERSION_3);
+    outputBuffer.putLong(properties.getTimeToLiveInSeconds());
+    outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
+    outputBuffer.putLong(properties.getCreationTimeInMs());
+    outputBuffer.putLong(properties.getBlobSize());
+    Utils.serializeNullableString(outputBuffer, properties.getContentType());
+    Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
+    Utils.serializeNullableString(outputBuffer, properties.getServiceId());
+    outputBuffer.putShort(properties.getAccountId());
+    outputBuffer.putShort(properties.getContainerId());
+    outputBuffer.put(properties.isEncrypted() ? (byte) 1 : (byte) 0);
   }
 
   /**
