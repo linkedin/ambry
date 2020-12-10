@@ -84,10 +84,19 @@ public class BlobPropertiesTest {
     String filenameToExpect = filename;
 
     BlobProperties blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
+        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, null, null);
+    System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
+    ByteBuffer serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
+    blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
+        new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
+    verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, Utils.Infinite_Time, accountIdToExpect,
+        containerIdToExpect, encryptFlagToExpect, null, null, null);
+
+    blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
         SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, contentEncoding,
         filename);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
-    ByteBuffer serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
+    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, Utils.Infinite_Time, accountIdToExpect,
