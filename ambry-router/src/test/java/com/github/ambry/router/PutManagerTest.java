@@ -85,7 +85,7 @@ import static org.junit.Assert.*;
 @RunWith(Parameterized.class)
 public class PutManagerTest {
   static final GeneralSecurityException GSE = new GeneralSecurityException("Exception to throw for tests");
-  private static final long MAX_WAIT_MS = 5000;
+  private static final long MAX_WAIT_MS = 10000;
   private final boolean testEncryption;
   private final int metadataContentVersion;
   private final MockServerLayout mockServerLayout;
