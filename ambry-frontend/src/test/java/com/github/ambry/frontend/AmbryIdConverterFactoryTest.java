@@ -14,12 +14,18 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.named.DeleteResult;
+import com.github.ambry.named.NamedBlobDb;
+import com.github.ambry.named.NamedBlobRecord;
+import com.github.ambry.named.PutResult;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
@@ -27,21 +33,21 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.junit.Test;
 
 import static com.github.ambry.commons.BlobId.*;
-import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -50,12 +56,14 @@ import static org.mockito.Mockito.*;
  * Unit tests for {@link AmbryIdConverterFactory}.
  */
 public class AmbryIdConverterFactoryTest {
-  private static final String OPERATION_BASE = "/named/account_name/container_name/blobName";
+  private static final String ACCOUNT_NAME = "account_name";
+  private static final String CONTAINER_NAME = "container_name";
+  private static final String BLOB_NAME = "blobName/a/b1234f";
+  private static final String NAMED_BLOB_PATH = "/named/" + ACCOUNT_NAME + "/" + CONTAINER_NAME + "/" + BLOB_NAME;
   private static final byte dataCenterId = 66;
   private static final short accountId = 101;
   private static final short containerId = 5;
   private static final long partition = 2;
-  private BlobId blobId;
 
   /**
    * Tests the instantiation and use of the {@link IdConverter} instance returned through the
@@ -100,18 +108,26 @@ public class AmbryIdConverterFactoryTest {
         RestServiceErrorCode.InternalServerError);
     verify(idSigningService).parseSignedId(input);
     //with named blob
-    ClusterMap clusterMap = new MockClusterMap();
+    NamedBlobDb namedBlobDb = mock(NamedBlobDb.class);
     ambryIdConverterFactory =
-        new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, null);
+        new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);
     idConverter = ambryIdConverterFactory.getIdConverter();
     assertNotNull("No IdConverter returned", idConverter);
-    List<String> operations = generateOperations(OPERATION_BASE);
-    for (String operation : operations) {
-      reset(idSigningService);
-      String[] slashFields = operation.split("/");
-      String operationsOutput = (slashFields[2] + slashFields[3] + slashFields[4]);
-      testConversion(idConverter, RestMethod.GET, null, operationsOutput, operation);
-    }
+
+    String outputId = "dummy-id";
+    reset(idSigningService);
+    reset(namedBlobDb);
+    when(namedBlobDb.get(any(), any(), any())).thenReturn(
+        CompletableFuture.completedFuture(new NamedBlobRecord("", "", "", outputId, Utils.Infinite_Time)));
+    testConversion(idConverter, RestMethod.GET, null, outputId, NAMED_BLOB_PATH);
+    verify(namedBlobDb).get(ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME);
+
+    reset(idSigningService);
+    reset(namedBlobDb);
+    when(namedBlobDb.delete(any(), any(), any())).thenReturn(
+        CompletableFuture.completedFuture(new DeleteResult(outputId, false)));
+    testConversion(idConverter, RestMethod.DELETE, null, outputId, NAMED_BLOB_PATH);
+    verify(namedBlobDb).delete(ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME);
 
     // POST
     // without leading slash (there will be no leading slashes returned from the Router)
@@ -182,12 +198,13 @@ public class AmbryIdConverterFactoryTest {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     IdSigningService idSigningService = mock(IdSigningService.class);
+    NamedBlobDb namedBlobDb = mock(NamedBlobDb.class);
     AmbryIdConverterFactory ambryIdConverterFactory =
-        new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, null);
+        new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);
     IdConverter idConverter = ambryIdConverterFactory.getIdConverter();
     assertNotNull("No IdConverter returned", idConverter);
     PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+    BlobId blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
         BlobDataType.DATACHUNK);
 
     List<String> idList = new ArrayList<>();
@@ -195,8 +212,12 @@ public class AmbryIdConverterFactoryTest {
 
     for (String id : idList) {
       reset(idSigningService);
+      reset(namedBlobDb);
+      when(namedBlobDb.put(any())).thenReturn(
+          CompletableFuture.completedFuture(new PutResult(new NamedBlobRecord("", "", "", id, Utils.Infinite_Time))));
       testConversionForNamedBlob(idConverter, RestMethod.PUT, null, id, id);
       verify(idSigningService, never()).getSignedId(any(), any());
+      verify(namedBlobDb).put(any());
     }
   }
 
@@ -209,38 +230,29 @@ public class AmbryIdConverterFactoryTest {
    * @param input the input string
    * @throws Exception
    */
-  private void testConversionForNamedBlob(IdConverter idConverter, RestMethod restMethod, Map<String, String> signedIdMetadata,
-      String expectedOutput, String input) throws Exception {
+  private void testConversionForNamedBlob(IdConverter idConverter, RestMethod restMethod,
+      Map<String, String> signedIdMetadata, String expectedOutput, String input) throws Exception {
     JSONObject requestData = new JSONObject();
     JSONObject headers = new JSONObject();
     String contentType = "application/octet-stream";
     headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
     requestData.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
-    requestData.put(MockRestRequest.URI_KEY, OPERATION_BASE);
+    requestData.put(MockRestRequest.URI_KEY, NAMED_BLOB_PATH);
     requestData.put(MockRestRequest.HEADERS_KEY, headers);
     RestRequest restRequest = new MockRestRequest(requestData, null);
     if (signedIdMetadata != null) {
       restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, signedIdMetadata);
     }
+    BlobInfo blobInfo = null;
     if (restMethod.equals(RestMethod.PUT)) {
-      restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, RequestPath.parse(OPERATION_BASE, Collections.emptyMap(), Collections.emptyList(), "Ambry-test"));
+      restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+          RequestPath.parse(NAMED_BLOB_PATH, Collections.emptyMap(), Collections.emptyList(), "Ambry-test"));
+      blobInfo = new BlobInfo(new BlobProperties(-1, "service", accountId, containerId, false), new byte[0]);
     }
     IdConversionCallback callback = new IdConversionCallback();
     assertEquals("Converted ID does not match expected (Future)", expectedOutput,
-        idConverter.convert(restRequest, input, callback).get(5, TimeUnit.SECONDS));
+        idConverter.convert(restRequest, input, blobInfo, callback).get(5, TimeUnit.SECONDS));
     assertEquals("Converted ID does not match expected (Callback)", expectedOutput, callback.result);
-  }
-
-  /**
-   * Gets multiple test Operations. The bases will be randomly generated but will be
-   * prefixed with {@code prefix}
-   * @param prefix the  prefix to use.
-   * @return containing multiple test Operations based on {@code base}
-   */
-  private List<String> generateOperations(String prefix) {
-    List<String> inputs = new ArrayList<String>();
-    inputs.add(prefix + getRandomString(8));
-    return inputs;
   }
 
   /**

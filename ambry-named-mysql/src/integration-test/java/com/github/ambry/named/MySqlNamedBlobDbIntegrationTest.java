@@ -86,6 +86,7 @@ public class MySqlNamedBlobDbIntegrationTest {
               i % 2 == 0 ? Utils.Infinite_Time : System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1);
           NamedBlobRecord record =
               new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
+
           namedBlobDb.put(record).get();
           records.add(record);
         }
@@ -123,14 +124,29 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     // delete the records and check that they cannot be fetched with a get call.
     for (NamedBlobRecord record : records) {
-      namedBlobDb.delete(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
+      DeleteResult deleteResult =
+          namedBlobDb.delete(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
+      assertEquals("Unexpected deleted ID", record.getBlobId(), deleteResult.getBlobId());
+      assertFalse("Unexpected alreadyDeleted value", deleteResult.isAlreadyDeleted());
       checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()),
           RestServiceErrorCode.Deleted);
     }
 
     // deletes should be idempotent and additional delete calls should succeed
     for (NamedBlobRecord record : records) {
-      namedBlobDb.delete(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
+      DeleteResult deleteResult =
+          namedBlobDb.delete(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
+      assertEquals("Unexpected deleted ID", record.getBlobId(), deleteResult.getBlobId());
+      assertTrue("Unexpected alreadyDeleted value", deleteResult.isAlreadyDeleted());
+    }
+
+    // delete and get for non existent blobs should return not found.
+    for (NamedBlobRecord record : records) {
+      String nonExistentName = record.getBlobName() + "-other";
+      checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), nonExistentName),
+          RestServiceErrorCode.NotFound);
+      checkErrorCode(() -> namedBlobDb.delete(record.getAccountName(), record.getContainerName(), nonExistentName),
+          RestServiceErrorCode.NotFound);
     }
 
     records.clear();
@@ -149,6 +165,11 @@ public class MySqlNamedBlobDbIntegrationTest {
         }
       }
     }
+  }
+
+  @Test
+  public void testExpiredBlobs() {
+
   }
 
   /**

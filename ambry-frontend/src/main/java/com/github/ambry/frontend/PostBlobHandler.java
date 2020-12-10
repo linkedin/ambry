@@ -186,10 +186,11 @@ class PostBlobHandler {
     }
 
     /**
-     * After reading the body of the stitch request
-     * @param channel
-     * @param blobInfo
-     * @return
+     * After reading the body of the stitch request, parse the request body,
+     * and make a call to {@link Router#stitchBlob}.
+     * @param channel the {@link RetainingAsyncWritableChannel} that will contain the request body.
+     * @param blobInfo the {@link BlobInfo} to make the router call with.
+     * @return a {@link Callback} to be used with {@link RestRequest#readInto}.
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postReadStitchRequestMetrics,
@@ -206,7 +207,7 @@ class PostBlobHandler {
      */
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo)), uri, LOGGER,
+          blobId -> idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo)), uri, LOGGER,
           finalCallback);
     }
 

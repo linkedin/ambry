@@ -57,8 +57,6 @@ class AmbrySecurityService implements SecurityService {
   private final UrlSigningService urlSigningService;
   private final QuotaManager quotaManager;
   private boolean isOpen;
-  private static final String NAMED_BLOB_PREFIX = "/named";
-
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       UrlSigningService urlSigningService, QuotaManager quotaManager) {
@@ -221,7 +219,7 @@ class AmbrySecurityService implements SecurityService {
             break;
           case OPTIONS:
           case PUT:
-            if (requestPath.getOperationOrBlobId(false).startsWith(NAMED_BLOB_PREFIX)) {
+            if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
               responseChannel.setStatus(ResponseStatus.Created);
               responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
               responseChannel.setHeader(RestUtils.Headers.CREATION_TIME,

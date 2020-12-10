@@ -136,7 +136,6 @@ public class NamedBlobPutHandler {
     private void start() {
       restRequest.getMetricsTracker()
           .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
-      //?restRequest.setArg(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT, true);
       try {
         // Start the callback chain by parsing blob info headers and performing request security processing.
         BlobInfo blobInfo = getBlobInfoFromRequest();
@@ -154,7 +153,7 @@ public class NamedBlobPutHandler {
      */
     private BlobInfo getBlobInfoFromRequest() throws RestServiceException {
       long propsBuildStartTime = System.currentTimeMillis();
-      accountAndContainerInjector.injectAccountAndContainerForPutRequest(restRequest,
+      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
           frontendMetrics.putBlobMetricsGroup);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
@@ -208,26 +207,28 @@ public class NamedBlobPutHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        if (STITCH.equals(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, false))) {
+        if (STITCH.equals(
+            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, false))) {
           RetainingAsyncWritableChannel channel =
               new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback());
+              routerPutBlobCallback(blobInfo));
         }
       }, uri, LOGGER, finalCallback);
     }
 
     /**
      * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to store the mapping between blobName and blobId.
+     * @param blobInfo the {@link BlobInfo} to use for security checks.
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
-    private Callback<String> routerPutBlobCallback() {
+    private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
-        idConverter.convert(restRequest, blobId, idConverterCallback());
+        idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo));
       }, uri, LOGGER, finalCallback);
     }
 
@@ -235,8 +236,7 @@ public class NamedBlobPutHandler {
      * @return the {@link PutBlobOptions} to use, parsed from the request.
      */
     private PutBlobOptions getPutBlobOptionsFromRequest() throws RestServiceException {
-      PutBlobOptionsBuilder builder =
-          new PutBlobOptionsBuilder().chunkUpload(false);
+      PutBlobOptionsBuilder builder = new PutBlobOptionsBuilder().chunkUpload(false);
       Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
       if (maxUploadSize != null) {
         builder.maxUploadSize(maxUploadSize);
@@ -245,26 +245,29 @@ public class NamedBlobPutHandler {
     }
 
     /**
-     * After reading the body of the stitch request
-     * @param channel
-     * @param blobInfo
-     * @return
+     * After reading the body of the stitch request, parse the request body,
+     * and make a call to {@link Router#stitchBlob}.
+     * @param channel the {@link RetainingAsyncWritableChannel} that will contain the request body.
+     * @param blobInfo the {@link BlobInfo} to make the router call with.
+     * @return a {@link Callback} to be used with {@link RestRequest#readInto}.
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
-              routerStitchBlobCallback()), uri, LOGGER, finalCallback);
+              routerStitchBlobCallback(blobInfo)), uri, LOGGER, finalCallback);
     }
 
     /**
      * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
      * that will be returned in the "Location" header.
+     * @param blobInfo the {@link BlobInfo} to use for security checks.
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
-    private Callback<String> routerStitchBlobCallback() {
+    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback()), uri, LOGGER, finalCallback);
+          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo)), uri, LOGGER,
+          finalCallback);
     }
 
     /**
@@ -342,11 +345,12 @@ public class NamedBlobPutHandler {
     /**
      * After {@link IdConverter#convert} finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
+     * @param blobInfo the {@link BlobInfo} to use for security checks.
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
-    private Callback<String> idConverterCallback() {
+    private Callback<String> idConverterCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putIdConversionMetrics, blobId -> {
-        securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
+        securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);
     }
 
