@@ -726,8 +726,9 @@ public class RestUtilsTest {
     // user metadata that needs to be encoded
     usermetadataMap.clear();
     headers = new JSONObject();
+    String umHeader = "filename";
     String filenameValue = "death\nstar";
-    usermetadataMap.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "filename", filenameValue);
+    usermetadataMap.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + umHeader, filenameValue);
     setUserMetadataHeaders(headers, usermetadataMap);
     restRequest = createRestRequest(RestMethod.POST, "/", headers);
     userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
@@ -736,9 +737,26 @@ public class RestUtilsTest {
     assertTrue("Should report that headers are set", RestUtils.setUserMetadataHeaders(userMetadata, responseChannel));
     Map<String, Object> encodedHeaders = responseChannel.getResponseHeaders();
     assertEquals("Expected a header", 1, encodedHeaders.size());
-    Object encodedValue = encodedHeaders.get(RestUtils.Headers.USER_META_DATA_ENCODED_HEADER_PREFIX + "filename");
+    Object encodedValue = encodedHeaders.get(RestUtils.Headers.USER_META_DATA_ENCODED_HEADER_PREFIX + umHeader);
     assertNotNull("Expected encoded header", encodedValue);
     assertNotSame("Expected different value", filenameValue, encodedValue);
+  }
+
+  /**
+   * Tests for {@link RestUtils#setUserMetadataHeaders(Map<String, String>, RestResponseChannel)}
+   */
+  @Test
+  public void setUserMetadataHeadersMapTest() {
+    // Call method that takes map input and verify headers are prefixed.
+    String rawName = "customer";
+    String customerName = "Walmart";
+    Map<String, String> rawUserMetadata = Collections.singletonMap(rawName, customerName);
+    MockRestResponseChannel responseChannel = new MockRestResponseChannel();
+    RestUtils.setUserMetadataHeaders(rawUserMetadata, responseChannel);
+    Map<String, Object> responseHeaders = responseChannel.getResponseHeaders();
+    assertEquals("Expected one header", 1, responseHeaders.size());
+    assertEquals("Header did not get prefixed", customerName,
+        responseHeaders.get(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + rawName));
   }
 
   // helpers.

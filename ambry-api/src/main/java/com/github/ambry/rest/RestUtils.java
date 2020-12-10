@@ -906,6 +906,10 @@ public class RestUtils {
     for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
       String headerName = entry.getKey();
       String headerValue = entry.getValue();
+      // Ensure um prefix is prepended to header name
+      if (!headerName.startsWith(Headers.USER_META_DATA_HEADER_PREFIX)) {
+        headerName = Headers.USER_META_DATA_HEADER_PREFIX + headerName;
+      }
       try {
         restResponseChannel.setHeader(headerName, headerValue);
       } catch (IllegalArgumentException iae) {
