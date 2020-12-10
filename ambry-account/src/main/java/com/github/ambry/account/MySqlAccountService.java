@@ -470,17 +470,7 @@ public class MySqlAccountService extends AbstractAccountService {
   public static AccountServiceException translateSQLException(SQLException e) {
     if (e instanceof SQLIntegrityConstraintViolationException || (e instanceof BatchUpdateException
         && e.getCause() instanceof SQLIntegrityConstraintViolationException)) {
-      String message;
-      if (e.getMessage().contains(ContainerDao.INDEX_ACCOUNT_CONTAINER)) {
-        // Example: Duplicate entry '101-5' for key 'containers.accountContainer'
-        message = "Duplicate containerId";
-      } else if (e.getMessage().contains(ContainerDao.INDEX_CONTAINER_NAME)) {
-        // duplicate container name: need to update cache but retry may fail
-        message = "Duplicate container name";
-      } else {
-        message = "Constraint violation";
-      }
-      return new AccountServiceException(message, AccountServiceErrorCode.ResourceConflict);
+      return new AccountServiceException(e.getMessage(), AccountServiceErrorCode.ResourceConflict);
     } else if (MySqlDataAccessor.isCredentialError(e)) {
       return new AccountServiceException("Invalid database credentials", AccountServiceErrorCode.InternalError);
     } else {

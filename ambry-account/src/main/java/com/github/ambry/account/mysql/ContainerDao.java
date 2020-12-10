@@ -41,9 +41,6 @@ public class ContainerDao {
   public static final String CREATION_TIME = "creationTime";
   public static final String LAST_MODIFIED_TIME = "lastModifiedTime";
 
-  public static final String INDEX_ACCOUNT_CONTAINER = "containers.accountContainer";
-  public static final String INDEX_CONTAINER_NAME = "containers.uniqueName";
-
   private final MySqlDataAccessor dataAccessor;
   private final String insertSql;
   private final String getSinceSql;
