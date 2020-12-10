@@ -584,7 +584,8 @@ public class GetManagerTest {
   private void setOperationParams(int blobSize, GetBlobOptions options) {
     this.blobSize = blobSize;
     putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption, null);
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption, null, null,
+        null);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
     putContent = new byte[blobSize];

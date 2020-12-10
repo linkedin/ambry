@@ -46,7 +46,6 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
@@ -287,7 +286,7 @@ public class PostBlobHandlerTest {
   private void doTtlRequiredEnforcementTest(Container container, long blobTtlSecs) throws Exception {
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, blobTtlSecs, !container.isCacheable(), SERVICE_ID,
-        CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), container.getName());
+        CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), container.getName(), null);
     byte[] content = TestUtils.getRandomBytes(1024);
     RestRequest request = getRestRequest(headers, "/", content);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -357,7 +356,7 @@ public class PostBlobHandlerTest {
       long blobTtlSecs, ThrowingConsumer<ExecutionException> errorChecker) throws Exception {
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, blobTtlSecs, !REF_CONTAINER.isCacheable(), SERVICE_ID,
-        CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), REF_CONTAINER.getName());
+        CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), REF_CONTAINER.getName(), null);
     if (chunkUpload) {
       headers.put(RestUtils.Headers.CHUNK_UPLOAD, true);
     }
@@ -438,7 +437,8 @@ public class PostBlobHandlerTest {
       byte[] content = TestUtils.getRandomBytes(chunkSize);
       BlobProperties blobProperties =
           new BlobProperties(-1, SERVICE_ID, OWNER_ID, CONTENT_TYPE, !container.isCacheable(), blobTtlSecs,
-              creationTimeMs, container.getParentAccountId(), container.getId(), container.isEncrypted(), null);
+              creationTimeMs, container.getParentAccountId(), container.getId(), container.isEncrypted(), null, null,
+              null);
       String blobId =
           router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
               new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);
@@ -499,7 +499,7 @@ public class PostBlobHandlerTest {
       ThrowingConsumer<ExecutionException> errorChecker) throws Exception {
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(),
-        SERVICE_ID, CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), REF_CONTAINER.getName());
+        SERVICE_ID, CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), REF_CONTAINER.getName(), null);
     RestRequest request = getRestRequest(headers, "/" + Operations.STITCH, requestBody);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> future = new FutureResult<>();

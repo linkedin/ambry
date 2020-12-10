@@ -16,11 +16,14 @@ package com.github.ambry.cloud.azure;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudRequestAgent;
+import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.FeedResponse;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
@@ -30,14 +33,17 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import org.apache.commons.codec.binary.Base64;
 import rx.Observable;
 import rx.observables.BlockingObservable;
 
 import static com.github.ambry.commons.BlobId.*;
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
@@ -192,5 +198,72 @@ class AzureTestUtils {
     when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
     when(mockBlockingObservable.getIterator()).thenReturn(Collections.emptyIterator());
     return mockResponse;
+  }
+
+  /**
+   * Utility method to create specified number of unencrypted blobs with permanent ttl and with specified properties.
+   * @param numBlobs number of blobs to create.
+   * @param dataCenterId datacenter id.
+   * @param accountId account id.
+   * @param containerId container id.
+   * @param partitionId {@link PartitionId} of the partition in which blobs will be created.
+   * @param blobSize size of blobs.
+   * @param cloudRequestAgent {@link CloudRequestAgent} object.
+   * @param azureDest {@link AzureCloudDestination} object.
+   * @param creationTime blob creation time.
+   * @return A {@link Map} of create blobs' {@link BlobId} and data.
+   * @throws CloudStorageException in case of any exception while uploading blob.
+   */
+  static Map<BlobId, byte[]> createUnencryptedPermanentBlobs(int numBlobs, byte dataCenterId, short accountId,
+      short containerId, PartitionId partitionId, int blobSize, CloudRequestAgent cloudRequestAgent,
+      AzureCloudDestination azureDest, long creationTime) throws CloudStorageException {
+    Map<BlobId, byte[]> blobIdtoDataMap = new HashMap<>();
+    for (int j = 0; j < numBlobs; j++) {
+      BlobId blobId =
+          new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+              BlobDataType.DATACHUNK);
+      byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
+      blobIdtoDataMap.put(blobId, randomBytes);
+      CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
+          CloudBlobMetadata.EncryptionOrigin.NONE);
+      assertTrue("Expected upload to return true",
+          uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, new ByteArrayInputStream(randomBytes),
+              cloudRequestAgent, azureDest));
+    }
+    return blobIdtoDataMap;
+  }
+
+  /**
+   * Upload blob. Retry with appropriate throttling if required.
+   * Upload blob to the cloud destination.
+   * @param blobId id of the Ambry blob
+   * @param blobSize the length of the input stream, if known, -1 if unknown.
+   * @param cloudBlobMetadata the {@link CloudBlobMetadata} for the blob being uploaded.
+   * @param inputStream the stream to read blob data
+   * @param cloudRequestAgent {@link CloudRequestAgent} object.
+   * @param azureDest {@link AzureCloudDestination} object.
+   * @return flag indicating whether the blob was uploaded
+   * @throws CloudStorageException if the upload encounters an error.
+   */
+  static boolean uploadBlobWithRetry(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
+      InputStream inputStream, CloudRequestAgent cloudRequestAgent, AzureCloudDestination azureDest)
+      throws CloudStorageException {
+    return cloudRequestAgent.doWithRetries(() -> azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream),
+        "UploadBlob", blobId.getPartition().toPathString());
+  }
+
+  /**
+   * Get metadata for blobs. Retry with appropriate throttling if required.
+   * @param blobIds list of blob Ids to query.
+   * @param partitionPath partition of the blobs.
+   * @param cloudRequestAgent {@link CloudRequestAgent} object.
+   * @param azureDest {@link AzureCloudDestination} object.
+   * @return a {@link Map} of blobId strings to {@link CloudBlobMetadata}.  If metadata for a blob could not be found,
+   * it will not be included in the returned map.
+   * @throws CloudStorageException if query encounters an error.
+   */
+  static Map<String, CloudBlobMetadata> getBlobMetadataWithRetry(List<BlobId> blobIds, String partitionPath,
+      CloudRequestAgent cloudRequestAgent, AzureCloudDestination azureDest) throws CloudStorageException {
+    return cloudRequestAgent.doWithRetries(() -> azureDest.getBlobMetadata(blobIds), "GetBlobMetadata", partitionPath);
   }
 }

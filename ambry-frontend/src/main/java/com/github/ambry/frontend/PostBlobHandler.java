@@ -186,10 +186,11 @@ class PostBlobHandler {
     }
 
     /**
-     * After reading the body of the stitch request
-     * @param channel
-     * @param blobInfo
-     * @return
+     * After reading the body of the stitch request, parse the request body,
+     * and make a call to {@link Router#stitchBlob}.
+     * @param channel the {@link RetainingAsyncWritableChannel} that will contain the request body.
+     * @param blobInfo the {@link BlobInfo} to make the router call with.
+     * @return a {@link Callback} to be used with {@link RestRequest#readInto}.
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postReadStitchRequestMetrics,
@@ -206,7 +207,7 @@ class PostBlobHandler {
      */
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo)), uri, LOGGER,
+          blobId -> idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo)), uri, LOGGER,
           finalCallback);
     }
 
@@ -368,7 +369,7 @@ class PostBlobHandler {
         String blobId = idAndMetadata.getFirst();
         Map<String, String> metadata = idAndMetadata.getSecond();
 
-        expectedSession = verifyChunkUploadSession(metadata, expectedSession);
+        expectedSession = RestUtils.verifyChunkUploadSession(metadata, expectedSession);
         @SuppressWarnings("ConstantConditions")
         long chunkSizeBytes = RestUtils.getLongHeader(metadata, RestUtils.Headers.BLOB_SIZE, true);
 
@@ -385,24 +386,6 @@ class PostBlobHandler {
       //the actual blob size for stitched blob is the sum of all the chunk sizes
       restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, totalStitchedBlobSize);
       return chunksToStitch;
-    }
-
-    /**
-     * Verify that the session ID in the chunk metadata matches the expected session.
-     * @param chunkMetadata the metadata map parsed from a signed chunk ID.
-     * @param expectedSession the session that the chunk should match. This can be null for the first chunk (where any
-     *                        session ID is valid).
-     * @return this chunk's session ID
-     * @throws RestServiceException if the chunk has a null session ID or it does not match the expected value.
-     */
-    private String verifyChunkUploadSession(Map<String, String> chunkMetadata, String expectedSession)
-        throws RestServiceException {
-      String chunkSession = RestUtils.getHeader(chunkMetadata, RestUtils.Headers.SESSION, true);
-      if (expectedSession != null && !expectedSession.equals(chunkSession)) {
-        throw new RestServiceException("Session IDs differ for chunks in a stitch request",
-            RestServiceErrorCode.BadRequest);
-      }
-      return chunkSession;
     }
 
     /**

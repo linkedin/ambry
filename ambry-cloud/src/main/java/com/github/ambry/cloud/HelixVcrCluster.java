@@ -26,9 +26,9 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -67,15 +67,17 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   private final CloudDestination cloudDestination;
   private HelixManager manager;
   private HelixAdmin helixAdmin;
+  private VcrMetrics vcrMetrics;
 
   /**
    * Construct the helix VCR cluster.
    * @param cloudConfig The cloud configuration to use.
    * @param clusterMapConfig The clusterMap configuration to use.
    * @param clusterMap The clusterMap to use.
+   * @param vcrMetrics {@link VcrMetrics} object.
    */
   public HelixVcrCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, StoreConfig storeConfig,
-      ClusterMap clusterMap, AccountService accountService, CloudDestination cloudDestination) {
+      ClusterMap clusterMap, AccountService accountService, CloudDestination cloudDestination, VcrMetrics vcrMetrics) {
     if (Utils.isNullOrEmpty(cloudConfig.vcrClusterZkConnectString)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING);
     } else if (Utils.isNullOrEmpty(cloudConfig.vcrClusterName)) {
@@ -93,6 +95,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
     metrics = new HelixVcrClusterMetrics(clusterMap.getMetricRegistry(), assignedPartitionIds);
     this.accountService = accountService;
     this.cloudDestination = cloudDestination;
+    this.vcrMetrics = vcrMetrics;
   }
 
   /**
@@ -162,7 +165,9 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
         cloudConfig.vcrClusterZkConnectString);
     VcrStateModelFactory stateModelFactory = Utils.getObj(cloudConfig.vcrHelixStateModelFactoryClass, this);
     manager.getStateMachineEngine().registerStateModelFactory(stateModelFactory.getStateModelName(), stateModelFactory);
-    registerContainerDeletionSyncTask(manager.getStateMachineEngine());
+    if (cloudConfig.cloudContainerCompactionEnabled) {
+      registerContainerDeletionSyncTask(manager.getStateMachineEngine());
+    }
     manager.connect();
     helixAdmin = manager.getClusterManagmentTool();
     logger.info("Participated in HelixVcrCluster successfully.");
@@ -173,23 +178,36 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
    * @param engine the {@link StateMachineEngine} to register the task state model.
    */
   private void registerContainerDeletionSyncTask(StateMachineEngine engine) {
-    Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
-    taskFactoryMap.put(DeprecatedContainerCloudSyncTask.class.getSimpleName(), new TaskFactory() {
-      @Override
-      public Task createNewTask(TaskCallbackContext context) {
-        return new DeprecatedContainerCloudSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
-            cloudDestination);
+    if (cloudConfig.cloudContainerCompactionEnabled) {
+      Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
+      taskFactoryMap.put(DeprecatedContainerCloudSyncTask.class.getSimpleName(), new TaskFactory() {
+        @Override
+        public Task createNewTask(TaskCallbackContext context) {
+          return new DeprecatedContainerCloudSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
+              cloudDestination, vcrMetrics);
+        }
+      });
+      if (!taskFactoryMap.isEmpty()) {
+        if (engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
+            new TaskStateModelFactory(manager, taskFactoryMap))) {
+          logger.info("Container deletion sync task registered with helix.");
+        } else {
+          vcrMetrics.deprecationSyncTaskRegistrationFailureCount.inc();
+          logger.error("Container deletion sync task registration with helix failed.");
+        }
       }
-    });
-    if (!taskFactoryMap.isEmpty()) {
-      engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
-          new TaskStateModelFactory(manager, taskFactoryMap));
     }
   }
 
   @Override
-  public List<? extends PartitionId> getAssignedPartitionIds() {
-    return new LinkedList<>(assignedPartitionIds);
+  public Collection<? extends PartitionId> getAssignedPartitionIds() {
+    return Collections.unmodifiableCollection(assignedPartitionIds);
+  }
+
+  @Override
+  public boolean isPartitionAssigned(String partitionPath) {
+    return (partitionIdMap.get(partitionPath) != null) && assignedPartitionIds.contains(
+        partitionIdMap.get(partitionPath));
   }
 
   @Override

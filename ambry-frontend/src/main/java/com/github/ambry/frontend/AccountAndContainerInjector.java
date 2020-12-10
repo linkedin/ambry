@@ -85,6 +85,39 @@ public class AccountAndContainerInjector {
   }
 
   /**
+   * Injects target {@link Account} and {@link Container} for named blob requests. This will treat the request path as
+   * a named blob path that includes the account and container names.
+   * @param restRequest The Put {@link RestRequest}.
+   * @param metricsGroup The {@link RestRequestMetricsGroup} to use to set up {@link ContainerMetrics}, or {@code null}
+   *                     if {@link ContainerMetrics} instantiation is not needed.
+   * @throws RestServiceException
+   */
+  public void injectAccountAndContainerForNamedBlob(RestRequest restRequest, RestRequestMetricsGroup metricsGroup)
+      throws RestServiceException {
+    accountAndContainerSanityCheck(restRequest);
+
+    NamedBlobPath namedBlobPath =
+        NamedBlobPath.parse(RestUtils.getRequestPath(restRequest).getOperationOrBlobId(false));
+    String accountName = namedBlobPath.getAccountName();
+    Account targetAccount = accountService.getAccountByName(accountName);
+    if (targetAccount == null) {
+      frontendMetrics.unrecognizedAccountNameCount.inc();
+      throw new RestServiceException("Account cannot be found for accountName=" + accountName
+          + " in put request with account and container headers.", RestServiceErrorCode.InvalidAccount);
+    }
+    ensureAccountNameMatch(targetAccount, restRequest);
+    String containerName = namedBlobPath.getContainerName();
+    Container targetContainer = targetAccount.getContainerByName(containerName);
+    if (targetContainer == null) {
+      frontendMetrics.unrecognizedContainerNameCount.inc();
+      throw new RestServiceException(
+          "Container cannot be found for accountName=" + accountName + " and containerName=" + containerName
+              + " in put request with account and container headers.", RestServiceErrorCode.InvalidContainer);
+    }
+    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, metricsGroup);
+  }
+
+  /**
    * Obtains the target {@link Account} and {@link Container} id from the blobId string, queries the {@link AccountService}
    * to get the corresponding {@link Account} and {@link Container}, and injects the target {@link Account} and
    * {@link Container} into the {@link RestRequest}.
@@ -216,12 +249,18 @@ public class AccountAndContainerInjector {
    * @throws RestServiceException if the specified service id, account or container name is set as system reserved value.
    */
   private void accountAndContainerSanityCheck(RestRequest restRequest) throws RestServiceException {
+    NamedBlobPath namedBlobPath = null;
+    if (getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
+      namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest).getOperationOrBlobId(false));
+    }
     if (Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false))
-        || Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false))) {
+        || Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false)) || (
+        namedBlobPath != null && Account.UNKNOWN_ACCOUNT_NAME.equals(namedBlobPath.getAccountName()))) {
       throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
     }
     String targetContainerName = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
-    if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName)) {
+    if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName) || (namedBlobPath != null
+        && Container.UNKNOWN_CONTAINER_NAME.equals(namedBlobPath.getContainerName()))) {
       throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
     }
     List<String> prohibitedHeaders = Arrays.asList(InternalKeys.TARGET_ACCOUNT_KEY, InternalKeys.TARGET_CONTAINER_KEY);

@@ -21,6 +21,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudContainerCompactor;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.CloudUpdateValidator;
@@ -88,20 +89,23 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureReplicationFeedType {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
    * @param clusterMap {@link ClusterMap}.
    * @throws ReflectiveOperationException
+   * @throws CloudStorageException
    */
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
       VcrMetrics vcrMetrics, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType,
-      ClusterMap clusterMap) throws ReflectiveOperationException {
+      ClusterMap clusterMap) throws ReflectiveOperationException, CloudStorageException {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureCloudConfig);
     this.azureBlobDataAccessor =
         new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, blobLayoutStrategy, azureMetrics);
     this.queryBatchSize = azureCloudConfig.cosmosQueryBatchSize;
+
     this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, vcrMetrics, azureMetrics);
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureContainerCompactor =
-        new AzureContainerCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
+        new AzureContainerCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, azureCloudConfig,
+            vcrMetrics, azureMetrics);
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     this.cloudConfig = cloudConfig;
@@ -124,7 +128,7 @@ class AzureCloudDestination implements CloudDestination {
   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
       AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String cosmosDeletedContainerCollectionLink,
       String clusterName, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType,
-      ClusterMap clusterMap, boolean isVcr) {
+      ClusterMap clusterMap, boolean isVcr, Properties configProps) throws CloudStorageException {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
@@ -133,15 +137,16 @@ class AzureCloudDestination implements CloudDestination {
     this.cosmosDataAccessor =
         new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, cosmosDeletedContainerCollectionLink,
             vcrMetrics, azureMetrics);
-    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
+    this.cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
+    AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureContainerCompactor =
-        new AzureContainerCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
+        new AzureContainerCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, azureCloudConfig,
+            vcrMetrics, azureMetrics);
     this.azureReplicationFeed =
         getReplicationFeedObj(azureReplicationFeedType, cosmosDataAccessor, azureMetrics, queryBatchSize);
     this.isVcr = isVcr;
-    this.cloudConfig = new CloudConfig(new VerifiableProperties(new Properties()));
     this.clusterMap = clusterMap;
   }
 
@@ -490,8 +495,14 @@ class AzureCloudDestination implements CloudDestination {
 
   @Override
   public void deprecateContainers(Collection<Container> deletedContainers) throws CloudStorageException {
+    //TODO need to account for all possible partition classes in call to getAllPartitionIds.
     azureContainerCompactor.deprecateContainers(deletedContainers,
         clusterMap.getAllPartitionIds(null).stream().map(PartitionId::toPathString).collect(Collectors.toSet()));
+  }
+
+  @Override
+  public CloudContainerCompactor getContainerCompactor() {
+    return azureContainerCompactor;
   }
 
   /**

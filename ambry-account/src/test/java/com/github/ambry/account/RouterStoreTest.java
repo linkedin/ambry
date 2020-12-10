@@ -114,7 +114,7 @@ public class RouterStoreTest {
   public void testUpdateAndFetch() throws Exception {
     RouterStore store =
         new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), forBackfill,
-            TOTAL_NUMBER_OF_VERSION_TO_KEEP);
+            TOTAL_NUMBER_OF_VERSION_TO_KEEP, config);
     Map<Short, Account> idToRefAccountMap = new HashMap<>();
     Map<Short, Map<Short, Container>> idtoRefContainerMap = new HashMap<>();
     Set<Short> accountIDSet = new HashSet<>();
@@ -158,7 +158,7 @@ public class RouterStoreTest {
     assumeTrue(!forBackfill);
     RouterStore store =
         new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), forBackfill,
-            TOTAL_NUMBER_OF_VERSION_TO_KEEP);
+            TOTAL_NUMBER_OF_VERSION_TO_KEEP, config);
     Map<Short, Account> idToRefAccountMap = new HashMap<>();
     Map<Short, Map<Short, Container>> idtoRefContainerMap = new HashMap<>();
     Set<Short> accountIDSet = new HashSet<>();
@@ -186,7 +186,7 @@ public class RouterStoreTest {
   public void testSizeLimitInList() throws Exception {
     RouterStore store =
         new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), forBackfill,
-            TOTAL_NUMBER_OF_VERSION_TO_KEEP);
+            TOTAL_NUMBER_OF_VERSION_TO_KEEP, config);
 
     Map<Short, Account> idToRefAccountMap = new HashMap<>();
     Map<Short, Map<Short, Container>> idtoRefContainerMap = new HashMap<>();

@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import org.junit.Test;
 
@@ -154,7 +155,8 @@ public class MySqlAccountServiceTest {
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer2).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
     verify(mockMySqlAccountStore, never()).updateAccount(testAccount);
-    verify(mockMySqlAccountStore, atLeastOnce()).addContainer(testContainer2);
+    verify(mockMySqlAccountStore, atLeastOnce()).addContainers(anyInt(),
+        argThat(containers -> containers.size() == 1 && containers.iterator().next().equals(testContainer2)));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
 
@@ -165,9 +167,8 @@ public class MySqlAccountServiceTest {
     verify(mockMySqlAccountStore, never()).updateAccount(testAccount);
     Container finalTestContainer =
         new ContainerBuilder(testContainer).setSnapshotVersion(testContainer.getSnapshotVersion() + 1).build();
-    verify(mockMySqlAccountStore, atLeastOnce()).updateContainer(argThat(
-        container -> container.equals(finalTestContainer)
-            && container.getSnapshotVersion() == finalTestContainer.getSnapshotVersion()));
+    verify(mockMySqlAccountStore, atLeastOnce()).updateContainers(anyInt(),
+        argThat(containers -> containers.size() == 1));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
   }
@@ -456,5 +457,94 @@ public class MySqlAccountServiceTest {
 
     // verify consumers are not notified
     assertEquals("No updates should be received", 0, updatedAccountsReceivedByConsumers.size());
+  }
+
+  /**
+   * Tests ignoring version conflicts in Accounts and Containers
+   */
+  @Test
+  public void testUpdateAccountsWithVersionMismatchIgnored() throws Exception {
+
+    mySqlConfigProps.setProperty(IGNORE_VERSION_MISMATCH, "true");
+    AccountService mySqlAccountService = getAccountService();
+
+    // write account (1, "a")
+    Account accountToUpdate = new AccountBuilder((short) 1, "a", Account.AccountStatus.ACTIVE).addOrUpdateContainer(
+        new ContainerBuilder((short) 1, "c1", Container.ContainerStatus.ACTIVE, "c1", (short) 1).build()).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate));
+
+    // verify updating account (1, "a") with different version is successful
+    accountToUpdate = new AccountBuilder(accountToUpdate).status(Account.AccountStatus.INACTIVE)
+        .snapshotVersion(mySqlAccountService.getAccountById((short) 1).getSnapshotVersion() + 5)
+        .build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate));
+    assertEquals("Mismatch in account information", accountToUpdate, mySqlAccountService.getAccountById((short) 1));
+
+    // verify updating container (1,"c1") in account (1,"a") with different version is successful
+    Container containerToUpdate = accountToUpdate.getContainerById((short) 1);
+    containerToUpdate = new ContainerBuilder(containerToUpdate).setStatus(Container.ContainerStatus.INACTIVE)
+        .setSnapshotVersion(containerToUpdate.getSnapshotVersion() + 5)
+        .build();
+    mySqlAccountService.updateContainers(accountToUpdate.getName(), Collections.singletonList(containerToUpdate));
+    assertEquals("Mismatch in container information", containerToUpdate,
+        mySqlAccountService.getContainer(accountToUpdate.getName(), containerToUpdate.getName()));
+  }
+
+  /**
+   * Tests creating existing containers with different states. This is to mock edge case where user attempts to create
+   * same container which has been deprecated already.
+   * @throws Exception
+   */
+  @Test
+  public void testCreateExistingContainerInDifferentStates() throws Exception {
+    AccountService mySqlAccountService = getAccountService();
+    String accountName = "test-account";
+    String inactiveContainer = "inactive-container";
+    String deleteInProgressContainer1 = "delete-in-progress-container1";
+    String deleteInProgressContainer2 = "delete-in-progress-container2";
+    // create a testing account with inactive and delete-in-progress container.
+    Account accountToUpdate =
+        new AccountBuilder((short) 1, accountName, Account.AccountStatus.ACTIVE).addOrUpdateContainer(
+            new ContainerBuilder((short) 1, inactiveContainer, Container.ContainerStatus.INACTIVE, "",
+                (short) 1).build())
+            .addOrUpdateContainer(new ContainerBuilder((short) 2, deleteInProgressContainer1,
+                Container.ContainerStatus.DELETE_IN_PROGRESS, "", (short) 1).setDeleteTriggerTime(
+                System.currentTimeMillis()).build())
+            .addOrUpdateContainer(new ContainerBuilder((short) 3, deleteInProgressContainer2,
+                Container.ContainerStatus.DELETE_IN_PROGRESS, "", (short) 1).setDeleteTriggerTime(
+                System.currentTimeMillis() - TimeUnit.DAYS.toMillis(15)).build())
+            .build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate));
+
+    // Attempting to create an existing container with INACTIVE state should fail
+    Container containerToCreate =
+        new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, inactiveContainer, Container.ContainerStatus.ACTIVE, "",
+            (short) 1).build();
+    try {
+      mySqlAccountService.updateContainers(accountName, Collections.singletonList(containerToCreate));
+      fail("should fail because container to create is already marked as inactive");
+    } catch (AccountServiceException ase) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceHasGone, ase.getErrorCode());
+    }
+
+    // Attempting to create an existing container with DELETE_IN_PROGRESS state (within retention time) should fail
+    containerToCreate = new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, deleteInProgressContainer1,
+        Container.ContainerStatus.ACTIVE, "", (short) 1).build();
+    try {
+      mySqlAccountService.updateContainers(accountName, Collections.singletonList(containerToCreate));
+      fail("should fail because container to create is in DELETE_IN_PROGRESS state");
+    } catch (AccountServiceException ase) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.MethodNotAllowed, ase.getErrorCode());
+    }
+
+    // Attempting to create an existing container with DELETE_IN_PROGRESS state (past retention time) should fail
+    containerToCreate = new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, deleteInProgressContainer2,
+        Container.ContainerStatus.ACTIVE, "", (short) 1).build();
+    try {
+      mySqlAccountService.updateContainers(accountName, Collections.singletonList(containerToCreate));
+      fail("should fail because container to create is in DELETE_IN_PROGRESS state and past retention time");
+    } catch (AccountServiceException ase) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceHasGone, ase.getErrorCode());
+    }
   }
 }

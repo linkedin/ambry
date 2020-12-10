@@ -40,6 +40,7 @@ public class FrontendConfig {
   public static final String ENABLE_UNDELETE = PREFIX + "enable.undelete";
   public static final String ENABLE_STORAGE_QUOTA_SERVICE = PREFIX + "enable.storage.quota.service";
   public static final String STORAGE_QUOTA_SERVICE_FACTORY = PREFIX + "storage.quota.service.factory";
+  public static final String NAMED_BLOB_DB_FACTORY = PREFIX + "named.blob.db.factory";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -229,6 +230,14 @@ public class FrontendConfig {
   @Default(DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY)
   public final String storageQuotaServiceFactory;
 
+  /**
+   * Can be set to a classname that implements {@link com.github.ambry.named.NamedBlobDbFactory} to enable named blob
+   * support.
+   */
+  @Config(NAMED_BLOB_DB_FACTORY)
+  @Default("null")
+  public final String namedBlobDbFactory;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
@@ -278,6 +287,8 @@ public class FrontendConfig {
     enableStorageQuotaService = verifiableProperties.getBoolean(ENABLE_STORAGE_QUOTA_SERVICE, false);
     storageQuotaServiceFactory =
         verifiableProperties.getString(STORAGE_QUOTA_SERVICE_FACTORY, DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY);
+    namedBlobDbFactory =
+        verifiableProperties.getString(NAMED_BLOB_DB_FACTORY, null);
   }
 
   /**

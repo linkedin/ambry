@@ -25,6 +25,8 @@ public class BlobProperties {
   private final String serviceId;
   private final String ownerId;
   private final String contentType;
+  private final String contentEncoding;
+  private final String filename;
   private final boolean isPrivate;
   private final long creationTimeInMs;
   private final short accountId;
@@ -44,7 +46,7 @@ public class BlobProperties {
    */
   public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, boolean isEncrypted) {
     this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, SystemTime.getInstance().milliseconds(),
-        accountId, containerId, isEncrypted, null);
+        accountId, containerId, isEncrypted, null, null, null);
   }
 
   /**
@@ -58,7 +60,7 @@ public class BlobProperties {
   public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, boolean isEncrypted,
       long creationTimeInMs) {
     this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, creationTimeInMs, accountId, containerId,
-        isEncrypted, null);
+        isEncrypted, null, null, null);
   }
 
   /**
@@ -72,11 +74,15 @@ public class BlobProperties {
    * @param containerId containerId of the blob
    * @param isEncrypted whether this blob is encrypted.
    * @param externalAssetTag externalAssetTag for this blob. This is a non-persistent field.
+   * @param contentEncoding the field to identify if the blob is compressed.
+   * @param filename the name of the file.
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, short accountId, short containerId, boolean isEncrypted, String externalAssetTag) {
+      long timeToLiveInSeconds, short accountId, short containerId, boolean isEncrypted, String externalAssetTag,
+      String contentEncoding, String filename) {
     this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
-        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag);
+        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, contentEncoding,
+        filename);
   }
 
   /**
@@ -91,10 +97,12 @@ public class BlobProperties {
    * @param containerId containerId of the blob
    * @param isEncrypted whether this blob is encrypted.
    * @param externalAssetTag externalAssetTag for this blob. This is a non-persistent field.
+   * @param contentEncoding the field to identify if the blob is compressed.
+   * @param filename the name of the file.
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId, boolean isEncrypted,
-      String externalAssetTag) {
+      String externalAssetTag, String contentEncoding, String filename) {
     this.blobSize = blobSize;
     this.serviceId = serviceId;
     this.ownerId = ownerId;
@@ -106,6 +114,8 @@ public class BlobProperties {
     this.containerId = containerId;
     this.isEncrypted = isEncrypted;
     this.externalAssetTag = externalAssetTag;
+    this.contentEncoding = contentEncoding;
+    this.filename = filename;
   }
 
   public long getTimeToLiveInSeconds() {
@@ -131,6 +141,14 @@ public class BlobProperties {
 
   public String getContentType() {
     return contentType;
+  }
+
+  public String getContentEncoding() {
+    return contentEncoding;
+  }
+
+  public String getFilename() {
+    return filename;
   }
 
   /**
@@ -183,21 +201,9 @@ public class BlobProperties {
     StringBuilder sb = new StringBuilder();
     sb.append("BlobProperties[");
     sb.append("BlobSize=").append(getBlobSize());
-    if (getContentType() != null) {
-      sb.append(", ").append("ContentType=").append(getContentType());
-    } else {
-      sb.append(", ").append("ContentType=Null");
-    }
-    if (getOwnerId() != null) {
-      sb.append(", ").append("OwnerId=").append(getOwnerId());
-    } else {
-      sb.append(", ").append("OwnerId=Null");
-    }
-    if (getServiceId() != null) {
-      sb.append(", ").append("ServiceId=").append(getServiceId());
-    } else {
-      sb.append(", ").append("ServiceId=Null");
-    }
+    sb.append(", ").append("ContentType=").append(getContentType());
+    sb.append(", ").append("OwnerId=").append(getOwnerId());
+    sb.append(", ").append("ServiceId=").append(getServiceId());
     sb.append(", ").append("IsPrivate=").append(isPrivate());
     sb.append(", ").append("CreationTimeInMs=").append(getCreationTimeInMs());
     if (getTimeToLiveInSeconds() != Utils.Infinite_Time) {
@@ -209,6 +215,8 @@ public class BlobProperties {
     sb.append(", ").append("ContainerId=").append(getContainerId());
     sb.append(", ").append("IsEncrypted=").append(isEncrypted());
     sb.append(", ").append("externalAssetTag=").append(getExternalAssetTag());
+    sb.append(", ").append("ContentEncoding=").append(getContentEncoding());
+    sb.append(", ").append("Filename=").append(getFilename());
     sb.append("]");
     return sb.toString();
   }

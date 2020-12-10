@@ -55,7 +55,7 @@ public class MySqlDataAccessor {
    * List of operation types on the mysql store.
    */
   public enum OperationType {
-    Write, Read
+    Write, Read, Copy
   }
 
   /** Production constructor */
@@ -107,7 +107,7 @@ public class MySqlDataAccessor {
       if (isCredentialError(e)) {
         throw e;
       } else {
-        logger.error("No writable database available, will retry later.");
+        logger.error("No writable database available, will retry later.", e);
       }
     }
   }
@@ -238,8 +238,10 @@ public class MySqlDataAccessor {
     if (e instanceof SQLTransientConnectionException) {
       if (operationType == OperationType.Write) {
         metrics.writeFailureCount.inc();
-      } else {
+      } else if (operationType == operationType.Read) {
         metrics.readFailureCount.inc();
+      } else if (operationType == operationType.Copy) {
+        metrics.copyFailureCount.inc();
       }
       closeActiveConnection();
     }
@@ -254,9 +256,12 @@ public class MySqlDataAccessor {
     if (operationType == OperationType.Write) {
       metrics.writeSuccessCount.inc();
       metrics.writeTimeMs.update(operationTimeInMs);
-    } else {
+    } else if (operationType == OperationType.Read) {
       metrics.readSuccessCount.inc();
       metrics.readTimeMs.update(operationTimeInMs);
+    } else if (operationType == OperationType.Copy) {
+      metrics.copySuccessCount.inc();
+      metrics.copyTimeMs.update(operationTimeInMs);
     }
   }
 

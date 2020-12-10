@@ -15,8 +15,8 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.azure.AzureReplicationFeed;
-import com.github.ambry.cloud.azure.ContainerDeletionEntry;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
+import com.github.ambry.cloud.azure.CosmosContainerDeletionEntry;
 import com.github.ambry.cloud.azure.CosmosUpdateTimeFindToken;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -55,61 +55,9 @@ import org.slf4j.LoggerFactory;
  */
 public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
-  /**
-   * Class representing change feed for {@link LatchBasedInMemoryCloudDestination}
-   */
-  class ChangeFeed {
-    private final Map<String, BlobId> continuationTokenToBlobIdMap = new HashMap<>();
-    private final Map<BlobId, String> blobIdToContinuationTokenMap = new HashMap<>();
-    private int continuationTokenCounter = -1;
-    private final String reqUuid = UUID.randomUUID().toString();
-
-    /**
-     * Add a blobid to the change feed.
-     * @param blobId {@link BlobId} to add.
-     */
-    void add(BlobId blobId) {
-      if (blobIdToContinuationTokenMap.containsKey(blobId)) {
-        continuationTokenToBlobIdMap.put(blobIdToContinuationTokenMap.get(blobId), null);
-      }
-      continuationTokenToBlobIdMap.put(Integer.toString(++continuationTokenCounter), blobId);
-      blobIdToContinuationTokenMap.put(blobId, Integer.toString(continuationTokenCounter));
-    }
-
-    /**
-     * Return continuation token for specified {@link BlobId}
-     * @param blobId {@link BlobId} object.
-     * @return continuation token.
-     */
-    String getContinuationTokenForBlob(BlobId blobId) {
-      return blobIdToContinuationTokenMap.get(blobId);
-    }
-
-    /**
-     * Return continuation token to blob id map.
-     * @return {@code continuationTokenToBlobIdMap}.
-     */
-    Map<String, BlobId> getContinuationTokenToBlobIdMap() {
-      return continuationTokenToBlobIdMap;
-    }
-
-    /**
-     * Return continuation token counter.
-     * @return {@code continuationTokenCounter}.
-     */
-    int getContinuationTokenCounter() {
-      return continuationTokenCounter;
-    }
-
-    /**
-     * Return request uuid.
-     * @return {@code reqUuid}
-     */
-    String getReqUuid() {
-      return reqUuid;
-    }
-  }
-
+  private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
+  private final static AzureReplicationFeed.FeedType DEFAULT_AZURE_REPLICATION_FEED_TYPE =
+      AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
   private final Map<BlobId, Pair<CloudBlobMetadata, byte[]>> map = new HashMap<>();
   private final CountDownLatch uploadLatch;
   private final CountDownLatch downloadLatch;
@@ -118,13 +66,9 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final AtomicLong bytesUploadedCounter = new AtomicLong(0);
   private final AtomicInteger blobsUploadedCounter = new AtomicInteger(0);
   private final ChangeFeed changeFeed = new ChangeFeed();
-  private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
   private final AzureReplicationFeed.FeedType azureReplicationFeedType;
-  private final Set<ContainerDeletionEntry> deprecatedContainers = new HashSet<>();
+  private final Set<CosmosContainerDeletionEntry> deprecatedContainers = new HashSet<>();
   private final ClusterMap clusterMap;
-
-  private final static AzureReplicationFeed.FeedType DEFAULT_AZURE_REPLICATION_FEED_TYPE =
-      AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
 
   /**
    * Instantiate {@link LatchBasedInMemoryCloudDestination}.
@@ -379,9 +323,22 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   public void deprecateContainers(Collection<Container> deletedContainers) {
     this.deprecatedContainers.addAll(deletedContainers.stream()
-        .map(container -> ContainerDeletionEntry.fromContainer(container,
+        .map(container -> CosmosContainerDeletionEntry.fromContainer(container,
             clusterMap.getAllPartitionIds(null).stream().map(PartitionId::toPathString).collect(Collectors.toSet())))
         .collect(Collectors.toList()));
+  }
+
+  @Override
+  public CloudContainerCompactor getContainerCompactor() {
+    return new CloudContainerCompactor() {
+      @Override
+      public void compactAssignedDeprecatedContainers(Collection<? extends PartitionId> assignedPartitions) {
+      }
+
+      @Override
+      public void shutdown() {
+      }
+    };
   }
 
   boolean doesBlobExist(BlobId blobId) {
@@ -435,7 +392,62 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   /**
    * @return {@code deletedContainers}.
    */
-  public Set<ContainerDeletionEntry> getDeletedContainers() {
+  public Set<CosmosContainerDeletionEntry> getDeletedContainers() {
     return deprecatedContainers;
+  }
+
+  /**
+   * Class representing change feed for {@link LatchBasedInMemoryCloudDestination}
+   */
+  class ChangeFeed {
+    private final Map<String, BlobId> continuationTokenToBlobIdMap = new HashMap<>();
+    private final Map<BlobId, String> blobIdToContinuationTokenMap = new HashMap<>();
+    private final String reqUuid = UUID.randomUUID().toString();
+    private int continuationTokenCounter = -1;
+
+    /**
+     * Add a blobid to the change feed.
+     * @param blobId {@link BlobId} to add.
+     */
+    void add(BlobId blobId) {
+      if (blobIdToContinuationTokenMap.containsKey(blobId)) {
+        continuationTokenToBlobIdMap.put(blobIdToContinuationTokenMap.get(blobId), null);
+      }
+      continuationTokenToBlobIdMap.put(Integer.toString(++continuationTokenCounter), blobId);
+      blobIdToContinuationTokenMap.put(blobId, Integer.toString(continuationTokenCounter));
+    }
+
+    /**
+     * Return continuation token for specified {@link BlobId}
+     * @param blobId {@link BlobId} object.
+     * @return continuation token.
+     */
+    String getContinuationTokenForBlob(BlobId blobId) {
+      return blobIdToContinuationTokenMap.get(blobId);
+    }
+
+    /**
+     * Return continuation token to blob id map.
+     * @return {@code continuationTokenToBlobIdMap}.
+     */
+    Map<String, BlobId> getContinuationTokenToBlobIdMap() {
+      return continuationTokenToBlobIdMap;
+    }
+
+    /**
+     * Return continuation token counter.
+     * @return {@code continuationTokenCounter}.
+     */
+    int getContinuationTokenCounter() {
+      return continuationTokenCounter;
+    }
+
+    /**
+     * Return request uuid.
+     * @return {@code reqUuid}
+     */
+    String getReqUuid() {
+      return reqUuid;
+    }
   }
 }

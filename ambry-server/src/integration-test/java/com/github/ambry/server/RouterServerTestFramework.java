@@ -64,7 +64,7 @@ import org.junit.Assert;
  * {@link RouterServerSSLTest} for example usage.
  */
 class RouterServerTestFramework {
-  static final int AWAIT_TIMEOUT = 50;
+  static final int AWAIT_TIMEOUT = 120;
   static final int CHUNK_SIZE = 1024 * 1024;
 
   private final MockClusterMap clusterMap;
@@ -159,7 +159,7 @@ class RouterServerTestFramework {
     short containerId = container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getId();
     BlobProperties properties =
         new BlobProperties(blobSize, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId,
-            testEncryption, null);
+            testEncryption, null, null, null);
     OperationChain opChain = new OperationChain(chainId, properties, userMetadata, data, operations);
     continueChain(opChain);
     return opChain;

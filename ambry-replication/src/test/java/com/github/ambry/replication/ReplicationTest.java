@@ -1615,8 +1615,8 @@ public class ReplicationTest extends ReplicationTestHelper {
 
       // add an expired message to the remote host only
       StoreKey id =
-          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId,
-              containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
+          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+              partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       PutMsgInfoAndBuffer msgInfoAndBuffer = createPutMessage(id, accountId, containerId, toEncrypt);
       remoteHost.addMessage(partitionId,
           new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), 1, accountId, containerId,
@@ -1700,8 +1700,8 @@ public class ReplicationTest extends ReplicationTestHelper {
 
       // add an expired message to the remote host only
       StoreKey id =
-          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId,
-              containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
+          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+              partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       PutMsgInfoAndBuffer msgInfoAndBuffer = createPutMessage(id, accountId, containerId, toEncrypt);
       remoteHost.addMessage(partitionId,
           new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), 1, accountId, containerId,
@@ -1871,8 +1871,8 @@ public class ReplicationTest extends ReplicationTestHelper {
       boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
       // add an expired message to the remote host only
       StoreKey id =
-          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId,
-              containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
+          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+              partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       PutMsgInfoAndBuffer msgInfoAndBuffer = createPutMessage(id, accountId, containerId, toEncrypt);
       remoteHost.addMessage(partitionId,
           new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), 1, accountId, containerId,
@@ -1886,8 +1886,8 @@ public class ReplicationTest extends ReplicationTestHelper {
       containerId = Utils.getRandomShort(TestUtils.RANDOM);
       toEncrypt = TestUtils.RANDOM.nextBoolean();
       // add a corrupt message to the remote host only
-      id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId,
-          containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
+      id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+          partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       msgInfoAndBuffer = createPutMessage(id, accountId, containerId, toEncrypt);
       byte[] data = msgInfoAndBuffer.byteBuffer.array();
       // flip every bit in the array

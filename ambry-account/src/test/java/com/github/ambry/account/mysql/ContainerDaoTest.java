@@ -26,6 +26,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLTransientConnectionException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -51,6 +52,7 @@ public class ContainerDaoTest {
   private final MySqlMetrics metrics;
   private final PreparedStatement mockInsertStatement;
   private final PreparedStatement mockQueryStatement;
+  private final PreparedStatement mockUpdateStatement;
 
   public ContainerDaoTest() throws SQLException {
     metrics = new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry());
@@ -61,8 +63,12 @@ public class ContainerDaoTest {
     mockInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into"))).thenReturn(mockInsertStatement);
     when(mockInsertStatement.executeUpdate()).thenReturn(1);
+    when(mockInsertStatement.executeBatch()).thenReturn(new int[]{1});
     mockQueryStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(startsWith("select"))).thenReturn(mockQueryStatement);
+    mockUpdateStatement = mock(PreparedStatement.class);
+    when(mockConnection.prepareStatement(contains("update"))).thenReturn(mockUpdateStatement);
+    when(mockUpdateStatement.executeBatch()).thenReturn(new int[]{1});
     ResultSet mockResultSet = mock(ResultSet.class);
     when(mockQueryStatement.executeQuery()).thenReturn(mockResultSet);
     when(mockResultSet.next()).thenReturn(true).thenReturn(false);
@@ -109,5 +115,26 @@ public class ContainerDaoTest {
     when(mockQueryStatement.executeQuery()).thenThrow(new SQLTransientConnectionException());
     TestUtils.assertException(SQLTransientConnectionException.class, () -> containerDao.getNewContainers(0L), null);
     assertEquals("Read failure count should be 1", 1, metrics.readFailureCount.getCount());
+  }
+
+  @Test
+  public void testBatchOperations() throws SQLException {
+    List<Container> containers = new ArrayList<>();
+    int size = 11;
+    int batchSize = 5;
+    for (int i = 1; i <= size; i++) {
+      containers.add(new ContainerBuilder((short) i, "test container " + i, Container.ContainerStatus.ACTIVE, "",
+          (short) 1).build());
+    }
+
+    // test batch inserts
+    containerDao.addContainers(1, containers, batchSize);
+    verify(mockInsertStatement, times(size)).addBatch();
+    verify(mockInsertStatement, times(size / batchSize + 1)).executeBatch();
+
+    // test batch updates
+    containerDao.updateContainers(1, containers, batchSize);
+    verify(mockUpdateStatement, times(size)).addBatch();
+    verify(mockUpdateStatement, times(size / batchSize + 1)).executeBatch();
   }
 }

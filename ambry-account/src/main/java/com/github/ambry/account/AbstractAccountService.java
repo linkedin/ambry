@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -111,18 +112,35 @@ abstract class AbstractAccountService implements AccountService {
     for (Container container : containers) {
       if (container.getId() == Container.UNKNOWN_CONTAINER_ID) {
         // new container
-        // make sure there is no conflicting container (conflicting means a container with same name but different attributes already exists).
         Container existingContainer = existingContainersInAccount.get(container.getName());
         if (existingContainer != null) {
-          if (existingContainer.isSameContainer(container)) {
-            // If an exactly same container already exists, treat as no-op (may be retry after partial failure).
-            // But include it in the list returned to caller to provide the containerId.
-            logger.info("Request to create container with existing name and properties: {}",
-                existingContainer.toJson().toString());
-            existingUnchangedContainers.add(existingContainer);
-          } else {
-            throw new AccountServiceException("There is a conflicting container in account " + accountName,
-                AccountServiceErrorCode.ResourceConflict);
+          switch (existingContainer.getStatus()) {
+            case INACTIVE:
+              throw new AccountServiceException(
+                  "The container " + container.getName() + " has gone and cannot be restored",
+                  AccountServiceErrorCode.ResourceHasGone);
+            case DELETE_IN_PROGRESS:
+              if (existingContainer.getDeleteTriggerTime() + TimeUnit.DAYS.toMillis(
+                  config.containerDeprecationRetentionDays) > System.currentTimeMillis()) {
+                throw new AccountServiceException("Create method is not allowed on container " + container.getName()
+                    + " as it's in Delete_In_Progress state", AccountServiceErrorCode.MethodNotAllowed);
+              } else {
+                throw new AccountServiceException(
+                    "The container " + container.getName() + " has gone and cannot be restored",
+                    AccountServiceErrorCode.ResourceHasGone);
+              }
+            case ACTIVE:
+              // make sure there is no conflicting container (conflicting means a container with same name but different attributes already exists).
+              if (existingContainer.isSameContainer(container)) {
+                // If an exactly same container already exists, treat as no-op (may be retry after partial failure).
+                // But include it in the list returned to caller to provide the containerId.
+                logger.info("Request to create container with existing name and properties: {}",
+                    existingContainer.toJson().toString());
+                existingUnchangedContainers.add(existingContainer);
+              } else {
+                throw new AccountServiceException("There is a conflicting container in account " + accountName,
+                    AccountServiceErrorCode.ResourceConflict);
+              }
           }
         } else {
           resolvedContainers.add(
@@ -141,7 +159,8 @@ abstract class AbstractAccountService implements AccountService {
               "In account " + accountName + ", container " + container.getName() + " has containerId "
                   + existingContainer.getId() + " (" + container.getId() + " was supplied)",
               AccountServiceErrorCode.ResourceConflict);
-        } else if (existingContainer.getSnapshotVersion() != container.getSnapshotVersion()) {
+        } else if (!config.ignoreVersionMismatch
+            && existingContainer.getSnapshotVersion() != container.getSnapshotVersion()) {
           throw new AccountServiceException(
               "In account " + accountName + ", container " + container.getName() + " has version "
                   + existingContainer.getSnapshotVersion() + " (" + container.getSnapshotVersion() + " was supplied)",

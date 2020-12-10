@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -25,8 +26,8 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -77,14 +78,15 @@ public class HelixVcrClusterTest {
             Collections.singleton(VcrTestUtil.helixResource), null);
     // Create helixInstance1 and join the cluster. All partitions should be assigned to helixInstance1.
     VirtualReplicatorCluster helixInstance1 = createHelixInstance(8123, 10123);
-    List<PartitionId> expectedPartitions = mockClusterMap.getAllPartitionIds(null);
+    Collection<? extends PartitionId> expectedPartitions =
+        Collections.unmodifiableCollection(mockClusterMap.getAllPartitionIds(null));
     MockVcrListener mockVcrListener = new MockVcrListener();
     helixInstance1.addListener(mockVcrListener);
     helixInstance1.participate();
     TestUtils.checkAndSleep(true, () -> helixInstance1.getAssignedPartitionIds().size() > 0, 1000);
     Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(5000));
-    Assert.assertEquals("Partition assignment are not correct.", helixInstance1.getAssignedPartitionIds(),
-        expectedPartitions);
+    Assert.assertTrue("Partition assignment are not correct.",
+        collectionEquals(helixInstance1.getAssignedPartitionIds(), expectedPartitions));
 
     // Create helixInstance2 and join the cluster. Half of partitions should be removed from helixInstance1.
     VirtualReplicatorCluster helixInstance2 = createHelixInstance(8124, 10124);
@@ -102,8 +104,8 @@ public class HelixVcrClusterTest {
     TestUtils.checkAndSleep(true, () -> helixInstance1.getAssignedPartitionIds().size() > expectedPartitions.size() / 2,
         500);
     Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(5000));
-    Assert.assertEquals("Partition assignment are not correct.", helixInstance1.getAssignedPartitionIds(),
-        expectedPartitions);
+    Assert.assertTrue("Partition assignment are not correct.",
+        collectionEquals(helixInstance1.getAssignedPartitionIds(), expectedPartitions));
 
     helixInstance1.close();
   }
@@ -130,7 +132,19 @@ public class HelixVcrClusterTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
     return new HelixVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap, Mockito.mock(AccountService.class),
-        new StoreConfig(verifiableProperties), null).getVirtualReplicatorCluster();
+        new StoreConfig(verifiableProperties), null, new MetricRegistry()).getVirtualReplicatorCluster();
+  }
+
+  /**
+   * Check if two collections have same contents.
+   * @param collection1 {@link Collection} object to compare.
+   * @param collection2 {@link Collection} object to compare.
+   * @return true if contents are equals. false otherwise.
+   */
+  private boolean collectionEquals(Collection<? extends PartitionId> collection1,
+      Collection<? extends PartitionId> collection2) {
+    return collection1.size() == collection2.size() && collection1.containsAll(collection2) && collection2.containsAll(
+        collection1);
   }
 
   private static class MockVcrListener implements VirtualReplicatorClusterListener {

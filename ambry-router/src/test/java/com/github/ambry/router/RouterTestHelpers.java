@@ -34,6 +34,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -62,7 +63,8 @@ class RouterTestHelpers {
         .equals(b.getContentType()) && a.isPrivate() == b.isPrivate()
         && a.getTimeToLiveInSeconds() == b.getTimeToLiveInSeconds()
         && a.getCreationTimeInMs() == b.getCreationTimeInMs() && a.getAccountId() == b.getAccountId()
-        && a.getContainerId() == b.getContainerId() && a.isEncrypted() == b.isEncrypted();
+        && a.getContainerId() == b.getContainerId() && a.isEncrypted() == b.isEncrypted() && Objects.equals(
+        a.getFilename(), b.getFilename()) && Objects.equals(a.getContentEncoding(), b.getContentEncoding());
   }
 
   /**

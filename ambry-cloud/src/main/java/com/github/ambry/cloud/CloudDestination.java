@@ -145,4 +145,9 @@ public interface CloudDestination extends Closeable {
    * @throws {@link CloudStorageException} if the operation fails.
    */
   void deprecateContainers(Collection<Container> deprecatedContainers) throws CloudStorageException;
+
+  /**
+   * @return {@link CloudContainerCompactor} object that would do container compaction for cloud.
+   */
+  CloudContainerCompactor getContainerCompactor();
 }

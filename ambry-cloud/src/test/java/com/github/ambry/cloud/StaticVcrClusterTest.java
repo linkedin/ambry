@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
@@ -60,7 +61,8 @@ public class StaticVcrClusterTest {
     CloudConfig cloudConfig = new CloudConfig(vProps);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
     VirtualReplicatorClusterFactory factory =
-        new StaticVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap, null, null, null);
+        new StaticVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap, null, null, null,
+            new MetricRegistry());
     VirtualReplicatorCluster virtualReplicatorCluster = factory.getVirtualReplicatorCluster();
     assertEquals("CloudDataNode host name doesn't match", hostName,
         virtualReplicatorCluster.getCurrentDataNodeId().getHostname());

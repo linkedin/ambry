@@ -18,9 +18,9 @@ import com.github.ambry.clustermap.MockHelixPropertyStore;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
@@ -208,23 +208,8 @@ public class HelixStorageUsageRefresherTest {
    * @throws Exception
    */
   private void writeStorageUsageToHelix(Map<String, Map<String, Long>> accountStorageUsage) throws Exception {
-    Map<String, StatsSnapshot> accountSnapshots = new HashMap<>();
-    long sumOfAccountUsage = 0;
-    for (Map.Entry<String, Map<String, Long>> accountStorageUsageEntry : accountStorageUsage.entrySet()) {
-      String accountId = accountStorageUsageEntry.getKey();
-      Map<String, StatsSnapshot> containerSnapshots = new HashMap<>();
-      long sumOfContainerUsage = 0;
-      for (Map.Entry<String, Long> containerStorageUsageEntry : accountStorageUsageEntry.getValue().entrySet()) {
-        String containerId = containerStorageUsageEntry.getKey();
-        long usage = containerStorageUsageEntry.getValue();
-        sumOfContainerUsage += usage;
-        containerSnapshots.put("C[" + containerId + "]", new StatsSnapshot(usage, null));
-      }
-      accountSnapshots.put("A[" + accountId + "]", new StatsSnapshot(sumOfContainerUsage, containerSnapshots));
-      sumOfAccountUsage += sumOfContainerUsage;
-    }
-    StatsSnapshot topSnapshot = new StatsSnapshot(sumOfAccountUsage, accountSnapshots);
-    writeToHelix(new ObjectMapper().writeValueAsString(topSnapshot));
+    StatsSnapshot snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(accountStorageUsage);
+    writeToHelix(new ObjectMapper().writeValueAsString(snapshot));
   }
 
   /**

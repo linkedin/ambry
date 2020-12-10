@@ -21,8 +21,6 @@ import com.codahale.metrics.Timer;
 
 public class VcrMetrics {
 
-  private final MetricRegistry registry;
-
   // Encryption metrics
   public final Counter blobEncryptionCount;
   public final Counter blobDecryptionCount;
@@ -33,6 +31,7 @@ public class VcrMetrics {
   // Compaction metrics
   // Rate of blob compaction for VCR instance
   public final Meter blobCompactionRate;
+  public final Meter deprecatedContainerBlobCompactionRate;
   public final Counter compactionFailureCount;
   public final Counter compactionShutdownTimeoutCount;
   // Cache counters
@@ -44,12 +43,18 @@ public class VcrMetrics {
   public final Counter addPartitionErrorCount;
   public final Counter removePartitionErrorCount;
   public final Counter tokenReloadWarnCount;
+  // Container deprecation metrics
+  public final Timer accountServiceFetchTime;
+  public final Timer deprecationTaskRunTime;
+  public final Counter deprecatedContainerCount;
+  public final Counter deprecationSyncTaskRegistrationFailureCount;
 
   // Retry metrics
-  /** Number of times operation was retried */
-  public final Counter retryCount;
   /** Number of msec spent waiting between retries */
   public final Counter retryWaitTimeMsec;
+  /** Number of times operation was retried */
+  public final Counter retryCount;
+  private final MetricRegistry registry;
 
   public VcrMetrics(MetricRegistry registry) {
     this.registry = registry;
@@ -66,7 +71,10 @@ public class VcrMetrics {
     retryCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryCount"));
     retryWaitTimeMsec = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RetryWaitTimeMsec"));
     blobCompactionRate = registry.meter(MetricRegistry.name(CloudStorageCompactor.class, "BlobCompactionRate"));
-    compactionFailureCount = registry.counter(MetricRegistry.name(CloudStorageCompactor.class, "CompactionFailureCount"));
+    deprecatedContainerBlobCompactionRate =
+        registry.meter(MetricRegistry.name(CloudContainerCompactor.class, "DeprecatedContainerBlobCompactionRate"));
+    compactionFailureCount =
+        registry.counter(MetricRegistry.name(CloudStorageCompactor.class, "CompactionFailureCount"));
     compactionShutdownTimeoutCount =
         registry.counter(MetricRegistry.name(CloudStorageCompactor.class, "CompactionShutdownTimeoutCount"));
     addPartitionErrorCount =
@@ -74,6 +82,14 @@ public class VcrMetrics {
     removePartitionErrorCount =
         registry.counter(MetricRegistry.name(VcrReplicationManager.class, "RemovePartitionErrorCount"));
     tokenReloadWarnCount = registry.counter(MetricRegistry.name(VcrReplicationManager.class, "TokenReloadWarnCount"));
+    deprecationTaskRunTime =
+        registry.timer(MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "DeprecationTaskRunTime"));
+    accountServiceFetchTime =
+        registry.timer(MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "AccountServiceFetchTime"));
+    deprecatedContainerCount =
+        registry.counter(MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "DeprecatedContainerCount"));
+    deprecationSyncTaskRegistrationFailureCount = registry.counter(
+        MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "DeprecationSyncTaskRegistrationFailureCount"));
   }
 
   /**

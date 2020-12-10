@@ -14,6 +14,7 @@
 
 package com.github.ambry.server;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.codehaus.jackson.annotate.JsonAutoDetect;
 import org.codehaus.jackson.annotate.JsonPropertyOrder;
@@ -50,6 +51,18 @@ public class StatsHeader {
   }
 
   /**
+   * A copy constructor.
+   * @param original The original copy.
+   */
+  public StatsHeader(StatsHeader original) {
+    this.description = original.description;
+    this.timestamp = original.timestamp;
+    this.storesContactedCount = original.storesContactedCount;
+    this.storesRespondedCount = original.storesRespondedCount;
+    this.unreachableStores = new ArrayList<>(original.unreachableStores);
+  }
+
+  /**
    * @return the reference timestamp at which the stats are collected
    */
   public long getTimestamp() {
@@ -61,5 +74,19 @@ public class StatsHeader {
    */
   public List<String> getUnreachableStores() {
     return unreachableStores;
+  }
+
+  /**
+   * @return the storesContactedCount.
+   */
+  public int getStoresContactedCount() {
+    return storesContactedCount;
+  }
+
+  /**
+   * @return the storesRespondedCount.
+   */
+  public int getStoresRespondedCount() {
+    return storesRespondedCount;
   }
 }

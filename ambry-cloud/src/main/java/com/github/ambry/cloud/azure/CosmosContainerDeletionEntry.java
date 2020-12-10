@@ -25,34 +25,35 @@ import org.json.JSONObject;
 /**
  * Class representing container deletion status in cloud.
  */
-public class ContainerDeletionEntry {
-
+public class CosmosContainerDeletionEntry {
   static final String VERSION_KEY = "version";
   static final String CONTAINER_ID_KEY = "containerId";
   static final String ACCOUNT_ID_KEY = "accountId";
-  static final String CONTAINER_DELETE_TRIGGER_TIME_KEY = "deleteTriggerTime";
-  static final String IS_DELETED_KEY = "isDeleted";
+  static final String CONTAINER_DELETE_TRIGGER_TIME_KEY = "deleteTriggerTimestamp";
+  static final String DELETED_KEY = "deleted";
   static final String DELETE_PENDING_PARTITIONS_KEY = "deletePendingPartitions";
+  private static final String CONTAINER_ID_ACCOUNT_ID_DELIM = "_";
 
   private static short JSON_VERSION_1 = 1;
 
   private final short version;
   private final short containerId;
   private final short accountId;
+  private final String id;
   private final Set<String> deletePendingPartitions;
   private final long deleteTriggerTimestamp;
   private boolean isDeleted;
 
   /**
-   * Constructor for {@link ContainerDeletionEntry}.
+   * Constructor for {@link CosmosContainerDeletionEntry}.
    * @param containerId container id.
    * @param accountId account id of the container.
    * @param deleteTriggerTimestamp timestamp at which delete was triggered.
    * @param isDeleted {@code true} if all container blobs are deleted in cloud. {@code false} otherwise.
    * @param partitionIds {@link Collection} of all the cloud partition ids from which container is yet to be deleted.
    */
-  public ContainerDeletionEntry(short containerId, short accountId, long deleteTriggerTimestamp, boolean isDeleted,
-      Collection<String> partitionIds) {
+  public CosmosContainerDeletionEntry(short containerId, short accountId, long deleteTriggerTimestamp,
+      boolean isDeleted, Collection<String> partitionIds) {
     this.version = JSON_VERSION_1;
     this.containerId = containerId;
     this.accountId = accountId;
@@ -64,10 +65,11 @@ public class ContainerDeletionEntry {
     } else {
       deletePendingPartitions = Collections.emptySet();
     }
+    this.id = generateContainerDeletionEntryId(accountId, containerId);
   }
 
   /**
-   * Private constructor for {@link ContainerDeletionEntry}. Used for deserialization.
+   * Private constructor for {@link CosmosContainerDeletionEntry}. Used for deserialization.
    * @param version deserialized version.
    * @param containerId container id.
    * @param accountId account id of the container.
@@ -75,7 +77,7 @@ public class ContainerDeletionEntry {
    * @param isDeleted {@code true} if all container blobs are deleted in cloud. {@code false} otherwise.
    * @param pendingPartitions {@link Collection} of all the cloud partition ids from which container is yet to be deleted.
    */
-  private ContainerDeletionEntry(short version, short containerId, short accountId, long deleteTriggerTimestamp,
+  private CosmosContainerDeletionEntry(short version, short containerId, short accountId, long deleteTriggerTimestamp,
       boolean isDeleted, Collection<Object> pendingPartitions) {
     this.version = version;
     this.containerId = containerId;
@@ -83,29 +85,40 @@ public class ContainerDeletionEntry {
     this.deleteTriggerTimestamp = deleteTriggerTimestamp;
     this.isDeleted = isDeleted;
     this.deletePendingPartitions = new HashSet<>();
+    this.id = generateContainerDeletionEntryId(accountId, containerId);
     pendingPartitions.forEach(partitionId -> this.deletePendingPartitions.add((String) partitionId));
   }
 
   /**
-   * Create a {@link ContainerDeletionEntry} from specified {@link Container} in specified {@link ClusterMap}.
+   * Generate unique id for {@link CosmosContainerDeletionEntry} cosmos entry.
+   * @param accountId account id.
+   * @param containerId container id.
+   * @return concatenation of account id and container id with a delimiter to act as unique key.
+   */
+  static String generateContainerDeletionEntryId(short accountId, short containerId) {
+    return String.join(CONTAINER_ID_ACCOUNT_ID_DELIM, String.valueOf(accountId), String.valueOf(containerId));
+  }
+
+  /**
+   * Create a {@link CosmosContainerDeletionEntry} from specified {@link Container} in specified {@link ClusterMap}.
    * @param container {@link Container} from which to create deletion entry.
    * @param partitionIds {@link Collection} of partition ids.
-   * @return {@link ContainerDeletionEntry} object.
+   * @return {@link CosmosContainerDeletionEntry} object.
    */
-  public static ContainerDeletionEntry fromContainer(Container container, Collection<String> partitionIds) {
-    return new ContainerDeletionEntry(container.getId(), container.getParentAccountId(),
+  public static CosmosContainerDeletionEntry fromContainer(Container container, Collection<String> partitionIds) {
+    return new CosmosContainerDeletionEntry(container.getId(), container.getParentAccountId(),
         container.getDeleteTriggerTime(), false, partitionIds);
   }
 
   /**
-   * Create {@link ContainerDeletionEntry} from specified json.
-   * @param jsonObject {@link JSONObject} representing the serialized {@link ContainerDeletionEntry}.
-   * @return deserialized {@link ContainerDeletionEntry} object.
+   * Create {@link CosmosContainerDeletionEntry} from specified json.
+   * @param jsonObject {@link JSONObject} representing the serialized {@link CosmosContainerDeletionEntry}.
+   * @return deserialized {@link CosmosContainerDeletionEntry} object.
    */
-  public static ContainerDeletionEntry fromJson(JSONObject jsonObject) {
-    return new ContainerDeletionEntry((short) jsonObject.getInt(VERSION_KEY),
+  public static CosmosContainerDeletionEntry fromJson(JSONObject jsonObject) {
+    return new CosmosContainerDeletionEntry((short) jsonObject.getInt(VERSION_KEY),
         (short) jsonObject.getInt(CONTAINER_ID_KEY), (short) jsonObject.getInt(ACCOUNT_ID_KEY),
-        jsonObject.getLong(CONTAINER_DELETE_TRIGGER_TIME_KEY), jsonObject.getBoolean(IS_DELETED_KEY),
+        jsonObject.getLong(CONTAINER_DELETE_TRIGGER_TIME_KEY), jsonObject.getBoolean(DELETED_KEY),
         jsonObject.getJSONArray(DELETE_PENDING_PARTITIONS_KEY).toList());
   }
 
@@ -122,6 +135,13 @@ public class ContainerDeletionEntry {
    */
   public void removePartition(String partitionId) {
     deletePendingPartitions.remove(partitionId);
+  }
+
+  /**
+   * @return unique id for the {@link CosmosContainerDeletionEntry} entry in cosmos db.
+   */
+  public String getId() {
+    return id;
   }
 
   /**
@@ -153,6 +173,20 @@ public class ContainerDeletionEntry {
   }
 
   /**
+   * @return {@code deletePendingPartitions}.
+   */
+  public Set<String> getDeletePendingPartitions() {
+    return deletePendingPartitions;
+  }
+
+  /**
+   * @return {@code version}.
+   */
+  public short getVersion() {
+    return version;
+  }
+
+  /**
    * Serialize {@link Container} object to save to Cosmos.
    * @return serialized {@link JSONObject}.
    */
@@ -161,7 +195,7 @@ public class ContainerDeletionEntry {
     metadata.put(VERSION_KEY, version);
     metadata.put(CONTAINER_ID_KEY, containerId);
     metadata.put(ACCOUNT_ID_KEY, accountId);
-    metadata.put(IS_DELETED_KEY, isDeleted);
+    metadata.put(DELETED_KEY, isDeleted);
     metadata.put(CONTAINER_DELETE_TRIGGER_TIME_KEY, deleteTriggerTimestamp);
     metadata.put(DELETE_PENDING_PARTITIONS_KEY, deletePendingPartitions);
     return metadata;

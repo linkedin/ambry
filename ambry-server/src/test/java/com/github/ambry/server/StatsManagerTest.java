@@ -160,7 +160,8 @@ public class StatsManagerTest {
     MockHelixParticipant.metricRegistry = new MetricRegistry();
     clusterParticipant = new MockHelixParticipant(clusterMapConfig);
     statsManager =
-        new StatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, new MockTime(), null);
+        new StatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, new MockTime(), null,
+            null);
   }
 
   /**
@@ -210,7 +211,7 @@ public class StatsManagerTest {
     problematicStoreMap.put(partitionId2, exceptionStore);
     StatsManager testStatsManager = new StatsManager(new MockStorageManager(problematicStoreMap, dataNodeId),
         Arrays.asList(partitionId1.getReplicaIds().get(0), partitionId2.getReplicaIds().get(0)), new MetricRegistry(),
-        statsManagerConfig, new MockTime(), null);
+        statsManagerConfig, new MockTime(), null, null);
     List<PartitionId> unreachablePartitions = new ArrayList<>();
     StatsSnapshot actualSnapshot = new StatsSnapshot(0L, null);
     for (PartitionId partitionId : problematicStoreMap.keySet()) {
@@ -234,7 +235,7 @@ public class StatsManagerTest {
     mixedStoreMap.put(partitionId4, exceptionStore);
     testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap, dataNodeId),
         Arrays.asList(partitionId3.getReplicaIds().get(0), partitionId4.getReplicaIds().get(0)), new MetricRegistry(),
-        statsManagerConfig, new MockTime(), null);
+        statsManagerConfig, new MockTime(), null, null);
     actualSnapshot = new StatsSnapshot(0L, null);
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
@@ -278,7 +279,7 @@ public class StatsManagerTest {
     StorageManager mockStorageManager = new MockStorageManager(testStoreMap, dataNodeId);
     StatsManager testStatsManager =
         new StatsManager(mockStorageManager, testReplicas, new MetricRegistry(), statsManagerConfig, new MockTime(),
-            null);
+            null, null);
 
     // verify that adding an existing store to StatsManager should fail
     assertFalse("Adding a store which already exists should fail", testStatsManager.addReplica(testReplicas.get(0)));
@@ -478,7 +479,8 @@ public class StatsManagerTest {
     }
     StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
     StatsManager statsManager =
-        new StatsManager(storageManager, replicaIds, new MetricRegistry(), statsManagerConfig, new MockTime(), null);
+        new StatsManager(storageManager, replicaIds, new MetricRegistry(), statsManagerConfig, new MockTime(), null,
+            null);
 
     StatsSnapshot expectAccountSnapshot = new StatsSnapshot(0L, new HashMap<>());
     StatsSnapshot expectPartitionClassSnapshot = new StatsSnapshot(0L, new HashMap<>());

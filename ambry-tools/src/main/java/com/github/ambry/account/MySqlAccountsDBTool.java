@@ -225,7 +225,7 @@ public class MySqlAccountsDBTool {
 
     // Populate Account and Container tables
     for (Account account : accountInfoMap.getAccounts()) {
-      mySqlAccountStore.addContainers(account.getAllContainers());
+      mySqlAccountStore.addContainers(account.getId(), account.getAllContainers());
       mySqlAccountStore.addAccounts(Collections.singletonList(account));
     }
 

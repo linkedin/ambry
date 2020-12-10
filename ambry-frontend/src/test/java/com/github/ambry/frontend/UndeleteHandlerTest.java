@@ -65,7 +65,7 @@ public class UndeleteHandlerTest {
 
   private static final BlobProperties BLOB_PROPERTIES =
       new BlobProperties(100, SERVICE_ID, null, null, false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
-          REF_CONTAINER.getId(), false, null);
+          REF_CONTAINER.getId(), false, null, null, null);
   private static final byte[] BLOB_DATA = TestUtils.getRandomBytes(100);
 
   static {

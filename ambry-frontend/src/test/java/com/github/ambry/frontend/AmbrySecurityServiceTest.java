@@ -85,10 +85,10 @@ public class AmbrySecurityServiceTest {
   private static final short DEFAULT_LIFEVERSION = 3;
   private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
+          Container.UNKNOWN_CONTAINER_ID, false, null, null, null), new byte[0]);
   private static final BlobInfo UNKNOWN_INFO_ENC = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, true, null), new byte[0]);
+          Container.UNKNOWN_CONTAINER_ID, true, null, null, null), new byte[0]);
   private static final FrontendTestUrlSigningServiceFactory URL_SIGNING_SERVICE_FACTORY =
       new FrontendTestUrlSigningServiceFactory();
 
@@ -109,11 +109,11 @@ public class AmbrySecurityServiceTest {
           TestUtils.getRandomString(11));
       DEFAULT_INFO = new BlobInfo(
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
-              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null),
+              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null),
           RestUtils.buildUserMetadata(USER_METADATA));
       LIFEVERSION_INFO = new BlobInfo(
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
-              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null),
+              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null),
           RestUtils.buildUserMetadata(USER_METADATA), DEFAULT_LIFEVERSION);
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
     } catch (Exception e) {
@@ -295,17 +295,17 @@ public class AmbrySecurityServiceTest {
     // with no owner id
     BlobInfo blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, null, "image/gif", false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
-            REF_CONTAINER.getId(), false, null), new byte[0]);
+            REF_CONTAINER.getId(), false, null, null, null), new byte[0]);
     testHeadBlobWithVariousRanges(blobInfo);
     // with no content type
     blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, OWNER_ID, null, false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
-            REF_CONTAINER.getId(), false, null), new byte[0]);
+            REF_CONTAINER.getId(), false, null, null, null), new byte[0]);
     testHeadBlobWithVariousRanges(blobInfo);
     // with a TTL
     blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, 10000, REF_ACCOUNT.getId(),
-            REF_CONTAINER.getId(), false, null), new byte[0]);
+            REF_CONTAINER.getId(), false, null, null, null), new byte[0]);
     testHeadBlobWithVariousRanges(blobInfo);
 
     // GET BlobInfo
@@ -328,29 +328,31 @@ public class AmbrySecurityServiceTest {
     // less than chunk threshold size
     blobInfo = new BlobInfo(
         new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID, "image/gif",
-            false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
+            false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null, null, null),
+        new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // == chunk threshold size
     blobInfo = new BlobInfo(
         new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes, SERVICE_ID, OWNER_ID, "image/gif", false,
-            10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
+            10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null, null, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // more than chunk threshold size
     blobInfo = new BlobInfo(
         new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 2, SERVICE_ID, OWNER_ID, "image/gif",
-            false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
+            false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null, null, null),
+        new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // Get blob with content type null
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, null, true, 10000, Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
+        Container.UNKNOWN_CONTAINER_ID, false, null, null, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // Get blob in a non-cacheable container. AmbrySecurityService should not care about the isPrivate setting.
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time,
-        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PRIVATE_CONTAINER_ID, false, null), new byte[0]);
+        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PRIVATE_CONTAINER_ID, false, null, null, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // Get blob in a cacheable container. AmbrySecurityService should not care about the isPrivate setting.
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", true, Utils.Infinite_Time,
-        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PUBLIC_CONTAINER_ID, false, null), new byte[0]);
+        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PUBLIC_CONTAINER_ID, false, null, null, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // not modified response
     // > creation time (in secs).
@@ -363,7 +365,7 @@ public class AmbrySecurityServiceTest {
     // Get blob for a public blob with content type as "text/html"
     blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, OWNER_ID, "text/html", true, 10000, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
+            Container.UNKNOWN_CONTAINER_ID, false, null, null, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // not modified response
     // > creation time (in secs).

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
@@ -45,7 +46,8 @@ public class DeprecatedContainerCloudSyncTaskTest {
     long containerDeletionRetentionDays = 2;
     cloudDestination = new LatchBasedInMemoryCloudDestination(new ArrayList<>(), Mockito.mock(ClusterMap.class));
     deprecatedContainerCloudSyncTask =
-        new DeprecatedContainerCloudSyncTask(accountService, containerDeletionRetentionDays, cloudDestination);
+        new DeprecatedContainerCloudSyncTask(accountService, containerDeletionRetentionDays, cloudDestination,
+            new VcrMetrics(new MetricRegistry()));
   }
 
   /**

@@ -150,6 +150,17 @@ public class Utils {
   }
 
   /**
+   * Reads a nullable String whose length is an int from the given input stream
+   * @param input The input stream from which to read the String from
+   * @return The String read from the stream
+   * @throws IOException
+   */
+  public static String readNullableIntString(DataInputStream input) throws IOException {
+    String tmp = readIntString(input, StandardCharsets.UTF_8);
+    return tmp.isEmpty() ? null : tmp;
+  }
+
+  /**
    * Reads a String whose length is an int from the given input stream
    * @param input The input stream from which to read the String from
    * @param charset the charset to use.

@@ -96,7 +96,7 @@ public class MySqlAccountServiceIntegrationTest {
         new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword");
     try {
       new MySqlAccountStore(Collections.singletonList(endpoint), endpoint.getDatacenter(),
-          new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry()));
+          new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry()), accountServiceConfig);
       fail("Store creation should fail with bad credentials");
     } catch (SQLException e) {
       assertTrue(MySqlDataAccessor.isCredentialError(e));
@@ -295,7 +295,6 @@ public class MySqlAccountServiceIntegrationTest {
     String accountName = "a1";
     // Number of calls expected in producer account store
     int expectedAddAccounts = 0, expectedUpdateAccounts = 0;
-    int expectedAddContainers = 0, expectedUpdateContainers = 0;
     List<Container> containers = new ArrayList<>();
     containers.add(new ContainerBuilder((short) 1, "c1", ContainerStatus.ACTIVE, DESCRIPTION, accountId).build());
     containers.add(new ContainerBuilder((short) 2, "c2", ContainerStatus.ACTIVE, DESCRIPTION, accountId).build());
@@ -304,9 +303,7 @@ public class MySqlAccountServiceIntegrationTest {
         new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).containers(containers).build();
     producerAccountService.updateAccounts(Collections.singletonList(a1));
     expectedAddAccounts++;
-    expectedAddContainers += 3;
-    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, expectedAddContainers,
-        expectedUpdateContainers);
+    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, 3, 0);
     consumerAccountService.fetchAndUpdateCache();
     long lmt = consumerAccountService.accountInfoMapRef.get().getLastModifiedTime();
     assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
@@ -316,8 +313,7 @@ public class MySqlAccountServiceIntegrationTest {
     a1 = new AccountBuilder(a1).name(newAccountName).build();
     producerAccountService.updateAccounts(Collections.singletonList(a1));
     expectedUpdateAccounts++;
-    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, expectedAddContainers,
-        expectedUpdateContainers);
+    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, 0, 0);
     consumerAccountService.fetchAndUpdateCache();
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
     verify(consumerAccountStore).getNewContainers(eq(lmt));
@@ -332,9 +328,7 @@ public class MySqlAccountServiceIntegrationTest {
     Collection<Container> result =
         producerAccountService.updateContainers(accountName, Collections.singletonList(c1Mod));
     // Account should not have been touched
-    expectedUpdateContainers++;
-    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, expectedAddContainers,
-        expectedUpdateContainers);
+    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, 0, 1);
     assertEquals("Expected one result", 1, result.size());
     assertEquals("Container mismatch", c1Mod, result.iterator().next());
     consumerAccountService.fetchAndUpdateCache();
@@ -347,9 +341,7 @@ public class MySqlAccountServiceIntegrationTest {
     // Add container only
     Container cNew = makeNewContainer("c4", accountId, ContainerStatus.ACTIVE);
     result = producerAccountService.updateContainers(accountName, Collections.singletonList(cNew));
-    expectedAddContainers++;
-    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, expectedAddContainers,
-        expectedUpdateContainers);
+    verifyStoreInteractions(producerAccountStore, expectedAddAccounts, expectedUpdateAccounts, 1, 0);
     assertEquals("Expected one result", 1, result.size());
     cNew = result.iterator().next();
     containers.add(cNew);
@@ -534,8 +526,13 @@ public class MySqlAccountServiceIntegrationTest {
       int expectedUpdateAccounts, int expectedAddContainers, int expectedUpdateContainers) throws Exception {
     verify(accountStore, times(expectedAddAccounts)).addAccount(any());
     verify(accountStore, times(expectedUpdateAccounts)).updateAccount(any());
-    verify(accountStore, times(expectedAddContainers)).addContainer(any());
-    verify(accountStore, times(expectedUpdateContainers)).updateContainer(any());
+    if (expectedAddContainers > 0) {
+      verify(accountStore).addContainers(anyInt(), argThat(containers -> containers.size() == expectedAddContainers));
+    }
+    if (expectedUpdateContainers > 0) {
+      verify(accountStore).updateContainers(anyInt(),
+          argThat(containers -> containers.size() == expectedUpdateContainers));
+    }
   }
 
   /**
