@@ -64,7 +64,7 @@ import org.junit.Assert;
  * {@link RouterServerSSLTest} for example usage.
  */
 class RouterServerTestFramework {
-  static final int AWAIT_TIMEOUT = 50;
+  static final int AWAIT_TIMEOUT = 120;
   static final int CHUNK_SIZE = 1024 * 1024;
 
   private final MockClusterMap clusterMap;
