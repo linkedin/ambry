@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,6 +51,10 @@ public class MySqlDataAccessor {
   private DbEndpoint connectedEndpoint;
   private List<DbEndpoint> sortedDbEndpoints;
   private EndpointComparator endpointComparator;
+  // Time of most recent attempt to connect to optimal endpoint
+  private long lastConnectionAttemptTime = 0;
+  // TODO: make config property
+  private long connectionRetryWaitTime = TimeUnit.SECONDS.toMillis(30);
 
   /**
    * List of operation types on the mysql store.
@@ -140,7 +145,7 @@ public class MySqlDataAccessor {
     // See if we can do better
     Pair<DbEndpoint, Connection> endpointConnectionPair = connectToBestAvailableEndpoint(needWritable);
     if (connectedEndpoint == endpointConnectionPair.getFirst()) {
-      // No better endpoint  was available.
+      // No better endpoint was available.
       logger.debug("Still connected to {}", connectedEndpoint.getUrl());
     } else {
       // New connection established
@@ -210,7 +215,12 @@ public class MySqlDataAccessor {
    * @throws SQLException
    */
   public synchronized PreparedStatement getPreparedStatement(String sql, boolean needWritable) throws SQLException {
-    // TODO: if connected to suboptimal endpoint, try to upgrade
+    // If connected to suboptimal endpoint, attempt to upgrade every so often
+    long now = System.currentTimeMillis();
+    if (lastConnectionAttemptTime < now - connectionRetryWaitTime) {
+      getDatabaseConnection(needWritable);
+      lastConnectionAttemptTime = now;
+    }
     PreparedStatement statement = statementCache.get(sql);
     if (statement != null) {
       return statement;
