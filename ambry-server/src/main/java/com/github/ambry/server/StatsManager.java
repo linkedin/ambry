@@ -157,7 +157,7 @@ class StatsManager {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
         Map<StatsReportType, StatsSnapshot> snapshotsByType =
             store.getStoreStats().getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds());
-        StatsSnapshot.aggregate(aggregatedSnapshot, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
+        aggregatedSnapshot.getSubMap().put(partitionId.toString(), snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
       } catch (StoreException e) {
         unreachablePartitions.add(partitionId);
@@ -331,7 +331,7 @@ class StatsManager {
       logger.info("Aggregating stats for local report");
       try {
         long totalFetchAndAggregateStartTimeMs = time.milliseconds();
-        StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
+        StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, new HashMap<>());
         List<PartitionId> unreachablePartitions = new ArrayList<>();
         Iterator<PartitionId> iterator = (new HashSet<>(partitionToReplicaMap.keySet())).iterator();
         while (!cancelled && iterator.hasNext()) {
@@ -339,6 +339,7 @@ class StatsManager {
           logger.info("Aggregating stats for local report started for store {}", partitionId);
           collectAndAggregate(aggregatedSnapshot, partitionId, unreachablePartitions);
         }
+        aggregatedSnapshot.updateValue();
         List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);

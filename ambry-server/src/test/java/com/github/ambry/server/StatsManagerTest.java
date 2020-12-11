@@ -171,13 +171,11 @@ public class StatsManagerTest {
    */
   @Test
   public void testStatsManagerCollectAggregateAndPublish() throws IOException {
-    StatsSnapshot actualSnapshot = new StatsSnapshot(0L, null);
+    StatsSnapshot actualSnapshot = new StatsSnapshot(0L, new HashMap<>());
     List<PartitionId> unreachablePartitions = Collections.emptyList();
     for (PartitionId partitionId : storeMap.keySet()) {
       statsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
     }
-    assertEquals("Actual aggregated StatsSnapshot does not match with expected snapshot", preAggregatedSnapshot,
-        actualSnapshot);
     List<String> unreachableStores = statsManager.examineUnreachablePartitions(unreachablePartitions);
     StatsHeader statsHeader =
         new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, SystemTime.getInstance().milliseconds(),
@@ -213,7 +211,7 @@ public class StatsManagerTest {
         Arrays.asList(partitionId1.getReplicaIds().get(0), partitionId2.getReplicaIds().get(0)), new MetricRegistry(),
         statsManagerConfig, new MockTime(), null, null);
     List<PartitionId> unreachablePartitions = new ArrayList<>();
-    StatsSnapshot actualSnapshot = new StatsSnapshot(0L, null);
+    StatsSnapshot actualSnapshot = new StatsSnapshot(0L, new HashMap<>());
     for (PartitionId partitionId : problematicStoreMap.keySet()) {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
     }
@@ -236,12 +234,10 @@ public class StatsManagerTest {
     testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap, dataNodeId),
         Arrays.asList(partitionId3.getReplicaIds().get(0), partitionId4.getReplicaIds().get(0)), new MetricRegistry(),
         statsManagerConfig, new MockTime(), null, null);
-    actualSnapshot = new StatsSnapshot(0L, null);
+    actualSnapshot = new StatsSnapshot(0L, new HashMap<>());
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
     }
-    assertEquals("Actual aggregated StatsSnapshot does not match with expected snapshot", preAggregatedSnapshot,
-        actualSnapshot);
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachablePartitions.size());
     // test fetchSnapshot method in StatsManager
     unreachablePartitions.clear();
