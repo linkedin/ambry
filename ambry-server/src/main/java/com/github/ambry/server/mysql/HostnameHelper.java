@@ -48,7 +48,7 @@ public class HostnameHelper {
    */
   public String simplifyHostname(String hostname) {
     for (String domainName : domainNamesToRemove) {
-      if (domainName != null && !domainName.isEmpty()) {
+      if (domainName != null && !(domainName = domainName.trim()).isEmpty()) {
         if (domainName.charAt(0) != '.') {
           domainName = "." + domainName;
         }
