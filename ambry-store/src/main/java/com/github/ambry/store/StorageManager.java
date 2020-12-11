@@ -167,7 +167,7 @@ public class StorageManager implements StoreManager {
        deletes) is always greater than the log flush period. */
     if (storeConfig.storeDeletedMessageRetentionHours
         < TimeUnit.SECONDS.toHours(storeConfig.storeDataFlushIntervalSeconds) + 1) {
-      throw new StoreException("Message retention days must be greater than the store flush interval period",
+      throw new StoreException("Message retention hours must be greater than the store flush interval period",
           StoreErrorCodes.Initialization_Error);
     }
     if (diskManagerConfig.diskManagerReserveFileDirName.length() == 0) {
