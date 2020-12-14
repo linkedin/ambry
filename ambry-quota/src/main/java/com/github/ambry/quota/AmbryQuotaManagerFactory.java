@@ -13,9 +13,19 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.quota.AmbryQuotaManager;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaManagerFactory;
+import org.omg.DynamicAny.DynArray;
+
+
 /**
- * Quota service mode. If mode is tracking, it will not throttle traffics even if the quota is exceeded.
+ * Factory to instantiate {@link AmbryQuotaManager} class.
  */
-public enum QuotaMode {
-  TRACKING, THROTTLING
+public class AmbryQuotaManagerFactory implements QuotaManagerFactory {
+  @Override
+  public QuotaManager getQuotaManager(QuotaConfig quotaConfig) throws ReflectiveOperationException {
+    return new AmbryQuotaManager(quotaConfig);
+  }
 }

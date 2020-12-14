@@ -15,6 +15,7 @@ package com.github.ambry.quota;
 
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.storage.JSONStringStorageQuotaSource;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Properties;

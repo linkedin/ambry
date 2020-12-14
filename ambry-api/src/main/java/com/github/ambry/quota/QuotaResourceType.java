@@ -14,8 +14,10 @@
 package com.github.ambry.quota;
 
 /**
- * Quota service mode. If mode is tracking, it will not throttle traffics even if the quota is exceeded.
+ * Type of Ambry resource for which quota can be applied.
  */
-public enum QuotaMode {
-  TRACKING, THROTTLING
+public enum QuotaResourceType {
+  AMBRY_ACCOUNT,
+  AMBRY_CONTAINER,
+  HOST_RESOURCES
 }

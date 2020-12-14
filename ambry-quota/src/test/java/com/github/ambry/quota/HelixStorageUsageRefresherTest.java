@@ -17,6 +17,8 @@ import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.clustermap.MockHelixPropertyStore;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.storage.HelixStorageUsageRefresher;
+import com.github.ambry.quota.storage.StorageUsageRefresher;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;

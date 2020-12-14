@@ -14,8 +14,13 @@
 package com.github.ambry.quota;
 
 /**
- * Quota service mode. If mode is tracking, it will not throttle traffics even if the quota is exceeded.
+ * Factory to instantiate {@link QuotaEnforcer} class.
  */
-public enum QuotaMode {
-  TRACKING, THROTTLING
+public interface QuotaEnforcerFactory {
+
+  /**
+   * Build and return {@link QuotaEnforcer} class.
+   * @return QuotaEnforcer object.
+   */
+  public QuotaEnforcer getQuotaEnforcer();
 }

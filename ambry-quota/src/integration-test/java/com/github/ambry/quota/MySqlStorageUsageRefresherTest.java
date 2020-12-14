@@ -24,6 +24,7 @@ import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.quota.storage.MySqlStorageUsageRefresher;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;

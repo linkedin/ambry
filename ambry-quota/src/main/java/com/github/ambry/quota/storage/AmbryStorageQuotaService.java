@@ -11,10 +11,12 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.quota.storage;
 
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.StorageQuotaConfig;
+import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaOperation;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.concurrent.ScheduledExecutorService;

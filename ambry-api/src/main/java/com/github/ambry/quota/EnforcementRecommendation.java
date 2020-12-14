@@ -14,15 +14,19 @@
 package com.github.ambry.quota;
 
 /**
- * {@link StorageQuotaServiceFactory} is a factory to generate all the supporting cast required to instantiate an
- * {@link StorageQuotaService}. Usually called with the canonical class name and as such might have to support appropriate
- * (multiple) constructors.
+ * Interface representing enforcement recommendation.
  */
-public interface StorageQuotaServiceFactory {
+public interface EnforcementRecommendation {
 
   /**
-   * Return an instance of {@link StorageQuotaService} that the factory generates.
-   * @return The instance of {@link StorageQuotaService} that the factory generates.
+   * Boolean recommendation to throttle or not.
+   * @return true if recommendation is to throttle. false otherwise.
    */
-  StorageQuotaService getStorageQuotaService();
+  boolean shouldThrottle();
+
+  /**
+   * Estimation of percentage of quota in use when the recommendation was made.
+   * @return percentage value between 0 and 100.
+   */
+  float quotaUsagePercentage();
 }

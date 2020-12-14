@@ -17,5 +17,5 @@ package com.github.ambry.quota;
  * Operations for quota service.
  */
 public enum QuotaOperation {
-  Post, Delete, TtlUpdate
+  POST, DELETE, TTL_UPDATE, GET
 }

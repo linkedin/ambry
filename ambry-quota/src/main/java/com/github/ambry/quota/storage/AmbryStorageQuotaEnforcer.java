@@ -11,8 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.quota.storage;
 
+import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaOperation;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,18 +26,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * to update this in-memory map. It also keeps another in-memory map for storage usage of each container and listens on usage
  * change from {@link StorageUsageRefresher}.
  *
- * This implementation checks whether to throttle the operation only if the operation is {@link QuotaOperation#Post}. And when the
+ * This implementation checks whether to throttle the operation only if the operation is {@link QuotaOperation#POST}. And when the
  * targeted account and container doesn't have a quota specified, it doesn't throttle the operation at all. Any legitimate
  * uploads would also increase the storage usage in the in-memory map.
  */
 public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
-  private volatile QuotaMode mode = QuotaMode.Tracking;
+  private volatile QuotaMode mode = QuotaMode.TRACKING;
   private volatile Map<String, Map<String, Long>> storageQuota;
   private volatile Map<String, Map<String, Long>> storageUsage;
 
   @Override
   public boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
-    if (op != QuotaOperation.Post) {
+    if (op != QuotaOperation.POST) {
       return false;
     }
     long quota = storageQuota.getOrDefault(String.valueOf(accountId), new HashMap<>())
@@ -54,7 +56,7 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
             return v;
           }
         });
-    return mode == QuotaMode.Throttling ? exceedQuota.get() : false;
+    return mode == QuotaMode.THROTTLING ? exceedQuota.get() : false;
   }
 
   @Override

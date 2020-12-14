@@ -13,6 +13,10 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.quota.storage.AmbryStorageQuotaEnforcer;
+import com.github.ambry.quota.storage.StorageQuotaEnforcer;
+import com.github.ambry.quota.storage.StorageQuotaSource;
+import com.github.ambry.quota.storage.StorageUsageRefresher;
 import com.github.ambry.utils.TestUtils;
 import java.util.Collections;
 import java.util.HashMap;
@@ -140,7 +144,7 @@ public class AmbryStorageQuotaEnforcerTest {
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    enforcer.setQuotaMode(QuotaMode.Throttling);
+    enforcer.setQuotaMode(QuotaMode.THROTTLING);
 
     // Make sure there is no quota for this account and container
     Random random = new Random();
@@ -157,14 +161,14 @@ public class AmbryStorageQuotaEnforcerTest {
               return v.longValue() + size;
             }
           });
-      assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, size));
+      assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.POST, size));
     }
 
     TestUtils.assertContainerMap(expectedUsage, enforcer.getStorageUsage());
   }
 
   /**
-   *  Test on {@link StorageQuotaEnforcer#shouldThrottle} when the mode is {@link QuotaMode#Tracking}.
+   *  Test on {@link StorageQuotaEnforcer#shouldThrottle} when the mode is {@link QuotaMode#TRACKING}.
    */
   @Test
   public void testThrottleTracking() {
@@ -173,7 +177,7 @@ public class AmbryStorageQuotaEnforcerTest {
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    enforcer.setQuotaMode(QuotaMode.Tracking);
+    enforcer.setQuotaMode(QuotaMode.TRACKING);
 
     // Make sure there is no quota for this account and container
     Random random = new Random();
@@ -190,7 +194,7 @@ public class AmbryStorageQuotaEnforcerTest {
               return v.longValue() + size;
             }
           });
-      assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, size));
+      assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.POST, size));
     }
     // Make sure the container with quota will not be throttled.
     for (int i = 0; i < 100; i++) {
@@ -208,7 +212,7 @@ public class AmbryStorageQuotaEnforcerTest {
               return v.longValue();
             }
           });
-      assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, size));
+      assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.POST, size));
     }
     TestUtils.assertContainerMap(expectedUsage, enforcer.getStorageUsage());
   }
@@ -223,7 +227,7 @@ public class AmbryStorageQuotaEnforcerTest {
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    enforcer.setQuotaMode(QuotaMode.Throttling);
+    enforcer.setQuotaMode(QuotaMode.THROTTLING);
 
     for (Map.Entry<String, Map<String, Long>> accountQuota : expectedQuota.entrySet()) {
       short accountId = Short.parseShort(accountQuota.getKey());
@@ -231,11 +235,11 @@ public class AmbryStorageQuotaEnforcerTest {
         short containerId = Short.parseShort(containerQuota.getKey());
         long quota = containerQuota.getValue();
         // Delete should return false
-        assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Delete, quota));
+        assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.DELETE, quota));
         // First upload should return false
-        assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, quota));
+        assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.POST, quota));
         // Exceeds quota should return true
-        assertTrue(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, 1));
+        assertTrue(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.POST, 1));
       }
     }
   }

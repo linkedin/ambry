@@ -11,8 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.quota.storage;
 
+import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaOperation;
 import java.util.Map;
 
 
@@ -60,13 +62,13 @@ public interface StorageQuotaEnforcer {
    * @param accountId The accountId of this operation.
    * @param containerId The containerId of this operation.
    * @param op The {@link QuotaOperation}.
-   * @param size The size of this operation. eg, if the op is {@link QuotaOperation#Post}, size if the size of the content.
+   * @param size The size of this operation. eg, if the op is {@link QuotaOperation#POST}, size if the size of the content.
    * @return True if the given {@link QuotaOperation} should be throttled.
    */
   boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size);
 
   /**
-   * Change the {@link StorageQuotaEnforcer}'s mode to the given value. If the mode is {@link QuotaMode#Tracking}, then {@link StorageQuotaEnforcer}
+   * Change the {@link StorageQuotaEnforcer}'s mode to the given value. If the mode is {@link QuotaMode#TRACKING}, then {@link StorageQuotaEnforcer}
    * should never return true in {@link #shouldThrottle} method.
    * @param mode The new value for {@link QuotaMode}.
    */
