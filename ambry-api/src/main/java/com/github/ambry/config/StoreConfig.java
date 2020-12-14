@@ -78,7 +78,7 @@ public class StoreConfig {
    * How long (in hours) a key must be in deleted state before it is hard deleted. Minimum value: 1 hour.
    */
   @Config("store.deleted.message.retention.hours")
-  @Default("24")
+  @Default("168")
   public final int storeDeletedMessageRetentionHours;
 
   /**
@@ -374,7 +374,7 @@ public class StoreConfig {
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
     storeDeletedMessageRetentionHours =
-        verifiableProperties.getIntInRange("store.deleted.message.retention.hours", 24, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("store.deleted.message.retention.hours", 168, 1, Integer.MAX_VALUE);
     storeCompactionPolicySwitchTimestampDays =
         verifiableProperties.getIntInRange("store.compaction.policy.switch.timestamp.days", 7, 1, 14);
     storeCompactionPolicySwitchCounterDays =
