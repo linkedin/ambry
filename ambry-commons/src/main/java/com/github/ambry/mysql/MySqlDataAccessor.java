@@ -129,7 +129,7 @@ public class MySqlDataAccessor {
    * @param enable {@code true} to enable auto commit and {@code false} to disable auto commit.
    * @throws SQLException
    */
-  public void setAutoCommit(boolean enable) throws SQLException {
+  public synchronized void setAutoCommit(boolean enable) throws SQLException {
     if (activeConnection != null && activeConnection.isValid(5)) {
       activeConnection.setAutoCommit(enable);
     } else {
@@ -141,7 +141,7 @@ public class MySqlDataAccessor {
    * Commits transaction changes on current active {@link Connection}. This should only be used with auto commit disabled.
    * @throws SQLException
    */
-  public void commit() throws SQLException {
+  public synchronized void commit() throws SQLException {
     if (activeConnection != null && activeConnection.isValid(5)) {
       activeConnection.commit();
     } else {
@@ -153,7 +153,7 @@ public class MySqlDataAccessor {
    * Rollback transaction changes on current active {@link Connection}. This should only be used with auto commit disabled.
    * @throws SQLException
    */
-  public void rollback() throws SQLException {
+  public synchronized void rollback() throws SQLException {
     if (activeConnection != null && activeConnection.isValid(5)) {
       activeConnection.rollback();
     } else {

@@ -206,7 +206,8 @@ public class AccountDao {
    * @param batchSize number of statements to be executed in one batch
    * @throws SQLException
    */
-  public void updateAccounts(List<AccountUtils.AccountUpdateInfo> accountsInfo, int batchSize) throws SQLException {
+  public synchronized void updateAccounts(List<AccountUtils.AccountUpdateInfo> accountsInfo, int batchSize)
+      throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
 
