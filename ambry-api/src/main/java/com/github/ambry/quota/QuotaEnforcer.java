@@ -15,6 +15,8 @@ package com.github.ambry.quota;
 
 /**
  * Interface for class that would do the quota enforcement of a particular quota.
+ * A {@link QuotaEnforcer} object would need a {@link QuotaSource} to get and save quota and usage. It can decide to use
+ * one of the {@link QuotaSource}s in {@link QuotaSourceFactory} instance, or create its own.
  */
 public interface QuotaEnforcer {
   /**

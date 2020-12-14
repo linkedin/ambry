@@ -22,9 +22,12 @@ import java.util.Set;
  * Config for quota of various resources in Ambry.
  */
 public class QuotaConfig {
-  public static final String QUOTA_ENFORCER_FACTORIES = "quota.enforcer.factories";
+  public static final String QUOTA_CONFIG_PREFIX = "quota.";
+  public static final String QUOTA_ENFORCER_FACTORIES = QUOTA_CONFIG_PREFIX + "enforcer.factories";
+  public static final String STORAGE_QUOTA_SOURCE = QUOTA_CONFIG_PREFIX + "storage.quota.source";
+  public static final String CAPACITY_UNIT_QUOTA_SOURCE = QUOTA_CONFIG_PREFIX + "capacity.unit.quota.source";
+  public static final String HOST_RESOURCES_QUOTA_SOURCE = QUOTA_CONFIG_PREFIX + "host.resources.quota.source";
   public StorageQuotaConfig storageQuotaConfig;
-
   /**
    * {@link Set} of all the quota factory classes to be instantiated.
    */
@@ -32,12 +35,33 @@ public class QuotaConfig {
   public Set<String> enabledQuotaEnforcers;
 
   /**
+   * Class for storage quota source.
+   */
+  @Config(STORAGE_QUOTA_SOURCE)
+  public String storageQuotaSource;
+
+  /**
+   * Class for capacity unit quota source.
+   */
+  @Config(CAPACITY_UNIT_QUOTA_SOURCE)
+  public String capacityUnitQuotaSource;
+
+  /**
+   * Class for host resources quota source.
+   */
+  @Config(HOST_RESOURCES_QUOTA_SOURCE)
+  public String hostResourcesQuotaSource;
+
+  /**
    * Constructor for {@link QuotaConfig}.
    * @param verifiableProperties {@link VerifiableProperties} object.
    */
   public QuotaConfig(VerifiableProperties verifiableProperties) {
     storageQuotaConfig = new StorageQuotaConfig(verifiableProperties);
-    String quotaThrottlers = verifiableProperties.getString("replication.vcr.recovery.partitions", "");
-    enabledQuotaEnforcers = Utils.splitString(quotaThrottlers, ",", HashSet::new);
+    String quotaEnforcers = verifiableProperties.getString(QUOTA_ENFORCER_FACTORIES);
+    enabledQuotaEnforcers = Utils.splitString(quotaEnforcers, ",", HashSet::new);
+    storageQuotaSource = verifiableProperties.getString(STORAGE_QUOTA_SOURCE, "");
+    capacityUnitQuotaSource = verifiableProperties.getString(CAPACITY_UNIT_QUOTA_SOURCE, "");
+    hostResourcesQuotaSource = verifiableProperties.getString(HOST_RESOURCES_QUOTA_SOURCE, "");
   }
 }

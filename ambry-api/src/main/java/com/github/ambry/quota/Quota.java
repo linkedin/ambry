@@ -56,7 +56,7 @@ public class Quota<T> {
   public QuotaResource getQuotaResource() {
     return quotaResource;
   }
-  
+
   /**
    * @return QuotaOperation object.
    */

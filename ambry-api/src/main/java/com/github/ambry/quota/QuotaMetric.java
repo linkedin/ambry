@@ -18,5 +18,6 @@ package com.github.ambry.quota;
  */
 public enum QuotaMetric {
   CAPACITY_UNIT,
-  STORAGE_IN_GB
+  STORAGE_IN_GB,
+  HOST_LEVEL_RESOURCE_USAGE
 }

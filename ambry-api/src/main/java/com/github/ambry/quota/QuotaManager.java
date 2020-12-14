@@ -55,6 +55,14 @@ public interface QuotaManager {
       List<EnforcementRecommendation> enforcementRecommendations);
 
   /**
+   * Method to add {@link QuotaEnforcer} implementation to a {@link QuotaManager}.
+   * This method allows to add special enforcers which might be difficult to create within the QuotaManager in a generic
+   * way. This method should only be used sparingly for special cases.
+   */
+  default void addQuotaEnforcer(QuotaEnforcer quotaEnforcer) {
+  }
+
+  /**
    * Method to shutdown the {@link QuotaManager} and cleanup if required.
    */
   void shutdown();
