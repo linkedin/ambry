@@ -21,6 +21,7 @@ public class Quota<T> {
   private final QuotaMetric quotaMetric;
   private final T quotaValue;
   private final QuotaResource quotaResource;
+  private final QuotaOperation quotaOperation;
 
   /**
    * Constructor for {@link Quota}.
@@ -28,10 +29,11 @@ public class Quota<T> {
    * @param quotaValue value of the quota limit.
    * @param quotaResource {@link QuotaResource} for which quota is specified.
    */
-  public Quota(QuotaMetric quotaMetric, T quotaValue, QuotaResource quotaResource) {
+  public Quota(QuotaMetric quotaMetric, T quotaValue, QuotaResource quotaResource, QuotaOperation quotaOperation) {
     this.quotaMetric = quotaMetric;
     this.quotaValue = quotaValue;
     this.quotaResource = quotaResource;
+    this.quotaOperation = quotaOperation;
   }
 
   /**
@@ -53,5 +55,12 @@ public class Quota<T> {
    */
   public QuotaResource getQuotaResource() {
     return quotaResource;
+  }
+  
+  /**
+   * @return QuotaOperation object.
+   */
+  public QuotaOperation getQuotaOperation() {
+    return quotaOperation;
   }
 }

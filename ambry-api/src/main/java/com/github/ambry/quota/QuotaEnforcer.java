@@ -20,31 +20,37 @@ public interface QuotaEnforcer {
   /**
    * Method to initialize the {@link QuotaEnforcer}.
    */
-  public void init();
+  void init();
 
   /**
-   * Makes an {@link EnforcementRecommendation} for the quota based on specified requestCost. This method also charges
-   * the specified requestCost against the quota.
+   * Makes an {@link EnforcementRecommendation} for the quotaResource and quotaOperation based on specified requestCost.
+   * This method also charges the specified requestCost against the quota.
    * @param requestCost {@link RequestCost} object indicating the cost of the request.
+   * @param quotaResource {@link QuotaResource} object.
+   * @param quotaOperation {@link QuotaOperation} object.
    * @return EnforcementRecommendation object with the recommendation.
    */
-  public EnforcementRecommendation chargeAndRecommend(RequestCost requestCost);
+  EnforcementRecommendation chargeAndRecommend(RequestCost requestCost, QuotaResource quotaResource,
+      QuotaOperation quotaOperation);
 
   /**
-   * Makes an {@link EnforcementRecommendation} for the quota based on specified requestCost. This method only makes the
-   * recommendation and does not charge the cost against the quota.
+   * Makes an {@link EnforcementRecommendation} for the quotaResource and quotaOperation based on specified requestCost.
+   * This method only makes the recommendation and does not charge the cost against the quota.
    * @param requestCost {@link RequestCost} object indicating the cost of the request.
+   * @param quotaResource {@link QuotaResource} object.
+   * @param quotaOperation {@link QuotaOperation} object.
    * @return EnforcementRecommendation object with the recommendation.
    */
-  public EnforcementRecommendation recommend(RequestCost requestCost);
+  EnforcementRecommendation recommend(RequestCost requestCost, QuotaResource quotaResource,
+      QuotaOperation quotaOperation);
 
   /**
-   * Get {@link Quota} of this {@link QuotaEnforcer}.
+   * @return QuotaSource object of the enforcer.
    */
-  public Quota getQuota();
+  QuotaSource getQuotaSource();
 
   /**
    * Shutdown the {@link QuotaEnforcer} and perform any cleanup.
    */
-  public void shutdown();
+  void shutdown();
 }

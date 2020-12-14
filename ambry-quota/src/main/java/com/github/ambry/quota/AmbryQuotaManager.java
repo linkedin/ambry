@@ -49,11 +49,13 @@ public class AmbryQuotaManager implements QuotaManager {
   }
 
   @Override
-  public boolean shouldThrottle(RequestCost requestCost, List<EnforcementRecommendation> enforcementRecommendations) {
+  public boolean shouldThrottle(RequestCost requestCost, QuotaResource quotaResource, QuotaOperation quotaOperation,
+      List<EnforcementRecommendation> enforcementRecommendations) {
     boolean shouldThrottle = true;
     Iterator<QuotaEnforcer> quotaEnforcerIterator = quotaEnforcers.iterator();
     while (quotaEnforcerIterator.hasNext()) {
-      EnforcementRecommendation enforcementRecommendation = quotaEnforcerIterator.next().recommend(requestCost);
+      EnforcementRecommendation enforcementRecommendation =
+          quotaEnforcerIterator.next().recommend(requestCost, quotaResource, quotaOperation);
       shouldThrottle = shouldThrottle && enforcementRecommendation.shouldThrottle();
       enforcementRecommendations.add(enforcementRecommendation);
     }
@@ -61,13 +63,13 @@ public class AmbryQuotaManager implements QuotaManager {
   }
 
   @Override
-  public boolean shouldThrottleAndCharge(RequestCost requestCost,
-      List<EnforcementRecommendation> enforcementRecommendations) {
+  public boolean shouldThrottleAndCharge(RequestCost requestCost, QuotaResource quotaResource,
+      QuotaOperation quotaOperation, List<EnforcementRecommendation> enforcementRecommendations) {
     boolean shouldThrottle = true;
     Iterator<QuotaEnforcer> quotaEnforcerIterator = quotaEnforcers.iterator();
     while (quotaEnforcerIterator.hasNext()) {
       EnforcementRecommendation enforcementRecommendation =
-          quotaEnforcerIterator.next().chargeAndRecommend(requestCost);
+          quotaEnforcerIterator.next().chargeAndRecommend(requestCost, quotaResource, quotaOperation);
       shouldThrottle = shouldThrottle && enforcementRecommendation.shouldThrottle();
       enforcementRecommendations.add(enforcementRecommendation);
     }

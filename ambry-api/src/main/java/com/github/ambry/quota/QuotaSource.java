@@ -13,15 +13,11 @@
  */
 package com.github.ambry.quota;
 
-import com.github.ambry.config.QuotaConfig;
-
-
-/**
- * Factory to instantiate {@link AmbryQuotaManager} class.
- */
-public class AmbryQuotaManagerFactory implements QuotaManagerFactory {
-  @Override
-  public QuotaManager getQuotaManager(QuotaConfig quotaConfig) throws ReflectiveOperationException {
-    return new AmbryQuotaManager(quotaConfig);
-  }
+public interface QuotaSource {
+  /**
+   * Get the {@link Quota} for specified resource and operation.
+   * @param quotaResource {@link QuotaResource} object.
+   * @param quotaOperation {@link QuotaOperation} object.
+   */
+  public Quota getQuota(QuotaResource quotaResource, QuotaOperation quotaOperation);
 }

@@ -20,15 +20,18 @@ package com.github.ambry.quota;
 public class RequestCost<T> {
   private final T cost;
   private final QuotaResource quotaResource;
+  private final QuotaOperation quotaOperation;
 
   /**
    * Constructor of {@link RequestCost}.
    * @param cost cost of the request.
    * @param quotaResource {@link QuotaResource} specifying the resource for which cost should be applied.
+   * @param quotaOperation {@link QuotaOperation} object.
    */
-  public RequestCost(T cost, QuotaResource quotaResource) {
+  public RequestCost(T cost, QuotaResource quotaResource, QuotaOperation quotaOperation) {
     this.cost = cost;
     this.quotaResource = quotaResource;
+    this.quotaOperation = quotaOperation;
   }
 
   /**
@@ -36,5 +39,19 @@ public class RequestCost<T> {
    */
   public T getCost() {
     return cost;
+  }
+
+  /**
+   * @return QuotaResource object.
+   */
+  public QuotaResource getQuotaResource() {
+    return quotaResource;
+  }
+
+  /**
+   * @return QuotaOperation object.
+   */
+  public QuotaOperation getQuotaOperation() {
+    return quotaOperation;
   }
 }

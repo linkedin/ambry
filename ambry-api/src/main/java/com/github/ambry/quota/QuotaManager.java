@@ -33,20 +33,26 @@ public interface QuotaManager {
    * based on the specified requestCost, and populates the specified enforcementRecommendations list with the
    * recommendations. This method does not charge the requestCost against the quota.
    * @param requestCost {@link RequestCost} of the request.
+   * @param quotaResource {@link QuotaResource} object.
+   * @param quotaOperation {@link QuotaOperation} object.
    * @param enforcementRecommendations {@link List} of {@link EnforcementRecommendation}s to be populated.
    * @return true if the request should be throttled. false otherwise.
    */
-  boolean shouldThrottle(RequestCost requestCost, List<EnforcementRecommendation> enforcementRecommendations);
+  boolean shouldThrottle(RequestCost requestCost, QuotaResource quotaResource, QuotaOperation quotaOperation,
+      List<EnforcementRecommendation> enforcementRecommendations);
 
   /**
    * Computes the overall boolean recommendation to throttle a request or not for all the types of quotas supported
    * based on the specified requestCost, and populates the specified enforcementRecommendations list with the
    * recommendations. This method charges the requestCost against the quota.
    * @param requestCost {@link RequestCost} of the request.
+   * @param quotaResource {@link QuotaResource} object.
+   * @param quotaOperation {@link QuotaOperation} object.
    * @param enforcementRecommendations {@link List} of {@link EnforcementRecommendation}s to be populated.
    * @return true if the request should be throttled. false otherwise.
    */
-  boolean shouldThrottleAndCharge(RequestCost requestCost, List<EnforcementRecommendation> enforcementRecommendations);
+  boolean shouldThrottleAndCharge(RequestCost requestCost, QuotaResource quotaResource, QuotaOperation quotaOperation,
+      List<EnforcementRecommendation> enforcementRecommendations);
 
   /**
    * Method to shutdown the {@link QuotaManager} and cleanup if required.
