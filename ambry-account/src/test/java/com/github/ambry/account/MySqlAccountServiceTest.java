@@ -140,7 +140,11 @@ public class MySqlAccountServiceTest {
 
     // 1. Addition of new account. Verify account is added to cache and written to mysql store.
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, atLeastOnce()).addAccount(testAccount);
+    Account finalTestAccount = testAccount;
+    verify(mockMySqlAccountStore, atLeastOnce()).updateAccounts(argThat(accountsInfo -> {
+      Account account = accountsInfo.get(0).getAccount();
+      return account.equals(finalTestAccount);
+    }));
     List<Account> accounts = new ArrayList<>(mySqlAccountService.getAllAccounts());
     assertEquals("Mismatch in number of accounts", 1, accounts.size());
     assertEquals("Mismatch in account retrieved by ID", testAccount,
@@ -154,9 +158,13 @@ public class MySqlAccountServiceTest {
             .build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer2).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, never()).updateAccount(testAccount);
-    verify(mockMySqlAccountStore, atLeastOnce()).addContainers(anyInt(),
-        argThat(containers -> containers.size() == 1 && containers.iterator().next().equals(testContainer2)));
+    Account finalTestAccount1 = testAccount;
+    verify(mockMySqlAccountStore, atLeastOnce()).updateAccounts(argThat(accountsInfo -> {
+      AccountUtils.AccountUpdateInfo accountUpdateInfo = accountsInfo.get(0);
+      return accountUpdateInfo.getAccount().equals(finalTestAccount1) && !accountUpdateInfo.isAdded()
+          && !accountUpdateInfo.isUpdated() && accountUpdateInfo.getAddedContainers()
+          .equals(Collections.singletonList(testContainer2)) && accountUpdateInfo.getUpdatedContainers().isEmpty();
+    }));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
 
@@ -164,11 +172,15 @@ public class MySqlAccountServiceTest {
     testContainer = new ContainerBuilder(testContainer).setMediaScanDisabled(true).setCacheable(true).build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
-    verify(mockMySqlAccountStore, never()).updateAccount(testAccount);
     Container finalTestContainer =
         new ContainerBuilder(testContainer).setSnapshotVersion(testContainer.getSnapshotVersion() + 1).build();
-    verify(mockMySqlAccountStore, atLeastOnce()).updateContainers(anyInt(),
-        argThat(containers -> containers.size() == 1));
+    Account finalTestAccount2 = testAccount;
+    verify(mockMySqlAccountStore, atLeastOnce()).updateAccounts(argThat(accountsInfo -> {
+      AccountUtils.AccountUpdateInfo accountUpdateInfo = accountsInfo.get(0);
+      return accountUpdateInfo.getAccount().equals(finalTestAccount2) && !accountUpdateInfo.isAdded()
+          && !accountUpdateInfo.isUpdated() && accountUpdateInfo.getAddedContainers().isEmpty()
+          && accountUpdateInfo.getUpdatedContainers().equals(Collections.singletonList(finalTestContainer));
+    }));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
   }

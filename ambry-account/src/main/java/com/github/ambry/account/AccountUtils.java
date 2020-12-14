@@ -17,6 +17,7 @@ import com.github.ambry.server.StatsSnapshot;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -212,6 +213,62 @@ public class AccountUtils {
           searchNonEmptyContainers(nonEmptyContainersByAccount, entry.getValue(), entry.getKey());
         }
       }
+    }
+  }
+
+  /**
+   * Holds information updated for an Account
+   */
+  public static class AccountUpdateInfo {
+    private final Account account;
+    private final boolean isAdded;
+    private final boolean isUpdated;
+    private final List<Container> addedContainers;
+    private final List<Container> updatedContainers;
+
+    public AccountUpdateInfo(Account account, boolean isAdded, boolean isUpdated, List<Container> addedContainers,
+        List<Container> updatedContainers) {
+      this.account = account;
+      this.isAdded = isAdded;
+      this.isUpdated = isUpdated;
+      this.addedContainers = addedContainers;
+      this.updatedContainers = updatedContainers;
+    }
+
+    /**
+     * @return {@link Account} object.
+     */
+    public Account getAccount() {
+      return account;
+    }
+
+    /**
+     * @return true if {@link Account} is a new account added.
+     */
+    public boolean isAdded() {
+      return isAdded;
+    }
+
+    /**
+     *
+     * @return true if {@link Account} account fields are modified.
+     */
+    public boolean isUpdated() {
+      return isUpdated;
+    }
+
+    /**
+     * @return list of added {@link Container}s
+     */
+    public List<Container> getAddedContainers() {
+      return addedContainers;
+    }
+
+    /**
+     * @return list of modified {@link Container}s
+     */
+    public List<Container> getUpdatedContainers() {
+      return updatedContainers;
     }
   }
 }

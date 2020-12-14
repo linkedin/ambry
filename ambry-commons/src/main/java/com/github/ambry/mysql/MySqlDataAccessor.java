@@ -15,6 +15,7 @@ package com.github.ambry.mysql;
 
 import com.github.ambry.utils.Pair;
 import com.mysql.cj.exceptions.MysqlErrorNumbers;
+import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
@@ -120,6 +121,43 @@ public class MySqlDataAccessor {
   private void initializeDriver(String url) throws SQLException {
     if (mysqlDriver == null) {
       mysqlDriver = DriverManager.getDriver(url);
+    }
+  }
+
+  /**
+   * Enables or disables auto commit on current active {@link Connection}.
+   * @param enable {@code true} to enable auto commit and {@code false} to disable auto commit.
+   * @throws SQLException
+   */
+  public void setAutoCommit(boolean enable) throws SQLException {
+    if (activeConnection != null && activeConnection.isValid(5)) {
+      activeConnection.setAutoCommit(enable);
+    } else {
+      logger.debug("Connection to MySql DB is not available");
+    }
+  }
+
+  /**
+   * Commits transaction changes on current active {@link Connection}. This should only be used with auto commit disabled.
+   * @throws SQLException
+   */
+  public void commit() throws SQLException {
+    if (activeConnection != null && activeConnection.isValid(5)) {
+      activeConnection.commit();
+    } else {
+      logger.debug("Connection to MySql DB is not available");
+    }
+  }
+
+  /**
+   * Rollback transaction changes on current active {@link Connection}. This should only be used with auto commit disabled.
+   * @throws SQLException
+   */
+  public void rollback() throws SQLException {
+    if (activeConnection != null && activeConnection.isValid(5)) {
+      activeConnection.rollback();
+    } else {
+      logger.debug("Connection to MySql DB is not available");
     }
   }
 
@@ -245,7 +283,7 @@ public class MySqlDataAccessor {
    * @param operationType type of mysql operation
    */
   public void onException(SQLException e, OperationType operationType) {
-    if (e instanceof SQLTransientConnectionException) {
+    if (e instanceof SQLTransientConnectionException || e instanceof BatchUpdateException) {
       if (operationType == OperationType.Write) {
         metrics.writeFailureCount.inc();
       } else if (operationType == operationType.Read) {

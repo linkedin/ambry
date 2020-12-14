@@ -14,7 +14,7 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.mysql.ContainerDao;
+import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.config.VerifiableProperties;
@@ -22,6 +22,7 @@ import com.github.ambry.utils.Utils;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -58,7 +59,7 @@ public class DatabaseTest {
     MySqlDataAccessor dataAccessor =
         new MySqlAccountStoreFactory(verifiableProperties, new MetricRegistry()).getMySqlAccountStore()
             .getMySqlDataAccessor();
-    ContainerDao containerDao = new ContainerDao(dataAccessor);
+    AccountDao containerDao = new AccountDao(dataAccessor);
     // Use high account id to avoid conflict
     short startAccountId = 30000;
     int numAccounts = 10;
@@ -69,13 +70,23 @@ public class DatabaseTest {
     ContainerBuilder builder = new ContainerBuilder((short) 0, "", Container.ContainerStatus.ACTIVE, "Test", (short) 0);
     long t0 = System.currentTimeMillis();
     int containersAdded = 0;
+    List<AccountUtils.AccountUpdateInfo> accountUpdateInfos = new ArrayList<>();
     for (short accountId = startAccountId; accountId < startAccountId + numAccounts; accountId++) {
+      Account account = new AccountBuilder(accountId, "Account-" + accountId, Account.AccountStatus.ACTIVE).build();
+      List<Container> containers = new ArrayList<>();
       for (short containerId = 1; containerId <= numContainers; containerId++) {
-        builder.setId(containerId).setName("Container-" + containerId).setTtlRequired(true);
-        containerDao.addContainer(accountId, builder.build());
+        containers.add(builder.setId(containerId)
+            .setParentAccountId(accountId)
+            .setName("Container-" + containerId)
+            .setTtlRequired(true)
+            .build());
         containersAdded++;
       }
+      accountUpdateInfos.add(new AccountUtils.AccountUpdateInfo(account, true, false, containers, new ArrayList<>()));
     }
+
+    containerDao.updateAccounts(accountUpdateInfos, 100);
+
     long t1 = System.currentTimeMillis();
     long insertTime = t1 - t0;
     logger.info("Added {} containers in {} ms", containersAdded, insertTime);
@@ -93,7 +104,7 @@ public class DatabaseTest {
   private static void cleanup(Connection dbConnection, short startAccountId) throws SQLException {
     Statement statement = dbConnection.createStatement();
     int numDeleted = statement.executeUpdate(
-        "delete from " + ContainerDao.CONTAINER_TABLE + " where " + ContainerDao.ACCOUNT_ID + " >= " + startAccountId);
+        "delete from " + AccountDao.CONTAINER_TABLE + " where " + AccountDao.ACCOUNT_ID + " >= " + startAccountId);
     logger.info("Deleted {} containers", numDeleted);
   }
 }
