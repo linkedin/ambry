@@ -648,7 +648,7 @@ class CloudBlobStore implements Store {
       throw new StoreException("Id " + key + " is already undeleted in cloud", StoreErrorCodes.ID_Undeleted);
     } else if (!metadata.isDeleted()) {
       throw new StoreException("Id " + key + " is not deleted yet in cloud ", StoreErrorCodes.ID_Not_Deleted);
-    } else if (metadata.getDeletionTime() + TimeUnit.DAYS.toMillis(storeConfig.storeDeletedMessageRetentionDays)
+    } else if (metadata.getDeletionTime() + TimeUnit.HOURS.toMillis(storeConfig.storeDeletedMessageRetentionHours)
         < System.currentTimeMillis()) {
       throw new StoreException("Id " + key + " already permanently deleted in cloud ",
           StoreErrorCodes.ID_Deleted_Permanently);

@@ -165,9 +165,9 @@ public class StorageManager implements StoreManager {
     /* NOTE: We must ensure that the store never performs hard deletes on the part of the log that is not yet flushed.
        We do this by making sure that the retention period for deleted messages (which determines the end point for hard
        deletes) is always greater than the log flush period. */
-    if (storeConfig.storeDeletedMessageRetentionDays
-        < TimeUnit.SECONDS.toDays(storeConfig.storeDataFlushIntervalSeconds) + 1) {
-      throw new StoreException("Message retention days must be greater than the store flush interval period",
+    if (storeConfig.storeDeletedMessageRetentionHours
+        < TimeUnit.SECONDS.toHours(storeConfig.storeDataFlushIntervalSeconds) + 1) {
+      throw new StoreException("Message retention hours must be greater than the store flush interval period",
           StoreErrorCodes.Initialization_Error);
     }
     if (diskManagerConfig.diskManagerReserveFileDirName.length() == 0) {

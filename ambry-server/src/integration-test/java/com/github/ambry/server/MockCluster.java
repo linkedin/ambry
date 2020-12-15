@@ -241,7 +241,7 @@ public class MockCluster {
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
     props.setProperty("store.enable.hard.delete", Boolean.toString(enableHardDeletes));
-    props.setProperty("store.deleted.message.retention.days", "1");
+    props.setProperty("store.deleted.message.retention.hours", "1");
     props.setProperty("store.validate.authorization", "true");
     props.setProperty("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 10));
     props.setProperty("replication.token.flush.interval.seconds", "5");

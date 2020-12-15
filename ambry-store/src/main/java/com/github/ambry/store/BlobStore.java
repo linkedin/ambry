@@ -247,7 +247,7 @@ public class BlobStore implements Store {
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
         metrics.initializeIndexGauges(storeId, index, capacityInBytes);
-        long logSegmentForecastOffsetMs = TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays);
+        long logSegmentForecastOffsetMs = TimeUnit.HOURS.toMillis(config.storeDeletedMessageRetentionHours);
         long bucketSpanInMs = TimeUnit.MINUTES.toMillis(config.storeStatsBucketSpanInMinutes);
         long queueProcessingPeriodInMs =
             TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes);

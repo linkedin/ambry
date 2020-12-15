@@ -184,7 +184,7 @@ public class HardDeleterTest {
     Properties props = new Properties();
     // the test will set the tokens, so disable the index persistor.
     props.setProperty("store.data.flush.interval.seconds", "3600");
-    props.setProperty("store.deleted.message.retention.days", "1");
+    props.setProperty("store.deleted.message.retention.hours", "1");
     props.setProperty("store.index.max.number.of.inmem.elements", "2");
     props.setProperty("store.segment.size.in.bytes", "10000");
     // the following determines the number of entries that will be fetched at most. We need this to test the

@@ -49,7 +49,7 @@ public class StatsBasedCompactionPolicyTest {
     config = initState.getSecond();
     blobStore = initState.getFirst();
     mockBlobStoreStats = blobStore.getBlobStoreStats();
-    messageRetentionTimeInMs = TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays);
+    messageRetentionTimeInMs = TimeUnit.HOURS.toMillis(config.storeDeletedMessageRetentionHours);
     compactionPolicy = new StatsBasedCompactionPolicy(config, time);
   }
 
