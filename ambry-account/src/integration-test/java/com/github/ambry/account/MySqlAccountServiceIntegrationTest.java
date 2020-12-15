@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
@@ -141,8 +142,8 @@ public class MySqlAccountServiceIntegrationTest {
   @Test
   public void testInitCacheOnStartUp() throws Exception {
     Account testAccount = makeTestAccountWithContainer();
-    AccountUtils.AccountUpdateInfo accountUpdateInfo =
-        new AccountUtils.AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
+    AccountUpdateInfo accountUpdateInfo =
+        new AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
             new ArrayList<>());
     mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo));
     mySqlAccountService = getAccountService();
@@ -256,7 +257,7 @@ public class MySqlAccountServiceIntegrationTest {
 
     // Add account to DB (could use second AS for this)
     mySqlAccountStore.updateAccounts(Collections.singletonList(
-        new AccountUtils.AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
+        new AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
             new ArrayList<>())));
 
     // sleep for polling interval time
@@ -305,7 +306,7 @@ public class MySqlAccountServiceIntegrationTest {
     producerAccountService.updateAccounts(Collections.singletonList(a1));
     Account finalA = a1;
     verify(producerAccountStore).updateAccounts(argThat(accountInfos -> {
-      AccountUtils.AccountUpdateInfo accountInfo = accountInfos.get(0);
+      AccountUpdateInfo accountInfo = accountInfos.get(0);
       return accountInfo.getAccount().equals(finalA) && accountInfo.getAddedContainers().equals(containers)
           && accountInfo.isAdded() && !accountInfo.isUpdated() && accountInfo.getUpdatedContainers().isEmpty();
     }));
@@ -319,7 +320,7 @@ public class MySqlAccountServiceIntegrationTest {
     producerAccountService.updateAccounts(Collections.singletonList(a1));
     Account finalA1 = a1;
     verify(producerAccountStore).updateAccounts(argThat(accountInfos -> {
-      AccountUtils.AccountUpdateInfo accountInfo = accountInfos.get(0);
+      AccountUpdateInfo accountInfo = accountInfos.get(0);
       return accountInfo.getAccount().equals(finalA1) && accountInfo.getAddedContainers().isEmpty()
           && !accountInfo.isAdded() && accountInfo.isUpdated() && accountInfo.getUpdatedContainers().isEmpty();
     }));

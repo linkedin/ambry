@@ -16,7 +16,7 @@ package com.github.ambry.account.mysql;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
-import com.github.ambry.account.AccountUtils;
+import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.mysql.MySqlDataAccessor;
@@ -206,18 +206,21 @@ public class AccountDao {
    * @param batchSize number of statements to be executed in one batch
    * @throws SQLException
    */
-  public synchronized void updateAccounts(List<AccountUtils.AccountUpdateInfo> accountsInfo, int batchSize)
-      throws SQLException {
+  public synchronized void updateAccounts(List<AccountUpdateInfo> accountsInfo, int batchSize) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
 
-      AccountUpdateBatch accountUpdateBatch = new AccountUpdateBatch();
+      AccountUpdateBatch accountUpdateBatch =
+          new AccountUpdateBatch(dataAccessor.getPreparedStatement(insertAccountsSql, true),
+              dataAccessor.getPreparedStatement(updateAccountsSql, true),
+              dataAccessor.getPreparedStatement(insertContainersSql, true),
+              dataAccessor.getPreparedStatement(updateContainersSql, true));
 
       // Disable auto commits
       dataAccessor.setAutoCommit(false);
 
       int batchCount = 0;
-      for (AccountUtils.AccountUpdateInfo accountUpdateInfo : accountsInfo) {
+      for (AccountUpdateInfo accountUpdateInfo : accountsInfo) {
         // Get account and container changes information
         Account account = accountUpdateInfo.getAccount();
         boolean isAccountAdded = accountUpdateInfo.isAdded();
@@ -270,9 +273,6 @@ public class AccountDao {
       dataAccessor.rollback();
       dataAccessor.onException(e, Write);
       throw e;
-    } finally {
-      // reset auto commit to true
-      dataAccessor.setAutoCommit(true);
     }
   }
 
@@ -336,11 +336,12 @@ public class AccountDao {
     private final PreparedStatement insertContainerStatement;
     private final PreparedStatement updateContainerStatement;
 
-    public AccountUpdateBatch() throws SQLException {
-      this.insertAccountStatement = dataAccessor.getPreparedStatement(insertAccountsSql, true);
-      this.updateAccountStatement = dataAccessor.getPreparedStatement(updateAccountsSql, true);
-      this.insertContainerStatement = dataAccessor.getPreparedStatement(insertContainersSql, true);
-      this.updateContainerStatement = dataAccessor.getPreparedStatement(updateContainersSql, true);
+    public AccountUpdateBatch(PreparedStatement insertAccountStatement, PreparedStatement updateAccountStatement,
+        PreparedStatement insertContainerStatement, PreparedStatement updateContainerStatement) {
+      this.insertAccountStatement = insertAccountStatement;
+      this.updateAccountStatement = updateAccountStatement;
+      this.insertContainerStatement = insertContainerStatement;
+      this.updateContainerStatement = updateContainerStatement;
     }
 
     /**
@@ -348,19 +349,19 @@ public class AccountDao {
      * @throws SQLException
      */
     public void maybeExecuteBatch() throws SQLException {
-      if (insertAccountCount > 0) {
+      if (insertAccountStatement != null && insertAccountCount > 0) {
         insertAccountStatement.executeBatch();
         insertAccountCount = 0;
       }
-      if (updateAccountCount > 0) {
+      if (updateAccountStatement != null && updateAccountCount > 0) {
         updateAccountStatement.executeBatch();
         updateAccountCount = 0;
       }
-      if (insertContainerCount > 0) {
+      if (insertContainerStatement != null && insertContainerCount > 0) {
         insertContainerStatement.executeBatch();
         insertContainerCount = 0;
       }
-      if (updateContainerCount > 0) {
+      if (updateContainerStatement != null && updateContainerCount > 0) {
         updateContainerStatement.executeBatch();
         updateContainerCount = 0;
       }

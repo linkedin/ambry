@@ -13,7 +13,6 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.mysql.MySqlDataAccessor;
@@ -324,7 +323,6 @@ public class MySqlAccountService extends AbstractAccountService {
   @Override
   public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
-    // TODO: make transactional
     try {
       return super.updateContainers(accountName, containers);
     } catch (AccountServiceException ase) {

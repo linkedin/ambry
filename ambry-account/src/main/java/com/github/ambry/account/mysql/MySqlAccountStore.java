@@ -14,7 +14,7 @@
 package com.github.ambry.account.mysql;
 
 import com.github.ambry.account.Account;
-import com.github.ambry.account.AccountUtils;
+import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
@@ -62,7 +62,7 @@ public class MySqlAccountStore {
    * @param accountsInfo information of updated Accounts
    * @throws SQLException
    */
-  public void updateAccounts(List<AccountUtils.AccountUpdateInfo> accountsInfo) throws SQLException {
+  public void updateAccounts(List<AccountUpdateInfo> accountsInfo) throws SQLException {
     accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize);
   }
 

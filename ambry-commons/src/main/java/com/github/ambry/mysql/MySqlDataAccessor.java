@@ -15,7 +15,6 @@ package com.github.ambry.mysql;
 
 import com.github.ambry.utils.Pair;
 import com.mysql.cj.exceptions.MysqlErrorNumbers;
-import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
@@ -130,11 +129,7 @@ public class MySqlDataAccessor {
    * @throws SQLException
    */
   public synchronized void setAutoCommit(boolean enable) throws SQLException {
-    if (activeConnection != null && activeConnection.isValid(5)) {
-      activeConnection.setAutoCommit(enable);
-    } else {
-      logger.debug("Connection to MySql DB is not available");
-    }
+    activeConnection.setAutoCommit(enable);
   }
 
   /**
@@ -142,11 +137,7 @@ public class MySqlDataAccessor {
    * @throws SQLException
    */
   public synchronized void commit() throws SQLException {
-    if (activeConnection != null && activeConnection.isValid(5)) {
-      activeConnection.commit();
-    } else {
-      logger.debug("Connection to MySql DB is not available");
-    }
+    activeConnection.commit();
   }
 
   /**
@@ -154,11 +145,7 @@ public class MySqlDataAccessor {
    * @throws SQLException
    */
   public synchronized void rollback() throws SQLException {
-    if (activeConnection != null && activeConnection.isValid(5)) {
-      activeConnection.rollback();
-    } else {
-      logger.debug("Connection to MySql DB is not available");
-    }
+    activeConnection.rollback();
   }
 
   /**
@@ -172,7 +159,6 @@ public class MySqlDataAccessor {
     // Close active connection if no longer valid
     if (activeConnection != null && !activeConnection.isValid(5)) {
       closeActiveConnection();
-      activeConnection = null;
       connectedEndpoint = null;
     }
 
@@ -283,12 +269,12 @@ public class MySqlDataAccessor {
    * @param operationType type of mysql operation
    */
   public void onException(SQLException e, OperationType operationType) {
-    if (e instanceof SQLTransientConnectionException || e instanceof BatchUpdateException) {
+    if (e instanceof SQLTransientConnectionException) {
       if (operationType == OperationType.Write) {
         metrics.writeFailureCount.inc();
-      } else if (operationType == operationType.Read) {
+      } else if (operationType == OperationType.Read) {
         metrics.readFailureCount.inc();
-      } else if (operationType == operationType.Copy) {
+      } else if (operationType == OperationType.Copy) {
         metrics.copyFailureCount.inc();
       }
       closeActiveConnection();
@@ -323,6 +309,7 @@ public class MySqlDataAccessor {
     }
     statementCache.clear();
     closeQuietly(activeConnection);
+    activeConnection = null;
   }
 
   private boolean isBetterEndpoint(DbEndpoint first, DbEndpoint second) {

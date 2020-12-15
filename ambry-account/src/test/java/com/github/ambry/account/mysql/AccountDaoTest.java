@@ -17,7 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
-import com.github.ambry.account.AccountUtils;
+import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.mysql.MySqlDataAccessor;
@@ -51,7 +51,7 @@ public class AccountDaoTest {
   private final short accountId = 101;
   private final Account testAccount;
   private final Container testContainer;
-  private final AccountUtils.AccountUpdateInfo testAccountInfo;
+  private final AccountUpdateInfo testAccountInfo;
   private final AccountDao accountDao;
   private final MySqlMetrics metrics;
   private final PreparedStatement mockAccountInsertStatement;
@@ -68,9 +68,8 @@ public class AccountDaoTest {
     testAccount =
         new AccountBuilder(accountId, "samza", Account.AccountStatus.ACTIVE).addOrUpdateContainer(testContainer)
             .build();
-    testAccountInfo =
-        new AccountUtils.AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
-            new ArrayList<>());
+    testAccountInfo = new AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
+        new ArrayList<>());
 
     Connection mockConnection = mock(Connection.class);
     MySqlDataAccessor dataAccessor = getDataAccessor(mockConnection, metrics);
@@ -152,7 +151,6 @@ public class AccountDaoTest {
     when(mockAccountInsertStatement.executeBatch()).thenThrow(new BatchUpdateException());
     TestUtils.assertException(BatchUpdateException.class,
         () -> accountDao.updateAccounts(Collections.singletonList(testAccountInfo), 50), null);
-    assertEquals("Write failure count should be 1", 1, metrics.writeFailureCount.getCount());
   }
 
   @Test
@@ -191,7 +189,6 @@ public class AccountDaoTest {
     when(mockContainerInsertStatement.executeBatch()).thenThrow(new BatchUpdateException());
     TestUtils.assertException(BatchUpdateException.class,
         () -> accountDao.updateAccounts(Collections.singletonList(testAccountInfo), 50), null);
-    assertEquals("Write failure count should be 1", 1, metrics.writeFailureCount.getCount());
   }
 
   @Test
@@ -203,15 +200,14 @@ public class AccountDaoTest {
 
   @Test
   public void testBatchOperations() throws SQLException {
-    List<AccountUtils.AccountUpdateInfo> accountUpdateInfos = new ArrayList<>();
+    List<AccountUpdateInfo> accountUpdateInfos = new ArrayList<>();
     int size = 11;
     int batchSize = 5;
 
     // test batch account inserts
     for (int i = 1; i <= size; i++) {
       Account account = new AccountBuilder((short) i, "test account " + i, Account.AccountStatus.ACTIVE).build();
-      accountUpdateInfos.add(
-          new AccountUtils.AccountUpdateInfo(account, true, false, new ArrayList<>(), new ArrayList<>()));
+      accountUpdateInfos.add(new AccountUpdateInfo(account, true, false, new ArrayList<>(), new ArrayList<>()));
     }
     accountDao.updateAccounts(accountUpdateInfos, batchSize);
     verify(mockAccountInsertStatement, times(size)).addBatch();
@@ -222,8 +218,7 @@ public class AccountDaoTest {
     for (int i = 1; i <= size; i++) {
       Account account =
           new AccountBuilder((short) i, "test account " + i, Account.AccountStatus.ACTIVE).snapshotVersion(1).build();
-      accountUpdateInfos.add(
-          new AccountUtils.AccountUpdateInfo(account, false, true, new ArrayList<>(), new ArrayList<>()));
+      accountUpdateInfos.add(new AccountUpdateInfo(account, false, true, new ArrayList<>(), new ArrayList<>()));
     }
     accountDao.updateAccounts(accountUpdateInfos, batchSize);
     verify(mockAccountUpdateStatement, times(size)).addBatch();
@@ -237,7 +232,7 @@ public class AccountDaoTest {
     }
     // test batch container inserts
     accountUpdateInfos.clear();
-    accountUpdateInfos.add(new AccountUtils.AccountUpdateInfo(account, false, false, containers, new ArrayList<>()));
+    accountUpdateInfos.add(new AccountUpdateInfo(account, false, false, containers, new ArrayList<>()));
     accountDao.updateAccounts(accountUpdateInfos, batchSize);
     verify(mockContainerInsertStatement, times(size)).addBatch();
     // Execute batch should be invoked only once since all containers belong to same account
@@ -245,7 +240,7 @@ public class AccountDaoTest {
 
     // test batch container updates
     accountUpdateInfos.clear();
-    accountUpdateInfos.add(new AccountUtils.AccountUpdateInfo(account, false, false, new ArrayList<>(), containers));
+    accountUpdateInfos.add(new AccountUpdateInfo(account, false, false, new ArrayList<>(), containers));
     accountDao.updateAccounts(accountUpdateInfos, batchSize);
     verify(mockContainerUpdateStatement, times(size)).addBatch();
     // Execute batch should be invoked only once since all containers belong to same account

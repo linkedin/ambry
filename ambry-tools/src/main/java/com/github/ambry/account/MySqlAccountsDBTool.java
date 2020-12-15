@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
@@ -224,11 +225,10 @@ public class MySqlAccountsDBTool {
     AccountInfoMap accountInfoMap = new AccountInfoMap(new AccountServiceMetrics(new MetricRegistry()), accountMap);
 
     // Populate Account and Container tables in batches
-    List<AccountUtils.AccountUpdateInfo> accountUpdateInfos = new ArrayList<>();
+    List<AccountUpdateInfo> accountUpdateInfos = new ArrayList<>();
     for (Account account : accountInfoMap.getAccounts()) {
       accountUpdateInfos.add(
-          new AccountUtils.AccountUpdateInfo(account, true, false, new ArrayList<>(account.getAllContainers()),
-              new ArrayList<>()));
+          new AccountUpdateInfo(account, true, false, new ArrayList<>(account.getAllContainers()), new ArrayList<>()));
     }
     mySqlAccountStore.updateAccounts(accountUpdateInfos);
 
