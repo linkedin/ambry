@@ -13,6 +13,8 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -20,6 +22,7 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.QuotaManagerFactory;
@@ -47,19 +50,31 @@ public class RestServerMain {
       InvocationOptions options = new InvocationOptions(args);
       Properties properties = Utils.loadProps(options.serverPropsFilePath);
       VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+
+      // ClusterMap
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
       ClusterAgentsFactory clusterAgentsFactory =
           Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
               options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       clusterMap = clusterAgentsFactory.getClusterMap();
       SSLFactory sslFactory = getSSLFactoryIfRequired(verifiableProperties);
-      logger.info("Bootstrapping RestServer");
+
+      // Account Service
+      RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
+      AccountServiceFactory accountServiceFactory =
+          Utils.getObj(restServerConfig.restServerAccountServiceFactory, verifiableProperties,
+              clusterMap.getMetricRegistry());
+      AccountService accountService = accountServiceFactory.getAccountService();
+
+      // Quota
       QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
       QuotaManagerFactory quotaManagerFactory =
           Utils.getObj(quotaConfig.quotaManagerFactoryClass, quotaConfig, Collections.emptyList(),
               Collections.emptyList());
+
+      logger.info("Bootstrapping RestServer");
       restServer = new RestServer(verifiableProperties, clusterMap, new LoggingNotificationSystem(), sslFactory,
-          quotaManagerFactory);
+          accountService, quotaManagerFactory);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread(() -> {
         logger.info("Received shutdown signal. Shutting down RestServer");

@@ -19,7 +19,6 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.jmx.JmxReporter;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.account.HelixAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.NettyInternalMetrics;
@@ -97,8 +96,8 @@ public class RestServer {
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, SSLFactory sslFactory) throws Exception {
-    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, null);
+      NotificationSystem notificationSystem, SSLFactory sslFactory, AccountService accountService) throws Exception {
+    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, accountService, null);
   }
 
   /**
@@ -111,9 +110,10 @@ public class RestServer {
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, SSLFactory sslFactory, QuotaManagerFactory quotaManagerFactory)
-      throws Exception {
-    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, null, null, quotaManagerFactory);
+      NotificationSystem notificationSystem, SSLFactory sslFactory, AccountService accountService,
+      QuotaManagerFactory quotaManagerFactory) throws Exception {
+    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, accountService, null, null,
+        quotaManagerFactory);
   }
 
   /**
@@ -127,11 +127,13 @@ public class RestServer {
    * @param reporterFactory if non-null, use this function to set up a {@link JmxReporter} with custom settings. If this
    *                        option is null the default settings for the reporter will be used.
    * @param quotaManagerFactory the {@link QuotaManagerFactory} class to manage quota and throttling.
+   * @param accountService {@link AccountService} object.
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, SSLFactory sslFactory, List<ChannelHandler> addedChannelHandlers,
-      Function<MetricRegistry, JmxReporter> reporterFactory, QuotaManagerFactory quotaManagerFactory) throws Exception {
+      NotificationSystem notificationSystem, SSLFactory sslFactory, AccountService accountService,
+      List<ChannelHandler> addedChannelHandlers, Function<MetricRegistry, JmxReporter> reporterFactory,
+      QuotaManagerFactory quotaManagerFactory) throws Exception {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of RestServer");
     }
@@ -142,11 +144,7 @@ public class RestServer {
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
     restServerMetrics = new RestServerMetrics(metricRegistry, restServerState);
-
-    AccountServiceFactory accountServiceFactory =
-        Utils.getObj(restServerConfig.restServerAccountServiceFactory, verifiableProperties,
-            clusterMap.getMetricRegistry());
-    accountService = accountServiceFactory.getAccountService();
+    this.accountService = accountService;
 
     SSLFactory routerSslFactory;
     if (new RouterConfig(verifiableProperties).routerEnableHttp2NetworkClient) {
@@ -189,8 +187,7 @@ public class RestServer {
     NioServerFactory nioServerFactory =
         Utils.getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, metricRegistry,
             restRequestHandler, publicAccessLogger, restServerState, sslFactory,
-            restServerConfig.restServerEnableAddedChannelHandlers ? addedChannelHandlers : null, quotaManager,
-            quotaConfig);
+            restServerConfig.restServerEnableAddedChannelHandlers ? addedChannelHandlers : null, quotaManager);
     nioServer = nioServerFactory.getNioServer();
 
     if (accountService == null || router == null || restResponseHandler == null || restRequestHandler == null

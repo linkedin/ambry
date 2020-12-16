@@ -60,14 +60,13 @@ public class FrontendNettyFactory implements NioServerFactory {
    * @param addedChannelHandlers a list of {@link ChannelHandler} to add to the {@link io.netty.channel.ChannelInitializer} before
    *                             the final handler.
    * @param quotaManager {@link QuotaManager} object.
-   * @param quotaConfig {@link QuotaConfig} object.
    * @throws IllegalArgumentException if any of the arguments are null.
    * @throws ReflectiveOperationException if a netty-specific {@link SSLFactory} cannot be instantiated via reflection.
    */
   public FrontendNettyFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       final RestRequestHandler requestHandler, final PublicAccessLogger publicAccessLogger,
       final RestServerState restServerState, SSLFactory defaultSslFactory, List<ChannelHandler> addedChannelHandlers,
-      QuotaManager quotaManager, QuotaConfig quotaConfig) throws ReflectiveOperationException {
+      QuotaManager quotaManager) throws ReflectiveOperationException {
     if (verifiableProperties == null || metricRegistry == null || requestHandler == null || publicAccessLogger == null
         || restServerState == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of FrontendNettyFactory");
@@ -77,6 +76,7 @@ public class FrontendNettyFactory implements NioServerFactory {
     nettyMetrics = new NettyMetrics(metricRegistry);
     ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
 
+    QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
     Map<Integer, ChannelInitializer<SocketChannel>> initializers = new HashMap<>();
     initializers.put(nettyConfig.nettyServerPort,
         new FrontendNettyChannelInitializer(nettyConfig, performanceConfig, nettyMetrics, connectionStatsHandler,

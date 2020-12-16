@@ -73,7 +73,7 @@ public class FrontendNettyFactoryTest {
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     FrontendNettyFactory nettyServerFactory =
         new FrontendNettyFactory(verifiableProperties, new MetricRegistry(), REST_REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER,
-            REST_SERVER_STATE, defaultSslFactory, null);
+            REST_SERVER_STATE, defaultSslFactory, null, null);
     NioServer nioServer = nettyServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
