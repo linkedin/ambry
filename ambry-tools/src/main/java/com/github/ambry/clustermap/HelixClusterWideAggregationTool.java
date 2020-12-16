@@ -108,6 +108,10 @@ public class HelixClusterWideAggregationTool {
     @Default("false")
     final boolean deleteSpecifiedWorkflow;
 
+    @Config("is.mysql")
+    @Default("false")
+    final boolean isMysql;
+
     /**
      * Constructs the configs associated with the tool.
      * @param verifiableProperties the props to use to load the config.
@@ -121,6 +125,7 @@ public class HelixClusterWideAggregationTool {
       deleteSpecifiedWorkflow = verifiableProperties.getBoolean("delete.specified.workflow", false);
       statsReportsToAggregate =
           Arrays.asList(verifiableProperties.getString("stats.reports.to.aggregate", "").split(","));
+      isMysql = verifiableProperties.getBoolean("is.mysql", false);
     }
   }
 
@@ -167,8 +172,9 @@ public class HelixClusterWideAggregationTool {
               String jobId = statsType.toString().toLowerCase() + (isRecurrentWorkflow ? RECURRENT_JOB_SUFFIX
                   : ONE_TIME_JOB_SUFFIX);
               String taskId = statsType.toString().toLowerCase() + TASK_SUFFIX;
-              String aggregationCommand =
-                  String.format("%s_%s", HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, reportName);
+              String aggregationCommand = String.format("%s_%s",
+                  config.isMysql ? MySqlReportAggregatorTask.TASK_COMMAND_PREFIX
+                      : HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, reportName);
               // build task
               List<TaskConfig> taskConfigs = new ArrayList<>();
               taskConfigs.add(new TaskConfig.Builder().setTaskId(taskId).setCommand(aggregationCommand).build());
