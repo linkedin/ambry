@@ -14,7 +14,9 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.commons.Callback;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
@@ -51,7 +53,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   private static final Logger logger = LoggerFactory.getLogger(AsyncRequestResponseHandler.class);
   private final RequestResponseHandlerMetrics metrics;
   private final QuotaManager quotaManager;
-  private final boolean isRequestQuotaEnabled;
+  private final QuotaConfig quotaConfig;
   private final List<AsyncRequestWorker> asyncRequestWorkers = new ArrayList<>();
   private final AtomicInteger currIndex = new AtomicInteger(0);
   private AsyncResponseHandler asyncResponseHandler = null;
@@ -65,12 +67,12 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
    * @param workerCount the required number of request handling units.
    * @param restRequestService the {@link RestRequestService} instance to be used to process requests.
    * @param quotaManager {@link QuotaManager} object.
-   * @param isRequestQuotaEnabled flag indicating whether request quota enforcement is enabled.
+   * @param quotaConfig {@link QuotaConfig} object.
    * @throws IllegalArgumentException if {@code workerCount} < 0 or if {@code workerCount} > 0 but
    * {@code restRequestService} is null.
    */
   protected AsyncRequestResponseHandler(RequestResponseHandlerMetrics metrics, int workerCount,
-      RestRequestService restRequestService, QuotaManager quotaManager, boolean isRequestQuotaEnabled) {
+      RestRequestService restRequestService, QuotaManager quotaManager, QuotaConfig quotaConfig) {
     this.metrics = metrics;
     metrics.trackAsyncRequestResponseHandler(this);
     if (workerCount < 0) {
@@ -82,7 +84,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
     this.restRequestService = restRequestService;
     this.restRequestService.setupResponseHandler(this);
     this.quotaManager = quotaManager;
-    this.isRequestQuotaEnabled = isRequestQuotaEnabled;
+    this.quotaConfig = quotaConfig;
     logger.trace("Instantiated AsyncRequestResponseHandler");
   }
 
@@ -162,10 +164,17 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   @Override
   public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws RestServiceException {
-    if (isRequestQuotaEnabled && quotaManager.shouldThrottleOnRequest(restRequest, new ArrayList<>())) {
-      // TODO use enforcement recommendation to create more specific error message.
-      // TODO make sure that container and account both are populated in request here
-      throw new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
+    if (quotaConfig.requestQuotaThrottlingEnabled && quotaManager.shouldThrottleOnRequest(restRequest,
+        new ArrayList<>())) {
+      if (quotaConfig.quotaThrottlingMode == QuotaMode.THROTTLING) {
+        // TODO use enforcement recommendation to create more specific error message.
+        // TODO make sure that container and account both are populated in request here
+        throw new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
+      } else {
+        // TODO send feedback to user in terms of response headers.
+        // TODO log metrics internally
+        logger.warn("Throttling recommended due as request exceeds quota");
+      }
     }
     if (isRunning() && requestWorkersCount > 0) {
       getWorker().submitRequest(restRequest, restResponseChannel);

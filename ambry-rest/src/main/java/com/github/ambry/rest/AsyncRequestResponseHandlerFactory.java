@@ -18,6 +18,7 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaManager;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
@@ -41,19 +42,19 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestResponseHa
    * @param metricRegistry the {@link MetricRegistry} handler that should be used for metrics.
    * @param restRequestService the {@link RestRequestService} to use for handling requests.
    * @param quotaManager {@link QuotaManager} object.
-   * @param isRequestQuotaEnabled flag indicating whether quota enforcement is enabled.
+   * @param quotaConfig {@link QuotaConfig} object.
    * @throws IllegalArgumentException if {@code handlerCount} <= 0 or if {@code metricRegistry} or
    * {@code restRequestService} is null.
    */
   public AsyncRequestResponseHandlerFactory(Integer handlerCount, MetricRegistry metricRegistry,
-      RestRequestService restRequestService, QuotaManager quotaManager, boolean isRequestQuotaEnabled) {
+      RestRequestService restRequestService, QuotaManager quotaManager, QuotaConfig quotaConfig) {
     if (metricRegistry == null || restRequestService == null) {
       throw new IllegalArgumentException("One or more arguments received is null");
     } else if (handlerCount <= 0) {
       throw new IllegalArgumentException("Request handler scaling unit count has to be > 0. Is " + handlerCount);
     } else {
       handler = new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(metricRegistry), handlerCount,
-          restRequestService, quotaManager, isRequestQuotaEnabled);
+          restRequestService, quotaManager, quotaConfig);
     }
     logger.trace("Instantiated AsyncRequestResponseHandlerFactory as RestRequestHandler");
   }

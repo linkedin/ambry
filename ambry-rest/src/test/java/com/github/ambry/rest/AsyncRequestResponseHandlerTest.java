@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteBufferRSC;
@@ -72,7 +73,7 @@ public class AsyncRequestResponseHandlerTest {
     restRequestService = new MockRestRequestService(verifiableProperties, router);
     asyncRequestResponseHandler =
         new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 5, restRequestService,
-            null, false);
+            null, new QuotaConfig(verifiableProperties));
     restRequestService.setupResponseHandler(asyncRequestResponseHandler);
     restRequestService.start();
     asyncRequestResponseHandler.start();
@@ -98,7 +99,8 @@ public class AsyncRequestResponseHandlerTest {
   private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(int requestWorkers) throws IOException {
     RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
     RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
-    return new AsyncRequestResponseHandler(metrics, requestWorkers, restRequestService, null, false);
+    return new AsyncRequestResponseHandler(metrics, requestWorkers, restRequestService, null,
+        new QuotaConfig(verifiableProperties));
   }
 
   /**
@@ -185,7 +187,8 @@ public class AsyncRequestResponseHandlerTest {
     try {
       RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
       metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
-      new AsyncRequestResponseHandler(metrics, 1, null, null, false);
+      new AsyncRequestResponseHandler(metrics, 1, null, null,
+          new QuotaConfig(new VerifiableProperties(new Properties())));
       fail("Setting RestRequestService to null should have thrown exception");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.

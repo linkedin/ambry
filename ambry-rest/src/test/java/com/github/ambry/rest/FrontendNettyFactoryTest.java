@@ -19,6 +19,7 @@ import com.github.ambry.commons.NettySslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
@@ -37,7 +38,8 @@ public class FrontendNettyFactoryTest {
   // dud properties. server should pick up defaults
   private static final RestRequestHandler REST_REQUEST_HANDLER =
       new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 1,
-          new MockRestRequestService(new VerifiableProperties(new Properties()), new MockRouter()), null, false);
+          new MockRestRequestService(new VerifiableProperties(new Properties()), new MockRouter()), null,
+          new QuotaConfig(new VerifiableProperties(new Properties())));
   private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
   private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();

@@ -18,10 +18,12 @@ import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
@@ -41,6 +43,8 @@ import java.util.GregorianCalendar;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.router.GetBlobOptions.*;
@@ -51,27 +55,27 @@ import static com.github.ambry.router.GetBlobOptions.*;
  * sets the respective headers on response.
  */
 class AmbrySecurityService implements SecurityService {
-
   static final Set<String> OPERATIONS = Collections.unmodifiableSet(
       Utils.getStaticFieldValuesAsStrings(Operations.class)
           .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
+  private static final Logger logger = LoggerFactory.getLogger(AmbrySecurityService.class);
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
   private final HostLevelThrottler hostLevelThrottler;
   private final QuotaManager quotaManager;
-  private final boolean quotaThrottlingEnabled;
+  private final QuotaConfig quotaConfig;
   private boolean isOpen;
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       UrlSigningService urlSigningService, HostLevelThrottler hostLevelThrottler, QuotaManager quotaManager,
-      boolean quotaThrottlingEnabled) {
+      QuotaConfig quotaConfig) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.urlSigningService = urlSigningService;
     this.hostLevelThrottler = hostLevelThrottler;
     this.quotaManager = quotaManager;
-    this.quotaThrottlingEnabled = quotaThrottlingEnabled;
+    this.quotaConfig = quotaConfig;
     isOpen = true;
   }
 
@@ -242,10 +246,16 @@ class AmbrySecurityService implements SecurityService {
         exception = e;
       }
     }
-    if (quotaThrottlingEnabled) {
-      // TODO use enforcement recommendation to create more specific error message and set specific response headers.
-      // TODO make sure that container and account both are populated in request here
-      quotaManager.shouldThrottleOnRequestAndCharge(restRequest, blobInfo, new ArrayList<>());
+    if (quotaConfig.requestQuotaThrottlingEnabled) {
+      if (quotaConfig.quotaThrottlingMode == QuotaMode.THROTTLING) {
+        // TODO use enforcement recommendation to create more specific error message and set specific response headers.
+        // TODO make sure that container and account both are populated in request here
+        quotaManager.shouldThrottleOnRequestAndCharge(restRequest, blobInfo, new ArrayList<>());
+      } else {
+        // TODO send feedback to user in terms of response headers.
+        // TODO log metrics internally
+        logger.warn("HostQuotaEnforcementHandler recommends throttling due to high system load");
+      }
     }
     frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);

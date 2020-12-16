@@ -3,6 +3,7 @@ package com.github.ambry.rest;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.EnforcementRecommendation;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMode;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -27,25 +28,31 @@ public class HostQuotaEnforcementHandler extends ChannelInboundHandlerAdapter {
   private final static byte[] TOO_MANY_REQUESTS = "TOO_MANY_REQUESTS".getBytes();
   private final NettyMetrics metrics;
   private final QuotaManager quotaManager;
-  private final boolean hostQuotaThrottlingEnabled;
+  private final QuotaConfig quotaConfig;
   private FullHttpResponse response;
 
   public HostQuotaEnforcementHandler(NettyMetrics nettyMetrics, QuotaManager quotaManager, QuotaConfig quotaConfig) {
     this.metrics = nettyMetrics;
     this.quotaManager = quotaManager;
-    this.hostQuotaThrottlingEnabled = quotaConfig.hostQuotaThrottlingEnabled;
+    this.quotaConfig = quotaConfig;
   }
 
   @Override
   public void channelActive(ChannelHandlerContext ctx) throws Exception {
     logger.trace("Doing host level checks on channel {}", ctx.name());
     List<EnforcementRecommendation> enforcementRecommendations = new ArrayList<>();
-    if (hostQuotaThrottlingEnabled && quotaManager.shouldThrottleOnHost(enforcementRecommendations)) {
-      // TODO Add a detailed message and possible a retry after header
-      response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.TOO_MANY_REQUESTS,
-          Unpooled.wrappedBuffer(TOO_MANY_REQUESTS));
-      HttpUtil.setKeepAlive(response, false);
-      HttpUtil.setContentLength(response, TOO_MANY_REQUESTS.length);
+    if (quotaConfig.hostQuotaThrottlingEnabled && quotaManager.shouldThrottleOnHost(enforcementRecommendations)) {
+      if (quotaConfig.quotaThrottlingMode == QuotaMode.THROTTLING) {
+        // TODO Add a detailed message and possible a retry after header
+        response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.TOO_MANY_REQUESTS,
+            Unpooled.wrappedBuffer(TOO_MANY_REQUESTS));
+        HttpUtil.setKeepAlive(response, false);
+        HttpUtil.setContentLength(response, TOO_MANY_REQUESTS.length);
+      } else {
+        // TODO send feedback to user in terms of response headers.
+        // TODO log metrics internally
+        logger.warn("HostQuotaEnforcementHandler recommends throttling due to high system load");
+      }
     }
     super.channelActive(ctx);
   }

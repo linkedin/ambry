@@ -13,6 +13,7 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.utils.Utils;
 import java.util.HashSet;
 import java.util.Set;
@@ -36,6 +37,7 @@ public class QuotaConfig {
   public static final String HOST_QUOTA_ENFORCER_FACTORIES = "host.quota.enforcer.factories";
   public static final String QUOTA_MANAGER_FACTORY_CLASS = QUOTA_CONFIG_PREFIX + "manger.factory.class";
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY_CLASS = "com.github.ambry.quota.AmbryQuotaManagerFactory";
+  public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public StorageQuotaConfig storageQuotaConfig;
 
   @Config(REQUEST_QUOTA_THROTTLING_ENABLED)
@@ -77,6 +79,9 @@ public class QuotaConfig {
   @Default(DEFAULT_QUOTA_MANAGER_FACTORY_CLASS)
   public String quotaManagerFactoryClass;
 
+  @Config(QUOTA_THROTTLING_MODE)
+  public QuotaMode quotaThrottlingMode;
+
   /**
    * Constructor for {@link QuotaConfig}.
    * @param verifiableProperties {@link VerifiableProperties} object.
@@ -93,6 +98,8 @@ public class QuotaConfig {
         Utils.splitString(verifiableProperties.getString(HOST_QUOTA_ENFORCER_FACTORIES), ",", HashSet::new);
     quotaManagerFactoryClass =
         verifiableProperties.getString(QUOTA_MANAGER_FACTORY_CLASS, DEFAULT_QUOTA_MANAGER_FACTORY_CLASS);
+    quotaThrottlingMode =
+        QuotaMode.valueOf(verifiableProperties.getString(QUOTA_THROTTLING_MODE, DEFAULT_QUOTA_THROTTLING_MODE));
   }
 
   private static String buildDefaultQuotaEnforcerSourceInfoPairJson() {

@@ -179,7 +179,7 @@ public class RestServer {
     RestRequestResponseHandlerFactory restHandlerFactory =
         Utils.getObj(restServerConfig.restServerRequestResponseHandlerFactory,
             restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, restRequestService, quotaManager,
-            quotaConfig.requestQuotaThrottlingEnabled);
+            quotaConfig);
     restRequestHandler = restHandlerFactory.getRestRequestHandler();
     restResponseHandler = restHandlerFactory.getRestResponseHandler();
 

@@ -52,6 +52,6 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
   public SecurityService getSecurityService() {
     return new AmbrySecurityService(frontendConfig, frontendMetrics, urlSigningService,
         new HostLevelThrottler(hostThrottleConfig), quotaManagerFactory.getQuotaManager(),
-        quotaConfig.requestQuotaThrottlingEnabled);
+        quotaConfig);
   }
 }
