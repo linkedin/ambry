@@ -55,6 +55,11 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     public final Histogram publishTimeMs;
     public final Histogram aggregatedBatchSize;
     public final Histogram aggregatedPublishTimeMs;
+    public final Histogram queryStatsTimeMs;
+    public final Histogram queryAggregatedStatsTimeMs;
+    public final Histogram queryMonthlyAggregatedStatsTimeMs;
+    public final Histogram queryMonthTimeMs;
+    public final Histogram takeSnapshotTimeMs;
 
     /**
      * Constructor to create the Metrics.
@@ -67,6 +72,13 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "AggregatedBatchSize"));
       aggregatedPublishTimeMs =
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "AggregatedPublishTimeMs"));
+      queryStatsTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryStatsTimeMs"));
+      queryAggregatedStatsTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryAggregatedStatsTimeMs"));
+      queryMonthlyAggregatedStatsTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryMonthlyAggregatedStatsTimeMs"));
+      queryMonthTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryMonthTimeMs"));
+      takeSnapshotTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "TakeSnapshotTimeMs"));
     }
   }
 
@@ -139,6 +151,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    */
   @Override
   public StatsWrapper queryStatsOf(String clusterName, String hostname) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
     hostname = hostnameHelper.simplifyHostname(hostname);
     Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
     StatsSnapshot hostSnapshot = new StatsSnapshot((long) 0, partitionSubMap);
@@ -154,6 +167,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
         });
 
     hostSnapshot.updateValue();
+    storeMetrics.queryStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return new StatsWrapper(
         new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, timestamp.get(), partitionSubMap.size(),
             partitionSubMap.size(), null), hostSnapshot);
@@ -194,28 +208,35 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    */
   @Override
   public Map<String, Map<String, Long>> queryAggregatedStats(String clusterName) throws Exception {
+    long startTimeMs = System.currentTimeMillis();
     Map<String, Map<String, Long>> result = new HashMap<>();
     aggregatedaccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerId, storageUsage) -> {
       result.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
           .put(String.valueOf(containerId), storageUsage);
     });
+    storeMetrics.queryAggregatedStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return result;
   }
 
   @Override
   public Map<String, Map<String, Long>> queryMonthlyAggregatedStats(String clusterName) throws Exception {
+    long startTimeMs = System.currentTimeMillis();
     Map<String, Map<String, Long>> result = new HashMap<>();
     aggregatedaccountReportsDao.queryMonthlyContainerUsageForCluster(clusterName,
         (accountId, containerId, storageUsage) -> {
           result.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
               .put(String.valueOf(containerId), storageUsage);
         });
+    storeMetrics.queryMonthlyAggregatedStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return result;
   }
 
   @Override
   public String queryRecordedMonth(String clusterName) throws SQLException {
-    return aggregatedaccountReportsDao.queryMonthForCluster(clusterName);
+    long startTimeMs = System.currentTimeMillis();
+    String result = aggregatedaccountReportsDao.queryMonthForCluster(clusterName);
+    storeMetrics.queryMonthTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    return result;
   }
 
   /**
@@ -227,8 +248,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    */
   @Override
   public void takeSnapshotOfAggregatedStatsAndUpdateMonth(String clusterName, String monthValue) throws Exception {
+    long startTimeMs = System.currentTimeMillis();
     aggregatedaccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
     aggregatedaccountReportsDao.updateMonth(clusterName, monthValue);
+    storeMetrics.takeSnapshotTimeMs.update(System.currentTimeMillis() - startTimeMs);
   }
 
   /**

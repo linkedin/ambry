@@ -87,6 +87,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
         statsWrappers.put(instanceName,
             accountStatsStore.queryStatsOf(clusterMapConfig.clusterMapClusterName, instanceName));
       }
+      logger.info(String.format("Aggregating stats from %d hosts", statsWrappers.size()));
       results = clusterAggregator.doWorkOnStatsWrapperMap(statsWrappers, statsReportType);
       accountStatsStore.storeAggregatedStats(results.getSecond());
       // Create a base report at the beginning of each month.
@@ -99,6 +100,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
         String recordedMonthValue = accountStatsStore.queryRecordedMonth(clusterMapConfig.clusterMapClusterName);
         if (recordedMonthValue == null || recordedMonthValue.isEmpty() || !currentMonthValue.equals(
             recordedMonthValue)) {
+          logger.info("Taking snapshot of aggregated stats for month " + currentMonthValue);
           accountStatsStore.takeSnapshotOfAggregatedStatsAndUpdateMonth(clusterMapConfig.clusterMapClusterName,
               currentMonthValue);
         }
