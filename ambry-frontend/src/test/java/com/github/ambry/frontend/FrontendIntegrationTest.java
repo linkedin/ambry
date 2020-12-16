@@ -124,29 +124,20 @@ public class FrontendIntegrationTest {
   private static final String HOST_NAME = "localhost";
   private static final String CLUSTER_NAME = "Cluster-name";
   private static boolean enableUndeleteTested = false;
-
-  static {
-    try {
-      CLUSTER_MAP = new MockClusterMap();
-      File trustStoreFile = File.createTempFile("truststore", ".jks");
-      trustStoreFile.deleteOnExit();
-      FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps(trustStoreFile);
-      SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
-      FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
-      ACCOUNT_SERVICE.clear();
-      ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
   private static RestServer ambryRestServer = null;
   private static NettyClient plaintextNettyClient = null;
   private static NettyClient sslNettyClient = null;
-
   private final NettyClient nettyClient;
   private final boolean addClusterPrefix;
   private final boolean useSSL;
+  /**
+   * @param useSSL {@code true} if SSL should be tested.
+   */
+  public FrontendIntegrationTest(boolean useSSL, boolean addClusterPrefix) {
+    this.useSSL = useSSL;
+    nettyClient = useSSL ? sslNettyClient : plaintextNettyClient;
+    this.addClusterPrefix = addClusterPrefix;
+  }
 
   /**
    * Running it many times so that keep-alive bugs are caught.
@@ -171,8 +162,9 @@ public class FrontendIntegrationTest {
    */
   @BeforeClass
   public static void setup() throws Exception {
+    // TODO add a test quota manager factory for RestServer
     ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem(),
-        SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
+        SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)), null);
     ambryRestServer.start();
     plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT, null);
     sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT,
@@ -196,12 +188,47 @@ public class FrontendIntegrationTest {
   }
 
   /**
-   * @param useSSL {@code true} if SSL should be tested.
+   * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
+   * @param trustStoreFile the trust store file to add certificates to for SSL testing.
+   * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
    */
-  public FrontendIntegrationTest(boolean useSSL, boolean addClusterPrefix) {
-    this.useSSL = useSSL;
-    nettyClient = useSSL ? sslNettyClient : plaintextNettyClient;
-    this.addClusterPrefix = addClusterPrefix;
+  private static VerifiableProperties buildFrontendVProps(File trustStoreFile)
+      throws IOException, GeneralSecurityException {
+    return buildFrontendVProps(trustStoreFile, true, PLAINTEXT_SERVER_PORT, SSL_SERVER_PORT);
+  }
+
+  /**
+   * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
+   * @param trustStoreFile the trust store file to add certificates to for SSL testing.
+   * @param enableUndelete enable undelete in frontend when it's true.
+   * @param plaintextServerPort server port number to support plaintext protocol
+   * @param sslServerPort server port number to support ssl protocol
+   * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
+   */
+  private static VerifiableProperties buildFrontendVProps(File trustStoreFile, boolean enableUndelete,
+      int plaintextServerPort, int sslServerPort) throws IOException, GeneralSecurityException {
+    Properties properties = new Properties();
+    properties.put("rest.server.rest.request.service.factory",
+        "com.github.ambry.frontend.FrontendRestRequestServiceFactory");
+    properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
+    properties.put("rest.server.account.service.factory", "com.github.ambry.account.InMemAccountServiceFactory");
+    properties.put("netty.server.port", Integer.toString(plaintextServerPort));
+    properties.put("netty.server.ssl.port", Integer.toString(sslServerPort));
+    properties.put("netty.server.enable.ssl", "true");
+    properties.put(NettyConfig.SSL_FACTORY_KEY, NettySslFactory.class.getName());
+    // to test that backpressure does not impede correct operation.
+    properties.put("netty.server.request.buffer.watermark", "1");
+    // to test that multipart requests over a certain size fail
+    properties.put("netty.multipart.post.max.size.bytes", Long.toString(MAX_MULTIPART_POST_SIZE_BYTES));
+    CommonTestUtils.populateRequiredRouterProps(properties);
+    TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
+    // add key for singleKeyManagementService
+    properties.put("kms.default.container.key", TestUtils.getRandomKey(32));
+    properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
+    properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
+    properties.setProperty("clustermap.host.name", HOST_NAME);
+    properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(enableUndelete));
+    return new VerifiableProperties(properties);
   }
 
   /**
@@ -512,6 +539,9 @@ public class FrontendIntegrationTest {
     updateContainersAndVerify(editedAccount, newContainer);
   }
 
+  // helpers
+  // general
+
   @Test
   public void emptyBlobRangeHandlingTest() throws Exception {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
@@ -536,9 +566,6 @@ public class FrontendIntegrationTest {
     getBlobAndVerify(blobId, range, null, true, headers, !refContainer.isCacheable(), content, refAccount.getName(),
         refContainer.getName());
   }
-
-  // helpers
-  // general
 
   /**
    * Method to easily create a request.
@@ -587,6 +614,8 @@ public class FrontendIntegrationTest {
     return buffer;
   }
 
+  // BeforeClass helpers
+
   /**
    * Discards all the content in {@code contents} and checks none of the chunks have actual content
    * @param contents the content to discard.
@@ -604,53 +633,6 @@ public class FrontendIntegrationTest {
     }
     assertTrue("There should have been an end marker", endMarkerFound);
   }
-
-  // BeforeClass helpers
-
-  /**
-   * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
-   * @param trustStoreFile the trust store file to add certificates to for SSL testing.
-   * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
-   */
-  private static VerifiableProperties buildFrontendVProps(File trustStoreFile)
-      throws IOException, GeneralSecurityException {
-    return buildFrontendVProps(trustStoreFile, true, PLAINTEXT_SERVER_PORT, SSL_SERVER_PORT);
-  }
-
-  /**
-   * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
-   * @param trustStoreFile the trust store file to add certificates to for SSL testing.
-   * @param enableUndelete enable undelete in frontend when it's true.
-   * @param plaintextServerPort server port number to support plaintext protocol
-   * @param sslServerPort server port number to support ssl protocol
-   * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
-   */
-  private static VerifiableProperties buildFrontendVProps(File trustStoreFile, boolean enableUndelete,
-      int plaintextServerPort, int sslServerPort) throws IOException, GeneralSecurityException {
-    Properties properties = new Properties();
-    properties.put("rest.server.rest.request.service.factory",
-        "com.github.ambry.frontend.FrontendRestRequestServiceFactory");
-    properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
-    properties.put("rest.server.account.service.factory", "com.github.ambry.account.InMemAccountServiceFactory");
-    properties.put("netty.server.port", Integer.toString(plaintextServerPort));
-    properties.put("netty.server.ssl.port", Integer.toString(sslServerPort));
-    properties.put("netty.server.enable.ssl", "true");
-    properties.put(NettyConfig.SSL_FACTORY_KEY, NettySslFactory.class.getName());
-    // to test that backpressure does not impede correct operation.
-    properties.put("netty.server.request.buffer.watermark", "1");
-    // to test that multipart requests over a certain size fail
-    properties.put("netty.multipart.post.max.size.bytes", Long.toString(MAX_MULTIPART_POST_SIZE_BYTES));
-    CommonTestUtils.populateRequiredRouterProps(properties);
-    TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
-    // add key for singleKeyManagementService
-    properties.put("kms.default.container.key", TestUtils.getRandomKey(32));
-    properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
-    properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
-    properties.setProperty("clustermap.host.name", HOST_NAME);
-    properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(enableUndelete));
-    return new VerifiableProperties(properties);
-  }
-  // postGetHeadUpdateDeleteTest() and multipartPostGetHeadUpdateDeleteTest() helpers
 
   /**
    * Utility to test blob POST, GET, HEAD and DELETE operations for a specified size
@@ -722,6 +704,7 @@ public class FrontendIntegrationTest {
     headers.add(RestUtils.Headers.LIFE_VERSION, "1");
     undeleteBlobAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
   }
+  // postGetHeadUpdateDeleteTest() and multipartPostGetHeadUpdateDeleteTest() helpers
 
   /**
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
@@ -1320,12 +1303,12 @@ public class FrontendIntegrationTest {
     HttpDataFactory httpDataFactory = new DefaultHttpDataFactory(false);
     HttpPostRequestEncoder encoder = new HttpPostRequestEncoder(httpDataFactory, request, true);
     FileUpload fileUpload = new MemoryFileUpload(RestUtils.MultipartPost.BLOB_PART, RestUtils.MultipartPost.BLOB_PART,
-        "application/octet-stream", "", Charset.forName("UTF-8"), blobContent.remaining());
+        "application/octet-stream", "", StandardCharsets.UTF_8, blobContent.remaining());
     fileUpload.setContent(Unpooled.wrappedBuffer(blobContent));
     encoder.addBodyHttpData(fileUpload);
     fileUpload =
         new MemoryFileUpload(RestUtils.MultipartPost.USER_METADATA_PART, RestUtils.MultipartPost.USER_METADATA_PART,
-            "application/octet-stream", "", Charset.forName("UTF-8"), usermetadata.remaining());
+            "application/octet-stream", "", StandardCharsets.UTF_8, usermetadata.remaining());
     fileUpload.setContent(Unpooled.wrappedBuffer(usermetadata));
     encoder.addBodyHttpData(fileUpload);
     return encoder;
@@ -1355,8 +1338,6 @@ public class FrontendIntegrationTest {
     Assert.assertEquals("Unexpected or missing tracking header for hostname", HOST_NAME,
         response.headers().get(RestUtils.TrackingHeaders.FRONTEND_NAME));
   }
-
-  // stitchedUploadTest() helpers
 
   /**
    * Upload data chunks using chunk upload signed URL.
@@ -1423,6 +1404,8 @@ public class FrontendIntegrationTest {
     return new Pair<>(signedChunkIds, fullContentStream.toByteArray());
   }
 
+  // stitchedUploadTest() helpers
+
   /**
    * Test the stitched upload flow for a specified chunk size and number of chunks.
    * @param account the {@link Account} to upload into.
@@ -1469,8 +1452,6 @@ public class FrontendIntegrationTest {
         container.getName(), ByteBuffer.wrap(fullContentArray), null);
   }
 
-  // accountApiTest() helpers
-
   /**
    * Call the {@code POST /accounts} API to update account metadata and verify that the update succeeded.
    * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
@@ -1489,6 +1470,8 @@ public class FrontendIntegrationTest {
       assertEquals("Update not reflected in AccountService", account, ACCOUNT_SERVICE.getAccountById(account.getId()));
     }
   }
+
+  // accountApiTest() helpers
 
   /**
    * Call the {@code POST /accounts/updateContainers} API to update account metadata and verify that the update succeeded.
@@ -1588,5 +1571,20 @@ public class FrontendIntegrationTest {
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
     return new HashSet<>(
         AccountCollectionSerde.accountsFromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8))));
+  }
+
+  static {
+    try {
+      CLUSTER_MAP = new MockClusterMap();
+      File trustStoreFile = File.createTempFile("truststore", ".jks");
+      trustStoreFile.deleteOnExit();
+      FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps(trustStoreFile);
+      SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+      FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
+      ACCOUNT_SERVICE.clear();
+      ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
   }
 }

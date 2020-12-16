@@ -26,11 +26,14 @@ import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
 import com.github.ambry.utils.Utils;
@@ -71,8 +74,8 @@ import org.slf4j.LoggerFactory;
  * {@link RestResponseHandler}.
  */
 public class RestServer {
-  private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private static final Logger logger = LoggerFactory.getLogger(RestServer.class);
+  private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final RestServerMetrics restServerMetrics;
   private final JmxReporter reporter;
   private final AccountService accountService;
@@ -86,72 +89,6 @@ public class RestServer {
   private final NettyInternalMetrics nettyInternalMetrics;
 
   /**
-   * {@link RestServer} specific metrics tracking.
-   */
-  private class RestServerMetrics {
-    // Errors
-    public final Counter restServerInstantiationError;
-
-    // Others
-    public final Histogram restRequestServiceShutdownTimeInMs;
-    public final Histogram restRequestServiceStartTimeInMs;
-    public final Histogram nioServerShutdownTimeInMs;
-    public final Histogram nioServerStartTimeInMs;
-    public final Histogram jmxReporterShutdownTimeInMs;
-    public final Histogram jmxReporterStartTimeInMs;
-    public final Histogram restRequestHandlerShutdownTimeInMs;
-    public final Histogram restRequestHandlerStartTimeInMs;
-    public final Histogram restResponseHandlerShutdownTimeInMs;
-    public final Histogram restResponseHandlerStartTimeInMs;
-    public final Histogram restServerShutdownTimeInMs;
-    public final Histogram restServerStartTimeInMs;
-    public final Histogram routerCloseTimeInMs;
-    public final Histogram accountServiceCloseTimeInMs;
-
-    /**
-     * Creates an instance of RestServerMetrics using the given {@code metricRegistry}.
-     * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
-     * @param restServerState the {@link RestServerState} object used to track the state of the {@link RestServer}.
-     */
-    public RestServerMetrics(MetricRegistry metricRegistry, final RestServerState restServerState) {
-      // Errors
-      restServerInstantiationError =
-          metricRegistry.counter(MetricRegistry.name(RestServer.class, "InstantiationError"));
-
-      // Others
-      restRequestServiceShutdownTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestServiceShutdownTimeInMs"));
-      restRequestServiceStartTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestServiceStartTimeInMs"));
-      jmxReporterShutdownTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "JmxShutdownTimeInMs"));
-      jmxReporterStartTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "JmxStartTimeInMs"));
-      nioServerShutdownTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "NioServerShutdownTimeInMs"));
-      nioServerStartTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "NioServerStartTimeInMs"));
-      restRequestHandlerShutdownTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestHandlerShutdownTimeInMs"));
-      restRequestHandlerStartTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestHandlerStartTimeInMs"));
-      restResponseHandlerShutdownTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestResponseHandlerShutdownTimeInMs"));
-      restResponseHandlerStartTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestResponseHandlerStartTimeInMs"));
-      restServerShutdownTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerShutdownTimeInMs"));
-      restServerStartTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerStartTimeInMs"));
-      routerCloseTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RouterCloseTimeInMs"));
-      accountServiceCloseTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "AccountServiceCloseTimeInMs"));
-
-      Gauge<Integer> restServerStatus = () -> restServerState.isServiceUp() ? 1 : 0;
-      metricRegistry.register(MetricRegistry.name(RestServer.class, "RestServerState"), restServerStatus);
-    }
-  }
-
-  /**
    * Creates an instance of RestServer.
    * @param verifiableProperties the properties that define the behavior of the RestServer and its components.
    * @param clusterMap the {@link ClusterMap} instance that needs to be used.
@@ -161,7 +98,22 @@ public class RestServer {
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem, SSLFactory sslFactory) throws Exception {
-    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, null, null);
+    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, null);
+  }
+
+  /**
+   * Creates an instance of RestServer.
+   * @param verifiableProperties the properties that define the behavior of the RestServer and its components.
+   * @param clusterMap the {@link ClusterMap} instance that needs to be used.
+   * @param notificationSystem the {@link NotificationSystem} instance that needs to be used.
+   * @param sslFactory the {@link SSLFactory} to be used. This can be {@code null} if no components require SSL support.
+   * @param quotaManagerFactory the {@link QuotaManagerFactory} class to manage quota and throttling.
+   * @throws InstantiationException if there is any error instantiating an instance of RestServer.
+   */
+  public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      NotificationSystem notificationSystem, SSLFactory sslFactory, QuotaManagerFactory quotaManagerFactory)
+      throws Exception {
+    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, null, null, quotaManagerFactory);
   }
 
   /**
@@ -174,11 +126,12 @@ public class RestServer {
    *                             the final handler.
    * @param reporterFactory if non-null, use this function to set up a {@link JmxReporter} with custom settings. If this
    *                        option is null the default settings for the reporter will be used.
+   * @param quotaManagerFactory the {@link QuotaManagerFactory} class to manage quota and throttling.
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem, SSLFactory sslFactory, List<ChannelHandler> addedChannelHandlers,
-      Function<MetricRegistry, JmxReporter> reporterFactory) throws Exception {
+      Function<MetricRegistry, JmxReporter> reporterFactory, QuotaManagerFactory quotaManagerFactory) throws Exception {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of RestServer");
     }
@@ -221,9 +174,12 @@ public class RestServer {
       throw new InstantiationException("RestRequestService is null");
     }
 
+    QuotaManager quotaManager = quotaManagerFactory.getQuotaManager();
+    QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
     RestRequestResponseHandlerFactory restHandlerFactory =
         Utils.getObj(restServerConfig.restServerRequestResponseHandlerFactory,
-            restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, restRequestService);
+            restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, restRequestService, quotaManager,
+            quotaConfig.requestQuotaThrottlingEnabled);
     restRequestHandler = restHandlerFactory.getRestRequestHandler();
     restResponseHandler = restHandlerFactory.getRestResponseHandler();
 
@@ -233,7 +189,8 @@ public class RestServer {
     NioServerFactory nioServerFactory =
         Utils.getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, metricRegistry,
             restRequestHandler, publicAccessLogger, restServerState, sslFactory,
-            restServerConfig.restServerEnableAddedChannelHandlers ? addedChannelHandlers : null);
+            restServerConfig.restServerEnableAddedChannelHandlers ? addedChannelHandlers : null, quotaManager,
+            quotaConfig);
     nioServer = nioServerFactory.getNioServer();
 
     if (accountService == null || router == null || restResponseHandler == null || restRequestHandler == null
@@ -364,5 +321,71 @@ public class RestServer {
    */
   public void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
+  }
+
+  /**
+   * {@link RestServer} specific metrics tracking.
+   */
+  private class RestServerMetrics {
+    // Errors
+    public final Counter restServerInstantiationError;
+
+    // Others
+    public final Histogram restRequestServiceShutdownTimeInMs;
+    public final Histogram restRequestServiceStartTimeInMs;
+    public final Histogram nioServerShutdownTimeInMs;
+    public final Histogram nioServerStartTimeInMs;
+    public final Histogram jmxReporterShutdownTimeInMs;
+    public final Histogram jmxReporterStartTimeInMs;
+    public final Histogram restRequestHandlerShutdownTimeInMs;
+    public final Histogram restRequestHandlerStartTimeInMs;
+    public final Histogram restResponseHandlerShutdownTimeInMs;
+    public final Histogram restResponseHandlerStartTimeInMs;
+    public final Histogram restServerShutdownTimeInMs;
+    public final Histogram restServerStartTimeInMs;
+    public final Histogram routerCloseTimeInMs;
+    public final Histogram accountServiceCloseTimeInMs;
+
+    /**
+     * Creates an instance of RestServerMetrics using the given {@code metricRegistry}.
+     * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
+     * @param restServerState the {@link RestServerState} object used to track the state of the {@link RestServer}.
+     */
+    public RestServerMetrics(MetricRegistry metricRegistry, final RestServerState restServerState) {
+      // Errors
+      restServerInstantiationError =
+          metricRegistry.counter(MetricRegistry.name(RestServer.class, "InstantiationError"));
+
+      // Others
+      restRequestServiceShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestServiceShutdownTimeInMs"));
+      restRequestServiceStartTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestServiceStartTimeInMs"));
+      jmxReporterShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "JmxShutdownTimeInMs"));
+      jmxReporterStartTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "JmxStartTimeInMs"));
+      nioServerShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "NioServerShutdownTimeInMs"));
+      nioServerStartTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "NioServerStartTimeInMs"));
+      restRequestHandlerShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestHandlerShutdownTimeInMs"));
+      restRequestHandlerStartTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestHandlerStartTimeInMs"));
+      restResponseHandlerShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestResponseHandlerShutdownTimeInMs"));
+      restResponseHandlerStartTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestResponseHandlerStartTimeInMs"));
+      restServerShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerShutdownTimeInMs"));
+      restServerStartTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerStartTimeInMs"));
+      routerCloseTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RouterCloseTimeInMs"));
+      accountServiceCloseTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "AccountServiceCloseTimeInMs"));
+
+      Gauge<Integer> restServerStatus = () -> restServerState.isServiceUp() ? 1 : 0;
+      metricRegistry.register(MetricRegistry.name(RestServer.class, "RestServerState"), restServerStatus);
+    }
   }
 }

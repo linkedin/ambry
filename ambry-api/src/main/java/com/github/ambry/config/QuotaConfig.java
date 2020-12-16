@@ -16,41 +16,66 @@ package com.github.ambry.config;
 import com.github.ambry.utils.Utils;
 import java.util.HashSet;
 import java.util.Set;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 
 /**
  * Config for quota of various resources in Ambry.
  */
 public class QuotaConfig {
+  public static final String QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR = "quotaEnforcerSourcePairInfo";
+  public static final String ENFORCER_STR = "enforcer";
+  public static final String SOURCE_STR = "source";
   public static final String QUOTA_CONFIG_PREFIX = "quota.";
-  public static final String QUOTA_ENFORCER_FACTORIES = QUOTA_CONFIG_PREFIX + "enforcer.factories";
-  public static final String STORAGE_QUOTA_SOURCE = QUOTA_CONFIG_PREFIX + "storage.quota.source";
-  public static final String CAPACITY_UNIT_QUOTA_SOURCE = QUOTA_CONFIG_PREFIX + "capacity.unit.quota.source";
-  public static final String HOST_RESOURCES_QUOTA_SOURCE = QUOTA_CONFIG_PREFIX + "host.resources.quota.source";
+  public static final String REQUEST_QUOTA_THROTTLING_ENABLED = "request.quota.throttling.enabled";
+  public static final String HOST_QUOTA_THROTTLING_ENABLED = "host.quota.throttling.enabled";
+  public static final String QUOTA_THROTTLING_MODE = QUOTA_CONFIG_PREFIX + "throttling.mode";
+  public static final String REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON =
+      "request.quota.enforcer.source.pair.info.json";
+  public static final String HOST_QUOTA_ENFORCER_FACTORIES = "host.quota.enforcer.factories";
+  public static final String QUOTA_MANAGER_FACTORY_CLASS = QUOTA_CONFIG_PREFIX + "manger.factory.class";
+  public static final String DEFAULT_QUOTA_MANAGER_FACTORY_CLASS = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public StorageQuotaConfig storageQuotaConfig;
-  /**
-   * {@link Set} of all the quota factory classes to be instantiated.
-   */
-  @Config(QUOTA_ENFORCER_FACTORIES)
-  public Set<String> enabledQuotaEnforcers;
+
+  @Config(REQUEST_QUOTA_THROTTLING_ENABLED)
+  @Default("false")
+  public boolean requestQuotaThrottlingEnabled;
+
+  @Config(HOST_QUOTA_THROTTLING_ENABLED)
+  @Default("false")
+  public boolean hostQuotaThrottlingEnabled;
 
   /**
-   * Class for storage quota source.
+   * Serialized json containing pairs of enforcer classes and corresponding source classes.
+   * This information should be of the following form:
+   * <pre>
+   * {
+   *   "quotaEnforcerSourcePairInfo" : [
+   *     {
+   *       "enforcer":"com.github.ambry.quota.QuotaEnforcer",
+   *       "source": "com.github.ambry.quota.QuotaSource"
+   *     },
+   *     {
+   *       "enforcer":"com.github.ambry.quota.QuotaEnforcer",
+   *       "source": "com.github.ambry.quota.QuotaSource"
+   *     }
+   *   ]
+   * }
+   * </pre>
    */
-  @Config(STORAGE_QUOTA_SOURCE)
-  public String storageQuotaSource;
+  @Config(REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON)
+  public String requestQuotaEnforcerSourcePairInfoJson;
 
   /**
-   * Class for capacity unit quota source.
+   * {@link Set} of host quota enforcers. Specified as comma separated list of enforcer classes.
    */
-  @Config(CAPACITY_UNIT_QUOTA_SOURCE)
-  public String capacityUnitQuotaSource;
+  @Config(HOST_QUOTA_ENFORCER_FACTORIES)
+  public Set<String> hostQuotaEnforcerFactories;
 
-  /**
-   * Class for host resources quota source.
-   */
-  @Config(HOST_RESOURCES_QUOTA_SOURCE)
-  public String hostResourcesQuotaSource;
+  @Config(QUOTA_MANAGER_FACTORY_CLASS)
+  @Default(DEFAULT_QUOTA_MANAGER_FACTORY_CLASS)
+  public String quotaManagerFactoryClass;
 
   /**
    * Constructor for {@link QuotaConfig}.
@@ -58,10 +83,24 @@ public class QuotaConfig {
    */
   public QuotaConfig(VerifiableProperties verifiableProperties) {
     storageQuotaConfig = new StorageQuotaConfig(verifiableProperties);
-    String quotaEnforcers = verifiableProperties.getString(QUOTA_ENFORCER_FACTORIES);
-    enabledQuotaEnforcers = Utils.splitString(quotaEnforcers, ",", HashSet::new);
-    storageQuotaSource = verifiableProperties.getString(STORAGE_QUOTA_SOURCE, "");
-    capacityUnitQuotaSource = verifiableProperties.getString(CAPACITY_UNIT_QUOTA_SOURCE, "");
-    hostResourcesQuotaSource = verifiableProperties.getString(HOST_RESOURCES_QUOTA_SOURCE, "");
+    requestQuotaThrottlingEnabled = verifiableProperties.getBoolean(REQUEST_QUOTA_THROTTLING_ENABLED, false);
+    hostQuotaThrottlingEnabled = verifiableProperties.getBoolean(HOST_QUOTA_THROTTLING_ENABLED, false);
+    requestQuotaEnforcerSourcePairInfoJson =
+        verifiableProperties.getString(REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON,
+            buildDefaultQuotaEnforcerSourceInfoPairJson());
+    // TODO add a default host throttler.
+    hostQuotaEnforcerFactories =
+        Utils.splitString(verifiableProperties.getString(HOST_QUOTA_ENFORCER_FACTORIES), ",", HashSet::new);
+    quotaManagerFactoryClass =
+        verifiableProperties.getString(QUOTA_MANAGER_FACTORY_CLASS, DEFAULT_QUOTA_MANAGER_FACTORY_CLASS);
+  }
+
+  private static String buildDefaultQuotaEnforcerSourceInfoPairJson() {
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put(ENFORCER_STR, "com.github.ambry.quota.capacityunit.AmbryCapacityUnitQuotaEnforcer");
+    jsonObject.put(SOURCE_STR, "com.github.ambry.quota.capacityunit.UnlimitedQuotaSource");
+    JSONArray jsonArray = new JSONArray();
+    jsonArray.put(jsonArray);
+    return jsonObject.put(QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR, jsonArray).toString();
   }
 }

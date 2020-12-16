@@ -37,7 +37,7 @@ public class FrontendNettyFactoryTest {
   // dud properties. server should pick up defaults
   private static final RestRequestHandler REST_REQUEST_HANDLER =
       new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 1,
-          new MockRestRequestService(new VerifiableProperties(new Properties()), new MockRouter()));
+          new MockRestRequestService(new VerifiableProperties(new Properties()), new MockRouter()), null, false);
   private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
   private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();

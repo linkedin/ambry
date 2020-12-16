@@ -16,7 +16,6 @@ package com.github.ambry.quota.storage;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.quota.QuotaMode;
-import com.github.ambry.quota.QuotaOperation;
 
 
 /**

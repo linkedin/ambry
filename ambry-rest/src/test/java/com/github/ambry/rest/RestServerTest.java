@@ -70,9 +70,10 @@ public class RestServerTest {
     ObjectNameFactory spyObjectNameFactory = spy(new DefaultObjectNameFactory());
     Function<MetricRegistry, JmxReporter> reporterFactory =
         reporter -> JmxReporter.forRegistry(reporter).createsObjectNamesWith(spyObjectNameFactory).build();
+    // TODO add a test quota manager factory for rest server
     RestServer server =
         new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, Collections.emptyList(),
-            reporterFactory);
+            reporterFactory, null);
     server.start();
     // check that the custom ObjectNameFactory specified in reporterFactory was used.
     verify(spyObjectNameFactory, atLeastOnce()).createName(anyString(), anyString(), anyString());

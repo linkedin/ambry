@@ -13,11 +13,15 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.quota.storage.QuotaOperation;
+
+
 public interface QuotaSource {
   /**
    * Get the {@link Quota} for specified resource and operation.
    * @param quotaResource {@link QuotaResource} object.
    * @param quotaOperation {@link QuotaOperation} object.
+   * @param quotaMetric {@link QuotaMetric} object.
    */
-  public Quota getQuota(QuotaResource quotaResource, QuotaOperation quotaOperation);
+  Quota getQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric);
 }

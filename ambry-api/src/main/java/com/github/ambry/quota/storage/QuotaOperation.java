@@ -11,16 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.quota.storage;
 
 /**
- * Factory to instantiate {@link QuotaEnforcer} class.
+ * Operations for quota service.
  */
-public interface QuotaEnforcerFactory {
-
-  /**
-   * Build and return {@link QuotaEnforcer} class.
-   * @return QuotaEnforcer object.
-   */
-  public QuotaEnforcer getQuotaEnforcer();
+public enum QuotaOperation {
+  POST, DELETE, TTL_UPDATE, GET
 }

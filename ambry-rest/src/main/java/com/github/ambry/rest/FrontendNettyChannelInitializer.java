@@ -15,8 +15,10 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.commons.SSLFactory;
-import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.PerformanceConfig;
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.quota.QuotaManager;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
@@ -42,6 +44,8 @@ public class FrontendNettyChannelInitializer extends ChannelInitializer<SocketCh
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
   private final SSLFactory sslFactory;
+  private final QuotaManager quotaManager;
+  private final QuotaConfig quotaConfig;
   private final List<ChannelHandler> addedChannelHandlers;
 
   /**
@@ -55,13 +59,15 @@ public class FrontendNettyChannelInitializer extends ChannelInitializer<SocketCh
    * @param restServerState the {@link RestServerState} object to use.
    * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
    *                   or {@code null} if SSL is not enabled in this pipeline.
+   * @param quotaManager {@link QuotaManager} object to do host resource usage based throttling.
+   * @param quotaConfig {@link QuotaConfig} object to get quota configurations.
    * @param addedChannelHandlers a list of {@link ChannelHandler} to add to the {@link io.netty.channel.ChannelInitializer} before
    *                             the final handler.
    */
   public FrontendNettyChannelInitializer(NettyConfig nettyConfig, PerformanceConfig performanceConfig,
       NettyMetrics nettyMetrics, ConnectionStatsHandler connectionStatsHandler, RestRequestHandler requestHandler,
       PublicAccessLogger publicAccessLogger, RestServerState restServerState, SSLFactory sslFactory,
-      List<ChannelHandler> addedChannelHandlers) {
+      QuotaManager quotaManager, QuotaConfig quotaConfig, List<ChannelHandler> addedChannelHandlers) {
     this.nettyConfig = nettyConfig;
     this.performanceConfig = performanceConfig;
     this.nettyMetrics = nettyMetrics;
@@ -71,6 +77,8 @@ public class FrontendNettyChannelInitializer extends ChannelInitializer<SocketCh
     this.restServerState = restServerState;
     this.sslFactory = sslFactory;
     this.addedChannelHandlers = addedChannelHandlers;
+    this.quotaManager = quotaManager;
+    this.quotaConfig = quotaConfig;
   }
 
   @Override
@@ -79,6 +87,9 @@ public class FrontendNettyChannelInitializer extends ChannelInitializer<SocketCh
     // in the pipeline for every connection.
     // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
     ChannelPipeline pipeline = ch.pipeline();
+    // handler to throttle on low host resources
+    pipeline.addLast("hostQuotaEnforcementHandler",
+        new HostQuotaEnforcementHandler(nettyMetrics, quotaManager, quotaConfig));
     // connection stats handler to track connection related metrics
     pipeline.addLast("connectionStatsHandler", connectionStatsHandler);
     // if SSL is enabled, add an SslHandler before the HTTP codec

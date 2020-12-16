@@ -18,7 +18,9 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.HostThrottleConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.QuotaManagerFactory;
 
 
 /**
@@ -32,19 +34,24 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
   private final HostThrottleConfig hostThrottleConfig;
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
+  private final QuotaManagerFactory quotaManagerFactory;
+  private final QuotaConfig quotaConfig;
 
   public AmbrySecurityServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       AccountService accountService, UrlSigningService urlSigningService, IdSigningService idSigningService,
-      AccountAndContainerInjector accountAndContainerInjector) {
+      AccountAndContainerInjector accountAndContainerInjector, QuotaManagerFactory quotaManagerFactory) {
     frontendConfig = new FrontendConfig(verifiableProperties);
     hostThrottleConfig = new HostThrottleConfig(verifiableProperties);
+    quotaConfig = new QuotaConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
+    this.quotaManagerFactory = quotaManagerFactory;
     this.urlSigningService = urlSigningService;
   }
 
   @Override
-  public SecurityService getSecurityService() throws InstantiationException {
+  public SecurityService getSecurityService() {
     return new AmbrySecurityService(frontendConfig, frontendMetrics, urlSigningService,
-        new HostLevelThrottler(hostThrottleConfig));
+        new HostLevelThrottler(hostThrottleConfig), quotaManagerFactory.getQuotaManager(),
+        quotaConfig.requestQuotaThrottlingEnabled);
   }
 }

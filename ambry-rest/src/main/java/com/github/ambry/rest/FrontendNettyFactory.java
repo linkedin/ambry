@@ -17,8 +17,10 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.utils.Utils;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInitializer;
@@ -39,11 +41,10 @@ import org.slf4j.LoggerFactory;
  */
 public class FrontendNettyFactory implements NioServerFactory {
   private static final Logger LOGGER = LoggerFactory.getLogger(FrontendNettyFactory.class);
-
+  final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
   private final NettyConfig nettyConfig;
   private final PerformanceConfig performanceConfig;
   private final NettyMetrics nettyMetrics;
-  final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
 
   /**
    * Creates a new instance of FrontendNettyFactory.
@@ -58,13 +59,15 @@ public class FrontendNettyFactory implements NioServerFactory {
    *                          it will be overridden).
    * @param addedChannelHandlers a list of {@link ChannelHandler} to add to the {@link io.netty.channel.ChannelInitializer} before
    *                             the final handler.
+   * @param quotaManager {@link QuotaManager} object.
+   * @param quotaConfig {@link QuotaConfig} object.
    * @throws IllegalArgumentException if any of the arguments are null.
    * @throws ReflectiveOperationException if a netty-specific {@link SSLFactory} cannot be instantiated via reflection.
    */
   public FrontendNettyFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       final RestRequestHandler requestHandler, final PublicAccessLogger publicAccessLogger,
-      final RestServerState restServerState, SSLFactory defaultSslFactory, List<ChannelHandler> addedChannelHandlers)
-      throws ReflectiveOperationException {
+      final RestServerState restServerState, SSLFactory defaultSslFactory, List<ChannelHandler> addedChannelHandlers,
+      QuotaManager quotaManager, QuotaConfig quotaConfig) throws ReflectiveOperationException {
     if (verifiableProperties == null || metricRegistry == null || requestHandler == null || publicAccessLogger == null
         || restServerState == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of FrontendNettyFactory");
@@ -77,7 +80,8 @@ public class FrontendNettyFactory implements NioServerFactory {
     Map<Integer, ChannelInitializer<SocketChannel>> initializers = new HashMap<>();
     initializers.put(nettyConfig.nettyServerPort,
         new FrontendNettyChannelInitializer(nettyConfig, performanceConfig, nettyMetrics, connectionStatsHandler,
-            requestHandler, publicAccessLogger, restServerState, null, addedChannelHandlers));
+            requestHandler, publicAccessLogger, restServerState, null, quotaManager, quotaConfig,
+            addedChannelHandlers));
     if (nettyConfig.nettyServerEnableSSL) {
       SSLFactory sslFactoryToUse;
       if (nettyConfig.nettyServerSslFactory.isEmpty()) {
@@ -91,7 +95,8 @@ public class FrontendNettyFactory implements NioServerFactory {
       }
       initializers.put(nettyConfig.nettyServerSSLPort,
           new FrontendNettyChannelInitializer(nettyConfig, performanceConfig, nettyMetrics, connectionStatsHandler,
-              requestHandler, publicAccessLogger, restServerState, sslFactoryToUse, addedChannelHandlers));
+              requestHandler, publicAccessLogger, restServerState, sslFactoryToUse, quotaManager, quotaConfig,
+              addedChannelHandlers));
     }
     channelInitializers = Collections.unmodifiableMap(initializers);
   }

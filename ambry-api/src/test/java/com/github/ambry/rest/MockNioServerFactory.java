@@ -14,7 +14,9 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.QuotaManager;
 import io.netty.channel.ChannelHandler;
 import java.util.List;
 
@@ -32,7 +34,7 @@ public class MockNioServerFactory implements NioServerFactory {
 
   public MockNioServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       Object restRequestHandler, Object publicAccessLogger, Object restServerState, Object sslFactory,
-      List<ChannelHandler> addedChannelHandlers) {
+      List<ChannelHandler> addedChannelHandlers, QuotaManager quotaManager, QuotaConfig quotaConfig) {
     isFaulty = verifiableProperties.getBoolean(IS_FAULTY_KEY, false);
   }
 

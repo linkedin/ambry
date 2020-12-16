@@ -14,7 +14,6 @@
 package com.github.ambry.quota.storage;
 
 import com.github.ambry.quota.QuotaMode;
-import com.github.ambry.quota.QuotaOperation;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

@@ -14,14 +14,30 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
+import java.util.List;
 
 
 /**
  * Factory to instantiate {@link AmbryQuotaManager} class.
  */
 public class AmbryQuotaManagerFactory implements QuotaManagerFactory {
+  private final QuotaManager quotaManager;
+
+  /**
+   * @param quotaConfig {@link QuotaConfig} object.
+   * @param addedRequestQuotaEnforcers {@link List} of {@link RequestQuotaEnforcer}s to inject to {@link QuotaManager}. These will be
+   *                                        those {@link RequestQuotaEnforcer} classes that cannot be created by config.
+   * @param addedHostQuotaEnforcers {@link List} of {@link HostQuotaEnforcer}s to inject to {@link QuotaManager}. These will be
+   *                                        those {@link HostQuotaEnforcer} classes that cannot be created by config.
+   * @throws ReflectiveOperationException
+   */
+  public AmbryQuotaManagerFactory(QuotaConfig quotaConfig, List<RequestQuotaEnforcer> addedRequestQuotaEnforcers,
+      List<HostQuotaEnforcer> addedHostQuotaEnforcers) throws ReflectiveOperationException {
+    quotaManager = new AmbryQuotaManager(quotaConfig, addedHostQuotaEnforcers, addedRequestQuotaEnforcers);
+  }
+
   @Override
-  public QuotaManager getQuotaManager(QuotaConfig quotaConfig) throws ReflectiveOperationException {
-    return new AmbryQuotaManager(quotaConfig);
+  public QuotaManager getQuotaManager() {
+    return quotaManager;
   }
 }

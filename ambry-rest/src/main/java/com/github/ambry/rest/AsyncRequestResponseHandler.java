@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.commons.Callback;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
@@ -47,12 +48,12 @@ import org.slf4j.LoggerFactory;
  * These are the scaling units of the server and can be scaled up and down independently of any other component.
  */
 class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
+  private static final Logger logger = LoggerFactory.getLogger(AsyncRequestResponseHandler.class);
   private final RequestResponseHandlerMetrics metrics;
-
+  private final QuotaManager quotaManager;
+  private final boolean isRequestQuotaEnabled;
   private final List<AsyncRequestWorker> asyncRequestWorkers = new ArrayList<>();
   private final AtomicInteger currIndex = new AtomicInteger(0);
-  private static final Logger logger = LoggerFactory.getLogger(AsyncRequestResponseHandler.class);
-
   private AsyncResponseHandler asyncResponseHandler = null;
   private RestRequestService restRequestService = null;
   private int requestWorkersCount = 0;
@@ -63,11 +64,13 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
    * @param metrics the {@link RequestResponseHandlerMetrics} instance to use to track metrics.
    * @param workerCount the required number of request handling units.
    * @param restRequestService the {@link RestRequestService} instance to be used to process requests.
+   * @param quotaManager {@link QuotaManager} object.
+   * @param isRequestQuotaEnabled flag indicating whether request quota enforcement is enabled.
    * @throws IllegalArgumentException if {@code workerCount} < 0 or if {@code workerCount} > 0 but
    * {@code restRequestService} is null.
    */
   protected AsyncRequestResponseHandler(RequestResponseHandlerMetrics metrics, int workerCount,
-      RestRequestService restRequestService) {
+      RestRequestService restRequestService, QuotaManager quotaManager, boolean isRequestQuotaEnabled) {
     this.metrics = metrics;
     metrics.trackAsyncRequestResponseHandler(this);
     if (workerCount < 0) {
@@ -78,6 +81,8 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
     requestWorkersCount = workerCount;
     this.restRequestService = restRequestService;
     this.restRequestService.setupResponseHandler(this);
+    this.quotaManager = quotaManager;
+    this.isRequestQuotaEnabled = isRequestQuotaEnabled;
     logger.trace("Instantiated AsyncRequestResponseHandler");
   }
 
@@ -157,6 +162,11 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   @Override
   public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws RestServiceException {
+    if (isRequestQuotaEnabled && quotaManager.shouldThrottleOnRequest(restRequest, new ArrayList<>())) {
+      // TODO use enforcement recommendation to create more specific error message.
+      // TODO make sure that container and account both are populated in request here
+      throw new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
+    }
     if (isRunning() && requestWorkersCount > 0) {
       getWorker().submitRequest(restRequest, restResponseChannel);
     } else {
@@ -264,13 +274,13 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
  * Thread that handles the queuing and processing of requests.
  */
 class AsyncRequestWorker implements Runnable {
+  private static final Logger logger = LoggerFactory.getLogger(AsyncRequestWorker.class);
   private final RequestResponseHandlerMetrics metrics;
   private final RestRequestService restRequestService;
   private final LinkedBlockingQueue<AsyncRequestInfo> requests = new LinkedBlockingQueue<AsyncRequestInfo>();
   private final AtomicInteger queuedRequestCount = new AtomicInteger(0);
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final AtomicBoolean running = new AtomicBoolean(true);
-  private static final Logger logger = LoggerFactory.getLogger(AsyncRequestWorker.class);
 
   /**
    * Creates a worker that can process requests.
@@ -528,10 +538,10 @@ class AsyncRequestWorker implements Runnable {
  * Handles sending responses, handling callbacks and doing cleanup.
  */
 class AsyncResponseHandler implements Closeable {
+  private static final Logger logger = LoggerFactory.getLogger(AsyncResponseHandler.class);
   private final RequestResponseHandlerMetrics metrics;
   private final ConcurrentHashMap<RestRequest, ResponseWriteCallback> responses = new ConcurrentHashMap<>();
   private final AtomicInteger inFlightResponsesCount = new AtomicInteger(0);
-  private static final Logger logger = LoggerFactory.getLogger(AsyncResponseHandler.class);
 
   /**
    * Creates a AsyncResponseHandler that can handle responses.

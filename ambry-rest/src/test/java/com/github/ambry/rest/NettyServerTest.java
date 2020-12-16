@@ -107,12 +107,13 @@ public class NettyServerTest {
     final PerformanceConfig performanceConfig = new PerformanceConfig(verifiableProperties);
 
     Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = new HashMap<>();
+    // TODO create a dummy quota manager for test.
     channelInitializers.put(nettyConfig.nettyServerPort,
         new FrontendNettyChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
-            REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, null, null));
+            REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, null, null, null, null));
     channelInitializers.put(nettyConfig.nettyServerSSLPort,
         new FrontendNettyChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
-            REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, SSL_FACTORY, null));
+            REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, SSL_FACTORY, null, null, null));
     return new NettyServer(nettyConfig, NETTY_METRICS, channelInitializers);
   }
 

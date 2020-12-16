@@ -11,12 +11,9 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.quota.storage;
 
-import com.github.ambry.quota.storage.AmbryStorageQuotaEnforcer;
-import com.github.ambry.quota.storage.StorageQuotaEnforcer;
-import com.github.ambry.quota.storage.StorageQuotaSource;
-import com.github.ambry.quota.storage.StorageUsageRefresher;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.utils.TestUtils;
 import java.util.Collections;
 import java.util.HashMap;

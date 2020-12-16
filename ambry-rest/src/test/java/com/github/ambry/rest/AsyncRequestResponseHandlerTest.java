@@ -16,10 +16,10 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteBufferRSC;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
@@ -71,7 +71,8 @@ public class AsyncRequestResponseHandlerTest {
     router = new InMemoryRouter(verifiableProperties, new MockClusterMap());
     restRequestService = new MockRestRequestService(verifiableProperties, router);
     asyncRequestResponseHandler =
-        new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 5, restRequestService);
+        new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 5, restRequestService,
+            null, false);
     restRequestService.setupResponseHandler(asyncRequestResponseHandler);
     restRequestService.start();
     asyncRequestResponseHandler.start();
@@ -86,6 +87,18 @@ public class AsyncRequestResponseHandlerTest {
     asyncRequestResponseHandler.shutdown();
     restRequestService.shutdown();
     router.close();
+  }
+
+  /**
+   * Gets a new instance of {@link AsyncRequestResponseHandler}.
+   * @param requestWorkers the number of request workers.
+   * @return a new instance of {@link AsyncRequestResponseHandler}.
+   * @throws IOException
+   */
+  private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(int requestWorkers) throws IOException {
+    RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
+    RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
+    return new AsyncRequestResponseHandler(metrics, requestWorkers, restRequestService, null, false);
   }
 
   /**
@@ -172,7 +185,7 @@ public class AsyncRequestResponseHandlerTest {
     try {
       RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
       metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
-      new AsyncRequestResponseHandler(metrics, 1, null);
+      new AsyncRequestResponseHandler(metrics, 1, null, null, false);
       fail("Setting RestRequestService to null should have thrown exception");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
@@ -396,6 +409,9 @@ public class AsyncRequestResponseHandlerTest {
     }
   }
 
+  // helpers
+  // general
+
   /**
    * Tests various functions when multiple requests are in queue.
    * @throws Exception
@@ -419,9 +435,6 @@ public class AsyncRequestResponseHandlerTest {
       restRequestService.releaseAllOperations();
     }
   }
-
-  // helpers
-  // general
 
   /**
    * Creates a {@link MockRestRequest} with the given parameters.
@@ -508,6 +521,8 @@ public class AsyncRequestResponseHandlerTest {
     }
   }
 
+  // BeforeClass helpers
+
   /**
    * Tests {@link AsyncRequestResponseHandler#handleResponse(RestRequest, RestResponseChannel, ReadableStreamChannel, Exception)} with good input.
    * @throws Exception
@@ -562,20 +577,6 @@ public class AsyncRequestResponseHandlerTest {
     } else {
       throw restResponseChannel.getException();
     }
-  }
-
-  // BeforeClass helpers
-
-  /**
-   * Gets a new instance of {@link AsyncRequestResponseHandler}.
-   * @param requestWorkers the number of request workers.
-   * @return a new instance of {@link AsyncRequestResponseHandler}.
-   * @throws IOException
-   */
-  private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(int requestWorkers) throws IOException {
-    RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
-    RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
-    return new AsyncRequestResponseHandler(metrics, requestWorkers, restRequestService);
   }
 
   // useWithoutSettingWorkerCountTest() and zeroScalingUnitsTest() helpers

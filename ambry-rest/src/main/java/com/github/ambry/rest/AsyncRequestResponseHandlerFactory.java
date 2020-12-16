@@ -18,6 +18,7 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.quota.QuotaManager;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,25 +33,27 @@ import org.slf4j.LoggerFactory;
  */
 public class AsyncRequestResponseHandlerFactory implements RestRequestResponseHandlerFactory {
 
-  private final AsyncRequestResponseHandler handler;
   private static final Logger logger = LoggerFactory.getLogger(AsyncRequestResponseHandlerFactory.class);
+  private final AsyncRequestResponseHandler handler;
 
   /**
    * @param handlerCount the number of request scaling units required.
    * @param metricRegistry the {@link MetricRegistry} handler that should be used for metrics.
    * @param restRequestService the {@link RestRequestService} to use for handling requests.
+   * @param quotaManager {@link QuotaManager} object.
+   * @param isRequestQuotaEnabled flag indicating whether quota enforcement is enabled.
    * @throws IllegalArgumentException if {@code handlerCount} <= 0 or if {@code metricRegistry} or
    * {@code restRequestService} is null.
    */
   public AsyncRequestResponseHandlerFactory(Integer handlerCount, MetricRegistry metricRegistry,
-      RestRequestService restRequestService) {
+      RestRequestService restRequestService, QuotaManager quotaManager, boolean isRequestQuotaEnabled) {
     if (metricRegistry == null || restRequestService == null) {
       throw new IllegalArgumentException("One or more arguments received is null");
     } else if (handlerCount <= 0) {
       throw new IllegalArgumentException("Request handler scaling unit count has to be > 0. Is " + handlerCount);
     } else {
       handler = new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(metricRegistry), handlerCount,
-          restRequestService);
+          restRequestService, quotaManager, isRequestQuotaEnabled);
     }
     logger.trace("Instantiated AsyncRequestResponseHandlerFactory as RestRequestHandler");
   }
@@ -76,9 +79,6 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestResponseHa
  * {@link AsyncRequestResponseHandler} specific metrics tracking.
  */
 class RequestResponseHandlerMetrics {
-  final MetricRegistry metricRegistry;
-  private final AtomicInteger asyncRequestWorkerIndex = new AtomicInteger(0);
-
   // Rates
   // AsyncRequestWorker
   public final Meter requestArrivalRate;
@@ -87,7 +87,6 @@ class RequestResponseHandlerMetrics {
   // AsyncResponseHandler
   public final Meter responseArrivalRate;
   public final Meter responseCompletionRate;
-
   // Latencies
   // AsyncRequestWorker
   public final Histogram requestPreProcessingTimeInMs;
@@ -97,7 +96,6 @@ class RequestResponseHandlerMetrics {
   public final Histogram responsePreProcessingTimeInMs;
   // AsyncRequestResponseHandler
   public final Histogram requestWorkerSelectionTimeInMs;
-
   // Errors
   // AsyncRequestWorker
   public final Counter requestProcessingError;
@@ -110,7 +108,6 @@ class RequestResponseHandlerMetrics {
   // AsyncRequestResponseHandler
   public final Counter requestResponseHandlerShutdownError;
   public final Counter requestResponseHandlerUnavailableError;
-
   // Others
   // AsyncResponseHandler
   public final Counter responseExceptionCount;
@@ -122,6 +119,8 @@ class RequestResponseHandlerMetrics {
   public final Histogram requestResponseHandlerStartTimeInMs;
   public final Counter residualRequestQueueSize;
   public final Counter residualResponseSetSize;
+  final MetricRegistry metricRegistry;
+  private final AtomicInteger asyncRequestWorkerIndex = new AtomicInteger(0);
 
   /**
    * Creates an instance of RequestResponseHandlerMetrics using the given {@code metricRegistry}.

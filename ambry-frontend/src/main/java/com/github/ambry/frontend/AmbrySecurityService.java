@@ -21,6 +21,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
@@ -33,6 +34,7 @@ import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.GregorianCalendar;
@@ -57,14 +59,19 @@ class AmbrySecurityService implements SecurityService {
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
   private final HostLevelThrottler hostLevelThrottler;
+  private final QuotaManager quotaManager;
+  private final boolean quotaThrottlingEnabled;
   private boolean isOpen;
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-      UrlSigningService urlSigningService, HostLevelThrottler hostLevelThrottler) {
+      UrlSigningService urlSigningService, HostLevelThrottler hostLevelThrottler, QuotaManager quotaManager,
+      boolean quotaThrottlingEnabled) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.urlSigningService = urlSigningService;
     this.hostLevelThrottler = hostLevelThrottler;
+    this.quotaManager = quotaManager;
+    this.quotaThrottlingEnabled = quotaThrottlingEnabled;
     isOpen = true;
   }
 
@@ -234,6 +241,11 @@ class AmbrySecurityService implements SecurityService {
       } catch (RestServiceException e) {
         exception = e;
       }
+    }
+    if (quotaThrottlingEnabled) {
+      // TODO use enforcement recommendation to create more specific error message and set specific response headers.
+      // TODO make sure that container and account both are populated in request here
+      quotaManager.shouldThrottleOnRequestAndCharge(restRequest, blobInfo, new ArrayList<>());
     }
     frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);

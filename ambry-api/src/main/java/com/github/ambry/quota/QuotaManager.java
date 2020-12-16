@@ -13,6 +13,8 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.rest.RestRequest;
 import java.util.List;
 
 
@@ -24,43 +26,39 @@ import java.util.List;
 public interface QuotaManager {
 
   /**
-   * Method to intialize the {@link QuotaManager}.
+   * Method to initialize the {@link QuotaManager}.
    */
   void init();
 
   /**
-   * Computes the overall boolean recommendation to throttle a request or not for all the types of quotas supported
-   * based on the specified requestCost, and populates the specified enforcementRecommendations list with the
-   * recommendations. This method does not charge the requestCost against the quota.
-   * @param requestCost {@link RequestCost} of the request.
-   * @param quotaResource {@link QuotaResource} object.
-   * @param quotaOperation {@link QuotaOperation} object.
+   * Computes the overall boolean recommendation to throttle a request or not, for all the types of quotas that depend on
+   * the load on host resources, and populates the specified enforcementRecommendations list with the
+   * recommendations. This method should be used for throttling on quota that doesn't depend upon request characteristics.
    * @param enforcementRecommendations {@link List} of {@link EnforcementRecommendation}s to be populated.
    * @return true if the request should be throttled. false otherwise.
    */
-  boolean shouldThrottle(RequestCost requestCost, QuotaResource quotaResource, QuotaOperation quotaOperation,
-      List<EnforcementRecommendation> enforcementRecommendations);
+  boolean shouldThrottleOnHost(List<EnforcementRecommendation> enforcementRecommendations);
 
   /**
-   * Computes the overall boolean recommendation to throttle a request or not for all the types of quotas supported
-   * based on the specified requestCost, and populates the specified enforcementRecommendations list with the
-   * recommendations. This method charges the requestCost against the quota.
-   * @param requestCost {@link RequestCost} of the request.
-   * @param quotaResource {@link QuotaResource} object.
-   * @param quotaOperation {@link QuotaOperation} object.
+   * Computes the overall boolean recommendation to throttle a request or not for all the types of request quotas supported.
+   * This method does not charge the requestCost against the quota.
+   * @param restRequest {@link RestRequest} object.
    * @param enforcementRecommendations {@link List} of {@link EnforcementRecommendation}s to be populated.
    * @return true if the request should be throttled. false otherwise.
    */
-  boolean shouldThrottleAndCharge(RequestCost requestCost, QuotaResource quotaResource, QuotaOperation quotaOperation,
-      List<EnforcementRecommendation> enforcementRecommendations);
+  boolean shouldThrottleOnRequest(RestRequest restRequest, List<EnforcementRecommendation> enforcementRecommendations);
 
   /**
-   * Method to add {@link QuotaEnforcer} implementation to a {@link QuotaManager}.
-   * This method allows to add special enforcers which might be difficult to create within the QuotaManager in a generic
-   * way. This method should only be used sparingly for special cases.
+   * Computes the overall boolean recommendation to throttle a request or not for all the types of request quotas supported.
+   * This method charges the requestCost against the quota.
+   * @param restRequest {@link RestRequest} object.
+   * @param blobInfo {@link BlobInfo} object representing the blob characteristics using which request cost can be
+   *                                 determined by enforcers.
+   * @param enforcementRecommendations {@link List} of {@link EnforcementRecommendation}s to be populated.
+   * @return true if the request should be throttled. false otherwise.
    */
-  default void addQuotaEnforcer(QuotaEnforcer quotaEnforcer) {
-  }
+  boolean shouldThrottleOnRequestAndCharge(RestRequest restRequest, BlobInfo blobInfo,
+      List<EnforcementRecommendation> enforcementRecommendations);
 
   /**
    * Method to shutdown the {@link QuotaManager} and cleanup if required.
