@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import java.util.Objects;
 import java.util.stream.Stream;
 import org.apache.helix.api.listeners.IdealStateChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
@@ -51,6 +52,6 @@ interface HelixClusterChangeHandler
     return getRoutingTableSnapshot().getInstancesForResource(resourceName, partition.toPathString(), state.name())
         .stream()
         .map(instanceConfig -> getDataNode(instanceConfig.getInstanceName()))
-        .map(dataNode -> getReplicaId(dataNode, partition.toPathString()));
+        .map(dataNode -> getReplicaId(dataNode, partition.toPathString())).filter(Objects::nonNull);
   }
 }

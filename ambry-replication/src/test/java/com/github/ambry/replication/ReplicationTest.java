@@ -517,9 +517,10 @@ public class ReplicationTest extends ReplicationTestHelper {
     List<RemoteReplicaInfo> remoteReplicaInfos =
         replicationManager.partitionToPartitionInfo.get(existingPartition).getRemoteReplicaInfos();
     ReplicaId peerReplica1 = remoteReplicaInfos.get(0).getReplicaId();
-    // we purposely update lag to verify that local replica is present in ReplicaSyncUpManager.
-    assertTrue("Updating lag between local replica and peer replica should succeed",
-        mockHelixParticipant.getReplicaSyncUpManager().updateLagBetweenReplicas(localReplica, peerReplica1, 10L));
+
+    assertFalse("Sync up should not complete because not enough replicas have caught up",
+        mockHelixParticipant.getReplicaSyncUpManager()
+            .updateReplicaLagAndCheckSyncStatus(localReplica, peerReplica1, 10L, ReplicaState.INACTIVE));
     // pick another remote replica to update the replication lag
     ReplicaId peerReplica2 = remoteReplicaInfos.get(1).getReplicaId();
     replicationManager.updateTotalBytesReadByRemoteReplica(existingPartition,
@@ -536,7 +537,8 @@ public class ReplicationTest extends ReplicationTestHelper {
     // we purposely update lag against local replica to verify local replica is no longer in ReplicaSyncUpManager because
     // deactivation is complete and local replica should be removed from "replicaToLagInfos" map.
     assertFalse("Sync up should complete (2 replicas have caught up), hence updated should be false",
-        mockHelixParticipant.getReplicaSyncUpManager().updateLagBetweenReplicas(localReplica, peerReplica2, 0L));
+        mockHelixParticipant.getReplicaSyncUpManager()
+            .updateReplicaLagAndCheckSyncStatus(localReplica, peerReplica2, 0L, ReplicaState.INACTIVE));
     storageManager.shutdown();
   }
 

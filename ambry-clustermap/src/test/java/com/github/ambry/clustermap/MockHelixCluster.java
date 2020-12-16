@@ -78,11 +78,13 @@ public class MockHelixCluster {
   /**
    * Upgrade based on the partitionLayout.
    * @param partitionLayoutPath the new partition layout.
+   * @param adminOperation the admin operation associated with this upgrade.
    * @throws Exception
    */
-  void upgradeWithNewPartitionLayout(String partitionLayoutPath) throws Exception {
+  void upgradeWithNewPartitionLayout(String partitionLayoutPath,
+      HelixBootstrapUpgradeUtil.HelixAdminOperation adminOperation) throws Exception {
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
-        "all", 3, false, false, helixAdminFactory, false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster);
+        "all", 3, false, false, helixAdminFactory, false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, adminOperation);
     triggerInstanceConfigChangeNotification();
   }
 

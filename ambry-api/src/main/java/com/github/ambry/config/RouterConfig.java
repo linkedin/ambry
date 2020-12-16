@@ -58,9 +58,8 @@ public class RouterConfig {
   public static final String ROUTER_GET_REQUEST_PARALLELISM = "router.get.request.parallelism";
   public static final String ROUTER_GET_SUCCESS_TARGET = "router.get.success.target";
   public static final String ROUTER_GET_CROSS_DC_ENABLED = "router.get.cross.dc.enabled";
-  public static final String ROUTER_GET_INCLUDE_NON_ORIGINATING_DC_REPLICAS =
-      "router.get.include.non.originating.dc.replicas";
-  public static final String ROUTER_GET_REPLICAS_REQUIRED = "router.get.replicas.required";
+  public static final String ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS =
+      "router.operation.tracker.include.down.replicas";
   public static final String ROUTER_GET_OPERATION_TRACKER_TYPE = "router.get.operation.tracker.type";
   public static final String ROUTER_LATENCY_TOLERANCE_QUANTILE = "router.latency.tolerance.quantile";
   public static final String ROUTER_BLOBID_CURRENT_VERSION = "router.blobid.current.version";
@@ -251,20 +250,12 @@ public class RouterConfig {
   public final boolean routerGetCrossDcEnabled;
 
   /**
-   * Indicates whether get operations are allowed to make requests to nodes in non-originating remote data centers.
+   * Whether to include down(offline) replicas in replicas pool within operation tracker.
    */
-  @Config(ROUTER_GET_INCLUDE_NON_ORIGINATING_DC_REPLICAS)
+  @Config(ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS)
   @Default("true")
-  public final boolean routerGetIncludeNonOriginatingDcReplicas;
+  public final boolean routerOperationTrackerIncludeDownReplicas;
 
-  /**
-   * Number of replicas required for GET OperationTracker when routerGetIncludeNonOriginatingDcReplicas is False.
-   * Please note routerGetReplicasRequired is 6 because total number of local and originating replicas is always <= 6.
-   * This may no longer be true with partition classes and flexible replication.
-   */
-  @Config(ROUTER_GET_REPLICAS_REQUIRED)
-  @Default("6")
-  public final int routerGetReplicasRequired;
   /**
    * The OperationTracker to use for GET operations.
    */
@@ -546,10 +537,8 @@ public class RouterConfig {
         verifiableProperties.getIntInRange(ROUTER_GET_REQUEST_PARALLELISM, 2, 1, Integer.MAX_VALUE);
     routerGetSuccessTarget = verifiableProperties.getIntInRange(ROUTER_GET_SUCCESS_TARGET, 1, 1, Integer.MAX_VALUE);
     routerGetCrossDcEnabled = verifiableProperties.getBoolean(ROUTER_GET_CROSS_DC_ENABLED, true);
-    routerGetIncludeNonOriginatingDcReplicas =
-        verifiableProperties.getBoolean(ROUTER_GET_INCLUDE_NON_ORIGINATING_DC_REPLICAS, true);
-    routerGetReplicasRequired =
-        verifiableProperties.getIntInRange(ROUTER_GET_REPLICAS_REQUIRED, 6, 1, Integer.MAX_VALUE);
+    routerOperationTrackerIncludeDownReplicas =
+        verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS, true);
     routerGetOperationTrackerType =
         verifiableProperties.getString(ROUTER_GET_OPERATION_TRACKER_TYPE, "SimpleOperationTracker");
     routerLatencyToleranceQuantile =

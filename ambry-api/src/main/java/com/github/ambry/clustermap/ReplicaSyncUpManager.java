@@ -37,14 +37,18 @@ public interface ReplicaSyncUpManager {
   void waitBootstrapCompleted(String partitionName) throws InterruptedException;
 
   /**
-   * Update replica lag (in byte) between two replicas (local and peer replica)
+   * Update replica lag (in byte) between two replicas (local and peer replica) and check sync-up status.
    * @param localReplica the replica that resides on current node
    * @param peerReplica the peer replica of local one.
    * @param lagInBytes replica lag bytes
-   * @return whether the lag is updated or not. If {@code false}, it means the local replica is not tracked in this service.
-   *         Either the replica has caught up and removed from service or it is an existing replica that doesn't need catchup.
+   * @param targetState the target state the replica will transit to after sync-up completes.
+   * @return whether sync-up is completed by this update. If {@code false}, it means either the local replica is not
+   *         tracked by this manager or the sync-up has not finished yet. For the former case, there are also two cases:
+   *         (1) the replica has caught up and removed from manager already
+   *         (2) it is an existing replica that doesn't need catchup.
    */
-  boolean updateLagBetweenReplicas(ReplicaId localReplica, ReplicaId peerReplica, long lagInBytes);
+  boolean updateReplicaLagAndCheckSyncStatus(ReplicaId localReplica, ReplicaId peerReplica, long lagInBytes,
+      ReplicaState targetState);
 
   /**
    * Whether given replica has synced up with its peers.
