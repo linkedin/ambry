@@ -94,7 +94,7 @@ public class ServerHardDeleteTest {
     props.setProperty("port", Integer.toString(mockClusterMap.getDataNodes().get(0).getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
     props.setProperty("store.enable.hard.delete", "true");
-    props.setProperty("store.deleted.message.retention.hours", "7");
+    props.setProperty("store.deleted.message.retention.hours", "168");
     props.setProperty("server.handle.undelete.request.enabled", "true");
     props.setProperty("clustermap.cluster.name", "test");
     props.setProperty("clustermap.datacenter.name", "DC1");
