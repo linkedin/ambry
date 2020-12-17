@@ -23,9 +23,14 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.quota.QuotaManagerFactory;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.router.InMemoryRouterFactory;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Properties;
@@ -42,6 +47,17 @@ import static org.mockito.Mockito.*;
 public class RestServerTest {
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();
   private static final AccountService ACCOUNT_SERVICE = new InMemAccountService(false, true);
+  private static final QuotaManagerFactory QUOTA_MANAGER_FACTORY;
+
+  static {
+    try {
+      QuotaConfig quotaConfig = QuotaTestUtils.createDummyQuotaConfig();
+      QUOTA_MANAGER_FACTORY = Utils.getObj(quotaConfig.quotaManagerFactoryClass, quotaConfig, Collections.emptyList(),
+          Collections.emptyList());
+    } catch (ReflectiveOperationException rEx) {
+      throw new IllegalArgumentException("Unable to initialize quota manager factory", rEx);
+    }
+  }
 
   /**
    * Tests {@link RestServer#start()} and {@link RestServer#shutdown()}.
@@ -55,7 +71,8 @@ public class RestServerTest {
     NotificationSystem notificationSystem = new LoggingNotificationSystem();
 
     RestServer server =
-        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE);
+        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE,
+            QUOTA_MANAGER_FACTORY);
     server.start();
     server.shutdown();
     server.awaitShutdown();
@@ -77,7 +94,7 @@ public class RestServerTest {
     // TODO add a test quota manager factory for rest server
     RestServer server =
         new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE,
-            Collections.emptyList(), reporterFactory, null);
+            Collections.emptyList(), reporterFactory, QUOTA_MANAGER_FACTORY);
     server.start();
     // check that the custom ObjectNameFactory specified in reporterFactory was used.
     verify(spyObjectNameFactory, atLeastOnce()).createName(anyString(), anyString(), anyString());
@@ -98,7 +115,8 @@ public class RestServerTest {
     NotificationSystem notificationSystem = new LoggingNotificationSystem();
 
     RestServer server =
-        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE);
+        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE,
+            QUOTA_MANAGER_FACTORY);
     server.shutdown();
     server.awaitShutdown();
   }
@@ -129,7 +147,8 @@ public class RestServerTest {
     ClusterMap clusterMap = new MockClusterMap();
     NotificationSystem notificationSystem = new LoggingNotificationSystem();
     RestServer server =
-        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE);
+        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE,
+            QUOTA_MANAGER_FACTORY);
     try {
       server.start();
       fail("start() should not be successful. MockNioServer::start() would have thrown InstantiationException");
@@ -144,9 +163,6 @@ public class RestServerTest {
       }
     }
   }
-
-  // helpers
-  // general
 
   /**
    * Gets {@link VerifiableProperties} with some mandatory values set.
@@ -163,6 +179,8 @@ public class RestServerTest {
    * @param properties The {@link Properties} to set these values in.
    */
   private void setMandatoryValues(Properties properties) {
+    properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
+    properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "");
     properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
     properties.setProperty("rest.server.response.handler.factory",
         MockRestRequestResponseHandlerFactory.class.getCanonicalName());
@@ -175,7 +193,8 @@ public class RestServerTest {
     properties.setProperty("router.datacenter.name", "dc1");
   }
 
-  // serverCreationWithBadInputTest() helpers
+  // helpers
+  // general
 
   /**
    * Tests {@link RestServer} instantiation attempts with bad input.
@@ -191,7 +210,7 @@ public class RestServerTest {
 
     try {
       // no props.
-      new RestServer(null, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE);
+      new RestServer(null, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE, QUOTA_MANAGER_FACTORY);
       fail("Properties missing, yet no exception was thrown");
     } catch (IllegalArgumentException e) {
       // nothing to do. expected.
@@ -199,7 +218,8 @@ public class RestServerTest {
 
     try {
       // no ClusterMap.
-      new RestServer(verifiableProperties, null, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE);
+      new RestServer(verifiableProperties, null, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE,
+          QUOTA_MANAGER_FACTORY);
       fail("ClusterMap missing, yet no exception was thrown");
     } catch (IllegalArgumentException e) {
       // nothing to do. expected.
@@ -207,7 +227,7 @@ public class RestServerTest {
 
     try {
       // no NotificationSystem.
-      new RestServer(verifiableProperties, clusterMap, null, SSL_FACTORY, ACCOUNT_SERVICE);
+      new RestServer(verifiableProperties, clusterMap, null, SSL_FACTORY, ACCOUNT_SERVICE, QUOTA_MANAGER_FACTORY);
       fail("NotificationSystem missing, yet no exception was thrown");
     } catch (IllegalArgumentException e) {
       // nothing to do. expected.
@@ -223,8 +243,9 @@ public class RestServerTest {
     doBadFactoryClassTest("rest.server.rest.request.service.factory");
     doBadFactoryClassTest("rest.server.router.factory");
     doBadFactoryClassTest("rest.server.request.response.handler.factory");
-    doBadFactoryClassTest("rest.server.account.service.factory");
   }
+
+  // serverCreationWithBadInputTest() helpers
 
   /**
    * Tests for bad factory class name for {@code configKey} in {@link RestServer}.
@@ -240,7 +261,7 @@ public class RestServerTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(), SSL_FACTORY,
-          ACCOUNT_SERVICE);
+          ACCOUNT_SERVICE, QUOTA_MANAGER_FACTORY);
       fail("Properties file contained non existent " + configKey + ", yet no exception was thrown");
     } catch (ClassNotFoundException e) {
       // nothing to do. expected.
@@ -251,7 +272,7 @@ public class RestServerTest {
     verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(), SSL_FACTORY,
-          ACCOUNT_SERVICE);
+          ACCOUNT_SERVICE, QUOTA_MANAGER_FACTORY);
       fail("Properties file contained invalid " + configKey + " class, yet no exception was thrown");
     } catch (NoSuchMethodException e) {
       // nothing to do. expected.
@@ -263,7 +284,7 @@ public class RestServerTest {
     try {
       RestServer restServer =
           new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(), SSL_FACTORY,
-              ACCOUNT_SERVICE);
+              ACCOUNT_SERVICE, QUOTA_MANAGER_FACTORY);
       restServer.start();
       fail("Properties file contained faulty " + configKey + " class, yet no exception was thrown");
     } catch (InstantiationException e) {

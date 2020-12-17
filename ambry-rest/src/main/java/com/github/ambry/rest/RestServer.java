@@ -93,20 +93,8 @@ public class RestServer {
    * @param clusterMap the {@link ClusterMap} instance that needs to be used.
    * @param notificationSystem the {@link NotificationSystem} instance that needs to be used.
    * @param sslFactory the {@link SSLFactory} to be used. This can be {@code null} if no components require SSL support.
-   * @throws InstantiationException if there is any error instantiating an instance of RestServer.
-   */
-  public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, SSLFactory sslFactory, AccountService accountService) throws Exception {
-    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, accountService, null);
-  }
-
-  /**
-   * Creates an instance of RestServer.
-   * @param verifiableProperties the properties that define the behavior of the RestServer and its components.
-   * @param clusterMap the {@link ClusterMap} instance that needs to be used.
-   * @param notificationSystem the {@link NotificationSystem} instance that needs to be used.
-   * @param sslFactory the {@link SSLFactory} to be used. This can be {@code null} if no components require SSL support.
    * @param quotaManagerFactory the {@link QuotaManagerFactory} class to manage quota and throttling.
+   * @param accountService {@link AccountService} object.
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,

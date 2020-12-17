@@ -32,10 +32,15 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.SSLConfig;
+import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.AmbryQuotaManagerFactory;
+import com.github.ambry.quota.QuotaManagerFactory;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
 import com.github.ambry.rest.RestMethod;
@@ -75,7 +80,6 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -120,6 +124,8 @@ public class FrontendIntegrationTest {
   private static final FrontendConfig FRONTEND_CONFIG;
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
+  private static final QuotaConfig QUOTA_CONFIG = QuotaTestUtils.createDummyQuotaConfig();
+  private static final QuotaManagerFactory QUOTA_MANAGER_FACTORY;
   private static final String DATA_CENTER_NAME = "Datacenter-Name";
   private static final String HOST_NAME = "localhost";
   private static final String CLUSTER_NAME = "Cluster-name";
@@ -130,6 +136,24 @@ public class FrontendIntegrationTest {
   private final NettyClient nettyClient;
   private final boolean addClusterPrefix;
   private final boolean useSSL;
+
+  static {
+    try {
+      QUOTA_MANAGER_FACTORY =
+          new AmbryQuotaManagerFactory(QUOTA_CONFIG, Collections.emptyList(), Collections.emptyList());
+      CLUSTER_MAP = new MockClusterMap();
+      File trustStoreFile = File.createTempFile("truststore", ".jks");
+      trustStoreFile.deleteOnExit();
+      FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps(trustStoreFile);
+      SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+      FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
+      ACCOUNT_SERVICE.clear();
+      ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
   /**
    * @param useSSL {@code true} if SSL should be tested.
    */
@@ -162,9 +186,8 @@ public class FrontendIntegrationTest {
    */
   @BeforeClass
   public static void setup() throws Exception {
-    // TODO add a test quota manager factory for RestServer
     ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem(),
-        SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)), null);
+        SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)), ACCOUNT_SERVICE, QUOTA_MANAGER_FACTORY);
     ambryRestServer.start();
     plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT, null);
     sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT,
@@ -208,6 +231,8 @@ public class FrontendIntegrationTest {
   private static VerifiableProperties buildFrontendVProps(File trustStoreFile, boolean enableUndelete,
       int plaintextServerPort, int sslServerPort) throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
+    properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
+    properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "");
     properties.put("rest.server.rest.request.service.factory",
         "com.github.ambry.frontend.FrontendRestRequestServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
@@ -244,7 +269,7 @@ public class FrontendIntegrationTest {
         buildFrontendVProps(trustStoreFile, false, PLAINTEXT_SERVER_PORT + 100, SSL_SERVER_PORT + 100);
 
     RestServer ambryRestServer = new RestServer(vprop, CLUSTER_MAP, new LoggingNotificationSystem(),
-        SSLFactory.getNewInstance(new SSLConfig(vprop)), ACCOUNT_SERVICE);
+        SSLFactory.getNewInstance(new SSLConfig(vprop)), ACCOUNT_SERVICE, QUOTA_MANAGER_FACTORY);
     ambryRestServer.start();
     NettyClient plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT + 100, null);
     NettyClient sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT + 100,
@@ -539,9 +564,6 @@ public class FrontendIntegrationTest {
     updateContainersAndVerify(editedAccount, newContainer);
   }
 
-  // helpers
-  // general
-
   @Test
   public void emptyBlobRangeHandlingTest() throws Exception {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
@@ -566,6 +588,9 @@ public class FrontendIntegrationTest {
     getBlobAndVerify(blobId, range, null, true, headers, !refContainer.isCacheable(), content, refAccount.getName(),
         refContainer.getName());
   }
+
+  // helpers
+  // general
 
   /**
    * Method to easily create a request.
@@ -614,8 +639,6 @@ public class FrontendIntegrationTest {
     return buffer;
   }
 
-  // BeforeClass helpers
-
   /**
    * Discards all the content in {@code contents} and checks none of the chunks have actual content
    * @param contents the content to discard.
@@ -633,6 +656,8 @@ public class FrontendIntegrationTest {
     }
     assertTrue("There should have been an end marker", endMarkerFound);
   }
+
+  // BeforeClass helpers
 
   /**
    * Utility to test blob POST, GET, HEAD and DELETE operations for a specified size
@@ -704,7 +729,6 @@ public class FrontendIntegrationTest {
     headers.add(RestUtils.Headers.LIFE_VERSION, "1");
     undeleteBlobAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
   }
-  // postGetHeadUpdateDeleteTest() and multipartPostGetHeadUpdateDeleteTest() helpers
 
   /**
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
@@ -745,6 +769,7 @@ public class FrontendIntegrationTest {
       throw new IllegalArgumentException("Some required arguments are null. Cannot set ambry headers");
     }
   }
+  // postGetHeadUpdateDeleteTest() and multipartPostGetHeadUpdateDeleteTest() helpers
 
   /**
    * Posts a blob with the given {@code headers} and {@code content}.
@@ -1404,8 +1429,6 @@ public class FrontendIntegrationTest {
     return new Pair<>(signedChunkIds, fullContentStream.toByteArray());
   }
 
-  // stitchedUploadTest() helpers
-
   /**
    * Test the stitched upload flow for a specified chunk size and number of chunks.
    * @param account the {@link Account} to upload into.
@@ -1452,6 +1475,8 @@ public class FrontendIntegrationTest {
         container.getName(), ByteBuffer.wrap(fullContentArray), null);
   }
 
+  // stitchedUploadTest() helpers
+
   /**
    * Call the {@code POST /accounts} API to update account metadata and verify that the update succeeded.
    * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
@@ -1470,8 +1495,6 @@ public class FrontendIntegrationTest {
       assertEquals("Update not reflected in AccountService", account, ACCOUNT_SERVICE.getAccountById(account.getId()));
     }
   }
-
-  // accountApiTest() helpers
 
   /**
    * Call the {@code POST /accounts/updateContainers} API to update account metadata and verify that the update succeeded.
@@ -1504,6 +1527,8 @@ public class FrontendIntegrationTest {
           ACCOUNT_SERVICE.getContainer(accountName, container.getName()));
     }
   }
+
+  // accountApiTest() helpers
 
   /**
    * Call the {@code GET /accounts} and {@code Get /accounts/containers} API and verify the response for all accounts
@@ -1571,20 +1596,5 @@ public class FrontendIntegrationTest {
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
     return new HashSet<>(
         AccountCollectionSerde.accountsFromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8))));
-  }
-
-  static {
-    try {
-      CLUSTER_MAP = new MockClusterMap();
-      File trustStoreFile = File.createTempFile("truststore", ".jks");
-      trustStoreFile.deleteOnExit();
-      FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps(trustStoreFile);
-      SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
-      FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
-      ACCOUNT_SERVICE.clear();
-      ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
   }
 }

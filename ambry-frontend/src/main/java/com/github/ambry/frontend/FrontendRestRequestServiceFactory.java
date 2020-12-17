@@ -17,16 +17,19 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
-import com.github.ambry.config.StorageQuotaConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
+import com.github.ambry.quota.AmbryQuotaManagerFactory;
+import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.quota.storage.StorageQuotaServiceFactory;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestRequestServiceFactory;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
+import java.util.Collections;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +42,7 @@ import org.slf4j.LoggerFactory;
  * instance on {@link #getRestRequestService()}.
  */
 public class FrontendRestRequestServiceFactory implements RestRequestServiceFactory {
+  private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestServiceFactory.class);
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final VerifiableProperties verifiableProperties;
@@ -46,7 +50,6 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
   private final ClusterMapConfig clusterMapConfig;
   private final Router router;
   private final AccountService accountService;
-  private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestServiceFactory.class);
 
   /**
    * Creates a new instance of FrontendRestRequestServiceFactory.
@@ -89,9 +92,12 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
               clusterMap.getMetricRegistry()).getUrlSigningService();
       AccountAndContainerInjector accountAndContainerInjector =
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
+      QuotaManagerFactory quotaManagerFactory =
+          new AmbryQuotaManagerFactory(new QuotaConfig(verifiableProperties), Collections.emptyList(),
+              Collections.emptyList());
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
-              urlSigningService, idSigningService, accountAndContainerInjector);
+              urlSigningService, idSigningService, accountAndContainerInjector, quotaManagerFactory);
       StorageQuotaService storageQuotaService = null;
       if (frontendConfig.enableStorageQuotaService) {
         storageQuotaService =

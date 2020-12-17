@@ -19,11 +19,16 @@ import com.github.ambry.commons.NettySslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.AmbryQuotaManagerFactory;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaTestUtils;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import java.io.File;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 import org.junit.Test;
@@ -35,14 +40,23 @@ import static org.junit.Assert.*;
  * Tests functionality of {@link FrontendNettyFactory}.
  */
 public class FrontendNettyFactoryTest {
-  // dud properties. server should pick up defaults
-  private static final RestRequestHandler REST_REQUEST_HANDLER =
-      new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 1,
-          new MockRestRequestService(new VerifiableProperties(new Properties()), new MockRouter()), null,
-          QuotaTestUtils.createDummyQuotaConfig());
   private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
   private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();
+  // dud properties. server should pick up defaults
+  private static final QuotaConfig QUOTA_CONFIG = QuotaTestUtils.createDummyQuotaConfig();
+  private static final QuotaManager QUOTA_MANAGER;
+  private static final RestRequestHandler REST_REQUEST_HANDLER;
+
+  static {
+    try {
+      QUOTA_MANAGER = new AmbryQuotaManagerFactory(QUOTA_CONFIG, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
+      REST_REQUEST_HANDLER = new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 1,
+          new MockRestRequestService(new VerifiableProperties(new Properties()), new MockRouter()), QUOTA_MANAGER, QUOTA_CONFIG);
+    } catch (ReflectiveOperationException rEx) {
+      throw new IllegalArgumentException("Unable to create quota manager class", rEx);
+    }
+  }
 
   /**
    * Checks to see that getting the default {@link NioServer} (currently {@link NettyServer}) works.
@@ -50,6 +64,8 @@ public class FrontendNettyFactoryTest {
   @Test
   public void getNettyServerTest() throws Exception {
     Properties properties = new Properties();
+    properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
+    properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "");
     doGetNettyServerTest(properties, SSL_FACTORY);
     doGetNettyServerTest(properties, null);
     // test with ssl
@@ -73,7 +89,7 @@ public class FrontendNettyFactoryTest {
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     FrontendNettyFactory nettyServerFactory =
         new FrontendNettyFactory(verifiableProperties, new MetricRegistry(), REST_REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER,
-            REST_SERVER_STATE, defaultSslFactory, null, null);
+            REST_SERVER_STATE, defaultSslFactory, null, QUOTA_MANAGER);
     NioServer nioServer = nettyServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),

@@ -13,6 +13,10 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.quota.QuotaManager;
+
+
 /**
  * Implementation of {@link RestRequestResponseHandlerFactory} that can be used in tests.
  * Sets up all the supporting cast required for {@link MockRestRequestResponseHandler}. Maintains a single instance of
@@ -23,7 +27,7 @@ public class MockRestRequestResponseHandlerFactory implements RestRequestRespons
   private MockRestRequestResponseHandler handler;
 
   public MockRestRequestResponseHandlerFactory(Object handlerCount, Object metricRegistry,
-      RestRequestService restRequestService) {
+      RestRequestService restRequestService, QuotaManager quotaManager, QuotaConfig quotaConfig) {
     handler = new MockRestRequestResponseHandler(restRequestService);
   }
 

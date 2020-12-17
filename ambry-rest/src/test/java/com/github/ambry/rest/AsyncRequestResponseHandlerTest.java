@@ -19,6 +19,9 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.AmbryQuotaManagerFactory;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.FutureResult;
@@ -32,6 +35,7 @@ import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -60,6 +64,8 @@ public class AsyncRequestResponseHandlerTest {
   private static Router router;
   private static MockRestRequestService restRequestService;
   private static AsyncRequestResponseHandler asyncRequestResponseHandler;
+  private static QuotaManager quotaManager;
+  private static QuotaConfig quotaConfig;
 
   /**
    * Sets up all the tests by providing a started {@link AsyncRequestResponseHandler} for their use.
@@ -67,13 +73,16 @@ public class AsyncRequestResponseHandlerTest {
    * @throws IOException
    */
   @BeforeClass
-  public static void startRequestResponseHandler() throws InstantiationException, IOException {
+  public static void startRequestResponseHandler() throws ReflectiveOperationException, IOException {
     verifiableProperties = new VerifiableProperties(new Properties());
     router = new InMemoryRouter(verifiableProperties, new MockClusterMap());
     restRequestService = new MockRestRequestService(verifiableProperties, router);
+    quotaConfig = QuotaTestUtils.createDummyQuotaConfig();
+    quotaManager =
+        new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
     asyncRequestResponseHandler =
         new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 5, restRequestService,
-            null, new QuotaConfig(verifiableProperties));
+            quotaManager, quotaConfig);
     restRequestService.setupResponseHandler(asyncRequestResponseHandler);
     restRequestService.start();
     asyncRequestResponseHandler.start();
@@ -99,8 +108,8 @@ public class AsyncRequestResponseHandlerTest {
   private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(int requestWorkers) throws IOException {
     RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
     RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
-    return new AsyncRequestResponseHandler(metrics, requestWorkers, restRequestService, null,
-        new QuotaConfig(verifiableProperties));
+    return new AsyncRequestResponseHandler(metrics, requestWorkers, restRequestService, quotaManager,
+        quotaConfig);
   }
 
   /**
