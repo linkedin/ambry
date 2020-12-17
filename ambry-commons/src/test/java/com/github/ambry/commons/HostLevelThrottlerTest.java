@@ -50,7 +50,8 @@ public class HostLevelThrottlerTest {
         "{\"PUT\": \"20\",\"GET\": \"20\",\"POST\": \"20\",\"HEAD\": \"20\",\"OPTIONS\": \"20\",\"DELETE\": \"20\"}");
     HostThrottleConfig hostThrottleConfig = new HostThrottleConfig(new VerifiableProperties(props));
     MockClock clock = new MockClock();
-    HostLevelThrottler quotaManager = new HostLevelThrottler(createQuotaMock(hostThrottleConfig, clock), new HashMap<>(), null);
+    HostLevelThrottler quotaManager =
+        new HostLevelThrottler(createQuotaMock(hostThrottleConfig, clock), new HashMap<>(), null);
     // Issue new requests. Since MockClock tick doesn't change, rate is 0.
     for (int i = 0; i < 100; i++) {
       for (RestMethod restMethod : RestMethod.values()) {
@@ -82,8 +83,8 @@ public class HostLevelThrottlerTest {
   @Test
   public void hardwareUsageTest() throws Exception {
     String hardwareThresholdsString =
-        new JSONObject().put("MEMORY", new JSONObject().put("threshold", 30).put("boundType", "UpperBound").toString())
-            .put("CPU", new JSONObject().put("threshold", 30).put("boundType", "UpperBound").toString())
+        new JSONObject().put("MEMORY", new JSONObject().put("threshold", 30).put("boundType", "UpperBound"))
+            .put("CPU", new JSONObject().put("threshold", 30).put("boundType", "UpperBound"))
             .toString();
 
     List<int[]> usages = new ArrayList<>();

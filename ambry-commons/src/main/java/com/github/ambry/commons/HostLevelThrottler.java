@@ -90,7 +90,7 @@ public class HostLevelThrottler {
     // Future work: if multiple throttling rules under "OR" condition needed, a list of thresholds/hardwareThresholdMap can be used.
     for (HardwareResource hardwareResource : HardwareResource.values()) {
       if (thresholds.has(hardwareResource.name())) {
-        String jsonString = thresholds.getString(hardwareResource.name());
+        String jsonString = thresholds.getJSONObject(hardwareResource.name()).toString();
         ObjectMapper objectMapper = new ObjectMapper();
         try {
           Criteria criteria = objectMapper.readValue(jsonString, Criteria.class);
