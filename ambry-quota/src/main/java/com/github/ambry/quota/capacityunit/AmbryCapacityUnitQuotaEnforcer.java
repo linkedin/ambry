@@ -1,6 +1,7 @@
 package com.github.ambry.quota.capacityunit;
 
 import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.quota.AmbryEnforcementRecommendation;
 import com.github.ambry.quota.EnforcementRecommendation;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.RequestQuotaEnforcer;
@@ -13,17 +14,8 @@ public class AmbryCapacityUnitQuotaEnforcer implements RequestQuotaEnforcer {
 
   public AmbryCapacityUnitQuotaEnforcer(QuotaSource quotaSource) {
     this.quotaSource = quotaSource;
-    allowRecommendation = new EnforcementRecommendation() {
-      @Override
-      public boolean shouldThrottle() {
-        return false;
-      }
-
-      @Override
-      public float quotaUsagePercentage() {
-        return 0;
-      }
-    };
+    allowRecommendation =
+        new AmbryEnforcementRecommendation(false, 0, AmbryCapacityUnitQuotaEnforcer.class.getSimpleName(), 200);
   }
 
   @Override

@@ -29,4 +29,14 @@ public interface EnforcementRecommendation {
    * @return percentage value between 0 and 100.
    */
   float quotaUsagePercentage();
+
+  /**
+   * @return name of the enforcer that created this recommendation.
+   */
+  String getQuotaEnforcerName();
+
+  /**
+   * @return http status recommended by enforcer.
+   */
+  int getRecommendedHttpStatus();
 }

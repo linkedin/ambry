@@ -13,4 +13,14 @@ public class RejectEnforcementRecommendation implements EnforcementRecommendatio
   public float quotaUsagePercentage() {
     return 100;
   }
+
+  @Override
+  public String getQuotaEnforcerName() {
+    return RejectQuotaEnforcer.class.getSimpleName();
+  }
+
+  @Override
+  public int getRecommendedHttpStatus() {
+    return 429;
+  }
 }
