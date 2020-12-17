@@ -20,8 +20,11 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.AmbryQuotaManagerFactory;
+import com.github.ambry.quota.DummyQuotaSourceFactory;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.quota.RejectQuotaEnforcerFactory;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.FutureResult;
@@ -36,6 +39,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -108,8 +112,7 @@ public class AsyncRequestResponseHandlerTest {
   private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(int requestWorkers) throws IOException {
     RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
     RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
-    return new AsyncRequestResponseHandler(metrics, requestWorkers, restRequestService, quotaManager,
-        quotaConfig);
+    return new AsyncRequestResponseHandler(metrics, requestWorkers, restRequestService, quotaManager, quotaConfig);
   }
 
   /**
@@ -172,6 +175,58 @@ public class AsyncRequestResponseHandlerTest {
     } catch (RestServiceException e) {
       assertEquals("The RestServiceErrorCode does not match", RestServiceErrorCode.ServiceUnavailable,
           e.getErrorCode());
+    }
+  }
+
+  @Test
+  public void testThrottlingInTrackingMode() throws Exception {
+    Map<String, String> enforcerSourceFactoryMap = new HashMap<>();
+    enforcerSourceFactoryMap.put(RejectQuotaEnforcerFactory.class.getName(),
+        DummyQuotaSourceFactory.class.getTypeName());
+    QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(enforcerSourceFactoryMap, true, QuotaMode.TRACKING);
+    QuotaManager quotaManager =
+        new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
+    AsyncRequestResponseHandler asyncRequestResponseHandler =
+        new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 5, restRequestService,
+            quotaManager, quotaConfig);
+    RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
+    RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
+    AsyncRequestResponseHandler handler =
+        new AsyncRequestResponseHandler(metrics, 1, restRequestService, quotaManager, quotaConfig);
+    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    try {
+      // this should throw server unavailable and not too many requests.s
+      handler.handleRequest(restRequest, new MockRestResponseChannel());
+      fail("Should have thrown RestServiceException because throttler rejected request");
+    } catch (RestServiceException e) {
+      assertEquals("The RestServiceErrorCode does not match", RestServiceErrorCode.ServiceUnavailable,
+          e.getErrorCode());
+    }
+  }
+
+  @Test
+  public void testThrottling() throws Exception {
+    Map<String, String> enforcerSourceFactoryMap = new HashMap<>();
+    enforcerSourceFactoryMap.put(RejectQuotaEnforcerFactory.class.getName(),
+        DummyQuotaSourceFactory.class.getTypeName());
+
+    // test throttling when quota mode is THROTTLING
+    QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(enforcerSourceFactoryMap, true, QuotaMode.THROTTLING);
+    QuotaManager quotaManager =
+        new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
+    AsyncRequestResponseHandler asyncRequestResponseHandler =
+        new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 5, restRequestService,
+            quotaManager, quotaConfig);
+    RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
+    RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
+    AsyncRequestResponseHandler handler =
+        new AsyncRequestResponseHandler(metrics, 1, restRequestService, quotaManager, quotaConfig);
+    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    try {
+      handler.handleRequest(restRequest, new MockRestResponseChannel());
+      fail("Should have thrown RestServiceException because throttler rejected request");
+    } catch (RestServiceException e) {
+      assertEquals("The RestServiceErrorCode does not match", RestServiceErrorCode.TooManyRequests, e.getErrorCode());
     }
   }
 
