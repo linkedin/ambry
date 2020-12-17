@@ -26,9 +26,13 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.AmbryQuotaManager;
 import com.github.ambry.quota.AmbryQuotaManagerFactory;
+import com.github.ambry.quota.DummyQuotaSourceFactory;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.quota.RejectQuotaEnforcerFactory;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
@@ -389,6 +393,58 @@ public class AmbrySecurityServiceTest {
     for (RestMethod restMethod : methods) {
       testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), blobInfo,
           RestServiceErrorCode.ServiceUnavailable);
+    }
+  }
+
+  @Test
+  public void testThrottling() throws Exception {
+    SecurityService securityService = null;
+    // test throttling when quota mode is THROTTLING
+    try {
+      Map<String, String> enforcerSourceFactoryMap = new HashMap<>();
+      enforcerSourceFactoryMap.put(RejectQuotaEnforcerFactory.class.getName(), DummyQuotaSourceFactory.class.getTypeName());
+
+      QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(enforcerSourceFactoryMap, true, QuotaMode.THROTTLING);
+      QuotaManager quotaManager = mock(AmbryQuotaManager.class);
+      new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
+
+      securityService =
+          new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
+              URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager, quotaConfig);
+
+      MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null);
+      when(quotaManager.shouldThrottleOnRequestAndCharge(eq(restRequest), eq(DEFAULT_INFO), anyList())).thenReturn(true);
+      securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO);
+      verify(quotaManager, times(1)).shouldThrottleOnRequestAndCharge(eq(restRequest), eq(DEFAULT_INFO), anyList());
+    } finally {
+      if(securityService != null) {
+        securityService.close();
+      }
+    }
+
+    // test throttling when quota mode is TRACKING
+    try {
+      Map<String, String> enforcerSourceFactoryMap = new HashMap<>();
+      enforcerSourceFactoryMap.put(RejectQuotaEnforcerFactory.class.getName(), DummyQuotaSourceFactory.class.getTypeName());
+
+      QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(enforcerSourceFactoryMap, true, QuotaMode.TRACKING);
+      QuotaManager quotaManager = mock(AmbryQuotaManager.class);
+      new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
+
+      securityService =
+          new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
+              URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager, quotaConfig);
+
+      MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null);
+      when(quotaManager.shouldThrottleOnRequestAndCharge(eq(restRequest), eq(DEFAULT_INFO), anyList())).thenReturn(true);
+      securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO);
+      verify(quotaManager, times(0)).shouldThrottleOnRequestAndCharge(eq(restRequest), eq(DEFAULT_INFO), anyList());
+    } finally {
+      if(securityService != null) {
+        securityService.close();
+      }
     }
   }
 
