@@ -16,6 +16,7 @@ package com.github.ambry.quota;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 import org.json.JSONArray;
@@ -38,11 +39,12 @@ public class QuotaTestUtils {
     return new QuotaConfig(new VerifiableProperties(properties));
   }
 
-  public static QuotaConfig createQuotaConfig(Map<String, String> map, boolean isQuotaThrottlingEnabled, QuotaMode quotaMode) {
+  public static QuotaConfig createQuotaConfig(Map<String, String> map, boolean isQuotaThrottlingEnabled,
+      QuotaMode quotaMode) {
     Properties properties = new Properties();
     properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
     properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "");
-    properties.setProperty(QuotaConfig.REQUEST_QUOTA_THROTTLING_ENABLED, ""+isQuotaThrottlingEnabled);
+    properties.setProperty(QuotaConfig.REQUEST_QUOTA_THROTTLING_ENABLED, "" + isQuotaThrottlingEnabled);
     properties.setProperty(QuotaConfig.QUOTA_THROTTLING_MODE, quotaMode.name());
     JSONArray jsonArray = new JSONArray();
     for (String enforcerFactoryClass : map.keySet()) {
@@ -53,6 +55,27 @@ public class QuotaTestUtils {
     }
     properties.setProperty(QuotaConfig.REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON,
         new JSONObject().put(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR, jsonArray).toString());
+    return new QuotaConfig(new VerifiableProperties(properties));
+  }
+
+  public static QuotaConfig createQuotaConfig(Collection<String> hostEnforcerFactoryClass,
+      boolean isRequestThrottlingEnabled, QuotaMode quotaMode, boolean isHostThrottlingEnabled) {
+    Properties properties = new Properties();
+    properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
+    properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "");
+    properties.setProperty(QuotaConfig.REQUEST_QUOTA_THROTTLING_ENABLED, "" + isRequestThrottlingEnabled);
+    properties.setProperty(QuotaConfig.HOST_QUOTA_THROTTLING_ENABLED, "" + isHostThrottlingEnabled);
+    properties.setProperty(QuotaConfig.QUOTA_THROTTLING_MODE, quotaMode.name());
+    properties.setProperty(QuotaConfig.REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON, "");
+    String hostEnforcerFactoryClassConfig = "";
+    for (String factoryClass : hostEnforcerFactoryClass) {
+      if (hostEnforcerFactoryClassConfig.isEmpty()) {
+        hostEnforcerFactoryClassConfig = factoryClass;
+      } else {
+        hostEnforcerFactoryClassConfig += "," + factoryClass;
+      }
+    }
+    properties.setProperty(QuotaConfig.HOST_QUOTA_ENFORCER_FACTORIES, hostEnforcerFactoryClassConfig);
     return new QuotaConfig(new VerifiableProperties(properties));
   }
 }

@@ -17,10 +17,10 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 
 
-public class RejectQuotaEnforcer implements RequestQuotaEnforcer {
+public class RejectRequestQuotaEnforcer implements RequestQuotaEnforcer {
   private final QuotaSource quotaSource;
 
-  public RejectQuotaEnforcer(QuotaSource quotaSource) {
+  public RejectRequestQuotaEnforcer(QuotaSource quotaSource) {
     this.quotaSource = quotaSource;
   }
 
@@ -30,12 +30,12 @@ public class RejectQuotaEnforcer implements RequestQuotaEnforcer {
 
   @Override
   public EnforcementRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo) {
-    return new RejectEnforcementRecommendation();
+    return new RejectEnforcementRecommendation(RejectRequestQuotaEnforcer.class.getSimpleName());
   }
 
   @Override
   public EnforcementRecommendation recommend(RestRequest restRequest) {
-    return new RejectEnforcementRecommendation();
+    return new RejectEnforcementRecommendation(RejectRequestQuotaEnforcer.class.getSimpleName());
   }
 
   @Override

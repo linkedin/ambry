@@ -13,31 +13,18 @@
  */
 package com.github.ambry.quota;
 
-public class RejectEnforcementRecommendation implements EnforcementRecommendation {
-  private static final int REJECT_HTTP_STATUS_CODE = 429;
-  private final String enforcerName;
+public class ServeHostQuotaEnforcer implements HostQuotaEnforcer {
 
-  public RejectEnforcementRecommendation(String enforcerName) {
-    this.enforcerName = enforcerName;
+  @Override
+  public void init() {
   }
 
   @Override
-  public boolean shouldThrottle() {
-    return true;
+  public EnforcementRecommendation recommend() {
+    return new ServeEnforcementRecommendation(ServeHostQuotaEnforcer.class.getSimpleName());
   }
 
   @Override
-  public float quotaUsagePercentage() {
-    return 101;
-  }
-
-  @Override
-  public String getQuotaEnforcerName() {
-    return enforcerName;
-  }
-
-  @Override
-  public int getRecommendedHttpStatus() {
-    return REJECT_HTTP_STATUS_CODE;
+  public void shutdown() {
   }
 }

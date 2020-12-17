@@ -61,6 +61,7 @@ public class HostQuotaEnforcementHandler extends ChannelInboundHandlerAdapter {
             Unpooled.wrappedBuffer(TOO_MANY_REQUESTS));
         HttpUtil.setKeepAlive(response, false);
         HttpUtil.setContentLength(response, TOO_MANY_REQUESTS.length);
+        ctx.write(response);
       } else {
         // TODO send feedback to user in terms of response headers.
         // TODO log metrics internally

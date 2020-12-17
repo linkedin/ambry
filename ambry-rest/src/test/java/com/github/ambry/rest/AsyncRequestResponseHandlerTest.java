@@ -24,7 +24,7 @@ import com.github.ambry.quota.DummyQuotaSourceFactory;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
-import com.github.ambry.quota.RejectQuotaEnforcerFactory;
+import com.github.ambry.quota.RejectRequestQuotaEnforcerFactory;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.FutureResult;
@@ -184,7 +184,7 @@ public class AsyncRequestResponseHandlerTest {
     RestRequestService restRequestService = null;
     try {
       Map<String, String> enforcerSourceFactoryMap = new HashMap<>();
-      enforcerSourceFactoryMap.put(RejectQuotaEnforcerFactory.class.getName(),
+      enforcerSourceFactoryMap.put(RejectRequestQuotaEnforcerFactory.class.getName(),
           DummyQuotaSourceFactory.class.getTypeName());
       QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(enforcerSourceFactoryMap, true, QuotaMode.TRACKING);
       QuotaManager quotaManager =
@@ -221,7 +221,7 @@ public class AsyncRequestResponseHandlerTest {
     RestRequestService restRequestService = null;
     try {
       Map<String, String> enforcerSourceFactoryMap = new HashMap<>();
-      enforcerSourceFactoryMap.put(RejectQuotaEnforcerFactory.class.getName(),
+      enforcerSourceFactoryMap.put(RejectRequestQuotaEnforcerFactory.class.getName(),
           DummyQuotaSourceFactory.class.getTypeName());
 
       // test throttling when quota mode is THROTTLING

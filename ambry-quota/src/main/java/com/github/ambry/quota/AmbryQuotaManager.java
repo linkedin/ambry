@@ -18,6 +18,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -126,6 +127,9 @@ public class AmbryQuotaManager implements QuotaManager {
   }
 
   private Map<String, String> parseQuotaEnforcerAndSourceInfo(String quotaEnforcerSourceJson) {
+    if (quotaEnforcerSourceJson.isEmpty()) {
+      return Collections.emptyMap();
+    }
     Map<String, String> quotaEnforcerSourceMap = new HashMap<>();
     JSONObject root = new JSONObject(quotaEnforcerSourceJson);
     JSONArray all = root.getJSONArray(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR);

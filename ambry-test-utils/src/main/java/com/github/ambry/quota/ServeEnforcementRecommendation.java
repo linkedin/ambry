@@ -13,11 +13,11 @@
  */
 package com.github.ambry.quota;
 
-public class RejectEnforcementRecommendation implements EnforcementRecommendation {
-  private static final int REJECT_HTTP_STATUS_CODE = 429;
+public class ServeEnforcementRecommendation implements EnforcementRecommendation {
+  private static final int ACCEPT_HTTP_STATUS_CODE = 200;
   private final String enforcerName;
 
-  public RejectEnforcementRecommendation(String enforcerName) {
+  public ServeEnforcementRecommendation(String enforcerName) {
     this.enforcerName = enforcerName;
   }
 
@@ -38,6 +38,6 @@ public class RejectEnforcementRecommendation implements EnforcementRecommendatio
 
   @Override
   public int getRecommendedHttpStatus() {
-    return REJECT_HTTP_STATUS_CODE;
+    return ACCEPT_HTTP_STATUS_CODE;
   }
 }

@@ -31,11 +31,6 @@ public interface HostQuotaEnforcer {
   EnforcementRecommendation recommend();
 
   /**
-   * @return QuotaSource object of the enforcer.
-   */
-  QuotaSource getQuotaSource();
-
-  /**
    * Shutdown the {@link HostQuotaEnforcer} and perform any cleanup.
    */
   void shutdown();

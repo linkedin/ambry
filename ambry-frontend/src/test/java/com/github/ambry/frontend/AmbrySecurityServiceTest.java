@@ -32,7 +32,7 @@ import com.github.ambry.quota.DummyQuotaSourceFactory;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
-import com.github.ambry.quota.RejectQuotaEnforcerFactory;
+import com.github.ambry.quota.RejectRequestQuotaEnforcerFactory;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
@@ -402,7 +402,7 @@ public class AmbrySecurityServiceTest {
     // test throttling when quota mode is THROTTLING
     try {
       Map<String, String> enforcerSourceFactoryMap = new HashMap<>();
-      enforcerSourceFactoryMap.put(RejectQuotaEnforcerFactory.class.getName(), DummyQuotaSourceFactory.class.getTypeName());
+      enforcerSourceFactoryMap.put(RejectRequestQuotaEnforcerFactory.class.getName(), DummyQuotaSourceFactory.class.getTypeName());
 
       QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(enforcerSourceFactoryMap, true, QuotaMode.THROTTLING);
       QuotaManager quotaManager = mock(AmbryQuotaManager.class);
@@ -426,7 +426,7 @@ public class AmbrySecurityServiceTest {
     // test throttling when quota mode is TRACKING
     try {
       Map<String, String> enforcerSourceFactoryMap = new HashMap<>();
-      enforcerSourceFactoryMap.put(RejectQuotaEnforcerFactory.class.getName(), DummyQuotaSourceFactory.class.getTypeName());
+      enforcerSourceFactoryMap.put(RejectRequestQuotaEnforcerFactory.class.getName(), DummyQuotaSourceFactory.class.getTypeName());
 
       QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(enforcerSourceFactoryMap, true, QuotaMode.TRACKING);
       QuotaManager quotaManager = mock(AmbryQuotaManager.class);

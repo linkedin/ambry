@@ -40,7 +40,9 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManagerFactory;
 import com.github.ambry.quota.QuotaManagerFactory;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.quota.RejectHostQuotaEnforcerFactory;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
 import com.github.ambry.rest.RestMethod;
@@ -93,6 +95,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
@@ -118,6 +121,7 @@ public class FrontendIntegrationTest {
   private static final int PLAINTEXT_SERVER_PORT = 1174;
   private static final int SSL_SERVER_PORT = 1175;
   private static final int MAX_MULTIPART_POST_SIZE_BYTES = 10 * 10 * 1024;
+  private static final QuotaMode DEFAULT_QUOTA_MODE = QuotaMode.TRACKING;
   private static final MockClusterMap CLUSTER_MAP;
   private static final VerifiableProperties FRONTEND_VERIFIABLE_PROPS;
   private static final VerifiableProperties SSL_CLIENT_VERIFIABLE_PROPS;
@@ -129,6 +133,7 @@ public class FrontendIntegrationTest {
   private static final String DATA_CENTER_NAME = "Datacenter-Name";
   private static final String HOST_NAME = "localhost";
   private static final String CLUSTER_NAME = "Cluster-name";
+  private static final File trustFile;
   private static boolean enableUndeleteTested = false;
   private static RestServer ambryRestServer = null;
   private static NettyClient plaintextNettyClient = null;
@@ -136,23 +141,6 @@ public class FrontendIntegrationTest {
   private final NettyClient nettyClient;
   private final boolean addClusterPrefix;
   private final boolean useSSL;
-
-  static {
-    try {
-      QUOTA_MANAGER_FACTORY =
-          new AmbryQuotaManagerFactory(QUOTA_CONFIG, Collections.emptyList(), Collections.emptyList());
-      CLUSTER_MAP = new MockClusterMap();
-      File trustStoreFile = File.createTempFile("truststore", ".jks");
-      trustStoreFile.deleteOnExit();
-      FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps(trustStoreFile);
-      SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
-      FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
-      ACCOUNT_SERVICE.clear();
-      ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
 
   /**
    * @param useSSL {@code true} if SSL should be tested.
@@ -217,7 +205,7 @@ public class FrontendIntegrationTest {
    */
   private static VerifiableProperties buildFrontendVProps(File trustStoreFile)
       throws IOException, GeneralSecurityException {
-    return buildFrontendVProps(trustStoreFile, true, PLAINTEXT_SERVER_PORT, SSL_SERVER_PORT);
+    return buildFrontendVProps(trustStoreFile, true, PLAINTEXT_SERVER_PORT, SSL_SERVER_PORT, DEFAULT_QUOTA_MODE, false);
   }
 
   /**
@@ -229,10 +217,13 @@ public class FrontendIntegrationTest {
    * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
    */
   private static VerifiableProperties buildFrontendVProps(File trustStoreFile, boolean enableUndelete,
-      int plaintextServerPort, int sslServerPort) throws IOException, GeneralSecurityException {
+      int plaintextServerPort, int sslServerPort, QuotaMode quotaMode, boolean isHostThrottlingEnabled)
+      throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
     properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "");
+    properties.setProperty(QuotaConfig.QUOTA_THROTTLING_MODE, quotaMode.name());
+    properties.setProperty(QuotaConfig.HOST_QUOTA_THROTTLING_ENABLED, String.valueOf(isHostThrottlingEnabled));
     properties.put("rest.server.rest.request.service.factory",
         "com.github.ambry.frontend.FrontendRestRequestServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
@@ -266,7 +257,8 @@ public class FrontendIntegrationTest {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
     trustStoreFile.deleteOnExit();
     VerifiableProperties vprop =
-        buildFrontendVProps(trustStoreFile, false, PLAINTEXT_SERVER_PORT + 100, SSL_SERVER_PORT + 100);
+        buildFrontendVProps(trustStoreFile, false, PLAINTEXT_SERVER_PORT + 100, SSL_SERVER_PORT + 100,
+            DEFAULT_QUOTA_MODE, false);
 
     RestServer ambryRestServer = new RestServer(vprop, CLUSTER_MAP, new LoggingNotificationSystem(),
         SSLFactory.getNewInstance(new SSLConfig(vprop)), ACCOUNT_SERVICE, QUOTA_MANAGER_FACTORY);
@@ -589,8 +581,42 @@ public class FrontendIntegrationTest {
         refContainer.getName());
   }
 
-  // helpers
-  // general
+  @Test
+  public void hostThrottlingTest() throws Exception {
+    NettyClient plaintextNettyClient = null;
+    NettyClient sslNettyClient = null;
+    RestServer ambryRestServer = null;
+    int plainTextServerPort = SSL_SERVER_PORT + 1;
+    int sslServerPort = SSL_SERVER_PORT + 1;
+    try {
+      QuotaConfig quotaConfig =
+          QuotaTestUtils.createQuotaConfig(Collections.singletonList(RejectHostQuotaEnforcerFactory.class.getName()),
+              true, QuotaMode.THROTTLING, true);
+      QuotaManagerFactory quotaManagerFactory =
+          new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList());
+      VerifiableProperties verifiableProperties =
+          buildFrontendVProps(trustFile, true, plainTextServerPort, sslServerPort, QuotaMode.THROTTLING, true);
+      ambryRestServer = new RestServer(verifiableProperties, CLUSTER_MAP, new LoggingNotificationSystem(),
+          SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)), ACCOUNT_SERVICE, quotaManagerFactory);
+      ambryRestServer.start();
+      plaintextNettyClient = new NettyClient("localhost", plainTextServerPort, null);
+      sslNettyClient = new NettyClient("localhost", sslServerPort,
+          SSLFactory.getNewInstance(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
+      FullHttpRequest httpRequest =
+          buildRequest(HttpMethod.GET, UUID.randomUUID().toString(), new DefaultHttpHeaders(), null);
+      nettyClient.sendRequest(httpRequest, null, null).get();
+    } finally {
+      if (plaintextNettyClient != null) {
+        plaintextNettyClient.close();
+      }
+      if (sslNettyClient != null) {
+        sslNettyClient.close();
+      }
+      if (ambryRestServer != null) {
+        ambryRestServer.shutdown();
+      }
+    }
+  }
 
   /**
    * Method to easily create a request.
@@ -616,6 +642,9 @@ public class FrontendIntegrationTest {
     }
     return httpRequest;
   }
+
+  // helpers
+  // general
 
   /**
    * Combines all the parts in {@code contents} into one {@link ByteBuffer}.
@@ -656,8 +685,6 @@ public class FrontendIntegrationTest {
     }
     assertTrue("There should have been an end marker", endMarkerFound);
   }
-
-  // BeforeClass helpers
 
   /**
    * Utility to test blob POST, GET, HEAD and DELETE operations for a specified size
@@ -730,6 +757,8 @@ public class FrontendIntegrationTest {
     undeleteBlobAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
   }
 
+  // BeforeClass helpers
+
   /**
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
    * Any other headers have to be set explicitly.
@@ -769,7 +798,6 @@ public class FrontendIntegrationTest {
       throw new IllegalArgumentException("Some required arguments are null. Cannot set ambry headers");
     }
   }
-  // postGetHeadUpdateDeleteTest() and multipartPostGetHeadUpdateDeleteTest() helpers
 
   /**
    * Posts a blob with the given {@code headers} and {@code content}.
@@ -785,6 +813,7 @@ public class FrontendIntegrationTest {
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     return verifyPostAndReturnBlobId(responseParts, contentSize);
   }
+  // postGetHeadUpdateDeleteTest() and multipartPostGetHeadUpdateDeleteTest() helpers
 
   /**
    * Verifies a POST and returns the blob ID.
@@ -1475,8 +1504,6 @@ public class FrontendIntegrationTest {
         container.getName(), ByteBuffer.wrap(fullContentArray), null);
   }
 
-  // stitchedUploadTest() helpers
-
   /**
    * Call the {@code POST /accounts} API to update account metadata and verify that the update succeeded.
    * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
@@ -1495,6 +1522,8 @@ public class FrontendIntegrationTest {
       assertEquals("Update not reflected in AccountService", account, ACCOUNT_SERVICE.getAccountById(account.getId()));
     }
   }
+
+  // stitchedUploadTest() helpers
 
   /**
    * Call the {@code POST /accounts/updateContainers} API to update account metadata and verify that the update succeeded.
@@ -1528,8 +1557,6 @@ public class FrontendIntegrationTest {
     }
   }
 
-  // accountApiTest() helpers
-
   /**
    * Call the {@code GET /accounts} and {@code Get /accounts/containers} API and verify the response for all accounts
    * managed by {@link #ACCOUNT_SERVICE}.
@@ -1551,6 +1578,8 @@ public class FrontendIntegrationTest {
       assertEquals("Mismatch in container", container, getContainer(account.getName(), container.getName()));
     }
   }
+
+  // accountApiTest() helpers
 
   /**
    * Get a container from given account.
@@ -1596,5 +1625,22 @@ public class FrontendIntegrationTest {
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
     return new HashSet<>(
         AccountCollectionSerde.accountsFromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8))));
+  }
+
+  static {
+    try {
+      QUOTA_MANAGER_FACTORY =
+          new AmbryQuotaManagerFactory(QUOTA_CONFIG, Collections.emptyList(), Collections.emptyList());
+      CLUSTER_MAP = new MockClusterMap();
+      trustFile = File.createTempFile("truststore", ".jks");
+      trustFile.deleteOnExit();
+      FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps(trustFile);
+      SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustFile, "client");
+      FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
+      ACCOUNT_SERVICE.clear();
+      ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
   }
 }
