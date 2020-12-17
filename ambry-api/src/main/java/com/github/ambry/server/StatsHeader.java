@@ -59,7 +59,7 @@ public class StatsHeader {
     this.timestamp = original.timestamp;
     this.storesContactedCount = original.storesContactedCount;
     this.storesRespondedCount = original.storesRespondedCount;
-    this.unreachableStores = new ArrayList<>(original.unreachableStores);
+    this.unreachableStores = original.unreachableStores == null ? null : new ArrayList<>(original.unreachableStores);
   }
 
   /**
