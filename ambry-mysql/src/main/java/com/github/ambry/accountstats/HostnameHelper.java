@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server.mysql;
+package com.github.ambry.accountstats;
 
 import com.github.ambry.config.AccountStatsMySqlConfig;
 import java.util.Arrays;

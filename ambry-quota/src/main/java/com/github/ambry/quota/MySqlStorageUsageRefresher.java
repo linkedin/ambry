@@ -13,10 +13,10 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.clustermap.MySqlReportAggregatorTask;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StorageQuotaConfig;
-import com.github.ambry.server.mysql.AccountStatsMySqlStore;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.File;

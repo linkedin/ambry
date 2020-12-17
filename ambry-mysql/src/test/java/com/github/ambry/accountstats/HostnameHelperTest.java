@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server.mysql;
+package com.github.ambry.accountstats;
 
 import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -27,13 +27,7 @@ public class HostnameHelperTest {
 
   @Test
   public void testHostnameHelperBasic() throws Exception {
-    String[] domains = {
-        ".github.com",
-        ".travis.com",
-        "noleadingdot.com",
-        "  needtrim.com  ",
-        "    "
-    };
+    String[] domains = {".github.com", ".travis.com", "noleadingdot.com", "  needtrim.com  ", "    "};
     AccountStatsMySqlConfig config = createAccountStatsMySqlConfig(String.join(",", domains));
     int port = 1000;
     HostnameHelper helper = new HostnameHelper(config, port);

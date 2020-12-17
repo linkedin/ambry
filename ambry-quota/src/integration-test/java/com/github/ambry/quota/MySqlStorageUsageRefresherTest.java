@@ -14,6 +14,10 @@
 package com.github.ambry.quota;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.accountstats.AccountReportsDao;
+import com.github.ambry.accountstats.AccountStatsMySqlStore;
+import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
+import com.github.ambry.accountstats.AggregatedAccountReportsDao;
 import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
@@ -21,10 +25,6 @@ import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.server.StatsSnapshot;
-import com.github.ambry.server.mysql.AccountReportsDao;
-import com.github.ambry.server.mysql.AccountStatsMySqlStore;
-import com.github.ambry.server.mysql.AccountStatsMySqlStoreFactory;
-import com.github.ambry.server.mysql.AggregatedAccountReportsDao;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
